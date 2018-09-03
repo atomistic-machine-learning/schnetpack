@@ -41,7 +41,9 @@ supporting more architectures and datasets and many more features.**_
 
 You're ready to go!
  
- 
+## Documentation
+
+For the full API reference, visit our [documentation](https://schnetpack.readthedocs.io).
 
 ## Getting started
 
@@ -77,7 +79,6 @@ To evaluate the trained model with the best validation error, call
 `schnetpack_qm9.py eval <schnet/wacsf> <datadir> <modeldir> [--split train val test] [--cuda]`
 
 which will write a result file `evaluation.txt` into the model directory.
-
 
 
 ## References
