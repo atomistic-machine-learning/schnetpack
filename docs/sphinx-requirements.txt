@@ -1,0 +1,5 @@
+http://download.pytorch.org/whl/cpu/torch-0.4.0-cp35-cp35m-linux_x86_64.whl
+numpy
+ase
+tensorboardX
+h5py

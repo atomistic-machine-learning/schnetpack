@@ -1,0 +1,7 @@
+--index-url https://pypi.python.org/simple/
+
+torch
+numpy
+ase
+tensorboardX
+h5py
