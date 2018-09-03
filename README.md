@@ -10,7 +10,7 @@ extensible to custom atomistic architectures.
 - wACSF - weighted atom-centered symmetry functions [4,5]
 
 _**Note: We will keep working on improving the documentation, 
-supporting more architectures and datasets and many more.**_
+supporting more architectures and datasets and many more features.**_
 
 ##### Requirements:
 - python 3
