@@ -21,6 +21,8 @@ more architectures and datasets as well as support for active sampling in the fu
 
 ## Installation
 
+### Install from source
+
 #### Clone the repository
 
 `git clone git@gitlab.tubit.tu-berlin.de:atomistic-ml/schnetpack.git`
