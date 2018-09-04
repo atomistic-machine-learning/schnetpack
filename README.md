@@ -31,7 +31,7 @@ _**Note: We recommend using a GPU for training the neural networks.**_
 
 #### Clone the repository
 
-`git clone git@gitlab.tubit.tu-berlin.de:atomistic-ml/schnetpack.git`
+`git clone https://github.com/atomistic-machine-learning/schnetpack.git`
 
 `cd schnetpack`
 
