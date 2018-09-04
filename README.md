@@ -23,6 +23,10 @@ _**Note: We recommend using a GPU for training the neural networks.**_
 
 ## Installation
 
+### Install with pip
+
+`pip install schnetpack`
+
 ### Install from source
 
 #### Clone the repository
