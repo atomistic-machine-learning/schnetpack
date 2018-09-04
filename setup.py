@@ -10,7 +10,7 @@ def read(fname):
 
 
 setup(
-    name='schnetpacktest1',
+    name='schnetpack',
     version='0.2',
     author='Kristof T. Schuett, Michael Gastegger, Pan Kessel, Kim Nicoli',
     email='kristof.schuett@tu-berlin.de',
