@@ -19,6 +19,8 @@ supporting more architectures and datasets and many more features.**_
 - PyTorch (>=0.4)
 - Optional: tensorboardX, h5py
 
+_**Note: We recommend using a GPU for training the neural networks.
+
 ## Installation
 
 ### Install from source
