@@ -36,14 +36,14 @@ def get_parser():
     cmd_parser.add_argument('--log_every_n_epochs', type=int,
                             help='Log metrics every given number of epochs (default: %(default)s)',
                             default=1)
-    cmd_parser.add_argument('--property', type=str,
-                            help='Materials Project property to be predicted (default: %(default)s)',
-                            default="formation_energy_per_atom", choices=MaterialsProject.properties)
 
     ## training
     train_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
     train_parser.add_argument('datapath', help='Path / destination of Materials Project dataset directory')
     train_parser.add_argument('modelpath', help='Destination for models and logs')
+    train_parser.add_argument('--property', type=str,
+                              help='Materials Project property to be predicted (default: %(default)s)',
+                              default="formation_energy_per_atom", choices=MaterialsProject.properties)
     train_parser.add_argument('--apikey', help='API key for Materials Project (see https://materialsproject.org/open)')
     train_parser.add_argument('--seed', type=int, default=None, help='Set random seed for torch and numpy.')
     train_parser.add_argument('--overwrite', help='Remove previous model directory.', action='store_true')
@@ -75,6 +75,8 @@ def get_parser():
 
     # model-specific parsers
     model_parser = argparse.ArgumentParser(add_help=False)
+    model_parser.add_argument('--aggregation_mode', type=str, default='avg', choices=['sum', 'avg'],
+                              help=' (default: %(default)s)')
 
     #######  SchNet  #######
     schnet_parser = argparse.ArgumentParser(add_help=False, parents=[model_parser])
@@ -195,7 +197,8 @@ def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None, par
     if args.model == 'schnet':
         representation = spk.representation.SchNet(args.features, args.features, args.interactions,
                                                    args.cutoff, args.num_gaussians, normalize_filter=True)
-        atomwise_output = spk.atomistic.Atomwise(args.features, pool_mode='avg', mean=mean, stddev=stddev,
+        atomwise_output = spk.atomistic.Atomwise(args.features, aggregation_mode=args.aggregation_mode,
+                                                 mean=mean, stddev=stddev,
                                                  atomref=atomref, train_embeddings=True)
         model = spk.atomistic.AtomisticModel(representation, atomwise_output)
     else:
@@ -248,7 +251,7 @@ if __name__ == '__main__':
 
     # will download MaterialsProject if necessary
     mp = spk.datasets.MaterialsProject(args.datapath, args.cutoff, apikey=args.apikey, download=True,
-                                       properties=[args.property])
+                                       properties=[train_args.property])
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, 'split.npz')
@@ -285,7 +288,7 @@ if __name__ == '__main__':
         train(args, model, train_loader, val_loader, device)
     elif args.mode == 'eval':
         test_loader = spk.data.AtomsLoader(data_test, batch_size=args.batch_size,
-                                      num_workers=2, pin_memory=True)
+                                           num_workers=2, pin_memory=True)
         evaluate(args, model, train_loader, val_loader, test_loader, device)
     else:
         print('Unknown mode:', args.mode)

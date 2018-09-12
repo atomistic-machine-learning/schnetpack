@@ -36,13 +36,13 @@ def get_parser():
     cmd_parser.add_argument('--log_every_n_epochs', type=int,
                             help='Log metrics every given number of epochs (default: %(default)s)',
                             default=1)
-    cmd_parser.add_argument('--property', type=str, help='ANI-1 property to be predicted (default: %(default)s)',
-                            default="energy", choices=ANI1.properties)
 
     ## training
     train_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
     train_parser.add_argument('datapath', help='Path / destination of ANI1 dataset directory')
     train_parser.add_argument('modelpath', help='Destination for models and logs')
+    train_parser.add_argument('--property', type=str, help='ANI-1 property to be predicted (default: %(default)s)',
+                              default="energy", choices=ANI1.properties)
     train_parser.add_argument('--seed', type=int, default=None, help='Set random seed for torch and numpy.')
     train_parser.add_argument('--overwrite', help='Remove previous model directory.', action='store_true')
 
@@ -72,6 +72,8 @@ def get_parser():
 
     # model-specific parsers
     model_parser = argparse.ArgumentParser(add_help=False)
+    model_parser.add_argument('--aggregation_mode', type=str, default='sum', choices=['sum', 'avg'],
+                              help=' (default: %(default)s)')
 
     #######  SchNet  #######
     schnet_parser = argparse.ArgumentParser(add_help=False, parents=[model_parser])
@@ -221,7 +223,8 @@ def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None, par
     if args.model == 'schnet':
         representation = spk.representation.SchNet(args.features, args.features, args.interactions,
                                                    args.cutoff, args.num_gaussians)
-        atomwise_output = spk.atomistic.Atomwise(args.features, mean=mean, stddev=stddev, atomref=atomref)
+        atomwise_output = spk.atomistic.Atomwise(args.features, mean=mean, stddev=stddev, atomref=atomref,
+                                                 aggregation_mode=args.aggregation_mode)
         model = spk.atomistic.AtomisticModel(representation, atomwise_output)
 
     elif args.model == 'wacsf':
@@ -247,6 +250,7 @@ def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None, par
         # Build HDNN model
         atomwise_output = spk.atomistic.ElementalEnergy(representation.n_symfuncs, n_hidden=args.n_nodes,
                                                         n_layers=args.n_layers, mean=mean, stddev=stddev,
+                                                        aggregation_mode=args.aggregation_mode,
                                                         atomref=atomref, elements=elements)
         model = spk.atomistic.AtomisticModel(representation, atomwise_output)
 
@@ -285,9 +289,9 @@ if __name__ == '__main__':
 
     # will download ANI1 if necessary, calculate_triples is required for wACSF angular functions
     logging.info('ANI1 will be loaded...')
-    ani1 = spk.datasets.ANI1(args.datapath, download=True, properties=[args.property],
+    ani1 = spk.datasets.ANI1(args.datapath, download=True, properties=[train_args.property],
                              collect_triples=args.model == 'wacsf')
-    atomref = ani1.get_reference(args.property)
+    atomref = ani1.get_reference(train_args.property)
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, 'split.npz')

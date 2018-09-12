@@ -124,7 +124,7 @@ class Atomwise(OutputModule):
 
     """
 
-    def __init__(self, n_in=128, n_out=1, pool_mode='sum', n_layers=2, n_neurons=None,
+    def __init__(self, n_in=128, n_out=1, aggregation_mode='sum', n_layers=2, n_neurons=None,
                  activation=schnetpack.nn.activations.shifted_softplus, return_contributions=False,
                  requires_dr=False, create_graph=False, mean=None, stddev=None, atomref=None, max_z=100, outnet=None,
                  train_embeddings=False):
@@ -157,9 +157,9 @@ class Atomwise(OutputModule):
         # Make standardization separate
         self.standardize = schnetpack.nn.base.ScaleShift(mean, stddev)
 
-        if pool_mode == 'sum':
+        if aggregation_mode == 'sum':
             self.atom_pool = schnetpack.nn.base.Aggregate(axis=1, mean=False)
-        elif pool_mode == 'avg':
+        elif aggregation_mode == 'avg':
             self.atom_pool = schnetpack.nn.base.Aggregate(axis=1, mean=True)
 
     def forward(self, inputs):
@@ -211,11 +211,11 @@ class Energy(Atomwise):
 
             If requires_dr is true additionally returns forces
         """
-    def __init__(self, n_in, pool_mode='sum', n_layers=2, n_neurons=None,
+    def __init__(self, n_in, aggregation_mode='sum', n_layers=2, n_neurons=None,
                  activation=schnetpack.nn.activations.shifted_softplus,
                  return_contributions=False, create_graph=False,
                  return_force=False, mean=None, stddev=None, atomref=None, max_z=100, outnet=None):
-        super(Energy, self).__init__(n_in, 1, pool_mode, n_layers, n_neurons, activation,
+        super(Energy, self).__init__(n_in, 1, aggregation_mode, n_layers, n_neurons, activation,
                                      return_contributions, return_force, create_graph, mean, stddev,
                                      atomref, 100, outnet)
 
@@ -297,14 +297,14 @@ class ElementalAtomwise(Atomwise):
     Particularly useful for networks of Behler-Parrinello type.
     """
 
-    def __init__(self, n_in, n_out=1, pool_mode='sum', n_layers=3, requires_dr=False, create_graph=False,
+    def __init__(self, n_in, n_out=1, aggregation_mode='sum', n_layers=3, requires_dr=False, create_graph=False,
                  elements=frozenset((1, 6, 7, 8, 9)), n_hidden=50,
                  activation=schnetpack.nn.activations.shifted_softplus,
                  return_contributions=False, mean=None, stddev=None, atomref=None, max_z=100):
         outnet = schnetpack.nn.blocks.GatedNetwork(n_in, n_out, elements, n_hidden=n_hidden, n_layers=n_layers,
                                                    activation=activation)
 
-        super(ElementalAtomwise, self).__init__(n_in, n_out, pool_mode, n_layers, None, activation,
+        super(ElementalAtomwise, self).__init__(n_in, n_out, aggregation_mode, n_layers, None, activation,
                                                 return_contributions, requires_dr, create_graph, mean, stddev, atomref,
                                                 max_z, outnet)
 
@@ -331,14 +331,14 @@ class ElementalEnergy(Energy):
         max_z (int): ignored if atomref is not learned (default: 100)
     """
 
-    def __init__(self, n_in, n_out=1, pool_mode='sum', n_layers=3, return_force=False, create_graph=False,
+    def __init__(self, n_in, n_out=1, aggregation_mode='sum', n_layers=3, return_force=False, create_graph=False,
                  elements=frozenset((1, 6, 7, 8, 9)), n_hidden=50,
                  activation=schnetpack.nn.activations.shifted_softplus, return_contributions=False, mean=None,
                  stddev=None, atomref=None, max_z=100):
         outnet = schnetpack.nn.blocks.GatedNetwork(n_in, n_out, elements, n_hidden=n_hidden, n_layers=n_layers,
                                                    activation=activation)
 
-        super(ElementalEnergy, self).__init__(n_in, pool_mode, n_layers, None, activation, return_contributions,
+        super(ElementalEnergy, self).__init__(n_in, aggregation_mode, n_layers, None, activation, return_contributions,
                                               create_graph=create_graph, return_force=return_force, mean=mean,
                                               stddev=stddev, atomref=atomref, max_z=max_z, outnet=outnet)
 
