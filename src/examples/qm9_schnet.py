@@ -20,9 +20,12 @@ reps = rep.SchNet()
 output = atm.Atomwise()
 model = atm.AtomisticModel(reps, output)
 
-# create trainergit add
-opt = Adam(model.parameters(), lr=1e-4)
-loss = lambda b, p: F.mse_loss(p["y"], b[QM9.U0])
+# filter for trainable parameters (https://github.com/pytorch/pytorch/issues/679)
+trainable_params = filter(lambda p: p.requires_grad, model.parameters())
+
+# create trainer
+opt = Adam(trainable_params, lr=1e-4)
+loss = lambda b, p: F.mse_loss(p[0], b[QM9.U0])
 trainer = spk.train.Trainer("output/", model, loss,
                             opt, loader, val_loader)
 

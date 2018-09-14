@@ -151,7 +151,7 @@ class CSVHook(LoggingHook):
             log = ''
             log += 'Time'
 
-            if self.log_train_loss:
+            if self.log_learning_rate:
                 log += ',Learning rate'
 
             if self.log_train_loss:
