@@ -16,7 +16,7 @@ loader = spk.data.AtomsLoader(train, batch_size=100, num_workers=4)
 val_loader = spk.data.AtomsLoader(val)
 
 # create model
-reps = rep.SymmetryFunctions(22, 5)
+reps = rep.BehlerSFBlock()
 output = atm.ElementalAtomwise(reps.n_symfuncs)
 model = atm.AtomisticModel(reps, output)
 
@@ -25,9 +25,9 @@ trainable_params = filter(lambda p: p.requires_grad, model.parameters())
 
 # create trainer
 opt = Adam(trainable_params, lr=1e-4)
-loss = lambda b, p: F.mse_loss(p[0], b[QM9.U0])
+loss = lambda b, p: F.mse_loss(p["y"], b[QM9.U0])
 trainer = spk.train.Trainer("wacsf/", model, loss,
-                            opt, loader, val_loader)
+                      opt, loader, val_loader)
 
 # start training
 trainer.train(torch.device("cpu"))
