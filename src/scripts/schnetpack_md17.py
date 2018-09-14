@@ -156,10 +156,10 @@ def train(args, model, train_loader, val_loader, device):
     hooks.append(schedule)
 
     # index into model output: [energy, forces]
-    metrics = [spk.metrics.MeanAbsoluteError(MD17.E, "y"),
-               spk.metrics.RootMeanSquaredError(MD17.E, "y"),
-               spk.metrics.MeanAbsoluteError(MD17.F, "dydx"),
-               spk.metrics.RootMeanSquaredError(MD17.F, "dydx")]
+    metrics = [spk.metrics.MeanAbsoluteError(MD17.energies, "y"),
+               spk.metrics.RootMeanSquaredError(MD17.energies, "y"),
+               spk.metrics.MeanAbsoluteError(MD17.forces, "dydx"),
+               spk.metrics.RootMeanSquaredError(MD17.forces, "dydx")]
     if args.logger == 'csv':
         logger = spk.train.CSVHook(os.path.join(args.modelpath, 'log'),
                                    metrics, every_n_epochs=args.log_every_n_epochs)
@@ -171,10 +171,10 @@ def train(args, model, train_loader, val_loader, device):
 
     # setup loss function
     def loss(batch, result):
-        ediff = batch[MD17.E] - result["y"]
+        ediff = batch[MD17.energies] - result["y"]
         ediff = ediff ** 2
 
-        fdiff = batch[MD17.F] - result["dydx"]
+        fdiff = batch[MD17.forces] - result["dydx"]
         fdiff = fdiff ** 2
 
         err_sq = args.rho * torch.mean(ediff.view(-1)) + (1 - args.rho) * torch.mean(fdiff.view(-1))
@@ -190,14 +190,14 @@ def evaluate(args, model, train_loader, val_loader, test_loader, device):
               'Force MAE', 'Force RMSE', 'Force Length MAE', 'Force Length RMSE', 'Force Angle MAE', 'Angle RMSE']
 
     metrics = [
-        spk.metrics.MeanAbsoluteError(MD17.E, "y"),
-        spk.metrics.RootMeanSquaredError(MD17.E, "y"),
-        spk.metrics.MeanAbsoluteError(MD17.F, "dydx"),
-        spk.metrics.RootMeanSquaredError(MD17.F, "dydx"),
-        spk.metrics.LengthMAE(MD17.F, "dydx"),
-        spk.metrics.LengthRMSE(MD17.F, "dydx"),
-        spk.metrics.AngleMAE(MD17.F, "dydx"),
-        spk.metrics.AngleRMSE(MD17.F, "dydx")
+        spk.metrics.MeanAbsoluteError(MD17.energies, "y"),
+        spk.metrics.RootMeanSquaredError(MD17.energies, "y"),
+        spk.metrics.MeanAbsoluteError(MD17.forces, "dydx"),
+        spk.metrics.RootMeanSquaredError(MD17.forces, "dydx"),
+        spk.metrics.LengthMAE(MD17.forces, "dydx"),
+        spk.metrics.LengthRMSE(MD17.forces, "dydx"),
+        spk.metrics.AngleMAE(MD17.forces, "dydx"),
+        spk.metrics.AngleRMSE(MD17.forces, "dydx")
     ]
 
     results = []
