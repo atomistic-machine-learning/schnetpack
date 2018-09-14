@@ -47,7 +47,8 @@ class MD17(AtomsData):
         "uracil"
     ]
 
-    def __init__(self, datapath, dataset, subset=None, download=True, collect_triples=False, parse_all=False):
+    def __init__(self, datapath, dataset, subset=None, download=True, collect_triples=False, parse_all=False,
+                 properties=None):
         self.load_all = parse_all
         self.datapath = datapath
 
@@ -64,15 +65,16 @@ class MD17(AtomsData):
         if download:
             self.download()
 
-        properties = ["energy", "forces"]
+        if properties is None:
+            properties = ["energy", "forces"]
 
         super(MD17, self).__init__(self.dbpath, subset, properties, environment_provider, collect_triples)
 
-    E = "energy"
-    F = "forces"
+    energies = "energy"
+    forces = "forces"
 
     properties = [
-        E, F
+        energies, forces
     ]
 
     units = dict(

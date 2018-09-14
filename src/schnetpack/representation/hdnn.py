@@ -6,7 +6,7 @@ import schnetpack.nn as snn
 from schnetpack.data import Structure, StatisticsAccumulator
 
 
-class BehlerSFBlock(nn.Module):
+class SymmetryFunctions(nn.Module):
     """
     Compute atom-centered symmetry functions [#acsf1]_ and weighted variant thereof as described
     in Reference [#wacsf1]_.
@@ -61,7 +61,7 @@ class BehlerSFBlock(nn.Module):
                  pairwise_elements=False
                  ):
 
-        super(BehlerSFBlock, self).__init__()
+        super(SymmetryFunctions, self).__init__()
 
         self.n_radial = n_radial
         self.n_angular = n_angular
@@ -220,7 +220,7 @@ class BehlerSFBlock(nn.Module):
         return symmetry_functions
 
 
-class SymmetryFunctions(BehlerSFBlock):
+class BehlerSFBlock(SymmetryFunctions):
     """
     Utility layer for fast initialisation of ACSFs and wACSFs.
 
@@ -240,7 +240,7 @@ class SymmetryFunctions(BehlerSFBlock):
                        len_embedding (default=False).
     """
 
-    def __init__(self, n_radial, n_angular, zetas={1}, cutoff_radius=5.0, elements=frozenset((1, 6, 7, 8, 9)),
+    def __init__(self, n_radial=22, n_angular=5, zetas={1}, cutoff_radius=5.0, elements=frozenset((1, 6, 7, 8, 9)),
                  centered=False, crossterms=False, mode='weighted'):
         # Determine mode.
         if mode == 'weighted':
@@ -253,7 +253,7 @@ class SymmetryFunctions(BehlerSFBlock):
             raise NotImplementedError("Unrecognized symmetry function %s" % mode)
 
         # Construct symmetry functions.
-        super(SymmetryFunctions, self).__init__(
+        super(BehlerSFBlock, self).__init__(
             n_radial=n_radial,
             n_angular=n_angular,
             zetas=zetas,

@@ -248,11 +248,11 @@ def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None, par
         sfmode = ('weighted', 'Behler')[args.behler]
         # Convert element strings to atomic charges
         elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
-        representation = spk.representation.SymmetryFunctions(args.radial, args.angular, zetas=set(args.zetas),
-                                                              cutoff_radius=args.cutoff,
-                                                              centered=args.centered, crossterms=args.crossterms,
-                                                              elements=elements,
-                                                              mode=sfmode)
+        representation = spk.representation.BehlerSFBlock(args.radial, args.angular, zetas=set(args.zetas),
+                                                          cutoff_radius=args.cutoff,
+                                                          centered=args.centered, crossterms=args.crossterms,
+                                                          elements=elements,
+                                                          mode=sfmode)
         logging.info("Using {:d} {:s}-type SF".format(representation.n_symfuncs, sfmode))
         # Standardize representation if requested
         if args.standardize and mode == 'train':
@@ -325,7 +325,7 @@ if __name__ == '__main__':
 
     if args.mode == 'train':
         logging.info('calculate statistics...')
-        mean, stddev = train_loader.get_statistics(MD17.E, True)
+        mean, stddev = train_loader.get_statistics(MD17.energies, True)
     else:
         mean, stddev = None, None
 
