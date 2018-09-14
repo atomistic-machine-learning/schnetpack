@@ -16,4 +16,4 @@ References
 """
 
 from schnetpack.representation.schnet import SchNet, SchNetInteraction
-from schnetpack.representation.hdnn import SymmetryFunctions, StandardizeSF
+from schnetpack.representation.hdnn import BehlerSFBlock, StandardizeSF
