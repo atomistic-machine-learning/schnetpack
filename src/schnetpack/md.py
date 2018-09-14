@@ -94,8 +94,8 @@ class MLPotential(Calculator):
         model_results = self.model(model_inputs)
 
         # Convert outputs to calculator format
-        energy = model_results[0].cpu().data.numpy()
-        forces = model_results[1].cpu().data.numpy()
+        energy = model_results['y'].cpu().data.numpy()
+        forces = model_results['dydx'].cpu().data.numpy()
 
         self.results = {
             'energy': energy.reshape(-1),
