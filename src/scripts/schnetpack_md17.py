@@ -25,17 +25,12 @@ def get_parser():
     ## command-specific
     cmd_parser = argparse.ArgumentParser(add_help=False)
     cmd_parser.add_argument('--cuda', help='Set flag to use GPU(s)', action='store_true')
-    cmd_parser.add_argument('--logger', help='Choose logger for training process (default: %(default)s)',
-                            choices=['csv', 'tensorboard'], default='csv')
     cmd_parser.add_argument('--parallel',
                             help='Run data-parallel on all available GPUs (specify with environment variable'
                                  + ' CUDA_VISIBLE_DEVICES)', action='store_true')
     cmd_parser.add_argument('--batch_size', type=int,
                             help='Mini-batch size for training and prediction (default: %(default)s)',
                             default=100)
-    cmd_parser.add_argument('--log_every_n_epochs', type=int,
-                            help='Log metrics every given number of epochs (default: %(default)s)',
-                            default=1)
 
     ## training
     train_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
@@ -65,6 +60,12 @@ def get_parser():
     train_parser.add_argument('--rho', type=float,
                               help='Energy-force trade-off. For rho=0, use forces only. (default: %(default)s)',
                               default=0.1)
+
+    train_parser.add_argument('--logger', help='Choose logger for training process (default: %(default)s)',
+                              choices=['csv', 'tensorboard'], default='csv')
+    train_parser.add_argument('--log_every_n_epochs', type=int,
+                              help='Log metrics every given number of epochs (default: %(default)s)',
+                              default=1)
 
     ## evaluation
     eval_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])

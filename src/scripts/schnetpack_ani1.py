@@ -25,17 +25,12 @@ def get_parser():
     ## command-specific
     cmd_parser = argparse.ArgumentParser(add_help=False)
     cmd_parser.add_argument('--cuda', help='Set flag to use GPU(s)', action='store_true')
-    cmd_parser.add_argument('--logger', help='Choose logger for training process (default: %(default)s)',
-                            choices=['csv', 'tensorboard'], default='csv')
     cmd_parser.add_argument('--parallel',
                             help='Run data-parallel on all available GPUs (specify with environment variable'
                                  + ' CUDA_VISIBLE_DEVICES)', action='store_true')
     cmd_parser.add_argument('--batch_size', type=int,
                             help='Mini-batch size for training and prediction (default: %(default)s)',
                             default=400)
-    cmd_parser.add_argument('--log_every_n_epochs', type=int,
-                            help='Log metrics every given number of epochs (default: %(default)s)',
-                            default=1)
 
     ## training
     train_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
@@ -62,6 +57,12 @@ def get_parser():
                               default=0.5)
     train_parser.add_argument('--lr_min', type=float, help='Minimal learning rate (default: %(default)s)',
                               default=1e-6)
+
+    train_parser.add_argument('--logger', help='Choose logger for training process (default: %(default)s)',
+                              choices=['csv', 'tensorboard'], default='csv')
+    train_parser.add_argument('--log_every_n_epochs', type=int,
+                              help='Log metrics every given number of epochs (default: %(default)s)',
+                              default=1)
 
     ## evaluation
     eval_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
@@ -174,9 +175,9 @@ def train(args, model, train_loader, val_loader, device):
     trainer.train(device)
 
 
-def evaluate(args, model, train_loader, val_loader, test_loader, device):
-    metrics = [spk.metrics.MeanAbsoluteError(args.property, 0),
-               spk.metrics.RootMeanSquaredError(args.property, 0)]
+def evaluate(args, model, property, train_loader, val_loader, test_loader, device):
+    metrics = [spk.metrics.MeanAbsoluteError(property, 0),
+               spk.metrics.RootMeanSquaredError(property, 0)]
 
     header = []
     results = []
@@ -334,7 +335,7 @@ if __name__ == '__main__':
         test_loader = spk.data.AtomsLoader(data_test, batch_size=args.batch_size,
                                            num_workers=4, pin_memory=True)
         with torch.no_grad():
-            evaluate(args, model, train_loader, val_loader, test_loader, device)
+            evaluate(args, model, train_args.property, train_loader, val_loader, test_loader, device)
         logging.info("... done!")
     else:
         print('Unknown mode:', args.mode)
