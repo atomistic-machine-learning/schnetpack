@@ -6,6 +6,7 @@ python:
 
 install:
   - pip install -r docs/sphinx-requirements.txt
+  - pip install .
 
 script:
   - pytest
