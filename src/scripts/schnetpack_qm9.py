@@ -154,20 +154,20 @@ def train(args, model, train_loader, val_loader, device):
 
     if args.logger == 'csv':
         logger = spk.train.CSVHook(os.path.join(args.modelpath, 'log'),
-                                   [spk.metrics.MeanAbsoluteError(args.property, 0),
-                                    spk.metrics.RootMeanSquaredError(args.property, 0)],
+                                   [spk.metrics.MeanAbsoluteError(args.property, "y"),
+                                    spk.metrics.RootMeanSquaredError(args.property, "y")],
                                    every_n_epochs=args.log_every_n_epochs)
         hooks.append(logger)
     elif args.logger == 'tensorboard':
         logger = spk.train.TensorboardHook(os.path.join(args.modelpath, 'log'),
-                                           [spk.metrics.MeanAbsoluteError(args.property, 0),
-                                            spk.metrics.RootMeanSquaredError(args.property, 0)],
+                                           [spk.metrics.MeanAbsoluteError(args.property, "y"),
+                                            spk.metrics.RootMeanSquaredError(args.property, "y")],
                                            every_n_epochs=args.log_every_n_epochs)
         hooks.append(logger)
 
     # setup loss function
     def loss(batch, result):
-        diff = batch[args.property] - result[0]
+        diff = batch[args.property] - result["y"]
         diff = diff ** 2
         err_sq = torch.mean(diff)
         return err_sq
@@ -180,8 +180,8 @@ def train(args, model, train_loader, val_loader, device):
 def evaluate(args, model, property, train_loader, val_loader, test_loader, device):
     header = ['Subset', property + ' MAE', property + ' RMSE']
 
-    metrics = [spk.metrics.MeanAbsoluteError(property, 0),
-               spk.metrics.RootMeanSquaredError(property, 0)
+    metrics = [spk.metrics.MeanAbsoluteError(property, "y"),
+               spk.metrics.RootMeanSquaredError(property, "y")
                ]
 
     results = []

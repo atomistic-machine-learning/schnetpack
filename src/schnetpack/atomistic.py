@@ -3,14 +3,12 @@ Classes for output modules.
 """
 
 from collections import Iterable
-from collections import namedtuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd import grad
 
-import schnetpack.nn as L
 import schnetpack.nn.activations
 import schnetpack.nn.base
 import schnetpack.nn.blocks
@@ -87,9 +85,6 @@ class OutputModule(nn.Module):
         Should be overwritten
         """
         raise NotImplementedError
-
-
-atomwise = namedtuple('atomwise', ['y', 'yi', 'grad'])
 
 
 class Atomwise(OutputModule):
@@ -178,10 +173,10 @@ class Atomwise(OutputModule):
 
         y = self.atom_pool(yi, atom_mask)
 
-        result = (y,)
+        result = {"y": y}
 
         if self.return_contributions:
-            result = result + (yi,)
+            result['yi'] = yi
 
         return result
 
@@ -211,6 +206,7 @@ class Energy(Atomwise):
 
             If requires_dr is true additionally returns forces
         """
+
     def __init__(self, n_in, aggregation_mode='sum', n_layers=2, n_neurons=None,
                  activation=schnetpack.nn.activations.shifted_softplus,
                  return_contributions=False, create_graph=False,
@@ -226,10 +222,10 @@ class Energy(Atomwise):
         result = super(Energy, self).forward(inputs)
 
         if self.requires_dr:
-            forces = -grad(result[0], inputs[Structure.R],
-                           grad_outputs=torch.ones_like(result[0]),
+            forces = -grad(result["y"], inputs[Structure.R],
+                           grad_outputs=torch.ones_like(result["y"]),
                            create_graph=self.create_graph)[0]
-            result = result + (forces,)
+            result['dydx'] = forces
 
         return result
 
@@ -254,7 +250,7 @@ class DipoleMoment(Atomwise):
     Returns:
         tuple: vector for the dipole moment
 
-        If predict_magnitute is true returns the magnitude of the dipole moment instead of the vector
+        If predict_magnitude is true returns the magnitude of the dipole moment instead of the vector
 
         If return_charges is true returns either vector or magnitude of the dipole moment, and latent atomic charges
 
@@ -281,12 +277,12 @@ class DipoleMoment(Atomwise):
         y = self.atom_pool(yi)
 
         if self.predict_magnitude:
-            result = (torch.norm(y, dim=1, keepdim=True),)
+            result = {"y": torch.norm(y, dim=1, keepdim=True)}
         else:
-            result = (y,)
+            result = {"y": y}
 
         if self.return_charges:
-            result = result + (yi,)
+            result['yi'] = yi
 
         return result
 

@@ -156,10 +156,10 @@ def train(args, model, train_loader, val_loader, device):
     hooks.append(schedule)
 
     # index into model output: [energy, forces]
-    metrics = [spk.metrics.MeanAbsoluteError(MD17.E, 0),
-               spk.metrics.RootMeanSquaredError(MD17.E, 0),
-               spk.metrics.MeanAbsoluteError(MD17.F, 1),
-               spk.metrics.RootMeanSquaredError(MD17.F, 1)]
+    metrics = [spk.metrics.MeanAbsoluteError(MD17.E, "y"),
+               spk.metrics.RootMeanSquaredError(MD17.E, "y"),
+               spk.metrics.MeanAbsoluteError(MD17.F, "dydx"),
+               spk.metrics.RootMeanSquaredError(MD17.F, "dydx")]
     if args.logger == 'csv':
         logger = spk.train.CSVHook(os.path.join(args.modelpath, 'log'),
                                    metrics, every_n_epochs=args.log_every_n_epochs)
@@ -171,10 +171,10 @@ def train(args, model, train_loader, val_loader, device):
 
     # setup loss function
     def loss(batch, result):
-        ediff = batch[MD17.E] - result[0]
+        ediff = batch[MD17.E] - result["y"]
         ediff = ediff ** 2
 
-        fdiff = batch[MD17.F] - result[1]
+        fdiff = batch[MD17.F] - result["dydx"]
         fdiff = fdiff ** 2
 
         err_sq = args.rho * torch.mean(ediff.view(-1)) + (1 - args.rho) * torch.mean(fdiff.view(-1))
@@ -190,14 +190,14 @@ def evaluate(args, model, train_loader, val_loader, test_loader, device):
               'Force MAE', 'Force RMSE', 'Force Length MAE', 'Force Length RMSE', 'Force Angle MAE', 'Angle RMSE']
 
     metrics = [
-        spk.metrics.MeanAbsoluteError(MD17.E, 0),
-        spk.metrics.RootMeanSquaredError(MD17.E, 0),
-        spk.metrics.MeanAbsoluteError(MD17.F, -1),
-        spk.metrics.RootMeanSquaredError(MD17.F, -1),
-        spk.metrics.LengthMAE(MD17.F, -1),
-        spk.metrics.LengthRMSE(MD17.F, -1),
-        spk.metrics.AngleMAE(MD17.F, -1),
-        spk.metrics.AngleRMSE(MD17.F, -1)
+        spk.metrics.MeanAbsoluteError(MD17.E, "y"),
+        spk.metrics.RootMeanSquaredError(MD17.E, "y"),
+        spk.metrics.MeanAbsoluteError(MD17.F, "dydx"),
+        spk.metrics.RootMeanSquaredError(MD17.F, "dydx"),
+        spk.metrics.LengthMAE(MD17.F, "dydx"),
+        spk.metrics.LengthRMSE(MD17.F, "dydx"),
+        spk.metrics.AngleMAE(MD17.F, "dydx"),
+        spk.metrics.AngleRMSE(MD17.F, "dydx")
     ]
 
     results = []
@@ -349,8 +349,7 @@ if __name__ == '__main__':
         logging.info("evaluating...")
         test_loader = spk.data.AtomsLoader(data_test, batch_size=args.batch_size,
                                            num_workers=2, pin_memory=True)
-        with torch.no_grad():
-            evaluate(args, model, train_loader, val_loader, test_loader, device)
+        evaluate(args, model, train_loader, val_loader, test_loader, device)
         logging.info("... done!")
     else:
         print('Unknown mode:', args.mode)
