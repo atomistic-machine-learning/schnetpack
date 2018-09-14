@@ -26,24 +26,20 @@ def get_parser():
     ## command-specific
     cmd_parser = argparse.ArgumentParser(add_help=False)
     cmd_parser.add_argument('--cuda', help='Set flag to use GPU(s)', action='store_true')
-    cmd_parser.add_argument('--logger', help='Choose logger for training process (default: %(default)s)',
-                            choices=['csv', 'tensorboard'], default='csv')
     cmd_parser.add_argument('--parallel',
                             help='Run data-parallel on all available GPUs (specify with environment variable'
                                  + ' CUDA_VISIBLE_DEVICES)', action='store_true')
     cmd_parser.add_argument('--batch_size', type=int,
                             help='Mini-batch size for training and prediction (default: %(default)s)',
                             default=100)
-    cmd_parser.add_argument('--log_every_n_epochs', type=int,
-                            help='Log metrics every given number of epochs (default: %(default)s)',
-                            default=1)
-    cmd_parser.add_argument('--property', type=str, help='QM9 property to be predicted (default: %(default)s)',
-                            default="energy_U0", choices=QM9.properties)
 
     ## training
     train_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
     train_parser.add_argument('datapath', help='Path / destination of QM9 dataset directory')
     train_parser.add_argument('modelpath', help='Destination for models and logs')
+    train_parser.add_argument('--property', type=str, help='QM9 property to be predicted (default: %(default)s)',
+                              default="energy_U0", choices=QM9.properties)
+
     train_parser.add_argument('--remove_uncharacterized', help='Remove uncharacterized molecules from QM9',
                               type=bool, default='False')
     train_parser.add_argument('--seed', type=int, default=None, help='Set random seed for torch and numpy.')
@@ -65,6 +61,12 @@ def get_parser():
     train_parser.add_argument('--lr_min', type=float, help='Minimal learning rate (default: %(default)s)',
                               default=1e-6)
 
+    train_parser.add_argument('--logger', help='Choose logger for training process (default: %(default)s)',
+                            choices=['csv', 'tensorboard'], default='csv')
+    train_parser.add_argument('--log_every_n_epochs', type=int,
+                            help='Log metrics every given number of epochs (default: %(default)s)',
+                            default=1)
+
     ## evaluation
     eval_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
     eval_parser.add_argument('datapath', help='Path of QM9 dataset directory')
@@ -74,6 +76,8 @@ def get_parser():
 
     # model-specific parsers
     model_parser = argparse.ArgumentParser(add_help=False)
+    model_parser.add_argument('--aggregation_mode', type=str, default='sum', choices=['sum', 'avg'],
+                              help=' (default: %(default)s)')
 
     #######  SchNet  #######
     schnet_parser = argparse.ArgumentParser(add_help=False, parents=[model_parser])
@@ -173,11 +177,11 @@ def train(args, model, train_loader, val_loader, device):
     trainer.train(device)
 
 
-def evaluate(args, model, train_loader, val_loader, test_loader, device):
-    header = ['Subset', args.property + ' MAE', args.property + ' RMSE']
+def evaluate(args, model, property, train_loader, val_loader, test_loader, device):
+    header = ['Subset', property + ' MAE', property + ' RMSE']
 
-    metrics = [spk.metrics.MeanAbsoluteError(args.property, 0),
-               spk.metrics.RootMeanSquaredError(args.property, 0)
+    metrics = [spk.metrics.MeanAbsoluteError(property, 0),
+               spk.metrics.RootMeanSquaredError(property, 0)
                ]
 
     results = []
@@ -225,7 +229,8 @@ def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None, par
             atomwise_output = spk.atomistic.DipoleMoment(args.features, predict_magnitude=True, mean=mean,
                                                          stddev=stddev)
         else:
-            atomwise_output = spk.atomistic.Atomwise(args.features, mean=mean, stddev=stddev, atomref=atomref)
+            atomwise_output = spk.atomistic.Atomwise(args.features, aggregation_mode=args.aggregation_mode, mean=mean,
+                                                     stddev=stddev, atomref=atomref)
         model = spk.atomistic.AtomisticModel(representation, atomwise_output)
 
     elif args.model == 'wacsf':
@@ -257,6 +262,7 @@ def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None, par
         else:
             atomwise_output = spk.atomistic.ElementalAtomwise(representation.n_symfuncs, n_hidden=args.n_nodes,
                                                               n_layers=args.n_layers,
+                                                              aggregation_mode=args.aggregation_mode,
                                                               mean=mean, stddev=stddev, atomref=atomref,
                                                               elements=elements)
         model = spk.atomistic.AtomisticModel(representation, atomwise_output)
@@ -313,7 +319,7 @@ if __name__ == '__main__':
     logging.info('QM9 will be loaded...')
     qm9 = QM9(args.datapath, download=True, properties=[train_args.property], collect_triples=args.model == 'wacsf',
               remove_uncharacterized=train_args.remove_uncharacterized)
-    atomref = qm9.get_reference(args.property)
+    atomref = qm9.get_reference(train_args.property)
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, 'split.npz')
@@ -355,7 +361,7 @@ if __name__ == '__main__':
         test_loader = spk.data.AtomsLoader(data_test, batch_size=args.batch_size,
                                            num_workers=2, pin_memory=True)
         with torch.no_grad():
-            evaluate(args, model, train_loader, val_loader, test_loader, device)
+            evaluate(args, model, train_args.property, train_loader, val_loader, test_loader, device)
         logging.info("... done!")
     else:
         print('Unknown mode:', args.mode)
