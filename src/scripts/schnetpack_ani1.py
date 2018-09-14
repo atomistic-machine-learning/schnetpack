@@ -232,11 +232,11 @@ def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None, par
         sfmode = ('weighted', 'Behler')[args.behler]
         # Convert element strings to atomic charges
         elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
-        representation = spk.representation.SymmetryFunctions(args.radial, args.angular, zetas=set(args.zetas),
-                                                              cutoff_radius=args.cutoff,
-                                                              centered=args.centered, crossterms=args.crossterms,
-                                                              mode=sfmode,
-                                                              elements=elements)
+        representation = spk.representation.BehlerSFBlock(args.radial, args.angular, zetas=set(args.zetas),
+                                                          cutoff_radius=args.cutoff,
+                                                          centered=args.centered, crossterms=args.crossterms,
+                                                          mode=sfmode,
+                                                          elements=elements)
         logging.info("Using {:d} {:s}-type SF".format(representation.n_symfuncs, sfmode))
         # Standardize representation if requested
         if args.standardize and mode == 'train':

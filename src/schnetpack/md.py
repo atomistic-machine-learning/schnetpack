@@ -28,7 +28,7 @@ from ase.vibrations import Vibrations
 from schnetpack.atomistic import Energy, ElementalEnergy, AtomisticModel
 from schnetpack.data import Structure
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
-from schnetpack.representation import SchNet, SymmetryFunctions, StandardizeSF
+from schnetpack.representation import SchNet, BehlerSFBlock, StandardizeSF
 from schnetpack.utils import read_from_json
 
 
@@ -362,9 +362,9 @@ def load_model(modelpath, cuda=True):
         mode = ('weighted', 'Behler')[args.behler]
         # Convert element strings to atomic charges
         elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
-        representation = SymmetryFunctions(args.radial, args.angular, zetas=set(args.zetas), cutoff_radius=args.cutoff,
-                                           centered=args.centered, crossterms=args.crossterms, mode=mode,
-                                           elements=elements)
+        representation = BehlerSFBlock(args.radial, args.angular, zetas=set(args.zetas), cutoff_radius=args.cutoff,
+                                       centered=args.centered, crossterms=args.crossterms, mode=mode,
+                                       elements=elements)
         representation = StandardizeSF(representation, cuda=args.cuda)
         atomwise_output = ElementalEnergy(representation.n_symfuncs, n_hidden=args.n_nodes, n_layers=args.n_layers,
                                           return_force=True, create_graph=True, elements=elements)

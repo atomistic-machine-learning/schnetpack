@@ -156,10 +156,10 @@ def train(args, model, train_loader, val_loader, device):
     hooks.append(schedule)
 
     # index into model output: [energy, forces]
-    metrics = [spk.metrics.MeanAbsoluteError(MD17.E, 0),
-               spk.metrics.RootMeanSquaredError(MD17.E, 0),
-               spk.metrics.MeanAbsoluteError(MD17.F, 1),
-               spk.metrics.RootMeanSquaredError(MD17.F, 1)]
+    metrics = [spk.metrics.MeanAbsoluteError(MD17.energies, 0),
+               spk.metrics.RootMeanSquaredError(MD17.energies, 0),
+               spk.metrics.MeanAbsoluteError(MD17.forces, 1),
+               spk.metrics.RootMeanSquaredError(MD17.forces, 1)]
     if args.logger == 'csv':
         logger = spk.train.CSVHook(os.path.join(args.modelpath, 'log'),
                                    metrics, every_n_epochs=args.log_every_n_epochs)
@@ -171,10 +171,10 @@ def train(args, model, train_loader, val_loader, device):
 
     # setup loss function
     def loss(batch, result):
-        ediff = batch[MD17.E] - result[0]
+        ediff = batch[MD17.energies] - result[0]
         ediff = ediff ** 2
 
-        fdiff = batch[MD17.F] - result[1]
+        fdiff = batch[MD17.forces] - result[1]
         fdiff = fdiff ** 2
 
         err_sq = args.rho * torch.mean(ediff.view(-1)) + (1 - args.rho) * torch.mean(fdiff.view(-1))
@@ -190,14 +190,14 @@ def evaluate(args, model, train_loader, val_loader, test_loader, device):
               'Force MAE', 'Force RMSE', 'Force Length MAE', 'Force Length RMSE', 'Force Angle MAE', 'Angle RMSE']
 
     metrics = [
-        spk.metrics.MeanAbsoluteError(MD17.E, 0),
-        spk.metrics.RootMeanSquaredError(MD17.E, 0),
-        spk.metrics.MeanAbsoluteError(MD17.F, -1),
-        spk.metrics.RootMeanSquaredError(MD17.F, -1),
-        spk.metrics.LengthMAE(MD17.F, -1),
-        spk.metrics.LengthRMSE(MD17.F, -1),
-        spk.metrics.AngleMAE(MD17.F, -1),
-        spk.metrics.AngleRMSE(MD17.F, -1)
+        spk.metrics.MeanAbsoluteError(MD17.energies, 0),
+        spk.metrics.RootMeanSquaredError(MD17.energies, 0),
+        spk.metrics.MeanAbsoluteError(MD17.forces, -1),
+        spk.metrics.RootMeanSquaredError(MD17.forces, -1),
+        spk.metrics.LengthMAE(MD17.forces, -1),
+        spk.metrics.LengthRMSE(MD17.forces, -1),
+        spk.metrics.AngleMAE(MD17.forces, -1),
+        spk.metrics.AngleRMSE(MD17.forces, -1)
     ]
 
     results = []
@@ -248,11 +248,11 @@ def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None, par
         sfmode = ('weighted', 'Behler')[args.behler]
         # Convert element strings to atomic charges
         elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
-        representation = spk.representation.SymmetryFunctions(args.radial, args.angular, zetas=set(args.zetas),
-                                                              cutoff_radius=args.cutoff,
-                                                              centered=args.centered, crossterms=args.crossterms,
-                                                              elements=elements,
-                                                              mode=sfmode)
+        representation = spk.representation.BehlerSFBlock(args.radial, args.angular, zetas=set(args.zetas),
+                                                          cutoff_radius=args.cutoff,
+                                                          centered=args.centered, crossterms=args.crossterms,
+                                                          elements=elements,
+                                                          mode=sfmode)
         logging.info("Using {:d} {:s}-type SF".format(representation.n_symfuncs, sfmode))
         # Standardize representation if requested
         if args.standardize and mode == 'train':
@@ -325,7 +325,7 @@ if __name__ == '__main__':
 
     if args.mode == 'train':
         logging.info('calculate statistics...')
-        mean, stddev = train_loader.get_statistics(MD17.E, True)
+        mean, stddev = train_loader.get_statistics(MD17.energies, True)
     else:
         mean, stddev = None, None
 
