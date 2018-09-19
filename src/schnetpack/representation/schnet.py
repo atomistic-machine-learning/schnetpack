@@ -188,7 +188,7 @@ class SchNet(nn.Module):
         x = self.embedding(atomic_numbers)
 
         # spatial features
-        r_ij = self.distances(positions, neighbors, cell, cell_offset)
+        r_ij = self.distances(positions, neighbors, cell, cell_offset, neighbor_mask=neighbor_mask)
         f_ij = self.distance_expansion(r_ij)
 
         # interactions
