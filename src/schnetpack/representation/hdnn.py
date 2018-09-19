@@ -187,7 +187,7 @@ class SymmetryFunctions(nn.Module):
             # Get atom types of neighbors
             Z_ij = snn.neighbor_elements(Z_rad, neighbors)
             # Compute distances
-            distances = snn.atom_distances(positions, neighbors)
+            distances = snn.atom_distances(positions, neighbors, neighbor_mask=neighbor_mask)
             radial_sf = self.RDF(distances, elemental_weights=Z_ij, neighbor_mask=neighbor_mask)
         else:
             radial_sf = None
