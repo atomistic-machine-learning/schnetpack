@@ -49,8 +49,8 @@ class SchNetInteraction(nn.Module):
         Returns:
             torch.Tensor: SchNet representation.
         """
-        v = self.cfconv.forward(x, r_ij, neighbors, neighbor_mask, f_ij=f_ij)
-        v = self.dense.forward(v)
+        v = self.cfconv(x, r_ij, neighbors, neighbor_mask, f_ij=f_ij)
+        v = self.dense(v)
         return v
 
 
@@ -98,8 +98,8 @@ class SchNetCutoffInteraction(nn.Module):
         Returns:
             torch.Tensor: SchNet representation.
         """
-        v = self.cfconv.forward(x, r_ij, neighbors, neighbor_mask, f_ij)
-        v = self.dense.forward(v)
+        v = self.cfconv(x, r_ij, neighbors, neighbor_mask, f_ij)
+        v = self.dense(v)
         return v
 
 
