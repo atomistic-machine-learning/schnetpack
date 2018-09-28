@@ -144,9 +144,10 @@ class AtomsConverter:
         # get atom environment
         nbh_idx, offsets = self.environment_provider.get_environment(idx, atoms)
 
-        # Get neighbors
-        inputs[Structure.neighbors] = torch.LongTensor(nbh_idx.astype(np.int))
-        inputs[Structure.neighbor_mask] = torch.ones_like(inputs[Structure.neighbors]).float()
+        # Get neighbors and neighbor mask
+        mask = torch.FloatTensor(nbh_idx) >= 0
+        inputs[Structure.neighbor_mask] = mask.float()
+        inputs[Structure.neighbors] = torch.LongTensor(nbh_idx.astype(np.int)) * mask.long()
 
         # Get cells
         inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
