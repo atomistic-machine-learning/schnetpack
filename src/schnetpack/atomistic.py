@@ -69,14 +69,10 @@ class OutputModule(nn.Module):
     Base class for output modules.
 
     Args:
-        n_in (int): input dimension
-        n_out (int): output dimension
         requires_dr (bool): specifies if the derivative of the ouput is required
     """
 
-    def __init__(self, n_in, n_out, requires_dr=False):
-        self.n_in = n_in
-        self.n_out = n_out
+    def __init__(self, requires_dr=False):
         self.requires_dr = requires_dr
         super(OutputModule, self).__init__()
 
