@@ -82,6 +82,11 @@ class AtomsData(Dataset):
         at = row.toatoms()
         return at
 
+    def get_metadata(self, key):
+        if key in self.asedb.metadata.keys():
+            return self.asedb.metadata[key]
+        return None
+
     def __getitem__(self, idx):
         # get row
         if self.subset is None:
