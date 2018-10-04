@@ -6,11 +6,79 @@ from torch.optim import Adam
 from torch.nn.modules import MSELoss
 
 from schnetpack.nn.cfconv import CFConv
-from schnetpack.representation.schnet import SchNet
+from schnetpack.representation.schnet import SchNet, SchNetInteraction
 from schnetpack.data import Structure
 
 
-def assert_params_changed(model, test_batch, exclude=[]):
+@pytest.fixture
+def batchsize():
+    return 4
+
+@pytest.fixture
+def n_atom_basis():
+    return 128
+
+@pytest.fixture
+def n_atoms():
+    return 19
+
+@pytest.fixture
+def n_spatial_basis():
+    return 25
+
+@pytest.fixture
+def n_filters():
+    return 128
+
+@pytest.fixture
+def atomic_env(batchsize, n_atoms, n_filters):
+    return torch.rand((batchsize, n_atoms, n_filters))
+
+@pytest.fixture
+def atomic_numbers(batchsize, n_atoms):
+    atoms = np.random.randint(1, 9, (1, n_atoms))
+    return torch.LongTensor(np.repeat(atoms, batchsize, axis=0))
+
+@pytest.fixture
+def positions(batchsize, n_atoms):
+    return torch.rand((batchsize, n_atoms, 3))
+
+@pytest.fixture
+def cell(batchsize):
+    return torch.zeros((batchsize, 3, 3))
+
+@pytest.fixture
+def cell_offset(batchsize, n_atoms):
+    return torch.zeros((batchsize, n_atoms, n_atoms - 1, 3))
+
+@pytest.fixture
+def neighbors(batchsize, n_atoms):
+    neighbors = np.array([range(n_atoms)]*n_atoms)
+    neighbors = neighbors[~np.eye(neighbors.shape[0], dtype=bool)].reshape(
+        neighbors.shape[0], -1)[np.newaxis, :]
+    return torch.LongTensor(np.repeat(neighbors, batchsize, axis=0))
+
+@pytest.fixture
+def neighbor_mask(batchsize, n_atoms):
+    return torch.ones((batchsize, n_atoms, n_atoms - 1))
+
+@pytest.fixture
+def schnet_batch(atomic_numbers, positions, cell, cell_offset, neighbors, neighbor_mask):
+    inputs = {}
+    inputs[Structure.Z] = atomic_numbers
+    inputs[Structure.R] = positions
+    inputs[Structure.cell] = cell
+    inputs[Structure.cell_offset] = cell_offset
+    inputs[Structure.neighbors] = neighbors
+    inputs[Structure.neighbor_mask] = neighbor_mask
+    return inputs
+
+@pytest.fixture
+def distances(batchsize, n_atoms):
+    return torch.rand((batchsize, n_atoms, n_atoms - 1))
+
+
+def assert_params_changed(model, input, exclude=[]):
     """
     Check if all model-parameters are updated when training.
 
@@ -24,7 +92,7 @@ def assert_params_changed(model, test_batch, exclude=[]):
     # do one training step
     optimizer = Adam(model.parameters())
     loss_fn = MSELoss()
-    pred = model(test_batch)
+    pred = model(*input)
     loss = loss_fn(pred, torch.rand(pred.shape))
     optimizer.zero_grad()
     loss.backward()
@@ -37,47 +105,35 @@ def assert_params_changed(model, test_batch, exclude=[]):
             continue
         assert (before[key] != after[key]).any(), 'Not all Parameters have been updated!'
 
-def assert_equal_shape(model, test_batch, out_shape):
+def assert_equal_shape(model, batch, out_shape):
     """
     Check if the model returns the desired output shape.
 
     Args:
         model (nn.Module): model that needs to be tested
-        test_batch (dict): input data
+        test_batch (list): input data
         out_shape (list): desired output shape
     """
-    pred = model(test_batch)
+    pred = model(*batch)
     assert list(pred.shape) == out_shape, 'Model does not return expected shape!'
 
-
-@pytest.fixture
-def test_batch():
-    inputs = {}
-    inputs[Structure.Z] = torch.LongTensor([[1]*10 + [6]*7 + [8]*2]*4)
-    inputs[Structure.R] = torch.rand((4, 19, 3))
-    inputs[Structure.cell] = torch.zeros((4, 3, 3))
-    inputs[Structure.cell_offset] = torch.zeros((4, 19, 18, 3))
-    neighbors = np.array([range(19)]*19)
-    neighbors = neighbors[~np.eye(neighbors.shape[0], dtype=bool)].reshape(
-        neighbors.shape[0], -1)[np.newaxis, :]
-    neighbors = np.vstack((neighbors, neighbors, neighbors, neighbors))
-    inputs[Structure.neighbors] = torch.LongTensor(neighbors)
-    inputs[Structure.neighbor_mask] = torch.ones((4, 19, 18))
-
-    return inputs
-
-def test_parameter_update_schnet(test_batch):
+def test_parameter_update_schnet(schnet_batch):
     model = SchNet()
-    assert_params_changed(model, test_batch, exclude=['distance_expansion'])
+    schnet_batch = [schnet_batch]
+    assert_params_changed(model, schnet_batch, exclude=['distance_expansion'])
 
-def test_shape_schnet(test_batch):
-    batch_size = 4
-    n_atom_basis = 100
-    n_atoms = 19
-
+def test_shape_schnet(schnet_batch, batchsize, n_atoms, n_atom_basis):
+    schnet_batch = [schnet_batch]
     model = SchNet(n_atom_basis=n_atom_basis)
 
-    assert_equal_shape(model, test_batch, [batch_size, n_atoms, n_atom_basis])
+    assert_equal_shape(model, schnet_batch, [batchsize, n_atoms, n_atom_basis])
+
+def test_shape_schnetinteraction(batchsize, n_atoms, n_atom_basis, n_spatial_basis, n_filters,
+                                 atomic_env, distances, neighbors, neighbor_mask):
+    model = SchNetInteraction(n_atom_basis, 1, n_filters)
+    out_shape = [batchsize, n_atoms, n_filters]
+    inputs = [atomic_env, distances, neighbors, neighbor_mask]
+    assert_equal_shape(model, inputs, out_shape)
 
 def teardown_module():
     """
