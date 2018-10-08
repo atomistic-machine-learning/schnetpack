@@ -1,10 +1,12 @@
 """
-This module contains all functionalities required to load atomistic data, generate batches and compute statistics.
-It makes use of the ASE database for atoms [#ase2]_.
+This module contains all functionalities required to load atomistic data,
+generate batches and compute statistics. It makes use of the ASE database
+for atoms [#ase2]_.
 
 References
 ----------
-.. [#ase2] Larsen, Mortensen, Blomqvist, Castelli, Christensen, Dułak, Friis, Groves, Hammer, Hargus:
+.. [#ase2] Larsen, Mortensen, Blomqvist, Castelli, Christensen, Dułak, Friis,
+   Groves, Hammer, Hargus:
    The atomic simulation environment -- a Python library for working with atoms.
    Journal of Physics: Condensed Matter, 9, 27. 2017.
 """
@@ -21,28 +23,66 @@ from torch.utils.data import Dataset, DataLoader
 from .environment import SimpleEnvironmentProvider, collect_atom_triples
 
 
-class AtomsData(Dataset):
-    """
-    Data interface for atomistic systems and properties based on an ASE database.
+class AtomsDataError(Exception):
+    pass
 
-    Args:
-        asedb_path (str): path to ASE database
-        subset (list): indices of subset (optional)
-        properties (list of str): properties to be loaded (optional)
-        environment_provider (schnetpack.environment.EnvironmentProvider): method to collect atom neighbors
-        collect_triples (bool): If True, collect atom triple indices (default: False).
-        center_positions (bool): If True, substract center of mass from atom positions (default: True).
-    """
 
-    def __init__(self, asedb_path, subset=None, properties=[], environment_provider=SimpleEnvironmentProvider(),
+class BaseAtomsData(Dataset):
+
+    def __init__(self, datapath, subset=None, required_properties=[],
+                 environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True):
-        self.asedb_path = asedb_path
-        self.asedb = connect(asedb_path)
+        self.datapath = datapath
         self.subset = subset
-        self.properties = properties
+        self.required_properties = required_properties
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
         self.centered = center_positions
+
+    def create_splits(self, num_train=None, num_val=None, split_file=None):
+        """
+        Splits the dataset into train/validation/test splits, writes split to
+        an npz file and returns subsets. Either the sizes of training and
+        validation split or an existing split file with split indices have to
+        be supplied. The remaining data will be used in the test dataset.
+
+        Args:
+            num_train (int): number of training examples
+            num_val (int): number of validation examples
+            split_file (str): Path to split file. If file exists, splits will
+                              be loaded. Otherwise, a new file will be created
+                              where the generated split is stored.
+
+        Returns:
+            schnetpack.data.AtomsData: training dataset
+            schnetpack.data.AtomsData: validation dataset
+            schnetpack.data.AtomsData: test dataset
+
+        """
+        if split_file is not None and os.path.exists(split_file):
+            S = np.load(split_file)
+            train_idx = S['train_idx'].tolist()
+            val_idx = S['val_idx'].tolist()
+            test_idx = S['test_idx'].tolist()
+        else:
+            if num_train is None or num_val is None:
+                raise ValueError(
+                    'You have to supply either split sizes (num_train /' +
+                    ' num_val) or an npz file with splits.')
+
+            idx = np.random.permutation(len(self))
+            train_idx = idx[:num_train].tolist()
+            val_idx = idx[num_train:num_train + num_val].tolist()
+            test_idx = idx[num_train + num_val:].tolist()
+
+            if split_file is not None:
+                np.savez(split_file, train_idx=train_idx, val_idx=val_idx,
+                         test_idx=test_idx)
+
+        train = self.create_subset(train_idx)
+        val = self.create_subset(val_idx)
+        test = self.create_subset(test_idx)
+        return train, val, test
 
     def create_subset(self, idx):
         """
@@ -55,8 +95,77 @@ class AtomsData(Dataset):
         """
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
-        return AtomsData(self.asedb_path, subidx, self.properties, self.environment_provider, self.collect_triples,
-                         self.centered)
+        return type(self)(self.datapath, subidx, self.required_properties,
+                          self.environment_provider, self.collect_triples,
+                          self.centered)
+
+    def __len__(self):
+        raise NotImplementedError
+
+    def __getitem__(self, idx):
+        at, properties = self.get_properties(idx)
+
+        # get atom environment
+        nbh_idx, offsets = self.environment_provider.get_environment(idx, at)
+
+        properties[Structure.neighbors] = torch.LongTensor(
+            nbh_idx.astype(np.int))
+        properties[Structure.cell_offset] = torch.FloatTensor(
+            offsets.astype(np.float32))
+        properties['_idx'] = torch.LongTensor(np.array([idx], dtype=np.int))
+
+        if self.collect_triples:
+            nbh_idx_j, nbh_idx_k = collect_atom_triples(nbh_idx)
+            properties[Structure.neighbor_pairs_j] = torch.LongTensor(
+                nbh_idx_j.astype(np.int))
+            properties[Structure.neighbor_pairs_k] = torch.LongTensor(
+                nbh_idx_k.astype(np.int))
+
+        return properties
+
+    def get_atoms(self, idx):
+        raise NotImplementedError
+
+    def get_properties(self, idx):
+        raise NotImplementedError
+
+    def get_metadata(self, key):
+        raise NotImplementedError
+
+    def _subset_index(self, idx):
+        # get row
+        if self.subset is None:
+            idx = int(idx)
+        else:
+            idx = int(self.subset[idx])
+        return idx
+
+
+class AtomsData(BaseAtomsData):
+    """
+    Data interface for atomistic systems and properties based on an
+    ASE database.
+
+    Args:
+        asedb_path (str): path to ASE database
+        subset (list): indices of subset (optional)
+        properties (list of str): properties to be loaded (optional)
+        environment_provider (schnetpack.environment.EnvironmentProvider):
+            method to collect atom neighbors
+        collect_triples (bool):
+            If True, collect atom triple indices (default: False).
+        center_positions (bool):
+            If True, substract center of mass from atom positions
+            (default: True).
+    """
+
+    def __init__(self, asedb_path, subset=None, properties=[],
+                 environment_provider=SimpleEnvironmentProvider(),
+                 collect_triples=False, center_positions=True):
+        super(AtomsData, self).__init__(asedb_path, subset, properties,
+                                        environment_provider,
+                                        collect_triples, center_positions)
+        self.asedb = connect(asedb_path)
 
     def __len__(self):
         if self.subset is None:
@@ -74,11 +183,8 @@ class AtomsData(Dataset):
             ase.Atoms: atoms data
 
         """
-        # get row
-        if self.subset is None:
-            row = self.asedb.get(int(idx) + 1)
-        else:
-            row = self.asedb.get(int(self.subset[idx]) + 1)
+        idx = self._subset_index(idx)
+        row = self.asedb.get(idx + 1)
         at = row.toatoms()
         return at
 
@@ -87,18 +193,16 @@ class AtomsData(Dataset):
             return self.asedb.metadata[key]
         return None
 
-    def __getitem__(self, idx):
-        # get row
-        if self.subset is None:
-            row = self.asedb.get(int(idx) + 1)
-        else:
-            row = self.asedb.get(int(self.subset[idx]) + 1)
-        at = self.get_atoms(idx)
+    def get_properties(self, idx):
+        idx = self._subset_index(idx)
+        row = self.asedb.get(idx + 1)
+        at = row.toatoms()
 
         # extract properties
         properties = {}
-        for p in self.properties:
-            # Capture exception for ISO17 where energies are stored directly in the row
+        for p in self.required_properties:
+            # Capture exception for ISO17 where energies are stored directly
+            # in the row
             if p in row:
                 prop = row[p]
             else:
@@ -111,68 +215,72 @@ class AtomsData(Dataset):
 
         # extract/calculate structure
         properties[Structure.Z] = torch.LongTensor(at.numbers.astype(np.int))
-
         positions = at.positions.astype(np.float32)
         if self.centered:
             positions -= at.get_center_of_mass()
         properties[Structure.R] = torch.FloatTensor(positions)
+        properties[Structure.cell] = torch.FloatTensor(
+            at.cell.astype(np.float32))
+        return at, properties
 
-        properties[Structure.cell] = torch.FloatTensor(at.cell.astype(np.float32))
 
-        # get atom environment
-        nbh_idx, offsets = self.environment_provider.get_environment(idx, at)
+class AseAtomsData(BaseAtomsData):
+    def __init__(self, asedb_path, subset=None, required_properties=[],
+                 environment_provider=SimpleEnvironmentProvider(),
+                 collect_triples=False, center_positions=True):
+        super(AseAtomsData, self).__init__(asedb_path, subset,
+                                           required_properties,
+                                           environment_provider,
+                                           collect_triples, center_positions)
+        self.asedb = connect(asedb_path)
 
-        properties[Structure.neighbors] = torch.LongTensor(nbh_idx.astype(np.int))
-        properties[Structure.cell_offset] = torch.FloatTensor(offsets.astype(np.float32))
-        properties['_idx'] = torch.LongTensor(np.array([idx], dtype=np.int))
+    def __len__(self):
+        if self.subset is None:
+            return self.asedb.count()
+        return len(self.subset)
 
-        if self.collect_triples:
-            nbh_idx_j, nbh_idx_k = collect_atom_triples(nbh_idx)
-            properties[Structure.neighbor_pairs_j] = torch.LongTensor(nbh_idx_j.astype(np.int))
-            properties[Structure.neighbor_pairs_k] = torch.LongTensor(nbh_idx_k.astype(np.int))
-
-        return properties
-
-    def create_splits(self, num_train=None, num_val=None, split_file=None):
+    def get_atoms(self, idx):
         """
-        Splits the dataset into train/validation/test splits, writes split to an npz file and returns subsets.
-        Either the sizes of training and validation split or an existing split file with split indices have to be
-        supplied. The remaining data will be used in the test dataset.
+        Return atoms of provided index.
 
         Args:
-            num_train (int): number of training examples
-            num_val (int): number of validation examples
-            split_file (str): Path to split file. If file exists, splits will be loaded.
-                              Otherwise, a new file will be created where the generated split is stored.
+            idx (int): atoms index
 
         Returns:
-            schnetpack.data.AtomsData: training dataset
-            schnetpack.data.AtomsData: validation dataset
-            schnetpack.data.AtomsData: test dataset
+            ase.Atoms: atoms data
 
         """
-        if split_file is not None and os.path.exists(split_file):
-            S = np.load(split_file)
-            train_idx = S['train_idx'].tolist()
-            val_idx = S['val_idx'].tolist()
-            test_idx = S['test_idx'].tolist()
-        else:
-            if num_train is None or num_val is None:
-                raise ValueError(
-                    'You have to supply either split sizes (num_train / num_val) or an npz file with splits.')
+        idx = self._subset_index(idx)
+        row = self.asedb.get(idx + 1)
+        at = row.toatoms()
+        return at
 
-            idx = np.random.permutation(len(self))
-            train_idx = idx[:num_train].tolist()
-            val_idx = idx[num_train:num_train + num_val].tolist()
-            test_idx = idx[num_train + num_val:].tolist()
+    def get_metadata(self, key):
+        if key in self.asedb.metadata.keys():
+            return self.asedb.metadata[key]
+        return None
 
-            if split_file is not None:
-                np.savez(split_file, train_idx=train_idx, val_idx=val_idx, test_idx=test_idx)
+    def add_atoms(self, atoms, **properties):
 
-        train = self.create_subset(train_idx)
-        val = self.create_subset(val_idx)
-        test = self.create_subset(test_idx)
-        return train, val, test
+        data = {}
+        for pname in self.required_properties:
+            try:
+                prop = properties[pname]
+            except:
+                raise AtomsDataError("Required property missing:" + pname)
+
+            try:
+                pshape = prop.shape
+                ptype = prop.dtype
+            except:
+                raise AtomsDataError("Required property `" + pname +
+                                     "` has to be `numpy.ndarray`.")
+
+            data[pname] = prop.tobytes()
+            data['_shape_'+pname] = pshape
+            data['_dtype_' + pname] = ptype
+
+        self.asedb.write(atoms, data=data)
 
 
 class StatisticsAccumulator:
@@ -201,7 +309,8 @@ class StatisticsAccumulator:
 
     def add_sample(self, sample_value):
         """
-        Add a sample to the accumulator and update running estimators. Differentiates between different types of samples
+        Add a sample to the accumulator and update running estimators.
+        Differentiates between different types of samples.
 
         Args:
             sample_value (torch.Tensor): data sample
@@ -258,7 +367,7 @@ class StatisticsAccumulator:
         return mean, stddev
 
 
-def collate_atoms(examples):
+def collate_aseatoms(examples):
     """
     Build batch from systems and properties & apply padding
 
@@ -279,26 +388,31 @@ def collate_atoms(examples):
     # get maximum sizes
     for properties in examples[1:]:
         for prop, val in properties.items():
-            max_size[prop] = np.maximum(max_size[prop], np.array(val.size(), dtype=np.int))
+            max_size[prop] = np.maximum(max_size[prop],
+                                        np.array(val.size(), dtype=np.int))
 
     # initialize batch
     batch = {
-        p: torch.zeros(len(examples), *[int(ss) for ss in size]).type(examples[0][p].type()) for p, size in
+        p: torch.zeros(len(examples), *[int(ss) for ss in size]).type(
+            examples[0][p].type()) for p, size in
         max_size.items()
     }
     has_atom_mask = Structure.atom_mask in batch.keys()
     has_neighbor_mask = Structure.neighbor_mask in batch.keys()
 
     if not has_neighbor_mask:
-        batch[Structure.neighbor_mask] = torch.zeros_like(batch[Structure.neighbors]).float()
+        batch[Structure.neighbor_mask] = torch.zeros_like(
+            batch[Structure.neighbors]).float()
     if not has_atom_mask:
-        batch[Structure.atom_mask] = torch.zeros_like(batch[Structure.Z]).float()
+        batch[Structure.atom_mask] = torch.zeros_like(
+            batch[Structure.Z]).float()
 
     # If neighbor pairs are requested, construct mask placeholders
     # Since the structure of both idx_j and idx_k is identical
     # (not the values), only one cutoff mask has to be generated
     if Structure.neighbor_pairs_j in properties:
-        batch[Structure.neighbor_pairs_mask] = torch.zeros_like(batch[Structure.neighbor_pairs_j]).float()
+        batch[Structure.neighbor_pairs_mask] = torch.zeros_like(
+            batch[Structure.neighbor_pairs_j]).float()
 
     # build batch and pad
     for k, properties in enumerate(examples):
@@ -338,8 +452,9 @@ def collate_atoms(examples):
 
 class AtomsLoader(DataLoader):
     r"""
-    Convenience for ``torch.data.DataLoader`` which already uses the correct collate_fn for AtomsData and
-    provides functionality for calculating mean and stddev.
+    Convenience for ``torch.data.DataLoader`` which already uses the correct
+    collate_fn for AtomsData and provides functionality for calculating mean
+    and stddev.
 
     Arguments:
         dataset (Dataset): dataset from which to load the data.
@@ -370,14 +485,19 @@ class AtomsLoader(DataLoader):
 
     """
 
-    def __init__(self, dataset, batch_size=1, shuffle=False, sampler=None, batch_sampler=None,
-                 num_workers=0, collate_fn=collate_atoms, pin_memory=False, drop_last=False,
+    def __init__(self, dataset, batch_size=1, shuffle=False, sampler=None,
+                 batch_sampler=None,
+                 num_workers=0, collate_fn=collate_aseatoms, pin_memory=False,
+                 drop_last=False,
                  timeout=0, worker_init_fn=None):
-        super(AtomsLoader, self).__init__(dataset, batch_size, shuffle, sampler, batch_sampler,
-                                          num_workers, collate_fn, pin_memory, drop_last,
+        super(AtomsLoader, self).__init__(dataset, batch_size, shuffle,
+                                          sampler, batch_sampler,
+                                          num_workers, collate_fn, pin_memory,
+                                          drop_last,
                                           timeout, worker_init_fn)
 
-    def get_statistics(self, property_name, atomistic=False, atomref=None, split_file=None):
+    def get_statistics(self, property_name, atomistic=False, atomref=None,
+                       split_file=None):
         """
         Compute mean and variance of a property.
         Uses the incremental Welford algorithm implemented in StatisticsAccumulator
@@ -411,7 +531,8 @@ class AtomsLoader(DataLoader):
 
                 count = 0
                 for row in self:
-                    self._update_statistic(atomistic, atomref, property_name, row, statistics)
+                    self._update_statistic(atomistic, atomref, property_name,
+                                           row, statistics)
                     count += 1
 
                 mean, stddev = statistics.get_statistics()
@@ -420,11 +541,14 @@ class AtomsLoader(DataLoader):
                 if split_file is not None and os.path.exists(split_file):
                     split_data = np.load(split_file)
                     np.savez(split_file, train_idx=split_data['train_idx'],
-                             val_idx=split_data['val_idx'], test_idx=split_data['test_idx'], mean=mean, stddev=stddev)
+                             val_idx=split_data['val_idx'],
+                             test_idx=split_data['test_idx'], mean=mean,
+                             stddev=stddev)
 
             return mean, stddev
 
-    def _update_statistic(self, atomistic, atomref, property_name, row, statistics):
+    def _update_statistic(self, atomistic, atomref, property_name, row,
+                          statistics):
         """
         Helper function to update iterative mean / stddev statistics computation
         """
@@ -446,6 +570,7 @@ class Structure:
     atom_mask = '_atom_mask'
     R = '_positions'
     cell = '_cell'
+    pbc = '_pbc'
     neighbors = '_neighbors'
     neighbor_mask = '_neighbor_mask'
     cell_offset = '_cell_offset'
