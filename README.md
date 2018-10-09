@@ -16,7 +16,7 @@ supporting more architectures and datasets and many more features.**_
 - python 3
 - ASE
 - numpy
-- PyTorch (>=0.4)
+- PyTorch (>=0.4.1)
 - Optional: tensorboardX, h5py
 
 _**Note: We recommend using a GPU for training the neural networks.**_
