@@ -12,11 +12,11 @@ from ase.db import connect
 from ase.io.extxyz import read_xyz
 from ase.units import Debye, Bohr, Hartree, eV
 
-from schnetpack.data import AtomsData
+from schnetpack.data import AseAtomsData
 from schnetpack.environment import SimpleEnvironmentProvider
 
 
-class QM9(AtomsData):
+class QM9(AseAtomsData):
     """ QM9 benchmark dataset for organic molecules with up to nine heavy atoms from {C, O, N, F}.
 
         This class adds convenience functions to download QM9 from figshare and load the data into pytorch.
@@ -73,8 +73,8 @@ class QM9(AtomsData):
             )
     )
 
-    def __init__(self, path, download=True, subset=None, properties=[], collect_triples=False,
-                 remove_uncharacterized=False):
+    def __init__(self, path, download=True, subset=None, properties=[],
+                 collect_triples=False, remove_uncharacterized=False):
         self.path = path
         self.dbpath = os.path.join(self.path, 'qm9.db')
         self.atomref_path = os.path.join(self.path, 'atomref.npz')
@@ -96,7 +96,8 @@ class QM9(AtomsData):
             # attention:  1-indexing vs 0-indexing
             subset = np.setdiff1d(subset, evilmols - 1)
 
-        super().__init__(self.dbpath, subset, properties, environment_provider, collect_triples)
+        super().__init__(self.dbpath, subset, properties, environment_provider,
+                         collect_triples)
 
     def create_subset(self, idx):
         idx = np.array(idx)
