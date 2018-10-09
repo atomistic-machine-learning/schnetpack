@@ -143,101 +143,15 @@ class BaseAtomsData(Dataset):
 
 
 class AtomsData(BaseAtomsData):
-    """
-    Data interface for atomistic systems and properties based on an
-    ASE database.
-
-    Args:
-        asedb_path (str): path to ASE database
-        subset (list): indices of subset (optional)
-        properties (list of str): properties to be loaded (optional)
-        environment_provider (schnetpack.environment.EnvironmentProvider):
-            method to collect atom neighbors
-        collect_triples (bool):
-            If True, collect atom triple indices (default: False).
-        center_positions (bool):
-            If True, substract center of mass from atom positions
-            (default: True).
-    """
-
-    def __init__(self, asedb_path, subset=None, properties=[],
-                 environment_provider=SimpleEnvironmentProvider(),
-                 collect_triples=False, center_positions=True):
-        super(AtomsData, self).__init__(asedb_path, subset, properties,
-                                        environment_provider,
-                                        collect_triples, center_positions)
-        self.asedb = connect(asedb_path)
-
-    def __len__(self):
-        if self.subset is None:
-            return self.asedb.count()
-        return len(self.subset)
-
-    def get_atoms(self, idx):
-        """
-        Return atoms of provided index.
-
-        Args:
-            idx (int): atoms index
-
-        Returns:
-            ase.Atoms: atoms data
-
-        """
-        idx = self._subset_index(idx)
-        row = self.asedb.get(idx + 1)
-        at = row.toatoms()
-        return at
-
-    def get_metadata(self, key):
-        if key in self.asedb.metadata.keys():
-            return self.asedb.metadata[key]
-        return None
-
-    def set_metadata(self, key, value):
-        self.asedb.metadata[key] = value
-
-    def get_properties(self, idx):
-        idx = self._subset_index(idx)
-        row = self.asedb.get(idx + 1)
-        at = row.toatoms()
-
-        # extract properties
-        properties = {}
-        for p in self.required_properties:
-            # Capture exception for ISO17 where energies are stored directly
-            # in the row
-            if p in row:
-                prop = row[p]
-            else:
-                prop = row.data[p]
-            try:
-                prop.shape
-            except AttributeError as e:
-                prop = np.array([prop], dtype=np.float32)
-            properties[p] = torch.FloatTensor(prop)
-
-        # extract/calculate structure
-        properties[Structure.Z] = torch.LongTensor(at.numbers.astype(np.int))
-        positions = at.positions.astype(np.float32)
-        if self.centered:
-            positions -= at.get_center_of_mass()
-        properties[Structure.R] = torch.FloatTensor(positions)
-        properties[Structure.cell] = torch.FloatTensor(
-            at.cell.astype(np.float32))
-        return at, properties
-
-
-class AseAtomsData(BaseAtomsData):
     ENCODING = 'utf-8'
 
     def __init__(self, asedb_path, subset=None, required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True):
-        super(AseAtomsData, self).__init__(asedb_path, subset,
-                                           required_properties,
-                                           environment_provider,
-                                           collect_triples, center_positions)
+        super(AtomsData, self).__init__(asedb_path, subset,
+                                        required_properties,
+                                        environment_provider,
+                                        collect_triples, center_positions)
         self.asedb = connect(asedb_path)
 
     def __len__(self):
@@ -287,7 +201,7 @@ class AseAtomsData(BaseAtomsData):
                                      "` has to be `numpy.ndarray`.")
 
             base64_bytes = b64encode(prop.tobytes())
-            base64_string = base64_bytes.decode(AseAtomsData.ENCODING)
+            base64_string = base64_bytes.decode(AtomsData.ENCODING)
             data[pname] = base64_string
             data['_shape_'+pname] = pshape
             data['_dtype_' + pname] = str(ptype)
@@ -522,18 +436,21 @@ class AtomsLoader(DataLoader):
         num_workers (int, optional): how many subprocesses to use for data
             loading. 0 means that the data will be loaded in the main process.
             (default: 0)
-        collate_fn (callable, optional): merges a list of samples to form a mini-batch (default: collate_atons).
-        pin_memory (bool, optional): If ``True``, the data loader will copy tensors
-            into CUDA pinned memory before returning them.
-        drop_last (bool, optional): set to ``True`` to drop the last incomplete batch,
-            if the dataset size is not divisible by the batch size. If ``False`` and
-            the size of dataset is not divisible by the batch size, then the last batch
-            will be smaller. (default: False)
-        timeout (numeric, optional): if positive, the timeout value for collecting a batch
-            from workers. Should always be non-negative. (default: 0)
-        worker_init_fn (callable, optional): If not None, this will be called on each
-            worker subprocess with the worker id (an int in ``[0, num_workers - 1]``) as
-            input, after seeding and before data loading. (default: None)
+        collate_fn (callable, optional): merges a list of samples to form a
+            mini-batch (default: collate_atons).
+        pin_memory (bool, optional): If ``True``, the data loader will copy
+            tensors into CUDA pinned memory before returning them.
+        drop_last (bool, optional): set to ``True`` to drop the last incomplete
+            batch, if the dataset size is not divisible by the batch size.
+            If ``False`` and the size of dataset is not divisible by the batch
+            size, then the last batch will be smaller. (default: False)
+        timeout (numeric, optional): if positive, the timeout value for
+            collecting a batch from workers. Should always be non-negative.
+            (default: 0)
+        worker_init_fn (callable, optional): If not None, this will be called
+            on each worker subprocess with the worker id (an int in
+            ``[0, num_workers - 1]``) as input, after seeding and before data
+            loading. (default: None)
 
     """
 
@@ -551,15 +468,16 @@ class AtomsLoader(DataLoader):
     def get_statistics(self, property_name, atomistic=False, atomref=None,
                        split_file=None):
         """
-        Compute mean and variance of a property.
-        Uses the incremental Welford algorithm implemented in StatisticsAccumulator
+        Compute mean and variance of a property. Uses the incremental Welford
+        algorithm implemented in StatisticsAccumulator
 
         Args:
-            property_name (str):  Name of the property for which the mean and standard
-                            deviation should be computed
+            property_name (str):  Name of the property for which the mean and
+                standard deviation should be computed
             atomistic (bool): If set to true, averages over atoms
             atomref (np.ndarray): atomref (default: None)
-            split_file (str): path to split file. If specified, mean and std will be cached in this file (default: None)
+            split_file (str): path to split file. If specified, mean and std
+                will be cached in this file (default: None)
 
         Returns:
             mean:           Mean value
@@ -602,7 +520,7 @@ class AtomsLoader(DataLoader):
     def _update_statistic(self, atomistic, atomref, property_name, row,
                           statistics):
         """
-        Helper function to update iterative mean / stddev statistics computation
+        Helper function to update iterative mean / stddev statistics
         """
         property_value = row[property_name]
         if atomref is not None:
@@ -616,7 +534,7 @@ class AtomsLoader(DataLoader):
 
 class Structure:
     """
-    Keys to access structure properties loaded using `schnetpack.data.AtomsData`
+    Keys to access structure properties in `schnetpack.data.AtomsData`
     """
     Z = '_atomic_numbers'
     atom_mask = '_atom_mask'

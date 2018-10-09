@@ -1,5 +1,6 @@
 import torch
 from torch import nn as nn
+
 from schnetpack.nn import Dense
 from schnetpack.nn.base import Aggregate
 
@@ -23,7 +24,8 @@ class CFConv(nn.Module):
         axis (int): axis over which convolution should be applied
     """
 
-    def __init__(self, n_in, n_filters, n_out, filter_network, cutoff_network=None,
+    def __init__(self, n_in, n_filters, n_out, filter_network,
+                 cutoff_network=None,
                  activation=None, normalize_filter=False, axis=2):
         super(CFConv, self).__init__()
         self.in2f = Dense(n_in, n_filters, bias=False)
@@ -38,7 +40,8 @@ class CFConv(nn.Module):
             x (torch.Tensor): Input representation of atomic environments.
             r_ij (torch.Tensor): Interatomic distances.
             neighbors (torch.Tensor): Indices of neighboring atoms.
-            pairwise_mask (torch.Tensor): Mask to filter out non-existing neighbors introduced via padding.
+            pairwise_mask (torch.Tensor): Mask to filter out non-existing
+                neighbors introduced via padding.
             f_ij (torch.Tensor): Interatomic distances with distance expansion.
 
         Returns:
@@ -55,7 +58,7 @@ class CFConv(nn.Module):
         if self.cutoff_network is not None:
             C = self.cutoff_network(r_ij)
             #            print(C)
-            W *= C
+            W = W * C
 
         # convolution
         y = self.in2f(x)

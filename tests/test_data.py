@@ -29,8 +29,8 @@ def property_spec():
 
 @pytest.fixture
 def empty_asedata(tmpdir, max_atoms, property_spec):
-    return spk.data.AseAtomsData(os.path.join(str(tmpdir), 'test.db'),
-                                 required_properties=list(property_spec.keys()))
+    return spk.data.AtomsData(os.path.join(str(tmpdir), 'test.db'),
+                              required_properties=list(property_spec.keys()))
 
 
 @pytest.fixture
