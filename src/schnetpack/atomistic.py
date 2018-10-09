@@ -119,7 +119,7 @@ class Atomwise(OutputModule):
                  activation=schnetpack.nn.activations.shifted_softplus, return_contributions=False,
                  requires_dr=False, create_graph=False, mean=None, stddev=None, atomref=None, max_z=100, outnet=None,
                  train_embeddings=False):
-        super(Atomwise, self).__init__(n_in, n_out, requires_dr)
+        super(Atomwise, self).__init__(requires_dr)
 
         self.n_layers = n_layers
         self.create_graph = create_graph

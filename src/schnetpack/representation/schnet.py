@@ -44,7 +44,7 @@ class SchNetInteraction(nn.Module):
             r_ij (torch.Tensor): Interatomic distances.
             neighbors (torch.Tensor): Indices of neighboring atoms.
             neighbor_mask (torch.Tensor): Mask to indicate virtual neighbors introduced via zeros padding.
-            f_ij (torch.Tensor): Use at your own risk.
+            f_ij (torch.Tensor): Interatomic distances with distance expansion.
 
         Returns:
             torch.Tensor: SchNet representation.

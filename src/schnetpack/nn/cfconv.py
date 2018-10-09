@@ -39,14 +39,14 @@ class CFConv(nn.Module):
             r_ij (torch.Tensor): Interatomic distances.
             neighbors (torch.Tensor): Indices of neighboring atoms.
             pairwise_mask (torch.Tensor): Mask to filter out non-existing neighbors introduced via padding.
-            f_ij (torch.Tensor): Use at your own risk. Set to None otherwise.
+            f_ij (torch.Tensor): Interatomic distances with distance expansion.
 
         Returns:
             torch.Tensor: Continuous convolution.
 
         """
         if f_ij is None:
-            f_ij = r_ij
+            f_ij = r_ij.unsqueeze(-1)
 
         # calculate filter
         W = self.filter_network(f_ij)
