@@ -73,12 +73,12 @@ class AngularDistribution(nn.Module):
         angular_term = self.angular_filter(cos_theta)
 
         if self.cutoff_function is not None:
-            cutoff_ij = self.cutoff_function(r_ij)
-            cutoff_ik = self.cutoff_function(r_ik)
+            cutoff_ij = self.cutoff_function(r_ij).unsqueeze(-1)
+            cutoff_ik = self.cutoff_function(r_ik).unsqueeze(-1)
             angular_distribution = angular_distribution * cutoff_ij * cutoff_ik
 
             if self.crossterms:
-                cutoff_jk = self.cutoff_function(r_jk)
+                cutoff_jk = self.cutoff_function(r_jk).unsqueeze(-1)
                 angular_distribution = angular_distribution * cutoff_jk
 
         # Compute radial part of descriptor
@@ -253,7 +253,7 @@ class RadialDistribution(nn.Module):
         # If requested, apply cutoff function
         if self.cutoff_function is not None:
             cutoffs = self.cutoff_function(r_ij)
-            radial_distribution = radial_distribution * cutoffs
+            radial_distribution = radial_distribution * cutoffs.unsqueeze(-1)
 
         # Apply neighbor mask
         if neighbor_mask is not None:

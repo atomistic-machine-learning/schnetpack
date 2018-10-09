@@ -13,7 +13,7 @@ from schnetpack.nn.acsf import GaussianSmearing
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.nn.base import Dense, GetItem, ScaleShift, Standardize, Aggregate
 from schnetpack.nn.blocks import MLP, TiledMultiLayerNN, ElementalGate, GatedNetwork
-from schnetpack.nn.cutoff import CosineCutoff, MollifierCutoff
+from schnetpack.nn.cutoff import CosineCutoff, MollifierCutoff, HardCutoff
 from schnetpack.nn.neighbors import NeighborElements
 
 
@@ -141,9 +141,9 @@ def assert_params_changed(model, input, exclude=[]):
     after = model.state_dict()
     before = torch.load('before')
     for key in before.keys():
-        if sum([key.startswith(exclude_layer) for exclude_layer in exclude]) != 0:
+        if np.array([key.startswith(exclude_layer) for exclude_layer in exclude]).any():
             continue
-        assert (before[key] != after[key]).any(), 'Not all Parameters have been updated!'
+        assert (before[key] != after[key]).any(), '{} layer has not been updated!'.format(key)
 
 
 def assert_equal_shape(model, batch, out_shape):
@@ -162,13 +162,25 @@ def assert_equal_shape(model, batch, out_shape):
 def test_parameter_update_schnet(schnet_batch):
     model = SchNet()
     schnet_batch = [schnet_batch]
-    assert_params_changed(model, schnet_batch, exclude=['distance_expansion'])
+    assert_params_changed(model, schnet_batch, exclude=['distance_expansion', 'interactions.0.cutoff_network',
+                                                        'interactions.0.cfconv.cutoff_network'])
+
+def test_parameter_update_schnet_with_cutoff(schnet_batch, n_atom_basis):
+    model_cosine = SchNet(n_atom_basis, cutoff_network=CosineCutoff)
+    model_mollifier = SchNet(n_atom_basis, cutoff_network=MollifierCutoff)
+    schnet_batch = [schnet_batch]
+    exclude = ['distance_expansion', 'interactions.0.cutoff_network',
+               'interactions.0.cfconv.cutoff_network']
+
+    assert_params_changed(model_cosine, schnet_batch, exclude=exclude)
+    assert_params_changed(model_mollifier, schnet_batch, exclude=exclude)
 
 
 def test_gaussian_smearing_is_trainable(schnet_batch):
     model = SchNet(trainable_gaussians=True)
     schnet_batch = [schnet_batch]
-    assert_params_changed(model, schnet_batch)
+    assert_params_changed(model, schnet_batch, exclude=['interactions.0.cutoff_network',
+                                                        'interactions.0.cfconv.cutoff_network'])
 
 
 def test_shape_schnet(schnet_batch, batchsize, n_atoms, n_atom_basis):
@@ -178,9 +190,19 @@ def test_shape_schnet(schnet_batch, batchsize, n_atoms, n_atom_basis):
     assert_equal_shape(model, schnet_batch, [batchsize, n_atoms, n_atom_basis])
 
 
+def test_shape_schnet_with_cutoff(schnet_batch, batchsize, n_atoms, n_atom_basis):
+    schnet_batch = [schnet_batch]
+    model_cosine = SchNet(n_atom_basis=n_atom_basis, cutoff_network=CosineCutoff)
+    model_mollifier = SchNet(n_atom_basis=n_atom_basis, cutoff_network=MollifierCutoff)
+
+    assert_equal_shape(model_cosine, schnet_batch, [batchsize, n_atoms, n_atom_basis])
+    assert_equal_shape(model_mollifier, schnet_batch, [batchsize, n_atoms, n_atom_basis])
+
+
+
 def test_shape_schnetinteraction(batchsize, n_atoms, n_atom_basis, single_spatial_basis,
                                  n_filters, atomic_env, distances, neighbors, neighbor_mask):
-    model = SchNetInteraction(n_atom_basis, single_spatial_basis, n_filters)
+    model = SchNetInteraction(n_atom_basis, single_spatial_basis, n_filters, 5.0)
     out_shape = [batchsize, n_atoms, n_filters]
     inputs = [atomic_env, distances, neighbors, neighbor_mask]
     assert_equal_shape(model, inputs, out_shape)
@@ -271,19 +293,25 @@ def test_shape_elemental_gate(batchsize, n_atoms, atomtypes, atomic_numbers):
     assert_equal_shape(model, inputs, out_shape)
 
 
-def x_test_shape_cosine_cutoff(distances):
-    # ToDo: change Docstring or remove unsqueeze(-1)
-    model = CosineCutoff()
+def test_shape_cutoffs(distances):
+    cosine = CosineCutoff()
+    mollifier = MollifierCutoff()
+    hard = HardCutoff()
     inputs = [distances]
     out_shape = list(distances.shape)
-    assert_equal_shape(model, inputs, out_shape)
 
-def x_test_shape_mollifier_cutoff(distances):
-    # ToDo: change Docstring or remove unsqueeze(-1)
-    model = MollifierCutoff()
-    inputs = [distances]
-    out_shape = list(distances.shape)
-    assert_equal_shape(model, inputs, out_shape)
+    assert_equal_shape(cosine, inputs, out_shape)
+    assert_equal_shape(mollifier, inputs, out_shape)
+    assert_equal_shape(hard, inputs, out_shape)
+
+
+def test_hard_cutoff_functionality(batchsize, n_atoms):
+    cutoff = 20
+    hard = HardCutoff(cutoff=cutoff)
+    distances = torch.arange(1, batchsize*n_atoms*(n_atoms-1)+1).reshape(batchsize, n_atoms, n_atoms-1).float()
+
+    assert torch.sum(hard(distances) != 0) == cutoff
+
 
 def x_test_shape_neighbor_elements(atomic_numbers, neighbors):
     # ToDo: change Docstring or squeeze()
@@ -291,6 +319,7 @@ def x_test_shape_neighbor_elements(atomic_numbers, neighbors):
     inputs = [atomic_numbers.unsqueeze(-1), neighbors]
     out_shape = list(neighbors.shape)
     assert_equal_shape(model, inputs, out_shape)
+
 
 def teardown_module():
     """
