@@ -54,8 +54,7 @@ class CFConv(nn.Module):
         # apply optional cutoff
         if self.cutoff_network is not None:
             C = self.cutoff_network(r_ij)
-            #            print(C)
-            W *= C
+            W = W * C.unsqueeze(-1)
 
         # convolution
         y = self.in2f(x)

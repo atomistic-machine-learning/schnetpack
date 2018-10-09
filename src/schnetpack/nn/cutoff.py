@@ -23,8 +23,6 @@ def cosine_cutoff(distances, cutoff=5.0):
     cutoffs = 0.5 * (torch.cos(distances * np.pi / cutoff) + 1.0)
     # Remove contributions beyond the cutoff radius
     cutoffs *= (distances < cutoff).float()
-    # Add a singleton dimension for easier broadcasting
-    cutoffs = torch.unsqueeze(cutoffs, -1)
     return cutoffs
 
 
@@ -67,7 +65,6 @@ def mollifier_cutoff(distances, cutoff=5.0):
     exponent = 1.0 - 1.0 / (1.0 - torch.pow(distances * mask / cutoff, 2))
     cutoffs = torch.exp(exponent)
     cutoffs = cutoffs * mask
-    cutoffs = torch.unsqueeze(cutoffs, -1)
     return cutoffs
 
 
