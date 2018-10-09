@@ -13,6 +13,7 @@ References
 
 import logging
 import os
+from base64 import b64encode, b64decode
 
 import numpy as np
 import torch
@@ -193,6 +194,9 @@ class AtomsData(BaseAtomsData):
             return self.asedb.metadata[key]
         return None
 
+    def set_metadata(self, key, value):
+        self.asedb.metadata[key] = value
+
     def get_properties(self, idx):
         idx = self._subset_index(idx)
         row = self.asedb.get(idx + 1)
@@ -225,6 +229,8 @@ class AtomsData(BaseAtomsData):
 
 
 class AseAtomsData(BaseAtomsData):
+    ENCODING = 'utf-8'
+
     def __init__(self, asedb_path, subset=None, required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True):
@@ -260,6 +266,10 @@ class AseAtomsData(BaseAtomsData):
             return self.asedb.metadata[key]
         return None
 
+    def set_metadata(self, metadata):
+        self.asedb.metadata = metadata
+        print(self.asedb.metadata)
+
     def add_atoms(self, atoms, **properties):
 
         data = {}
@@ -276,11 +286,53 @@ class AseAtomsData(BaseAtomsData):
                 raise AtomsDataError("Required property `" + pname +
                                      "` has to be `numpy.ndarray`.")
 
-            data[pname] = prop.tobytes()
+            base64_bytes = b64encode(prop.tobytes())
+            base64_string = base64_bytes.decode(AseAtomsData.ENCODING)
+            data[pname] = base64_string
             data['_shape_'+pname] = pshape
-            data['_dtype_' + pname] = ptype
+            data['_dtype_' + pname] = str(ptype)
 
         self.asedb.write(atoms, data=data)
+
+    def get_properties(self, idx):
+        idx = self._subset_index(idx)
+        row = self.asedb.get(idx + 1)
+        at = row.toatoms()
+
+        # extract properties
+        properties = {}
+        for pname in self.required_properties:
+            # new data format
+            try:
+                shape = row.data['_shape_' + pname]
+                dtype = row.data['_dtype_' + pname]
+                prop = np.frombuffer(b64decode(row.data[pname]), dtype=dtype)
+                prop = prop.reshape(shape)
+            except:
+                # fallback
+                # Capture exception for ISO17 where energies are stored directly
+                # in the row
+                if pname in row:
+                    prop = row[pname]
+                else:
+                    prop = row.data[pname]
+
+                try:
+                    prop.shape
+                except AttributeError as e:
+                    prop = np.array([prop], dtype=np.float32)
+
+            properties[pname] = torch.FloatTensor(prop)
+
+        # extract/calculate structure
+        properties[Structure.Z] = torch.LongTensor(at.numbers.astype(np.int))
+        positions = at.positions.astype(np.float32)
+        if self.centered:
+            positions -= at.get_center_of_mass()
+        properties[Structure.R] = torch.FloatTensor(positions)
+        properties[Structure.cell] = torch.FloatTensor(
+            at.cell.astype(np.float32))
+        return at, properties
 
 
 class StatisticsAccumulator:
