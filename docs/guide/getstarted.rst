@@ -198,17 +198,17 @@ References
    `Generalized neural-network representation of high-dimensional potential-energy surfaces <https://link.aps.org/doi/10.1103/PhysRevLett.98.146401>`_
    Physical Review Letters, 98(14), 146401. (2007)
 
-.. [#qm9]_ R. Ramakrishnan, P.O. Dral, M. Rupp, O. A. von Lilienfeld.
+.. [#qm9] R. Ramakrishnan, P.O. Dral, M. Rupp, O. A. von Lilienfeld.
    `Quantum chemistry structures and properties of 134 kilo molecules <https://doi.org/10.1038/sdata.2014.22>`_
    Scientific data, 1, 140022. (2014)
 
 .. [#ani] J.S. Smith, O. Isayev, A.E. Roitberg.
-    `ANI-1, A data set of 20 million calculated off-equilibrium conformations for organic molecules.<https://doi.org/10.1038/sdata.2017.193>`_
+    `ANI-1, A data set of 20 million calculated off-equilibrium conformations for organic molecules. <https://doi.org/10.1038/sdata.2017.193>`_
     Scientific data, 4, 170193. (2017)
 
-.. [#qm]_ `Quantum-Machine.org<http://www.quantum-machine.org/data>`_
+.. [#qm] `Quantum-Machine.org <http://www.quantum-machine.org/data>`_
 
-.. [#mp]_ A. Jain, S.P. Ong, G. Hautier, W. Chen, W.D. Richards, S. Dacek,
+.. [#mp] A. Jain, S.P. Ong, G. Hautier, W. Chen, W.D. Richards, S. Dacek,
     S. Cholia, D. Gunter, D. Skinner, G. Ceder, K.A. Persson.
-    `The Materials Project: A materials genome approach to accelerating materials innovation<doi:10.1063/1.4812323>`_
+    `The Materials Project: A materials genome approach to accelerating materials innovation <https://doi.org/10.1063/1.4812323>`_
     APL Materials 1(1), 011002 (2013)

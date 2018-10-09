@@ -69,14 +69,10 @@ class OutputModule(nn.Module):
     Base class for output modules.
 
     Args:
-        n_in (int): input dimension
-        n_out (int): output dimension
         requires_dr (bool): specifies if the derivative of the ouput is required
     """
 
-    def __init__(self, n_in, n_out, requires_dr=False):
-        self.n_in = n_in
-        self.n_out = n_out
+    def __init__(self, requires_dr=False):
         self.requires_dr = requires_dr
         super(OutputModule, self).__init__()
 
@@ -123,7 +119,7 @@ class Atomwise(OutputModule):
                  activation=schnetpack.nn.activations.shifted_softplus, return_contributions=False,
                  requires_dr=False, create_graph=False, mean=None, stddev=None, atomref=None, max_z=100, outnet=None,
                  train_embeddings=False):
-        super(Atomwise, self).__init__(n_in, n_out, requires_dr)
+        super(Atomwise, self).__init__(requires_dr)
 
         self.n_layers = n_layers
         self.create_graph = create_graph

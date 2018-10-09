@@ -207,7 +207,7 @@ def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None, par
     if parallelize:
         model = nn.DataParallel(model)
 
-    logging.info(f"The model you built has: {compute_params(model)} parameters")
+    logging.info("The model you built has: {} parameters".format(compute_params(model)))
 
     return model
 
