@@ -1,6 +1,6 @@
 --index-url https://pypi.python.org/simple/
 
-torch
+torch>=0.4.1
 numpy
 ase
 tensorboardX
