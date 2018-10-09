@@ -22,7 +22,7 @@ setup(
     package_dir={'': 'src'},
     python_requires='>=3.5',
     install_requires=[
-        "torch>=0.4",
+        "torch>=0.4.1",
         "numpy",
         "ase>=3.16",
         "tensorboardX",
