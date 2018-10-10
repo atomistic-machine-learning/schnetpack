@@ -1,17 +1,15 @@
 import logging
 import os
 import shutil
-import tarfile
 import tempfile
+
 from urllib import request as request
 from urllib.error import HTTPError, URLError
 from ase import Atoms
 import numpy as np
-from ase.units import kcal, mol
 
 from schnetpack.data import AtomsData
 from schnetpack.environment import SimpleEnvironmentProvider
-from schnetpack.datasets.extxyz import parse_extxyz
 
 
 class MD17(AtomsData):
@@ -41,33 +39,32 @@ class MD17(AtomsData):
     See: http://quantum-machine.org/datasets/
     """
 
-    datasets_dict = dict(aspirin_dft='aspirin_dft.npz',
-                         aspirin_ccsd='aspirin_ccsd.zip',
-                         azobenzene_dft='azobenzene_dft.npz',
+    datasets_dict = dict(aspirin='aspirin_dft.npz',
+                         #aspirin_ccsd='aspirin_ccsd.zip',
+                         azobenzene='azobenzene_dft.npz',
                          benzene='benzene_dft.npz',
-                         ethanol_dft='ethanol_dft.npz',
-                         ethanol_ccsd_t='ethanol_ccsd_t.zip',
-                         malonaldehyde_dft='malonaldehyde_dft.npz',
-                         malonaldehyde_ccsdt='malonaldehyde_ccsd_t.zip',
-                         naphthalene_dft='naphthalene_dft.npz',
-                         paracetamol_dft='paracetamol_dft.npz',
-                         salicylic_acid_dft='salicylic_dft.npz',
-                         toluene_dft='toluene_dft.npz',
-                         toluene_ccsd_t='toluene_ccsd_t.zip',
-                         uracil_dft='uracil_dft.npz'
+                         ethanol='ethanol_dft.npz',
+                         #ethanol_ccsdt='ethanol_ccsd_t.zip',
+                         malonaldehyde='malonaldehyde_dft.npz',
+                         #malonaldehyde_ccsdt='malonaldehyde_ccsd_t.zip',
+                         naphthalene='naphthalene_dft.npz',
+                         paracetamol='paracetamol_dft.npz',
+                         salicylic_acid='salicylic_dft.npz',
+                         toluene='toluene_dft.npz',
+                         #toluene_ccsdt='toluene_ccsd_t.zip',
+                         uracil='uracil_dft.npz'
                          )
 
-    def __init__(self, datapath, dataset, subset=None, download=True, collect_triples=False, parse_all=False,
+    def __init__(self, dbdir, dataset, subset=None, download=True, collect_triples=False, parse_all=False,
                  properties=None):
         self.load_all = parse_all
-        self.datapath = datapath
 
         if dataset not in self.datasets_dict.keys():
             raise ValueError("Unknown dataset specification {:s}".format(dataset))
-
+        self.dbdir = dbdir
         self.dataset = dataset
         self.database = dataset + ".db"
-        self.dbpath = os.path.join(self.datapath, self.database)
+        dbpath = os.path.join(self.dbdir, self.database)
         self.collect_triples = collect_triples
 
         environment_provider = SimpleEnvironmentProvider()
@@ -75,35 +72,25 @@ class MD17(AtomsData):
         if properties is None:
             properties = ["energy", "forces"]
 
-        super(MD17, self).__init__(self.datapath, self.dbpath, subset, properties, environment_provider,
+        super(MD17, self).__init__(dbpath, subset, properties, environment_provider,
                                    collect_triples)
 
         if download:
             self.download()
 
-    #energies = "energy"
-    #forces = "forces"
-
-    #properties = [
-    #    energies, forces
-    #]
-
-    #units = dict(
-    #    zip(properties, [kcal / mol, kcal / mol / 1.0])
-    #)
 
     def create_subset(self, idx):
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
-        return MD17(self.datapath, self.dataset, subset=subidx, download=False, collect_triples=self.collect_triples)
+        return MD17(self.dbpath, self.dataset, subset=subidx, download=False, collect_triples=self.collect_triples)
 
     def download(self):
         """
         download data if not already on disk.
         """
         success = True
-        if not os.path.exists(self.datapath):
-            os.makedirs(self.datapath)
+        if not os.path.exists(self.dbdir):
+            os.makedirs(self.dbdir)
 
         if not os.path.exists(self.dbpath):
             success = success and self._load_data()
@@ -136,15 +123,14 @@ class MD17(AtomsData):
 
             data = np.load(rawpath)
 
-            name = data['name']
             numbers = data['z']
+            atoms_list = []
+            properties_list = []
             for positions, energies, forces in zip(data['R'], data['E'], data['F']):
-                properties = dict(energy=energies,
-                                  forces=forces)
-                atoms = Atoms(positions=positions,
-                              numbers=numbers,
-                              symbols=name)
-                self.add_system(atoms, **properties)
+                properties_list.append(dict(energy=energies, forces=forces))
+                atoms_list.append(Atoms(positions=positions, numbers=numbers))
+
+            self.add_systems(atoms_list, properties_list)
 
         logging.info("Cleanining up the mess...")
         logging.info('{} molecule done'.format(molecule))
@@ -154,4 +140,4 @@ class MD17(AtomsData):
 
 
 if __name__ == '__main__':
-    md17 = MD17('./test', 'aspirin_ccsd')
+    md17 = MD17('./test', 'aspirin_dft')

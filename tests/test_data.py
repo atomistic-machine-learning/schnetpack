@@ -60,7 +60,7 @@ def test_add_and_read(empty_asedata, example_data):
         empty_asedata.add_system(ats, **props)
 
     assert len(empty_asedata) == len(example_data)
-    assert os.path.exists(empty_asedata.datapath)
+    assert os.path.exists(empty_asedata.dbpath)
 
     for i in range(len(example_data)):
         d = empty_asedata[i]

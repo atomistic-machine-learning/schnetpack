@@ -33,7 +33,7 @@ class BaseAtomsData(Dataset):
     def __init__(self, datapath, subset=None, required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True):
-        self.datapath = datapath
+        self.dbpath = datapath
         self.subset = subset
         self.required_properties = required_properties
         self.environment_provider = environment_provider
@@ -96,7 +96,7 @@ class BaseAtomsData(Dataset):
         """
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
-        return type(self)(self.datapath, subidx, self.required_properties,
+        return type(self)(self.dbpath, subidx, self.required_properties,
                           self.environment_provider, self.collect_triples,
                           self.centered)
 
@@ -145,18 +145,18 @@ class BaseAtomsData(Dataset):
 class AtomsData(BaseAtomsData):
     ENCODING = 'utf-8'
 
-    def __init__(self, datapath, subset=None,
+    def __init__(self, dbpath, subset=None,
                  required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True):
-        super(AtomsData, self).__init__(datapath, subset,
+        super(AtomsData, self).__init__(dbpath, subset,
                                         required_properties,
                                         environment_provider,
                                         collect_triples, center_positions)
 
     def __len__(self):
         if self.subset is None:
-            with connect(self.datapath) as conn:
+            with connect(self.dbpath) as conn:
                 return conn.count()
         return len(self.subset)
 
@@ -172,19 +172,19 @@ class AtomsData(BaseAtomsData):
 
         """
         idx = self._subset_index(idx)
-        with connect(self.datapath) as conn:
+        with connect(self.dbpath) as conn:
             row = conn.get(idx + 1)
         at = row.toatoms()
         return at
 
     def get_metadata(self, key):
-        with connect(self.datapath) as conn:
+        with connect(self.dbpath) as conn:
             if key in conn.metadata.keys():
                 return conn.metadata[key]
         return None
 
     def set_metadata(self, metadata):
-        with connect(self.datapath) as conn:
+        with connect(self.dbpath) as conn:
             conn.metadata = metadata
 
     def _add_system(self, conn, atoms, **properties):
@@ -212,17 +212,17 @@ class AtomsData(BaseAtomsData):
         conn.write(atoms, data=data)
 
     def add_system(self, atoms, **properties):
-        with connect(self.datapath) as conn:
+        with connect(self.dbpath) as conn:
             self._add_system(conn, atoms, **properties)
 
     def add_systems(self, atoms, property_list):
-        with connect(self.datapath) as conn:
+        with connect(self.dbpath) as conn:
             for at, prop in zip(atoms, property_list):
                 self._add_system(conn, at, **prop)
 
     def get_properties(self, idx):
         idx = self._subset_index(idx)
-        with connect(self.datapath) as conn:
+        with connect(self.dbpath) as conn:
             row = conn.get(idx + 1)
         at = row.toatoms()
 

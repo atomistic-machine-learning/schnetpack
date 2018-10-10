@@ -5,56 +5,11 @@ import schnetpack.nn.activations
 import schnetpack.nn.base
 import schnetpack.nn.cfconv
 import schnetpack.nn.neighbors
+from schnetpack.nn.cutoff import HardCutoff
 from schnetpack.data import Structure
 
 
 class SchNetInteraction(nn.Module):
-    """
-    SchNet interaction block for modeling quantum interactions of atomistic systems.
-
-    Args:
-        n_atom_basis (int): number of features used to describe atomic environments
-        n_spatial_basis (int): number of input features of filter-generating networks
-        n_filters (int): number of filters used in continuous-filter convolution
-        normalize_filter (bool): if true, divide filter by number of neighbors over which convolution is applied
-    """
-
-    def __init__(self, n_atom_basis, n_spatial_basis, n_filters,
-                 normalize_filter=False):
-        super(SchNetInteraction, self).__init__()
-
-        # initialize filters
-        self.filter_network = nn.Sequential(
-            schnetpack.nn.base.Dense(n_spatial_basis, n_filters,
-                                     activation=schnetpack.nn.activations.shifted_softplus),
-            schnetpack.nn.base.Dense(n_filters, n_filters)
-        )
-
-        # initialize interaction blocks
-        self.cfconv = schnetpack.nn.cfconv.CFConv(n_atom_basis, n_filters, n_atom_basis,
-                                                  self.filter_network,
-                                                  activation=schnetpack.nn.activations.shifted_softplus,
-                                                  normalize_filter=normalize_filter)
-        self.dense = schnetpack.nn.base.Dense(n_atom_basis, n_atom_basis)
-
-    def forward(self, x, r_ij, neighbors, neighbor_mask, f_ij=None):
-        """
-        Args:
-            x (torch.Tensor): Atom-wise input representations.
-            r_ij (torch.Tensor): Interatomic distances.
-            neighbors (torch.Tensor): Indices of neighboring atoms.
-            neighbor_mask (torch.Tensor): Mask to indicate virtual neighbors introduced via zeros padding.
-            f_ij (torch.Tensor): Interatomic distances with distance expansion.
-
-        Returns:
-            torch.Tensor: SchNet representation.
-        """
-        v = self.cfconv(x, r_ij, neighbors, neighbor_mask, f_ij=f_ij)
-        v = self.dense(v)
-        return v
-
-
-class SchNetCutoffInteraction(nn.Module):
     """
     SchNet interaction block for modeling quantum interactions of atomistic systems with cosine cutoff.
 
@@ -66,8 +21,8 @@ class SchNetCutoffInteraction(nn.Module):
     """
 
     def __init__(self, n_atom_basis, n_spatial_basis, n_filters, cutoff,
-                 normalize_filter=False):
-        super(SchNetCutoffInteraction, self).__init__()
+                 cutoff_network=HardCutoff, normalize_filter=False):
+        super(SchNetInteraction, self).__init__()
 
         # initialize filters
         self.filter_network = nn.Sequential(
@@ -76,7 +31,7 @@ class SchNetCutoffInteraction(nn.Module):
             schnetpack.nn.base.Dense(n_filters, n_filters)
         )
 
-        self.cutoff_network = schnetpack.nn.CosineCutoff(cutoff)
+        self.cutoff_network = cutoff_network(cutoff)
 
         # initialize interaction blocks
         self.cfconv = schnetpack.nn.cfconv.CFConv(n_atom_basis, n_filters, n_atom_basis,
@@ -85,6 +40,7 @@ class SchNetCutoffInteraction(nn.Module):
                                                   activation=schnetpack.nn.activations.shifted_softplus,
                                                   normalize_filter=normalize_filter)
         self.dense = schnetpack.nn.base.Dense(n_atom_basis, n_atom_basis)
+
 
     def forward(self, x, r_ij, neighbors, neighbor_mask, f_ij=None):
         """
@@ -101,6 +57,7 @@ class SchNetCutoffInteraction(nn.Module):
         v = self.cfconv(x, r_ij, neighbors, neighbor_mask, f_ij)
         v = self.dense(v)
         return v
+
 
 
 class SchNet(nn.Module):
@@ -136,7 +93,7 @@ class SchNet(nn.Module):
 
     def __init__(self, n_atom_basis=128, n_filters=128, n_interactions=1, cutoff=5.0, n_gaussians=25,
                  normalize_filter=False, coupled_interactions=False,
-                 return_intermediate=False, max_z=100, interaction_block=SchNetInteraction, trainable_gaussians=False,
+                 return_intermediate=False, max_z=100, cutoff_network=HardCutoff, trainable_gaussians=False,
                  distance_expansion=None):
         super(SchNet, self).__init__()
 
@@ -156,15 +113,21 @@ class SchNet(nn.Module):
         # interaction network
         if coupled_interactions:
             self.interactions = nn.ModuleList([
-                                                  interaction_block(n_atom_basis=n_atom_basis,
+                                                  SchNetInteraction(n_atom_basis=n_atom_basis,
                                                                     n_spatial_basis=n_gaussians,
                                                                     n_filters=n_filters,
+                                                                    cutoff_network=cutoff_network,
+                                                                    cutoff=cutoff,
                                                                     normalize_filter=normalize_filter)
                                               ] * n_interactions)
         else:
             self.interactions = nn.ModuleList([
-                interaction_block(n_atom_basis=n_atom_basis, n_spatial_basis=n_gaussians,
-                                  n_filters=n_filters, normalize_filter=normalize_filter)
+                                                  SchNetInteraction(n_atom_basis=n_atom_basis,
+                                                                    n_spatial_basis=n_gaussians,
+                                                                    n_filters=n_filters,
+                                                                    cutoff_network=cutoff_network,
+                                                                    cutoff=cutoff,
+                                                                    normalize_filter=normalize_filter)
                 for _ in range(n_interactions)
             ])
 
