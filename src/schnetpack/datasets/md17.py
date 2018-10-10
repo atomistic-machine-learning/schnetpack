@@ -29,10 +29,14 @@ class MD17(AtomsData):
                             salicylic_acid
                             toluene
                             uracil
-        subset (list): indices of subset. Set to None for entire dataset (default: None)
-        download (bool): set true if dataset should be downloaded (default: True)
-        calculate_triples (bool): set true if triples for angular functions should be computed (default: False)
-        parse_all (bool): set true to generate the ase dbs of all molecules in the beginning (default: False)
+        subset (list): indices of subset. Set to None for entire dataset
+            (default: None)
+        download (bool): set true if dataset should be downloaded
+            (default: True)
+        calculate_triples (bool): set true if triples for angular functions
+            should be computed (default: False)
+        parse_all (bool): set true to generate the ase dbs of all molecules in
+            the beginning (default: False)
 
     See: http://quantum-machine.org/datasets/
     """
