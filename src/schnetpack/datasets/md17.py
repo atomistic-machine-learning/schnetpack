@@ -1,17 +1,15 @@
 import logging
 import os
 import shutil
-import tarfile
 import tempfile
+
 from urllib import request as request
 from urllib.error import HTTPError, URLError
 from ase import Atoms
 import numpy as np
-from ase.units import kcal, mol
 
 from schnetpack.data import AtomsData
 from schnetpack.environment import SimpleEnvironmentProvider
-from schnetpack.datasets.extxyz import parse_extxyz
 
 
 class MD17(AtomsData):
