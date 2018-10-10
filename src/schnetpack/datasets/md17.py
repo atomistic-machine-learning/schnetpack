@@ -144,7 +144,7 @@ class MD17(AtomsData):
                 atoms = Atoms(positions=positions,
                               numbers=numbers,
                               symbols=name)
-                self.add_atoms(atoms, **properties)
+                self.add_system(atoms, **properties)
 
         logging.info("Cleanining up the mess...")
         logging.info('{} molecule done'.format(molecule))

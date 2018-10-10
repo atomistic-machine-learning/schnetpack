@@ -145,19 +145,19 @@ class BaseAtomsData(Dataset):
 class AtomsData(BaseAtomsData):
     ENCODING = 'utf-8'
 
-    def __init__(self, datapath, asedb_path, subset=None, required_properties=[],
+    def __init__(self, datapath, subset=None,
+                 required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True):
         super(AtomsData, self).__init__(datapath, subset,
                                         required_properties,
                                         environment_provider,
                                         collect_triples, center_positions)
-        self.asedb = connect(asedb_path)
-        self.asedb_path = asedb_path
 
     def __len__(self):
         if self.subset is None:
-            return self.asedb.count()
+            with connect(self.datapath) as conn:
+                return conn.count()
         return len(self.subset)
 
     def get_atoms(self, idx):
@@ -172,21 +172,22 @@ class AtomsData(BaseAtomsData):
 
         """
         idx = self._subset_index(idx)
-        row = self.asedb.get(idx + 1)
+        with connect(self.datapath) as conn:
+            row = conn.get(idx + 1)
         at = row.toatoms()
         return at
 
     def get_metadata(self, key):
-        if key in self.asedb.metadata.keys():
-            return self.asedb.metadata[key]
+        with connect(self.datapath) as conn:
+            if key in conn.metadata.keys():
+                return conn.metadata[key]
         return None
 
     def set_metadata(self, metadata):
-        self.asedb.metadata = metadata
-        print(self.asedb.metadata)
+        with connect(self.datapath) as conn:
+            conn.metadata = metadata
 
-
-    def add_atoms(self, atoms, **properties):
+    def _add_system(self, conn, atoms, **properties):
 
         data = {}
         for pname in self.required_properties:
@@ -208,11 +209,21 @@ class AtomsData(BaseAtomsData):
             data['_shape_' + pname] = pshape
             data['_dtype_' + pname] = str(ptype)
 
-        self.asedb.write(atoms, data=data)
+        conn.write(atoms, data=data)
+
+    def add_system(self, atoms, **properties):
+        with connect(self.datapath) as conn:
+            self._add_system(conn, atoms, **properties)
+
+    def add_systems(self, atoms, property_list):
+        with connect(self.datapath) as conn:
+            for at, prop in zip(atoms, property_list):
+                self._add_system(conn, at, **prop)
 
     def get_properties(self, idx):
         idx = self._subset_index(idx)
-        row = self.asedb.get(idx + 1)
+        with connect(self.datapath) as conn:
+            row = conn.get(idx + 1)
         at = row.toatoms()
 
         # extract properties

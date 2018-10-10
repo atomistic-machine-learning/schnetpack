@@ -231,7 +231,7 @@ class QM9(AtomsData):
             with open(tmp, 'r') as f:
                 ats = list(read_xyz(f, 0))[0]
 
-            self.add_atoms(ats, **properties)
+            self.add_system(ats, **properties)
         logging.info('Done.')
 
         shutil.rmtree(tmpdir)

@@ -57,7 +57,7 @@ def example_data(max_atoms, num_data):
 def test_add_and_read(empty_asedata, example_data):
     # add data
     for ats, props in example_data:
-        empty_asedata.add_atoms(ats, **props)
+        empty_asedata.add_system(ats, **props)
 
     assert len(empty_asedata) == len(example_data)
     assert os.path.exists(empty_asedata.datapath)
