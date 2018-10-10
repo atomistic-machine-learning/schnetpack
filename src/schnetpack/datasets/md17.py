@@ -5,13 +5,13 @@ import tarfile
 import tempfile
 from urllib import request as request
 from urllib.error import HTTPError, URLError
-
+from ase import Atoms
 import numpy as np
 from ase.units import kcal, mol
 
 from schnetpack.data import AtomsData
 from schnetpack.environment import SimpleEnvironmentProvider
-from .extxyz import parse_extxyz
+from schnetpack.datasets.extxyz import parse_extxyz
 
 
 class MD17(AtomsData):
@@ -40,23 +40,29 @@ class MD17(AtomsData):
 
     See: http://quantum-machine.org/datasets/
     """
-    existing_datasets = [
-        "aspirin",
-        "benzene",
-        "ethanol",
-        "malonaldehyde",
-        "naphthalene",
-        "salicylic_acid",
-        "toluene",
-        "uracil"
-    ]
+
+    datasets_dict = dict(aspirin_dft='aspirin_dft.npz',
+                         aspirin_ccsd='aspirin_ccsd.zip',
+                         azobenzene_dft='azobenzene_dft.npz',
+                         benzene='benzene_dft.npz',
+                         ethanol_dft='ethanol_dft.npz',
+                         ethanol_ccsd_t='ethanol_ccsd_t.zip',
+                         malonaldehyde_dft='malonaldehyde_dft.npz',
+                         malonaldehyde_ccsdt='malonaldehyde_ccsd_t.zip',
+                         naphthalene_dft='naphthalene_dft.npz',
+                         paracetamol_dft='paracetamol_dft.npz',
+                         salicylic_acid_dft='salicylic_dft.npz',
+                         toluene_dft='toluene_dft.npz',
+                         toluene_ccsd_t='toluene_ccsd_t.zip',
+                         uracil_dft='uracil_dft.npz'
+                         )
 
     def __init__(self, datapath, dataset, subset=None, download=True, collect_triples=False, parse_all=False,
                  properties=None):
         self.load_all = parse_all
         self.datapath = datapath
 
-        if dataset not in self.existing_datasets:
+        if dataset not in self.datasets_dict.keys():
             raise ValueError("Unknown dataset specification {:s}".format(dataset))
 
         self.dataset = dataset
@@ -66,24 +72,25 @@ class MD17(AtomsData):
 
         environment_provider = SimpleEnvironmentProvider()
 
-        if download:
-            self.download()
-
         if properties is None:
             properties = ["energy", "forces"]
 
-        super(MD17, self).__init__(self.dbpath, subset, properties, environment_provider, collect_triples)
+        super(MD17, self).__init__(self.datapath, self.dbpath, subset, properties, environment_provider,
+                                   collect_triples)
 
-    energies = "energy"
-    forces = "forces"
+        if download:
+            self.download()
 
-    properties = [
-        energies, forces
-    ]
+    #energies = "energy"
+    #forces = "forces"
 
-    units = dict(
-        zip(properties, [kcal / mol, kcal / mol / 1.0])
-    )
+    #properties = [
+    #    energies, forces
+    #]
+
+    #units = dict(
+    #    zip(properties, [kcal / mol, kcal / mol / 1.0])
+    #)
 
     def create_subset(self, idx):
         idx = np.array(idx)
@@ -104,45 +111,47 @@ class MD17(AtomsData):
         return success
 
     def _load_data(self):
-        logging.info("Downloading MD database...")
-        tmpdir = tempfile.mkdtemp("MD")
-        tarpath = os.path.join(self.datapath, "md17.tar.xz")
-        rawpath = os.path.join(tmpdir, "md17")
-        url = "http://www.quantum-machine.org/data/md17.tar.xz"
 
-        try:
-            request.urlretrieve(url, tarpath)
-        except HTTPError as e:
-            logging.error("HTTP Error:", e.code, url)
-            return False
-        except URLError as e:
-            logging.error("URL Error:", e.reason, url)
-            return False
-
-        logging.info("Extracting files...")
-
-        tar = tarfile.open(tarpath)
-        tar.extractall(tmpdir)
-        tar.close()
-
-        logging.info('Done!')
-
-        for molecule in MD17.existing_datasets:
+        for molecule in self.datasets_dict.keys():
             # if requested, convert only the required molecule
             if not self.load_all:
                 if molecule != self.dataset:
                     continue
+
+            logging.info("Downloading {} data".format(molecule))
+            tmpdir = tempfile.mkdtemp("MD")
+            rawpath = os.path.join(tmpdir, self.datasets_dict[molecule])
+            url = "http://www.quantum-machine.org/gdml/data/npz/" + self.datasets_dict[molecule]
+
+            try:
+                request.urlretrieve(url, rawpath)
+            except HTTPError as e:
+                logging.error("HTTP Error:", e.code, url)
+                return False
+            except URLError as e:
+                logging.error("URL Error:", e.reason, url)
+                return False
+
             logging.info("Parsing molecule {:s}".format(molecule))
-            moldb = os.path.join(self.datapath, molecule + ".db")
-            molraw = os.path.join(rawpath, molecule + '.xyz')
 
-            parse_extxyz(moldb, molraw)
+            data = np.load(rawpath)
 
-            logging.info("Cleaning temporary directory {:s}".format(molraw))
+            name = data['name']
+            numbers = data['z']
+            for positions, energies, forces in zip(data['R'], data['E'], data['F']):
+                properties = dict(energy=energies,
+                                  forces=forces)
+                atoms = Atoms(positions=positions,
+                              numbers=numbers,
+                              symbols=name)
+                self.add_atoms(atoms, **properties)
 
         logging.info("Cleanining up the mess...")
-        logging.info('Data loaded.')
-
+        logging.info('{} molecule done'.format(molecule))
         shutil.rmtree(tmpdir)
 
         return True
+
+
+if __name__ == '__main__':
+    md17 = MD17('./test', 'aspirin_ccsd')

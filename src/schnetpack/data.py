@@ -145,14 +145,15 @@ class BaseAtomsData(Dataset):
 class AtomsData(BaseAtomsData):
     ENCODING = 'utf-8'
 
-    def __init__(self, asedb_path, subset=None, required_properties=[],
+    def __init__(self, datapath, asedb_path, subset=None, required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True):
-        super(AtomsData, self).__init__(asedb_path, subset,
+        super(AtomsData, self).__init__(datapath, subset,
                                         required_properties,
                                         environment_provider,
                                         collect_triples, center_positions)
         self.asedb = connect(asedb_path)
+        self.asedb_path = asedb_path
 
     def __len__(self):
         if self.subset is None:
@@ -184,6 +185,7 @@ class AtomsData(BaseAtomsData):
         self.asedb.metadata = metadata
         print(self.asedb.metadata)
 
+
     def add_atoms(self, atoms, **properties):
 
         data = {}
@@ -203,7 +205,7 @@ class AtomsData(BaseAtomsData):
             base64_bytes = b64encode(prop.tobytes())
             base64_string = base64_bytes.decode(AtomsData.ENCODING)
             data[pname] = base64_string
-            data['_shape_'+pname] = pshape
+            data['_shape_' + pname] = pshape
             data['_dtype_' + pname] = str(ptype)
 
         self.asedb.write(atoms, data=data)
