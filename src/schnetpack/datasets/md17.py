@@ -39,20 +39,20 @@ class MD17(AtomsData):
     See: http://quantum-machine.org/datasets/
     """
 
-    datasets_dict = dict(aspirin_dft='aspirin_dft.npz',
-                         aspirin_ccsd='aspirin_ccsd.zip',
-                         azobenzene_dft='azobenzene_dft.npz',
+    datasets_dict = dict(aspirin='aspirin_dft.npz',
+                         #aspirin_ccsd='aspirin_ccsd.zip',
+                         azobenzene='azobenzene_dft.npz',
                          benzene='benzene_dft.npz',
-                         ethanol_dft='ethanol_dft.npz',
-                         ethanol_ccsd_t='ethanol_ccsd_t.zip',
-                         malonaldehyde_dft='malonaldehyde_dft.npz',
-                         malonaldehyde_ccsdt='malonaldehyde_ccsd_t.zip',
-                         naphthalene_dft='naphthalene_dft.npz',
-                         paracetamol_dft='paracetamol_dft.npz',
-                         salicylic_acid_dft='salicylic_dft.npz',
-                         toluene_dft='toluene_dft.npz',
-                         toluene_ccsd_t='toluene_ccsd_t.zip',
-                         uracil_dft='uracil_dft.npz'
+                         ethanol='ethanol_dft.npz',
+                         #ethanol_ccsdt='ethanol_ccsd_t.zip',
+                         malonaldehyde='malonaldehyde_dft.npz',
+                         #malonaldehyde_ccsdt='malonaldehyde_ccsd_t.zip',
+                         naphthalene='naphthalene_dft.npz',
+                         paracetamol='paracetamol_dft.npz',
+                         salicylic_acid='salicylic_dft.npz',
+                         toluene='toluene_dft.npz',
+                         #toluene_ccsdt='toluene_ccsd_t.zip',
+                         uracil='uracil_dft.npz'
                          )
 
     def __init__(self, dbdir, dataset, subset=None, download=True, collect_triples=False, parse_all=False,
