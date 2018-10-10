@@ -82,9 +82,6 @@ class QM9(AtomsData):
 
         environment_provider = SimpleEnvironmentProvider()
 
-        if download:
-            self._download()
-
         if remove_uncharacterized:
             if subset is None:
                 with connect(self.dbpath) as con:
@@ -98,6 +95,9 @@ class QM9(AtomsData):
 
         super().__init__(self.dbpath, subset, properties, environment_provider,
                          collect_triples)
+
+        if download:
+            self._download()
 
     def create_subset(self, idx):
         idx = np.array(idx)
@@ -210,31 +210,34 @@ class QM9(AtomsData):
         tar.close()
 
         logging.info('Parse xyz files...')
-        with connect(self.dbpath) as con:
-            ordered_files = sorted(os.listdir(raw_path), key=lambda x: (int(re.sub('\D', '', x)), x))
-            for i, xyzfile in enumerate(ordered_files):
-                xyzfile = os.path.join(raw_path, xyzfile)
+        ordered_files = sorted(os.listdir(raw_path), key=lambda x: (int(re.sub('\D', '', x)), x))
+        for i, xyzfile in enumerate(ordered_files):
+            xyzfile = os.path.join(raw_path, xyzfile)
 
-                if (i + 1) % 10000 == 0:
-                    logging.info('Parsed: {:6d} / 133885'.format(i + 1))
-                properties = {}
-                tmp = os.path.join(tmpdir, 'tmp.xyz')
+            if (i + 1) % 10000 == 0:
+                logging.info('Parsed: {:6d} / 133885'.format(i + 1))
+            properties = {}
+            tmp = os.path.join(tmpdir, 'tmp.xyz')
 
-                with open(xyzfile, 'r') as f:
-                    lines = f.readlines()
-                    l = lines[1].split()[2:]
-                    for pn, p in zip(self.properties, l):
-                        properties[pn] = float(p) * self.units[pn]
-                    with open(tmp, "wt") as fout:
-                        for line in lines:
-                            fout.write(line.replace('*^', 'e'))
+            with open(xyzfile, 'r') as f:
+                lines = f.readlines()
+                l = lines[1].split()[2:]
+                for pn, p in zip(self.properties, l):
+                    properties[pn] = float(p) * self.units[pn]
+                with open(tmp, "wt") as fout:
+                    for line in lines:
+                        fout.write(line.replace('*^', 'e'))
 
-                with open(tmp, 'r') as f:
-                    ats = list(read_xyz(f, 0))[0]
+            with open(tmp, 'r') as f:
+                ats = list(read_xyz(f, 0))[0]
 
-                con.write(ats, data=properties)
+            self.add_atoms(ats, **properties)
         logging.info('Done.')
 
         shutil.rmtree(tmpdir)
 
         return True
+
+
+if __name__ == '__main__':
+    qm9 = QM9('.')
