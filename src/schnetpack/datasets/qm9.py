@@ -103,7 +103,7 @@ class QM9(AtomsData):
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
 
-        return QM9(self.path, False, subidx, self.properties, self.collect_triples, False)
+        return QM9(self.path, False, subidx, self.required_properties, self.collect_triples, False)
 
     def _download(self):
         works = True
@@ -211,6 +211,9 @@ class QM9(AtomsData):
 
         logging.info('Parse xyz files...')
         ordered_files = sorted(os.listdir(raw_path), key=lambda x: (int(re.sub('\D', '', x)), x))
+
+        all_atoms = []
+        all_properties = []
         for i, xyzfile in enumerate(ordered_files):
             xyzfile = os.path.join(raw_path, xyzfile)
 
@@ -223,21 +226,20 @@ class QM9(AtomsData):
                 lines = f.readlines()
                 l = lines[1].split()[2:]
                 for pn, p in zip(self.properties, l):
-                    properties[pn] = float(p) * self.units[pn]
+                    properties[pn] = np.array([float(p) * self.units[pn]])
                 with open(tmp, "wt") as fout:
                     for line in lines:
                         fout.write(line.replace('*^', 'e'))
 
             with open(tmp, 'r') as f:
                 ats = list(read_xyz(f, 0))[0]
+            all_atoms.append(ats)
+            all_properties.append(properties)
 
-            self.add_system(ats, **properties)
+        logging.info('Write atoms to db...')
+        self.add_systems(all_atoms, all_properties)
         logging.info('Done.')
 
         shutil.rmtree(tmpdir)
 
         return True
-
-
-if __name__ == '__main__':
-    qm9 = QM9('.')

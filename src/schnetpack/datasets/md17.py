@@ -137,7 +137,3 @@ class MD17(AtomsData):
         shutil.rmtree(tmpdir)
 
         return True
-
-
-if __name__ == '__main__':
-    md17 = MD17('./test', 'aspirin_dft')
