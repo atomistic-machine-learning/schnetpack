@@ -177,7 +177,8 @@ def train(args, model, train_loader, val_loader, device):
         fdiff = batch[MD17.forces] - result["dydx"]
         fdiff = fdiff ** 2
 
-        err_sq = args.rho * torch.mean(ediff.view(-1)) + (1 - args.rho) * torch.mean(fdiff.view(-1))
+        err_sq = args.rho * torch.mean(ediff.view(-1)) + (1 - args.rho) * \
+                 torch.mean(fdiff.view(-1))
         return err_sq
 
     trainer = spk.train.Trainer(args.modelpath, model, loss, optimizer,
@@ -187,7 +188,8 @@ def train(args, model, train_loader, val_loader, device):
 
 def evaluate(args, model, train_loader, val_loader, test_loader, device):
     header = ['Subset', 'Energy MAE', 'Energy RMSE',
-              'Force MAE', 'Force RMSE', 'Force Length MAE', 'Force Length RMSE', 'Force Angle MAE', 'Angle RMSE']
+              'Force MAE', 'Force RMSE', 'Force Length MAE',
+              'Force Length RMSE', 'Force Angle MAE', 'Angle RMSE']
 
     metrics = [
         spk.metrics.MeanAbsoluteError(MD17.energies, "y"),

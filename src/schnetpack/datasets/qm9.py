@@ -73,17 +73,14 @@ class QM9(AtomsData):
             )
     )
 
-    def __init__(self, path, download=True, subset=None, properties=[], collect_triples=False,
-                 remove_uncharacterized=False):
+    def __init__(self, path, download=True, subset=None, properties=[],
+                 collect_triples=False, remove_uncharacterized=False):
         self.path = path
         self.dbpath = os.path.join(self.path, 'qm9.db')
         self.atomref_path = os.path.join(self.path, 'atomref.npz')
         self.evilmols_path = os.path.join(self.path, 'evilmols.npy')
 
         environment_provider = SimpleEnvironmentProvider()
-
-        if download:
-            self._download()
 
         if remove_uncharacterized:
             if subset is None:
@@ -96,13 +93,17 @@ class QM9(AtomsData):
             # attention:  1-indexing vs 0-indexing
             subset = np.setdiff1d(subset, evilmols - 1)
 
-        super().__init__(self.dbpath, subset, properties, environment_provider, collect_triples)
+        super().__init__(self.dbpath, subset, properties, environment_provider,
+                         collect_triples)
+
+        if download:
+            self._download()
 
     def create_subset(self, idx):
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
 
-        return QM9(self.path, False, subidx, self.properties, self.collect_triples, False)
+        return QM9(self.path, False, subidx, self.required_properties, self.collect_triples, False)
 
     def _download(self):
         works = True
@@ -209,29 +210,34 @@ class QM9(AtomsData):
         tar.close()
 
         logging.info('Parse xyz files...')
-        with connect(self.dbpath) as con:
-            ordered_files = sorted(os.listdir(raw_path), key=lambda x: (int(re.sub('\D', '', x)), x))
-            for i, xyzfile in enumerate(ordered_files):
-                xyzfile = os.path.join(raw_path, xyzfile)
+        ordered_files = sorted(os.listdir(raw_path), key=lambda x: (int(re.sub('\D', '', x)), x))
 
-                if (i + 1) % 10000 == 0:
-                    logging.info('Parsed: {:6d} / 133885'.format(i + 1))
-                properties = {}
-                tmp = os.path.join(tmpdir, 'tmp.xyz')
+        all_atoms = []
+        all_properties = []
+        for i, xyzfile in enumerate(ordered_files):
+            xyzfile = os.path.join(raw_path, xyzfile)
 
-                with open(xyzfile, 'r') as f:
-                    lines = f.readlines()
-                    l = lines[1].split()[2:]
-                    for pn, p in zip(self.properties, l):
-                        properties[pn] = float(p) * self.units[pn]
-                    with open(tmp, "wt") as fout:
-                        for line in lines:
-                            fout.write(line.replace('*^', 'e'))
+            if (i + 1) % 10000 == 0:
+                logging.info('Parsed: {:6d} / 133885'.format(i + 1))
+            properties = {}
+            tmp = os.path.join(tmpdir, 'tmp.xyz')
 
-                with open(tmp, 'r') as f:
-                    ats = list(read_xyz(f, 0))[0]
+            with open(xyzfile, 'r') as f:
+                lines = f.readlines()
+                l = lines[1].split()[2:]
+                for pn, p in zip(self.properties, l):
+                    properties[pn] = np.array([float(p) * self.units[pn]])
+                with open(tmp, "wt") as fout:
+                    for line in lines:
+                        fout.write(line.replace('*^', 'e'))
 
-                con.write(ats, data=properties)
+            with open(tmp, 'r') as f:
+                ats = list(read_xyz(f, 0))[0]
+            all_atoms.append(ats)
+            all_properties.append(properties)
+
+        logging.info('Write atoms to db...')
+        self.add_systems(all_atoms, all_properties)
         logging.info('Done.')
 
         shutil.rmtree(tmpdir)
