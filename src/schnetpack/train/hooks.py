@@ -225,6 +225,7 @@ class TensorboardHook(LoggingHook):
 
     def __init__(self, log_path, metrics, log_train_loss=True,
                  log_validation_loss=True, log_learning_rate=True, every_n_epochs=1,
+                 img_every_n_epochs=10,
                  log_histogram=False):
         from tensorboardX import SummaryWriter
         super(TensorboardHook, self).__init__(log_path, metrics, log_train_loss,
@@ -232,6 +233,7 @@ class TensorboardHook(LoggingHook):
         self.writer = SummaryWriter(self.log_path)
         self.every_n_epochs = every_n_epochs
         self.log_histogram = log_histogram
+        self.img_every_n_epochs = img_every_n_epochs
 
     def on_epoch_end(self, trainer):
         if trainer.epoch % self.every_n_epochs == 0:
@@ -248,21 +250,22 @@ class TensorboardHook(LoggingHook):
                 if np.isscalar(m):
                     self.writer.add_scalar("metrics/%s" % metric.name, float(m), trainer.epoch)
                 elif m.ndim == 2:
-                    import matplotlib.pyplot as plt
-                    # tensorboardX only accepts images as numpy arrays.
-                    # we therefore convert plots in numpy array
-                    # see https://github.com/lanpa/tensorboard-pytorch/blob/master/examples/matplotlib_demo.py
-                    fig = plt.figure()
-                    plt.colorbar(plt.pcolor(m))
-                    fig.canvas.draw()
+                    if trainer.epoch % self.img_every_n_epochs == 0:
+                        import matplotlib.pyplot as plt
+                        # tensorboardX only accepts images as numpy arrays.
+                        # we therefore convert plots in numpy array
+                        # see https://github.com/lanpa/tensorboard-pytorch/blob/master/examples/matplotlib_demo.py
+                        fig = plt.figure()
+                        plt.colorbar(plt.pcolor(m))
+                        fig.canvas.draw()
 
-                    np_image = np.fromstring(fig.canvas.tostring_rgb(), dtype='uint8')
-                    np_image = np_image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+                        np_image = np.fromstring(fig.canvas.tostring_rgb(), dtype='uint8')
+                        np_image = np_image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
 
-                    plt.close(fig)
+                        plt.close(fig)
 
-                    self.writer.add_image("metrics/%s" % metric.name,
-                                          np_image, trainer.epoch)
+                        self.writer.add_image("metrics/%s" % metric.name,
+                                              np_image, trainer.epoch)
 
             if self.log_validation_loss:
                 self.writer.add_scalar("train/val_loss", float(val_loss), trainer.step)
