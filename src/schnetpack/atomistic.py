@@ -35,7 +35,7 @@ class AtomisticModel(nn.Module):
         self.representation = representation
 
         if isinstance(output_modules, Iterable):
-            self.output_modules = nn.ModuleList(output_modules)
+            self.output_modules = output_modules
             self.requires_dr = False
             for o in self.output_modules:
                 if o.requires_dr:
@@ -57,7 +57,7 @@ class AtomisticModel(nn.Module):
         if isinstance(self.output_modules, nn.ModuleList):
             outs = {}
             for output_module in self.output_modules:
-                outs[output_module] = output_module(inputs)
+                outs.update(output_module(inputs))
         else:
             outs = self.output_modules(inputs)
 
@@ -118,12 +118,14 @@ class Atomwise(OutputModule):
     def __init__(self, n_in=128, n_out=1, aggregation_mode='sum', n_layers=2, n_neurons=None,
                  activation=schnetpack.nn.activations.shifted_softplus, return_contributions=False,
                  requires_dr=False, create_graph=False, mean=None, stddev=None, atomref=None, max_z=100, outnet=None,
-                 train_embeddings=False):
+                 train_embeddings=False, property_name='y', derivative='dydx'):
         super(Atomwise, self).__init__(requires_dr)
 
         self.n_layers = n_layers
         self.create_graph = create_graph
         self.return_contributions = return_contributions
+        self.property_name = property_name
+        self.derivative = derivative
 
         mean = torch.FloatTensor([0.0]) if mean is None else mean
         stddev = torch.FloatTensor([1.0]) if stddev is None else stddev
@@ -169,10 +171,10 @@ class Atomwise(OutputModule):
 
         y = self.atom_pool(yi, atom_mask)
 
-        result = {"y": y}
+        result = {self.property_name: y}
 
         if self.return_contributions:
-            result['yi'] = yi
+            result[self.property_name + '_i'] = yi
 
         return result
 
@@ -206,10 +208,11 @@ class Energy(Atomwise):
     def __init__(self, n_in, aggregation_mode='sum', n_layers=2, n_neurons=None,
                  activation=schnetpack.nn.activations.shifted_softplus,
                  return_contributions=False, create_graph=False,
-                 return_force=False, mean=None, stddev=None, atomref=None, max_z=100, outnet=None):
+                 return_force=False, mean=None, stddev=None, atomref=None, max_z=100, outnet=None,
+                 property_name='energy', derivative='forces'):
         super(Energy, self).__init__(n_in, 1, aggregation_mode, n_layers, n_neurons, activation,
                                      return_contributions, return_force, create_graph, mean, stddev,
-                                     atomref, 100, outnet)
+                                     atomref, 100, outnet, property_name=property_name, derivative=derivative)
 
     def forward(self, inputs):
         r"""
@@ -218,10 +221,10 @@ class Energy(Atomwise):
         result = super(Energy, self).forward(inputs)
 
         if self.requires_dr:
-            forces = -grad(result["y"], inputs[Structure.R],
-                           grad_outputs=torch.ones_like(result["y"]),
+            forces = -grad(result[self.property_name], inputs[Structure.R],
+                           grad_outputs=torch.ones_like(result[self.property_name]),
                            create_graph=self.create_graph)[0]
-            result['dydx'] = forces
+            result[self.derivative] = forces
 
         return result
 
@@ -255,11 +258,13 @@ class DipoleMoment(Atomwise):
 
     def __init__(self, n_in, n_layers=2, n_neurons=None, activation=schnetpack.nn.activations.shifted_softplus,
                  return_charges=False, requires_dr=False, outnet=None, predict_magnitude=False,
-                 mean=torch.FloatTensor([0.0]), stddev=torch.FloatTensor([1.0])):
+                 mean=torch.FloatTensor([0.0]), stddev=torch.FloatTensor([1.0]), property_name='dipole',
+                 derivative='charges'):
         self.return_charges = return_charges
         self.predict_magnitude = predict_magnitude
         super(DipoleMoment, self).__init__(n_in, 1, 'sum', n_layers, n_neurons, activation=activation,
-                                           requires_dr=requires_dr, mean=mean, stddev=stddev, outnet=outnet)
+                                           requires_dr=requires_dr, mean=mean, stddev=stddev, outnet=outnet,
+                                           property_name=property_name ,derivative=derivative)
 
     def forward(self, inputs):
         """
@@ -273,12 +278,12 @@ class DipoleMoment(Atomwise):
         y = self.atom_pool(yi)
 
         if self.predict_magnitude:
-            result = {"y": torch.norm(y, dim=1, keepdim=True)}
+            result = {self.property_name: torch.norm(y, dim=1, keepdim=True)}
         else:
-            result = {"y": y}
+            result = {self.property_name: y}
 
         if self.return_charges:
-            result['yi'] = yi
+            result[self.derivative] = yi
 
         return result
 
