@@ -58,6 +58,8 @@ class MD17(AtomsData):
                          uracil='uracil_dft.npz'
                          )
 
+    existing_datasets = datasets_dict.keys()
+
     def __init__(self, dbdir, dataset, subset=None, download=True, collect_triples=False, parse_all=False,
                  properties=None):
         self.load_all = parse_all
@@ -85,7 +87,7 @@ class MD17(AtomsData):
     def create_subset(self, idx):
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
-        return MD17(self.dbpath, self.dataset, subset=subidx, download=False, collect_triples=self.collect_triples)
+        return MD17(self.dbdir, self.dataset, subset=subidx, download=False, collect_triples=self.collect_triples)
 
     def download(self):
         """

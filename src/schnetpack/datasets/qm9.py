@@ -79,8 +79,11 @@ class QM9(AtomsData):
         self.dbpath = os.path.join(self.path, 'qm9.db')
         self.atomref_path = os.path.join(self.path, 'atomref.npz')
         self.evilmols_path = os.path.join(self.path, 'evilmols.npy')
-
+        self.required_properties = properties
         environment_provider = SimpleEnvironmentProvider()
+
+        if download:
+            self._download()
 
         if remove_uncharacterized:
             if subset is None:
@@ -93,11 +96,8 @@ class QM9(AtomsData):
             # attention:  1-indexing vs 0-indexing
             subset = np.setdiff1d(subset, evilmols - 1)
 
-        super().__init__(self.dbpath, subset, properties, environment_provider,
+        super().__init__(self.dbpath, subset, self.required_properties, environment_provider,
                          collect_triples)
-
-        if download:
-            self._download()
 
     def create_subset(self, idx):
         idx = np.array(idx)
@@ -205,9 +205,11 @@ class QM9(AtomsData):
             logging.error("URL Error:", e.reason, url)
             return False
 
+        logging.info("Extracting files...")
         tar = tarfile.open(tar_path)
         tar.extractall(raw_path)
         tar.close()
+        logging.info("Done.")
 
         logging.info('Parse xyz files...')
         ordered_files = sorted(os.listdir(raw_path), key=lambda x: (int(re.sub('\D', '', x)), x))
