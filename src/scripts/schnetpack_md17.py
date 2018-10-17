@@ -156,10 +156,10 @@ def train(args, model, train_loader, val_loader, device):
     hooks.append(schedule)
 
     # index into model output: [energy, forces]
-    metrics = [spk.metrics.MeanAbsoluteError(MD17.energies, "y"),
-               spk.metrics.RootMeanSquaredError(MD17.energies, "y"),
-               spk.metrics.MeanAbsoluteError(MD17.forces, "dydx"),
-               spk.metrics.RootMeanSquaredError(MD17.forces, "dydx")]
+    metrics = [spk.metrics.MeanAbsoluteError(MD17.energies, "energy"),
+               spk.metrics.RootMeanSquaredError(MD17.energies, "energy"),
+               spk.metrics.MeanAbsoluteError(MD17.forces, "forces"),
+               spk.metrics.RootMeanSquaredError(MD17.forces, "forces")]
     if args.logger == 'csv':
         logger = spk.train.CSVHook(os.path.join(args.modelpath, 'log'),
                                    metrics, every_n_epochs=args.log_every_n_epochs)
@@ -192,14 +192,14 @@ def evaluate(args, model, train_loader, val_loader, test_loader, device):
               'Force Length RMSE', 'Force Angle MAE', 'Angle RMSE']
 
     metrics = [
-        spk.metrics.MeanAbsoluteError(MD17.energies, "y"),
-        spk.metrics.RootMeanSquaredError(MD17.energies, "y"),
-        spk.metrics.MeanAbsoluteError(MD17.forces, "dydx"),
-        spk.metrics.RootMeanSquaredError(MD17.forces, "dydx"),
-        spk.metrics.LengthMAE(MD17.forces, "dydx"),
-        spk.metrics.LengthRMSE(MD17.forces, "dydx"),
-        spk.metrics.AngleMAE(MD17.forces, "dydx"),
-        spk.metrics.AngleRMSE(MD17.forces, "dydx")
+        spk.metrics.MeanAbsoluteError(MD17.energies, "energy"),
+        spk.metrics.RootMeanSquaredError(MD17.energies, "energy"),
+        spk.metrics.MeanAbsoluteError(MD17.forces, "forces"),
+        spk.metrics.RootMeanSquaredError(MD17.forces, "forces"),
+        spk.metrics.LengthMAE(MD17.forces, "forces"),
+        spk.metrics.LengthRMSE(MD17.forces, "forces"),
+        spk.metrics.AngleMAE(MD17.forces, "forces"),
+        spk.metrics.AngleRMSE(MD17.forces, "forces")
     ]
 
     results = []
