@@ -30,10 +30,10 @@ class AtomsDataError(Exception):
 
 class BaseAtomsData(Dataset):
 
-    def __init__(self, datapath, subset=None, required_properties=[],
+    def __init__(self, dbpath, subset=None, required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True):
-        self.dbpath = datapath
+        self.dbpath = dbpath
         self.subset = subset
         self.required_properties = required_properties
         self.environment_provider = environment_provider

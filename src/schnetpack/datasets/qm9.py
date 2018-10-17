@@ -82,6 +82,12 @@ class QM9(AtomsData):
 
         environment_provider = SimpleEnvironmentProvider()
 
+        super().__init__(self.dbpath, subset, properties, environment_provider,
+                         collect_triples)
+
+        if download:
+            self._download()
+
         if remove_uncharacterized:
             if subset is None:
                 with connect(self.dbpath) as con:
@@ -92,12 +98,6 @@ class QM9(AtomsData):
 
             # attention:  1-indexing vs 0-indexing
             subset = np.setdiff1d(subset, evilmols - 1)
-
-        super().__init__(self.dbpath, subset, properties, environment_provider,
-                         collect_triples)
-
-        if download:
-            self._download()
 
     def create_subset(self, idx):
         idx = np.array(idx)
