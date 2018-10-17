@@ -39,6 +39,9 @@ class MD17(AtomsData):
     See: http://quantum-machine.org/datasets/
     """
 
+    energies = 'energy'
+    forces = 'forces'
+
     datasets_dict = dict(aspirin='aspirin_dft.npz',
                          #aspirin_ccsd='aspirin_ccsd.zip',
                          azobenzene='azobenzene_dft.npz',
