@@ -1,106 +1,90 @@
-"""
-This module provides a ASE calculator class [#ase1]_ for SchNetPack models, as well
-as a general Interface to all ASE calculation methods, such as geometry optimisation,
-normal mode computation and molecular dynamics simulations.
-
-References
-----------
-.. [#ase1] Larsen, Mortensen, Blomqvist, Castelli, Christensen, Dułak, Friis, Groves, Hammer, Hargus:
-   The atomic simulation environment -- a Python library for working with atoms.
-   Journal of Physics: Condensed Matter, 9, 27. 2017.
-"""
-
-import os
-
-import numpy as np
 import torch
+import os
+import torch.nn as nn
+import numpy as np
 from ase import units
-from ase.calculators.calculator import Calculator, all_changes
-from ase.data import atomic_numbers
 from ase.io import read, write
 from ase.io.trajectory import Trajectory
 from ase.io.xyz import read_xyz, write_xyz
+from ase.calculators.calculator import Calculator
 from ase.md import VelocityVerlet, Langevin, MDLogger
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary, ZeroRotation
 from ase.optimize import QuasiNewton
 from ase.vibrations import Vibrations
-
-from schnetpack.atomistic import Energy, ElementalEnergy, AtomisticModel
 from schnetpack.data import Structure
+from schnetpack.atomistic import AtomisticModel, Energy, DipoleMoment
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
-from schnetpack.representation import SchNet, BehlerSFBlock, StandardizeSF
-from schnetpack.utils import read_from_json
 
 
-class Model:
-    """
-    Basic wrapper for model to pass the calculator, etc.
 
-    Args:
-        model (callable): ML model
-        type (str): Model type, allowed is 'schnet'/'wacsf'
-        device (str): Device, either GPU or CPU
-    """
-    implemented = {"wacsf", "schnet"}
-
-    def __init__(self, model, type, device):
-        if type not in self.implemented:
-            raise NotImplementedError("Unrecognized model type {:s}".format(type))
-
-        self.model = model
-        self.type = type
-        self.device = device
-
-
-class MLPotential(Calculator):
+class NNCalculator(Calculator):
     """
     ASE calculator for schnetpack machine learning models.
 
     Args:
-        ml_model (object): Model class containing the callable model, device and the model type (schnet/wacsf)
-        environment_provider (callable): Provides neighbor lists
-        pair_provider (callable): Provides list of neighbor pairs. Only required if angular descriptors are used.
-                                  Default is none.
+        representation (nn.Module): Model class containing the callable model, device and the model type (schnet/wacsf)
+        n_in (int): input dimension of representation
+        calc_energy (bool): calculate energy if True
+        calc_forces (bool): calculate forces if True
+        calc_dipole (bool): calculate dipole momentum if True
+        calc_charges (bool): calculate charges if True
         **kwargs: Additional arguments for basic ase calculator class
     """
-    implemented_properties = ['energy', 'forces']
 
-    def __init__(self, ml_model, environment_provider=SimpleEnvironmentProvider(), **kwargs):
-        Calculator.__init__(self, **kwargs)
+    implemented_properties = ['energy', 'forces', 'charges', 'dipole']
+    default_parameters = {}
 
-        self.model = ml_model.model
+    def __init__(self, representation, model_path=None, n_in=128, calc_energy=False, calc_forces=False,
+                 calc_dipole=False, calc_charges=False, load_model_params=False):
+        super(NNCalculator, self).__init__()
+        self.calc_energy = calc_energy
+        self.calc_forces = calc_forces
+        self.calc_dipole = calc_dipole
+        self.calc_charges = calc_charges
 
-        collect_triples = ml_model.type == 'wacsf'
-        device = ml_model.device
+        self.calc_properties = dict(energy=self.calc_energy, forces=self.calc_forces, charges=self.calc_charges,
+                                    dipole=self.calc_dipole)
 
-        self.atoms_converter = AtomsConverter(environment_provider=environment_provider,
-                                              collect_triples=collect_triples, device=device)
+        output_modules = nn.ModuleList()
+        if self.calc_dipole or self.calc_charges:
+            output_modules.append(DipoleMoment(n_in=n_in, return_charges=calc_charges))
+        if self.calc_energy or self.calc_forces:
+            output_modules.append(Energy(n_in=n_in, return_force=calc_forces))
 
-    def calculate(self, atoms=None, properties=['energy'],
-                  system_changes=all_changes):
+        self.atoms_converter = AtomsConverter()
+
+        self.model_path = model_path
+        self.model = AtomisticModel(representation=representation, output_modules=output_modules)
+        if load_model_params:
+            self.load_model()
+
+
+    def calculate(self, atoms=None, properties=None,
+                  system_changes=None):
         """
+        Recalculate properties.
+
         Args:
             atoms (ase.Atoms): ASE atoms object.
-            properties (list of str): Properties to calculate.
-            system_changes (list of str): List of changes for ASE.
+            properties (list of str): Not implemented.
+            system_changes (list of str): Not implemented.
         """
-        # First call original calculator to set atoms attribute
-        # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
-        Calculator.calculate(self, atoms, properties, system_changes)
+        super(NNCalculator, self).calculate(atoms=atoms)
 
-        # Convert to schnetpack input format
-        model_inputs = self.atoms_converter.convert_atoms(atoms)
-        # Call model
-        model_results = self.model(model_inputs)
+        inputs = self.atoms_converter.convert_atoms(atoms)
+        results = self.model.forward(inputs)
+        self.results = dict()
 
-        # Convert outputs to calculator format
-        energy = model_results['y'].cpu().data.numpy()
-        forces = model_results['dydx'].cpu().data.numpy()
+        for prop in self.implemented_properties:
+            if self.calc_properties[prop]:
+                self.results[prop] = results[prop].cpu().detach().numpy().squeeze()
 
-        self.results = {
-            'energy': energy.reshape(-1),
-            'forces': forces.reshape((len(atoms), 3))
-        }
+    def get_model(self):
+        return self.model
+
+    def load_model(self):
+        assert self.model_path is not None, 'Model Path is not defined!'
+        self.model.load_state_dict(torch.load(os.path.join(self.model_path, 'best_model')))
 
 
 class AtomsConverter:
@@ -176,11 +160,12 @@ class AseInterface:
 
     Args:
         molecule_path (str): Path to initial geometry
-        ml_model (object): Model class wrapper for the ML model, type and the device
+        representation (nn.Modules): Network representation
         working_dir (str): Path to directory where files should be stored
     """
 
-    def __init__(self, molecule_path, ml_model, working_dir):
+    def __init__(self, molecule_path, representation, working_dir, calc_energy=True, calc_forces=True,
+                 calc_charges=False, calc_dipole=False):
         # Setup directory
         self.working_dir = working_dir
         if not os.path.exists(self.working_dir):
@@ -191,11 +176,13 @@ class AseInterface:
         self._load_molecule(molecule_path)
 
         # Set up calculator
-        calculator = MLPotential(ml_model)
+        calculator = NNCalculator(representation, calc_energy=calc_energy, calc_forces=calc_forces,
+                                  calc_dipole=calc_dipole, calc_charges=calc_charges)
         self.molecule.set_calculator(calculator)
 
         # Unless initialized, set dynamics to False
         self.dynamics = False
+
 
     def _load_molecule(self, molecule_path):
         """
@@ -240,7 +227,7 @@ class AseInterface:
 
     def init_md(self, name, time_step=0.5, temp_init=300, temp_bath=None, reset=False, interval=1):
         """
-        Initialize an ase molecular dynamics trajectory. The logfile needs to be specifies, so that old trajectories
+        Initialize an ase molecular dynamics trajectory. The logfile needs to be specified, so that old trajectories
         are not overwritten. This functionality can be used to subsequently carry out equilibration and production.
 
         Args:
@@ -338,6 +325,17 @@ class AseInterface:
             frequencies.write_jmol()
 
 
+if __name__ == '__main__':
+    from schnetpack.representation.schnet import SchNet
+    repr = SchNet()
+    ase_interface = AseInterface('test.xyz', repr, 'test/', calc_energy=True, calc_forces=True)
+    ase_interface.init_md('test_log')
+    ase_interface.run_md(5)
+    ase_interface.optimize()
+    ase_interface.compute_normal_modes()
+    B = 'BREAK'
+
+'''
 def load_model(modelpath, cuda=True):
     """
     Load a trained model from its directory and prepare it for simulations with ASE.
@@ -385,3 +383,4 @@ def load_model(modelpath, cuda=True):
     ml_model = Model(model, args.model, device)
 
     return ml_model
+'''
