@@ -171,10 +171,10 @@ def train(args, model, train_loader, val_loader, device):
 
     # setup loss function
     def loss(batch, result):
-        ediff = batch[MD17.energies] - result["y"]
+        ediff = batch[MD17.energies] - result["energy"]
         ediff = ediff ** 2
 
-        fdiff = batch[MD17.forces] - result["dydx"]
+        fdiff = batch[MD17.forces] - result["forces"]
         fdiff = fdiff ** 2
 
         err_sq = args.rho * torch.mean(ediff.view(-1)) + (1 - args.rho) * \
