@@ -17,6 +17,7 @@ val_loader = spk.data.AtomsLoader(val)
 
 # create model
 reps = rep.SchNet()
+reps.dump_config()
 output = atm.Atomwise()
 model = atm.AtomisticModel(reps, output)
 

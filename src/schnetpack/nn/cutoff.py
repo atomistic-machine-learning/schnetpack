@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from torch import nn as nn
+from schnetpack.config_model import Hyperparameters
 
 __all__ = [
     'CosineCutoff', 'MollifierCutoff'
@@ -106,7 +107,7 @@ def hard_cutoff(distances, cutoff=5.0):
     return distances * mask
 
 
-class HardCutoff(nn.Module):
+class HardCutoff(nn.Module, Hyperparameters):
     """
     Class wrapper for hard cutoff function.
 
@@ -114,9 +115,12 @@ class HardCutoff(nn.Module):
         cutoff (float): Cutoff radius.
     """
 
-    def __init__(self, cutoff=5.0):
+    default_parameters = dict(cutoff=5.0)
+
+    def __init__(self, **kwargs):
         super(HardCutoff, self).__init__()
-        self.register_buffer('cutoff', torch.FloatTensor([cutoff]))
+        self._create_attributes(**kwargs)
+        b = 'break'
 
     def forward(self, distances):
         """
