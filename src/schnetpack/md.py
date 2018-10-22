@@ -72,7 +72,7 @@ class NNCalculator(Calculator):
         super(NNCalculator, self).calculate(atoms=atoms)
 
         inputs = self.atoms_converter.convert_atoms(atoms)
-        results = self.model.forward(inputs)
+        results = self.model(inputs)
         self.results = dict()
 
         for prop in self.implemented_properties:
