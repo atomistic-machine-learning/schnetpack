@@ -6,18 +6,56 @@ class Hyperparameters:
 
     default_parameters = {}
 
-    def __init__(self):
-        self.config = {}
+    def __init__(self, **kwargs):
+        self._create_attributes(**kwargs)
 
+    # INIT
+    def create_config(self, **kwargs):
+        """
+        Create self.config attribute from kwargs and default parameters.
+
+        """
+        set_config = kwargs
+        self.config = self.default_parameters.copy()
+        for key, value in set_config.items():
+            if key in self.config.keys():
+                self.config[key] = value
+            else:
+                print('Invalid parameter "{}" will not be used!'.format(key))
+
+    def _create_attributes(self, **kwargs):
+        """
+        Create attributes from kwargs.
+
+        """
+        self.create_config(**kwargs)
+        for param, value in self.config.items():
+            setattr(self, param, value)
+
+    # GET
     def get_default_config(self):
         return self.default_parameters.copy()
 
     def get_config(self):
         return self.config.copy()
 
+    # DUMP
+    def dump_config(self, fp):
+        """
+        Dump the hyper-parameters to a json file.
+
+        Args:
+            fp (str): path to file
+
+        """
+        dict_to_dump = self.get_dump_dict()
+        with open(fp, 'w') as file:
+            json.dump(dict_to_dump, file)
+
     def get_dump_dict(self, in_dict=None):
         """
         Prepare hyper-parameters for dumping to json file.
+
         Args:
             in_dict (dic): hyper-parameters
 
@@ -26,60 +64,38 @@ class Hyperparameters:
             in_dict = self.config.copy()
         dump_dict = {}
         for key, value in in_dict.items():
-            if isinstance(value, type) and issubclass(value, Hyperparameters):
+            if isinstance(value, type):
                 dump_dict[key] = dict(class_name=value.__name__, module=value.__module__)
             elif isinstance(value, Hyperparameters):
-                dump_dict[key] = dict(name=value.__class__.__name__, module=value.__class__.__module__,
+                dump_dict[key] = dict(class_name=value.__class__.__name__, module=value.__class__.__module__,
                 params=self.get_dump_dict(value.config))
             else:
                 dump_dict[key] = value
-
         return dump_dict
 
-    def dump_config(self):
-        """
-        Dump the hyper-parameters to a json file.
+    # LOAD
+    def from_json(self, fp):
+        with open(fp) as file:
+            json_config = json.load(file)
+        return type(self)(**self.from_dict(json_config))
 
+    def from_dict(self, config):
         """
-        dict_to_dump = self.get_dump_dict()
-        with open('./test', 'w') as file:
-            json.dump(dict_to_dump, file)
+        Create self.config from default parameters and config settings.
 
-    def load_config_json(self, fp):
-        """
-        Load a json configuration as dict.
         Args:
-            fp (str): path to json file
+            config (dict): hyper-parameter configuration
 
         """
-        with open(fp, 'r') as file:
-            config = json.load(file)
-        return config
-
-    def update_config(self, config):
-        self.config = self.get_default_config()
+        new_config = {}
         for key, value in config.items():
             if type(value) == dict:
-                module_class = importlib.import_module(value['module'] + '.' + value['name'])
+                module = importlib.import_module(value['module'])
+                module_class = getattr(module, value['class_name'])
                 if 'params' in value.keys():
-                    self.config.update(dict(key=module_class(value['params'])))
+                    new_config[key] = module_class(**self.from_dict(value['params']))
                 else:
-                    self.config.update(dict(key=module_class))
+                    new_config[key] = module_class
             else:
-                self.config.update(dict(key=value))
-
-    def load_config(self, fp):
-        config = self.load_config_json(fp)
-        self.update_config(config)
-
-    def _create_config(self, **kwargs):
-        self.config = kwargs
-        self.config.update(self.default_parameters)
-
-    def _create_attributes(self, **kwargs):
-        self._create_config(**kwargs)
-        for param, value in self.config.items():
-            if param in self.default_parameters.keys():
-                setattr(self, param, value)
-            else:
-                print('Invalid parameter "{}" will not be used!')
+                new_config[key] = value
+        return new_config
