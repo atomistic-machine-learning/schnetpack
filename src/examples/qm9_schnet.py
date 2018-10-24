@@ -16,8 +16,9 @@ loader = spk.data.AtomsLoader(train, batch_size=100, num_workers=4)
 val_loader = spk.data.AtomsLoader(val)
 
 # create model
-reps = rep.SchNet()
-reps.dump_config()
+reps = rep.SchNet(n_filters=999, n_gaussians=999)
+reps.dump_config('config.JSON')
+reps.dump_default_config('default_config.JSON')
 output = atm.Atomwise()
 model = atm.AtomisticModel(reps, output)
 

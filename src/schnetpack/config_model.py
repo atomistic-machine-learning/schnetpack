@@ -4,31 +4,42 @@ import importlib
 
 class Hyperparameters:
 
-    default_parameters = {}
 
-    def __init__(self, **kwargs):
-        self._create_attributes(**kwargs)
+    def __init__(self, config):
+        """
+        Args:
+            config (dict): configuration of __init__
+        """
+        self.config = {}
+        self.default_parameters = {}
+        self.get_configs(config)
+        self._create_attributes(**self.config)
 
+    def get_configs(self, config):
+        del config['self']
+        self.config = config
+        self.default_parameters = dict(zip(self.__init__.__code__.co_varnames[1:],
+                                           self.__init__.__defaults__))
     # INIT
-    def create_config(self, **kwargs):
-        """
-        Create self.config attribute from kwargs and default parameters.
-
-        """
-        set_config = kwargs
-        self.config = self.default_parameters.copy()
-        for key, value in set_config.items():
-            if key in self.config.keys():
-                self.config[key] = value
-            else:
-                print('Invalid parameter "{}" will not be used!'.format(key))
+    #def create_config(self, **kwargs):
+    #    """
+    #    Create self.config attribute from kwargs and default parameters.
+    #
+    #    """
+    #    set_config = kwargs
+    #    self.config = self.default_parameters.copy()
+    #    for key, value in set_config.items():
+    #        if key in self.config.keys():
+    #            self.config[key] = value
+    #        else:
+    #            print('Invalid parameter "{}" will not be used!'.format(key))
 
     def _create_attributes(self, **kwargs):
         """
         Create attributes from kwargs.
 
         """
-        self.create_config(**kwargs)
+        #self.create_config(**kwargs)
         for param, value in self.config.items():
             setattr(self, param, value)
 
@@ -52,6 +63,18 @@ class Hyperparameters:
         with open(fp, 'w') as file:
             json.dump(dict_to_dump, file)
 
+    def dump_default_config(self, fp):
+        """
+        Dump the hyper-parameters to a json file.
+
+        Args:
+            fp (str): path to file
+
+        """
+        dict_to_dump = self.get_dump_dict(self.default_parameters)
+        with open(fp, 'w') as file:
+            json.dump(dict_to_dump, file)
+
     def get_dump_dict(self, in_dict=None):
         """
         Prepare hyper-parameters for dumping to json file.
@@ -61,7 +84,8 @@ class Hyperparameters:
 
         """
         if in_dict is None:
-            in_dict = self.config.copy()
+            in_dict = self.config
+        in_dict = in_dict.copy()
         dump_dict = {}
         for key, value in in_dict.items():
             if isinstance(value, type):

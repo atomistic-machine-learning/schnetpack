@@ -92,14 +92,15 @@ class SchNet(nn.Module, Hyperparameters):
        The Journal of Chemical Physics 148 (24), 241722. 2018.
     """
 
-    default_parameters = dict(n_atom_basis=128, n_filters=128, n_interactions=1, cutoff=5.0, n_gaussians=25,
-                          normalize_filter=False, coupled_interactions=False,
-                          return_intermediate=False, max_z=100, cutoff_network=HardCutoff, trainable_gaussians=False,
-                          distance_expansion=None)
+    default_parameters = dict()
 
-    def __init__(self, **kwargs):
-        super(SchNet, self).__init__()
-        self._create_attributes(**kwargs)
+    def __init__(self, n_atom_basis=128, n_filters=128, n_interactions=1, cutoff=5.0, n_gaussians=25,
+                 normalize_filter=False, coupled_interactions=False,
+                 return_intermediate=False, max_z=100, cutoff_network=HardCutoff, trainable_gaussians=False,
+                 distance_expansion=None):
+
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
 
         # atom type embeddings
         self.embedding = nn.Embedding(self.max_z, self.n_atom_basis, padding_idx=0)

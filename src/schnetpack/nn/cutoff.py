@@ -115,11 +115,9 @@ class HardCutoff(nn.Module, Hyperparameters):
         cutoff (float): Cutoff radius.
     """
 
-    default_parameters = dict(cutoff=5.0)
-
-    def __init__(self, **kwargs):
-        super(HardCutoff, self).__init__()
-        self._create_attributes(**kwargs)
+    def __init__(self, cutoff=5.0):
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         b = 'break'
 
     def forward(self, distances):
