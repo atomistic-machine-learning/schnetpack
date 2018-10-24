@@ -92,7 +92,7 @@ class SchNet(nn.Module, Hyperparameters):
        The Journal of Chemical Physics 148 (24), 241722. 2018.
     """
 
-    default_parameters = dict()
+    default_config = dict()
 
     def __init__(self, n_atom_basis=128, n_filters=128, n_interactions=1, cutoff=5.0, n_gaussians=25,
                  normalize_filter=False, coupled_interactions=False,
@@ -103,37 +103,37 @@ class SchNet(nn.Module, Hyperparameters):
         Hyperparameters.__init__(self, locals())
 
         # atom type embeddings
-        self.embedding = nn.Embedding(self.max_z, self.n_atom_basis, padding_idx=0)
+        self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
 
         # spatial features
         self.distances = schnetpack.nn.neighbors.AtomDistances()
-        if self.distance_expansion is None:
-            self.distance_expansion = schnetpack.nn.acsf.GaussianSmearing(0.0, self.cutoff, self.n_gaussians,
-                                                                          trainable=self.trainable_gaussians)
+        if distance_expansion is None:
+            self.distance_expansion = schnetpack.nn.acsf.GaussianSmearing(0.0, cutoff, n_gaussians,
+                                                                          trainable=trainable_gaussians)
         else:
-            self.distance_expansion = self.distance_expansion
+            self.distance_expansion = distance_expansion
 
-        self.return_intermediate = self.return_intermediate
+        self.return_intermediate = return_intermediate
 
         # interaction network
-        if self.coupled_interactions:
+        if coupled_interactions:
             self.interactions = nn.ModuleList([
-                                                  SchNetInteraction(n_atom_basis=self.n_atom_basis,
-                                                                    n_spatial_basis=self.n_gaussians,
-                                                                    n_filters=self.n_filters,
-                                                                    cutoff_network=self.cutoff_network,
-                                                                    cutoff=self.cutoff,
-                                                                    normalize_filter=self.normalize_filter)
-                                              ] * self.n_interactions)
+                                                  SchNetInteraction(n_atom_basis=n_atom_basis,
+                                                                    n_spatial_basis=n_gaussians,
+                                                                    n_filters=n_filters,
+                                                                    cutoff_network=cutoff_network,
+                                                                    cutoff=cutoff,
+                                                                    normalize_filter=normalize_filter)
+                                              ] * n_interactions)
         else:
             self.interactions = nn.ModuleList([
-                                                  SchNetInteraction(n_atom_basis=self.n_atom_basis,
-                                                                    n_spatial_basis=self.n_gaussians,
-                                                                    n_filters=self.n_filters,
-                                                                    cutoff_network=self.cutoff_network,
-                                                                    cutoff=self.cutoff,
-                                                                    normalize_filter=self.normalize_filter)
-                for _ in range(self.n_interactions)
+                SchNetInteraction(n_atom_basis=n_atom_basis,
+                                  n_spatial_basis=n_gaussians,
+                                  n_filters=n_filters,
+                                  cutoff_network=cutoff_network,
+                                  cutoff=cutoff,
+                                  normalize_filter=normalize_filter)
+                for _ in range(n_interactions)
             ])
 
     def forward(self, inputs):
@@ -173,3 +173,4 @@ class SchNet(nn.Module, Hyperparameters):
         if self.return_intermediate:
             return x, xs
         return x
+

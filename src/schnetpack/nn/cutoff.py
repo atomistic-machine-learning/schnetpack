@@ -118,7 +118,7 @@ class HardCutoff(nn.Module, Hyperparameters):
     def __init__(self, cutoff=5.0):
         nn.Module.__init__(self)
         Hyperparameters.__init__(self, locals())
-        b = 'break'
+        self.register_buffer('cutoff', torch.FloatTensor([cutoff]))
 
     def forward(self, distances):
         """
