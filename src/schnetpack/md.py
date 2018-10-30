@@ -14,10 +14,11 @@ from ase.vibrations import Vibrations
 from schnetpack.data import Structure
 from schnetpack.atomistic import AtomisticModel, Energy, DipoleMoment
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
+from schnetpack.config_model import Hyperparameters
 
 
 
-class NNCalculator(Calculator):
+class NNCalculator(Calculator, Hyperparameters):
     """
     ASE calculator for schnetpack machine learning models.
 
@@ -36,7 +37,8 @@ class NNCalculator(Calculator):
 
     def __init__(self, representation, model_path=None, n_in=128, calc_energy=False, calc_forces=False,
                  calc_dipole=False, calc_charges=False, load_model_params=False):
-        super(NNCalculator, self).__init__()
+        Hyperparameters.__init__(self, locals())
+        Calculator.__init__(self)
         self.calc_energy = calc_energy
         self.calc_forces = calc_forces
         self.calc_dipole = calc_dipole
@@ -324,16 +326,6 @@ class AseInterface:
         if write_jmol:
             frequencies.write_jmol()
 
-
-if __name__ == '__main__':
-    from schnetpack.representation.schnet import SchNet
-    repr = SchNet()
-    ase_interface = AseInterface('test.xyz', repr, 'test/', calc_energy=True, calc_forces=True)
-    ase_interface.init_md('test_log')
-    ase_interface.run_md(5)
-    ase_interface.optimize()
-    ase_interface.compute_normal_modes()
-    B = 'BREAK'
 
 '''
 def load_model(modelpath, cuda=True):

@@ -4,9 +4,10 @@ import torch.nn as nn
 import schnetpack.nn as snn
 
 from schnetpack.data import Structure, StatisticsAccumulator
+from schnetpack.config_model import Hyperparameters
 
 
-class SymmetryFunctions(nn.Module):
+class SymmetryFunctions(nn.Module, Hyperparameters):
     """
     Compute atom-centered symmetry functions [#acsf1]_ and weighted variant thereof as described
     in Reference [#wacsf1]_.
@@ -61,7 +62,8 @@ class SymmetryFunctions(nn.Module):
                  pairwise_elements=False
                  ):
 
-        super(SymmetryFunctions, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
 
         self.n_radial = n_radial
         self.n_angular = n_angular
@@ -266,7 +268,7 @@ class BehlerSFBlock(SymmetryFunctions):
         )
 
 
-class StandardizeSF(nn.Module):
+class StandardizeSF(nn.Module, Hyperparameters):
     """
     Compute mean and standard deviation of all symmetry functions computed for the molecules in the data loader
     and use them to standardize the descriptor vectors,
@@ -280,7 +282,8 @@ class StandardizeSF(nn.Module):
 
     def __init__(self, SFBlock, data_loader=None, cuda=False):
 
-        super(StandardizeSF, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
 
         device = torch.device("cuda" if cuda else "cpu")
 

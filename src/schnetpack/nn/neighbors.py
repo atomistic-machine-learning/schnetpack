@@ -1,6 +1,8 @@
 import torch
 from torch import nn as nn
 
+from schnetpack.config_model import Hyperparameters
+
 
 def atom_distances(positions, neighbors, cell=None, cell_offsets=None, return_directions=False, neighbor_mask=None):
     """
@@ -56,7 +58,7 @@ def atom_distances(positions, neighbors, cell=None, cell_offsets=None, return_di
     return distances
 
 
-class AtomDistances(nn.Module):
+class AtomDistances(nn.Module, Hyperparameters):
     """
     Layer that calculates all pair-wise distances between atoms.
 
@@ -69,7 +71,8 @@ class AtomDistances(nn.Module):
     """
 
     def __init__(self, return_directions=False):
-        super(AtomDistances, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.return_directions = return_directions
 
     def forward(self, positions, neighbors, cell=None, cell_offsets=None, neighbor_mask=None):
@@ -120,14 +123,15 @@ def triple_distances(positions, neighbors_j, neighbors_k):
     return r_ij, r_ik, r_jk
 
 
-class TriplesDistances(nn.Module):
+class TriplesDistances(nn.Module, Hyperparameters):
     """
     Layer that gets all distances between atoms forming a triangle with the central atoms.
     Required e.g. for angular symmetry functions.
     """
 
     def __init__(self):
-        super(TriplesDistances, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
 
     def forward(self, positions, neighbors_j, neighbors_k):
         """
@@ -167,13 +171,14 @@ def neighbor_elements(atomic_numbers, neighbors):
     return neighbor_numbers
 
 
-class NeighborElements(nn.Module):
+class NeighborElements(nn.Module, Hyperparameters):
     """
     Layer to obtain the atomic numbers associated with the neighboring atoms.
     """
 
     def __init__(self):
-        super(NeighborElements, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
 
     def forward(self, atomic_numbers, neighbors):
         """

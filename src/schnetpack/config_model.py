@@ -15,10 +15,17 @@ class Hyperparameters:
         self.get_configs(config)
 
     def get_configs(self, config):
+        config = config.copy()
         del config['self']
         self.config = config
-        self.default_config = dict(zip(self.__init__.__code__.co_varnames[1:],
-                                       self.__init__.__defaults__))
+        defaults = self.__init__.__defaults__
+        if defaults is None:
+            defaults = ()
+        varnames = self.__init__.__code__.co_varnames[1:]
+        n_defaults = len(defaults)
+        n_vars = len(varnames)
+        defaults = (None,) * (n_vars - n_defaults) + defaults
+        self.default_config = dict(zip(varnames, defaults))
 
     # GET
     def get_default_config(self):
@@ -75,12 +82,24 @@ class Hyperparameters:
         return dump_dict
 
     # LOAD
-    def from_json(self, fp):
+    @classmethod
+    def from_json(cls, fp):
+        """
+        Load configuration of a Model from a JSON config file.
+
+        Args:
+            fp (str): path to config JSON
+
+        Returns:
+            instance of model with loaded configuration
+
+        """
         with open(fp) as file:
             json_config = json.load(file)
-        return type(self)(**self.from_dict(json_config))
+        return cls(**cls.from_dict(json_config))
 
-    def from_dict(self, config):
+    @classmethod
+    def from_dict(cls, config):
         """
         Create self.config from default parameters and config settings.
 
@@ -94,7 +113,7 @@ class Hyperparameters:
                 module = importlib.import_module(value['module'])
                 module_class = getattr(module, value['class_name'])
                 if 'params' in value.keys():
-                    new_config[key] = module_class(**self.from_dict(value['params']))
+                    new_config[key] = module_class(**cls.from_dict(value['params']))
                 else:
                     new_config[key] = module_class
             else:

@@ -3,13 +3,14 @@ from torch import nn as nn
 from torch.nn.init import xavier_uniform_
 
 from schnetpack.nn.initializers import zeros_initializer
+from schnetpack.config_model import Hyperparameters
 
 __all__ = [
     'Dense', 'GetItem', 'ScaleShift', 'Standardize', 'Aggregate'
 ]
 
 
-class Dense(nn.Linear):
+class Dense(nn.Linear, Hyperparameters):
     """ Applies a dense layer with activation: :math:`y = activation(Wx + b)`
 
     Args:
@@ -23,11 +24,12 @@ class Dense(nn.Linear):
 
     def __init__(self, in_features, out_features, bias=True, activation=None,
                  weight_init=xavier_uniform_, bias_init=zeros_initializer):
+        Hyperparameters.__init__(self, locals())
         self.weight_init = weight_init
         self.bias_init = bias_init
         self.activation = activation
 
-        super(Dense, self).__init__(in_features, out_features, bias)
+        nn.Linear.__init__(self, in_features, out_features, bias)
 
     def reset_parameters(self):
         """
@@ -52,7 +54,7 @@ class Dense(nn.Linear):
         return y
 
 
-class GetItem(nn.Module):
+class GetItem(nn.Module, Hyperparameters):
     """
     Extracts a single item from the standard SchNetPack input dictionary.
 
@@ -61,7 +63,8 @@ class GetItem(nn.Module):
     """
 
     def __init__(self, key):
-        super(GetItem, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.key = key
 
     def forward(self, input):
@@ -75,7 +78,7 @@ class GetItem(nn.Module):
         return input[self.key]
 
 
-class ScaleShift(nn.Module):
+class ScaleShift(nn.Module, Hyperparameters):
     """
     Standardization layer encoding the standardization of output layers according to:
     :math:`X_\sigma = (X - \mu_X) / \sigma_X`
@@ -86,7 +89,8 @@ class ScaleShift(nn.Module):
     """
 
     def __init__(self, mean, stddev):
-        super(ScaleShift, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.register_buffer('mean', mean)
         self.register_buffer('stddev', stddev)
 
@@ -102,7 +106,7 @@ class ScaleShift(nn.Module):
         return y
 
 
-class Standardize(nn.Module):
+class Standardize(nn.Module, Hyperparameters):
     """
     Standardization routine for NN close to input,
     e.g. symmetry functions. Values of mean and sttdev must
@@ -115,7 +119,8 @@ class Standardize(nn.Module):
     """
 
     def __init__(self, mean, stddev, eps=1e-9):
-        super(Standardize, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.register_buffer('mean', mean)
         self.register_buffer('stddev', stddev)
         self.register_buffer('eps', torch.ones_like(stddev) * eps)
@@ -133,7 +138,7 @@ class Standardize(nn.Module):
         return y
 
 
-class Aggregate(nn.Module):
+class Aggregate(nn.Module, Hyperparameters):
     """
     Pooling layer with optional masking
 
@@ -143,6 +148,7 @@ class Aggregate(nn.Module):
     """
 
     def __init__(self, axis, mean=False):
+        Hyperparameters.__init__(self, locals())
         self.average = mean
         self.axis = axis
         super(Aggregate, self).__init__()

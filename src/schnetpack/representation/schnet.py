@@ -10,7 +10,7 @@ from schnetpack.data import Structure
 from schnetpack.config_model import Hyperparameters
 
 
-class SchNetInteraction(nn.Module):
+class SchNetInteraction(nn.Module, Hyperparameters):
     """
     SchNet interaction block for modeling quantum interactions of atomistic systems with cosine cutoff.
 
@@ -23,7 +23,8 @@ class SchNetInteraction(nn.Module):
 
     def __init__(self, n_atom_basis, n_spatial_basis, n_filters, cutoff,
                  cutoff_network=HardCutoff, normalize_filter=False):
-        super(SchNetInteraction, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
 
         # initialize filters
         self.filter_network = nn.Sequential(
@@ -92,12 +93,9 @@ class SchNet(nn.Module, Hyperparameters):
        The Journal of Chemical Physics 148 (24), 241722. 2018.
     """
 
-    default_config = dict()
-
     def __init__(self, n_atom_basis=128, n_filters=128, n_interactions=1, cutoff=5.0, n_gaussians=25,
-                 normalize_filter=False, coupled_interactions=False,
-                 return_intermediate=False, max_z=100, cutoff_network=HardCutoff, trainable_gaussians=False,
-                 distance_expansion=None):
+                 normalize_filter=False, coupled_interactions=False, return_intermediate=False, max_z=100,
+                 cutoff_network=HardCutoff, trainable_gaussians=False, distance_expansion=None):
 
         nn.Module.__init__(self)
         Hyperparameters.__init__(self, locals())
@@ -173,4 +171,3 @@ class SchNet(nn.Module, Hyperparameters):
         if self.return_intermediate:
             return x, xs
         return x
-

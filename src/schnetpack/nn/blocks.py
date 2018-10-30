@@ -3,9 +3,10 @@ from torch import nn as nn
 
 from schnetpack.data import Structure
 from schnetpack.nn import shifted_softplus, Dense
+from schnetpack.config_model import Hyperparameters
 
 
-class MLP(nn.Module):
+class MLP(nn.Module, Hyperparameters):
     """
     Template for fully-connected neural network of the multilayer perceptron type.
 
@@ -22,7 +23,8 @@ class MLP(nn.Module):
     """
 
     def __init__(self, n_in, n_out, n_hidden=None, n_layers=2, activation=shifted_softplus):
-        super(MLP, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         # If no neurons are given, initialize
         if n_hidden is None:
             c_neurons = n_in
@@ -53,7 +55,7 @@ class MLP(nn.Module):
         return self.out_net(inputs)
 
 
-class TiledMultiLayerNN(nn.Module):
+class TiledMultiLayerNN(nn.Module, Hyperparameters):
     """
     Tiled multilayer networks which are applied to the input and produce n_tiled different outputs.
     These outputs are then stacked and returned. Used e.g. to construct element-dependent prediction
@@ -68,7 +70,8 @@ class TiledMultiLayerNN(nn.Module):
     """
 
     def __init__(self, n_in, n_out, n_tiles, n_hidden=50, n_layers=3, activation=shifted_softplus):
-        super(TiledMultiLayerNN, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.mlps = nn.ModuleList([
             MLP(n_in, n_out, n_hidden=n_hidden, n_layers=n_layers, activation=activation)
             for _ in range(n_tiles)
@@ -86,7 +89,7 @@ class TiledMultiLayerNN(nn.Module):
         return torch.cat([net(inputs) for net in self.mlps], 2)
 
 
-class ElementalGate(nn.Module):
+class ElementalGate(nn.Module, Hyperparameters):
     """
     Produces a Nbatch x Natoms x Nelem mask depending on the nuclear charges passed as an argument.
     If onehot is set, mask is one-hot mask, else a random embedding is used.
@@ -99,7 +102,8 @@ class ElementalGate(nn.Module):
     """
 
     def __init__(self, elements, onehot=True, trainable=False):
-        super(ElementalGate, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.trainable = trainable
 
         # Get the number of elements, as well as the highest nuclear charge to use in the embedding vector
@@ -131,7 +135,7 @@ class ElementalGate(nn.Module):
         return self.gate(atomic_numbers)
 
 
-class GatedNetwork(nn.Module):
+class GatedNetwork(nn.Module, Hyperparameters):
     """
     Combines the TiledMultiLayerNN with the elemental gate to obtain element specific atomistic networks as in typical
     Behler--Parrinello networks [#behler1]_.
@@ -156,7 +160,8 @@ class GatedNetwork(nn.Module):
 
     def __init__(self, nin, nout, elements, n_hidden=50, n_layers=3, trainable=False, onehot=True,
                  activation=shifted_softplus):
-        super(GatedNetwork, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.nelem = len(elements)
         self.gate = ElementalGate(elements, trainable=trainable, onehot=onehot)
         self.network = TiledMultiLayerNN(nin, nout, self.nelem, n_hidden=n_hidden, n_layers=n_layers,

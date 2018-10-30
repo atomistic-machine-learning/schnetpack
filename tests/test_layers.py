@@ -2,9 +2,7 @@ import os
 import numpy as np
 import pytest
 import torch
-from torch.optim import Adam
 from torch import nn
-from torch.nn.modules import MSELoss
 
 from schnetpack.nn.cfconv import CFConv
 from schnetpack.representation.schnet import SchNet, SchNetInteraction
@@ -15,6 +13,7 @@ from schnetpack.nn.base import Dense, GetItem, ScaleShift, Standardize, Aggregat
 from schnetpack.nn.blocks import MLP, TiledMultiLayerNN, ElementalGate, GatedNetwork
 from schnetpack.nn.cutoff import CosineCutoff, MollifierCutoff, HardCutoff
 from schnetpack.nn.neighbors import NeighborElements
+from tests.base_test import assert_params_changed, assert_equal_shape
 
 
 @pytest.fixture
@@ -116,47 +115,6 @@ def expanded_distances(batchsize, n_atoms, n_spatial_basis):
 @pytest.fixture
 def filter_network(single_spatial_basis, n_filters):
     return nn.Linear(single_spatial_basis, n_filters)
-
-
-def assert_params_changed(model, input, exclude=[]):
-    """
-    Check if all model-parameters are updated when training.
-
-    Args:
-        model (torch.nn.Module): model to test
-        data (torch.utils.data.Dataset): input dataset
-        exclude (list): layers that are not necessarily updated
-    """
-    # save state-dict
-    torch.save(model.state_dict(), 'before')
-    # do one training step
-    optimizer = Adam(model.parameters())
-    loss_fn = MSELoss()
-    pred = model(*input)
-    loss = loss_fn(pred, torch.rand(pred.shape))
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-    # check if all trainable parameters have changed
-    after = model.state_dict()
-    before = torch.load('before')
-    for key in before.keys():
-        if np.array([key.startswith(exclude_layer) for exclude_layer in exclude]).any():
-            continue
-        assert (before[key] != after[key]).any(), '{} layer has not been updated!'.format(key)
-
-
-def assert_equal_shape(model, batch, out_shape):
-    """
-    Check if the model returns the desired output shape.
-
-    Args:
-        model (nn.Module): model that needs to be tested
-        batch (list): input data
-        out_shape (list): desired output shape
-    """
-    pred = model(*batch)
-    assert list(pred.shape) == out_shape, 'Model does not return expected shape!'
 
 
 def test_parameter_update_schnet(schnet_batch):

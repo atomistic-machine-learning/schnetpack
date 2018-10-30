@@ -3,13 +3,14 @@ from torch import nn as nn
 
 from schnetpack.nn import Dense
 from schnetpack.nn.base import Aggregate
+from schnetpack.config_model import Hyperparameters
 
 __all__ = [
     'CFConv'
 ]
 
 
-class CFConv(nn.Module):
+class CFConv(nn.Module, Hyperparameters):
     """
     Continuous-filter convolution layer for SchNet.
 
@@ -27,7 +28,8 @@ class CFConv(nn.Module):
     def __init__(self, n_in, n_filters, n_out, filter_network,
                  cutoff_network=None,
                  activation=None, normalize_filter=False, axis=2):
-        super(CFConv, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.in2f = Dense(n_in, n_filters, bias=False)
         self.f2out = Dense(n_filters, n_out, activation=activation)
         self.filter_network = filter_network

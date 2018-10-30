@@ -13,9 +13,10 @@ import schnetpack.nn.activations
 import schnetpack.nn.base
 import schnetpack.nn.blocks
 from schnetpack.data import Structure
+from schnetpack.config_model import Hyperparameters
 
 
-class AtomisticModel(nn.Module):
+class AtomisticModel(nn.Module, Hyperparameters):
     """
     Assembles an atomistic model from a representation module and one or more output modules.
 
@@ -30,8 +31,8 @@ class AtomisticModel(nn.Module):
     """
 
     def __init__(self, representation, output_modules):
-        super(AtomisticModel, self).__init__()
-
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.representation = representation
 
         if isinstance(output_modules, Iterable):
@@ -64,7 +65,7 @@ class AtomisticModel(nn.Module):
         return outs
 
 
-class OutputModule(nn.Module):
+class OutputModule(nn.Module, Hyperparameters):
     r"""
     Base class for output modules.
 
@@ -73,8 +74,9 @@ class OutputModule(nn.Module):
     """
 
     def __init__(self, requires_dr=False):
+        Hyperparameters.__init__(self, locals())
         self.requires_dr = requires_dr
-        super(OutputModule, self).__init__()
+        nn.Module.__init__(self)
 
     def forward(self, inputs):
         r"""

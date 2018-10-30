@@ -27,7 +27,7 @@ def cosine_cutoff(distances, cutoff=5.0):
     return cutoffs
 
 
-class CosineCutoff(nn.Module):
+class CosineCutoff(nn.Module, Hyperparameters):
     """
     Class wrapper for cosine cutoff function.
 
@@ -36,7 +36,8 @@ class CosineCutoff(nn.Module):
     """
 
     def __init__(self, cutoff=5.0):
-        super(CosineCutoff, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.register_buffer('cutoff', torch.FloatTensor([cutoff]))
 
     def forward(self, distances):
@@ -69,7 +70,7 @@ def mollifier_cutoff(distances, cutoff=5.0):
     return cutoffs
 
 
-class MollifierCutoff(nn.Module):
+class MollifierCutoff(nn.Module, Hyperparameters):
     """
     Class wrapper for mollifier cutoff function.
 
@@ -78,7 +79,8 @@ class MollifierCutoff(nn.Module):
     """
 
     def __init__(self, cutoff=5.0):
-        super(MollifierCutoff, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.register_buffer('cutoff', torch.FloatTensor([cutoff]))
 
     def forward(self, distances):

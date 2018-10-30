@@ -2,13 +2,14 @@ import torch
 from torch import nn as nn
 
 from schnetpack.nn.cutoff import CosineCutoff
+from schnetpack.config_model import Hyperparameters
 
 __all__ = [
     'AngularDistribution', 'BehlerAngular', 'GaussianSmearing', 'RadialDistribution'
 ]
 
 
-class AngularDistribution(nn.Module):
+class AngularDistribution(nn.Module, Hyperparameters):
     """
     Routine used to compute angular type symmetry functions between all atoms i-j-k, where i is the central atom.
 
@@ -30,7 +31,8 @@ class AngularDistribution(nn.Module):
                  crossterms=False,
                  pairwise_elements=False
                  ):
-        super(AngularDistribution, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.radial_filter = radial_filter
         self.angular_filter = angular_filter
         self.cutoff_function = cutoff_functions
@@ -119,7 +121,7 @@ class AngularDistribution(nn.Module):
         return angular_distribution
 
 
-class BehlerAngular(nn.Module):
+class BehlerAngular(nn.Module, Hyperparameters):
     """
     Compute Behler type angular contribution of the angle spanned by three atoms:
 
@@ -133,7 +135,8 @@ class BehlerAngular(nn.Module):
     """
 
     def __init__(self, zetas={1}):
-        super(BehlerAngular, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.zetas = zetas
 
     def forward(self, cos_theta):
@@ -181,7 +184,7 @@ def gaussian_smearing(distances, offset, widths, centered=False):
     return gauss
 
 
-class GaussianSmearing(nn.Module):
+class GaussianSmearing(nn.Module, Hyperparameters):
     """
     Wrapper class of gaussian_smearing function. Places a predefined number of Gaussian functions within the
     specified limits.
@@ -198,7 +201,8 @@ class GaussianSmearing(nn.Module):
     """
 
     def __init__(self, start=0.0, stop=5.0, n_gaussians=50, centered=False, trainable=False):
-        super(GaussianSmearing, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         offset = torch.linspace(start, stop, n_gaussians)
         widths = torch.FloatTensor((offset[1] - offset[0]) * torch.ones_like(offset))
         if trainable:
@@ -221,7 +225,7 @@ class GaussianSmearing(nn.Module):
         return gaussian_smearing(distances, self.offsets, self.width, centered=self.centered)
 
 
-class RadialDistribution(nn.Module):
+class RadialDistribution(nn.Module, Hyperparameters):
     """
     Radial distribution function used e.g. to compute Behler type radial symmetry functions.
 
@@ -231,7 +235,8 @@ class RadialDistribution(nn.Module):
     """
 
     def __init__(self, radial_filter, cutoff_function=CosineCutoff):
-        super(RadialDistribution, self).__init__()
+        nn.Module.__init__(self)
+        Hyperparameters.__init__(self, locals())
         self.radial_filter = radial_filter
         self.cutoff_function = cutoff_function
 
