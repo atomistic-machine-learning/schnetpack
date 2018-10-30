@@ -108,11 +108,11 @@ class MaterialsProject(AtomsData):
                                            positions=s.cart_coords,
                                            cell=s.lattice.matrix, pbc=True)
                                 con.write(at, data={
-                                    MaterialsProject.EPerAtom: q[
-                                        'energy_per_atom'],
-                                    MaterialsProject.EformationPerAtom: q[
-                                        'formation_energy_per_atom'],
-                                    MaterialsProject.TotalMagnetization: q[
-                                        'total_magnetization'],
-                                    MaterialsProject.BandGap: q[
-                                        'band_gap']})
+                                    MaterialsProject.EPerAtom:
+                                        q['energy_per_atom'],
+                                    MaterialsProject.EformationPerAtom:
+                                        q['formation_energy_per_atom'],
+                                    MaterialsProject.TotalMagnetization:
+                                        q['total_magnetization'],
+                                    MaterialsProject.BandGap:
+                                        q['band_gap']})
