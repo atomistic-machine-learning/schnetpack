@@ -72,14 +72,27 @@ class Hyperparameters:
         in_dict = in_dict.copy()
         dump_dict = {}
         for key, value in in_dict.items():
-            if isinstance(value, type):
-                dump_dict[key] = dict(class_name=value.__name__, module=value.__module__)
-            elif isinstance(value, Hyperparameters):
-                dump_dict[key] = dict(class_name=value.__class__.__name__, module=value.__class__.__module__,
-                params=self.get_dump_dict(value.config))
-            else:
-                dump_dict[key] = value
+            dump_dict[key] = self._dictify_object(value)
         return dump_dict
+
+    def _dictify_object(self, obj):
+        """
+        Transform object to be a part of the dump dict.
+
+        Args:
+            obj: can be a class, an instance of Hyperparameters, a List or any primitive datatype
+
+        Returns:
+            a dictionary that can be dumped to a JSON-file
+        """
+        if type(obj) == list:
+            return [dict(self._dictify_object(element)) for element in obj]
+        if isinstance(obj, type):
+            return dict(class_name=obj.__name__, module=obj.__module__)
+        if isinstance(obj, Hyperparameters):
+            return dict(class_name=obj.__class__.__name__, module=obj.__class__.__module__,
+                        params=self.get_dump_dict(obj.config))
+        return obj
 
     # LOAD
     @classmethod
@@ -109,13 +122,28 @@ class Hyperparameters:
         """
         new_config = {}
         for key, value in config.items():
-            if type(value) == dict:
-                module = importlib.import_module(value['module'])
-                module_class = getattr(module, value['class_name'])
-                if 'params' in value.keys():
-                    new_config[key] = module_class(**cls.from_dict(value['params']))
-                else:
-                    new_config[key] = module_class
-            else:
-                new_config[key] = value
+            new_config[key] = cls._restore_object(value)
         return new_config
+
+    @classmethod
+    def _restore_object(cls, obj):
+        """
+        Restore an object that has been transforemd with self._dictify_object.
+
+        Args:
+            obj: part of the config dictionary
+
+        Returns:
+            the restored object
+        """
+        if type(obj) == list:
+            print(obj)
+            return [cls._restore_object(element) for element in obj]
+        if type(obj) == dict and 'module' in obj.keys():
+            module = importlib.import_module(obj['module'])
+            module_class = getattr(module, obj['class_name'])
+            if 'params' in obj.keys():
+                return module_class(**cls.from_dict(obj['params']))
+            else:
+                return module_class
+        return obj

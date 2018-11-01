@@ -1,11 +1,12 @@
 import torch
-import torch.nn.functional as F
 from torch.optim import Adam
 
 import schnetpack as spk
 import schnetpack.atomistic as atm
 import schnetpack.representation as rep
 from schnetpack.datasets import *
+from  schnetpack.loss_functions import MSELoss
+
 
 # load qm9 dataset and download if necessary
 data = QM9("qm9/", properties=[QM9.U0], collect_triples=True)
@@ -20,14 +21,10 @@ reps = rep.BehlerSFBlock()
 output = atm.ElementalAtomwise(reps.n_symfuncs)
 model = atm.AtomisticModel(reps, output)
 
-# filter for trainable parameters (https://github.com/pytorch/pytorch/issues/679)
-trainable_params = filter(lambda p: p.requires_grad, model.parameters())
-
 # create trainer
-opt = Adam(trainable_params, lr=1e-4)
-loss = lambda b, p: F.mse_loss(p["y"], b[QM9.U0])
-trainer = spk.train.Trainer("wacsf/", model, loss,
-                      opt, loader, val_loader)
+loss = MSELoss(input_key=QM9.U0, target_key='y')
+trainer = spk.train.Trainer("output/", model, loss,
+                            Adam, optimizer_params=dict(lr=1e-4))
 
 # start training
-trainer.train(torch.device("cpu"))
+trainer.train(torch.device("cpu"), loader, val_loader)

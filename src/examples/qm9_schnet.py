@@ -1,11 +1,11 @@
 import torch
-import torch.nn.functional as F
 from torch.optim import Adam
 
 import schnetpack as spk
 import schnetpack.atomistic as atm
 import schnetpack.representation as rep
 from schnetpack.datasets import *
+from schnetpack.loss_functions import MSELoss
 
 # load qm9 dataset and download if necessary
 data = QM9("qm9/", properties=[QM9.U0])
@@ -20,11 +20,10 @@ reps = rep.SchNet()
 output = atm.Atomwise()
 model = atm.AtomisticModel(reps, output)
 
-# create trainergit add
-opt = Adam(model.parameters(), lr=1e-4)
-loss = lambda b, p: F.mse_loss(p["y"], b[QM9.U0])
+# create trainer
+loss = MSELoss(input_key=QM9.U0, target_key='y')
 trainer = spk.train.Trainer("output/", model, loss,
-                            opt, loader, val_loader)
+                            Adam, optimizer_params=dict(lr=1e-4))
 
 # start training
-trainer.train(torch.device("cpu"))
+trainer.train(torch.device("cpu"), loader, val_loader)

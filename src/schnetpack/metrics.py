@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 
+from schnetpack.config_model import Hyperparameters
 
 class Metric:
     r"""
@@ -31,7 +32,7 @@ class Metric:
         pass
 
 
-class ModelBias(Metric):
+class ModelBias(Metric, Hyperparameters):
     r"""
     Calculates the bias of the model. For non-scalar quantities, the mean of all components is taken.
 
@@ -42,8 +43,9 @@ class ModelBias(Metric):
     """
 
     def __init__(self, target, model_output=None, name=None):
+        Hyperparameters.__init__(self, locals())
         name = 'Bias_' + target if name is None else name
-        super(ModelBias, self).__init__(name)
+        Metric.__init__(self, name)
         self.target = target
         self.model_output = model_output
         self.l2loss = 0.
@@ -71,7 +73,7 @@ class ModelBias(Metric):
         return self.l2loss / self.n_entries
 
 
-class MeanSquaredError(Metric):
+class MeanSquaredError(Metric, Hyperparameters):
     r"""
     Metric for mean square error. For non-scalar quantities, the mean of all components is taken.
 
@@ -82,8 +84,9 @@ class MeanSquaredError(Metric):
     """
 
     def __init__(self, target, model_output=None, bias_correction=None, name=None):
+        Hyperparameters.__init__(self, locals())
         name = 'MSE_' + target if name is None else name
-        super(MeanSquaredError, self).__init__(name)
+        Metric.__init__(self, name)
         self.target = target
         self.bias_correction = bias_correction
         self.model_output = model_output
@@ -127,13 +130,13 @@ class RootMeanSquaredError(MeanSquaredError):
 
     def __init__(self, target, model_output=None, bias_correction=None, name=None):
         name = 'RMSE_' + target if name is None else name
-        super(RootMeanSquaredError, self).__init__(target, model_output, bias_correction, name)
+        MeanSquaredError.__init__(self, target, model_output, bias_correction, name)
 
     def aggregate(self):
         return np.sqrt(self.l2loss / self.n_entries)
 
 
-class MeanAbsoluteError(Metric):
+class MeanAbsoluteError(Metric, Hyperparameters):
     r"""
     Metric for mean absolute error. For non-scalar quantities, the mean of all components is taken.
 
@@ -144,8 +147,9 @@ class MeanAbsoluteError(Metric):
     """
 
     def __init__(self, target, model_output=None, bias_correction=None, name=None):
+        Hyperparameters.__init__(self, locals())
         name = 'MAE_' + target if name is None else name
-        super(MeanAbsoluteError, self).__init__(name)
+        Metric.__init__(self, name)
         self.target = target
         self.bias_correction = bias_correction
         self.model_output = model_output
@@ -168,7 +172,6 @@ class MeanAbsoluteError(Metric):
             yp = result
         else:
             yp = result[self.model_output]
-
         diff = self._get_diff(y, yp)
         self.l1loss += torch.sum(torch.abs(diff).view(-1), 0).detach().cpu().data.numpy()
         self.n_entries += np.prod(y.shape)
@@ -190,7 +193,7 @@ class HeatmapMAE(MeanAbsoluteError):
 
     def __init__(self, target, model_output=None, name=None):
         name = 'HeatmapMAE_' + target if name is None else name
-        super(HeatmapMAE, self).__init__(target, model_output, name=name)
+        MeanAbsoluteError.__init__(self, target, model_output, name=name)
 
     def add_batch(self, batch, result):
         y = batch[self.target]
@@ -220,7 +223,7 @@ class LengthMSE(MeanSquaredError):
 
     def __init__(self, target, model_output=None, name=None):
         name = 'LengthMSE_' + target if name is None else name
-        super(LengthRMSE, self).__init__(target, model_output, name=name)
+        MeanSquaredError.__init__(self, target, model_output, name=name)
 
     def _get_diff(self, y, yp):
         yl = torch.sqrt(torch.sum(y ** 2, dim=-1))

@@ -1,9 +1,9 @@
 import os
 import torch
 import numpy as np
+from schnetpack.config_model import Hyperparameters
 
-
-class Trainer:
+class Trainer(Hyperparameters):
     r"""
        Class to train models.
 
@@ -13,23 +13,20 @@ class Trainer:
            model_path (str): path to the model directory
            model (torch.Module): model to be trained
            loss_fn (callable): loss function used for training the model
-           optimizer (torch.optim.optimizer): optimizer used for training
-           train_loader (torch.utils.data.DataLoader): data loader for training set
-           validation_loader (torch.utils.data.DataLoader): data loader for validation set
+           optimizer_class (class): optimizer class used for training
+           optimizer_params (dict): parameters for initializing the optimizer
            keep_n_checkpoints (int): number of saved checkpoints (default: 3)
            checkpoint_interval (int): interval after which checkpoints is saved (default: 10)
            hooks (list): hooks to customize training process (default: [])
            loss_is_normalized (bool): if true, the loss per datapoint will be reported. Otherwise, the accumulated loss
                                      (default: True)
        """
-    def __init__(self, model_path, model, loss_fn, optimizer,
-                 train_loader, validation_loader, keep_n_checkpoints=3,
+    def __init__(self, model_path, model, loss_fn, optimizer_class, optimizer_params, keep_n_checkpoints=3,
                  checkpoint_interval=10, validation_interval=1, hooks=[], loss_is_normalized=True):
+        Hyperparameters.__init__(self, locals())
         self.model_path = model_path
         self.checkpoint_path = os.path.join(self.model_path, 'checkpoints')
         self.best_model = os.path.join(self.model_path, 'best_model')
-        self.train_loader = train_loader
-        self.validation_loader = validation_loader
         self.validation_interval = validation_interval
         self.keep_n_checkpoints = keep_n_checkpoints
         self.hooks = hooks
@@ -40,7 +37,8 @@ class Trainer:
         self.checkpoint_interval = checkpoint_interval
 
         self.loss_fn = loss_fn
-        self.optimizer = optimizer
+        self.optimizer = optimizer_class(filter(lambda p: p.requires_grad, self._model.parameters()),
+                                         **optimizer_params)
 
         if os.path.exists(self.checkpoint_path):
             self.restore_checkpoint()
@@ -105,12 +103,14 @@ class Trainer:
                              'checkpoint-' + str(epoch) + '.pth.tar')
         self.state_dict = torch.load(chkpt)
 
-    def train(self, device):
+    def train(self, device, train_loader, validation_loader):
         r"""
         Starts training of model on a specified device.
 
         Args:
             device (torch.torch.Device): device on which training takes place
+            train_loader (torch.utils.data.DataLoader): data loader for training set
+            validation_loader (torch.utils.data.DataLoader): data loader for validation set
 
         """
         self._stop = False
@@ -129,7 +129,7 @@ class Trainer:
                     break
 
                 # perform training epoch
-                for train_batch in self.train_loader:
+                for train_batch in train_loader:
                     self.optimizer.zero_grad()
 
                     for h in self.hooks:
@@ -164,7 +164,7 @@ class Trainer:
 
                     val_loss = 0.
                     n_val = 0
-                    for val_batch in self.validation_loader:
+                    for val_batch in validation_loader:
                         # append batch_size
                         vsize = list(val_batch.values())[0].size(0)
                         n_val += vsize

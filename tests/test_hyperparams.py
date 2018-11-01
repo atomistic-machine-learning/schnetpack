@@ -1,14 +1,14 @@
-import os
 import pytest
-import numpy as np
 import torch
 import torch.nn as nn
 
+from schnetpack.datasets import *
 from schnetpack.data import Structure
 from schnetpack.config_model import Hyperparameters
 from schnetpack.representation.schnet import SchNet
 import schnetpack.atomistic as atm
 from tests.base_test import assert_params_changed
+
 
 # Dummy classes
 class Dummy(object):

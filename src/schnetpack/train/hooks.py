@@ -5,6 +5,8 @@ import torch
 import numpy as np
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
 
+from schnetpack.config_model import Hyperparameters
+
 __all__ = [
     'Hook', 'LoggingHook', 'TensorboardHook', 'CSVHook', 'EarlyStoppingHook', 'MaxEpochHook', 'MaxStepHook',
     'LRScheduleHook', 'ReduceLROnPlateauHook', 'ExponentialDecayHook', 'WarmRestartHook'
@@ -101,7 +103,7 @@ class LoggingHook(Hook):
             metric.add_batch(val_batch, val_result)
 
 
-class CSVHook(LoggingHook):
+class CSVHook(LoggingHook, Hyperparameters):
     """ Hook for logging to csv files.
 
             This class provides an interface to write logging information about the training process to csv files.
@@ -117,8 +119,9 @@ class CSVHook(LoggingHook):
 
     def __init__(self, log_path, metrics, log_train_loss=True,
                  log_validation_loss=True, log_learning_rate=True, every_n_epochs=1):
+        Hyperparameters.__init__(self, locals())
         log_path = os.path.join(log_path, 'log.csv')
-        super(CSVHook, self).__init__(log_path, metrics, log_train_loss,
+        LoggingHook.__init__(self, log_path, metrics, log_train_loss,
                                       log_validation_loss, log_learning_rate)
         self._offset = 0
         self._restart = False
@@ -209,7 +212,7 @@ class CSVHook(LoggingHook):
                 f.write(log + os.linesep)
 
 
-class TensorboardHook(LoggingHook):
+class TensorboardHook(LoggingHook, Hyperparameters):
     """ Hook for logging to tensorboard.
 
         This class provides an interface to write logging information about the training process to tensorboard.
@@ -227,8 +230,9 @@ class TensorboardHook(LoggingHook):
                  log_validation_loss=True, log_learning_rate=True, every_n_epochs=1,
                  img_every_n_epochs=10,
                  log_histogram=False):
+        Hyperparameters.__init__(self, locals())
         from tensorboardX import SummaryWriter
-        super(TensorboardHook, self).__init__(log_path, metrics, log_train_loss,
+        LoggingHook.__init__(self, log_path, metrics, log_train_loss,
                                               log_validation_loss, log_learning_rate)
         self.writer = SummaryWriter(self.log_path)
         self.every_n_epochs = every_n_epochs
@@ -281,7 +285,7 @@ class TensorboardHook(LoggingHook):
         self.writer.close()
 
 
-class EarlyStoppingHook(Hook):
+class EarlyStoppingHook(Hook, Hyperparameters):
     """ Hook for early stopping.
 
         This hook can be used to stop training early if the validation loss has not improved over a certain number
@@ -293,6 +297,7 @@ class EarlyStoppingHook(Hook):
     """
 
     def __init__(self, patience, threshold_ratio=0.0001):
+        Hyperparameters.__init__(self, locals())
         self.best_loss = float('Inf')
         self.counter = 0
         self.threshold_ratio = threshold_ratio
@@ -317,9 +322,10 @@ class EarlyStoppingHook(Hook):
             trainer._stop = True
 
 
-class WarmRestartHook(Hook):
+class WarmRestartHook(Hook, Hyperparameters):
 
     def __init__(self, T0=10, Tmult=2, each_step=False, lr_min=1e-6, patience=1):
+        Hyperparameters.__init__(self, locals())
         self.scheduler = None
         self.each_step = each_step
         self.T0 = T0
@@ -365,7 +371,7 @@ class WarmRestartHook(Hook):
                 trainer._stop = True
 
 
-class MaxEpochHook(Hook):
+class MaxEpochHook(Hook, Hyperparameters):
     """Hook for stopping after a maximal number of epochs.
 
        This hook can be used to stop training early if a certain number of epochs have passed.
@@ -375,6 +381,7 @@ class MaxEpochHook(Hook):
    """
 
     def __init__(self, max_epochs):
+        Hyperparameters.__init__(self, locals())
         self.max_epochs = max_epochs
 
     def on_epoch_begin(self, trainer):
@@ -382,7 +389,7 @@ class MaxEpochHook(Hook):
             trainer._stop = True
 
 
-class MaxStepHook(Hook):
+class MaxStepHook(Hook, Hyperparameters):
     """ Hook for stopping after a maximal number of steps.
 
         This hook can be used to stop training early if a certain number of steps have passed.
@@ -392,6 +399,7 @@ class MaxStepHook(Hook):
     """
 
     def __init__(self, max_steps):
+        Hyperparameters.__init__(self, locals())
         self.max_steps = max_steps
 
     def on_batch_begin(self, trainer, train_batch):
@@ -399,7 +407,7 @@ class MaxStepHook(Hook):
             trainer._stop = True
 
 
-class LRScheduleHook(Hook):
+class LRScheduleHook(Hook, Hyperparameters):
     """Base class for learning rate scheduling hooks.
 
       This class provides a thin wrapper around torch.optim.lr_schedule._LRScheduler.
@@ -410,6 +418,7 @@ class LRScheduleHook(Hook):
       """
 
     def __init__(self, scheduler, each_step=False):
+        Hyperparameters.__init__(self, locals())
         self.scheduler = scheduler
         self.each_step = each_step
 
@@ -433,7 +442,7 @@ class LRScheduleHook(Hook):
             self.scheduler.step()
 
 
-class ReduceLROnPlateauHook(Hook):
+class ReduceLROnPlateauHook(Hook, Hyperparameters):
     """Hook for reduce plateau learning rate scheduling.
 
       This class provides a thin wrapper around torch.optim.lr_schedule.ReduceLROnPlateau. It takes the parameters
@@ -459,6 +468,7 @@ class ReduceLROnPlateauHook(Hook):
 
     def __init__(self, optimizer, patience=25, factor=0.2, min_lr=1e-6, window_length=1,
                  stop_after_min=False):
+        Hyperparameters.__init__(self, locals())
         self.scheduler = ReduceLROnPlateau(optimizer, patience=patience, factor=factor, min_lr=min_lr)
         self.window_length = window_length
         self.stop_after_min = stop_after_min
@@ -493,7 +503,7 @@ class ReduceLROnPlateauHook(Hook):
                     trainer._stop = True
 
 
-class ExponentialDecayHook(Hook):
+class ExponentialDecayHook(Hook, Hyperparameters):
     """Hook for reduce plateau learning rate scheduling.
 
       This class provides a thin wrapper around torch.optim.lr_schedule.StepLR. It takes the parameters
@@ -508,16 +518,18 @@ class ExponentialDecayHook(Hook):
       """
 
     def __init__(self, optimizer, gamma=0.96, step_size=100000):
+        Hyperparameters.__init__(self, locals())
         self.scheduler = StepLR(optimizer, step_size, gamma)
 
     def on_batch_end(self, trainer, train_batch, result, loss):
         self.scheduler.step()
 
 
-class UpdatePrioritiesHook(Hook):
+class UpdatePrioritiesHook(Hook, Hyperparameters):
     r"""Hook for updating the priority sampler"""
 
     def __init__(self, prioritized_sampler, priority_fn):
+        Hyperparameters.__init__(self, locals())
         self.prioritized_sampler = prioritized_sampler
         self.update_fn = priority_fn
 
