@@ -1,3 +1,4 @@
+import os
 import pytest
 from torch.optim import Adam
 import shutil
@@ -11,7 +12,8 @@ from schnetpack.metrics import *
 
 @pytest.fixture
 def data():
-    return QM9("test_data/", properties=[QM9.U0])
+    print(os.path.dirname(os.path.realpath(__file__)))
+    return QM9(os.path.dirname(os.path.realpath(__file__)) + "/test_data/", properties=[QM9.U0])
 
 @pytest.fixture
 def data_splits(data):
