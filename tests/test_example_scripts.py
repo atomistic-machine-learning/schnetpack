@@ -12,7 +12,6 @@ from schnetpack.metrics import *
 
 @pytest.fixture
 def data():
-    print(os.path.dirname(os.path.realpath(__file__)))
     return QM9(os.path.dirname(os.path.realpath(__file__)) + "/test_data/", properties=[QM9.U0])
 
 @pytest.fixture
