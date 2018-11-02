@@ -3,7 +3,7 @@ import torch
 from torch import nn as nn
 
 __all__ = [
-    'CosineCutoff', 'MollifierCutoff'
+    'CosineCutoff', 'MollifierCutoff', 'HardCutoff'
 ]
 
 
