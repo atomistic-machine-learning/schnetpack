@@ -142,9 +142,10 @@ class Aggregate(nn.Module):
         mean (bool): use average instead of sum pooling
     """
 
-    def __init__(self, axis, mean=False):
+    def __init__(self, axis, mean=False, keepdim=True):
         self.average = mean
         self.axis = axis
+        self.keepdim = keepdim
         super(Aggregate, self).__init__()
 
     def forward(self, input, mask=None):
@@ -162,7 +163,7 @@ class Aggregate(nn.Module):
 
         if self.average:
             if mask is not None:
-                N = torch.sum(mask, self.axis, keepdim=True)
+                N = torch.sum(mask, self.axis, keepdim=self.keepdim)
                 N = torch.max(N, other=torch.ones_like(N))
             else:
                 N = input.size(self.axis)

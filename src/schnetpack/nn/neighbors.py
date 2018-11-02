@@ -51,7 +51,10 @@ def atom_distances(positions, neighbors, cell=None, cell_offsets=None, return_di
         distances = tmp_distances
 
     if return_directions:
-        direction = dist_vec / distances[:, :, :, None]
+        tmp_distances = torch.ones_like(distances)
+        tmp_distances[neighbor_mask != 0] = distances[neighbor_mask != 0]
+
+        direction = dist_vec / tmp_distances[:, :, :, None]
         return distances, direction
     return distances
 
