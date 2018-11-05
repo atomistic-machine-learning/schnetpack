@@ -147,11 +147,11 @@ class Aggregate(nn.Module, Hyperparameters):
         mean (bool): use average instead of sum pooling
     """
 
-    def __init__(self, axis, mean=False):
+    def __init__(self, axis, mean=False, keepdim=True):
         Hyperparameters.__init__(self, locals())
         self.average = mean
         self.axis = axis
-        super(Aggregate, self).__init__()
+        self.keepdim = keepdim
 
     def forward(self, input, mask=None):
         """
@@ -168,7 +168,7 @@ class Aggregate(nn.Module, Hyperparameters):
 
         if self.average:
             if mask is not None:
-                N = torch.sum(mask, self.axis, keepdim=True)
+                N = torch.sum(mask, self.axis, keepdim=self.keepdim)
                 N = torch.max(N, other=torch.ones_like(N))
             else:
                 N = input.size(self.axis)

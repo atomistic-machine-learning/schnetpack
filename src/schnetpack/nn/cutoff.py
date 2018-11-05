@@ -4,7 +4,7 @@ from torch import nn as nn
 from schnetpack.config_model import Hyperparameters
 
 __all__ = [
-    'CosineCutoff', 'MollifierCutoff'
+    'CosineCutoff', 'MollifierCutoff', 'HardCutoff'
 ]
 
 
