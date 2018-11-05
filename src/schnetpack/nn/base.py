@@ -148,6 +148,7 @@ class Aggregate(nn.Module, Hyperparameters):
     """
 
     def __init__(self, axis, mean=False, keepdim=True):
+        nn.Module.__init__(self)
         Hyperparameters.__init__(self, locals())
         self.average = mean
         self.axis = axis
