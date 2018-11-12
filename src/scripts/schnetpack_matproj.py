@@ -266,8 +266,18 @@ if __name__ == '__main__':
     val_loader = spk.data.AtomsLoader(data_val, batch_size=args.batch_size, num_workers=2, pin_memory=True)
 
     if args.mode == 'train':
-        mean, stddev = train_loader.get_statistics(train_args.property, False)
-        logging.info('Training set statistics: mean=%.3f, stddev=%.3f' % (mean.numpy(), stddev.numpy()))
+        logging.info('calculate statistics...')
+        split_data = np.load(split_path)
+        if 'mean' in split_data.keys():
+            mean = split_data['mean']
+            stddev = split_data['stddev']
+        else:
+            mean, stddev = train_loader.get_statistics(train_args.property,
+                                                       True, atomref)
+            np.savez(split_path, train_idx=split_data['train_idx'],
+                     val_idx=split_data['val_idx'],
+                     test_idx=split_data['test_idx'], mean=mean,
+                     stddev=stddev)
     else:
         mean, stddev = None, None
 
