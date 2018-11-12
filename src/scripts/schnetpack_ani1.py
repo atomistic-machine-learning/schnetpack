@@ -312,8 +312,10 @@ if __name__ == '__main__':
         logging.info('calculate statistics...')
         split_data = np.load(split_path)
         if 'mean' in split_data.keys():
-            mean = split_data['mean']
-            stddev = split_data['stddev']
+            mean = torch.from_numpy(split_data['mean'])
+            stddev = torch.from_numpy(split_data['stddev'])
+            calc_stats = False
+            logging.info("cached statistics was loaded...")
         else:
             mean, stddev = train_loader.get_statistics(train_args.property,
                                                        True, atomref)

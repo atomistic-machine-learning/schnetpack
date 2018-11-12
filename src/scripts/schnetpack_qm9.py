@@ -195,16 +195,16 @@ def train(args, model, train_loader, val_loader, device):
         logger = spk.train.CSVHook(os.path.join(args.modelpath, 'log'),
                                    [spk.metrics.MeanAbsoluteError(
                                        args.property, "y"),
-                                    spk.metrics.RootMeanSquaredError(
-                                        args.property, "y")],
+                                       spk.metrics.RootMeanSquaredError(
+                                           args.property, "y")],
                                    every_n_epochs=args.log_every_n_epochs)
         hooks.append(logger)
     elif args.logger == 'tensorboard':
         logger = spk.train.TensorboardHook(os.path.join(args.modelpath, 'log'),
                                            [spk.metrics.MeanAbsoluteError(
                                                args.property, "y"),
-                                            spk.metrics.RootMeanSquaredError(
-                                                args.property, "y")],
+                                               spk.metrics.RootMeanSquaredError(
+                                                   args.property, "y")],
                                            every_n_epochs=args.log_every_n_epochs)
         hooks.append(logger)
 
@@ -416,8 +416,10 @@ if __name__ == '__main__':
         logging.info('calculate statistics...')
         split_data = np.load(split_path)
         if 'mean' in split_data.keys():
-            mean = split_data['mean']
-            stddev = split_data['stddev']
+            mean = torch.from_numpy(split_data['mean'])
+            stddev = torch.from_numpy(split_data['stddev'])
+            calc_stats = False
+            logging.info("cached statistics was loaded...")
         else:
             mean, stddev = train_loader.get_statistics(train_args.property,
                                                        True, atomref)
@@ -428,30 +430,30 @@ if __name__ == '__main__':
     else:
         mean, stddev = None, None
 
-    # construct the model
-    model = get_model(train_args, atomref=atomref, mean=mean, stddev=stddev,
-                      train_loader=train_loader, parallelize=args.parallel,
-                      mode=args.mode).to(device)
+# construct the model
+model = get_model(train_args, atomref=atomref, mean=mean, stddev=stddev,
+                  train_loader=train_loader, parallelize=args.parallel,
+                  mode=args.mode).to(device)
 
-    if args.mode == 'eval':
-        if args.parallel:
-            model.module.load_state_dict(
-                torch.load(os.path.join(args.modelpath, 'best_model')))
-        else:
-            model.load_state_dict(
-                torch.load(os.path.join(args.modelpath, 'best_model')))
-    if args.mode == 'train':
-        logging.info("training...")
-        train(args, model, train_loader, val_loader, device)
-        logging.info("...training done!")
-    elif args.mode == 'eval':
-        logging.info("evaluating...")
-        test_loader = spk.data.AtomsLoader(data_test,
-                                           batch_size=args.batch_size,
-                                           num_workers=2, pin_memory=True)
-        with torch.no_grad():
-            evaluate(args, model, train_args.property, train_loader,
-                     val_loader, test_loader, device)
-        logging.info("... done!")
+if args.mode == 'eval':
+    if args.parallel:
+        model.module.load_state_dict(
+            torch.load(os.path.join(args.modelpath, 'best_model')))
     else:
-        print('Unknown mode:', args.mode)
+        model.load_state_dict(
+            torch.load(os.path.join(args.modelpath, 'best_model')))
+if args.mode == 'train':
+    logging.info("training...")
+    train(args, model, train_loader, val_loader, device)
+    logging.info("...training done!")
+elif args.mode == 'eval':
+    logging.info("evaluating...")
+    test_loader = spk.data.AtomsLoader(data_test,
+                                       batch_size=args.batch_size,
+                                       num_workers=2, pin_memory=True)
+    with torch.no_grad():
+        evaluate(args, model, train_args.property, train_loader,
+                 val_loader, test_loader, device)
+    logging.info("... done!")
+else:
+    print('Unknown mode:', args.mode)
