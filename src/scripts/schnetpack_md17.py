@@ -34,7 +34,7 @@ def get_parser():
 
     ## training
     train_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
-    train_parser.add_argument('datapath', help='Path / destination of MD17 dataset directory')
+    train_parser.add_argument('datapath', help='Path / destination of MD17 dataset')
     train_parser.add_argument('molecule', help='Selected molecule trajectory of MD17 collection',
                               choices=MD17.existing_datasets)
     train_parser.add_argument('modelpath', help='Destination for models and logs')

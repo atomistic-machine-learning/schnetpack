@@ -66,7 +66,7 @@ def get_parser():
 
     ## evaluation
     eval_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
-    eval_parser.add_argument('datapath', help='Path of ANI1 dataset directory')
+    eval_parser.add_argument('datapath', help='Path of ANI1 dataset')
     eval_parser.add_argument('modelpath', help='Path of stored model')
     eval_parser.add_argument('--split', help='Evaluate trained model on given split',
                              choices=['train', 'validation', 'test'], default=['test'], nargs='+')

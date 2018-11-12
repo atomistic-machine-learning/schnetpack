@@ -33,7 +33,7 @@ def get_parser():
                             default=32)
     ## training
     train_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
-    train_parser.add_argument('datapath', help='Path / destination of Materials Project dataset directory')
+    train_parser.add_argument('datapath', help='Path / destination of Materials Project dataset')
     train_parser.add_argument('modelpath', help='Destination for models and logs')
     train_parser.add_argument('--property', type=str,
                               help='Materials Project property to be predicted (default: %(default)s)',
