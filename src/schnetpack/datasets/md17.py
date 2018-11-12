@@ -47,18 +47,18 @@ class MD17(AtomsData):
     properties = [energy, forces]
 
     datasets_dict = dict(aspirin='aspirin_dft.npz',
-                         aspirin_ccsd='aspirin_ccsd.zip',
+                         #aspirin_ccsd='aspirin_ccsd.zip',
                          azobenzene='azobenzene_dft.npz',
                          benzene='benzene_dft.npz',
                          ethanol='ethanol_dft.npz',
-                         ethanol_ccsdt='ethanol_ccsd_t.zip',
+                         #ethanol_ccsdt='ethanol_ccsd_t.zip',
                          malonaldehyde='malonaldehyde_dft.npz',
-                         malonaldehyde_ccsdt='malonaldehyde_ccsd_t.zip',
+                         #malonaldehyde_ccsdt='malonaldehyde_ccsd_t.zip',
                          naphthalene='naphthalene_dft.npz',
                          paracetamol='paracetamol_dft.npz',
                          salicylic_acid='salicylic_dft.npz',
                          toluene='toluene_dft.npz',
-                         toluene_ccsdt='toluene_ccsd_t.zip',
+                         #toluene_ccsdt='toluene_ccsd_t.zip',
                          uracil='uracil_dft.npz'
                          )
 

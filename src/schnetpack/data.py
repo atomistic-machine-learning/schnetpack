@@ -188,9 +188,11 @@ class AtomsData(BaseAtomsData):
             conn.metadata = metadata
 
     def _add_system(self, conn, atoms, **properties):
-
         data = {}
-        for pname in self.required_properties:
+        pnames = set(self.required_properties)
+        pnames.update(properties.keys())
+
+        for pname in pnames:
             try:
                 prop = properties[pname]
             except:
