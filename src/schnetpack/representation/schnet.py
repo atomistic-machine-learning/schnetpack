@@ -64,7 +64,7 @@ class SchNetInteraction(nn.Module):
 class SchNet(nn.Module):
     """
     SchNet architecture for learning representations of atomistic systems
-    as described in [#schnet1]_ [#schnet2]_ [#schnet3]_
+    as described in [#schnet1]_ [#schnet_transfer]_ [#schnet3]_
 
     Args:
         n_atom_basis (int): number of features used to describe atomic environments
@@ -86,7 +86,7 @@ class SchNet(nn.Module):
     .. [#schnet1] Schütt, Arbabzadah, Chmiela, Müller, Tkatchenko:
        Quantum-chemical insights from deep tensor neural networks.
        Nature Communications, 8, 13890. 2017.
-    .. [#schnet2] Schütt, Kindermans, Sauceda, Chmiela, Tkatchenko, Müller:
+    .. [#schnet_transfer] Schütt, Kindermans, Sauceda, Chmiela, Tkatchenko, Müller:
        SchNet: A continuous-filter convolutional neural network for modeling quantum interactions.
        In Advances in Neural Information Processing Systems, pp. 992-1002. 2017.
     .. [#schnet3] Schütt, Sauceda, Kindermans, Tkatchenko, Müller:
