@@ -309,7 +309,8 @@ if __name__ == '__main__':
 
     # will download md17 if necessary, calculate_triples is required for wACSF angular functions
     logging.info('MD17 will be loaded...')
-    md17 = MD17(args.datapath, args.molecule, download=True, parse_all=False, collect_triples=args.model == 'wacsf')
+    # ToDo: download=True
+    md17 = MD17(args.datapath, args.molecule, download=False,  collect_triples=args.model == 'wacsf')
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, 'split.npz')

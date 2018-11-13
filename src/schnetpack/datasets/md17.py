@@ -64,7 +64,7 @@ class MD17(AtomsData):
 
     existing_datasets = datasets_dict.keys()
 
-    def __init__(self, dbpath, dataset, subset=None, download=True,
+    def __init__(self, dbpath, dataset=None, subset=None, download=True,
                  collect_triples=False, properties=None):
         self.collect_triples = collect_triples
 
@@ -83,7 +83,7 @@ class MD17(AtomsData):
     def create_subset(self, idx):
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
-        return MD17(self.dbdir, self.dataset, subset=subidx, download=False,
+        return MD17(self.dbpath, subset=subidx, download=False,
                     collect_triples=self.collect_triples)
 
     def download(self, dataset):
