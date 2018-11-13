@@ -1,6 +1,7 @@
 import os
-import torch
+
 import numpy as np
+import torch
 
 
 class Trainer:
@@ -22,9 +23,11 @@ class Trainer:
            loss_is_normalized (bool): if true, the loss per datapoint will be reported. Otherwise, the accumulated loss
                                      (default: True)
        """
+
     def __init__(self, model_path, model, loss_fn, optimizer,
                  train_loader, validation_loader, keep_n_checkpoints=3,
-                 checkpoint_interval=10, validation_interval=1, hooks=[], loss_is_normalized=True):
+                 checkpoint_interval=10, validation_interval=1, hooks=[],
+                 loss_is_normalized=True):
         self.model_path = model_path
         self.checkpoint_path = os.path.join(self.model_path, 'checkpoints')
         self.best_model = os.path.join(self.model_path, 'best_model')
@@ -52,7 +55,8 @@ class Trainer:
             self.store_checkpoint()
 
     def _check_is_parallel(self):
-        return True if isinstance(self._model, torch.nn.DataParallel) else False
+        return True if isinstance(self._model,
+                                  torch.nn.DataParallel) else False
 
     def _load_model_state_dict(self, state_dict):
         if self._check_is_parallel():
@@ -98,7 +102,8 @@ class Trainer:
 
     def restore_checkpoint(self, epoch=None):
         if epoch is None:
-            epoch = max([int(f.split('.')[0].split('-')[-1]) for f in os.listdir(self.checkpoint_path)])
+            epoch = max([int(f.split('.')[0].split('-')[-1]) for f in
+                         os.listdir(self.checkpoint_path)])
         epoch = str(epoch)
 
         chkpt = os.path.join(self.checkpoint_path,
@@ -113,6 +118,12 @@ class Trainer:
             device (torch.torch.Device): device on which training takes place
 
         """
+        try:
+            from tqdm import tqdm
+            progress = True
+        except:
+            progress = False
+
         self._stop = False
 
         for h in self.hooks:
@@ -129,7 +140,12 @@ class Trainer:
                     break
 
                 # perform training epoch
-                for train_batch in self.train_loader:
+                if progress:
+                    train_iter = tqdm(self.train_loader)
+                else:
+                    train_iter = self.train_loader
+
+                for train_batch in train_iter:
                     self.optimizer.zero_grad()
 
                     for h in self.hooks:
@@ -179,14 +195,16 @@ class Trainer:
                         }
 
                         val_result = self._model(val_batch)
-                        val_batch_loss = self.loss_fn(val_batch, val_result).data.cpu().numpy()
+                        val_batch_loss = self.loss_fn(val_batch,
+                                                      val_result).data.cpu().numpy()
                         if self.loss_is_normalized:
                             val_loss += val_batch_loss * vsize
                         else:
                             val_loss += val_batch_loss
 
                         for h in self.hooks:
-                            h.on_validation_batch_end(self, val_batch, val_result)
+                            h.on_validation_batch_end(self, val_batch,
+                                                      val_result)
 
                     # weighted average over batches
                     if self.loss_is_normalized:
