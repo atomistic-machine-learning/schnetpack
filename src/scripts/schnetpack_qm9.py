@@ -393,7 +393,7 @@ if __name__ == '__main__':
     qm9 = QM9(args.datapath, download=True, properties=[train_args.property],
               collect_triples=args.model == 'wacsf',
               remove_uncharacterized=train_args.remove_uncharacterized)
-    atomref = qm9.get_reference(train_args.property)
+    atomref = qm9.get_atomref(train_args.property)
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, 'split.npz')
