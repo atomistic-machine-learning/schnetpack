@@ -151,3 +151,20 @@ class ANI1(AtomsData):
         atref[8, :] = self.self_energies['O'] * self.units['energy']
 
         return atref, labels
+
+    def create_subset(self, idx):
+        """
+        Returns a new dataset that only consists of provided indices.
+        Args:
+            idx (numpy.ndarray): subset indices
+
+        Returns:
+            schnetpack.data.AtomsData: dataset with subset of original data
+        """
+        idx = np.array(idx)
+        subidx = idx if self.subset is None else np.array(self.subset)[idx]
+        return type(self)(self.dbpath, download=False, subset=subidx,
+                          properties=self.required_properties,
+                          collect_triples=self.collect_triples,
+                          num_heavy_atoms=self.num_heavy_atoms,
+                          high_energies=self.high_energies)
