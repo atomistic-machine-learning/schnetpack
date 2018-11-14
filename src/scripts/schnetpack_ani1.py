@@ -292,7 +292,7 @@ if __name__ == '__main__':
     logging.info('ANI1 will be loaded...')
     ani1 = spk.datasets.ANI1(args.datapath, download=True, properties=[train_args.property],
                              collect_triples=args.model == 'wacsf')
-    atomref = ani1.get_reference(train_args.property)
+    atomref = ani1.get_atomref(train_args.property)
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, 'split.npz')
