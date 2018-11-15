@@ -275,7 +275,7 @@ if __name__ == '__main__':
             logging.info("cached statistics was loaded...")
         else:
             mean, stddev = train_loader.get_statistics(train_args.property,
-                                                       True, atomref)
+                                                       False)#, atomref)
             np.savez(split_path, train_idx=split_data['train_idx'],
                      val_idx=split_data['val_idx'],
                      test_idx=split_data['test_idx'], mean=mean,
