@@ -20,6 +20,10 @@ class OrganicMaterialsDatabase(AtomsData):
 
         This dataset: DFT (PBE) band gap (OMDB-GAP1 dataset) for 12500 non-magnetic materials.
 
+        arXiv: https://arxiv.org/abs/1810.12814 "Band gap prediction for large organic crystal structures with machine learning"
+        Bart Olsthoorn, R. Matthias Geilhufe, Stanislav S. Borysov, Alexander V. Balatsky
+        (Submitted on 30 Oct 2018)
+
         Args:
             path (str): path to directory containing mp database.
             cutoff (float): cutoff for bulk interactions
