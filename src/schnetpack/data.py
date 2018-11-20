@@ -65,6 +65,7 @@ class BaseAtomsData(Dataset):
             schnetpack.data.AtomsData: test dataset
 
         """
+        assert num_train + num_val <= len(self), 'Dataset is smaller than num_train + num_val!'
         if split_file is not None and os.path.exists(split_file):
             S = np.load(split_file)
             train_idx = S['train_idx'].tolist()
