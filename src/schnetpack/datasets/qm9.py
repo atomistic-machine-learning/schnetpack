@@ -227,7 +227,7 @@ class QM9(AtomsData):
             with open(xyzfile, 'r') as f:
                 lines = f.readlines()
                 l = lines[1].split()[2:]
-                for pn, p in zip(self.properties, l):
+                for pn, p in zip(QM9.properties, l):
                     properties[pn] = np.array([float(p) * self.units[pn]])
                 with open(tmp, "wt") as fout:
                     for line in lines:
