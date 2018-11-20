@@ -33,6 +33,7 @@ class AtomsDataError(Exception):
 
 
 class BaseAtomsData(Dataset):
+    available_properties = []
 
     def __init__(self, dbpath, subset=None, required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
@@ -194,7 +195,7 @@ class AtomsData(BaseAtomsData):
     def _add_system(self, conn, atoms, **properties):
 
         data = {}
-        for pname in self.required_properties:
+        for pname in self.available_properties:
             try:
                 prop = properties[pname]
             except:
