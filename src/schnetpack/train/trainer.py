@@ -118,11 +118,11 @@ class Trainer:
             device (torch.torch.Device): device on which training takes place
 
         """
-        try:
-            from tqdm import tqdm
-            progress = True
-        except:
-            progress = False
+#        try:
+#            from tqdm import tqdm
+#            progress = True
+#        except:
+#            progress = False
 
         self._stop = False
 
@@ -140,10 +140,10 @@ class Trainer:
                     break
 
                 # perform training epoch
-                if progress:
-                    train_iter = tqdm(self.train_loader)
-                else:
-                    train_iter = self.train_loader
+#                if progress:
+#                    train_iter = tqdm(self.train_loader)
+#                else:
+                train_iter = self.train_loader
 
                 for train_batch in train_iter:
                     self.optimizer.zero_grad()
