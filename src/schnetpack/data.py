@@ -33,6 +33,7 @@ class AtomsDataError(Exception):
 
 
 class BaseAtomsData(Dataset):
+    available_properties = []
 
     def __init__(self, dbpath, subset=None, required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
@@ -66,6 +67,7 @@ class BaseAtomsData(Dataset):
             schnetpack.data.AtomsData: test dataset
 
         """
+        assert num_train + num_val <= len(self), 'Dataset is smaller than num_train + num_val!'
         if split_file is not None and os.path.exists(split_file):
             S = np.load(split_file)
             train_idx = S['train_idx'].tolist()
@@ -198,7 +200,7 @@ class AtomsData(BaseAtomsData):
     def _add_system(self, conn, atoms, **properties):
 
         data = {}
-        for pname in self.required_properties:
+        for pname in self.available_properties:
             try:
                 prop = properties[pname]
             except:

@@ -51,7 +51,7 @@ class QM9(AtomsData):
     G = 'free_energy'
     Cv = 'heat_capacity'
 
-    properties = [
+    available_properties = [
         A, B, C, mu, alpha,
         homo, lumo, gap, r2, zpve,
         U0, U, H, G, Cv
@@ -62,7 +62,7 @@ class QM9(AtomsData):
     }
 
     units = dict(
-        zip(properties,
+        zip(available_properties,
             [
                 1., 1., 1., Debye, Bohr ** 3,
                 Hartree, Hartree, Hartree,
@@ -182,7 +182,7 @@ class QM9(AtomsData):
             with open(xyzfile, 'r') as f:
                 lines = f.readlines()
                 l = lines[1].split()[2:]
-                for pn, p in zip(QM9.properties, l):
+                for pn, p in zip(QM9.available_properties, l):
                     properties[pn] = np.array([float(p) * self.units[pn]])
                 with open(tmp, "wt") as fout:
                     for line in lines:
