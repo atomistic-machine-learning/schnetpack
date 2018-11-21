@@ -1,3 +1,6 @@
+import math
+
+import torch
 import torch.nn as nn
 
 import schnetpack.nn.acsf
@@ -99,7 +102,7 @@ class SchNet(nn.Module):
                  normalize_filter=False, coupled_interactions=False,
                  return_intermediate=False, max_z=100,
                  cutoff_network=HardCutoff, trainable_gaussians=False,
-                 distance_expansion=None):
+                 distance_expansion=None, charged_systems=False):
         super(SchNet, self).__init__()
 
         # atom type embeddings
@@ -108,26 +111,30 @@ class SchNet(nn.Module):
         # spatial features
         self.distances = schnetpack.nn.neighbors.AtomDistances()
         if distance_expansion is None:
-            self.distance_expansion = schnetpack.nn.acsf.GaussianSmearing(0.0,
-                                                                          cutoff,
-                                                                          n_gaussians,
-                                                                          trainable=trainable_gaussians)
+            self.distance_expansion = schnetpack.nn.acsf.GaussianSmearing(
+                0.0, cutoff, n_gaussians, trainable=trainable_gaussians)
         else:
             self.distance_expansion = distance_expansion
 
         self.return_intermediate = return_intermediate
 
+        self.charged_systems = charged_systems
+        if charged_systems:
+            self.charge = nn.Parameter(torch.Tensor(1, n_atom_basis))
+            self.charge.data.normal_(0, 1. / math.sqrt(n_atom_basis))
+
         # interaction network
         if coupled_interactions:
-            self.interactions = nn.ModuleList([
-                                                  SchNetInteraction(
-                                                      n_atom_basis=n_atom_basis,
-                                                      n_spatial_basis=n_gaussians,
-                                                      n_filters=n_filters,
-                                                      cutoff_network=cutoff_network,
-                                                      cutoff=cutoff,
-                                                      normalize_filter=normalize_filter)
-                                              ] * n_interactions)
+            self.interactions = nn.ModuleList(
+                [
+                    SchNetInteraction(
+                        n_atom_basis=n_atom_basis,
+                        n_spatial_basis=n_gaussians,
+                        n_filters=n_filters,
+                        cutoff_network=cutoff_network,
+                        cutoff=cutoff,
+                        normalize_filter=normalize_filter)
+                ] * n_interactions)
         else:
             self.interactions = nn.ModuleList([
                 SchNetInteraction(n_atom_basis=n_atom_basis,
@@ -154,9 +161,16 @@ class SchNet(nn.Module):
         cell_offset = inputs[Structure.cell_offset]
         neighbors = inputs[Structure.neighbors]
         neighbor_mask = inputs[Structure.neighbor_mask]
+        atom_mask = inputs[Structure.atom_mask]
 
         # atom embedding
         x = self.embedding(atomic_numbers)
+
+        if self.charged_systems and Structure.charge in inputs.keys():
+            n_atoms = torch.sum(atom_mask, dim=1)
+            charge = inputs[Structure.charge] / n_atoms # B
+            charge = charge[:, None] * self.charge  # B x F
+            x = x + charge[:, None, :]
 
         # spatial features
         r_ij = self.distances(positions, neighbors, cell, cell_offset,

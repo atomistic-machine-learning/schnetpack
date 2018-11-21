@@ -14,7 +14,7 @@ class Trainer:
            model_path (str): path to the model directory
            model (torch.Module): model to be trained
            loss_fn (callable): loss function used for training the model
-           optimizer (torch.optim.optimizer): optimizer used for training
+           optimizer (torch.optim.optimizer.Optimizer): optimizer used for training
            train_loader (torch.utils.data.DataLoader): data loader for training set
            validation_loader (torch.utils.data.DataLoader): data loader for validation set
            keep_n_checkpoints (int): number of saved checkpoints (default: 3)
