@@ -36,13 +36,15 @@ class BaseAtomsData(Dataset):
 
     def __init__(self, dbpath, subset=None, required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
-                 collect_triples=False, center_positions=True):
+                 collect_triples=False, center_positions=True,
+                 charged_systems=False):
         self.dbpath = dbpath
         self.subset = subset
         self.required_properties = required_properties
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
         self.centered = center_positions
+        self.charged_systems = charged_systems
 
     def create_splits(self, num_train=None, num_val=None, split_file=None):
         """
@@ -102,7 +104,7 @@ class BaseAtomsData(Dataset):
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
         return type(self)(self.dbpath, subidx, self.required_properties,
                           self.environment_provider, self.collect_triples,
-                          self.centered)
+                          self.centered, self.charged_systems)
 
     def __len__(self):
         raise NotImplementedError
@@ -152,11 +154,13 @@ class AtomsData(BaseAtomsData):
     def __init__(self, dbpath, subset=None,
                  required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
-                 collect_triples=False, center_positions=True):
+                 collect_triples=False, center_positions=True,
+                 charged_systems=False):
         super(AtomsData, self).__init__(dbpath, subset,
                                         required_properties,
                                         environment_provider,
-                                        collect_triples, center_positions)
+                                        collect_triples, center_positions,
+                                        charged_systems)
 
     def __len__(self):
         if self.subset is None:
@@ -263,6 +267,9 @@ class AtomsData(BaseAtomsData):
         properties[Structure.R] = torch.FloatTensor(positions)
         properties[Structure.cell] = torch.FloatTensor(
             at.cell.astype(np.float32))
+        if self.charged_systems:
+            properties[Structure.charge] = torch.FloatTensor([row['charge']])
+
         return at, properties
 
     def get_atomref(self, property):
@@ -578,6 +585,7 @@ class Structure:
     Keys to access structure properties in `schnetpack.data.AtomsData`
     """
     Z = '_atomic_numbers'
+    charge = '_charge'
     atom_mask = '_atom_mask'
     R = '_positions'
     cell = '_cell'
