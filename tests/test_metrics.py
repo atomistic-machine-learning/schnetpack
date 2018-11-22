@@ -1,56 +1,141 @@
 import pytest
-import os
+import torch
 import numpy as np
-import torch.nn as nn
-from torch.optim.adam import Adam
-import schnetpack as spk
-from schnetpack.data import Structure
 from schnetpack.metrics import *
-from schnetpack.train.hooks import *
-from schnetpack.datasets.qm9 import QM9
-from schnetpack.atomistic import AtomisticModel, Atomwise
-from schnetpack.representation.schnet import SchNet, SchNetInteraction
-
 
 @pytest.fixture
-def batchsize():
-    return 4
+def batch():
+
+    return dict(_atom_mask=torch.DoubleTensor([[1, 1, 1, 0], [1, 1, 0, 0]]),
+                _forces=torch.DoubleTensor([[[8, 1, 0], [1, 1, 0], [1, 1, 0], [0, 0, 0]],
+                                            [[1, 1, 0], [1, 4, 0], [0, 0, 0], [0, 0, 0]]]),
+                _energy=torch.DoubleTensor([[1], [1]]))
 
 @pytest.fixture
-def data():
-    return QM9(os.path.dirname(os.path.realpath(__file__)) + "/test_data/", properties=[QM9.U0], download=False)
+def result():
+    return dict(dydx=torch.DoubleTensor([[[8, 1, 1], [0, 2, 1], [1, 1, 1], [0, 0, 0]],
+                                         [[0, 1, 3], [0, 1, 4], [0, 0, 0], [0, 0, 0]]]),
+                y=torch.DoubleTensor([[2], [2]]))
 
 @pytest.fixture
-def filter_network(single_spatial_basis, n_filters):
-    return nn.Linear(single_spatial_basis, n_filters)
+def diff(batch, result):
+    return dict(dydx=batch['_forces']-result['dydx'],
+                y=batch['_energy']-result['y'])
 
 @pytest.fixture
-def mae():
-    return MeanAbsoluteError(QM9.U0, 'y')
+def mse_result(diff):
+    return dict(dydx=torch.sum(diff['dydx']**2).detach().cpu().data.numpy()/15,
+                y=torch.sum(diff['y']**2).detach().cpu().data.numpy()/2)
 
 @pytest.fixture
-def mse():
-    return MeanSquaredError(QM9.U0, 'y')
+def mae_result(diff):
+    return dict(dydx=torch.sum(torch.abs(diff['dydx'])).detach().cpu().data.numpy()/15,
+                y=torch.sum(torch.abs(diff['y'])).detach().cpu().data.numpy()/2)
 
 @pytest.fixture
-def reps():
-    return SchNet()
+def rmse_result(mse_result):
+    returns = {}
+    for key, value in mse_result.items():
+        returns[key] = np.sqrt(value)
+    return returns
 
 @pytest.fixture
-def output():
-    return Atomwise()
+def bias_result(diff):
+    return dict(dydx=torch.sum(diff['dydx']).detach().cpu().data.numpy()/15,
+                y=torch.sum(diff['y']).detach().cpu().data.numpy()/2)
 
 @pytest.fixture
-def model(reps, output):
-    return AtomisticModel(reps, output)
+def heatmap_mae_result(diff):
+    return dict(dydx=torch.sum(torch.abs(diff['dydx']), 0).detach().cpu().data.numpy()/2,
+                y=torch.sum(torch.abs(diff['y'])).detach().cpu().data.numpy()/2)
+
+@pytest.fixture
+def energy_mse():
+    return MeanSquaredError('_energy', 'y', name='energy')
+
+@pytest.fixture
+def forces_mse():
+    return MeanSquaredError('_forces', 'dydx', name='forces', element_wise=True)
+
+@pytest.fixture
+def energy_rmse():
+    return RootMeanSquaredError('_energy', 'y', name='energy')
+
+@pytest.fixture
+def forces_rmse():
+    return RootMeanSquaredError('_forces', 'dydx', name='forces', element_wise=True)
+
+@pytest.fixture
+def energy_bias():
+    return ModelBias('_energy', 'y', name='energy')
+
+@pytest.fixture
+def forces_bias():
+    return ModelBias('_forces', 'dydx', name='forces', element_wise=True)
+
+@pytest.fixture
+def energy_mae():
+    return MeanAbsoluteError('_energy', 'y', name='energy')
+
+@pytest.fixture
+def forces_mae():
+    return MeanAbsoluteError('_forces', 'dydx', name='forces', element_wise=True)
+
+@pytest.fixture
+def energy_heatmapmae():
+    return HeatmapMAE('_energy', 'y')
+
+@pytest.fixture
+def forces_heatmapmae():
+    return HeatmapMAE('_forces', 'dydx', element_wise=True)
+
 
 class TestMetrics:
 
     def test_mae(self):
         pass
 
-    def test_mse(self, mse, model, schnet_batch):
-        result = model(schnet_batch)
-        mse.add_batch(schnet_batch, result)
-        error = mse.aggregate()
+    def assert_valid_metric(self, metric, batch, result, target):
+        metric.add_batch(batch, result)
+        metric.add_batch(batch, result)
+        assert np.equal(metric.aggregate(), target).all()
 
+    def test_energy_mse(self, energy_mse, batch, result, mse_result):
+        val_metric = mse_result['y']
+        self.assert_valid_metric(energy_mse, batch, result, val_metric)
+
+    def test_forces_mse(self, forces_mse, batch, result, mse_result):
+        val_metric = mse_result['dydx']
+        self.assert_valid_metric(forces_mse, batch, result, val_metric)
+
+    def test_energy_rmse(self, energy_rmse, batch, result, rmse_result):
+        val_metric = rmse_result['y']
+        self.assert_valid_metric(energy_rmse, batch, result, val_metric)
+
+    def test_forces_rmse(self, forces_rmse, batch, result, rmse_result):
+        val_metric = rmse_result['dydx']
+        self.assert_valid_metric(forces_rmse, batch, result, val_metric)
+
+    def test_energy_bias(self, energy_bias, batch, result, bias_result):
+        val_metric = bias_result['y']
+        self.assert_valid_metric(energy_bias, batch, result, val_metric)
+
+    def test_forces_bias(self, forces_bias, batch, result, bias_result):
+        val_metric = bias_result['dydx']
+        self.assert_valid_metric(forces_bias, batch, result, val_metric)
+
+    def test_energy_mea(self, energy_mae, batch, result, mae_result):
+        val_metric = mae_result['y']
+        self.assert_valid_metric(energy_mae, batch, result, val_metric)
+
+    def test_forces_mea(self, forces_mae, batch, result, mae_result):
+        val_metric = mae_result['dydx']
+        self.assert_valid_metric(forces_mae, batch, result, val_metric)
+
+    def test_enery_heatmapmae(self, energy_heatmapmae, batch, result, heatmap_mae_result):
+        val_metric = heatmap_mae_result['y']
+        self.assert_valid_metric(energy_heatmapmae, batch, result, val_metric)
+
+    def test_forces_heatmapmae(self, forces_heatmapmae, batch, result, heatmap_mae_result):
+        val_metric = heatmap_mae_result['dydx']
+        self.assert_valid_metric(forces_heatmapmae, batch, result, val_metric)
