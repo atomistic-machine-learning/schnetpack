@@ -44,6 +44,7 @@ class ModelBias(Metric):
         target (str): name of target property
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`, `MSE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
     """
 
     def __init__(self, target, model_output=None, name=None, element_wise=False):
@@ -88,6 +89,7 @@ class MeanSquaredError(Metric):
         target (str): name of target property
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`, `MSE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
     """
 
     def __init__(self, target, model_output=None, bias_correction=None, name=None, element_wise=False):
@@ -136,6 +138,7 @@ class RootMeanSquaredError(MeanSquaredError):
         target (str): name of target property
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`, `RMSE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
     """
 
     def __init__(self, target, model_output=None, bias_correction=None, name=None, element_wise=False):
@@ -155,6 +158,7 @@ class MeanAbsoluteError(Metric):
         target (str): name of target property
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`, `MAE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
     """
 
     def __init__(self, target, model_output=None, bias_correction=None, name=None, element_wise=False):
@@ -204,6 +208,7 @@ class HeatmapMAE(MeanAbsoluteError):
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`,
                     `HeatmapMAE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
     """
 
     def __init__(self, target, model_output=None, name=None, element_wise=False):
@@ -236,6 +241,7 @@ class LengthMSE(MeanSquaredError):
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`,
                     `LengthMSE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
     """
 
     def __init__(self, target, model_output=None, name=None, element_wise=False):
@@ -278,6 +284,7 @@ class LengthRMSE(RootMeanSquaredError):
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`,
                     `LengthRMSE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
    """
 
     def __init__(self, target, model_output=None, name=None, element_wise=False):
