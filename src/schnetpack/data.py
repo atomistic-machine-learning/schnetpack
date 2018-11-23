@@ -301,6 +301,9 @@ class AtomsData(BaseAtomsData):
             list: list with atomrefs
         """
         labels = self.get_metadata('atref_labels')
+        if labels is None:
+            return None
+
         col = [i for i, l in enumerate(labels) if l == property]
         assert len(col) <= 1
 
