@@ -9,13 +9,16 @@ def batch():
     return dict(_atom_mask=torch.DoubleTensor([[1, 1, 1, 0], [1, 1, 0, 0]]),
                 _forces=torch.DoubleTensor([[[8, 1, 0], [1, 1, 0], [1, 1, 0], [0, 0, 0]],
                                             [[1, 1, 0], [1, 4, 0], [0, 0, 0], [0, 0, 0]]]),
-                _energy=torch.DoubleTensor([[1], [1]]))
+                _energy=torch.DoubleTensor([[1], [1]]),
+                _dipole_moment=torch.DoubleTensor([[1, 2, 3], [4, 5, 6]]))
 
 @pytest.fixture
 def result():
     return dict(dydx=torch.DoubleTensor([[[8, 1, 1], [0, 2, 1], [1, 1, 1], [0, 0, 0]],
                                          [[0, 1, 3], [0, 1, 4], [0, 0, 0], [0, 0, 0]]]),
-                y=torch.DoubleTensor([[2], [2]]))
+                y=torch.DoubleTensor([[2], [2]]),
+                _dipole_moment = torch.DoubleTensor([[0, 2, 0], [4, 1, 1]]))
+
 
 @pytest.fixture
 def diff(batch, result):
@@ -89,6 +92,14 @@ def energy_heatmapmae():
 def forces_heatmapmae():
     return HeatmapMAE('_forces', 'dydx', element_wise=True)
 
+@pytest.fixture
+def dipole_angle_mae():
+    return AngleMAE('_dipole_moment', '_dipole_moment')
+
+@pytest.fixture
+def forces_angle_mae():
+    return AngleMAE('_forces', 'dydx')
+
 
 class TestMetrics:
 
@@ -139,3 +150,9 @@ class TestMetrics:
     def test_forces_heatmapmae(self, forces_heatmapmae, batch, result, heatmap_mae_result):
         val_metric = heatmap_mae_result['dydx']
         self.assert_valid_metric(forces_heatmapmae, batch, result, val_metric)
+
+    def test_angle_entries(self, forces_angle_mae, dipole_angle_mae, batch, result):
+        forces_angle_mae.add_batch(batch, result)
+        assert np.equal(forces_angle_mae.n_entries, 5)
+        dipole_angle_mae.add_batch(batch, result)
+        assert np.equal(dipole_angle_mae.n_entries, 2)
