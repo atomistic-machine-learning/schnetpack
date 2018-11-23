@@ -33,19 +33,19 @@ class AtomsDataError(Exception):
 
 
 class BaseAtomsData(Dataset):
-    available_properties = []
+    available_properties = None
 
     def __init__(self, dbpath, subset=None, required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True,
-                 charged_systems=False):
+                 load_charge=False):
         self.dbpath = dbpath
         self.subset = subset
         self.required_properties = required_properties
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
         self.centered = center_positions
-        self.charged_systems = charged_systems
+        self.load_charge = load_charge
 
     def create_splits(self, num_train=None, num_val=None, split_file=None):
         """
@@ -67,7 +67,8 @@ class BaseAtomsData(Dataset):
             schnetpack.data.AtomsData: test dataset
 
         """
-        assert num_train + num_val <= len(self), 'Dataset is smaller than num_train + num_val!'
+        assert num_train + num_val <= len(
+            self), 'Dataset is smaller than num_train + num_val!'
         if split_file is not None and os.path.exists(split_file):
             S = np.load(split_file)
             train_idx = S['train_idx'].tolist()
@@ -106,7 +107,7 @@ class BaseAtomsData(Dataset):
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
         return type(self)(self.dbpath, subidx, self.required_properties,
                           self.environment_provider, self.collect_triples,
-                          self.centered, self.charged_systems)
+                          self.centered, self.load_charge)
 
     def __len__(self):
         raise NotImplementedError
@@ -157,12 +158,12 @@ class AtomsData(BaseAtomsData):
                  required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True,
-                 charged_systems=False):
+                 load_charge=False):
         super(AtomsData, self).__init__(dbpath, subset,
                                         required_properties,
                                         environment_provider,
                                         collect_triples, center_positions,
-                                        charged_systems)
+                                        load_charge)
 
     def __len__(self):
         if self.subset is None:
@@ -200,7 +201,12 @@ class AtomsData(BaseAtomsData):
     def _add_system(self, conn, atoms, **properties):
 
         data = {}
-        for pname in self.available_properties:
+
+        props = properties.keys() \
+            if self.available_properties is None \
+            else self.available_properties
+
+        for pname in props:
             try:
                 prop = properties[pname]
             except:
@@ -261,6 +267,18 @@ class AtomsData(BaseAtomsData):
 
             properties[pname] = torch.FloatTensor(prop)
 
+        if self.load_charge:
+            if Structure.charge in row.data.keys():
+                shape = row.data['_shape_' + Structure.charge]
+                dtype = row.data['_dtype_' + Structure.charge]
+                prop = np.frombuffer(b64decode(row.data[Structure.charge]),
+                                     dtype=dtype)
+                prop = prop.reshape(shape)
+                properties[Structure.charge] = torch.FloatTensor(prop)
+            else:
+                properties[Structure.charge] = torch.FloatTensor(
+                    np.array([0.], dtype=np.float32))
+
         # extract/calculate structure
         properties[Structure.Z] = torch.LongTensor(at.numbers.astype(np.int))
         positions = at.positions.astype(np.float32)
@@ -269,8 +287,6 @@ class AtomsData(BaseAtomsData):
         properties[Structure.R] = torch.FloatTensor(positions)
         properties[Structure.cell] = torch.FloatTensor(
             at.cell.astype(np.float32))
-        if self.charged_systems:
-            properties[Structure.charge] = torch.FloatTensor([row['charge']])
 
         return at, properties
 
