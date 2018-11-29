@@ -204,7 +204,6 @@ def test_shape_schnet_with_cutoff(schnet_batch, batchsize, n_atoms, n_atom_basis
     assert_equal_shape(model_mollifier, schnet_batch, [batchsize, n_atoms, n_atom_basis])
 
 
-
 def test_shape_schnetinteraction(batchsize, n_atoms, n_atom_basis, single_spatial_basis,
                                  n_filters, atomic_env, distances, neighbors, neighbor_mask):
     model = SchNetInteraction(n_atom_basis, single_spatial_basis, n_filters, 5.0)

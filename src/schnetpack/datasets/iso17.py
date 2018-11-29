@@ -3,6 +3,7 @@ import os
 import shutil
 import tarfile
 import tempfile
+import numpy as np
 from urllib import request as request
 from urllib.error import HTTPError, URLError
 
@@ -41,6 +42,7 @@ class ISO17(AtomsData):
             raise ValueError("Fold {:s} does not exist".format(fold))
 
         self.path = path
+        self.fold = fold
         self.datapath = os.path.join(self.path, "iso17")
 
         self.database = fold + ".db"
@@ -104,3 +106,16 @@ class ISO17(AtomsData):
         shutil.rmtree(tmpdir)
 
         return True
+
+    def create_subset(self, idx):
+        """
+        Returns a new dataset that only consists of provided indices.
+        Args:
+            idx (numpy.ndarray): subset indices
+
+        Returns:
+            schnetpack.data.AtomsData: dataset with subset of original data
+        """
+        idx = np.array(idx)
+        subidx = idx if self.subset is None else np.array(self.subset)[idx]
+        return type(self)(self.path, self.fold, subidx, False, self.collect_triples)
