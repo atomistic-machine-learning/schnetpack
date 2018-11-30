@@ -319,13 +319,15 @@ class EarlyStoppingHook(Hook):
 
 class WarmRestartHook(Hook):
 
-    def __init__(self, T0=10, Tmult=2, each_step=False, lr_min=1e-6, patience=1):
+    def __init__(self, T0=10, Tmult=2, each_step=False, lr_min=1e-6,
+                 lr_factor=1., patience=1):
         self.scheduler = None
         self.each_step = each_step
         self.T0 = T0
         self.Tmult = Tmult
         self.Tmax = T0
         self.lr_min = lr_min
+        self.lr_factor = lr_factor
         self.patience = patience
         self.waiting = 0
 
@@ -353,6 +355,10 @@ class WarmRestartHook(Hook):
             self.Tmax *= self.Tmult
             self.scheduler.last_epoch = -1
             self.scheduler.T_max = self.Tmax
+            self.scheduler.base_lrs = [
+                base_lr * self.lr_factor
+                for base_lr in self.scheduler.base_lrs
+            ]
             trainer.optimizer.load_state_dict(self.init_opt_state)
 
             if self.best_current > self.best_previous:
