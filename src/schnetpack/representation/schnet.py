@@ -166,11 +166,11 @@ class SchNet(nn.Module):
         # atom embedding
         x = self.embedding(atomic_numbers)
 
-        if self.charged_systems and Structure.charge in inputs.keys():
-            n_atoms = torch.sum(atom_mask, dim=1)
+        if False and self.charged_systems and Structure.charge in inputs.keys():
+            n_atoms = torch.sum(atom_mask, dim=1, keepdim=True)
             charge = inputs[Structure.charge] / n_atoms # B
             charge = charge[:, None] * self.charge  # B x F
-            x = x + charge[:, None, :]
+            x = x + charge
 
         # spatial features
         r_ij = self.distances(positions, neighbors, cell, cell_offset,
