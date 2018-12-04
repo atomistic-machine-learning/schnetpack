@@ -66,7 +66,7 @@ def get_parser():
 
     ## evaluation
     eval_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
-    eval_parser.add_argument('datapath', help='Path of ANI1 dataset directory')
+    eval_parser.add_argument('datapath', help='Path of ANI1 dataset')
     eval_parser.add_argument('modelpath', help='Path of stored model')
     eval_parser.add_argument('--split', help='Evaluate trained model on given split',
                              choices=['train', 'validation', 'test'], default=['test'], nargs='+')
@@ -292,7 +292,7 @@ if __name__ == '__main__':
     logging.info('ANI1 will be loaded...')
     ani1 = spk.datasets.ANI1(args.datapath, download=True, properties=[train_args.property],
                              collect_triples=args.model == 'wacsf')
-    atomref = ani1.get_reference(train_args.property)
+    atomref = ani1.get_atomref(train_args.property)
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, 'split.npz')
@@ -310,7 +310,19 @@ if __name__ == '__main__':
 
     if args.mode == 'train':
         logging.info('calculate statistics...')
-        mean, stddev = train_loader.get_statistics(train_args.property, True, atomref, split_file=split_path)
+        split_data = np.load(split_path)
+        if 'mean' in split_data.keys():
+            mean = torch.from_numpy(split_data['mean'])
+            stddev = torch.from_numpy(split_data['stddev'])
+            calc_stats = False
+            logging.info("cached statistics was loaded...")
+        else:
+            mean, stddev = train_loader.get_statistics(train_args.property,
+                                                       True, atomref)
+            np.savez(split_path, train_idx=split_data['train_idx'],
+                     val_idx=split_data['val_idx'],
+                     test_idx=split_data['test_idx'], mean=mean,
+                     stddev=stddev)
     else:
         mean, stddev = None, None
 

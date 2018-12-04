@@ -75,3 +75,4 @@ class CFConv(nn.Module):
         y = self.f2out(y)
 
         return y
+

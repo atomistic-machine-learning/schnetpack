@@ -18,7 +18,7 @@ setup(
     packages=find_packages('src'),
     scripts=['src/scripts/schnetpack_qm9.py', 'src/scripts/schnetpack_md17.py',
              'src/scripts/schnetpack_matproj.py', 'src/scripts/schnetpack_molecular_dynamics.py',
-             'src/scripts/schnetpack_ani1.py'],
+             'src/scripts/schnetpack_ani1.py', 'src/scripts/schnetpack_load.py'],
     package_dir={'': 'src'},
     python_requires='>=3.5',
     install_requires=[
