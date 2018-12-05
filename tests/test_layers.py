@@ -53,6 +53,11 @@ def atomic_env(batchsize, n_atoms, n_filters):
 
 
 @pytest.fixture
+def add_feat(batchsize, n_atoms):
+    atoms = np.random.normal(0, 1, (1, n_atoms))
+    return torch.FloatTensor(np.repeat(atoms, batchsize, axis=0))
+
+@pytest.fixture
 def atomic_numbers(batchsize, n_atoms):
     atoms = np.random.randint(1, 9, (1, n_atoms))
     return torch.LongTensor(np.repeat(atoms, batchsize, axis=0))
@@ -92,7 +97,7 @@ def neighbor_mask(batchsize, n_atoms):
 
 
 @pytest.fixture
-def schnet_batch(atomic_numbers, positions, cell, cell_offset, neighbors, neighbor_mask):
+def schnet_batch(atomic_numbers, positions, cell, cell_offset, neighbors, neighbor_mask, add_feat):
     inputs = {}
     inputs[Structure.Z] = atomic_numbers
     inputs[Structure.R] = positions
@@ -100,6 +105,7 @@ def schnet_batch(atomic_numbers, positions, cell, cell_offset, neighbors, neighb
     inputs[Structure.cell_offset] = cell_offset
     inputs[Structure.neighbors] = neighbors
     inputs[Structure.neighbor_mask] = neighbor_mask
+    inputs['additional_feature'] = add_feat
     return inputs
 
 
@@ -189,6 +195,12 @@ def test_shape_schnet(schnet_batch, batchsize, n_atoms, n_atom_basis):
 
     assert_equal_shape(model, schnet_batch, [batchsize, n_atoms, n_atom_basis])
 
+
+def test_shape_schnet_with_update(schnet_batch, batchsize, n_atoms, n_atom_basis):
+    schnet_batch = [schnet_batch]
+    model = SchNet(n_atom_basis=n_atom_basis, additional_features=['additional_feature'])
+
+    assert_equal_shape(model, schnet_batch, [batchsize, n_atoms, n_atom_basis+1])
 
 def test_shape_schnet_with_cutoff(schnet_batch, batchsize, n_atoms, n_atom_basis):
     schnet_batch = [schnet_batch]

@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch
 
 import schnetpack.nn.acsf
 import schnetpack.nn.activations
@@ -77,6 +78,8 @@ class SchNet(nn.Module):
         return_intermediate (bool): if true, also return intermediate feature representations
             after each interaction block
         max_z (int): maximum allowed nuclear charge in dataset. This determines the size of the embedding matrix.
+        additional_features ([string]): List features to use as inputs to the interaction filters
+            in addition to the embedding
 
     References
     ----------
@@ -94,7 +97,7 @@ class SchNet(nn.Module):
     def __init__(self, n_atom_basis=128, n_filters=128, n_interactions=1, cutoff=5.0, n_gaussians=25,
                  normalize_filter=False, coupled_interactions=False,
                  return_intermediate=False, max_z=100, cutoff_network=HardCutoff, trainable_gaussians=False,
-                 distance_expansion=None):
+                 distance_expansion=None, additional_features=None):
         super(SchNet, self).__init__()
 
         # atom type embeddings
@@ -109,6 +112,13 @@ class SchNet(nn.Module):
             self.distance_expansion = distance_expansion
 
         self.return_intermediate = return_intermediate
+
+        # Store a list of additional features to include in representation
+        self.additional_features = additional_features
+
+        # Get the number of features in the representation (counting embedding and new features)
+        if self.additional_features:
+            n_atom_basis += len(self.additional_features)
 
         # interaction network
         if coupled_interactions:
@@ -149,6 +159,11 @@ class SchNet(nn.Module):
 
         # atom embedding
         x = self.embedding(atomic_numbers)
+
+        # additional features, if desired
+        if self.additional_features is not None:
+            add_x = [x] + [torch.unsqueeze(inputs[f], -1) for f in self.additional_features]
+            x = torch.cat(add_x, dim=-1)
 
         # spatial features
         r_ij = self.distances(positions, neighbors, cell, cell_offset, neighbor_mask=neighbor_mask)
