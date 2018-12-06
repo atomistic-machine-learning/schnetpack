@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 
-from schnet_transfer.atomistic import Polarizability
+from schnetpack.atomistic import Polarizability
+
 from schnetpack.atomistic import Energy, DipoleMoment
 
 

@@ -1,20 +1,16 @@
-import os
-from shutil import rmtree
-
-import numpy as np
 import torch
+import os
 import yaml
+import numpy as np
+from shutil import rmtree
 from sacred import Experiment
+from model_ingredients import model_ingredient, build_model
+from trainer_ingredients import train_ingredient, setup_trainer
+from schnetpack.property_model import Properties
+from schnetpack.data import AtomsData, AtomsLoader
+from schnetpack.datasets.qm9 import QM9
 
-import schnetpack.data as dat
-from src.schnet_transfer.model import Properties
-from schnetpack.data import Structure
-from sacred_scripts.model_ingredients import model_ingredient as mod
-from sacred_scripts.trainer_ingredients import train_ingredient as tr
-
-ex = Experiment("schnet_transfer",
-                ingredients=[mod, tr]
-                )
+ex = Experiment('qm9', ingredients=[model_ingredient, train_ingredient])
 
 
 def is_extensive(prop):
@@ -23,19 +19,12 @@ def is_extensive(prop):
 
 @ex.config
 def cfg():
-    modeldir = None
+    properties = {}
+    loss_tradeoff = {}
     overwrite = True
+    additional_outputs = []
 
-    properties = {
-
-    }
-
-    loss_tradeoff = {
-    }
-
-    additional_outputs = [Properties.charges]
-    train_energy_diffs = False
-
+    modeldir = None
     dbpath = None
     batch_size = 100
     num_train = 0.8
@@ -47,13 +36,10 @@ def cfg():
 
 
 @ex.named_config
-def cuda():
-    device = 'cuda'
-
-
-@ex.named_config
-def overwrite():
-    overwrite = True
+def debug_cfg():
+    properties = {Properties.energy: QM9.U0}
+    dbpath = './qm9a.db'
+    modeldir = './model'
 
 
 @ex.capture
@@ -70,8 +56,7 @@ def prepare_data(_seed, dbpath, properties,
 
     # load and split
     targets = [tgt for tgt in properties.values() if tgt is not None]
-    data = dat.AtomsData(dbpath,
-                         required_properties=targets)
+    data = AtomsData(dbpath, required_properties=targets, load_charge=False)
 
     if num_train < 1:
         num_train = int(num_train * len(data))
@@ -80,12 +65,12 @@ def prepare_data(_seed, dbpath, properties,
 
     train, val, test = data.create_splits(num_train, num_val)
 
-    train_loader = dat.AtomsLoader(train, batch_size, True, pin_memory=True,
-                                   num_workers=num_workers)
-    val_loader = dat.AtomsLoader(val, batch_size, False, pin_memory=True,
-                                 num_workers=num_workers)
-    test_loader = dat.AtomsLoader(test, batch_size, False, pin_memory=True,
-                                  num_workers=num_workers)
+    train_loader = AtomsLoader(train, batch_size, True, pin_memory=True,
+                               num_workers=num_workers)
+    val_loader = AtomsLoader(val, batch_size, False, pin_memory=True,
+                             num_workers=num_workers)
+    test_loader = AtomsLoader(test, batch_size, False, pin_memory=True,
+                              num_workers=num_workers)
 
     atomrefs = {p: data.get_atomref(tgt)
                 for p, tgt in properties.items()
@@ -145,18 +130,11 @@ def build_loss(properties, loss_tradeoff):
                 diff = batch[tgt] - result[p]
                 diff = diff ** 2
                 err_sq = torch.mean(diff)
-                loss += loss_tradeoff[p] * err_sq
-
-        if Properties.charges in loss_tradeoff:
-            diff = batch[Structure.charge] - result[Properties.charges].sum(
-                dim=1)
-            diff = diff ** 2
-            err_sq = torch.mean(diff)
-            loss += loss_tradeoff[Properties.charges] * err_sq
-
+                if p in loss_tradeoff.keys():
+                    err_sq *= loss_tradeoff[p]
+                loss += err_sq
         return loss
-
-    return loss_fn, []
+    return loss_fn
 
 
 @ex.command
@@ -170,18 +148,15 @@ def train(_log, _config, modeldir, properties, additional_outputs, device):
 
     _log.info("Build model")
     props = [p for p, tgt in properties.items() if tgt is not None]
-    model = mod.build_model(mean=mean, stddev=stddev, atomrefs=atomrefs,
-                            properties=props,
-                            additional_outputs=additional_outputs).to(device)
+    model = build_model(mean=mean, stddev=stddev, atomrefs=atomrefs,
+                        properties=props,
+                        additional_outputs=additional_outputs).to(device)
 
     _log.info("Setup training")
-    loss_fn, hooks = build_loss()
-
-    trainer = tr.setup_trainer(
-        model=model, modeldir=modeldir, properties=properties,
-        train_loader=train_loader, val_loader=val_loader, loss_fn=loss_fn,
-        custom_hooks=hooks
-    )
+    loss_fn = build_loss()
+    trainer = setup_trainer(model=model, loss_fn=loss_fn, modeldir=modeldir,
+                            train_loader=train_loader, val_loader=val_loader,
+                            properties=properties)
     _log.info("Training")
     trainer.train(device)
 

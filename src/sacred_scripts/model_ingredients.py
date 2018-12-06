@@ -1,9 +1,9 @@
 from sacred import Ingredient
+from schnetpack.property_model import PropertyModel, Properties, ModelError
 
-import schnetpack.nn as snn
-from schnetpack.representation import SchNet
+from schnetpack.representation.schnet import SchNet
 from schnetpack.atomistic import AtomisticModel
-from schnetpack.property_model import PropertyModel, ModelError
+from schnetpack.nn.cutoff import *
 
 
 model_ingredient = Ingredient('model')
@@ -28,11 +28,13 @@ def schnet():
     coupled_interactions = False
     max_z = 100
     cutoff_network = 'hard'
+    additional_outputs = [Properties.dipole_moment]
 
 
 @model_ingredient.capture
 def build_model(mean, stddev, properties, atomrefs, additional_outputs,
                 n_atom_basis, name, cutoff):
+
     if name == 'schnet':
         representation = build_schnet(return_intermediate=False)
     else:
@@ -51,11 +53,11 @@ def build_model(mean, stddev, properties, atomrefs, additional_outputs,
 @model_ingredient.capture
 def get_cutoff(cutoff_network):
     if cutoff_network == 'hard':
-        cutoff_function = snn.HardCutoff
+        cutoff_function = HardCutoff
     elif cutoff_network == 'cosine':
-        cutoff_function = snn.CosineCutoff
+        cutoff_function = CosineCutoff
     elif cutoff_network == 'mollifier':
-        cutoff_function = snn.MollifierCutoff
+        cutoff_function = MollifierCutoff
     else:
         raise ModelError(
             'Unrecognized cutoff {:s}'.format(cutoff_network))
@@ -67,8 +69,9 @@ def build_schnet(return_intermediate,
                  n_atom_basis, n_filters, n_interactions, cutoff,
                  n_gaussians, normalize_filter,
                  coupled_interactions, max_z):
-    cutoff_function = get_cutoff()
 
+
+    cutoff_function = get_cutoff()
     return SchNet(
         n_atom_basis=n_atom_basis,
         n_filters=n_filters,
@@ -80,5 +83,6 @@ def build_schnet(return_intermediate,
         return_intermediate=return_intermediate,
         max_z=max_z,
         cutoff_network=cutoff_function,
-        charged_systems=True
+        charged_systems=False
     )
+
