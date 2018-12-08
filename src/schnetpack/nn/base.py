@@ -170,3 +170,38 @@ class Aggregate(nn.Module):
             y = y / N
 
         return y
+
+
+class GetRepresentationAndProperties(nn.Module):
+    """
+    Initial step for the atomwise layers of the SchNet model.
+
+    Can include both the atomic representations learned by the network, but also other properties
+    available in the input. These properties could be both for individual atoms or for the
+    entire molecule. For the second case, this class will duplicate the property for each atom
+    before concatinating the value with the representation.
+
+    Args:
+        additional_props ([string]): List of other properties to use as inputs
+    """
+
+    def __init__(self, additional_props=None):
+        super(GetRepresentationAndProperties, self).__init__()
+        self.additional_props = [] if additional_props is None else additional_props
+
+    def forward(self, inputs):
+
+        # Get the representation
+        rep = inputs['representation']
+        n_atoms = rep.shape[1]  # Use for expanding properties
+
+        # Append the additional props
+        output = [rep]
+        for p in self.additional_props:
+            x = inputs[p]
+            if x.dim() == 1:  # Per-molecule properties
+                x = torch.unsqueeze(torch.unsqueeze(x, -1).expand(-1, n_atoms), -1)
+            elif x.dim() == 2:
+                x = torch.unsqueeze(x, -1)
+            output.append(x)
+        return torch.cat(output, -1)
