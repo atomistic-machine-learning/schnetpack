@@ -9,6 +9,8 @@ from trainer_ingredients import train_ingredient, setup_trainer
 from schnetpack.property_model import Properties
 from schnetpack.data import AtomsData, AtomsLoader
 from schnetpack.datasets.qm9 import QM9
+from sacred.observers import MongoObserver
+
 
 ex = Experiment('qm9', ingredients=[model_ingredient, train_ingredient])
 
@@ -33,13 +35,37 @@ def cfg():
     mean = None
     stddev = None
     device = 'cpu'
+    mongo_url = None
+    mongo_db = None
+
+
+@ex.named_config
+def observe():
+    mongo_url = 'mongodb://127.0.0.1:27017'
+    mongo_db = 'test'
+    ex.observers.append(MongoObserver.create(url=mongo_url,
+                                             db_name=mongo_db))
 
 
 @ex.named_config
 def debug_cfg():
+    properties = {Properties.energy: 'total_energy'}
+    dbpath = './iso17/reference.db'
+    modeldir = './debug_model'
+
+
+@ex.named_config
+def iso17():
+    properties = {Properties.energy: 'total_energy'}
+    dbpath = './iso17/reference.db'
+    modeldir = './iso17_model'
+
+
+@ex.named_config
+def qm9():
     properties = {Properties.energy: QM9.U0}
-    dbpath = './qm9a.db'
-    modeldir = './model'
+    dbpath = './qm9.db'
+    modeldir = './qm9_model'
 
 
 @ex.capture
