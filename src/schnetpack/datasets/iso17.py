@@ -118,4 +118,5 @@ class ISO17(AtomsData):
         """
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
-        return type(self)(self.path, self.fold, subidx, False, self.collect_triples)
+        return type(self)(self.path, self.fold, subidx, False,
+                          self.collect_triples)
