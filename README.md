@@ -90,7 +90,9 @@ If you are using SchNetPack in you research, please cite:
 
 K.T. Schütt, P. Kessel, M. Gastegger, K. Nicoli, A. Tkatchenko, K.-R. Müller.
 SchNetPack: A Deep Learning Toolbox For Atomistic Systems.
-[arXiv:1809.01072](https://arxiv.org/abs/1809.01072). (2017)
+J. Chem. Theory Comput.
+[10.1021/acs.jctc.8b00908](http://dx.doi.org/10.1021/acs.jctc.8b00908)
+[arXiv:1809.01072](https://arxiv.org/abs/1809.01072). (2018)
 
 
 ## References
