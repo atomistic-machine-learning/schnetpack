@@ -37,18 +37,19 @@ class ANI1(AtomsData):
     # properties:
     energy = 'energy'
 
-    properties = [energy]
+    available_properties = [energy]
 
     reference = {
         energy: 0
     }
 
-    units = dict(zip(properties, [Hartree]))
+    units = dict(zip(available_properties, [Hartree]))
 
-    self_energies = {'H': -0.500607632585, 'C': -37.8302333826, 'N': -54.5680045287, 'O': -75.0362229210}
+    self_energies = {'H': -0.500607632585, 'C': -37.8302333826,
+                     'N': -54.5680045287, 'O': -75.0362229210}
 
-    def __init__(self, dbpath, download=True, subset=None, properties=None, collect_triples=False,
-                 num_heavy_atoms=8, high_energies=False):
+    def __init__(self, dbpath, download=True, subset=None, properties=None,
+                 collect_triples=False, num_heavy_atoms=8, high_energies=False):
         self.dbpath = dbpath
         #self.atomref_path = os.path.join(self.path, "atomrefs.npz")
 
@@ -58,12 +59,13 @@ class ANI1(AtomsData):
         environment_provider = SimpleEnvironmentProvider()
 
         if properties is None:
-            properties = ANI1.properties
+            properties = ANI1.available_properties
 
         if download:
             self._download()
 
-        super().__init__(self.dbpath, subset, properties, environment_provider, collect_triples)
+        super().__init__(self.dbpath, subset, properties, environment_provider,
+                         collect_triples)
 
     def _download(self):
 

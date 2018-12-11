@@ -73,17 +73,18 @@ class QM9(AtomsData):
             )
     )
 
-    def __init__(self, dbpath, download=True, subset=None, properties=[],
+    def __init__(self, dbpath, download=True, subset=None, properties=None,
                  collect_triples=False, remove_uncharacterized=False):
         self.dbpath = dbpath
-        self.required_properties = properties
         environment_provider = SimpleEnvironmentProvider()
 
         if not os.path.exists(dbpath) and download:
             self._download(remove_uncharacterized)
 
-        super().__init__(self.dbpath, subset, self.required_properties,
-                         environment_provider,
+        if properties is None:
+            properties = QM9.available_properties
+
+        super().__init__(self.dbpath, subset, properties, environment_provider,
                          collect_triples)
 
     def create_subset(self, idx):

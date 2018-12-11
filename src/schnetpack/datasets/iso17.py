@@ -13,13 +13,15 @@ from schnetpack.environment import SimpleEnvironmentProvider
 
 class ISO17(AtomsData):
     """
-    ISO17 benchmark data set for molecular dynamics of C7O2H10 isomers containing molecular forces.
+    ISO17 benchmark data set for molecular dynamics of C7O2H10 isomers
+    containing molecular forces.
 
     Args:
         path (str): Path to database
         fold (str): Fold of data to load. Allowed are:
                         reference - 80% of steps of 80% of MD trajectories
-                        reference_eq - equilibrium conformations of those molecules
+                        reference_eq - equilibrium conformations of those
+                                       molecules
                         test_within - remaining 20% unseen steps of reference trajectories
                         test_other - remaining 20% unseen MD trajectories
                         test_eq - equilibrium conformations of test trajectories
@@ -37,9 +39,21 @@ class ISO17(AtomsData):
         "test_eq"
     ]
 
-    def __init__(self, path, fold, subset=None, download=True, collect_triples=False):
+    E = "total_energy"
+    F = "atomic_forces"
+
+    available_properties = [E, F]
+
+    units = dict(zip(available_properties, [1.0, 1.0]))
+
+    def __init__(self, path, fold, download=True, properties=None, subset=None,
+                 collect_triples=False):
+
         if fold not in self.existing_folds:
             raise ValueError("Fold {:s} does not exist".format(fold))
+
+        if properties is None:
+            properties = ISO17.available_properties
 
         self.path = path
         self.fold = fold
@@ -54,20 +68,8 @@ class ISO17(AtomsData):
         if download:
             self.download()
 
-        properties = ["total_energy", "atomic_forces"]
-
-        super().__init__(self.dbpath, subset, properties, environment_provider, collect_triples)
-
-    E = "total_energy"
-    F = "atomic_forces"
-
-    properties = [
-        E, F
-    ]
-
-    units = dict(
-        zip(properties, [1.0, 1.0])
-    )
+        super().__init__(self.dbpath, subset, properties,
+                         environment_provider, collect_triples)
 
     def download(self):
         r"""
@@ -118,4 +120,5 @@ class ISO17(AtomsData):
         """
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
-        return type(self)(self.path, self.fold, subidx, False, self.collect_triples)
+        return type(self)(self.path, self.fold, subidx, False,
+                          self.collect_triples)

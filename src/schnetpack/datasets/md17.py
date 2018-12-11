@@ -44,7 +44,7 @@ class MD17(AtomsData):
 
     energy = 'energy'
     forces = 'forces'
-    properties = [energy, forces]
+    available_properties = [energy, forces]
 
     datasets_dict = dict(aspirin='aspirin_dft.npz',
                          #aspirin_ccsd='aspirin_ccsd.zip',
