@@ -46,15 +46,12 @@ class MaterialsProject(AtomsData):
             )
     )
 
-    def __init__(self, path, cutoff, apikey=None, download=True, subset=None,
+    def __init__(self, dbpath, cutoff, apikey=None, download=True, subset=None,
                  properties=[], collect_triples=False):
-        self.path = path
         self.cutoff = cutoff
         self.apikey = apikey
 
-        if not os.path.exists(self.path):
-            os.makedirs(self.path)
-        self.dbpath = os.path.join(self.path, 'mp.db')
+        self.dbpath = dbpath
 
         environment_provider = ASEEnvironmentProvider(cutoff)
 
@@ -69,7 +66,7 @@ class MaterialsProject(AtomsData):
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
 
-        return MaterialsProject(self.path, self.cutoff, download=False,
+        return MaterialsProject(self.dbpath, self.cutoff, download=False,
                                 subset=subidx, properties=self.properties,
                                 collect_triples=self.collect_triples)
 
@@ -116,3 +113,4 @@ class MaterialsProject(AtomsData):
                                         q['total_magnetization'],
                                     MaterialsProject.BandGap:
                                         q['band_gap']})
+        self.set_metadata({})

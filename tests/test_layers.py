@@ -57,6 +57,10 @@ def atomic_numbers(batchsize, n_atoms):
     atoms = np.random.randint(1, 9, (1, n_atoms))
     return torch.LongTensor(np.repeat(atoms, batchsize, axis=0))
 
+@pytest.fixture
+def atom_mask(atomic_numbers):
+    return torch.ones(atomic_numbers.shape)
+
 
 @pytest.fixture
 def atomtypes(atomic_numbers):
@@ -92,7 +96,7 @@ def neighbor_mask(batchsize, n_atoms):
 
 
 @pytest.fixture
-def schnet_batch(atomic_numbers, positions, cell, cell_offset, neighbors, neighbor_mask):
+def schnet_batch(atomic_numbers, atom_mask, positions, cell, cell_offset, neighbors, neighbor_mask):
     inputs = {}
     inputs[Structure.Z] = atomic_numbers
     inputs[Structure.R] = positions
@@ -100,6 +104,7 @@ def schnet_batch(atomic_numbers, positions, cell, cell_offset, neighbors, neighb
     inputs[Structure.cell_offset] = cell_offset
     inputs[Structure.neighbors] = neighbors
     inputs[Structure.neighbor_mask] = neighbor_mask
+    inputs[Structure.atom_mask] = atom_mask
     return inputs
 
 
@@ -197,7 +202,6 @@ def test_shape_schnet_with_cutoff(schnet_batch, batchsize, n_atoms, n_atom_basis
 
     assert_equal_shape(model_cosine, schnet_batch, [batchsize, n_atoms, n_atom_basis])
     assert_equal_shape(model_mollifier, schnet_batch, [batchsize, n_atoms, n_atom_basis])
-
 
 
 def test_shape_schnetinteraction(batchsize, n_atoms, n_atom_basis, single_spatial_basis,
