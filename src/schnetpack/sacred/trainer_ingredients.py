@@ -12,18 +12,16 @@ train_ingredient = Ingredient('trainer')
 
 @train_ingredient.config
 def cfg():
+    """
+    base config for the trainer
+
+    """
     optimizer = 'adam'
     schedule = None
     learning_rate = 1e-4
     max_epochs = None
-    patience = None
-    lr_min = None
-    lr_factor = None
-    t0 = None
-    tmult = None
     hooks = []
     metrics = []
-    threshold_ratio = None
     max_steps = None
     early_stopping = False
     lr_schedule = None
@@ -32,6 +30,10 @@ def cfg():
 
 @train_ingredient.named_config
 def sgdr():
+    """
+    default config for the SGDR schedule
+
+    """
     schedule = 'sgdr'
     t0 = 50
     tmult = 1
@@ -42,6 +44,10 @@ def sgdr():
 
 @train_ingredient.named_config
 def plateau():
+    """
+    default config for the ReduceOnPlateau schedule
+
+    """
     schedule = 'plateau'
     patience = 10
     lr_min = 1e-7
@@ -49,23 +55,90 @@ def plateau():
 
 
 @train_ingredient.named_config
+def early_stopping():
+    """
+    default config for early stopping hook
+
+    """
+    early_stopping = True
+    threshold_ratio = 0.
+    patience = 0
+
+
+@train_ingredient.named_config
 def base_hooks():
+    """
+    default config for logging hooks
+
+    """
     logging_hooks = ['csv']
     metrics = ['rmse', 'mae']
 
 
 @train_ingredient.capture
-def build_hooks(logging_hooks, schedule, optimizer, patience, lr_factor, lr_min,
-                t0, tmult, modeldir, max_epochs, property_map,
-                threshold_ratio, early_stopping, lr_schedule, max_steps):
+def get_early_stopping_hook(patience, threshold_ratio):
+    return EarlyStoppingHook(patience, threshold_ratio)
+
+
+@train_ingredient.capture
+def get_reduce_on_plateau_hook(optimizer, patience, lr_factor, lr_min):
+    return ReduceLROnPlateauHook(optimizer, patience=patience, factor=lr_factor,
+                                 min_lr=lr_min, window_length=1,
+                                 stop_after_min=True)
+
+
+@train_ingredient.capture
+def get_warm_restart_hook(t0, tmult, lr_min, lr_factor, patience):
+    return WarmRestartHook(T0=t0, Tmult=tmult, each_step=False, lr_min=lr_min,
+                           lr_factor=lr_factor, patience=patience)
+
+
+@train_ingredient.capture
+def get_optimizer(optimizer, learning_rate, trainable_params):
+    """
+    build optimizer object
+
+    Args:
+        optimizer (str): name of the optimizer
+        learning_rate (float): learning rate
+        trainable_params (dict): trainable parameters of the model
+
+    Returns:
+        Optimizer object
+    """
+    if optimizer == 'adam':
+        return Adam(trainable_params, lr=learning_rate)
+    else:
+        raise NotImplementedError
+
+@train_ingredient.capture
+def build_hooks(logging_hooks, schedule, modeldir, max_epochs, property_map,
+                early_stopping, lr_schedule, max_steps):
+    """
+    build a list with hook objects
+
+    Args:
+        logging_hooks (list): list with names of logging hooks
+        schedule (str): name of the lr_schedule
+        modeldir (str): path to the model directory
+        max_epochs (str): max number of training epochs
+        property_map (dict): mapping between model properties and dataset
+            properties
+        early_stopping (bool): add the EarlyStoppingHook if set to True
+        lr_schedule (torch.optim.lr_schedule._LRScheduler): scheduler
+        max_steps (int): max number of training steps
+
+    Returns:
+        list of hook objects
+
+    """
     metrics_objects = build_metrics(property_map=property_map)
-    hook_objects = build_schedule(schedule, optimizer, patience, lr_factor,
-                                  lr_min, t0, tmult)
+    hook_objects = build_schedule(schedule)
     hook_objects += build_logging_hooks(logging_hooks=logging_hooks,
                                         modeldir=modeldir,
                                         metrics_objects=metrics_objects)
     if early_stopping:
-        hook_objects.append(EarlyStoppingHook(patience, threshold_ratio))
+        hook_objects.append(get_early_stopping_hook())
     if max_epochs is not None:
         hook_objects.append((MaxEpochHook(max_epochs)))
     if max_steps is not None:
@@ -77,6 +150,18 @@ def build_hooks(logging_hooks, schedule, optimizer, patience, lr_factor, lr_min,
 
 @train_ingredient.capture
 def build_logging_hooks(logging_hooks, modeldir, metrics_objects):
+    """
+    build a list of logging hooks
+
+    Args:
+        logging_hooks (list): names of the logging hooks
+        modeldir (str): path to the model directory
+        metrics_objects (list): list with schnetpack.metrics.Metric objects
+
+    Returns:
+        list of logging hooks
+
+    """
     hook_objects = []
     if not logging_hooks:
         return hook_objects
@@ -92,23 +177,24 @@ def build_logging_hooks(logging_hooks, modeldir, metrics_objects):
 
 
 @train_ingredient.capture
-def build_schedule(schedule, optimizer, patience, lr_factor, lr_min, t0, tmult):
+def build_schedule(schedule):
+    """
+    builds a list with a single schedule hook
+
+    Args:
+        schedule (str): Name of the schedule
+
+    Returns:
+        list with a single schedule hook
+
+    """
     hook_objects = []
     if schedule is None:
         return hook_objects
     elif schedule == 'plateau':
-        hook_objects.append(ReduceLROnPlateauHook(optimizer,
-                                                  patience=patience,
-                                                  factor=lr_factor,
-                                                  min_lr=lr_min,
-                                                  window_length=1,
-                                                  stop_after_min=True))
+        hook_objects.append(get_reduce_on_plateau_hook())
     elif schedule == 'sgdr':
-        hook_objects.append(WarmRestartHook(T0=t0, Tmult=tmult,
-                                            each_step=False,
-                                            lr_min=lr_min,
-                                            lr_factor=lr_factor,
-                                            patience=patience))
+        hook_objects.append(get_warm_restart_hook())
     else:
         raise NotImplementedError
     return hook_objects
@@ -116,6 +202,18 @@ def build_schedule(schedule, optimizer, patience, lr_factor, lr_min, t0, tmult):
 
 @train_ingredient.capture
 def build_metrics(metrics, property_map):
+    """
+    builds a list with schnetpack.metrics.Metric objects
+
+    Args:
+        metrics (list): names of the metrics that should be used
+        property_map (dict): mapping between model properties and dataset
+            properties
+
+    Returns:
+        list of schnetpack.metrics.Metric objects
+
+    """
     metrics_objects = []
     for metric in metrics:
         metric = metric.lower()
@@ -132,17 +230,31 @@ def build_metrics(metrics, property_map):
 
 @train_ingredient.capture
 def setup_trainer(model, modeldir, loss_fn, train_loader, val_loader,
-                  optimizer, learning_rate, property_map, exclude=[]):
+                  property_map, exclude=[]):
+    """
+    build a trainer object
+
+    Args:
+        model (torch.nn.Module): model object
+        modeldir (str): path to the model directory
+        loss_fn (callable): loss function
+        train_loader (schnetpack.data.AtomsLoader): dataloader for train data
+        val_loader (schnetpack.data.Atomsloader):  dataloader fro validation
+            data
+        property_map (dict): maps the model properties on dataset properties
+        exclude (list): model parameters that should not be optimized
+
+    Returns:
+        schnetpack.train.Trainer object
+
+    """
     hooks = build_hooks(modeldir=modeldir, property_map=property_map)
 
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     trainable_params = filter(lambda p: p not in exclude, trainable_params)
 
-    if optimizer == 'adam':
-        optimizer = Adam(trainable_params, lr=learning_rate)
-    else:
-        raise NotImplementedError
+    optim = get_optimizer(trainable_params=trainable_params)
 
-    trainer = Trainer(modeldir, model, loss_fn, optimizer,
-                      train_loader, val_loader, hooks=hooks)
+    trainer = Trainer(modeldir, model, loss_fn, optim, train_loader,
+                      val_loader, hooks=hooks)
     return trainer

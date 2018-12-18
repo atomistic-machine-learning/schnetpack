@@ -24,6 +24,10 @@ def is_extensive(prop):
 
 @ex.config
 def cfg():
+    """
+    base configuration for schnetpack experiments
+
+    """
     loss_tradeoff = {}
     overwrite = True
     additional_outputs = []
@@ -44,6 +48,10 @@ def cfg():
 
 @ex.named_config
 def observe():
+    """
+    default config for observing experiments
+
+    """
     mongo_url = 'mongodb://127.0.0.1:27017'
     mongo_db = 'test'
     ex.observers.append(MongoObserver.create(url=mongo_url,
@@ -52,12 +60,24 @@ def observe():
 
 @ex.named_config
 def base_config():
+    """
+    default config for schnetpack experiments
+
+    """
     modeldir = './models'
-    properties = ['energy', 'forces']
+    properties = ['energy']
 
 
 @ex.capture
 def save_config(_config, modeldir):
+    """
+    Save the configuration to the model directory.
+
+    Args:
+        _config (dict): configuration of the experiment
+        modeldir (str): path to the model directory
+
+    """
     with open(os.path.join(modeldir, 'config.yaml'), 'w') as f:
         yaml.dump(_config, f, default_flow_style=False)
 
@@ -65,6 +85,22 @@ def save_config(_config, modeldir):
 @ex.capture
 def prepare_data(_seed, property_map,
                  batch_size, num_train, num_val, num_workers):
+    """
+    Create the dataloaders for training.
+
+    Args:
+        _seed (int): seed for controlled randomness
+        property_map (dict): mapping between model properties and dataset
+            properties
+        batch_size (int): batch size
+        num_train (int): number of training samles
+        num_val (int): number of validation samples
+        num_workers (int): number of workers for the dataloaders
+
+    Returns:
+        schnetpack.data.Atomsloader objects for training, validation and
+        testing and the atomic reference data
+    """
     # local seed
     np.random.seed(_seed)
 
@@ -94,6 +130,22 @@ def prepare_data(_seed, property_map,
 
 @ex.capture
 def stats(train_loader, atomrefs, property_map, mean, stddev, _config):
+    """
+    Calculate statistics of the input data.
+
+    Args:
+        train_loader (schnetpack.data.Atomsloader): loader for train data
+        atomrefs (torch.Tensor): atomic reference data
+        property_map (dict): mapping between the model properties and the
+            dataset properties
+        mean:
+        stddev:
+        _config (dict): configuration of the experiment
+
+    Returns:
+        mean and std for the configuration
+
+    """
     props = [p for p, tgt in property_map.items() if tgt is not None]
     targets = [property_map[p] for p in props if
                p not in [Properties.polarizability, Properties.dipole_moment]]
@@ -120,6 +172,15 @@ def stats(train_loader, atomrefs, property_map, mean, stddev, _config):
 
 @ex.capture
 def create_modeldir(_log, modeldir, overwrite):
+    """
+    Create the directory for the model.
+
+    Args:
+        _log:
+        modeldir (str): path to the model directory
+        overwrite (bool): overwrites the model directory if True
+
+    """
     _log.info("Create model directory")
     if modeldir is None:
         raise ValueError('Config `modeldir` has to be set!')
@@ -137,6 +198,19 @@ def create_modeldir(_log, modeldir, overwrite):
 
 @ex.capture
 def build_loss(property_map, loss_tradeoff):
+    """
+    Build the loss function.
+
+    Args:
+        property_map (dict): mapping between the model properties and the
+            dataset properties
+        loss_tradeoff (dict): contains tradeoff factors for properties,
+            if needed
+
+    Returns:
+        loss function
+
+    """
     def loss_fn(batch, result):
         loss = 0.
         for p, tgt in property_map.items():
@@ -153,18 +227,27 @@ def build_loss(property_map, loss_tradeoff):
 
 
 @ex.command
-def train(_log, _config, modeldir, properties, additional_outputs, device,
-          num_train, num_val, num_workers, batch_size):
+def train(_log, _config, modeldir, properties, additional_outputs, device):
+    """
+    Build a trainer from the configuration and start the treining.
+
+    Args:
+        _log:
+        _config (dict): configuration dictionary
+        modeldir (str): path to the model directry
+        properties (list): list of model properties
+        additional_outputs (list): list of additional model properties that are
+            not back-propagated
+        device (str): choose device for calculations (CPU/GPU)
+
+    """
     property_map = get_property_map(properties)
     create_modeldir()
     save_config()
 
     _log.info("Load data")
-    train_loader, val_loader, _, atomrefs = prepare_data(num_train=num_train,
-                                                         num_val=num_val,
-                                                         num_workers=num_workers,
-                                                         batch_size=batch_size,
-                                                         property_map=property_map)
+    train_loader, val_loader, _, atomrefs = prepare_data(property_map=
+                                                         property_map)
     mean, stddev = stats(train_loader, atomrefs, property_map)
 
     _log.info("Build model")
