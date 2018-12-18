@@ -80,6 +80,9 @@ class BaseAtomsData(Dataset):
                     'You have to supply either split sizes (num_train /' +
                     ' num_val) or an npz file with splits.')
 
+            num_train = num_train if num_train > 1 else num_train * len(self)
+            num_val = num_val if num_val > 1 else num_val * len(self)
+
             idx = np.random.permutation(len(self))
             train_idx = idx[:num_train].tolist()
             val_idx = idx[num_train:num_train + num_val].tolist()
@@ -141,6 +144,151 @@ class BaseAtomsData(Dataset):
 
     def get_metadata(self, key):
         raise NotImplementedError
+
+    def _subset_index(self, idx):
+        # get row
+        if self.subset is None:
+            idx = int(idx)
+        else:
+            idx = int(self.subset[idx])
+        return idx
+
+
+class MergedAtomsData(Dataset):
+    """
+    A merged dataset assembled from multiple ASE db files.
+
+    Note: the metadata of the first dataset wil be used as the metadata of
+          the merged dateset
+
+    """
+
+    def __init__(self, dbpath_list, subset_list=None,
+                 required_properties=[],
+                 environment_provider=SimpleEnvironmentProvider(),
+                 collect_triples=False, center_positions=True,
+                 load_charge=False):
+        self.dbpath_list = dbpath_list
+        self.subset_list = [None] * len(
+            dbpath_list) if subset_list is None else subset_list
+
+        self.datasets = [
+            AtomsData(dbpath, subset, required_properties=required_properties,
+                      environment_provider=environment_provider,
+                      collect_triples=collect_triples,
+                      center_positions=center_positions,
+                      load_charge=load_charge)
+            for dbpath, subset in zip(dbpath_list, subset_list)
+        ]
+        self.required_properties = required_properties
+        self.environment_provider = environment_provider
+        self.collect_triples = collect_triples
+        self.centered = center_positions
+        self.load_charge = load_charge
+
+        self.cumidx = [0]
+        for ds in self.datasets:
+            self.cumidx.append(self.cumidx[-1] + len(ds))
+
+    def create_splits(self, num_train=None, num_val=None, split_file=None):
+        """
+        Splits the dataset into train/validation/test splits, writes split to
+        an npz file and returns subsets. Either the sizes of training and
+        validation split or an existing split file with split indices have to
+        be supplied. The remaining data will be used in the test dataset.
+
+        Args:
+            num_train (int or float): number or fraction of training examples
+            num_val (int or float): number or fraction of validation examples
+            split_file (str): Path to split file. If file exists, splits will
+                              be loaded. Otherwise, a new file will be created
+                              where the generated split is stored.
+
+        Returns:
+            schnetpack.data.AtomsData: training dataset
+            schnetpack.data.AtomsData: validation dataset
+            schnetpack.data.AtomsData: test dataset
+
+        """
+        assert num_train + num_val <= len(
+            self), 'Dataset is smaller than num_train + num_val!'
+        if split_file is not None and os.path.exists(split_file):
+            S = np.load(split_file)
+            train_idx = S['train_idx'].tolist()
+            val_idx = S['val_idx'].tolist()
+            test_idx = S['test_idx'].tolist()
+        else:
+            if num_train is None or num_val is None:
+                raise ValueError(
+                    'You have to supply either split sizes (num_train /' +
+                    ' num_val) or an npz file with splits.')
+
+            train_idx = []
+            val_idx = []
+            test_idx = []
+            for ds in self.datasets:
+                idx = np.random.permutation(len(ds))
+                num_train = num_train if num_train > 1 else num_train * len(ds)
+                num_val = num_val if num_val > 1 else num_val * len(ds)
+
+                train_idx.append(idx[:num_train].tolist())
+                val_idx.append(idx[num_train:num_train + num_val].tolist())
+                test_idx.append(idx[num_train + num_val:].tolist())
+
+            if split_file is not None:
+                np.savez(split_file, train_idx=train_idx, val_idx=val_idx,
+                         test_idx=test_idx)
+
+        train = self.create_subset(train_idx)
+        val = self.create_subset(val_idx)
+        test = self.create_subset(test_idx)
+        return train, val, test
+
+    def create_subset(self, idx):
+        """
+        Returns a new dataset that only consists of provided indices.
+        Args:
+            idx (numpy.ndarray): subset indices
+
+        Returns:
+            schnetpack.data.AtomsData: dataset with subset of original data
+        """
+
+        subset_list = []
+        for i in range(self.datasets):
+            ds = self.datasets[i]
+            idx = np.array(idx[i])
+            subidx = idx if ds.subset is None else np.array(ds.subset)[idx]
+            subset_list.append(subidx)
+
+        return type(self)(self.dbpath_list, subset_list,
+                          self.required_properties,
+                          self.environment_provider, self.collect_triples,
+                          self.centered, self.load_charge)
+
+    def __len__(self):
+        return sum(*[len(ds) for ds in self.datasets])
+
+    def _get_local_idx(self, idx):
+        for i, cum in enumerate(self.cumidx[1:]):
+            if idx < cum:
+                return i, idx - self.cumidx[i]
+        return None, None
+
+    def __getitem__(self, idx):
+        i, idx = self._get_local_idx(idx)
+        return self.datasets[i][idx]
+
+    def get_atoms(self, idx):
+        i, idx = self._get_local_idx(idx)
+        return self.datasets[i].get_atoms(idx)
+
+    def get_properties(self, idx):
+        i, idx = self._get_local_idx(idx)
+        return self.datasets[i].get_properties(idx)
+
+    def get_metadata(self, key):
+        return self.datasets[0].get_metadata(key)
 
     def _subset_index(self, idx):
         # get row
