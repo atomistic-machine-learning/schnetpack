@@ -10,10 +10,6 @@ dataset_ingredient = Ingredient("dataset")
 def cfg():
     dbpath = None
     dataset = 'CUSTOM'
-    cutoff = None
-    api_key = None
-    molecule = None
-    fold = None
     property_mapping = {}
 
 
@@ -82,22 +78,34 @@ def get_ani1(dbpath, num_heavy_atoms, dataset_properties):
 
 
 @dataset_ingredient.capture
-def get_dataset(dbpath, dataset, cutoff, api_key, molecule, fold,
-                dataset_properties=None):
+def get_matproj(dbpath, cutoff, api_key, dataset_properties):
+    return MaterialsProject(dbpath, cutoff, api_key,
+                            properties=dataset_properties)
+
+
+@dataset_ingredient.capture
+def get_iso17(dbpath, fold, dataset_properties):
+    return ISO17(dbpath, fold, properties=dataset_properties)
+
+
+@dataset_ingredient.capture
+def get_md17(dbpath, molecule, dataset_properties):
+    return MD17(dbpath, molecule=molecule, properties=dataset_properties)
+
+
+@dataset_ingredient.capture
+def get_dataset(dbpath, dataset, dataset_properties=None):
     dataset = dataset.upper()
     if dataset == 'QM9':
         return QM9(dbpath, properties=dataset_properties)
     elif dataset == 'ISO17':
-        return ISO17(dbpath, fold, properties=dataset_properties)
+        return get_iso17(dataset_properties=dataset_properties)
     elif dataset == 'ANI1':
         return get_ani1(dataset_properties=dataset_properties)
     elif dataset == 'MD17':
-        return MD17(dbpath, molecule=molecule, properties=dataset_properties)
+        return get_md17(dataset_properties=dataset_properties)
     elif dataset == 'MATPROJ':
-        if api_key is None:
-            raise AtomsDataError('Materials Project requires a valid API key.')
-        return MaterialsProject(dbpath, cutoff, api_key,
-                                properties=dataset_properties)
+        return get_matproj(dataset_properties=dataset_properties)
     elif dataset == 'CUSTOM':
         return AtomsData(dbpath, required_properties=dataset_properties)
     else:
