@@ -1,8 +1,8 @@
 from sacred import Ingredient
-from schnetpack.property_model import PropertyModel, Properties, ModelError
 
 from schnetpack.representation.schnet import SchNet
-from schnetpack.atomistic import AtomisticModel
+from schnetpack.atomistic import AtomisticModel, ModelError, Properties, \
+    PropertyModel
 from schnetpack.nn.cutoff import *
 
 

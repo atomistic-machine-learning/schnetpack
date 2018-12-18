@@ -1,20 +1,21 @@
-import torch
 import os
-import yaml
-import numpy as np
 from shutil import rmtree
-from sacred import Experiment
-from model_ingredients import model_ingredient, build_model
-from trainer_ingredients import train_ingredient, setup_trainer
-from dataset_ingredients import dataset_ingredient, get_dataset, \
-    get_property_map
-from schnetpack.property_model import Properties
-from schnetpack.data import AtomsLoader
-from sacred.observers import MongoObserver
 
+import numpy as np
+import torch
+import yaml
+from sacred import Experiment
+from sacred.observers import MongoObserver
+from schnetpack.sacred.dataset_ingredients import dataset_ingredient, get_dataset, \
+    get_property_map
+from schnetpack.sacred.model_ingredients import model_ingredient, build_model
+from schnetpack.sacred.trainer_ingredients import train_ingredient, setup_trainer
+
+from schnetpack.data import AtomsLoader
+from schnetpack.atomistic import Properties
 
 ex = Experiment('experiment', ingredients=[model_ingredient, train_ingredient,
-                dataset_ingredient])
+                                           dataset_ingredient])
 
 
 def is_extensive(prop):
@@ -109,7 +110,8 @@ def stats(train_loader, atomrefs, property_map, mean, stddev, _config):
             _config["mean"] = dict(
                 zip(props, [m.detach().cpu().numpy().tolist() for m in mean]))
             _config["stddev"] = dict(
-                zip(props, [m.detach().cpu().numpy().tolist() for m in stddev]))
+                zip(props,
+                    [m.detach().cpu().numpy().tolist() for m in stddev]))
     else:
         _config["mean"] = {}
         _config["stddev"] = {}
@@ -146,6 +148,7 @@ def build_loss(property_map, loss_tradeoff):
                     err_sq *= loss_tradeoff[p]
                 loss += err_sq
         return loss
+
     return loss_fn
 
 
@@ -165,7 +168,8 @@ def train(_log, _config, modeldir, properties, additional_outputs, device,
     mean, stddev = stats(train_loader, atomrefs, property_map)
 
     _log.info("Build model")
-    model_properties = [p for p, tgt in property_map.items() if tgt is not None]
+    model_properties = [p for p, tgt in property_map.items() if
+                        tgt is not None]
     model = build_model(mean=mean, stddev=stddev, atomrefs=atomrefs,
                         model_properties=model_properties,
                         additional_outputs=additional_outputs).to(device)
@@ -182,6 +186,7 @@ def train(_log, _config, modeldir, properties, additional_outputs, device,
 @ex.command
 def download():
     get_dataset()
+
 
 @ex.command
 def evaluate():

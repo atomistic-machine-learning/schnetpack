@@ -1,8 +1,7 @@
 from sacred import Ingredient
 from schnetpack.datasets import ANI1, ISO17, QM9, MD17, MaterialsProject
 from schnetpack.data import AtomsData, AtomsLoader, AtomsDataError
-from schnetpack.property_model import Properties
-
+from schnetpack.atomistic import Properties
 
 dataset_ingredient = Ingredient("dataset")
 
@@ -15,7 +14,6 @@ def cfg():
     api_key = None
     molecule = None
     fold = None
-    num_heavy_atoms = None
     property_mapping = {}
 
 
@@ -78,16 +76,21 @@ def get_property_map(properties, property_mapping, dbpath):
 
 
 @dataset_ingredient.capture
+def get_ani1(dbpath, num_heavy_atoms, dataset_properties):
+    return ANI1(dbpath, num_heavy_atoms=num_heavy_atoms,
+                properties=dataset_properties)
+
+
+@dataset_ingredient.capture
 def get_dataset(dbpath, dataset, cutoff, api_key, molecule, fold,
-                num_heavy_atoms, dataset_properties=None):
+                dataset_properties=None):
     dataset = dataset.upper()
     if dataset == 'QM9':
         return QM9(dbpath, properties=dataset_properties)
     elif dataset == 'ISO17':
         return ISO17(dbpath, fold, properties=dataset_properties)
     elif dataset == 'ANI1':
-        return ANI1(dbpath, num_heavy_atoms=num_heavy_atoms,
-                    properties=dataset_properties)
+        return get_ani1(dataset_properties=dataset_properties)
     elif dataset == 'MD17':
         return MD17(dbpath, molecule=molecule, properties=dataset_properties)
     elif dataset == 'MATPROJ':
