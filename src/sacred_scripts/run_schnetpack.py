@@ -38,7 +38,7 @@ def cfg():
     mongo_url = None
     mongo_db = None
 
-    use_properties = []
+    properties = []
 
 
 @ex.named_config
@@ -50,8 +50,8 @@ def observe():
 
 
 @ex.named_config
-def debug_config():
-    modeldir = './models/debug'
+def base_config():
+    modeldir = './models'
     properties = ['energy', 'forces']
 
 
