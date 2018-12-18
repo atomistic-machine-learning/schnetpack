@@ -68,7 +68,12 @@ class ModelBias(Metric):
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+            else:
+                result = result[self.model_output]
+            yp = result
 
         diff = self._get_diff(y, yp)
         self.l2loss += torch.sum(diff.view(-1)).detach().cpu().data.numpy()
@@ -236,7 +241,12 @@ class HeatmapMAE(MeanAbsoluteError):
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+            else:
+                result = result[self.model_output]
+            yp = result
 
         diff = self._get_diff(y, yp)
         self.l1loss += torch.sum(torch.abs(diff), 0).detach().cpu().data.numpy()
@@ -341,7 +351,12 @@ class AngleMSE(MeanSquaredError):
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+            else:
+                result = result[self.model_output]
+            yp = result
 
         y = y.view(-1, y.size(-1))
         yp = yp.view(-1, yp.size(-1))
@@ -381,7 +396,12 @@ class AngleMAE(MeanAbsoluteError):
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+            else:
+                result = result[self.model_output]
+            yp = result
 
         y = y.view(-1, y.size(-1))
         yp = yp.view(-1, yp.size(-1))
@@ -421,7 +441,12 @@ class AngleRMSE(RootMeanSquaredError):
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+            else:
+                result = result[self.model_output]
+            yp = result
 
         y = y.view(-1, y.size(-1))
         yp = yp.view(-1, yp.size(-1))
