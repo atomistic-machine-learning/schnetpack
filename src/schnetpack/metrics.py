@@ -117,7 +117,12 @@ class MeanSquaredError(Metric):
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+            else:
+                result = result[self.model_output]
+            yp = result
 
         diff = self._get_diff(y, yp)
         self.l2loss += torch.sum(diff.view(-1) ** 2).detach().cpu().data.numpy()
@@ -186,9 +191,18 @@ class MeanAbsoluteError(Metric):
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+                    # print(result.shape)
+            else:
+                result = result[self.model_output]
+            yp = result
 
+        # print(yp, yp.shape, y.shape)
         diff = self._get_diff(y, yp)
+        # print(diff)
+        # print()
         self.l1loss += torch.sum(torch.abs(diff).view(-1), 0).detach().cpu().data.numpy()
         if self.element_wise:
             self.n_entries += torch.sum(batch[Structure.atom_mask]) * y.shape[-1]
