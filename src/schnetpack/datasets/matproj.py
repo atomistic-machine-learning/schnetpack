@@ -65,7 +65,8 @@ class MaterialsProject(AtomsData):
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
 
         return MaterialsProject(self.dbpath, self.cutoff, download=False,
-                                subset=subidx, properties=self.properties,
+                                subset=subidx,
+                                properties=self.required_properties,
                                 collect_triples=self.collect_triples)
 
     def _download(self):

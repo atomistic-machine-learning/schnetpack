@@ -12,6 +12,9 @@ train_ingredient = Ingredient('trainer')
 
 @train_ingredient.config
 def cfg():
+    """
+    Base configuration with all necessary parameters.
+    """
     optimizer = 'adam'
     schedule = None
     learning_rate = 1e-4
@@ -21,7 +24,7 @@ def cfg():
     lr_factor = None
     t0 = None
     tmult = None
-    custom_hooks = []
+    hooks = []
     custom_metrics = []
 
 
@@ -31,6 +34,7 @@ def sgdr():
     t0 = 50
     tmult = 1
     patience = 2
+    lr_min = 1e-7
     lr_factor = 1.
 
 
@@ -44,41 +48,41 @@ def plateau():
 
 @train_ingredient.named_config
 def base_hooks():
-    custom_hooks = ['csv']
+    hooks = ['csv']
     custom_metrics = ['rmse', 'mae']
 
 
 @train_ingredient.capture
-def build_hooks(custom_hooks, schedule, optimizer, patience, lr_factor, lr_min,
-                t0, tmult, modeldir, max_epochs, properties):
-    metrics = build_metrics(properties=properties)
-    hooks = build_schedule(schedule, optimizer, patience, lr_factor,
+def build_hooks(hooks, schedule, optimizer, patience, lr_factor, lr_min,
+                t0, tmult, modeldir, max_epochs, property_map):
+    metrics_objects = build_metrics(property_map=property_map)
+    hook_objects = build_schedule(schedule, optimizer, patience, lr_factor,
                                   lr_min, t0, tmult)
     if max_epochs is not None and max_epochs > 0:
-        hooks.append(MaxEpochHook(max_epochs))
-    for hook in custom_hooks:
+        hook_objects.append(MaxEpochHook(max_epochs))
+    for hook in hooks:
         hook = hook.lower()
         if hook == 'tensorboard':
-            hooks.append(TensorboardHook(os.path.join(modeldir, 'log'),
-                                         metrics))
+            hook_objects.append(TensorboardHook(os.path.join(modeldir, 'log'),
+                                                metrics_objects))
         elif hook == 'csv':
-            hooks.append(CSVHook(modeldir, metrics))
+            hook_objects.append(CSVHook(modeldir, metrics_objects))
         else:
             raise NotImplementedError
-    return hooks
+    return hook_objects
 
 
 @train_ingredient.capture
-def build_metrics(custom_metrics, properties):
+def build_metrics(custom_metrics, property_map):
     metrics = []
     for metric in custom_metrics:
         metric = metric.lower()
         if metric == 'mae':
             metrics += [MeanAbsoluteError(tgt, p) for p, tgt in
-                        properties.items() if tgt is not None]
+                        property_map.items() if tgt is not None]
         elif metric == 'rmse':
             metrics += [RootMeanSquaredError(tgt, p) for p, tgt in
-                        properties.items() if tgt is not None]
+                        property_map.items() if tgt is not None]
         else:
             raise NotImplementedError
     return metrics
@@ -103,13 +107,13 @@ def build_schedule(schedule, optimizer, patience, lr_factor, lr_min, t0, tmult):
                                    patience=patience)
     else:
         raise NotImplementedError
-    return schedule
+    return [schedule]
 
 
 @train_ingredient.capture
 def setup_trainer(model, modeldir, loss_fn, train_loader, val_loader,
-                  optimizer, learning_rate, properties, exclude=[]):
-    hooks = build_hooks(modeldir=modeldir, properties=properties)
+                  optimizer, learning_rate, property_map, exclude=[]):
+    hooks = build_hooks(modeldir=modeldir, property_map=property_map)
 
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     trainable_params = filter(lambda p: p not in exclude, trainable_params)

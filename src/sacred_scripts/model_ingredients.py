@@ -32,7 +32,7 @@ def schnet():
 
 
 @model_ingredient.capture
-def build_model(mean, stddev, properties, atomrefs, additional_outputs,
+def build_model(mean, stddev, model_properties, atomrefs, additional_outputs,
                 n_atom_basis, name, cutoff):
 
     if name == 'schnet':
@@ -42,7 +42,7 @@ def build_model(mean, stddev, properties, atomrefs, additional_outputs,
             'Unknown model: {:s}'.format(name))
 
     cutoff_function = get_cutoff()
-    output = PropertyModel(n_atom_basis, properties + additional_outputs,
+    output = PropertyModel(n_atom_basis, model_properties + additional_outputs,
                            mean, stddev, atomrefs,
                            cutoff_network=cutoff_function,
                            cutoff=cutoff)
