@@ -59,7 +59,7 @@ def observe():
 
 
 @ex.named_config
-def base_config():
+def default_config():
     """
     default config for schnetpack experiments
 
