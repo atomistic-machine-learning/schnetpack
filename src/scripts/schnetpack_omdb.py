@@ -44,14 +44,14 @@ def get_parser():
     train_parser.add_argument('--max_epochs', type=int, help='Maximum number of training epochs (default: %(default)s)',
                               default=5000)
     train_parser.add_argument('--lr', type=float, help='Initial learning rate (default: %(default)s)',
-                              default=1e-4)
+                              default=1e-3)
     train_parser.add_argument('--lr_patience', type=int,
                               help='Epochs without improvement before reducing the learning rate (default: %(default)s)',
-                              default=50)
+                              default=10)
     train_parser.add_argument('--lr_decay', type=float, help='Learning rate decay (default: %(default)s)',
-                              default=0.5)
+                              default=0.8)
     train_parser.add_argument('--lr_min', type=float, help='Minimal learning rate (default: %(default)s)',
-                              default=1e-6)
+                              default=1e-4)
 
     train_parser.add_argument('--logger', help='Choose logger for training process (default: %(default)s)',
                               choices=['csv', 'tensorboard'], default='csv')
@@ -76,7 +76,7 @@ def get_parser():
     schnet_parser.add_argument('--features', type=int, help='Size of atom-wise representation (default: %(default)s)',
                                default=64)
     schnet_parser.add_argument('--interactions', type=int, help='Number of interaction blocks (default: %(default)s)',
-                               default=6)
+                               default=3)
     schnet_parser.add_argument('--cutoff', type=float, default=5.,
                                help='Cutoff radius of local environment (default: %(default)s)')
     schnet_parser.add_argument('--num_gaussians', type=int, default=25,
@@ -258,7 +258,7 @@ if __name__ == '__main__':
     val_loader = spk.data.AtomsLoader(data_val, batch_size=args.batch_size, num_workers=2, pin_memory=True)
 
     if args.mode == 'train':
-        mean, stddev = train_loader.get_statistics(train_args.property, False)
+        mean, stddev = train_loader.get_statistics(train_args.property, True)
         logging.info('Training set statistics: mean=%.3f, stddev=%.3f' % (mean.numpy(), stddev.numpy()))
     else:
         mean, stddev = None, None

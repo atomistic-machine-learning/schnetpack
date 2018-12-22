@@ -54,13 +54,13 @@ class OrganicMaterialsDatabase(AtomsData):
         self.dbpath = self.path.replace('.tar.gz', '.db')
 
         if not os.path.exists(self.path) and not os.path.exists(self.dbpath):
-            raise FileNotFoundError('Download OMDB-GAP1.tar.gz from https://omdb.diracmaterials.org/dataset/ and set datapath to this file')
+            raise FileNotFoundError('Download OMDB dataset (e.g. OMDB-GAP1.tar.gz) from https://omdb.diracmaterials.org/dataset/ and set datapath to this file')
 
 
         environment_provider = ASEEnvironmentProvider(cutoff)
 
         if download and not os.path.exists(self.dbpath):
-            # Convert OMDB-GAP1.tar.gz into a .db file
+            # Convert OMDB .tar.gz into a .db file
             self._convert()
 
         super(OrganicMaterialsDatabase, self).__init__(self.dbpath, subset, properties,
@@ -77,10 +77,10 @@ class OrganicMaterialsDatabase(AtomsData):
 
     def _convert(self):
         """
-        Converts OMDB-GAP1.tar.gz to a .db file
+        Converts .tar.gz to a .db file
         """
-        print('Converting OMDB-GAP1.tar.gz to a .db file..')
-        tar = tarfile.open('OMDB-GAP1.tar.gz', 'r:gz')
+        print('Converting %s to a .db file..' % self.path)
+        tar = tarfile.open(self.path, 'r:gz')
         names = tar.getnames()
         tar.extractall()
         tar.close()
