@@ -176,7 +176,6 @@ class Atomwise(OutputModule):
             yi = yi + y0
 
         y = self.atom_pool(yi, atom_mask)
-
         result = {"y": y}
 
         if self.return_contributions:
@@ -221,7 +220,7 @@ class Energy(Atomwise):
                                      n_neurons, activation,
                                      return_contributions, return_force,
                                      create_graph, mean, stddev,
-                                     atomref, 100, outnet)
+                                     atomref, max_z, outnet)
 
     def forward(self, inputs):
         r"""
