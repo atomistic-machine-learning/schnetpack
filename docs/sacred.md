@@ -4,7 +4,7 @@
 The sacred scripts allow to train both SchNet and wACSF neural networks on 
 different datasets. The training is started via the following command:
     
-    run_schnetpack.py train with default_config dataset.<qm9/iso17/ani1/matproj/md17> model.<schnet/wacsf>
+    run_schnetpack.py train with dataset.<qm9/iso17/ani1/matproj/md17> model.<schnet/wacsf>
 
 This will start the training session for the chosen model based on the 
 dataset. If the dataset is not found at the default location, it will be 

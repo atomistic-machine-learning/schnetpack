@@ -33,7 +33,6 @@ def cfg():
     overwrite = True
     additional_outputs = []
 
-    modeldir = None
     batch_size = 100
     num_train = 0.8
     num_val = 0.1
@@ -44,7 +43,8 @@ def cfg():
     mongo_url = None
     mongo_db = None
 
-    properties = []
+    modeldir = './models'
+    properties = ['energy']
 
 
 @ex.named_config
@@ -57,16 +57,6 @@ def observe():
     mongo_db = 'test'
     ex.observers.append(MongoObserver.create(url=mongo_url,
                                              db_name=mongo_db))
-
-
-@ex.named_config
-def default_config():
-    """
-    default config for schnetpack experiments
-
-    """
-    modeldir = './models'
-    properties = ['energy']
 
 
 @ex.capture
