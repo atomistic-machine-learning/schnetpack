@@ -6,10 +6,11 @@ import torch
 import yaml
 from sacred import Experiment
 from sacred.observers import MongoObserver
-from schnetpack.sacred.dataset_ingredients import dataset_ingredient, get_dataset, \
-    get_property_map
+from schnetpack.sacred.dataset_ingredients import dataset_ingredient, \
+    get_dataset, get_property_map
 from schnetpack.sacred.model_ingredients import model_ingredient, build_model
-from schnetpack.sacred.trainer_ingredients import train_ingredient, setup_trainer
+from schnetpack.sacred.trainer_ingredients import train_ingredient, \
+    setup_trainer
 
 from schnetpack.data import AtomsLoader
 from schnetpack.atomistic import Properties
