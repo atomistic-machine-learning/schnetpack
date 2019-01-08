@@ -26,11 +26,13 @@ def test_run(property_mapping, properties):
     """
     Test if training is working and logs are created.
     """
+    dbpath = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                          'data/test_qm9.db')
     ex.run(command_name='train',
            named_configs=['model.schnet'],
            config_updates={'modeldir': tmpdir,
                            'properties': properties,
-                           'dataset.dbpath': './data/test_qm9.db',
+                           'dataset.dbpath': dbpath,
                            'dataset.property_mapping': property_mapping,
                            'trainer.max_epochs': 4,
                            'batch_size': 2,
