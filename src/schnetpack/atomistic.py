@@ -408,7 +408,6 @@ class DeltaLearning(Atomwise):
             output['y'] = self.atom_pool(output['yi'], atom_mask)
         else:
             output['y'] = delta['y'] + torch.unsqueeze(inputs[self.base_property], -1)
-            print(delta['y'].shape, inputs[self.base_property].shape)
             if self.return_contributions:
                 output['yi'] = delta['yi']
 
