@@ -69,7 +69,7 @@ class OutputModule(nn.Module):
     Base class for output modules.
 
     Args:
-        requires_dr (bool): specifies if the derivative of the ouput is required
+        requires_dr (bool): specifies if the derivative of the output is required
     """
 
     def __init__(self, requires_dr=False):
@@ -364,3 +364,52 @@ class ElementalDipoleMoment(DipoleMoment):
 
         super(ElementalDipoleMoment, self).__init__(n_in, n_layers, None, activation, return_charges, requires_dr,
                                                     outnet, predict_magnitude, mean, stddev)
+
+class DeltaLearning(Atomwise):
+    """
+    Atomise learning network for delta learning applciations
+
+    Adds the value of a property computed with a lower fidelity to the output of the out_net.
+    The values for the lower fidelity can be for the whole system or per-atom contributions.
+
+    Args:
+        base_property (string): Name of the base property
+        base_atomic_contribution (bool): Whether the property is a per-atom contribution or not
+        return_delta_values (bool): Whether to return the correction (delta) values
+    Keyword arguments are passed to the Atomwise superclass
+    """
+
+    def __init__(self, base_property, base_atomic_contribution, return_delta_values=False, **kwargs):
+        # If the base value is an atomic contribution, the model must return atomic contribution
+        if base_atomic_contribution:
+            kwargs['return_contributions'] = True
+        super(DeltaLearning, self).__init__(**kwargs)
+
+        self.base_property = base_property
+        self.base_atomic_contribution = base_atomic_contribution
+        self.return_delta_values = return_delta_values
+
+    def forward(self, inputs):
+        # Get the atoms included in this network
+        atom_mask = inputs[Structure.atom_mask]
+
+        # Get the output of the delta model
+        delta = super(DeltaLearning, self).forward(inputs)
+        output = {}
+
+        # Store the delta values, if desired
+        if self.return_delta_values:
+            for k, v in delta.items():
+                output['delta_' + k] = v
+
+        # Add the base value
+        if self.base_atomic_contribution:
+            output['yi'] = delta['yi'] + inputs[self.base_property]
+            output['y'] = self.atom_pool(output['yi'], atom_mask)
+        else:
+            output['y'] = delta['y'] + torch.unsqueeze(inputs[self.base_property], -1)
+            print(delta['y'].shape, inputs[self.base_property].shape)
+            if self.return_contributions:
+                output['yi'] = delta['yi']
+
+        return output
