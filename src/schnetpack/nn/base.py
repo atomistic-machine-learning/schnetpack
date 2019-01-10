@@ -1,6 +1,7 @@
 import torch
 from torch import nn as nn
 from torch.nn.init import xavier_uniform_
+from copy import deepcopy
 
 from schnetpack.nn.initializers import zeros_initializer
 
@@ -205,3 +206,35 @@ class GetRepresentationAndProperties(nn.Module):
                 x = torch.unsqueeze(x, -1)
             output.append(x)
         return torch.cat(output, -1)
+
+
+class StackedOutputModel(nn.Module):
+    """
+    A layer that adds the outputs from another SchNetPack model to the input fields.
+
+    The weights of this model are frozen.
+
+    Args:
+        model (AtomisticModel): Model to use for the stacking
+        tag (string): Tag to prepend to the names of output fields to the model before adding
+            them to the input fields. Keys will be named <tag>_<original name>
+    """
+
+    def __init__(self, model, tag):
+        super(StackedOutputModel, self).__init__()
+        self.model = deepcopy(model)
+        self.tag = tag
+
+        # Freeze the layers in the model
+        for p in self.model.parameters():
+            p.requires_grad = False
+
+    def forward(self, inputs):
+        # Run the previous model
+        stacked = self.model(inputs)
+
+        # Add outputs to the inputs
+        for k, v in stacked.items():
+            inputs['{}_{}'.format(self.tag, k)] = v
+
+        return inputs
