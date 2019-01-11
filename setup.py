@@ -19,7 +19,8 @@ setup(
     scripts=['src/scripts/schnetpack_qm9.py', 'src/scripts/schnetpack_md17.py',
              'src/scripts/schnetpack_matproj.py', 'src/scripts/schnetpack_molecular_dynamics.py',
              'src/scripts/schnetpack_ani1.py', 'src/scripts/schnetpack_load.py',
-             'src/sacred_scripts/run_schnetpack.py'],
+             'src/sacred_scripts/run_schnetpack.py',
+             'src/sacred_scripts/run_md.py'],
     package_dir={'': 'src'},
     python_requires='>=3.6',
     install_requires=[

@@ -47,8 +47,9 @@ class MDCalculator:
                 self._set_system_forces(system)
             else:
                 dim = self.results[p].shape
+                #ToDo: Ask Michael about the dim
                 system.properties[p] = self.results[p].view(
-                    system.n_replicas, system.n_molecules, *dim[2:]) * \
+                    system.n_replicas, system.n_molecules, *dim[1:]) * \
                     self.property_conversion[p]
 
     def _get_system_neighbors(self, system):

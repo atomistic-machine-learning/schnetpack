@@ -207,7 +207,8 @@ class GLEThermostat(ThermostatHook):
 
 class PIGLETThermostat(GLEThermostat):
 
-    def __init__(self, temperature_bath, gle_file, nm_transformation=NormalModeTransformer):
+    def __init__(self, temperature_bath, gle_file,
+                 nm_transformation=NormalModeTransformer):
         logging.info('Using PIGLET thermostat')
         super(PIGLETThermostat, self).__init__(temperature_bath, gle_file, nm_transformation=nm_transformation)
 

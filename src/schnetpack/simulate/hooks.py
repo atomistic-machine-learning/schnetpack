@@ -5,7 +5,9 @@ import json
 import h5py
 
 
-__all__ = ['Checkpoint', 'RemoveCOMMotion', 'BiasPotential']
+__all__ = ['Checkpoint', 'RemoveCOMMotion', 'BiasPotential', 'FileLogger',
+           'TensorboardLogger', 'TemperatureLogger', 'MoleculeStream',
+           'PropertyStream']
 
 
 class SimulationHook:
@@ -247,7 +249,8 @@ class FileLoggerError(Exception):
 
 class FileLogger(SimulationHook):
 
-    def __init__(self, filename, buffer_size, data_streams=[MoleculeStream, PropertyStream], restart=True):
+    def __init__(self, filename, buffer_size,
+                 data_streams=[MoleculeStream, PropertyStream], restart=True):
 
         self.restart = restart
 
@@ -273,7 +276,8 @@ class FileLogger(SimulationHook):
         for stream in self.data_steams:
             stream.init_data_stream(simulator)
             # Upon restart, get current position in file
-            # TODO: This is not the nicest way, but h5py does not seem to support life update of metadata
+            # TODO: This is not the nicest way, but h5py does not seem to
+            #  support life update of metadata
             if self.restart:
                 self.file_position = stream.data_group.attrs['entries']
 
@@ -350,7 +354,8 @@ class TensorboardLogger(SimulationHook):
 class TemperatureLogger(TensorboardLogger):
 
     def __init__(self, log_file, every_n_steps=100):
-        super(TemperatureLogger, self).__init__(log_file, every_n_steps=every_n_steps)
+        super(TemperatureLogger, self).__init__(log_file,
+                                                every_n_steps=every_n_steps)
 
     def on_step_end(self, simulator):
         if simulator.step % self.every_n_steps == 0:

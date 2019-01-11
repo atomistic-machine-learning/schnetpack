@@ -10,8 +10,8 @@ calculator_ingradient = Ingredient('calculator')
 @calculator_ingradient.config
 def config():
     calculator = 'schnet_calculator'
-    required_properties = []
-    force_handle = 0
+    required_properties = ['energy', 'forces']
+    force_handle = 'forces'
     position_conversion = 1.0 / MDUnits.angs2bohr
     force_conversion = 1.0 / MDUnits.auforces2aseforces
     property_conversion = {}

@@ -44,7 +44,7 @@ def cfg():
     mongo_db = None
 
     modeldir = './models'
-    properties = ['energy']
+    properties = ['energy', 'forces']
 
 
 @ex.named_config
@@ -69,8 +69,22 @@ def save_config(_config, modeldir):
         modeldir (str): path to the model directory
 
     """
-    with open(os.path.join(modeldir, 'config.yaml'), 'w') as f:
+    with open(os.path.join(modeldir, 'training_config.yaml'), 'w') as f:
         yaml.dump(_config, f, default_flow_style=False)
+
+
+@ex.capture
+def save_model_params(mean, stddev, atomrefs, model_properties,
+                      additional_outputs, modeldir):
+    """
+    Save the model parameters in order to use them for molecular dynamics.
+
+    """
+    model_params = dict(mean=mean, stddev=stddev, atomrefs=atomrefs,
+                        model_properties=model_properties,
+                        additional_outputs=additional_outputs)
+    with open(os.path.join(modeldir, 'model_config.yaml'), 'w') as f:
+        yaml.dump(model_params, f)
 
 
 @ex.capture
@@ -247,7 +261,9 @@ def train(_log, _config, modeldir, properties, additional_outputs, device):
     model = build_model(mean=mean, stddev=stddev, atomrefs=atomrefs,
                         model_properties=model_properties,
                         additional_outputs=additional_outputs).to(device)
-
+    save_model_params(mean=mean, stddev=stddev, atomrefs=atomrefs,
+                      model_properties=model_properties,
+                      additional_outputs=additional_outputs, modeldir=modeldir)
     _log.info("Setup training")
     loss_fn = build_loss(property_map=property_map)
     trainer = setup_trainer(model=model, loss_fn=loss_fn, modeldir=modeldir,
