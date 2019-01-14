@@ -5,3 +5,5 @@ numpy
 ase
 tensorboardX
 h5py
+pyyaml
+sacred

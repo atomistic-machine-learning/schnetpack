@@ -11,7 +11,6 @@ from ase.io.extxyz import read_xyz
 from ase.units import Debye, Bohr, Hartree, eV
 
 from schnetpack.data import AtomsData
-from schnetpack.environment import SimpleEnvironmentProvider
 
 __all__ = ['QM9']
 
@@ -73,18 +72,14 @@ class QM9(AtomsData):
             )
     )
 
-    def __init__(self, dbpath, download=True, subset=None, properties=[],
+    def __init__(self, dbpath, download=True, subset=None, properties=None,
                  collect_triples=False, remove_uncharacterized=False):
-        self.dbpath = dbpath
-        self.required_properties = properties
-        environment_provider = SimpleEnvironmentProvider()
 
-        if not os.path.exists(dbpath) and download:
-            self._download(remove_uncharacterized)
+        self.remove_uncharacterized = remove_uncharacterized
 
-        super().__init__(self.dbpath, subset, self.required_properties,
-                         environment_provider,
-                         collect_triples)
+        super().__init__(dbpath=dbpath, subset=subset,
+                         required_properties=properties,
+                         collect_triples=collect_triples, download=download)
 
     def create_subset(self, idx):
         idx = np.array(idx)
@@ -93,8 +88,8 @@ class QM9(AtomsData):
         return QM9(self.dbpath, False, subidx, self.required_properties,
                    self.collect_triples, False)
 
-    def _download(self, remove_uncharacterized):
-        if remove_uncharacterized:
+    def _download(self):
+        if self.remove_uncharacterized:
             evilmols = self._load_evilmols()
         else:
             evilmols = None

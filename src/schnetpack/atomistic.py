@@ -7,12 +7,14 @@ from collections import Iterable
 import numpy as np
 import torch
 import torch.nn as nn
+from torch import nn as nn
 from torch.autograd import grad
 
 import schnetpack.nn.activations
 import schnetpack.nn.base
 import schnetpack.nn.blocks
 from schnetpack.data import Structure
+import schnetpack.nn as L
 
 
 class AtomisticModel(nn.Module):
@@ -400,3 +402,196 @@ class ElementalDipoleMoment(DipoleMoment):
                                                     requires_dr,
                                                     outnet, predict_magnitude,
                                                     mean, stddev)
+
+
+class Polarizability(Atomwise):
+
+    def __init__(self, n_in, pool_mode='sum', n_layers=2, n_neurons=None,
+                 activation=L.shifted_softplus, return_isotropic=False,
+                 return_contributions=False, create_graph=False, outnet=None,
+                 cutoff_network=None):
+        super(Polarizability, self).__init__(n_in, 2, pool_mode, n_layers,
+                                             n_neurons, activation,
+                                             return_contributions, True,
+                                             create_graph, None, None, None,
+                                             100, outnet)
+        self.return_isotropic = return_isotropic
+        self.nbh_agg = L.Aggregate(2)
+        self.atom_agg = L.Aggregate(1)
+
+        self.cutoff_network = cutoff_network
+
+    def forward(self, inputs):
+        positions = inputs[Structure.R]
+        neighbors = inputs[Structure.neighbors]
+        nbh_mask = inputs[Structure.neighbor_mask]
+        atom_mask = inputs[Structure.atom_mask]
+
+        # Get environment distances and positions
+        distances, dist_vecs = L.atom_distances(positions, neighbors,
+                                                return_vecs=True)
+
+        # Get atomic contributions
+        contributions = self.out_net(inputs)
+        # c1 = contributions[:, :, 0]
+        # c2 = contributions[:, :, 1]
+
+        # norm = torch.norm(c1, dim=1)
+        #
+        #       c1 = c1 / norm[:, None]
+        #       c2 = c2 / norm[:, None]
+
+        # print(torch.mean(torch.sum(c1, 1)), "C1")
+        # print(torch.mean(torch.sum(c2, 1)), "C2")
+
+        # Redistribute contributions to neighbors
+        # B x A x N x 1
+        #neighbor_contributions = L.neighbor_elements(c1, neighbors)
+        neighbor_contributions = L.neighbor_elements(contributions, neighbors)
+
+        if self.cutoff_network is not None:
+            f_cut = self.cutoff_network(distances)[..., None]
+            neighbor_contributions = neighbor_contributions * f_cut
+
+        neighbor_contributions1 = neighbor_contributions[:, :, :, 0]
+        neighbor_contributions2 = neighbor_contributions[:, :, :, 1]
+
+        # B x A x N x 3
+        atomic_dipoles = self.nbh_agg(
+            dist_vecs * neighbor_contributions1[..., None], nbh_mask)
+        # B x A x N x 3
+
+        masked_dist = (distances ** 3 * nbh_mask) + (1 - nbh_mask)
+        nbh_fields = dist_vecs * neighbor_contributions2[..., None] / \
+                     masked_dist[..., None]
+        atomic_fields = self.nbh_agg(nbh_fields, nbh_mask)
+        field_norm = torch.norm(atomic_fields, dim=-1, keepdim=True)
+        field_norm = field_norm + (field_norm < 1e-10).float()
+        atomic_fields = atomic_fields / field_norm
+
+        atomic_polar = atomic_dipoles[..., None] * atomic_fields[:, :, None, :]
+
+        # Symmetrize
+        atomic_polar = symmetric_product(atomic_polar)
+
+        global_polar = self.atom_agg(atomic_polar, atom_mask[..., None])
+
+        result = {
+            #"y_i": atomic_polar,
+            "y": global_polar
+        }
+
+        if self.return_isotropic:
+            result["y_iso"] = torch.mean(torch.diagonal(global_polar,
+                                                        dim1=-2, dim2=-1),
+                                         dim=-1, keepdim=True)
+        return result
+
+
+def symmetric_product(tensor):
+    """
+    Symmetric outer product of tensor
+    """
+    shape = tensor.size()
+    idx = list(range(len(shape)))
+    idx[-1], idx[-2] = idx[-2], idx[-1]
+    return 0.5 * (tensor + tensor.permute(*idx))
+
+
+class ModelError(Exception):
+    pass
+
+
+class Properties:
+    energy = 'energy'
+    forces = 'forces'
+    dipole_moment = 'dipole_moment'
+    total_dipole_moment = 'total_dipole_moment'
+    polarizability = 'polarizability'
+    iso_polarizability = 'iso_polarizability'
+    at_polarizability = 'at_polarizability'
+    charges = 'charges'
+    energy_contributions = 'energy_contributions'
+
+
+class PropertyModel(nn.Module):
+
+    def __init__(self, n_in, properties, mean, stddev, atomrefs,
+                 cutoff_network, cutoff):
+        super(PropertyModel, self).__init__()
+
+        self.n_in = n_in
+        self.properties = properties
+
+        self._init_property_flags(properties)
+        self.requires_dr = self.need_forces
+
+        # if self.need_total_dipole and self.need_dipole:
+        #     raise ModelError("Only one of dipole_moment and " + \
+        #                      "total_dipole_moment can be specified!")
+
+        self.cutoff_network = cutoff_network(cutoff)
+
+        outputs = {}
+        self.bias = {}
+        if self.need_energy or self.need_forces:
+            mu = torch.tensor(mean[Properties.energy])
+            std = torch.tensor(stddev[Properties.energy])
+            try:
+                atomref = atomrefs[Properties.energy]
+            except:
+                atomref = None
+
+            energy_module = Energy(
+                n_in, aggregation_mode='sum', return_force=self.need_forces,
+                return_contributions=self.need_energy_contributions,
+                mean=mu, stddev=std, atomref=atomref, create_graph=True)
+            outputs[Properties.energy] = energy_module
+            self.bias[Properties.energy] = energy_module.out_net[1].out_net[
+                1].bias
+        if self.need_dipole or self.need_total_dipole:
+            dipole_module = DipoleMoment(
+                n_in, predict_magnitude=self.need_total_dipole,
+                return_charges=True,
+            )
+            if self.need_dipole:
+                outputs[Properties.dipole_moment] = dipole_module
+            else:
+                outputs[Properties.total_dipole_moment] = dipole_module
+        if self.need_polarizability or self.need_iso_polarizability:
+            polar_module = Polarizability(
+                n_in, return_isotropic=self.need_iso_polarizability,
+                cutoff_network=self.cutoff_network)
+            outputs[Properties.polarizability] = polar_module
+
+        self.output_dict = nn.ModuleDict(outputs)
+
+    def _init_property_flags(self, properties):
+        self.need_energy = Properties.energy in properties
+        self.need_forces = Properties.forces in properties
+        self.need_dipole = Properties.dipole_moment in properties
+        self.need_total_dipole = Properties.total_dipole_moment in properties
+        self.need_polarizability = Properties.polarizability in properties
+        self.need_at_polarizability = Properties.at_polarizability in properties
+        self.need_iso_polarizability = Properties.iso_polarizability in properties
+        self.need_energy_contributions = \
+            Properties.energy_contributions in properties
+
+    def forward(self, inputs):
+        outs = {}
+        for prop, mod in self.output_dict.items():
+            o = mod(inputs)
+            outs[prop] = o['y']
+            if prop == Properties.energy and self.need_forces:
+                outs[Properties.forces] = o['dydx']
+            if prop == Properties.energy and self.need_energy_contributions:
+                outs[Properties.energy_contributions] = o['yi']
+            if prop in [Properties.dipole_moment,
+                        Properties.total_dipole_moment]:
+                outs[Properties.charges] = o['yi']
+            if prop == Properties.polarizability:
+                if self.need_iso_polarizability:
+                    outs[Properties.iso_polarizability] = o['y_iso']
+                if self.need_at_polarizability:
+                    outs[Properties.at_polarizability] = o['y_i']
+        return outs

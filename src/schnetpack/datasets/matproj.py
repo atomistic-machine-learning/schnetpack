@@ -34,26 +34,24 @@ class MaterialsProject(AtomsData):
     BandGap = 'band_gap'
     TotalMagnetization = 'total_magnetization'
 
-    properties = [
+    available_properties = [
         EformationPerAtom, EPerAtom, BandGap, TotalMagnetization
     ]
 
-    units = dict(
-        zip(properties,
-            [
-                eV, eV, eV, 1.
-            ]
-            )
-    )
+    units = dict(zip(available_properties,
+                     [eV, eV, eV, 1.]))
 
     def __init__(self, dbpath, cutoff, apikey=None, download=True, subset=None,
-                 properties=[], collect_triples=False):
+                 properties=None, collect_triples=False):
         self.cutoff = cutoff
         self.apikey = apikey
 
         self.dbpath = dbpath
 
         environment_provider = ASEEnvironmentProvider(cutoff)
+
+        if properties is None:
+            properties = MaterialsProject.available_properties
 
         if download and not os.path.exists(self.dbpath):
             self._download()
@@ -67,7 +65,8 @@ class MaterialsProject(AtomsData):
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
 
         return MaterialsProject(self.dbpath, self.cutoff, download=False,
-                                subset=subidx, properties=self.properties,
+                                subset=subidx,
+                                properties=self.required_properties,
                                 collect_triples=self.collect_triples)
 
     def _download(self):

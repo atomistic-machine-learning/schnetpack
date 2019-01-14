@@ -11,8 +11,7 @@ from ase import Atoms
 from ase.db import connect
 from ase.units import Hartree
 
-from schnetpack.data import AtomsData, AtomsDataError
-from schnetpack.environment import SimpleEnvironmentProvider
+from schnetpack.data import AtomsData
 
 
 class ANI1(AtomsData):
@@ -37,49 +36,54 @@ class ANI1(AtomsData):
     # properties:
     energy = 'energy'
 
-    properties = [energy]
+    available_properties = [energy]
 
     reference = {
         energy: 0
     }
 
-    units = dict(zip(properties, [Hartree]))
+    units = dict(zip(available_properties, [Hartree]))
 
-    self_energies = {'H': -0.500607632585, 'C': -37.8302333826, 'N': -54.5680045287, 'O': -75.0362229210}
+    self_energies = {'H': -0.500607632585, 'C': -37.8302333826,
+                     'N': -54.5680045287, 'O': -75.0362229210}
 
-    def __init__(self, dbpath, download=True, subset=None, properties=None, collect_triples=False,
-                 num_heavy_atoms=8, high_energies=False):
-        self.dbpath = dbpath
-        #self.atomref_path = os.path.join(self.path, "atomrefs.npz")
+    def __init__(self, dbpath, download=True, subset=None, properties=None,
+                 collect_triples=False, num_heavy_atoms=8, high_energies=False):
 
         self.num_heavy_atoms = num_heavy_atoms
         self.high_energies = high_energies
 
-        environment_provider = SimpleEnvironmentProvider()
+        super().__init__(dbpath=dbpath, subset=subset,
+                         download=download,
+                         required_properties=properties,
+                         collect_triples=collect_triples)
 
-        if properties is None:
-            properties = ANI1.properties
+    def create_subset(self, idx):
+        """
+        Returns a new dataset that only consists of provided indices.
+        Args:
+            idx (numpy.ndarray): subset indices
 
-        if download:
-            self._download()
-
-        super().__init__(self.dbpath, subset, properties, environment_provider, collect_triples)
+        Returns:
+            schnetpack.data.AtomsData: dataset with subset of original data
+        """
+        idx = np.array(idx)
+        subidx = idx if self.subset is None else np.array(self.subset)[idx]
+        return type(self)(self.dbpath, download=False, subset=subidx,
+                          properties=self.required_properties,
+                          collect_triples=self.collect_triples,
+                          num_heavy_atoms=self.num_heavy_atoms,
+                          high_energies=self.high_energies)
 
     def _download(self):
 
-        if not os.path.exists(self.dbpath):
-            self._load_data()
-        else:
-            raise AtomsDataError(
-                "Dataset exists already at path " + self.dbpath)
-
+        self._load_data()
 
         atref, labels = self._create_atoms_ref()
 
         self.set_metadata({
             'atomrefs': atref.tolist(), 'atref_labels': labels
         })
-
 
     def _load_data(self):
         logging.info('downloading ANI-1 data...')
@@ -104,7 +108,6 @@ class ANI1(AtomsData):
         logging.info('done...')
 
         shutil.rmtree(tmpdir)
-
 
     def _load_h5_file(self, file_name):
         with connect(self.dbpath) as con:
@@ -134,7 +137,7 @@ class ANI1(AtomsData):
                         # loop over high energy conformations
                         for i in range(high_energies.shape[0]):
                             atm = Atoms(species, high_energy_positions[i])
-                            high_energy = high_energies[i] * self.units[self.high_energy]
+                            high_energy = high_energies[i] * self.units[self.high_energies]
 
                             properties = {self.energy: high_energy}
 
@@ -142,7 +145,7 @@ class ANI1(AtomsData):
 
     def _create_atoms_ref(self):
         atref = np.zeros((100, 6))
-        labels = self.properties
+        labels = self.required_properties
 
         # converts units to eV (which are set to one in ase)
         atref[1, :] = self.self_energies['H'] * self.units['energy']
@@ -151,20 +154,3 @@ class ANI1(AtomsData):
         atref[8, :] = self.self_energies['O'] * self.units['energy']
 
         return atref, labels
-
-    def create_subset(self, idx):
-        """
-        Returns a new dataset that only consists of provided indices.
-        Args:
-            idx (numpy.ndarray): subset indices
-
-        Returns:
-            schnetpack.data.AtomsData: dataset with subset of original data
-        """
-        idx = np.array(idx)
-        subidx = idx if self.subset is None else np.array(self.subset)[idx]
-        return type(self)(self.dbpath, download=False, subset=subidx,
-                          properties=self.required_properties,
-                          collect_triples=self.collect_triples,
-                          num_heavy_atoms=self.num_heavy_atoms,
-                          high_energies=self.high_energies)

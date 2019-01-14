@@ -35,13 +35,15 @@ class AtomsDataError(Exception):
 class BaseAtomsData(Dataset):
     available_properties = None
 
-    def __init__(self, dbpath, subset=None, required_properties=[],
+    def __init__(self, dbpath, subset=None, required_properties=None,
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True,
                  load_charge=False):
         self.dbpath = dbpath
         self.subset = subset
         self.required_properties = required_properties
+        if required_properties is None:
+            self.required_properties = self.available_properties
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
         self.centered = center_positions
@@ -308,21 +310,44 @@ class AtomsData(BaseAtomsData):
     ENCODING = 'utf-8'
 
     def __init__(self, dbpath, subset=None,
-                 required_properties=[],
+                 required_properties=None,
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True,
-                 load_charge=False):
+                 load_charge=False, download=False):
+
         super(AtomsData, self).__init__(dbpath, subset,
                                         required_properties,
                                         environment_provider,
                                         collect_triples, center_positions,
                                         load_charge)
+        if download:
+            self.download()
 
     def __len__(self):
         if self.subset is None:
             with connect(self.dbpath) as conn:
                 return conn.count()
         return len(self.subset)
+
+    def download(self):
+        """
+        Wrapper function for the download method.
+        """
+        if os.path.exists(self.dbpath):
+            logger.info('The dataset has already been downloaded and stored '
+                        'at {}'.format(self.dbpath))
+        else:
+            logger.info('Starting download')
+            folder = os.path.dirname(self.dbpath)
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+            self._download()
+
+    def _download(self):
+        """
+        To be implemented in deriving classes.
+        """
+        raise NotImplementedError
 
     def get_atoms(self, idx):
         """
