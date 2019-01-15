@@ -136,11 +136,11 @@ class Atomwise(OutputModule):
         if atomref is not None:
             self.atomref = nn.Embedding.from_pretrained(
                 torch.from_numpy(atomref.astype(np.float32)),
-                freeze=train_embeddings)
+                freeze=not train_embeddings)
         elif train_embeddings:
             self.atomref = nn.Embedding.from_pretrained(
                 torch.from_numpy(np.zeros((max_z, 1), dtype=np.float32)),
-                freeze=train_embeddings)
+                freeze=not train_embeddings)
         else:
             self.atomref = None
 
