@@ -365,6 +365,7 @@ class ElementalDipoleMoment(DipoleMoment):
         super(ElementalDipoleMoment, self).__init__(n_in, n_layers, None, activation, return_charges, requires_dr,
                                                     outnet, predict_magnitude, mean, stddev)
 
+
 class DeltaLearning(Atomwise):
     """
     Atomise learning network for delta learning applciations
@@ -407,7 +408,7 @@ class DeltaLearning(Atomwise):
             output['yi'] = delta['yi'] + inputs[self.base_property]
             output['y'] = self.atom_pool(output['yi'], atom_mask)
         else:
-            output['y'] = delta['y'] + torch.unsqueeze(inputs[self.base_property], -1)
+            output['y'] = delta['y'] + inputs[self.base_property]
             if self.return_contributions:
                 output['yi'] = delta['yi']
 
