@@ -74,20 +74,6 @@ def save_config(_config, modeldir):
 
 
 @ex.capture
-def save_model_params(mean, stddev, atomrefs, model_properties,
-                      additional_outputs, modeldir):
-    """
-    Save the model parameters in order to use them for molecular dynamics.
-
-    """
-    model_params = dict(mean=mean, stddev=stddev, atomrefs=atomrefs,
-                        model_properties=model_properties,
-                        additional_outputs=additional_outputs)
-    with open(os.path.join(modeldir, 'model_config.yaml'), 'w') as f:
-        yaml.dump(model_params, f)
-
-
-@ex.capture
 def prepare_data(_seed, property_map,
                  batch_size, num_train, num_val, num_workers):
     """
@@ -261,9 +247,6 @@ def train(_log, _config, modeldir, properties, additional_outputs, device):
     model = build_model(mean=mean, stddev=stddev, atomrefs=atomrefs,
                         model_properties=model_properties,
                         additional_outputs=additional_outputs).to(device)
-    save_model_params(mean=mean, stddev=stddev, atomrefs=atomrefs,
-                      model_properties=model_properties,
-                      additional_outputs=additional_outputs, modeldir=modeldir)
     _log.info("Setup training")
     loss_fn = build_loss(property_map=property_map)
     trainer = setup_trainer(model=model, loss_fn=loss_fn, modeldir=modeldir,

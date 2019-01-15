@@ -26,7 +26,7 @@ def config():
     modeldir = './runs/models'
     simulation_steps = 1000
     device = 'cpu'
-    path_to_molecules = './runs/datasets/ethanol.xyz'
+    path_to_molecules = './runs/data/ethanol.xyz'
 
 
 @md.capture
@@ -57,10 +57,13 @@ def get_state_dict(modeldir):
 
 
 @md.capture
+def load_model(modeldir):
+    return torch.load(os.path.join(modeldir, 'best_model'))
+
+
+@md.capture
 def setup_simulation(modeldir, device, path_to_molecules):
-    model_config = get_model_config(modeldir=modeldir)
-    model = build_model(**model_config)
-    model.load_state_dict(get_state_dict(modeldir=modeldir))
+    model = load_model(modeldir)
     calculator = build_calculator(model=model)
     integrator = build_integrator()
     system = build_system(device=device, path_to_molecules=path_to_molecules)
