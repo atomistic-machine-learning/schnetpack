@@ -366,8 +366,9 @@ class WarmRestartHook(Hook):
         self.best_current = float('Inf')
 
     def on_train_begin(self, trainer):
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(trainer.optimizer,
-                                                                    self.Tmax, self.lr_min)
+        self.scheduler =\
+            torch.optim.lr_scheduler.CosineAnnealingLR(trainer.optimizer,
+                                                       self.Tmax, self.lr_min)
         self.init_opt_state = trainer.optimizer.state_dict()
 
     def on_batch_begin(self, trainer, train_batch):
@@ -532,7 +533,8 @@ class ReduceLROnPlateauHook(Hook):
         self.scheduler.step(accum_loss)
 
         if self.stop_after_min:
-            for i, param_group in enumerate(self.scheduler.optimizer.param_groups):
+            for i, param_group in enumerate(
+                    self.scheduler.optimizer.param_groups):
                 old_lr = float(param_group['lr'])
                 if old_lr <= self.scheduler.min_lrs[i]:
                     trainer._stop = True

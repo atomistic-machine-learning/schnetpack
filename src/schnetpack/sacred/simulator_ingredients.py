@@ -13,6 +13,8 @@ simulator_ingredient = Ingredient('simulator')
 def config():
     logging_hooks = []
     step = 0
+    log_every_n_steps = 100
+    checkpoint_every_n_steps = 1000
 
 
 @simulator_ingredient.named_config
@@ -43,14 +45,39 @@ def build_logging_hooks(simulator_hooks, modeldir):
             hook_objects.append(get_checkpoint_logger(modeldir=modeldir))
         elif hook == 'remove_com_motion':
             hook_objects.append(get_remove_com_motion_logger())
+        elif hook == 'bias_potential':
+            hook_objects.append(get_bias_potential())
+        elif hook == 'tensorboard_logger':
+            hook_objects.append(
+                get_tensorboard_logger(modeldir=modeldir))
+        elif hook == 'temperature_logger':
+            hook_objects.append(
+                get_temperature_logger(modeldir=modeldir))
         else:
             raise NotImplementedError
     return hook_objects
 
 
 @simulator_ingredient.capture
-def get_remove_com_motion_logger(com_every_n_steps=10):
-    return RemoveCOMMotion(every_n_steps=com_every_n_steps)
+def get_tensorboard_logger(modeldir, log_every_n_steps):
+    log_file = os.path.join(modeldir, 'tensorboard_log')
+    return TensorboardLogger(log_file=log_file, every_n_steps=log_every_n_steps)
+
+
+@simulator_ingredient.capture
+def get_temperature_logger(modeldir, log_every_n_steps):
+    log_file = os.path.join(modeldir, 'temperature_log')
+    return TemperatureLogger(log_file=log_file, every_n_steps=log_every_n_steps)
+
+
+@simulator_ingredient.capture
+def get_bias_potential():
+    raise NotImplementedError
+
+
+@simulator_ingredient.capture
+def get_remove_com_motion_logger(log_every_n_steps):
+    return RemoveCOMMotion(every_n_steps=log_every_n_steps)
 
 
 @simulator_ingredient.capture

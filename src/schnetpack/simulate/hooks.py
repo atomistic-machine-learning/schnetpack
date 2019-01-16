@@ -99,7 +99,8 @@ class DataStream:
         raise NotImplementedError
 
     def flush_buffer(self, file_position, buffer_position):
-        self.data_group[file_position:file_position + buffer_position] = self.buffer[:buffer_position]
+        self.data_group[file_position:file_position + buffer_position] =\
+            self.buffer[:buffer_position]
         # Update number of meaningful entries
         self.data_group.attrs.modify('entries', file_position + buffer_position)
         self.data_group.flush()
@@ -109,24 +110,28 @@ class DataStream:
 
     def _setup_data_groups(self, data_shape, simulator):
         # Initialize the buffer
-        self.buffer = torch.zeros(self.buffer_size, *data_shape, device=simulator.system.device)
+        self.buffer = torch.zeros(self.buffer_size, *data_shape,
+                                  device=simulator.system.device)
 
         if self.restart:
             # Load previous data stream and resize
             self.data_group = self.main_dataset[self.group_name]
-            self.data_group.resize((simulator.n_steps + self.data_group.attrs['entries'],) + data_shape)
+            self.data_group.resize((simulator.n_steps
+                                    + self.data_group.attrs['entries'],)
+                                   + data_shape)
         else:
             # Otherwise, generate new data group in the dataset
             self.data_group = self.main_dataset.create_dataset(
-                self.group_name, shape=(simulator.n_steps,) + data_shape, chunks=self.buffer.shape, dtype=np.float32,
-                maxshape=(None,) + data_shape
-            )
+                self.group_name, shape=(simulator.n_steps,) + data_shape,
+                chunks=self.buffer.shape, dtype=np.float32,
+                maxshape=(None,) + data_shape)
 
 
 class PropertyStream(DataStream):
 
     def __init__(self, main_dataset, buffer_size, restart=False):
-        super(PropertyStream, self).__init__('properties', main_dataset, buffer_size, restart=restart)
+        super(PropertyStream, self).__init__('properties', main_dataset,
+                                             buffer_size, restart=restart)
 
         self.n_replicas = None
         self.n_molecules = None
@@ -138,11 +143,12 @@ class PropertyStream(DataStream):
         self.n_molecules = simulator.system.n_molecules
 
         if simulator.system.properties is None:
-            raise FileLoggerError('Shape of properties could not be determined, please call calculator')
+            raise FileLoggerError('Shape of properties could not be determined,'
+                                  'please call calculator')
 
         # Determine present properties, order and shape thereof
-        properties_entries, properties_shape, properties_positions = self._get_properties_structures(
-            simulator.system.properties)
+        properties_entries, properties_shape, properties_positions = \
+            self._get_properties_structures(simulator.system.properties)
 
         data_shape = (self.n_replicas, self.n_molecules, properties_entries)
 
@@ -151,7 +157,8 @@ class PropertyStream(DataStream):
         if not self.restart:
             # Store metadata on shape and position of properties in array
             self.data_group.attrs['shapes'] = json.dumps(properties_shape)
-            self.data_group.attrs['positions'] = json.dumps(properties_positions)
+            self.data_group.attrs['positions'] =\
+                json.dumps(properties_positions)
 
     def update_buffer(self, buffer_position, simulator):
         for p in self.properties_slices:
@@ -182,7 +189,8 @@ class PropertyStream(DataStream):
 class SimulationStream(PropertyStream):
 
     def __init__(self, main_dataset, buffer_size, restart=False):
-        super(SimulationStream, self).__init__(main_dataset, buffer_size, restart=restart)
+        super(SimulationStream, self).__init__(main_dataset, buffer_size,
+                                               restart=restart)
 
         self.group_name = 'simulation'
 
@@ -197,8 +205,8 @@ class SimulationStream(PropertyStream):
             'temperature_centroid': simulator.system.centroid_temperature
         }
 
-        properties_entries, properties_shape, properties_positions = self._get_properties_structures(
-            property_dictionary)
+        properties_entries, properties_shape, properties_positions =\
+            self._get_properties_structures(property_dictionary)
 
         data_shape = (self.n_replicas, self.n_molecules, properties_entries)
 
@@ -206,7 +214,8 @@ class SimulationStream(PropertyStream):
 
         if not self.restart:
             self.data_group.attrs['shapes'] = json.dumps(properties_shape)
-            self.data_group.attrs['positions'] = json.dumps(properties_positions)
+            self.data_group.attrs['positions'] =\
+                json.dumps(properties_positions)
 
     def update_buffer(self, buffer_position, simulator):
         property_dictionary = {
@@ -224,11 +233,13 @@ class SimulationStream(PropertyStream):
 class MoleculeStream(DataStream):
 
     def __init__(self, main_dataset, buffer_size, restart=False):
-        super(MoleculeStream, self).__init__('molecules', main_dataset, buffer_size, restart=restart)
+        super(MoleculeStream, self).__init__('molecules', main_dataset,
+                                             buffer_size, restart=restart)
         self.written = 0
 
     def _init_data_stream(self, simulator):
-        data_shape = (simulator.system.n_replicas, simulator.system.n_molecules, simulator.system.max_n_atoms, 6)
+        data_shape = (simulator.system.n_replicas, simulator.system.n_molecules,
+                      simulator.system.max_n_atoms, 6)
 
         self._setup_data_groups(data_shape, simulator)
 
@@ -239,8 +250,10 @@ class MoleculeStream(DataStream):
             self.data_group.attrs['atom_types'] = simulator.system.atom_types
 
     def update_buffer(self, buffer_position, simulator):
-        self.buffer[buffer_position:buffer_position + 1, ..., :3] = simulator.system.positions
-        self.buffer[buffer_position:buffer_position + 1, ..., 3:] = simulator.system.velocities
+        self.buffer[buffer_position:buffer_position + 1, ..., :3] =\
+            simulator.system.positions
+        self.buffer[buffer_position:buffer_position + 1, ..., 3:] =\
+            simulator.system.velocities
 
 
 class FileLoggerError(Exception):
@@ -265,7 +278,8 @@ class FileLogger(SimulationHook):
         # Precondition data streams
         self.data_steams = []
         for stream in data_streams:
-            self.data_steams += [stream(self.file, self.buffer_size, restart=self.restart)]
+            self.data_steams += [stream(self.file, self.buffer_size,
+                                        restart=self.restart)]
 
         # Counter for file writes
         self.file_position = 0
@@ -359,7 +373,8 @@ class TemperatureLogger(TensorboardLogger):
 
     def on_step_end(self, simulator):
         if simulator.step % self.every_n_steps == 0:
-            self._log_group('temperature',
-                            simulator.step,
-                            simulator.system.temperature,
-                            property_centroid=simulator.system.centroid_temperature)
+            self._log_group(
+                'temperature',
+                simulator.step,
+                simulator.system.temperature,
+                property_centroid=simulator.system.centroid_temperature)
