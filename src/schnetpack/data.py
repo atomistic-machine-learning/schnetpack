@@ -112,7 +112,7 @@ class BaseAtomsData(Dataset):
             schnetpack.data.AtomsData: dataset with subset of original data
         """
         idx = np.array(idx)
-        subidx = idx if self.subset is None else np.array(self.subset)[idx]
+        subidx = idx if self.subset is None or len(idx) == 0 else np.array(self.subset)[idx]
         return type(self)(self.dbpath, subidx, self.required_properties,
                           self.environment_provider, self.collect_triples,
                           self.centered, self.load_charge)
