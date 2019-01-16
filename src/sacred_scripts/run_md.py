@@ -7,7 +7,6 @@ from schnetpack.sacred.calculator_ingredients import (calculator_ingradient,
                                                       build_calculator)
 from schnetpack.sacred.simulator_ingredients import (simulator_ingredient,
                                                      build_simulator)
-from schnetpack.sacred.model_ingredients import (model_ingredient, build_model)
 from schnetpack.sacred.integrator_ingredients import (integrator_ingredient,
                                                       build_integrator)
 from schnetpack.sacred.system_ingredients import (system_ingredient,
@@ -17,8 +16,8 @@ from schnetpack.sacred.thermostat_ingredients import thermostat_ingredient, \
 
 
 md = Experiment('md', ingredients=[simulator_ingredient, calculator_ingradient,
-                                   integrator_ingredient, model_ingredient,
-                                   system_ingredient, thermostat_ingredient])
+                                   integrator_ingredient, system_ingredient,
+                                   thermostat_ingredient])
 
 
 @md.config

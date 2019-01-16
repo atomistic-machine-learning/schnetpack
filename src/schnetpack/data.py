@@ -122,7 +122,7 @@ class BaseAtomsData(Dataset):
         at, properties = self.get_properties(idx)
 
         # get atom environment
-        nbh_idx, offsets = self.environment_provider.get_environment(idx, at)
+        nbh_idx, offsets = self.environment_provider.get_environment(at)
 
         properties[Structure.neighbors] = torch.LongTensor(
             nbh_idx.astype(np.int))
@@ -564,14 +564,7 @@ class StatisticsAccumulator:
         # Compute standard deviation from M2
         mean = self.mean
         stddev = np.sqrt(self.M2 / self.count)
-        # TODO: Should no longer be necessary
-        # Convert to torch arrays
-        # if type(self.mean) == np.ndarray:
-        #    mean = torch.FloatTensor(self.mean)
-        #    stddev = torch.FloatTensor(stddev)
-        # else:
-        #    mean = torch.FloatTensor([self.mean])
-        #    stddev = torch.FloatTensor([stddev])
+
         return mean, stddev
 
 
@@ -713,16 +706,17 @@ class AtomsLoader(DataLoader):
         algorithm implemented in StatisticsAccumulator
 
         Args:
-            property_names (str or list):  Name of the property for which the mean and
-                standard deviation should be computed
+            property_names (str or list): Name of the property for which the
+                                          mean and standard deviation should
+                                          be computed
             per_atom (bool): If set to true, averages over atoms
             atomref (np.ndarray): atomref (default: None)
             split_file (str): path to split file. If specified, mean and std
-                will be cached in this file (default: None)
+                              will be cached in this file (default: None)
 
         Returns:
-            mean:           Mean value
-            stddev:         Standard deviation
+            mean: Mean value
+            stddev: Standard deviation
 
         """
         if type(property_names) is not list:

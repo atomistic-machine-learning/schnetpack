@@ -59,8 +59,7 @@ class System:
     def __init__(self,
                  n_replicas,
                  device='cuda',
-                 neighborlist=SimpleNeighborList
-                 ):
+                 neighborlist=SimpleNeighborList):
 
         # Specify device
         self.device = device
@@ -98,7 +97,7 @@ class System:
         """
         molecules = read(path_to_file)
         if not type(molecules) == list:
-            molecules = [molecules]
+            molecules = [molecules]*2
         self.load_molecules(molecules=molecules)
 
     def load_molecules(self, molecules):
@@ -112,7 +111,7 @@ class System:
         """
 
         # 1) Get maximum number of molecules, number of replicas and number of
-        # overall systems
+        #    overall systems
         self.n_molecules = len(molecules)
 
         # 2) Construct array with number of atoms in each molecule
@@ -123,7 +122,7 @@ class System:
             self.n_atoms[i] = molecules[i].get_number_of_atoms()
 
         # 3) Determine the maximum number of atoms present (in case of
-        # differently sized molecules)
+        #    differently sized molecules)
         self.max_n_atoms = int(torch.max(self.n_atoms))
 
         # 4) Construct basic properties and masks
@@ -156,7 +155,7 @@ class System:
             )
 
         # 6) Do proper broadcasting here for easier use in e.g. integrators and
-        # thermostats afterwards
+        #    thermostats afterwards
         self.masses = self.masses[None, :, :, None]
         self.atom_masks = self.atom_masks[..., None]
 

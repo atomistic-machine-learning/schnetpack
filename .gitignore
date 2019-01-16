@@ -7,7 +7,7 @@ __pycache__/
 
 # test data
 src/sacred_scripts/data/*
-
+src/sacred_scripts/models/*
 # C extensions
 *.so
 
