@@ -4,7 +4,6 @@ import shutil
 import tarfile
 import tempfile
 from urllib import request as request
-from urllib.error import HTTPError, URLError
 
 import h5py
 import numpy as np
@@ -13,7 +12,6 @@ from ase.db import connect
 from ase.units import Hartree
 
 from schnetpack.data import AtomsData
-from schnetpack.environment import SimpleEnvironmentProvider
 
 
 class ANI1(AtomsData):
@@ -38,44 +36,54 @@ class ANI1(AtomsData):
     # properties:
     energy = 'energy'
 
-    properties = [energy]
+    available_properties = [energy]
 
     reference = {
         energy: 0
     }
 
-    units = dict(zip(properties, [Hartree]))
+    units = dict(zip(available_properties, [Hartree]))
 
-    self_energies = {'H': -0.500607632585, 'C': -37.8302333826, 'N': -54.5680045287, 'O': -75.0362229210}
+    self_energies = {'H': -0.500607632585, 'C': -37.8302333826,
+                     'N': -54.5680045287, 'O': -75.0362229210}
 
-    def __init__(self, path, download=True, subset=None, properties=['energy'], collect_triples=False,
-                 num_heavy_atoms=8, high_energies=False):
-        self.path = path
-        self.atomref_path = os.path.join(self.path, "atomrefs.npz")
-        self.dbpath = os.path.join(self.path, 'ani1.db')
+    def __init__(self, dbpath, download=True, subset=None, properties=None,
+                 collect_triples=False, num_heavy_atoms=8, high_energies=False):
 
         self.num_heavy_atoms = num_heavy_atoms
         self.high_energies = high_energies
 
-        environment_provider = SimpleEnvironmentProvider()
+        super().__init__(dbpath=dbpath, subset=subset,
+                         download=download,
+                         required_properties=properties,
+                         collect_triples=collect_triples)
 
-        if download:
-            self._download()
+    def create_subset(self, idx):
+        """
+        Returns a new dataset that only consists of provided indices.
+        Args:
+            idx (numpy.ndarray): subset indices
 
-        super().__init__(self.dbpath, subset, properties, environment_provider, collect_triples)
+        Returns:
+            schnetpack.data.AtomsData: dataset with subset of original data
+        """
+        idx = np.array(idx)
+        subidx = idx if self.subset is None else np.array(self.subset)[idx]
+        return type(self)(self.dbpath, download=False, subset=subidx,
+                          properties=self.required_properties,
+                          collect_triples=self.collect_triples,
+                          num_heavy_atoms=self.num_heavy_atoms,
+                          high_energies=self.high_energies)
 
     def _download(self):
-        works = True
-        if not os.path.exists(self.path):
-            os.makedirs(self.path)
 
-        if not os.path.exists(self.dbpath):
-            works = works and self._load_data()
+        self._load_data()
 
-        if not os.path.exists(self.atomref_path):
-            works = works and self._create_atoms_ref()
+        atref, labels = self._create_atoms_ref()
 
-        return works
+        self.set_metadata({
+            'atomrefs': atref.tolist(), 'atref_labels': labels
+        })
 
     def _load_data(self):
         logging.info('downloading ANI-1 data...')
@@ -84,15 +92,8 @@ class ANI1(AtomsData):
         raw_path = os.path.join(tmpdir, 'data')
         url = 'https://ndownloader.figshare.com/files/9057631'
 
-        try:
-            request.urlretrieve(url, tar_path)
-            logging.info("Done.")
-        except HTTPError as e:
-            logging.error("HTTP Error:", e.code, url)
-            return False
-        except URLError as e:
-            logging.error("URL Error:", e.reason, url)
-            return False
+        request.urlretrieve(url, tar_path)
+        logging.info("Done.")
 
         tar = tarfile.open(tar_path)
         tar.extractall(raw_path)
@@ -107,8 +108,6 @@ class ANI1(AtomsData):
         logging.info('done...')
 
         shutil.rmtree(tmpdir)
-
-        return True
 
     def _load_h5_file(self, file_name):
         with connect(self.dbpath) as con:
@@ -138,17 +137,15 @@ class ANI1(AtomsData):
                         # loop over high energy conformations
                         for i in range(high_energies.shape[0]):
                             atm = Atoms(species, high_energy_positions[i])
-                            high_energy = high_energies[i] * self.units[self.high_energy]
+                            high_energy = high_energies[i] * self.units[self.high_energies]
 
                             properties = {self.energy: high_energy}
 
                             con.write(atm, data=properties)
 
     def _create_atoms_ref(self):
-        file_name = os.path.join(self.path, "atomrefs.npz")
-
         atref = np.zeros((100, 6))
-        labels = self.properties
+        labels = self.required_properties
 
         # converts units to eV (which are set to one in ase)
         atref[1, :] = self.self_energies['H'] * self.units['energy']
@@ -156,20 +153,4 @@ class ANI1(AtomsData):
         atref[7, :] = self.self_energies['N'] * self.units['energy']
         atref[8, :] = self.self_energies['O'] * self.units['energy']
 
-        np.savez(file_name, atom_ref=atref, labels=labels)
-
-        return True
-
-    def get_reference(self, property):
-        """
-        Returns atomref for property
-
-        Args:
-            property: property in the Ani1 dataset
-
-        Returns:
-            list: list with atomrefs
-        """
-        col = ANI1.reference[property]
-        atomref = np.load(self.atomref_path)['atom_ref'][:, col:col + 1]
-        return atomref
+        return atref, labels

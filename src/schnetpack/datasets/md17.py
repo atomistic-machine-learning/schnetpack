@@ -2,19 +2,20 @@ import logging
 import os
 import shutil
 import tempfile
-
 from urllib import request as request
-from urllib.error import HTTPError, URLError
-from ase import Atoms
+
 import numpy as np
+from ase import Atoms
 
 from schnetpack.data import AtomsData
-from schnetpack.environment import SimpleEnvironmentProvider
+
+__all__ = ['MD17']
 
 
 class MD17(AtomsData):
     """
-    MD17 benchmark data set for molecular dynamics of small molecules containing molecular forces.
+    MD17 benchmark data set for molecular dynamics of small molecules
+    containing molecular forces.
 
     Args:
         path (str): path to database
@@ -39,8 +40,9 @@ class MD17(AtomsData):
     See: http://quantum-machine.org/datasets/
     """
 
-    energies = 'energy'
+    energy = 'energy'
     forces = 'forces'
+    available_properties = [energy, forces]
 
     datasets_dict = dict(aspirin='aspirin_dft.npz',
                          #aspirin_ccsd='aspirin_ccsd.zip',
@@ -60,85 +62,49 @@ class MD17(AtomsData):
 
     existing_datasets = datasets_dict.keys()
 
-    def __init__(self, dbdir, dataset, subset=None, download=True, collect_triples=False, parse_all=False,
-                 properties=None):
-        self.load_all = parse_all
+    def __init__(self, datapath, molecule=None, subset=None, download=True,
+                 collect_triples=False, properties=None):
+        self.datapath = datapath
+        self.molecule = molecule
+        dbpath = os.path.join(datapath, 'md17', molecule + '.db')
 
-        if dataset not in self.datasets_dict.keys():
-            raise ValueError("Unknown dataset specification {:s}".format(dataset))
-        self.dbdir = dbdir
-        self.dataset = dataset
-        self.database = dataset + ".db"
-        dbpath = os.path.join(self.dbdir, self.database)
-        self.collect_triples = collect_triples
-
-        environment_provider = SimpleEnvironmentProvider()
-
-        if properties is None:
-            properties = ["energy", "forces"]
-
-        super(MD17, self).__init__(dbpath, subset, properties, environment_provider,
-                                   collect_triples)
-
-        if download:
-            self.download()
-
+        super(MD17, self).__init__(dbpath=dbpath, subset=subset,
+                                   required_properties=properties,
+                                   collect_triples=collect_triples,
+                                   download=download)
 
     def create_subset(self, idx):
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
-        return MD17(self.dbdir, self.dataset, subset=subidx, download=False, collect_triples=self.collect_triples)
+        return MD17(datapath=self.datapath, molecule=self.molecule,
+                    subset=subidx, download=False,
+                    collect_triples=self.collect_triples,
+                    properties=self.required_properties)
 
-    def download(self):
-        """
-        download data if not already on disk.
-        """
-        success = True
-        if not os.path.exists(self.dbdir):
-            os.makedirs(self.dbdir)
+    def _download(self):
 
-        if not os.path.exists(self.dbpath):
-            success = success and self._load_data()
+        logging.info("Downloading {} data".format(self.molecule))
+        tmpdir = tempfile.mkdtemp("MD")
+        rawpath = os.path.join(tmpdir, self.datasets_dict[self.molecule])
+        url = "http://www.quantum-machine.org/gdml/data/npz/" + \
+              self.datasets_dict[self.molecule]
 
-        return success
+        request.urlretrieve(url, rawpath)
 
-    def _load_data(self):
+        logging.info("Parsing molecule {:s}".format(self.molecule))
 
-        for molecule in self.datasets_dict.keys():
-            # if requested, convert only the required molecule
-            if not self.load_all:
-                if molecule != self.dataset:
-                    continue
+        data = np.load(rawpath)
 
-            logging.info("Downloading {} data".format(molecule))
-            tmpdir = tempfile.mkdtemp("MD")
-            rawpath = os.path.join(tmpdir, self.datasets_dict[molecule])
-            url = "http://www.quantum-machine.org/gdml/data/npz/" + self.datasets_dict[molecule]
+        numbers = data['z']
+        atoms_list = []
+        properties_list = []
+        for positions, energies, forces in zip(data['R'], data['E'],
+                                               data['F']):
+            properties_list.append(dict(energy=energies, forces=forces))
+            atoms_list.append(Atoms(positions=positions, numbers=numbers))
 
-            try:
-                request.urlretrieve(url, rawpath)
-            except HTTPError as e:
-                logging.error("HTTP Error:", e.code, url)
-                return False
-            except URLError as e:
-                logging.error("URL Error:", e.reason, url)
-                return False
-
-            logging.info("Parsing molecule {:s}".format(molecule))
-
-            data = np.load(rawpath)
-
-            numbers = data['z']
-            atoms_list = []
-            properties_list = []
-            for positions, energies, forces in zip(data['R'], data['E'], data['F']):
-                properties_list.append(dict(energy=energies, forces=forces))
-                atoms_list.append(Atoms(positions=positions, numbers=numbers))
-
-            self.add_systems(atoms_list, properties_list)
+        self.add_systems(atoms_list, properties_list)
 
         logging.info("Cleanining up the mess...")
-        logging.info('{} molecule done'.format(molecule))
+        logging.info('{} molecule done'.format(self.molecule))
         shutil.rmtree(tmpdir)
-
-        return True

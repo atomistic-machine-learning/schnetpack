@@ -6,8 +6,9 @@ import numpy as np
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
 
 __all__ = [
-    'Hook', 'LoggingHook', 'TensorboardHook', 'CSVHook', 'EarlyStoppingHook', 'MaxEpochHook', 'MaxStepHook',
-    'LRScheduleHook', 'ReduceLROnPlateauHook', 'ExponentialDecayHook', 'WarmRestartHook'
+    'Hook', 'LoggingHook', 'TensorboardHook', 'CSVHook', 'EarlyStoppingHook',
+    'MaxEpochHook', 'MaxStepHook', 'LRScheduleHook', 'ReduceLROnPlateauHook',
+    'ExponentialDecayHook', 'WarmRestartHook'
 ]
 
 
@@ -63,10 +64,14 @@ class LoggingHook(Hook):
 
         Args:
             log_path (str): path to directory to which log files will be written.
-            metrics (list): list containing all metrics that will be logged. Metrics have to be subclass of spk.Metric.
-            log_train_loss (bool): enable logging of training loss (default: True)
-            log_validation_loss (bool): enable logging of validation loss (default: True)
-            log_learning_rate (bool): enable logging of current learning rate (default: True)
+            metrics (list): list containing all metrics that will be logged.
+                Metrics have to be subclass of spk.Metric.
+            log_train_loss (bool): enable logging of training loss
+                (default: True)
+            log_validation_loss (bool): enable logging of validation loss
+                (default: True)
+            log_learning_rate (bool): enable logging of current learning rate
+                (default: True)
     """
 
     def __init__(self, log_path, metrics, log_train_loss=True,
@@ -104,19 +109,27 @@ class LoggingHook(Hook):
 class CSVHook(LoggingHook):
     """ Hook for logging to csv files.
 
-            This class provides an interface to write logging information about the training process to csv files.
+            This class provides an interface to write logging information about
+            the training process to csv files.
 
             Args:
-                log_path (str): path to directory to which log files will be written.
-                metrics (list): list containing all metrics to be logged. Metrics have to be subclass of spk.Metric.
-                log_train_loss (bool): enable logging of training loss (default: True)
-                log_validation_loss (bool): enable logging of validation loss (default: True)
-                log_learning_rate (bool): enable logging of current learning rate (default: True)
-                every_n_epochs (int): interval after which logging takes place (default: 1)
+                log_path (str): path to directory to which log files will be
+                    written.
+                metrics (list): list containing all metrics to be logged.
+                    Metrics have to be subclass of spk.Metric.
+                log_train_loss (bool): enable logging of training loss
+                    (default: True)
+                log_validation_loss (bool): enable logging of validation loss
+                    (default: True)
+                log_learning_rate (bool): enable logging of current learning
+                    rate (default: True)
+                every_n_epochs (int): interval after which logging takes place
+                    (default: 1)
         """
 
     def __init__(self, log_path, metrics, log_train_loss=True,
-                 log_validation_loss=True, log_learning_rate=True, every_n_epochs=1):
+                 log_validation_loss=True, log_learning_rate=True,
+                 every_n_epochs=1):
         log_path = os.path.join(log_path, 'log.csv')
         super(CSVHook, self).__init__(log_path, metrics, log_train_loss,
                                       log_validation_loss, log_learning_rate)
@@ -142,7 +155,8 @@ class CSVHook(LoggingHook):
                 os.remove(self.log_path)
         else:
             self._offset = -time.time()
-            # Create the log dir if it does not exists, since write cannot create a full path
+            # Create the log dir if it does not exists, since write cannot
+            # create a full path
             log_dir = os.path.dirname(self.log_path)
             if not os.path.exists(log_dir):
                 os.makedirs(log_dir)
@@ -212,24 +226,30 @@ class CSVHook(LoggingHook):
 class TensorboardHook(LoggingHook):
     """ Hook for logging to tensorboard.
 
-        This class provides an interface to write logging information about the training process to tensorboard.
+        This class provides an interface to write logging information about the
+        training process to tensorboard.
 
         Args:
             log_path (str): path to directory to which log files will be written.
-            metrics (list): list containing all metrics that will be logged. Metrics have to be subclass of spk.Metric.
-            log_train_loss (bool): enable logging of training loss (default: True)
-            log_validation_loss (bool): enable logging of validation loss (default: True)
-            log_learning_rate (bool): enable logging of current learning rate (default: True)
-            every_n_epochs (int): interval after which logging takes place (default: 1)
+            metrics (list): list containing all metrics that will be logged.
+                Metrics have to be subclass of spk.Metric.
+            log_train_loss (bool): enable logging of training loss
+                (default: True)
+            log_validation_loss (bool): enable logging of validation loss
+                (default: True)
+            log_learning_rate (bool): enable logging of current learning rate
+                (default: True)
+            every_n_epochs (int): interval after which logging takes place
+                (default: 1)
     """
 
     def __init__(self, log_path, metrics, log_train_loss=True,
-                 log_validation_loss=True, log_learning_rate=True, every_n_epochs=1,
-                 img_every_n_epochs=10,
-                 log_histogram=False):
+                 log_validation_loss=True, log_learning_rate=True,
+                 every_n_epochs=1, img_every_n_epochs=10, log_histogram=False):
         from tensorboardX import SummaryWriter
         super(TensorboardHook, self).__init__(log_path, metrics, log_train_loss,
-                                              log_validation_loss, log_learning_rate)
+                                              log_validation_loss,
+                                              log_learning_rate)
         self.writer = SummaryWriter(self.log_path)
         self.every_n_epochs = every_n_epochs
         self.log_histogram = log_histogram
@@ -238,9 +258,13 @@ class TensorboardHook(LoggingHook):
     def on_epoch_end(self, trainer):
         if trainer.epoch % self.every_n_epochs == 0:
             if self.log_train_loss:
-                self.writer.add_scalar("train/loss", self._train_loss / self._counter, trainer.epoch)
+                self.writer.add_scalar("train/loss",
+                                       self._train_loss / self._counter,
+                                       trainer.epoch)
             if self.log_learning_rate:
-                self.writer.add_scalar("train/learning_rate", trainer.optimizer.param_groups[0]['lr'], trainer.epoch)
+                self.writer.add_scalar("train/learning_rate",
+                                       trainer.optimizer.param_groups[0]['lr'],
+                                       trainer.epoch)
 
     def on_validation_end(self, trainer, val_loss):
         if trainer.epoch % self.every_n_epochs == 0:
@@ -248,7 +272,8 @@ class TensorboardHook(LoggingHook):
                 m = metric.aggregate()
 
                 if np.isscalar(m):
-                    self.writer.add_scalar("metrics/%s" % metric.name, float(m), trainer.epoch)
+                    self.writer.add_scalar("metrics/%s" % metric.name, float(m),
+                                           trainer.epoch)
                 elif m.ndim == 2:
                     if trainer.epoch % self.img_every_n_epochs == 0:
                         import matplotlib.pyplot as plt
@@ -259,8 +284,10 @@ class TensorboardHook(LoggingHook):
                         plt.colorbar(plt.pcolor(m))
                         fig.canvas.draw()
 
-                        np_image = np.fromstring(fig.canvas.tostring_rgb(), dtype='uint8')
-                        np_image = np_image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+                        np_image = np.fromstring(fig.canvas.tostring_rgb(),
+                                                 dtype='uint8')
+                        np_image = np_image.reshape(
+                            fig.canvas.get_width_height()[::-1] + (3,))
 
                         plt.close(fig)
 
@@ -268,11 +295,13 @@ class TensorboardHook(LoggingHook):
                                               np_image, trainer.epoch)
 
             if self.log_validation_loss:
-                self.writer.add_scalar("train/val_loss", float(val_loss), trainer.step)
+                self.writer.add_scalar("train/val_loss", float(val_loss),
+                                       trainer.step)
 
             if self.log_histogram:
                 for name, param in trainer._model.named_parameters():
-                    self.writer.add_histogram(name, param.detach().cpu().numpy(), trainer.epoch)
+                    self.writer.add_histogram(name, param.detach().cpu().numpy(),
+                                              trainer.epoch)
 
     def on_train_ends(self, trainer):
         self.writer.close()
@@ -284,12 +313,14 @@ class TensorboardHook(LoggingHook):
 class EarlyStoppingHook(Hook):
     """ Hook for early stopping.
 
-        This hook can be used to stop training early if the validation loss has not improved over a certain number
-        of epochs.
+        This hook can be used to stop training early if the validation loss has
+        not improved over a certain number of epochs.
 
         Args:
-            patience (int): number of epochs which can pass without improvement of validation loss before training ends.
-            threshold_ratio (float): counter increases if curr_val_loss>(1-threshold_ratio)*best_loss (default: 0.0001)
+            patience (int): number of epochs which can pass without improvement
+                of validation loss before training ends.
+            threshold_ratio (float): counter increases if
+                curr_val_loss>(1-threshold_ratio)*best_loss (default: 0.0001)
     """
 
     def __init__(self, patience, threshold_ratio=0.0001):
@@ -319,13 +350,15 @@ class EarlyStoppingHook(Hook):
 
 class WarmRestartHook(Hook):
 
-    def __init__(self, T0=10, Tmult=2, each_step=False, lr_min=1e-6, patience=1):
+    def __init__(self, T0=10, Tmult=2, each_step=False, lr_min=1e-6,
+                 lr_factor=1., patience=1):
         self.scheduler = None
         self.each_step = each_step
         self.T0 = T0
         self.Tmult = Tmult
         self.Tmax = T0
         self.lr_min = lr_min
+        self.lr_factor = lr_factor
         self.patience = patience
         self.waiting = 0
 
@@ -353,6 +386,10 @@ class WarmRestartHook(Hook):
             self.Tmax *= self.Tmult
             self.scheduler.last_epoch = -1
             self.scheduler.T_max = self.Tmax
+            self.scheduler.base_lrs = [
+                base_lr * self.lr_factor
+                for base_lr in self.scheduler.base_lrs
+            ]
             trainer.optimizer.load_state_dict(self.init_opt_state)
 
             if self.best_current > self.best_previous:
@@ -368,7 +405,8 @@ class WarmRestartHook(Hook):
 class MaxEpochHook(Hook):
     """Hook for stopping after a maximal number of epochs.
 
-       This hook can be used to stop training early if a certain number of epochs have passed.
+       This hook can be used to stop training early if a certain number of
+       epochs have passed.
 
        Args:
            max_epochs (int): maximal number of epochs.
@@ -385,7 +423,8 @@ class MaxEpochHook(Hook):
 class MaxStepHook(Hook):
     """ Hook for stopping after a maximal number of steps.
 
-        This hook can be used to stop training early if a certain number of steps have passed.
+        This hook can be used to stop training early if a certain number of
+        steps have passed.
 
         Args:
             max_steps (int): maximal number of steps.
@@ -402,11 +441,13 @@ class MaxStepHook(Hook):
 class LRScheduleHook(Hook):
     """Base class for learning rate scheduling hooks.
 
-      This class provides a thin wrapper around torch.optim.lr_schedule._LRScheduler.
+      This class provides a thin wrapper around
+      torch.optim.lr_schedule._LRScheduler.
 
       Args:
           scheduler (torch.optim.lr_schedule._LRScheduler): scheduler.
-          each_step (bool): if set to true (false) scheduler.step() is called every step (every epoch) (default: False)
+          each_step (bool): if set to true (false) scheduler.step() is called
+                            every step (every epoch) (default: False)
       """
 
     def __init__(self, scheduler, each_step=False):
@@ -436,9 +477,10 @@ class LRScheduleHook(Hook):
 class ReduceLROnPlateauHook(Hook):
     """Hook for reduce plateau learning rate scheduling.
 
-      This class provides a thin wrapper around torch.optim.lr_schedule.ReduceLROnPlateau. It takes the parameters
-      of ReduceLROnPlateau as arguments and creates a scheduler from it whose step() function will be called every
-      epoch.
+      This class provides a thin wrapper around
+      torch.optim.lr_schedule.ReduceLROnPlateau. It takes the parameters
+      of ReduceLROnPlateau as arguments and creates a scheduler from it whose
+      step() function will be called every epoch.
 
       Args:
         optimizer (Optimizer): Wrapped optimizer.
@@ -453,13 +495,16 @@ class ReduceLROnPlateauHook(Hook):
         min_lr (float or list): A scalar or a list of scalars. A
             lower bound on the learning rate of all param groups
             or each group respectively. (default: 1e-6).
-        window_length (int): window over which the accumulated loss will be averaged. (default: 1).
-        stop_after_min (bool): if enabled stops after minimal learning rate is reached (default: False).
+        window_length (int): window over which the accumulated loss will be
+                             averaged. (default: 1).
+        stop_after_min (bool): if enabled stops after minimal learning rate is
+                               reached (default: False).
       """
 
-    def __init__(self, optimizer, patience=25, factor=0.2, min_lr=1e-6, window_length=1,
-                 stop_after_min=False):
-        self.scheduler = ReduceLROnPlateau(optimizer, patience=patience, factor=factor, min_lr=min_lr)
+    def __init__(self, optimizer, patience=25, factor=0.2, min_lr=1e-6,
+                 window_length=1, stop_after_min=False):
+        self.scheduler = ReduceLROnPlateau(optimizer, patience=patience,
+                                           factor=factor, min_lr=min_lr)
         self.window_length = window_length
         self.stop_after_min = stop_after_min
         self.window = []
@@ -496,8 +541,9 @@ class ReduceLROnPlateauHook(Hook):
 class ExponentialDecayHook(Hook):
     """Hook for reduce plateau learning rate scheduling.
 
-      This class provides a thin wrapper around torch.optim.lr_schedule.StepLR. It takes the parameters
-      of StepLR as arguments and creates a scheduler from it whose step() function will be called every
+      This class provides a thin wrapper around torch.optim.lr_schedule.StepLR.
+      It takes the parameters of StepLR as arguments and creates a scheduler
+      from it whose step() function will be called every
       step.
 
       Args:
@@ -523,5 +569,6 @@ class UpdatePrioritiesHook(Hook):
 
     def on_batch_end(self, trainer, train_batch, result, loss):
         idx = train_batch['_idx']
-        self.prioritized_sampler.update_weights(idx.data.cpu().squeeze(),
-                                                self.update_fn(train_batch, result).data.cpu().squeeze())
+        self.prioritized_sampler.update_weights(
+            idx.data.cpu().squeeze(),
+            self.update_fn(train_batch, result).data.cpu().squeeze())

@@ -2,6 +2,7 @@
 import argparse
 import logging
 import os
+import sys
 from shutil import copyfile, rmtree
 
 import numpy as np
@@ -34,7 +35,7 @@ def get_parser():
 
     ## training
     train_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
-    train_parser.add_argument('datapath', help='Path / destination of MD17 dataset directory')
+    train_parser.add_argument('datapath', help='Path / destination of MD17 dataset')
     train_parser.add_argument('molecule', help='Selected molecule trajectory of MD17 collection',
                               choices=MD17.existing_datasets)
     train_parser.add_argument('modelpath', help='Destination for models and logs')
@@ -156,8 +157,8 @@ def train(args, model, train_loader, val_loader, device):
     hooks.append(schedule)
 
     # index into model output: [energy, forces]
-    metrics = [spk.metrics.MeanAbsoluteError(MD17.energies, "y"),
-               spk.metrics.RootMeanSquaredError(MD17.energies, "y"),
+    metrics = [spk.metrics.MeanAbsoluteError(MD17.energy, "y"),
+               spk.metrics.RootMeanSquaredError(MD17.energy, "y"),
                spk.metrics.MeanAbsoluteError(MD17.forces, "dydx"),
                spk.metrics.RootMeanSquaredError(MD17.forces, "dydx")]
     if args.logger == 'csv':
@@ -171,7 +172,7 @@ def train(args, model, train_loader, val_loader, device):
 
     # setup loss function
     def loss(batch, result):
-        ediff = batch[MD17.energies] - result["y"]
+        ediff = batch[MD17.energy] - result["y"]
         ediff = ediff ** 2
 
         fdiff = batch[MD17.forces] - result["dydx"]
@@ -192,8 +193,8 @@ def evaluate(args, model, train_loader, val_loader, test_loader, device):
               'Force Length RMSE', 'Force Angle MAE', 'Angle RMSE']
 
     metrics = [
-        spk.metrics.MeanAbsoluteError(MD17.energies, "y"),
-        spk.metrics.RootMeanSquaredError(MD17.energies, "y"),
+        spk.metrics.MeanAbsoluteError(MD17.energy, "y"),
+        spk.metrics.RootMeanSquaredError(MD17.energy, "y"),
         spk.metrics.MeanAbsoluteError(MD17.forces, "dydx"),
         spk.metrics.RootMeanSquaredError(MD17.forces, "dydx"),
         spk.metrics.LengthMAE(MD17.forces, "dydx"),
@@ -285,9 +286,24 @@ def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None, par
     return model
 
 
+def export_model(args):
+    jsonpath = os.path.join(args.modelpath, 'args.json')
+    train_args = read_from_json(jsonpath)
+    model = get_model(train_args)
+    model.load_state_dict(
+        torch.load(os.path.join(args.modelpath, 'best_model')))
+
+    torch.save(model, args.destpath)
+
+
 if __name__ == '__main__':
     parser = get_parser()
     args = parser.parse_args()
+
+    if args.mode == 'export':
+        export_model(args)
+        sys.exit(0)
+
     device = torch.device("cuda" if args.cuda else "cpu")
     argparse_dict = vars(args)
     jsonpath = os.path.join(args.modelpath, 'args.json')
@@ -309,7 +325,7 @@ if __name__ == '__main__':
 
     # will download md17 if necessary, calculate_triples is required for wACSF angular functions
     logging.info('MD17 will be loaded...')
-    md17 = MD17(args.datapath, args.molecule, download=True, parse_all=False, collect_triples=args.model == 'wacsf')
+    md17 = MD17(args.datapath, args.molecule, download=True,  collect_triples=args.model == 'wacsf')
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, 'split.npz')
@@ -327,7 +343,18 @@ if __name__ == '__main__':
 
     if args.mode == 'train':
         logging.info('calculate statistics...')
-        mean, stddev = train_loader.get_statistics(MD17.energies, True)
+        split_data = np.load(split_path)
+        if 'mean' in split_data.keys():
+            mean = torch.from_numpy(split_data['mean'])
+            stddev = torch.from_numpy(split_data['stddev'])
+            calc_stats = False
+            logging.info("cached statistics was loaded...")
+        else:
+            mean, stddev = train_loader.get_statistics(MD17.energy, True)
+            np.savez(split_path, train_idx=split_data['train_idx'],
+                     val_idx=split_data['val_idx'],
+                     test_idx=split_data['test_idx'], mean=mean,
+                     stddev=stddev)
     else:
         mean, stddev = None, None
 

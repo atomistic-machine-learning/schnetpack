@@ -34,29 +34,24 @@ class MaterialsProject(AtomsData):
     BandGap = 'band_gap'
     TotalMagnetization = 'total_magnetization'
 
-    properties = [
+    available_properties = [
         EformationPerAtom, EPerAtom, BandGap, TotalMagnetization
     ]
 
-    units = dict(
-        zip(properties,
-            [
-                eV, eV, eV, 1.
-            ]
-            )
-    )
+    units = dict(zip(available_properties,
+                     [eV, eV, eV, 1.]))
 
-    def __init__(self, path, cutoff, apikey=None, download=True, subset=None,
-                 properties=[], collect_triples=False):
-        self.path = path
+    def __init__(self, dbpath, cutoff, apikey=None, download=True, subset=None,
+                 properties=None, collect_triples=False):
         self.cutoff = cutoff
         self.apikey = apikey
 
-        if not os.path.exists(self.path):
-            os.makedirs(self.path)
-        self.dbpath = os.path.join(self.path, 'mp.db')
+        self.dbpath = dbpath
 
         environment_provider = ASEEnvironmentProvider(cutoff)
+
+        if properties is None:
+            properties = MaterialsProject.available_properties
 
         if download and not os.path.exists(self.dbpath):
             self._download()
@@ -69,8 +64,9 @@ class MaterialsProject(AtomsData):
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
 
-        return MaterialsProject(self.path, self.cutoff, download=False,
-                                subset=subidx, properties=self.properties,
+        return MaterialsProject(self.dbpath, self.cutoff, download=False,
+                                subset=subidx,
+                                properties=self.required_properties,
                                 collect_triples=self.collect_triples)
 
     def _download(self):
@@ -116,3 +112,4 @@ class MaterialsProject(AtomsData):
                                         q['total_magnetization'],
                                     MaterialsProject.BandGap:
                                         q['band_gap']})
+        self.set_metadata({})

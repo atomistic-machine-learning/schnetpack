@@ -12,6 +12,9 @@ References
 """
 
 import logging
+
+logger = logging.getLogger(__name__)
+
 import os
 from base64 import b64encode, b64decode
 
@@ -21,7 +24,8 @@ from ase.db import connect
 from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
 
-from .environment import SimpleEnvironmentProvider, collect_atom_triples
+from .environment import SimpleEnvironmentProvider, \
+    collect_atom_triples
 
 
 class AtomsDataError(Exception):
@@ -29,16 +33,21 @@ class AtomsDataError(Exception):
 
 
 class BaseAtomsData(Dataset):
+    available_properties = None
 
-    def __init__(self, dbpath, subset=None, required_properties=[],
+    def __init__(self, dbpath, subset=None, required_properties=None,
                  environment_provider=SimpleEnvironmentProvider(),
-                 collect_triples=False, center_positions=True):
+                 collect_triples=False, center_positions=True,
+                 load_charge=False):
         self.dbpath = dbpath
         self.subset = subset
         self.required_properties = required_properties
+        if required_properties is None:
+            self.required_properties = self.available_properties
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
         self.centered = center_positions
+        self.load_charge = load_charge
 
     def create_splits(self, num_train=None, num_val=None, split_file=None):
         """
@@ -71,6 +80,14 @@ class BaseAtomsData(Dataset):
                     'You have to supply either split sizes (num_train /' +
                     ' num_val) or an npz file with splits.')
 
+            assert num_train + num_val <= len(
+                self), 'Dataset is smaller than num_train + num_val!'
+
+            num_train = num_train if num_train > 1 else num_train * len(self)
+            num_val = num_val if num_val > 1 else num_val * len(self)
+            num_train = int(num_train)
+            num_val = int(num_val)
+
             idx = np.random.permutation(len(self))
             train_idx = idx[:num_train].tolist()
             val_idx = idx[num_train:num_train + num_val].tolist()
@@ -95,10 +112,10 @@ class BaseAtomsData(Dataset):
             schnetpack.data.AtomsData: dataset with subset of original data
         """
         idx = np.array(idx)
-        subidx = idx if self.subset is None else np.array(self.subset)[idx]
+        subidx = idx if self.subset is None or len(idx) == 0 else np.array(self.subset)[idx]
         return type(self)(self.dbpath, subidx, self.required_properties,
                           self.environment_provider, self.collect_triples,
-                          self.centered)
+                          self.centered, self.load_charge)
 
     def __len__(self):
         raise NotImplementedError
@@ -142,23 +159,195 @@ class BaseAtomsData(Dataset):
         return idx
 
 
+class MergedAtomsData(Dataset):
+    """
+    A merged dataset assembled from multiple ASE db files.
+
+    Note: the metadata of the first dataset wil be used as the metadata of
+          the merged dateset
+
+    """
+
+    def __init__(self, dbpath_list, subset_list=None,
+                 required_properties=[],
+                 environment_provider=SimpleEnvironmentProvider(),
+                 collect_triples=False, center_positions=True,
+                 load_charge=False):
+        self.dbpath_list = dbpath_list
+        self.subset_list = [None] * len(
+            dbpath_list) if subset_list is None else subset_list
+
+        self.datasets = [
+            AtomsData(dbpath, subset, required_properties=required_properties,
+                      environment_provider=environment_provider,
+                      collect_triples=collect_triples,
+                      center_positions=center_positions,
+                      load_charge=load_charge)
+            for dbpath, subset in zip(dbpath_list, subset_list)
+        ]
+        self.required_properties = required_properties
+        self.environment_provider = environment_provider
+        self.collect_triples = collect_triples
+        self.centered = center_positions
+        self.load_charge = load_charge
+
+        self.cumidx = [0]
+        for ds in self.datasets:
+            self.cumidx.append(self.cumidx[-1] + len(ds))
+
+    def create_splits(self, num_train=None, num_val=None, split_file=None):
+        """
+        Splits the dataset into train/validation/test splits, writes split to
+        an npz file and returns subsets. Either the sizes of training and
+        validation split or an existing split file with split indices have to
+        be supplied. The remaining data will be used in the test dataset.
+
+        Args:
+            num_train (int or float): number or fraction of training examples
+            num_val (int or float): number or fraction of validation examples
+            split_file (str): Path to split file. If file exists, splits will
+                              be loaded. Otherwise, a new file will be created
+                              where the generated split is stored.
+
+        Returns:
+            schnetpack.data.AtomsData: training dataset
+            schnetpack.data.AtomsData: validation dataset
+            schnetpack.data.AtomsData: test dataset
+
+        """
+        assert num_train + num_val <= len(
+            self), 'Dataset is smaller than num_train + num_val!'
+        if split_file is not None and os.path.exists(split_file):
+            S = np.load(split_file)
+            train_idx = S['train_idx'].tolist()
+            val_idx = S['val_idx'].tolist()
+            test_idx = S['test_idx'].tolist()
+        else:
+            if num_train is None or num_val is None:
+                raise ValueError(
+                    'You have to supply either split sizes (num_train /' +
+                    ' num_val) or an npz file with splits.')
+
+            train_idx = []
+            val_idx = []
+            test_idx = []
+            for ds in self.datasets:
+                idx = np.random.permutation(len(ds))
+                num_train = num_train if num_train > 1 else num_train * len(ds)
+                num_val = num_val if num_val > 1 else num_val * len(ds)
+                num_train = int(num_train)
+                num_val = int(num_val)
+
+                train_idx.append(idx[:num_train].tolist())
+                val_idx.append(idx[num_train:num_train + num_val].tolist())
+                test_idx.append(idx[num_train + num_val:].tolist())
+
+            if split_file is not None:
+                np.savez(split_file, train_idx=train_idx, val_idx=val_idx,
+                         test_idx=test_idx)
+
+        train = self.create_subset(train_idx)
+        val = self.create_subset(val_idx)
+        test = self.create_subset(test_idx)
+        return train, val, test
+
+    def create_subset(self, idx):
+        """
+        Returns a new dataset that only consists of provided indices.
+        Args:
+            idx (numpy.ndarray): subset indices
+
+        Returns:
+            schnetpack.data.AtomsData: dataset with subset of original data
+        """
+
+        subset_list = []
+        for i in range(self.datasets):
+            ds = self.datasets[i]
+            idx = np.array(idx[i])
+            subidx = idx if ds.subset is None else np.array(ds.subset)[idx]
+            subset_list.append(subidx)
+
+        return type(self)(self.dbpath_list, subset_list,
+                          self.required_properties,
+                          self.environment_provider, self.collect_triples,
+                          self.centered, self.load_charge)
+
+    def __len__(self):
+        return sum(*[len(ds) for ds in self.datasets])
+
+    def _get_local_idx(self, idx):
+        for i, cum in enumerate(self.cumidx[1:]):
+            if idx < cum:
+                return i, idx - self.cumidx[i]
+        return None, None
+
+    def __getitem__(self, idx):
+        i, idx = self._get_local_idx(idx)
+        return self.datasets[i][idx]
+
+    def get_atoms(self, idx):
+        i, idx = self._get_local_idx(idx)
+        return self.datasets[i].get_atoms(idx)
+
+    def get_properties(self, idx):
+        i, idx = self._get_local_idx(idx)
+        return self.datasets[i].get_properties(idx)
+
+    def get_metadata(self, key):
+        return self.datasets[0].get_metadata(key)
+
+    def _subset_index(self, idx):
+        # get row
+        if self.subset is None:
+            idx = int(idx)
+        else:
+            idx = int(self.subset[idx])
+        return idx
+
+
 class AtomsData(BaseAtomsData):
     ENCODING = 'utf-8'
 
     def __init__(self, dbpath, subset=None,
-                 required_properties=[],
+                 required_properties=None,
                  environment_provider=SimpleEnvironmentProvider(),
-                 collect_triples=False, center_positions=True):
+                 collect_triples=False, center_positions=True,
+                 load_charge=False, download=False):
+
         super(AtomsData, self).__init__(dbpath, subset,
                                         required_properties,
                                         environment_provider,
-                                        collect_triples, center_positions)
+                                        collect_triples, center_positions,
+                                        load_charge)
+        if download:
+            self.download()
 
     def __len__(self):
         if self.subset is None:
             with connect(self.dbpath) as conn:
                 return conn.count()
         return len(self.subset)
+
+    def download(self):
+        """
+        Wrapper function for the download method.
+        """
+        if os.path.exists(self.dbpath):
+            logger.info('The dataset has already been downloaded and stored '
+                        'at {}'.format(self.dbpath))
+        else:
+            logger.info('Starting download')
+            folder = os.path.dirname(self.dbpath)
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+            self._download()
+
+    def _download(self):
+        """
+        To be implemented in deriving classes.
+        """
+        raise NotImplementedError
 
     def get_atoms(self, idx):
         """
@@ -190,7 +379,12 @@ class AtomsData(BaseAtomsData):
     def _add_system(self, conn, atoms, **properties):
 
         data = {}
-        for pname in self.required_properties:
+
+        props = properties.keys() \
+            if self.available_properties is None \
+            else self.available_properties
+
+        for pname in props:
             try:
                 prop = properties[pname]
             except:
@@ -251,6 +445,18 @@ class AtomsData(BaseAtomsData):
 
             properties[pname] = torch.FloatTensor(prop)
 
+        if self.load_charge:
+            if Structure.charge in row.data.keys():
+                shape = row.data['_shape_' + Structure.charge]
+                dtype = row.data['_dtype_' + Structure.charge]
+                prop = np.frombuffer(b64decode(row.data[Structure.charge]),
+                                     dtype=dtype)
+                prop = prop.reshape(shape)
+                properties[Structure.charge] = torch.FloatTensor(prop)
+            else:
+                properties[Structure.charge] = torch.FloatTensor(
+                    np.array([0.], dtype=np.float32))
+
         # extract/calculate structure
         properties[Structure.Z] = torch.LongTensor(at.numbers.astype(np.int))
         positions = at.positions.astype(np.float32)
@@ -259,7 +465,34 @@ class AtomsData(BaseAtomsData):
         properties[Structure.R] = torch.FloatTensor(positions)
         properties[Structure.cell] = torch.FloatTensor(
             at.cell.astype(np.float32))
+
         return at, properties
+
+    def get_atomref(self, property):
+        """
+        Returns atomref for property.
+
+        Args:
+            property: property in the qm9 dataset
+
+        Returns:
+            list: list with atomrefs
+        """
+        labels = self.get_metadata('atref_labels')
+        if labels is None:
+            return None
+
+        col = [i for i, l in enumerate(labels) if l == property]
+        assert len(col) <= 1
+
+        if len(col) == 1:
+            col = col[0]
+            atomref = np.array(self.get_metadata('atomrefs'))[:,
+                      col:col + 1]
+        else:
+            atomref = None
+
+        return atomref
 
 
 class StatisticsAccumulator:
@@ -478,16 +711,15 @@ class AtomsLoader(DataLoader):
                                           drop_last,
                                           timeout, worker_init_fn)
 
-    def get_statistics(self, property_name, atomistic=False, atomref=None,
-                       split_file=None):
+    def get_statistics(self, property_names, per_atom=False, atomrefs=None):
         """
         Compute mean and variance of a property. Uses the incremental Welford
         algorithm implemented in StatisticsAccumulator
 
         Args:
-            property_name (str):  Name of the property for which the mean and
+            property_names (str or list):  Name of the property for which the mean and
                 standard deviation should be computed
-            atomistic (bool): If set to true, averages over atoms
+            per_atom (bool): If set to true, averages over atoms
             atomref (np.ndarray): atomref (default: None)
             split_file (str): path to split file. If specified, mean and std
                 will be cached in this file (default: None)
@@ -497,36 +729,38 @@ class AtomsLoader(DataLoader):
             stddev:         Standard deviation
 
         """
+        if type(property_names) is not list:
+            is_single = True
+            property_names = [property_names]
+            atomrefs = [atomrefs]
+        else:
+            is_single = False
+
+        if type(per_atom) is not list:
+            per_atom = [per_atom] * len(property_names)
+
         with torch.no_grad():
-            calc_stats = True
-            if split_file is not None and os.path.exists(split_file):
-                split_data = np.load(split_file)
+            statistics = [StatisticsAccumulator(batch=True)
+                          for _ in property_names]
+            logger.info("statistics will be calculated...")
 
-                if 'mean' in split_data and 'stddev' in split_data:
-                    mean = torch.from_numpy(split_data['mean'])
-                    stddev = torch.from_numpy(split_data['stddev'])
-                    calc_stats = False
-                    logging.info("cached statistics was loaded...")
+            count = 0
+            for row in self:
+                for property_name, statistic, pa, ar in zip(property_names,
+                                                            statistics,
+                                                            per_atom,
+                                                            atomrefs):
+                    self._update_statistic(pa, ar, property_name,
+                                           row, statistic)
+                count += 1
+                if count > 2:
+                    break
+            stats = list(zip(*[s.get_statistics() for s in statistics]))
+            mean, stddev = stats
 
-            if calc_stats:
-                statistics = StatisticsAccumulator(batch=True)
-                logging.info("statistics will be calculated...")
-
-                count = 0
-                for row in self:
-                    self._update_statistic(atomistic, atomref, property_name,
-                                           row, statistics)
-                    count += 1
-
-                mean, stddev = statistics.get_statistics()
-
-                # cache result in split file
-                if split_file is not None and os.path.exists(split_file):
-                    split_data = np.load(split_file)
-                    np.savez(split_file, train_idx=split_data['train_idx'],
-                             val_idx=split_data['val_idx'],
-                             test_idx=split_data['test_idx'], mean=mean,
-                             stddev=stddev)
+            if is_single:
+                mean = mean[0]
+                stddev = stddev[0]
 
             return mean, stddev
 
@@ -550,6 +784,7 @@ class Structure:
     Keys to access structure properties in `schnetpack.data.AtomsData`
     """
     Z = '_atomic_numbers'
+    charge = '_charge'
     atom_mask = '_atom_mask'
     R = '_positions'
     cell = '_cell'

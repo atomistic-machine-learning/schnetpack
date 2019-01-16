@@ -1,5 +1,10 @@
 import numpy as np
 import torch
+import warnings
+from schnetpack.data import Structure
+
+__all__ = ['ModelBias', 'MeanSquaredError', 'RootMeanSquaredError', 'MeanAbsoluteError', 'HeatmapMAE', 'SumMAE',
+           'LengthMSE', 'LengthMAE', 'LengthRMSE', 'AngleMSE', 'AngleMAE', 'AngleRMSE']
 
 
 class Metric:
@@ -39,13 +44,15 @@ class ModelBias(Metric):
         target (str): name of target property
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`, `MSE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
     """
 
-    def __init__(self, target, model_output=None, name=None):
+    def __init__(self, target, model_output=None, name=None, element_wise=False):
         name = 'Bias_' + target if name is None else name
         super(ModelBias, self).__init__(name)
         self.target = target
         self.model_output = model_output
+        self.element_wise = element_wise
         self.l2loss = 0.
         self.n_entries = 0.
 
@@ -61,11 +68,19 @@ class ModelBias(Metric):
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+            else:
+                result = result[self.model_output]
+            yp = result
 
         diff = self._get_diff(y, yp)
         self.l2loss += torch.sum(diff.view(-1)).detach().cpu().data.numpy()
-        self.n_entries += np.prod(y.shape)
+        if self.element_wise:
+            self.n_entries += torch.sum(batch[Structure.atom_mask]) * y.shape[-1]
+        else:
+            self.n_entries += np.prod(y.shape)
 
     def aggregate(self):
         return self.l2loss / self.n_entries
@@ -79,14 +94,16 @@ class MeanSquaredError(Metric):
         target (str): name of target property
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`, `MSE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
     """
 
-    def __init__(self, target, model_output=None, bias_correction=None, name=None):
+    def __init__(self, target, model_output=None, bias_correction=None, name=None, element_wise=False):
         name = 'MSE_' + target if name is None else name
         super(MeanSquaredError, self).__init__(name)
         self.target = target
         self.bias_correction = bias_correction
         self.model_output = model_output
+        self.element_wise = element_wise
         self.l2loss = 0.
         self.n_entries = 0.
 
@@ -105,11 +122,19 @@ class MeanSquaredError(Metric):
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+            else:
+                result = result[self.model_output]
+            yp = result
 
         diff = self._get_diff(y, yp)
         self.l2loss += torch.sum(diff.view(-1) ** 2).detach().cpu().data.numpy()
-        self.n_entries += np.prod(y.shape)
+        if self.element_wise:
+            self.n_entries += torch.sum(batch[Structure.atom_mask]) * y.shape[-1]
+        else:
+            self.n_entries += np.prod(y.shape)
 
     def aggregate(self):
         return self.l2loss / self.n_entries
@@ -123,11 +148,13 @@ class RootMeanSquaredError(MeanSquaredError):
         target (str): name of target property
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`, `RMSE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
     """
 
-    def __init__(self, target, model_output=None, bias_correction=None, name=None):
+    def __init__(self, target, model_output=None, bias_correction=None, name=None, element_wise=False):
         name = 'RMSE_' + target if name is None else name
-        super(RootMeanSquaredError, self).__init__(target, model_output, bias_correction, name)
+        super(RootMeanSquaredError, self).__init__(target, model_output, bias_correction, name,
+                                                   element_wise=element_wise)
 
     def aggregate(self):
         return np.sqrt(self.l2loss / self.n_entries)
@@ -141,13 +168,15 @@ class MeanAbsoluteError(Metric):
         target (str): name of target property
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`, `MAE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
     """
 
-    def __init__(self, target, model_output=None, bias_correction=None, name=None):
+    def __init__(self, target, model_output=None, bias_correction=None, name=None, element_wise=False):
         name = 'MAE_' + target if name is None else name
         super(MeanAbsoluteError, self).__init__(name)
         self.target = target
         self.bias_correction = bias_correction
+        self.element_wise = element_wise
         self.model_output = model_output
         self.l1loss = 0.
         self.n_entries = 0.
@@ -167,11 +196,23 @@ class MeanAbsoluteError(Metric):
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+                    # print(result.shape)
+            else:
+                result = result[self.model_output]
+            yp = result
 
+        # print(yp, yp.shape, y.shape)
         diff = self._get_diff(y, yp)
+        # print(diff)
+        # print()
         self.l1loss += torch.sum(torch.abs(diff).view(-1), 0).detach().cpu().data.numpy()
-        self.n_entries += np.prod(y.shape)
+        if self.element_wise:
+            self.n_entries += torch.sum(batch[Structure.atom_mask]) * y.shape[-1]
+        else:
+            self.n_entries += np.prod(y.shape)
 
     def aggregate(self):
         return self.l1loss / self.n_entries
@@ -186,18 +227,26 @@ class HeatmapMAE(MeanAbsoluteError):
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`,
                     `HeatmapMAE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
     """
 
-    def __init__(self, target, model_output=None, name=None):
+    def __init__(self, target, model_output=None, name=None, element_wise=False):
         name = 'HeatmapMAE_' + target if name is None else name
-        super(HeatmapMAE, self).__init__(target, model_output, name=name)
+        super(HeatmapMAE, self).__init__(target, model_output, name=name, element_wise=element_wise)
 
     def add_batch(self, batch, result):
+        if self.element_wise and torch.sum(batch[Structure.atom_mask]==0) != 0:
+            warnings.warn('MAEHeatmap should not be used for element-wise properties with different sized molecules!')
         y = batch[self.target]
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+            else:
+                result = result[self.model_output]
+            yp = result
 
         diff = self._get_diff(y, yp)
         self.l1loss += torch.sum(torch.abs(diff), 0).detach().cpu().data.numpy()
@@ -205,6 +254,27 @@ class HeatmapMAE(MeanAbsoluteError):
 
     def aggregate(self):
         return self.l1loss / self.n_entries
+
+
+class SumMAE(MeanAbsoluteError):
+    r"""
+    Metric for mean absolute error of length.
+
+    Args:
+        target (str): name of target property
+        model_output (int, str): index or key, in case of multiple outputs (Default: None)
+        name (str): name used in logging for this metric. If set to `None`,
+                    `LengthMAE_[target]` will be used (Default: None)
+   """
+
+    def __init__(self, target, model_output=None, axis=1, name=None, element_wise=False):
+        name = 'SumMAE_' + target if name is None else name
+        self.axis= axis
+        super(SumMAE, self).__init__(target, model_output, name=name, element_wise=element_wise)
+
+    def _get_diff(self, y, yp):
+        ypl = torch.sum(yp, dim=self.axis)
+        return torch.sum(torch.abs(y - ypl))
 
 
 class LengthMSE(MeanSquaredError):
@@ -216,11 +286,12 @@ class LengthMSE(MeanSquaredError):
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`,
                     `LengthMSE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
     """
 
-    def __init__(self, target, model_output=None, name=None):
+    def __init__(self, target, model_output=None, name=None, element_wise=False):
         name = 'LengthMSE_' + target if name is None else name
-        super(LengthRMSE, self).__init__(target, model_output, name=name)
+        super(LengthRMSE, self).__init__(target, model_output, name=name, element_wise=element_wise)
 
     def _get_diff(self, y, yp):
         yl = torch.sqrt(torch.sum(y ** 2, dim=-1))
@@ -239,9 +310,9 @@ class LengthMAE(MeanAbsoluteError):
                     `LengthMAE_[target]` will be used (Default: None)
    """
 
-    def __init__(self, target, model_output=None, name=None):
+    def __init__(self, target, model_output=None, name=None, element_wise=False):
         name = 'LengthMAE_' + target if name is None else name
-        super(LengthMAE, self).__init__(target, model_output, name=name)
+        super(LengthMAE, self).__init__(target, model_output, name=name, element_wise=element_wise)
 
     def _get_diff(self, y, yp):
         yl = torch.sqrt(torch.sum(y ** 2, dim=-1))
@@ -258,11 +329,12 @@ class LengthRMSE(RootMeanSquaredError):
         model_output (int, str): index or key, in case of multiple outputs (Default: None)
         name (str): name used in logging for this metric. If set to `None`,
                     `LengthRMSE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise property (forces, positions, ...)
    """
 
-    def __init__(self, target, model_output=None, name=None):
+    def __init__(self, target, model_output=None, name=None, element_wise=False):
         name = 'LengthRMSE_' + target if name is None else name
-        super(LengthRMSE, self).__init__(target, model_output, name=name)
+        super(LengthRMSE, self).__init__(target, model_output, name=name, element_wise=element_wise)
 
     def _get_diff(self, y, yp):
         yl = torch.sqrt(torch.sum(y ** 2, dim=-1))
@@ -300,14 +372,19 @@ class AngleMSE(MeanSquaredError):
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+            else:
+                result = result[self.model_output]
+            yp = result
 
         y = y.view(-1, y.size(-1))
         yp = yp.view(-1, yp.size(-1))
 
         diff = self._get_diff(y, yp)
         self.l2loss += torch.sum(diff ** 2).detach().cpu().data.numpy()
-        self.n_entries += y.size(0)
+        self.n_entries += torch.sum(torch.isnan(diff)==False)
 
 
 class AngleMAE(MeanAbsoluteError):
@@ -340,14 +417,19 @@ class AngleMAE(MeanAbsoluteError):
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+            else:
+                result = result[self.model_output]
+            yp = result
 
         y = y.view(-1, y.size(-1))
         yp = yp.view(-1, yp.size(-1))
 
         diff = self._get_diff(y, yp)
         self.l1loss += torch.sum(torch.abs(diff)).detach().cpu().data.numpy()
-        self.n_entries += y.size(0)
+        self.n_entries += torch.sum(torch.isnan(diff)==False)
 
 
 class AngleRMSE(RootMeanSquaredError):
@@ -380,11 +462,17 @@ class AngleRMSE(RootMeanSquaredError):
         if self.model_output is None:
             yp = result
         else:
-            yp = result[self.model_output]
+            if type(self.model_output) is list:
+                for idx in self.model_output:
+                    result = result[idx]
+            else:
+                result = result[self.model_output]
+            yp = result
 
         y = y.view(-1, y.size(-1))
         yp = yp.view(-1, yp.size(-1))
 
         diff = self._get_diff(y, yp)
         self.l2loss += torch.sum(diff ** 2).detach().cpu().data.numpy()
-        self.n_entries += y.size(0)
+        self.n_entries += torch.sum(torch.isnan(diff)==False)
+

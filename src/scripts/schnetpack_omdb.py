@@ -12,7 +12,7 @@ from torch.optim import Adam
 from torch.utils.data.sampler import RandomSampler
 
 import schnetpack as spk
-from schnetpack.datasets import MaterialsProject
+from schnetpack.datasets import OrganicMaterialsDatabase
 from schnetpack.utils import to_json, read_from_json, compute_params
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -33,30 +33,25 @@ def get_parser():
                             default=32)
     ## training
     train_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
-    train_parser.add_argument('datapath', help='Path / destination of Materials Project dataset')
+    train_parser.add_argument('datapath', help='Path / destination of OMDB dataset directory')
     train_parser.add_argument('modelpath', help='Destination for models and logs')
     train_parser.add_argument('--property', type=str,
-                              help='Materials Project property to be predicted (default: %(default)s)',
-                              default="formation_energy_per_atom", choices=MaterialsProject.properties)
-    train_parser.add_argument('--apikey', help='API key for Materials Project (see https://materialsproject.org/open)')
+                              help='Organic Materials Database property to be predicted (default: %(default)s)',
+                              default="band_gap", choices=OrganicMaterialsDatabase.properties)
     train_parser.add_argument('--seed', type=int, default=None, help='Set random seed for torch and numpy.')
     train_parser.add_argument('--overwrite', help='Remove previous model directory.', action='store_true')
 
-    train_parser.add_argument('--split_path', help='Path / destination of npz with data splits',
-                              default=None)
-    train_parser.add_argument('--split', help='Split into [train] [validation] and use remaining for testing',
-                              type=int, nargs=2, default=[None, None])
     train_parser.add_argument('--max_epochs', type=int, help='Maximum number of training epochs (default: %(default)s)',
                               default=5000)
     train_parser.add_argument('--lr', type=float, help='Initial learning rate (default: %(default)s)',
-                              default=1e-4)
+                              default=1e-3)
     train_parser.add_argument('--lr_patience', type=int,
                               help='Epochs without improvement before reducing the learning rate (default: %(default)s)',
-                              default=50)
+                              default=10)
     train_parser.add_argument('--lr_decay', type=float, help='Learning rate decay (default: %(default)s)',
-                              default=0.5)
+                              default=0.8)
     train_parser.add_argument('--lr_min', type=float, help='Minimal learning rate (default: %(default)s)',
-                              default=1e-6)
+                              default=1e-4)
 
     train_parser.add_argument('--logger', help='Choose logger for training process (default: %(default)s)',
                               choices=['csv', 'tensorboard'], default='csv')
@@ -66,10 +61,8 @@ def get_parser():
 
     ## evaluation
     eval_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
-    eval_parser.add_argument('datapath', help='Path of MaterialsProject dataset directory')
+    eval_parser.add_argument('datapath', help='Path of OMDB dataset directory')
     eval_parser.add_argument('modelpath', help='Path of stored model')
-    eval_parser.add_argument('--apikey', help='API key for Materials Project (see https://materialsproject.org/open)',
-                             default=None)
     eval_parser.add_argument('--split', help='Evaluate trained model on given split',
                              choices=['train', 'validation', 'test'], default=['test'], nargs='+')
 
@@ -83,7 +76,7 @@ def get_parser():
     schnet_parser.add_argument('--features', type=int, help='Size of atom-wise representation (default: %(default)s)',
                                default=64)
     schnet_parser.add_argument('--interactions', type=int, help='Number of interaction blocks (default: %(default)s)',
-                               default=6)
+                               default=3)
     schnet_parser.add_argument('--cutoff', type=float, default=5.,
                                help='Cutoff radius of local environment (default: %(default)s)')
     schnet_parser.add_argument('--num_gaussians', type=int, default=25,
@@ -249,37 +242,24 @@ if __name__ == '__main__':
     else:
         train_args = read_from_json(jsonpath)
 
-    # will download MaterialsProject if necessary
-    mp = spk.datasets.MaterialsProject(args.datapath, args.cutoff, apikey=args.apikey, download=True,
+    # will download OMDB dataset if necessary
+    omdb = spk.datasets.OrganicMaterialsDatabase(args.datapath, args.cutoff, download=True,
                                        properties=[train_args.property])
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, 'split.npz')
-    if args.mode == 'train':
-        if args.split_path is not None:
-            copyfile(args.split_path, split_path)
+    idx = list(range(12500))
+    np.savez(split_path, train_idx=idx[:9000], val_idx=idx[9000:10000], test_idx=idx[-2500:])
 
-    data_train, data_val, data_test = mp.create_splits(*train_args.split, split_file=split_path)
+    data_train, data_val, data_test = omdb.create_splits(split_file=split_path)
 
     train_loader = spk.data.AtomsLoader(data_train, batch_size=args.batch_size, sampler=RandomSampler(data_train),
                                         num_workers=4, pin_memory=True)
     val_loader = spk.data.AtomsLoader(data_val, batch_size=args.batch_size, num_workers=2, pin_memory=True)
 
     if args.mode == 'train':
-        logging.info('calculate statistics...')
-        split_data = np.load(split_path)
-        if 'mean' in split_data.keys():
-            mean = torch.from_numpy(split_data['mean'])
-            stddev = torch.from_numpy(split_data['stddev'])
-            calc_stats = False
-            logging.info("cached statistics was loaded...")
-        else:
-            mean, stddev = train_loader.get_statistics(train_args.property,
-                                                       True)#, atomref)
-            np.savez(split_path, train_idx=split_data['train_idx'],
-                     val_idx=split_data['val_idx'],
-                     test_idx=split_data['test_idx'], mean=mean,
-                     stddev=stddev)
+        mean, stddev = train_loader.get_statistics(train_args.property, True)
+        logging.info('Training set statistics: mean=%.3f, stddev=%.3f' % (mean.numpy(), stddev.numpy()))
     else:
         mean, stddev = None, None
 

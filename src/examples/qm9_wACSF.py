@@ -8,7 +8,7 @@ import schnetpack.representation as rep
 from schnetpack.datasets import *
 
 # load qm9 dataset and download if necessary
-data = QM9("qm9/", properties=[QM9.U0], collect_triples=True)
+data = QM9("qm9.db", properties=[QM9.U0], collect_triples=True)
 
 # split in train and val
 train, val, test = data.create_splits(100000, 10000)
