@@ -6,7 +6,7 @@ from ase.db import connect
 from ase.units import eV
 
 from schnetpack.data import AtomsData
-from schnetpack.environment import ASEEnvironmentProvider
+from schnetpack.environment import AseEnvironmentProvider
 
 __all__ = [
     'MaterialsProject'
@@ -48,7 +48,7 @@ class MaterialsProject(AtomsData):
 
         self.dbpath = dbpath
 
-        environment_provider = ASEEnvironmentProvider(cutoff)
+        environment_provider = AseEnvironmentProvider(cutoff)
 
         if properties is None:
             properties = MaterialsProject.available_properties

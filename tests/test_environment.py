@@ -39,7 +39,7 @@ def simple_env():
 
 @pytest.fixture
 def ase_env():
-    return env.ASEEnvironmentProvider(10.)
+    return env.AseEnvironmentProvider(10.)
 
 
 def test_single_atom(single_atom, simple_env, ase_env):
