@@ -43,7 +43,8 @@ def cfg():
     mongo_url = None
     mongo_db = None
 
-    modeldir = './models'
+    experiment_dir = './experiments'
+    training_dir = os.path.join(experiment_dir, 'training')
     properties = ['energy', 'forces']
 
 
@@ -60,16 +61,16 @@ def observe():
 
 
 @ex.capture
-def save_config(_config, modeldir):
+def save_config(_config, training_dir):
     """
     Save the configuration to the model directory.
 
     Args:
         _config (dict): configuration of the experiment
-        modeldir (str): path to the model directory
+        training_dir (str): path to the training directory
 
     """
-    with open(os.path.join(modeldir, 'training_config.yaml'), 'w') as f:
+    with open(os.path.join(training_dir, 'config.yaml'), 'w') as f:
         yaml.dump(_config, f, default_flow_style=False)
 
 
@@ -162,29 +163,30 @@ def stats(train_loader, atomrefs, property_map, mean, stddev, _config):
 
 
 @ex.capture
-def create_modeldir(_log, modeldir, overwrite):
+def create_dirs(_log, training_dir, overwrite):
     """
-    Create the directory for the model.
+    Create the directory for the experiment.
 
     Args:
         _log:
-        modeldir (str): path to the model directory
+        experiment_dir (str): path to the experiment directory
         overwrite (bool): overwrites the model directory if True
 
     """
     _log.info("Create model directory")
-    if modeldir is None:
-        raise ValueError('Config `modeldir` has to be set!')
+    if training_dir is None:
+        raise ValueError('Config `experiment_dir` has to be set!')
 
-    if os.path.exists(modeldir) and not overwrite:
+    if os.path.exists(training_dir) and not overwrite:
         raise ValueError(
-            'Model directory already exists (set overwrite flag?):', modeldir)
+            'Model directory already exists (set overwrite flag?):',
+            training_dir)
 
-    if os.path.exists(modeldir) and overwrite:
-        rmtree(modeldir)
+    if os.path.exists(training_dir) and overwrite:
+        rmtree(training_dir)
 
-    if not os.path.exists(modeldir):
-        os.makedirs(modeldir)
+    if not os.path.exists(training_dir):
+        os.makedirs(training_dir)
 
 
 @ex.capture
@@ -218,14 +220,14 @@ def build_loss(property_map, loss_tradeoff):
 
 
 @ex.command
-def train(_log, _config, modeldir, properties, additional_outputs, device):
+def train(_log, _config, training_dir, properties, additional_outputs, device):
     """
     Build a trainer from the configuration and start the treining.
 
     Args:
         _log:
         _config (dict): configuration dictionary
-        modeldir (str): path to the model directry
+        training_dir (str): path to the training directory
         properties (list): list of model properties
         additional_outputs (list): list of additional model properties that are
             not back-propagated
@@ -233,7 +235,7 @@ def train(_log, _config, modeldir, properties, additional_outputs, device):
 
     """
     property_map = get_property_map(properties)
-    create_modeldir()
+    create_dirs()
     save_config()
 
     _log.info("Load data")
@@ -249,8 +251,10 @@ def train(_log, _config, modeldir, properties, additional_outputs, device):
                         additional_outputs=additional_outputs).to(device)
     _log.info("Setup training")
     loss_fn = build_loss(property_map=property_map)
-    trainer = setup_trainer(model=model, loss_fn=loss_fn, modeldir=modeldir,
-                            train_loader=train_loader, val_loader=val_loader,
+    trainer = setup_trainer(model=model, loss_fn=loss_fn,
+                            training_dir=training_dir,
+                            train_loader=train_loader,
+                            val_loader=val_loader,
                             property_map=property_map)
     _log.info("Training")
     trainer.train(device)

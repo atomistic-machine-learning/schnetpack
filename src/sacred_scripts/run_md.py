@@ -2,6 +2,7 @@ from sacred import Experiment
 import os
 import torch
 import yaml
+from shutil import rmtree
 
 from schnetpack.sacred.calculator_ingredients import (calculator_ingradient,
                                                       build_calculator)
@@ -22,47 +23,38 @@ md = Experiment('md', ingredients=[simulator_ingredient, calculator_ingradient,
 
 @md.config
 def config():
-    modeldir = './runs/models'
+    experiment_dir = './experiments'
     simulation_steps = 1000
     device = 'cpu'
-    path_to_molecules = './runs/data/ethanol.xyz'
+    path_to_molecules = os.path.join(experiment_dir, 'data/ethanol.xyz')
+    simulation_dir = os.path.join(experiment_dir, 'simulation')
+    training_dir = os.path.join(experiment_dir, 'training')
+    model_path = os.path.join(training_dir, 'best_model')
+    overwrite = True
 
 
 @md.capture
-def save_config(_config, modeldir):
+def save_config(_config, simulation_dir):
     """
     Save the configuration to the model directory.
 
     Args:
         _config (dict): configuration of the experiment
-        modeldir (str): path to the model directory
+        simulation_dir (str): path to the simulation directory
 
     """
-    with open(os.path.join(modeldir, 'simulation_config.yaml'), 'w') as f:
+    with open(os.path.join(simulation_dir, 'config.yaml'), 'w') as f:
         yaml.dump(_config, f, default_flow_style=False)
 
 
 @md.capture
-def get_model_config(modeldir):
-    with open(os.path.join(modeldir, 'model_config.yaml')) as f:
-        model_config = yaml.load(f)
-    return model_config
+def load_model(model_path):
+    return torch.load(model_path)
 
 
 @md.capture
-def get_state_dict(modeldir):
-    state_dict = torch.load(os.path.join(modeldir, 'best_model'))
-    return state_dict
-
-
-@md.capture
-def load_model(modeldir):
-    return torch.load(os.path.join(modeldir, 'best_model'))
-
-
-@md.capture
-def setup_simulation(modeldir, device, path_to_molecules):
-    model = load_model(modeldir)
+def setup_simulation(simulation_dir, device, path_to_molecules):
+    model = load_model()
     calculator = build_calculator(model=model)
     integrator = build_integrator()
     system = build_system(device=device, path_to_molecules=path_to_molecules)
@@ -70,14 +62,43 @@ def setup_simulation(modeldir, device, path_to_molecules):
     simulator = build_simulator(system=system,
                                 integrator_object=integrator,
                                 calculator_object=calculator,
-                                modeldir=modeldir, thermostat_object=thermostat)
+                                simulation_dir=simulation_dir,
+                                thermostat_object=thermostat)
     return simulator
 
 
+@md.capture
+def create_dirs(_log, simulation_dir, overwrite):
+    """
+    Create the directory for the experiment.
+
+    Args:
+        _log:
+        experiment_dir (str): path to the experiment directory
+        overwrite (bool): overwrites the model directory if True
+
+    """
+    _log.info("Create model directory")
+    if simulation_dir is None:
+        raise ValueError('Config `experiment_dir` has to be set!')
+
+    if os.path.exists(simulation_dir) and not overwrite:
+        raise ValueError(
+            'Model directory already exists (set overwrite flag?):',
+            simulation_dir)
+
+    if os.path.exists(simulation_dir) and overwrite:
+        rmtree(simulation_dir)
+
+    if not os.path.exists(simulation_dir):
+        os.makedirs(simulation_dir)
+
+
 @md.command
-def simulate(modeldir, simulation_steps):
+def simulate(simulation_dir, simulation_steps):
+    create_dirs()
     save_config()
-    simulator = setup_simulation(modeldir=modeldir)
+    simulator = setup_simulation(simulation_dir=simulation_dir)
     simulator.simulate(simulation_steps)
 
 
