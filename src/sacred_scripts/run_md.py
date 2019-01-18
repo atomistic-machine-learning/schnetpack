@@ -23,6 +23,7 @@ md = Experiment('md', ingredients=[simulator_ingredient, calculator_ingradient,
 
 @md.config
 def config():
+    """configuration for the simulation experiment"""
     experiment_dir = './experiments'
     simulation_steps = 1000
     device = 'cpu'

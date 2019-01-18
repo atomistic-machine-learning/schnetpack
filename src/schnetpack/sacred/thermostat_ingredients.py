@@ -8,13 +8,13 @@ thermostat_ingredient = Ingredient('thermostat')
 
 @thermostat_ingredient.config
 def config():
-    """settings for the thermostat ingredient"""
+    """configuration for the thermostat ingredient"""
     thermostat = None
 
 
 @thermostat_ingredient.named_config
 def berendsen():
-    """settings for the berendsen thermostat"""
+    """configuration for the berendsen thermostat"""
     thermostat = 'berendsen'
     bath_temperature = 50.
     transfer_time = 1.
@@ -22,7 +22,7 @@ def berendsen():
 
 @thermostat_ingredient.named_config
 def gle():
-    """settings for the GLE thermostat"""
+    """configuration for the GLE thermostat"""
     thermostat = 'gle'
     bath_temperature = 50.
     gle_file = './some_file.txt'
@@ -31,7 +31,7 @@ def gle():
 
 @thermostat_ingredient.named_config
 def piglet():
-    """settings for the piglet thermostat"""
+    """configuration for the piglet thermostat"""
     thermostat = 'piglet'
     bath_temperature = 50.
     gle_file = './some_file.txt'
@@ -40,7 +40,7 @@ def piglet():
 
 @thermostat_ingredient.named_config
 def langevin():
-    """settings for the langevin thermostat"""
+    """configuration for the langevin thermostat"""
     thermostat = 'langevin'
     bath_temperature = 50.
     time_constant = 2.
@@ -48,7 +48,7 @@ def langevin():
 
 @thermostat_ingredient.named_config
 def pile_local():
-    """settings for the pile-local thermostat"""
+    """configuration for the pile-local thermostat"""
     thermostat = 'pile_local'
     bath_temperature = 50.
     time_constant = 2.
@@ -56,7 +56,7 @@ def pile_local():
 
 @thermostat_ingredient.named_config
 def pile_global():
-    """settings for the pile-global thermostat"""
+    """configuration for the pile-global thermostat"""
     thermostat = 'pile_global'
     bath_temperature = 50.
     time_constant = 2.
@@ -64,7 +64,7 @@ def pile_global():
 
 @thermostat_ingredient.named_config
 def nhc():
-    """settings for the nhc thermostat"""
+    """configuration for the nhc thermostat"""
     thermostat = 'nhc'
     bath_temperature = 50.
     time_constant = 2.
@@ -77,7 +77,7 @@ def nhc():
 
 @thermostat_ingredient.named_config
 def nhc_ring_polymer():
-    """settings for the nhc-ring-polymer thermostat"""
+    """configuration for the nhc-ring-polymer thermostat"""
     thermostat = 'nhc_ring_polymer'
     bath_temperature = 50.
     time_constant = 2.

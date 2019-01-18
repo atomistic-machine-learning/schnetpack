@@ -11,14 +11,14 @@ model_ingredient = Ingredient('model')
 
 @model_ingredient.config
 def cfg():
-    """Base configuration for the model."""
+    """configuration for the model ingredient"""
     name = None
     n_atom_basis = -1
 
 
 @model_ingredient.named_config
 def schnet():
-    """Default configuration for the SchNet model."""
+    """configuration for the SchNet model"""
     name = 'schnet'
     n_atom_basis = 128
     n_filters = 128

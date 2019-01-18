@@ -12,7 +12,7 @@ train_ingredient = Ingredient('trainer')
 
 @train_ingredient.config
 def cfg():
-    """base config for the trainer"""
+    """configuration for the trainer ingredient"""
     optimizer = 'adam'
     schedule = None
     learning_rate = 1e-4
@@ -26,7 +26,7 @@ def cfg():
 
 @train_ingredient.named_config
 def sgdr():
-    """default config for the SGDR schedule"""
+    """configuration for the SGDR schedule"""
     schedule = 'sgdr'
     t0 = 50
     tmult = 1
@@ -37,7 +37,7 @@ def sgdr():
 
 @train_ingredient.named_config
 def plateau():
-    """default config for the ReduceOnPlateau schedule"""
+    """configuration for the ReduceOnPlateau schedule"""
     schedule = 'plateau'
     patience = 10
     lr_min = 1e-7
@@ -46,7 +46,7 @@ def plateau():
 
 @train_ingredient.named_config
 def early_stopping():
-    """default config for early stopping hook"""
+    """configuration for early stopping hook"""
     early_stopping = True
     threshold_ratio = 0.
     patience = 0
@@ -54,7 +54,7 @@ def early_stopping():
 
 @train_ingredient.named_config
 def base_hooks():
-    """default config for logging hooks"""
+    """configuration for logging hooks"""
     logging_hooks = ['csv']
     metrics = ['rmse', 'mae']
 

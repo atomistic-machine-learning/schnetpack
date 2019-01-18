@@ -7,7 +7,7 @@ system_ingredient = Ingredient('system')
 
 @system_ingredient.config
 def config():
-    """settings for the system ingredient"""
+    """configuration for the system ingredient"""
     n_replicas = 2
 
 

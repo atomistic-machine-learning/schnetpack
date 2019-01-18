@@ -25,7 +25,7 @@ def is_extensive(prop):
 
 @ex.config
 def cfg():
-    """base configuration for training"""
+    """configuration configuration for training experiment"""
 
     loss_tradeoff = {}
     overwrite = True
@@ -44,7 +44,7 @@ def cfg():
 
 @ex.named_config
 def observe():
-    """default config for observing experiments"""
+    """configuration for observing experiments"""
 
     mongo_url = 'mongodb://127.0.0.1:27017'
     mongo_db = 'test'

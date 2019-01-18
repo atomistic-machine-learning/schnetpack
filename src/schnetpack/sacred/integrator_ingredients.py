@@ -15,14 +15,14 @@ def config():
 
 @integrator_ingredient.named_config
 def velocity_verlet():
-    """settings for the velocity verlet integrator"""
+    """configuration for the velocity verlet integrator"""
     integrator = 'velocity_verlet'
     time_step = 1
 
 
 @integrator_ingredient.named_config
 def ring_polymer():
-    """settings for the ring polymer integrator"""
+    """configuration for the ring polymer integrator"""
     integrator = 'ring_polymer'
     n_beads = 10
     time_step = 1
