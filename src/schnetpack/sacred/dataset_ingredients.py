@@ -8,10 +8,7 @@ dataset_ingredient = Ingredient("dataset")
 
 @dataset_ingredient.config
 def cfg():
-    """
-    Base configuration for the dataset.
-
-    """
+    """Base configuration for the dataset."""
     dbpath = None
     dataset = 'CUSTOM'
     property_mapping = {}
@@ -19,10 +16,7 @@ def cfg():
 
 @dataset_ingredient.named_config
 def qm9():
-    """
-    Default configuration for the QM9 dataset.
-
-    """
+    """Default configuration for the QM9 dataset."""
     dbpath = './data/qm9.db'
     dataset = 'QM9'
     property_mapping = {Properties.energy: QM9.U0,
@@ -32,10 +26,7 @@ def qm9():
 
 @dataset_ingredient.named_config
 def iso17():
-    """
-    Default configuration for the ISO17 dataset.
-
-    """
+    """Default configuration for the ISO17 dataset."""
     dbpath = './data'
     dataset = 'ISO17'
     fold = 'reference'
@@ -45,10 +36,7 @@ def iso17():
 
 @dataset_ingredient.named_config
 def ani1():
-    """
-    Default configuration for the ANI1 dataset.
-
-    """
+    """Default configuration for the ANI1 dataset."""
     dbpath = './data/ani1.db'
     dataset = 'ANI1'
     num_heavy_atoms = 2
@@ -57,10 +45,7 @@ def ani1():
 
 @dataset_ingredient.named_config
 def md17():
-    """
-    Default configuration for the MD17 dataset.
-
-    """
+    """Default configuration for the MD17 dataset."""
     dbpath = './data'
     dataset = 'MD17'
     molecule = 'aspirin'
@@ -70,10 +55,7 @@ def md17():
 
 @dataset_ingredient.named_config
 def matproj():
-    """
-    Default configuration for the Materials Project dataset.
-
-    """
+    """Default configuration for the Materials Project dataset."""
     dbpath = './data/matproj.db'
     dataset = 'MATPROJ'
     cutoff = 5.

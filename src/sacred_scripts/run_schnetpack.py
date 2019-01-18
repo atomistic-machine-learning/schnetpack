@@ -25,35 +25,27 @@ def is_extensive(prop):
 
 @ex.config
 def cfg():
-    """
-    base configuration for schnetpack experiments
+    """base configuration for training"""
 
-    """
     loss_tradeoff = {}
     overwrite = True
     additional_outputs = []
-
     batch_size = 100
     num_train = 0.8
     num_val = 0.1
     num_workers = 2
-    mean = None
-    stddev = None
     device = 'cpu'
-    mongo_url = None
-    mongo_db = None
-
     experiment_dir = './experiments'
     training_dir = os.path.join(experiment_dir, 'training')
     properties = ['energy', 'forces']
+    mean = None
+    stddev = None
 
 
 @ex.named_config
 def observe():
-    """
-    default config for observing experiments
+    """default config for observing experiments"""
 
-    """
     mongo_url = 'mongodb://127.0.0.1:27017'
     mongo_db = 'test'
     ex.observers.append(MongoObserver.create(url=mongo_url,

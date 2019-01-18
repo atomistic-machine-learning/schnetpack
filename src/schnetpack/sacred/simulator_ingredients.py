@@ -11,7 +11,9 @@ simulator_ingredient = Ingredient('simulator')
 
 @simulator_ingredient.config
 def config():
+    """settings for the simulator ingredient"""
     logging_hooks = []
+    data_streams = []
     step = 0
     log_every_n_steps = 100
     checkpoint_every_n_steps = 1000
@@ -19,6 +21,7 @@ def config():
 
 @simulator_ingredient.named_config
 def base_hooks():
+    """default settings for logging hooks"""
     logging_hooks = ['file_logger', 'checkpoint_logger']
     buffer_size = 1
     data_streams = ['molecule_stream', 'property_stream']
