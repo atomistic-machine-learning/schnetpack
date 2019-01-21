@@ -25,6 +25,8 @@ from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
 from ase.optimize import QuasiNewton
 from ase.vibrations import Vibrations
 
+from collections import Iterable
+
 from schnetpack.atomistic import Energy, ElementalEnergy, AtomisticModel
 from schnetpack.data import Structure
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
@@ -340,48 +342,37 @@ class AseInterface:
 
 def load_model(modelpath, cuda=True):
     """
-    Load a trained model from its directory and prepare it for simulations with ASE.
+    Load an exported model and prepare it for simulations with ASE. The model needs to be able to provide energies and
+    forces.
 
     Args:
-        modelpath (str): Path to model directory.
+        modelpath (str): Path to exported model files.
         cuda (bool): Use cuda (default=True).
 
     Returns:
         object: Model class specified in molecular_dynamics. Contains the model, model type and device.
     """
-    # Load stored arguments
-    argspath = os.path.join(modelpath, 'args.json')
-    args = read_from_json(argspath)
-
-    # Reconstruct model based on arguments
-    if args.model == 'schnet':
-        representation = SchNet(args.features, args.features, args.interactions,
-                                args.cutoff, args.num_gaussians)
-        atomwise_output = Energy(args.features, return_force=True, create_graph=True)
-    elif args.model == 'wacsf':
-        # Build HDNN model
-        mode = ('weighted', 'Behler')[args.behler]
-        # Convert element strings to atomic charges
-        elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
-        representation = BehlerSFBlock(args.radial, args.angular, zetas=set(args.zetas), cutoff_radius=args.cutoff,
-                                       centered=args.centered, crossterms=args.crossterms, mode=mode,
-                                       elements=elements)
-        representation = StandardizeSF(representation, cuda=args.cuda)
-        atomwise_output = ElementalEnergy(representation.n_symfuncs, n_hidden=args.n_nodes, n_layers=args.n_layers,
-                                          return_force=True, create_graph=True, elements=elements)
-    else:
-        raise ValueError('Unknown model class:', args.model)
-
-    model = AtomisticModel(representation, atomwise_output)
-
-    # Load old parameters
-    model.load_state_dict(torch.load(os.path.join(modelpath, 'best_model')))
 
     # Set cuda if requested
     device = torch.device("cuda" if cuda else "cpu")
-    model = model.to(device)
+    model = torch.load(modelpath).to(device)
+
+    # Determine model type
+    if isinstance(model.representation, BehlerSFBlock):
+        model_type = 'wacsf'
+    else:
+        model_type = 'schnet'
+
+    # Set gradiant flags properly
+    model.requires_dr = True
+
+    if isinstance(model.output_modules, Iterable):
+        for module in model.output_modules:
+            module.requires_dr = True
+    else:
+        model.output_modules.requires_dr = True
 
     # Store into model wrapper for calculator
-    ml_model = Model(model, args.model, device)
+    ml_model = Model(model, model_type, device)
 
     return ml_model
