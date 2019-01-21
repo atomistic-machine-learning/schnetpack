@@ -64,3 +64,10 @@ def test_add_and_read(empty_asedata, example_data):
 
     for i in range(len(example_data)):
         d = empty_asedata[i]
+    return empty_asedata
+
+
+def test_empty_subset_of_subset(empty_asedata, example_data):
+    data = test_add_and_read(empty_asedata, example_data)
+    subset = data.create_subset([0, 1])
+    subset.create_subset([])

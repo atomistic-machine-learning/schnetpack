@@ -3,8 +3,8 @@ import torch
 import warnings
 from schnetpack.data import Structure
 
-__all__ = ['ModelBias', 'MeanSquaredError', 'RootMeanSquaredError', 'MeanAbsoluteError', 'HeatmapMAE', 'LengthMSE',
-           'LengthMAE', 'LengthRMSE', 'AngleMSE', 'AngleMAE', 'AngleRMSE']
+__all__ = ['ModelBias', 'MeanSquaredError', 'RootMeanSquaredError', 'MeanAbsoluteError', 'HeatmapMAE', 'SumMAE',
+           'LengthMSE', 'LengthMAE', 'LengthRMSE', 'AngleMSE', 'AngleMAE', 'AngleRMSE']
 
 
 class Metric:
@@ -254,6 +254,27 @@ class HeatmapMAE(MeanAbsoluteError):
 
     def aggregate(self):
         return self.l1loss / self.n_entries
+
+
+class SumMAE(MeanAbsoluteError):
+    r"""
+    Metric for mean absolute error of length.
+
+    Args:
+        target (str): name of target property
+        model_output (int, str): index or key, in case of multiple outputs (Default: None)
+        name (str): name used in logging for this metric. If set to `None`,
+                    `LengthMAE_[target]` will be used (Default: None)
+   """
+
+    def __init__(self, target, model_output=None, axis=1, name=None, element_wise=False):
+        name = 'SumMAE_' + target if name is None else name
+        self.axis= axis
+        super(SumMAE, self).__init__(target, model_output, name=name, element_wise=element_wise)
+
+    def _get_diff(self, y, yp):
+        ypl = torch.sum(yp, dim=self.axis)
+        return torch.sum(torch.abs(y - ypl))
 
 
 class LengthMSE(MeanSquaredError):
