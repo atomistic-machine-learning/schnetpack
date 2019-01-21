@@ -34,6 +34,10 @@ from schnetpack.representation import SchNet, BehlerSFBlock, StandardizeSF
 from schnetpack.utils import read_from_json
 
 
+class MDModelError(Exception):
+    pass
+
+
 class Model:
     """
     Basic wrapper for model to pass the calculator, etc.
@@ -366,11 +370,20 @@ def load_model(modelpath, cuda=True):
     # Set gradiant flags properly
     model.requires_dr = True
 
+    has_energy = False
     if isinstance(model.output_modules, Iterable):
         for module in model.output_modules:
+            if isinstance(module, Energy) or isinstance(module, ElementalEnergy):
+                has_energy = True
             module.requires_dr = True
     else:
+        if isinstance(model.output_modules, Energy) or isinstance(model.output_modules, ElementalEnergy):
+            has_energy = True
         model.output_modules.requires_dr = True
+
+    if not has_energy:
+        raise MDModelError(
+            'Molecular dynamics model requires an Energy/ElementalEnergy output layer for predicting forces.')
 
     # Store into model wrapper for calculator
     ml_model = Model(model, model_type, device)
