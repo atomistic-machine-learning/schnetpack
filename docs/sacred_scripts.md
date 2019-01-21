@@ -54,11 +54,11 @@ The configuration can now be changed by directly setting the parameters:
 
      my_script.py my_command with my_ingredient.i1=90 e1=90
      
-This yields the output '90, 2, 90'. In order to use the named configurations, add the config name to the run arguments:
+This yields the output `90, 2, 90`. In order to use the named configurations, add the config name to the run arguments:
 
     my_script.py my_command with my_ingredient.other_config exp_other_config
     
-This yields the output '1, 20, 10'.  
+This yields the output `1, 20, 10`.  
 
 ### Implementing new Configurations
 
