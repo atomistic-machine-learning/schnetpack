@@ -30,7 +30,7 @@ def test_run(property_mapping, properties):
                           'data/test_qm9.db')
     ex.run(command_name='train',
            named_configs=['model.schnet'],
-           config_updates={'modeldir': tmpdir,
+           config_updates={'experiment_dir': tmpdir,
                            'properties': properties,
                            'dataset.dbpath': dbpath,
                            'dataset.property_mapping': property_mapping,
@@ -40,7 +40,7 @@ def test_run(property_mapping, properties):
                            'trainer.metrics': ['mae', 'rmse']
                            })
 
-    with open(os.path.join(tmpdir, 'log.csv'), 'r') as file:
+    with open(os.path.join(tmpdir, 'training/log.csv'), 'r') as file:
         log = file.readlines()
     assert len(log[0].split(',')) == 10
     assert len(log) == 5
