@@ -44,7 +44,7 @@ def get_parser():
                               help='Destination for models and logs')
     train_parser.add_argument('--property', type=str,
                               help='QM9 property to be predicted (default: %(default)s)',
-                              default="energy_U0", choices=QM9.properties)
+                              default="energy_U0", choices=QM9.available_properties)
 
     train_parser.add_argument('--remove_uncharacterized',
                               help='Remove uncharacterized molecules from QM9',
