@@ -8,7 +8,7 @@ from ase.db import connect
 from ase.units import eV
 
 from schnetpack.data import AtomsData
-from schnetpack.environment import ASEEnvironmentProvider
+from schnetpack.environment import AseEnvironmentProvider
 
 __all__ = [
     'OrganicMaterialsDatabase'
@@ -57,7 +57,7 @@ class OrganicMaterialsDatabase(AtomsData):
             raise FileNotFoundError('Download OMDB dataset (e.g. OMDB-GAP1.tar.gz) from https://omdb.diracmaterials.org/dataset/ and set datapath to this file')
 
 
-        environment_provider = ASEEnvironmentProvider(cutoff)
+        environment_provider = AseEnvironmentProvider(cutoff)
 
         if download and not os.path.exists(self.dbpath):
             # Convert OMDB .tar.gz into a .db file

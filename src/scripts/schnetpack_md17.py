@@ -2,6 +2,7 @@
 import argparse
 import logging
 import os
+import sys
 from shutil import copyfile, rmtree
 
 import numpy as np
@@ -285,9 +286,24 @@ def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None, par
     return model
 
 
+def export_model(args):
+    jsonpath = os.path.join(args.modelpath, 'args.json')
+    train_args = read_from_json(jsonpath)
+    model = get_model(train_args)
+    model.load_state_dict(
+        torch.load(os.path.join(args.modelpath, 'best_model')))
+
+    torch.save(model, args.destpath)
+
+
 if __name__ == '__main__':
     parser = get_parser()
     args = parser.parse_args()
+
+    if args.mode == 'export':
+        export_model(args)
+        sys.exit(0)
+
     device = torch.device("cuda" if args.cuda else "cpu")
     argparse_dict = vars(args)
     jsonpath = os.path.join(args.modelpath, 'args.json')

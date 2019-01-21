@@ -5,8 +5,14 @@ from ase.neighborlist import neighbor_list
 class BaseEnvironmentProvider:
     """
     Environment Providers are supposed to collect neighboring atoms within
+<<<<<<< HEAD
     local, atom-centered environments.
     All environment providers should inherit from this class.
+=======
+    local, atom-centered environments. All environment providers should inherit
+    from this class.
+
+>>>>>>> master
     """
 
     def get_environment(self, atoms):
@@ -18,10 +24,17 @@ class BaseEnvironmentProvider:
 
         Returns:
             neighborhood_idx (np.ndarray): indices of the neighbors with shape
+<<<<<<< HEAD
                                            n_atoms x n_max_neighbors
             offset (np.ndarray): offset in lattice coordinates for periodic
                                  systems (otherwise zero matrix) of shape
                                  n_atoms x n_max_neighbors x 3
+=======
+                n_atoms x n_max_neighbors
+            offset (np.ndarray): offset in lattice coordinates for periodic
+                systems (otherwise zero matrix) of shape
+                n_atoms x n_max_neighbors x 3
+>>>>>>> master
 
         '''
 
@@ -44,6 +57,7 @@ class SimpleEnvironmentProvider(BaseEnvironmentProvider):
         else:
             neighborhood_idx = np.tile(
                 np.arange(n_atoms, dtype=np.float32)[np.newaxis], (n_atoms, 1))
+<<<<<<< HEAD
             neighborhood_idx = neighborhood_idx[~np.eye(
                 n_atoms, dtype=np.bool)].reshape(n_atoms, n_atoms - 1)
 
@@ -65,6 +79,32 @@ class ASEEnvironmentProvider:
     Environment provider making use of ASE neighbor lists. Supports cutoffs
     and PBCs.
     '''
+=======
+            neighborhood_idx = neighborhood_idx[
+                ~np.eye(n_atoms, dtype=np.bool)].reshape(n_atoms, n_atoms - 1)
+
+            if grid is not None:
+                n_grid = grid.shape[0]
+                neighborhood_idx = np.hstack(
+                    [neighborhood_idx, -np.ones((n_atoms, 1))])
+                grid_nbh = np.tile(
+                    np.arange(n_atoms, dtype=np.float32)[np.newaxis],
+                    (n_grid, 1))
+                neighborhood_idx = np.vstack([neighborhood_idx, grid_nbh])
+
+            offsets = np.zeros(
+                (neighborhood_idx.shape[0], neighborhood_idx.shape[1], 3),
+                dtype=np.float32)
+        return neighborhood_idx, offsets
+
+
+class AseEnvironmentProvider(BaseEnvironmentProvider):
+    """
+    Environment provider making use of ASE neighbor lists. Supports cutoffs
+    and PBCs.
+
+    """
+>>>>>>> master
 
     def __init__(self, cutoff):
         self.cutoff = cutoff
@@ -90,7 +130,8 @@ class ASEEnvironmentProvider:
                                         dtype=np.float32)
             neighborhood_idx[mask] = idx_j
 
-            offset = np.zeros((n_atoms, np.max(n_max_nbh), 3), dtype=np.float32)
+            offset = np.zeros((n_atoms, np.max(n_max_nbh), 3),
+                              dtype=np.float32)
             offset[mask] = idx_S
         else:
             neighborhood_idx = -np.ones((n_atoms, 1), dtype=np.float32)

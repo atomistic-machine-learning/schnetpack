@@ -85,6 +85,8 @@ class BaseAtomsData(Dataset):
 
             num_train = num_train if num_train > 1 else num_train * len(self)
             num_val = num_val if num_val > 1 else num_val * len(self)
+            num_train = int(num_train)
+            num_val = int(num_val)
 
             idx = np.random.permutation(len(self))
             train_idx = idx[:num_train].tolist()
@@ -110,7 +112,7 @@ class BaseAtomsData(Dataset):
             schnetpack.data.AtomsData: dataset with subset of original data
         """
         idx = np.array(idx)
-        subidx = idx if self.subset is None else np.array(self.subset)[idx]
+        subidx = idx if self.subset is None or len(idx) == 0 else np.array(self.subset)[idx]
         return type(self)(self.dbpath, subidx, self.required_properties,
                           self.environment_provider, self.collect_triples,
                           self.centered, self.load_charge)
@@ -233,6 +235,8 @@ class MergedAtomsData(Dataset):
                 idx = np.random.permutation(len(ds))
                 num_train = num_train if num_train > 1 else num_train * len(ds)
                 num_val = num_val if num_val > 1 else num_val * len(ds)
+                num_train = int(num_train)
+                num_val = int(num_val)
 
                 train_idx.append(idx[:num_train].tolist())
                 val_idx.append(idx[num_train:num_train + num_val].tolist())
