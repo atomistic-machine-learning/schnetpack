@@ -18,9 +18,11 @@ class CFConv(nn.Module):
         n_filters (int): Number of filter dimensions
         n_out (int): Number of output dimensions
         filter_network (nn.Module): Calculates filter
-        cutoff_network (nn.Module): Calculates optional cutoff function (default: None)
+        cutoff_network (nn.Module): Calculates optional cutoff function
+                                    (default: None)
         activation (function): Activation function
-        normalize_filter (bool): If true, normalize filter to number of neighbors (default: false)
+        normalize_filter (bool): If true, normalize filter to number of
+                                 neighbors (default: false)
         axis (int): axis over which convolution should be applied
     """
 
@@ -75,4 +77,3 @@ class CFConv(nn.Module):
         y = self.f2out(y)
 
         return y
-

@@ -12,15 +12,11 @@ train_ingredient = Ingredient('trainer')
 
 @train_ingredient.config
 def cfg():
-    """
-    base config for the trainer
-
-    """
+    """configuration for the trainer ingredient"""
     optimizer = 'adam'
     schedule = None
     learning_rate = 1e-4
     max_epochs = None
-    hooks = []
     metrics = []
     max_steps = None
     early_stopping = False
@@ -30,10 +26,7 @@ def cfg():
 
 @train_ingredient.named_config
 def sgdr():
-    """
-    default config for the SGDR schedule
-
-    """
+    """configuration for the SGDR schedule"""
     schedule = 'sgdr'
     t0 = 50
     tmult = 1
@@ -44,10 +37,7 @@ def sgdr():
 
 @train_ingredient.named_config
 def plateau():
-    """
-    default config for the ReduceOnPlateau schedule
-
-    """
+    """configuration for the ReduceOnPlateau schedule"""
     schedule = 'plateau'
     patience = 10
     lr_min = 1e-7
@@ -56,10 +46,7 @@ def plateau():
 
 @train_ingredient.named_config
 def early_stopping():
-    """
-    default config for early stopping hook
-
-    """
+    """configuration for early stopping hook"""
     early_stopping = True
     threshold_ratio = 0.
     patience = 0
@@ -67,10 +54,7 @@ def early_stopping():
 
 @train_ingredient.named_config
 def base_hooks():
-    """
-    default config for logging hooks
-
-    """
+    """configuration for logging hooks"""
     logging_hooks = ['csv']
     metrics = ['rmse', 'mae']
 
@@ -112,7 +96,7 @@ def get_optimizer(optimizer, learning_rate, trainable_params):
         raise NotImplementedError
 
 @train_ingredient.capture
-def build_hooks(logging_hooks, schedule, modeldir, max_epochs, property_map,
+def build_hooks(logging_hooks, schedule, training_dir, max_epochs, property_map,
                 early_stopping, lr_schedule, max_steps):
     """
     build a list with hook objects
@@ -120,7 +104,7 @@ def build_hooks(logging_hooks, schedule, modeldir, max_epochs, property_map,
     Args:
         logging_hooks (list): list with names of logging hooks
         schedule (str): name of the lr_schedule
-        modeldir (str): path to the model directory
+        training_dir (str): path to the training directory
         max_epochs (str): max number of training epochs
         property_map (dict): mapping between model properties and dataset
             properties
@@ -135,7 +119,7 @@ def build_hooks(logging_hooks, schedule, modeldir, max_epochs, property_map,
     metrics_objects = build_metrics(property_map=property_map)
     hook_objects = build_schedule(schedule)
     hook_objects += build_logging_hooks(logging_hooks=logging_hooks,
-                                        modeldir=modeldir,
+                                        training_dir=training_dir,
                                         metrics_objects=metrics_objects)
     if early_stopping:
         hook_objects.append(get_early_stopping_hook())
@@ -149,13 +133,13 @@ def build_hooks(logging_hooks, schedule, modeldir, max_epochs, property_map,
 
 
 @train_ingredient.capture
-def build_logging_hooks(logging_hooks, modeldir, metrics_objects):
+def build_logging_hooks(logging_hooks, training_dir, metrics_objects):
     """
     build a list of logging hooks
 
     Args:
         logging_hooks (list): names of the logging hooks
-        modeldir (str): path to the model directory
+        training_dir (str): path to the training directory
         metrics_objects (list): list with schnetpack.metrics.Metric objects
 
     Returns:
@@ -167,10 +151,11 @@ def build_logging_hooks(logging_hooks, modeldir, metrics_objects):
         return hook_objects
     for hook in logging_hooks:
         if hook == 'tensorboard':
-            hook_objects.append(TensorboardHook(os.path.join(modeldir, 'log'),
+            hook_objects.append(TensorboardHook(os.path.join(training_dir,
+                                                             'log'),
                                                 metrics_objects))
         elif hook == 'csv':
-            hook_objects.append(CSVHook(modeldir, metrics_objects))
+            hook_objects.append(CSVHook(training_dir, metrics_objects))
         else:
             raise NotImplementedError
     return hook_objects
@@ -229,14 +214,14 @@ def build_metrics(metrics, property_map):
 
 
 @train_ingredient.capture
-def setup_trainer(model, modeldir, loss_fn, train_loader, val_loader,
+def setup_trainer(model, training_dir, loss_fn, train_loader, val_loader,
                   property_map, exclude=[]):
     """
     build a trainer object
 
     Args:
         model (torch.nn.Module): model object
-        modeldir (str): path to the model directory
+        training_dir (str): path to the training directory
         loss_fn (callable): loss function
         train_loader (schnetpack.data.AtomsLoader): dataloader for train data
         val_loader (schnetpack.data.Atomsloader):  dataloader fro validation
@@ -248,13 +233,13 @@ def setup_trainer(model, modeldir, loss_fn, train_loader, val_loader,
         schnetpack.train.Trainer object
 
     """
-    hooks = build_hooks(modeldir=modeldir, property_map=property_map)
+    hooks = build_hooks(training_dir=training_dir, property_map=property_map)
 
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     trainable_params = filter(lambda p: p not in exclude, trainable_params)
 
     optim = get_optimizer(trainable_params=trainable_params)
 
-    trainer = Trainer(modeldir, model, loss_fn, optim, train_loader,
+    trainer = Trainer(training_dir, model, loss_fn, optim, train_loader,
                       val_loader, hooks=hooks)
     return trainer

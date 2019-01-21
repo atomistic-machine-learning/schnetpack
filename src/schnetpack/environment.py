@@ -10,12 +10,11 @@ class BaseEnvironmentProvider:
 
     """
 
-    def get_environment(self, idx, atoms):
+    def get_environment(self, atoms):
         '''
         Returns the neighbor indices and offsets
 
         Args:
-            idx (int): index in the data set
             atoms (ase.Atoms): atomistic system
 
         Returns:
@@ -37,7 +36,7 @@ class SimpleEnvironmentProvider(BaseEnvironmentProvider):
     support cutoffs or periodic boundary conditions.
     '''
 
-    def get_environment(self, idx, atoms, grid=None):
+    def get_environment(self, atoms, grid=None):
         n_atoms = atoms.get_number_of_atoms()
 
         if n_atoms == 1:
@@ -46,6 +45,7 @@ class SimpleEnvironmentProvider(BaseEnvironmentProvider):
         else:
             neighborhood_idx = np.tile(
                 np.arange(n_atoms, dtype=np.float32)[np.newaxis], (n_atoms, 1))
+
             neighborhood_idx = neighborhood_idx[
                 ~np.eye(n_atoms, dtype=np.bool)].reshape(n_atoms, n_atoms - 1)
 
@@ -74,7 +74,7 @@ class AseEnvironmentProvider(BaseEnvironmentProvider):
     def __init__(self, cutoff):
         self.cutoff = cutoff
 
-    def get_environment(self, idx, atoms, grid=None):
+    def get_environment(self, atoms, grid=None):
         if grid is not None:
             raise NotImplementedError
 

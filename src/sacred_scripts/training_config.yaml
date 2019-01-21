@@ -1,0 +1,48 @@
+__doc__: configuration configuration for training experiment
+additional_outputs: []
+batch_size: 100
+dataset:
+  __doc__: configuration for the ISO17 dataset
+  dataset: ISO17
+  dbpath: ./data
+  fold: reference
+  property_mapping:
+    energy: total_energy
+    forces: atomic_forces
+device: cpu
+experiment_dir: ./experiments
+loss_tradeoff: {}
+mean: null
+model:
+  __doc__: configuration for the SchNet model
+  coupled_interactions: false
+  cutoff: 5.0
+  cutoff_network: hard
+  max_z: 100
+  n_atom_basis: 128
+  n_filters: 128
+  n_gaussians: 25
+  n_interactions: 6
+  name: schnet
+  normalize_filter: false
+num_train: 100
+num_val: 100
+num_workers: 2
+overwrite: true
+properties:
+- energy
+- forces
+seed: 548218764
+stddev: null
+trainer:
+  __doc__: configuration for the trainer ingredient
+  early_stopping: false
+  learning_rate: 0.0001
+  logging_hooks: []
+  lr_schedule: null
+  max_epochs: null
+  max_steps: null
+  metrics: []
+  optimizer: adam
+  schedule: null
+training_dir: ./experiments/training

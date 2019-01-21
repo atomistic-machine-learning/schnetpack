@@ -17,7 +17,8 @@ def cosine_cutoff(distances, cutoff=5.0):
         cutoff (float): Cutoff value, all values beyond are set to 0
 
     Returns:
-        torch.Tensor: Tensor holding values of the cutoff function (Nbatch x Nat x Nneigh)
+        torch.Tensor: Tensor holding values of the cutoff function
+                      (Nbatch x Nat x Nneigh)
     """
     # Compute values of cutoff function
     cutoffs = 0.5 * (torch.cos(distances * np.pi / cutoff) + 1.0)
@@ -59,7 +60,8 @@ def mollifier_cutoff(distances, cutoff=5.0):
         cutoff (float): Cutoff value, all values beyond are set to 0
 
     Returns:
-        torch.Tensor: Tensor holding values of the cutoff function (Nbatch x Nat x Nneigh)
+        torch.Tensor: Tensor holding values of the cutoff function
+                      (Nbatch x Nat x Nneigh)
     """
     mask = (distances <= cutoff).float()
     exponent = 1.0 - 1.0 / (1.0 - torch.pow(distances * mask / cutoff, 2))
@@ -100,7 +102,8 @@ def hard_cutoff(distances, cutoff=5.0):
         cutoff (float): Cutoff value, all values beyond are set to 0
 
     Returns:
-        torch.Tensor: Tensor holding values of the cutoff function (Nbatch x Nat x Nneigh)
+        torch.Tensor: Tensor holding values of the cutoff function
+                      (Nbatch x Nat x Nneigh)
     """
     mask = (distances <= cutoff).float()
     return distances * mask
