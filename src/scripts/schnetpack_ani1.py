@@ -331,13 +331,7 @@ if __name__ == '__main__':
                       train_loader=train_loader, parallelize=args.parallel, mode=args.mode).to(device)
 
     if args.mode == 'eval':
-        if args.parallel:
-            model.module.load_state_dict(
-                torch.load(os.path.join(args.modelpath, 'best_model')))
-        else:
-            model.load_state_dict(
-                torch.load(os.path.join(args.modelpath, 'best_model')))
-
+        model = torch.load(os.path.join(args.modelpath, 'best_model'))
     if args.mode == 'train':
         logging.info("training...")
         train(args, model, train_loader, val_loader, device)
