@@ -61,7 +61,7 @@ class System:
                  n_replicas,
                  device='cuda',
                  neighborlist=SimpleNeighborList,
-                 initializer=MaxwellBoltzmannInit(300)):
+                 initializer=None):
 
         # Specify device
         self.device = device
