@@ -7,3 +7,4 @@ tensorboardX
 h5py
 pyyaml
 sacred
+tqdm

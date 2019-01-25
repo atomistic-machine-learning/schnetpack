@@ -7,3 +7,4 @@ numpy
 ase
 tensorboardX
 h5py
+tqdm
