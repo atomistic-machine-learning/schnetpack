@@ -3,6 +3,7 @@ from ase.io import read
 
 from schnetpack.md.utils import MDUnits, compute_centroid, batch_inverse
 from schnetpack.md.neighbor_lists import SimpleNeighborList
+from schnetpack.md.initial_conditions import MaxwellBoltzmannInit
 
 
 class SystemException(Exception):
@@ -59,7 +60,8 @@ class System:
     def __init__(self,
                  n_replicas,
                  device='cuda',
-                 neighborlist=SimpleNeighborList):
+                 neighborlist=SimpleNeighborList,
+                 initializer=MaxwellBoltzmannInit(300)):
 
         # Specify device
         self.device = device
@@ -86,6 +88,9 @@ class System:
 
         # Initialize neighbor list for the calculator
         self.neighbor_list = neighborlist
+
+        # Initialize initial conditions
+        self.initializer = initializer
 
     def load_molecules_from_xyz(self, path_to_file):
         """
@@ -162,6 +167,10 @@ class System:
         # 7) Build neighbor lists
         if self.neighbor_list is not None:
             self.neighbor_list = self.neighbor_list(self)
+
+        # 8) Initialize Momenta
+        if self.initializer:
+            self.initializer.initialize_system(self)
 
     @property
     def center_of_mass(self):
