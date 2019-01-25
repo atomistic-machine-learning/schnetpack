@@ -11,7 +11,7 @@ install:
   - pip install .
 
 script:
-  - pytest --cov
+  - pytest --cov=schnetpack
   
 after_success:
   - coveralls
