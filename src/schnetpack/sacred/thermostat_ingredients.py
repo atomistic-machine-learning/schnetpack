@@ -16,7 +16,7 @@ def config():
 def berendsen():
     """configuration for the berendsen thermostat"""
     thermostat = 'berendsen'
-    bath_temperature = 50.
+    bath_temperature = 300.
     transfer_time = 1.
 
 
@@ -24,7 +24,7 @@ def berendsen():
 def gle():
     """configuration for the GLE thermostat"""
     thermostat = 'gle'
-    bath_temperature = 50.
+    bath_temperature = 300.
     gle_file = './some_file.txt'
     nm_transformation = None
 
@@ -33,7 +33,7 @@ def gle():
 def piglet():
     """configuration for the piglet thermostat"""
     thermostat = 'piglet'
-    bath_temperature = 50.
+    bath_temperature = 300.
     gle_file = './some_file.txt'
     nm_transformation = None
 
@@ -42,7 +42,7 @@ def piglet():
 def langevin():
     """configuration for the langevin thermostat"""
     thermostat = 'langevin'
-    bath_temperature = 50.
+    bath_temperature = 300.
     time_constant = 2.
 
 
@@ -50,7 +50,7 @@ def langevin():
 def pile_local():
     """configuration for the pile-local thermostat"""
     thermostat = 'pile_local'
-    bath_temperature = 50.
+    bath_temperature = 300.
     time_constant = 2.
 
 
@@ -58,7 +58,7 @@ def pile_local():
 def pile_global():
     """configuration for the pile-global thermostat"""
     thermostat = 'pile_global'
-    bath_temperature = 50.
+    bath_temperature = 300.
     time_constant = 2.
 
 
@@ -66,7 +66,7 @@ def pile_global():
 def nhc():
     """configuration for the nhc thermostat"""
     thermostat = 'nhc'
-    bath_temperature = 50.
+    bath_temperature = 300.
     time_constant = 2.
     chain_length = 3
     massive = False
@@ -79,7 +79,7 @@ def nhc():
 def nhc_ring_polymer():
     """configuration for the nhc-ring-polymer thermostat"""
     thermostat = 'nhc_ring_polymer'
-    bath_temperature = 50.
+    bath_temperature = 300.
     time_constant = 2.
     chain_length = 3
     local = True
