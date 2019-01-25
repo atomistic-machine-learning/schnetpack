@@ -5,7 +5,13 @@ python:
 
 install:
   - pip install -r docs/sphinx-requirements.txt
+  - pip install pytest
+  - pip install pytest-cov
+  - pip install coveralls
   - pip install .
 
 script:
-  - pytest
+  - pytest --cov=schnetpack
+  
+after_success:
+  - coveralls

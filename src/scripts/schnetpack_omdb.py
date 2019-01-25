@@ -268,13 +268,7 @@ if __name__ == '__main__':
                       parallelize=args.parallel).to(device)
 
     if args.mode == 'eval':
-        if args.parallel:
-            model.module.load_state_dict(
-                torch.load(os.path.join(args.modelpath, 'best_model')))
-        else:
-            model.load_state_dict(
-                torch.load(os.path.join(args.modelpath, 'best_model')))
-
+        model = torch.load(os.path.join(args.modelpath, 'best_model'))
     if args.mode == 'train':
         logging.info("Training...")
         train(args, model, train_loader, val_loader, device)
