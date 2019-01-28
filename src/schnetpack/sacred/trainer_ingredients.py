@@ -97,7 +97,7 @@ def get_optimizer(optimizer, learning_rate, trainable_params):
 
 @train_ingredient.capture
 def build_hooks(logging_hooks, schedule, training_dir, max_epochs, property_map,
-                early_stopping, lr_schedule, max_steps):
+                early_stopping, lr_schedule, max_steps, element_wise):
     """
     build a list with hook objects
 
@@ -116,7 +116,8 @@ def build_hooks(logging_hooks, schedule, training_dir, max_epochs, property_map,
         list of hook objects
 
     """
-    metrics_objects = build_metrics(property_map=property_map)
+    metrics_objects = build_metrics(property_map=property_map,
+                                    element_wise=element_wise)
     hook_objects = build_schedule(schedule)
     hook_objects += build_logging_hooks(logging_hooks=logging_hooks,
                                         training_dir=training_dir,
@@ -186,7 +187,7 @@ def build_schedule(schedule):
 
 
 @train_ingredient.capture
-def build_metrics(metrics, property_map):
+def build_metrics(metrics, property_map, element_wise):
     """
     builds a list with schnetpack.metrics.Metric objects
 
@@ -194,6 +195,7 @@ def build_metrics(metrics, property_map):
         metrics (list): names of the metrics that should be used
         property_map (dict): mapping between model properties and dataset
             properties
+        element_wise (list): list of the element_wise properties
 
     Returns:
         list of schnetpack.metrics.Metric objects
@@ -203,11 +205,13 @@ def build_metrics(metrics, property_map):
     for metric in metrics:
         metric = metric.lower()
         if metric == 'mae':
-            metrics_objects += [MeanAbsoluteError(tgt, p) for p, tgt in
-                                property_map.items() if tgt is not None]
+            metrics_objects +=\
+                [MeanAbsoluteError(tgt, p, element_wise=p in element_wise)
+                 for p, tgt in property_map.items() if tgt is not None]
         elif metric == 'rmse':
-            metrics_objects += [RootMeanSquaredError(tgt, p) for p, tgt in
-                                property_map.items() if tgt is not None]
+            metrics_objects +=\
+                [RootMeanSquaredError(tgt, p, element_wise=p in element_wise)
+                 for p, tgt in property_map.items() if tgt is not None]
         else:
             raise NotImplementedError
     return metrics_objects
@@ -215,7 +219,7 @@ def build_metrics(metrics, property_map):
 
 @train_ingredient.capture
 def setup_trainer(model, training_dir, loss_fn, train_loader, val_loader,
-                  property_map, exclude=[]):
+                  property_map, element_wise, exclude=[]):
     """
     build a trainer object
 
@@ -233,7 +237,8 @@ def setup_trainer(model, training_dir, loss_fn, train_loader, val_loader,
         schnetpack.train.Trainer object
 
     """
-    hooks = build_hooks(training_dir=training_dir, property_map=property_map)
+    hooks = build_hooks(training_dir=training_dir, property_map=property_map,
+                        element_wise=element_wise)
 
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     trainable_params = filter(lambda p: p not in exclude, trainable_params)

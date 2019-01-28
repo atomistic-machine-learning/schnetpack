@@ -7,15 +7,19 @@ from schnetpack.metrics import *
 def batch():
 
     return dict(_atom_mask=torch.DoubleTensor([[1, 1, 1, 0], [1, 1, 0, 0]]),
-                _forces=torch.DoubleTensor([[[8, 1, 0], [1, 1, 0], [1, 1, 0], [0, 0, 0]],
-                                            [[1, 1, 0], [1, 4, 0], [0, 0, 0], [0, 0, 0]]]),
+                _forces=torch.DoubleTensor([[[8, 1, 0], [1, 1, 0], [1, 1, 0],
+                                             [0, 0, 0]],
+                                            [[1, 1, 0], [1, 4, 0], [0, 0, 0],
+                                             [0, 0, 0]]]),
                 _energy=torch.DoubleTensor([[1], [1]]),
                 _dipole_moment=torch.DoubleTensor([[1, 2, 3], [4, 5, 6]]))
 
 @pytest.fixture
 def result():
-    return dict(dydx=torch.DoubleTensor([[[8, 1, 1], [0, 2, 1], [1, 1, 1], [0, 0, 0]],
-                                         [[0, 1, 3], [0, 1, 4], [0, 0, 0], [0, 0, 0]]]),
+    return dict(dydx=torch.DoubleTensor([[[8, 1, 1], [0, 2, 1], [1, 1, 1],
+                                          [0, 0, 0]],
+                                         [[0, 1, 3], [0, 1, 4], [0, 0, 0],
+                                          [0, 0, 0]]]),
                 y=torch.DoubleTensor([[2], [2]]),
                 _dipole_moment = torch.DoubleTensor([[0, 2, 0], [4, 1, 1]]))
 
@@ -32,7 +36,8 @@ def mse_result(diff):
 
 @pytest.fixture
 def mae_result(diff):
-    return dict(dydx=torch.sum(torch.abs(diff['dydx'])).detach().cpu().data.numpy()/15,
+    return dict(dydx=torch.sum(torch.abs(diff['dydx'])
+                               ).detach().cpu().data.numpy()/15,
                 y=torch.sum(torch.abs(diff['y'])).detach().cpu().data.numpy()/2)
 
 @pytest.fixture
@@ -49,7 +54,8 @@ def bias_result(diff):
 
 @pytest.fixture
 def heatmap_mae_result(diff):
-    return dict(dydx=torch.sum(torch.abs(diff['dydx']), 0).detach().cpu().data.numpy()/2,
+    return dict(dydx=torch.sum(torch.abs(diff['dydx']),
+                               0).detach().cpu().data.numpy()/2,
                 y=torch.sum(torch.abs(diff['y'])).detach().cpu().data.numpy()/2)
 
 @pytest.fixture
@@ -66,7 +72,8 @@ def energy_rmse():
 
 @pytest.fixture
 def forces_rmse():
-    return RootMeanSquaredError('_forces', 'dydx', name='forces', element_wise=True)
+    return RootMeanSquaredError('_forces', 'dydx', name='forces',
+                                element_wise=True)
 
 @pytest.fixture
 def energy_bias():
@@ -82,7 +89,8 @@ def energy_mae():
 
 @pytest.fixture
 def forces_mae():
-    return MeanAbsoluteError('_forces', 'dydx', name='forces', element_wise=True)
+    return MeanAbsoluteError('_forces', 'dydx', name='forces',
+                             element_wise=True)
 
 @pytest.fixture
 def energy_heatmapmae():
@@ -109,7 +117,10 @@ class TestMetrics:
     def assert_valid_metric(self, metric, batch, result, target):
         metric.add_batch(batch, result)
         metric.add_batch(batch, result)
-        assert np.equal(metric.aggregate(), target).all()
+        m = metric.aggregate()
+        assert np.equal(m, target).all()
+        if hasattr(m, '__iter__'):
+            assert len(m.shape) != 0
 
     def test_energy_mse(self, energy_mse, batch, result, mse_result):
         val_metric = mse_result['y']
@@ -143,16 +154,26 @@ class TestMetrics:
         val_metric = mae_result['dydx']
         self.assert_valid_metric(forces_mae, batch, result, val_metric)
 
-    def test_enery_heatmapmae(self, energy_heatmapmae, batch, result, heatmap_mae_result):
+    def test_enegry_heatmapmae(self, energy_heatmapmae, batch, result,
+                               heatmap_mae_result):
         val_metric = heatmap_mae_result['y']
         self.assert_valid_metric(energy_heatmapmae, batch, result, val_metric)
 
-    def test_forces_heatmapmae(self, forces_heatmapmae, batch, result, heatmap_mae_result):
+    def test_forces_heatmapmae(self, forces_heatmapmae, batch, result,
+                               heatmap_mae_result):
         val_metric = heatmap_mae_result['dydx']
         self.assert_valid_metric(forces_heatmapmae, batch, result, val_metric)
 
-    def test_angle_entries(self, forces_angle_mae, dipole_angle_mae, batch, result):
+    def test_angle_entries(self, forces_angle_mae, dipole_angle_mae, batch,
+                           result):
         forces_angle_mae.add_batch(batch, result)
-        assert np.equal(forces_angle_mae.n_entries, 5)
+        n_entries = forces_angle_mae.n_entries
+        assert np.equal(n_entries, 5)
+        if hasattr(n_entries, '__iter__'):
+            assert len(n_entries.shape) != 0
         dipole_angle_mae.add_batch(batch, result)
-        assert np.equal(dipole_angle_mae.n_entries, 2)
+        n_entries = dipole_angle_mae.n_entries
+        assert np.equal(n_entries, 2)
+        if hasattr(n_entries, '__iter__'):
+            assert len(n_entries.shape) != 0
+
