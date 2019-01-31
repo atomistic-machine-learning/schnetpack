@@ -10,7 +10,8 @@ system_ingredient = Ingredient('system', ingredients=[initializer_ing])
 @system_ingredient.config
 def config():
     """configuration for the system ingredient"""
-    n_replicas = 2
+    n_replicas = 1
+    path_to_molecules = 'ethanol.xyz'
 
 
 @system_ingredient.capture
