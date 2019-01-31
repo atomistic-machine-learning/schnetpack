@@ -436,7 +436,7 @@ if __name__ == '__main__':
                       mode=args.mode).to(device)
 
     if args.mode == 'eval':
-        torch.load(os.path.join(args.modelpath, 'best_model'))
+        model = torch.load(os.path.join(args.modelpath, 'best_model'))
     if args.mode == 'train':
         logging.info("training...")
         train(args, model, train_loader, val_loader, device)
