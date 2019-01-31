@@ -10,30 +10,29 @@ integrator_ingredient = Ingredient('integrator')
 def config():
     """configuration for the integrator ingredient"""
     integrator = 'velocity_verlet'
-    time_step = 1
+    time_step = 0.5
 
 
 @integrator_ingredient.named_config
 def velocity_verlet():
     """configuration for the velocity verlet integrator"""
     integrator = 'velocity_verlet'
-    time_step = 1
+    time_step = 0.5
 
 
 @integrator_ingredient.named_config
 def ring_polymer():
     """configuration for the ring polymer integrator"""
     integrator = 'ring_polymer'
-    n_beads = 10
-    time_step = 1
-    temperature = 50.
+    time_step = 0.5
+    temperature = 300.
     transformation = NormalModeTransformer
     device = 'cuda'
 
 
 @integrator_ingredient.capture
-def get_velocity_verlet(time_step):
-    return VelocityVerlet(time_step=time_step)
+def get_velocity_verlet(time_step, device='cuda'):
+    return VelocityVerlet(time_step=time_step, device=device)
 
 
 @integrator_ingredient.capture
@@ -45,7 +44,7 @@ def get_ring_polymer(n_beads, time_step, temperature,
 
 
 @integrator_ingredient.capture
-def build_integrator(integrator):
+def build_integrator(integrator, device, n_beads):
     """
     build the integrator object
 
@@ -56,8 +55,8 @@ def build_integrator(integrator):
         integrator object
     """
     if integrator == 'velocity_verlet':
-        return get_velocity_verlet()
+        return get_velocity_verlet(device=device)
     elif integrator == 'ring_polymer':
-        return get_ring_polymer()
+        return get_ring_polymer(n_beads=n_beads, device=device)
     else:
         raise NotImplementedError
