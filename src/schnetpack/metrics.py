@@ -236,7 +236,8 @@ class HeatmapMAE(MeanAbsoluteError):
 
     def add_batch(self, batch, result):
         if self.element_wise and torch.sum(batch[Structure.atom_mask]==0) != 0:
-            warnings.warn('MAEHeatmap should not be used for element-wise properties with different sized molecules!')
+            warnings.warn('MAEHeatmap should not be used for element-wise ' + \
+                          'properties with different sized molecules!')
         y = batch[self.target]
         if self.model_output is None:
             yp = result

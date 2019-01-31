@@ -7,11 +7,11 @@ import numpy as np
 from urllib import request as request
 from urllib.error import HTTPError, URLError
 
-from schnetpack.data import AtomsData, AtomsDataError
+from schnetpack.data import DownloadableAtomsData, AtomsDataError
 from schnetpack.environment import SimpleEnvironmentProvider
 
 
-class ISO17(AtomsData):
+class ISO17(DownloadableAtomsData):
     """
     ISO17 benchmark data set for molecular dynamics of C7O2H10 isomers
     containing molecular forces.

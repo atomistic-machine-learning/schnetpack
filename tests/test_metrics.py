@@ -149,7 +149,8 @@ class TestMetrics:
 
     def test_forces_heatmapmae(self, forces_heatmapmae, batch, result, heatmap_mae_result):
         val_metric = heatmap_mae_result['dydx']
-        self.assert_valid_metric(forces_heatmapmae, batch, result, val_metric)
+        with pytest.warns(UserWarning):
+            self.assert_valid_metric(forces_heatmapmae, batch, result, val_metric)
 
     def test_angle_entries(self, forces_angle_mae, dipole_angle_mae, batch, result):
         forces_angle_mae.add_batch(batch, result)

@@ -10,12 +10,12 @@ import numpy as np
 from ase.io.extxyz import read_xyz
 from ase.units import Debye, Bohr, Hartree, eV
 
-from schnetpack.data import AtomsData
+from schnetpack.data import DownloadableAtomsData
 
 __all__ = ['QM9']
 
 
-class QM9(AtomsData):
+class QM9(DownloadableAtomsData):
     """ QM9 benchmark dataset for organic molecules with up to nine heavy atoms from {C, O, N, F}.
 
         This class adds convenience functions to download QM9 from figshare and load the data into pytorch.

@@ -12,6 +12,7 @@ from torch.optim import Adam
 from torch.utils.data.sampler import RandomSampler
 
 import schnetpack as spk
+import schnetpack.data
 from schnetpack.datasets import MaterialsProject
 from schnetpack.utils import to_json, read_from_json, compute_params
 
@@ -261,9 +262,9 @@ if __name__ == '__main__':
 
     data_train, data_val, data_test = mp.create_splits(*train_args.split, split_file=split_path)
 
-    train_loader = spk.data.AtomsLoader(data_train, batch_size=args.batch_size, sampler=RandomSampler(data_train),
-                                        num_workers=4, pin_memory=True)
-    val_loader = spk.data.AtomsLoader(data_val, batch_size=args.batch_size, num_workers=2, pin_memory=True)
+    train_loader = schnetpack.data.AtomsLoader(data_train, batch_size=args.batch_size, sampler=RandomSampler(data_train),
+                                               num_workers=4, pin_memory=True)
+    val_loader = schnetpack.data.AtomsLoader(data_val, batch_size=args.batch_size, num_workers=2, pin_memory=True)
 
     if args.mode == 'train':
         logging.info('calculate statistics...')
@@ -293,8 +294,8 @@ if __name__ == '__main__':
         logging.info("Training...")
         train(args, model, train_loader, val_loader, device)
     elif args.mode == 'eval':
-        test_loader = spk.data.AtomsLoader(data_test, batch_size=args.batch_size,
-                                           num_workers=2, pin_memory=True)
+        test_loader = schnetpack.data.AtomsLoader(data_test, batch_size=args.batch_size,
+                                                  num_workers=2, pin_memory=True)
         evaluate(args, model, train_args.property, train_loader, val_loader, test_loader, device)
     else:
         print('Unknown mode:', args.mode)
