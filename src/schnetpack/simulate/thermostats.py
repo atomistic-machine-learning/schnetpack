@@ -3,11 +3,10 @@ import numpy as np
 import scipy.linalg as linalg
 import logging
 
-from schnetpack.md.utils import MDUnits, load_gle_matrices,  \
+from schnetpack.md.utils import MDUnits, load_gle_matrices, \
     NormalModeTransformer, YSWeights
 from schnetpack.md.integrators import RingPolymer
 from schnetpack.simulate.hooks import SimulationHook
-
 
 
 class ThermostatError(Exception):
@@ -34,7 +33,7 @@ class ThermostatHook(SimulationHook):
             if type(simulator.integrator) is not RingPolymer:
                 raise ThermostatError('Normal mode transformation should only be used with ring polymer dynamics.')
             else:
-                self.nm_transformation = self.nm_transformation(self.n_replicas)
+                self.nm_transformation = self.nm_transformation(self.n_replicas, device=self.device)
 
         if not self.initialized:
             self._init_thermostat(simulator)
