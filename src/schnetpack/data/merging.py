@@ -37,3 +37,4 @@ def merge_datasets(merged_dbpath, dbpaths, **mergedb_kwargs):
         'partitions': partitions
     }
     dst.metadata = metadata
+    return merged_data

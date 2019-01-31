@@ -2,7 +2,8 @@ import os
 import numpy as np
 
 
-def train_test_split(data, num_train=None, num_val=None, split_file=None):
+def train_test_split(data, num_train=None, num_val=None, split_file=None,
+                     stratify_partitions=False, num_per_partition=False):
     """
     Splits the dataset into train/validation/test splits, writes split to
     an npz file and returns subsets. Either the sizes of training and
@@ -41,10 +42,30 @@ def train_test_split(data, num_train=None, num_val=None, split_file=None):
         num_train = int(num_train)
         num_val = int(num_val)
 
-        idx = np.random.permutation(len(data))
-        train_idx = idx[:num_train].tolist()
-        val_idx = idx[num_train:num_train + num_val].tolist()
-        test_idx = idx[num_train + num_val:].tolist()
+        if stratify_partitions:
+            partitions = data.get_metadata('partitions')
+            n_partitions = len(partitions)
+            if num_per_partition:
+                num_train_part = num_train
+                num_val_part = num_val
+            else:
+                num_train_part = num_train // n_partitions
+                num_val_part = num_val // n_partitions
+
+            train_idx = []
+            val_idx = []
+            test_idx = []
+            for start, stop in partitions.values():
+                idx = np.random.permutation(np.arange(start, stop))
+                train_idx += idx[:num_train_part].tolist()
+                val_idx += idx[num_train_part:num_train_part + num_val_part].tolist()
+                test_idx += idx[num_train_part + num_val_part:].tolist()
+
+        else:
+            idx = np.random.permutation(len(data))
+            train_idx = idx[:num_train].tolist()
+            val_idx = idx[num_train:num_train + num_val].tolist()
+            test_idx = idx[num_train + num_val:].tolist()
 
         if split_file is not None:
             np.savez(split_file, train_idx=train_idx, val_idx=val_idx,

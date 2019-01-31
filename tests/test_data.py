@@ -88,6 +88,9 @@ def test_empty_subset_of_subset(empty_asedata, example_data):
 def test_merging(tmpdir, example_asedata):
     merged_dbpath = os.path.join(str(tmpdir), 'merged.db')
 
-    schnetpack.data.merge_datasets(merged_dbpath,
+    merged_data = schnetpack.data.merge_datasets(merged_dbpath,
                                    [example_asedata.dbpath,
                                     example_asedata.dbpath])
+
+    assert len(merged_data) == 2*len(example_asedata)
+
