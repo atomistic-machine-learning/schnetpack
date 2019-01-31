@@ -70,14 +70,13 @@ class ThermostatHook(SimulationHook):
 
 class BerendsenThermostat(ThermostatHook):
 
-    def __init__(self, temperature_bath, transfer_time):
-        logging.info('Using Berendsen thermostat')
+    def __init__(self, temperature_bath, time_constant):
         super(BerendsenThermostat, self).__init__(temperature_bath)
 
-        self.transfer_time = transfer_time * MDUnits.fs2atu
+        self.time_constant = time_constant * MDUnits.fs2atu
 
     def _apply_thermostat(self, simulator):
-        scaling = 1.0 + simulator.integrator.time_step / self.transfer_time * (
+        scaling = 1.0 + simulator.integrator.time_step / self.time_constant * (
                 self.temperature_bath / simulator.system.temperature - 1)
         simulator.system.momenta = torch.sqrt(scaling[:, :, None, None]) * simulator.system.momenta
 
@@ -85,7 +84,6 @@ class BerendsenThermostat(ThermostatHook):
 class GLEThermostat(ThermostatHook):
 
     def __init__(self, bath_temperature, gle_file, nm_transformation=None):
-        logging.info('Using GLE thermostat')
         super(GLEThermostat, self).__init__(bath_temperature,
                                             nm_transformation=nm_transformation)
 
@@ -208,7 +206,6 @@ class PIGLETThermostat(GLEThermostat):
 
     def __init__(self, temperature_bath, gle_file,
                  nm_transformation=NormalModeTransformer):
-        logging.info('Using PIGLET thermostat')
         super(PIGLETThermostat, self).__init__(temperature_bath, gle_file, nm_transformation=nm_transformation)
 
     def _init_gle_matrices(self, simulator):
@@ -217,7 +214,7 @@ class PIGLETThermostat(GLEThermostat):
         if a_matrix is None:
             raise ThermostatError('Error reading GLE matrices from {:s}'.format(self.gle_file))
         if a_matrix.shape[0] != self.n_replicas:
-            raise ThermostatError('Expected {:d} beads but found {:d}.'.format(self.n_replicas, a_matrix.shape[0]))
+            raise ThermostatError('Expected {:d} beads but found {:d}.'.format(a_matrix.shape[0], self.n_replicas))
         if not type(simulator.integrator) is RingPolymer:
             raise ThermostatError('PIGLET thermostat should only be used with RPMD.')
 
@@ -240,7 +237,6 @@ class PIGLETThermostat(GLEThermostat):
 class LangevinThermostat(ThermostatHook):
 
     def __init__(self, temperature_bath, time_constant, nm_transformation=None):
-        logging.info('Using Langevin thermostat')
         super(LangevinThermostat, self).__init__(temperature_bath, nm_transformation=nm_transformation)
 
         self.time_constant = time_constant * MDUnits.fs2atu
@@ -309,7 +305,6 @@ class LangevinThermostat(ThermostatHook):
 class PILELocalThermostat(LangevinThermostat):
 
     def __init__(self, temperature_bath, time_constant, nm_transformation=NormalModeTransformer):
-        logging.info('Using local PILE thermostat')
         super(PILELocalThermostat, self).__init__(temperature_bath, time_constant, nm_transformation=nm_transformation)
 
     def _init_thermostat(self, simulator):
@@ -362,7 +357,6 @@ class PILELocalThermostat(LangevinThermostat):
 class PILEGlobalThermostat(PILELocalThermostat):
 
     def __init__(self, temperature_bath, time_constant, nm_transformation=NormalModeTransformer):
-        logging.info('Using global PILE thermostat')
         super(PILEGlobalThermostat, self).__init__(temperature_bath, time_constant,
                                                    nm_transformation=nm_transformation)
 
