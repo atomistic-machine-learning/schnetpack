@@ -11,6 +11,12 @@ calculator:
   - forces
 device: cpu
 experiment_dir: ./experiments
+initializer:
+  __doc__: configuration for the initializer ingredient
+  init_temperature: 200
+  initializer: maxwell_boltzmann
+  remove_rotation: false
+  remove_translation: false
 integrator:
   __doc__: configuration for the integrator ingredient
   integrator: velocity_verlet
@@ -18,7 +24,7 @@ integrator:
 model_path: ./experiments/training/best_model
 overwrite: true
 path_to_molecules: ./data/ethanol.xyz
-seed: 902643973
+seed: 545802096
 simulation_dir: ./experiments/simulation
 simulation_steps: 1000
 simulator:
@@ -39,7 +45,7 @@ system:
   n_replicas: 2
 thermostat:
   __doc__: configuration for the berendsen thermostat
-  bath_temperature: 50.0
+  bath_temperature: 300.0
   thermostat: berendsen
   transfer_time: 1.0
 training_dir: ./experiments/training

@@ -38,6 +38,7 @@ def cfg():
     experiment_dir = './experiments'
     training_dir = os.path.join(experiment_dir, 'training')
     properties = ['energy', 'forces']
+    element_wise = ['forces']
     mean = None
     stddev = None
 
@@ -212,7 +213,8 @@ def build_loss(property_map, loss_tradeoff):
 
 
 @ex.command
-def train(_log, _config, training_dir, properties, additional_outputs, device):
+def train(_log, _config, training_dir, properties, additional_outputs, device,
+          element_wise):
     """
     Build a trainer from the configuration and start the treining.
 
@@ -247,7 +249,8 @@ def train(_log, _config, training_dir, properties, additional_outputs, device):
                             training_dir=training_dir,
                             train_loader=train_loader,
                             val_loader=val_loader,
-                            property_map=property_map)
+                            property_map=property_map,
+                            element_wise=element_wise)
     _log.info("Training")
     trainer.train(device)
 
