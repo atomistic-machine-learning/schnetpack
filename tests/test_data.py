@@ -1,5 +1,5 @@
 import os
-
+import torch
 import numpy as np
 import pytest
 from ase import Atoms
@@ -46,7 +46,7 @@ def example_data(max_atoms, num_data):
         ats = Atoms(numbers=z, positions=r, cell=c, pbc=pbc)
 
         props = {
-            'energy': np.random.rand(1),
+            'energy': np.array([5.], dtype=np.float32),
             'dipole_moment': np.random.rand(3),
             'forces': np.random.rand(n_atoms, 3)
         }
@@ -82,15 +82,59 @@ def test_add_and_read(empty_asedata, example_data):
 def test_empty_subset_of_subset(empty_asedata, example_data):
     data = test_add_and_read(empty_asedata, example_data)
     subset = data.create_subset([0, 1])
-    subset.create_subset([])
+    subsubset = subset.create_subset([])
+    assert len(subset) == 2
+    assert len(subsubset) == 0
 
 
-def test_merging(tmpdir, example_asedata):
+@pytest.fixture(params=[None, ['example1', 'example2', 'ex3']])
+def partition_names(request):
+    return request.param
+
+
+def test_merging(tmpdir, example_asedata, partition_names):
+    # create merged dataset by repeating original three times
     merged_dbpath = os.path.join(str(tmpdir), 'merged.db')
 
-    merged_data = schnetpack.data.merge_datasets(merged_dbpath,
-                                   [example_asedata.dbpath,
-                                    example_asedata.dbpath])
+    parts = [example_asedata.dbpath, example_asedata.dbpath,
+             example_asedata.dbpath]
+    if partition_names is not None:
+        parts = {k: v for k, v in zip(partition_names, parts)}
 
-    assert len(merged_data) == 2*len(example_asedata)
+    merged_data = schnetpack.data.merge_datasets(merged_dbpath, parts)
 
+    # check merged
+    assert len(merged_data) == 3 * len(example_asedata)
+
+    partitions = merged_data.get_metadata('partitions')
+    partition_meta = merged_data.get_metadata('partition_meta')
+
+    assert len(partitions) == 3
+
+    for p in partitions.values():
+        assert len(p) == 2
+
+    if partition_names is not None:
+        assert 'example1' in partitions.keys()
+        assert 'example2' in partitions.keys()
+        assert 'ex3' in partitions.keys()
+
+
+@pytest.fixture(params=[1, 10])
+def batch_size(request):
+    return request.param
+
+
+def test_loader(example_asedata, batch_size):
+    loader = schnetpack.data.AtomsLoader(example_asedata, batch_size)
+    for batch in loader:
+        for entry in batch.values():
+            assert entry.shape[0] == min(batch_size, len(loader.dataset))
+
+    mu, std = loader.get_statistics('energy')
+    assert mu == 5.
+    assert std == 0.
+
+    mu, std = loader.get_statistics(['energy'])
+    assert mu[0] == torch.FloatTensor([5.])
+    assert std[0] == torch.FloatTensor([0.])

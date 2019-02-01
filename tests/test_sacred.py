@@ -1,14 +1,11 @@
-from sacred_scripts.run_schnetpack import ex
-from sacred_scripts.run_md import md
-import tempfile
-import shutil
 import os
-from schnetpack.atomistic import Properties
-from schnetpack.datasets.iso17 import ISO17
+
 import pytest
 
-
-tmpdir = tempfile.mkdtemp('gdb9')
+from sacred_scripts.run_md import md
+from sacred_scripts.run_schnetpack import ex
+from schnetpack.atomistic import Properties
+from schnetpack.datasets.iso17 import ISO17
 
 
 @pytest.fixture
@@ -21,12 +18,13 @@ def properties(property_mapping):
     return [Properties.energy, Properties.forces]
 
 
-def test_run_training(property_mapping, properties):
+def test_run_training(tmpdir, property_mapping, properties):
     """
     Test if training is working and logs are created.
     """
     dbpath = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                           'data/test_iso.db')
+
     ex.run(command_name='train',
            named_configs=['model.schnet'],
            config_updates={'experiment_dir': tmpdir,
@@ -47,15 +45,12 @@ def test_run_training(property_mapping, properties):
     assert len(log) == 5
 
 
-def test_run_md():
-    mol_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                            'data/test_molecule.xyz')
-    md.run(command_name='simulate',
-           named_configs=['thermostat.berendsen', 'simulator.base_hooks'],
-           config_updates={'experiment_dir': tmpdir,
-                           'path_to_molecules': mol_path,
-                           'simulation_steps': 10})
-
-
-def teardown_module():
-    shutil.rmtree(tmpdir)
+# def test_run_md(tmpdir):
+#     print('runmd', tmpdir)
+#     mol_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+#                             'data/test_molecule.xyz')
+#     md.run(command_name='simulate',
+#            named_configs=['thermostat.berendsen', 'simulator.base_hooks'],
+#            config_updates={'experiment_dir': tmpdir,
+#                            'path_to_molecules': mol_path,
+#                            'simulation_steps': 10})

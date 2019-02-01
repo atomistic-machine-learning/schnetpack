@@ -20,6 +20,12 @@ def merge_datasets(merged_dbpath, dbpaths, **mergedb_kwargs):
         for name, dbp in zip(names, dbpaths):
             start = offset
 
+            if name in partitions.keys():
+                count = 1
+                while name + '_' + str(count) in partitions.keys():
+                    count += 1
+                name = name + '_' + str(count)
+
             with connect(dbp) as src:
                 length = src.count()
                 end = offset + length
