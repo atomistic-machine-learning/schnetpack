@@ -101,7 +101,7 @@ class DataStream:
 
     def flush_buffer(self, file_position, buffer_position):
         self.data_group[file_position:file_position + buffer_position] = \
-            self.buffer[:buffer_position]
+            self.buffer[:buffer_position].cpu()
         # Update number of meaningful entries
         self.data_group.attrs.modify('entries', file_position + buffer_position)
         self.data_group.flush()
@@ -247,8 +247,9 @@ class MoleculeStream(DataStream):
         if not self.restart:
             self.data_group.attrs['n_replicas'] = simulator.system.n_replicas
             self.data_group.attrs['n_molecules'] = simulator.system.n_molecules
-            self.data_group.attrs['n_atoms'] = simulator.system.n_atoms
-            self.data_group.attrs['atom_types'] = simulator.system.atom_types
+            self.data_group.attrs['n_atoms'] = simulator.system.n_atoms.cpu()
+            self.data_group.attrs['atom_types'] = simulator.system.atom_types.cpu()
+            self.data_group.attrs['time_step'] = simulator.integrator.time_step
 
     def update_buffer(self, buffer_position, simulator):
         self.buffer[buffer_position:buffer_position + 1, ..., :3] = \
@@ -265,7 +266,7 @@ class FileLogger(SimulationHook):
 
     def __init__(self, filename, buffer_size,
                  data_streams=[MoleculeStream, PropertyStream],
-                 every_n_steps=1, restart=True):
+                 every_n_steps=1, restart=False):
 
         self.restart = restart
         self.every_n_steps = every_n_steps
