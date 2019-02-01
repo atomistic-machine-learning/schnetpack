@@ -12,7 +12,6 @@ from torch.optim import Adam
 from torch.utils.data.sampler import RandomSampler
 
 import schnetpack as spk
-import schnetpack.data
 from schnetpack.datasets import MaterialsProject
 from schnetpack.utils import to_json, read_from_json, compute_params
 
@@ -25,41 +24,58 @@ def get_parser():
 
     ## command-specific
     cmd_parser = argparse.ArgumentParser(add_help=False)
-    cmd_parser.add_argument('--cuda', help='Set flag to use GPU(s)', action='store_true')
+    cmd_parser.add_argument('--cuda', help='Set flag to use GPU(s)',
+                            action='store_true')
     cmd_parser.add_argument('--parallel',
                             help='Run data-parallel on all available GPUs (specify with environment variable'
-                                 + ' CUDA_VISIBLE_DEVICES)', action='store_true')
+                                 + ' CUDA_VISIBLE_DEVICES)',
+                            action='store_true')
     cmd_parser.add_argument('--batch_size', type=int,
                             help='Mini-batch size for training and prediction (default: %(default)s)',
                             default=32)
     ## training
-    train_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
-    train_parser.add_argument('datapath', help='Path / destination of Materials Project dataset')
-    train_parser.add_argument('modelpath', help='Destination for models and logs')
+    train_parser = argparse.ArgumentParser(add_help=False,
+                                           parents=[cmd_parser])
+    train_parser.add_argument('datapath',
+                              help='Path / destination of Materials Project dataset')
+    train_parser.add_argument('modelpath',
+                              help='Destination for models and logs')
     train_parser.add_argument('--property', type=str,
                               help='Materials Project property to be predicted (default: %(default)s)',
-                              default="formation_energy_per_atom", choices=MaterialsProject.properties)
-    train_parser.add_argument('--apikey', help='API key for Materials Project (see https://materialsproject.org/open)')
-    train_parser.add_argument('--seed', type=int, default=None, help='Set random seed for torch and numpy.')
-    train_parser.add_argument('--overwrite', help='Remove previous model directory.', action='store_true')
+                              default="formation_energy_per_atom",
+                              choices=MaterialsProject.properties)
+    train_parser.add_argument('--apikey',
+                              help='API key for Materials Project (see https://materialsproject.org/open)')
+    train_parser.add_argument('--seed', type=int, default=None,
+                              help='Set random seed for torch and numpy.')
+    train_parser.add_argument('--overwrite',
+                              help='Remove previous model directory.',
+                              action='store_true')
 
-    train_parser.add_argument('--split_path', help='Path / destination of npz with data splits',
+    train_parser.add_argument('--split_path',
+                              help='Path / destination of npz with data splits',
                               default=None)
-    train_parser.add_argument('--split', help='Split into [train] [validation] and use remaining for testing',
+    train_parser.add_argument('--split',
+                              help='Split into [train] [validation] and use remaining for testing',
                               type=int, nargs=2, default=[None, None])
-    train_parser.add_argument('--max_epochs', type=int, help='Maximum number of training epochs (default: %(default)s)',
+    train_parser.add_argument('--max_epochs', type=int,
+                              help='Maximum number of training epochs (default: %(default)s)',
                               default=5000)
-    train_parser.add_argument('--lr', type=float, help='Initial learning rate (default: %(default)s)',
+    train_parser.add_argument('--lr', type=float,
+                              help='Initial learning rate (default: %(default)s)',
                               default=1e-4)
     train_parser.add_argument('--lr_patience', type=int,
                               help='Epochs without improvement before reducing the learning rate (default: %(default)s)',
                               default=50)
-    train_parser.add_argument('--lr_decay', type=float, help='Learning rate decay (default: %(default)s)',
+    train_parser.add_argument('--lr_decay', type=float,
+                              help='Learning rate decay (default: %(default)s)',
                               default=0.5)
-    train_parser.add_argument('--lr_min', type=float, help='Minimal learning rate (default: %(default)s)',
+    train_parser.add_argument('--lr_min', type=float,
+                              help='Minimal learning rate (default: %(default)s)',
                               default=1e-6)
 
-    train_parser.add_argument('--logger', help='Choose logger for training process (default: %(default)s)',
+    train_parser.add_argument('--logger',
+                              help='Choose logger for training process (default: %(default)s)',
                               choices=['csv', 'tensorboard'], default='csv')
     train_parser.add_argument('--log_every_n_epochs', type=int,
                               help='Log metrics every given number of epochs (default: %(default)s)',
@@ -67,23 +83,31 @@ def get_parser():
 
     ## evaluation
     eval_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
-    eval_parser.add_argument('datapath', help='Path of MaterialsProject dataset directory')
+    eval_parser.add_argument('datapath',
+                             help='Path of MaterialsProject dataset directory')
     eval_parser.add_argument('modelpath', help='Path of stored model')
-    eval_parser.add_argument('--apikey', help='API key for Materials Project (see https://materialsproject.org/open)',
+    eval_parser.add_argument('--apikey',
+                             help='API key for Materials Project (see https://materialsproject.org/open)',
                              default=None)
-    eval_parser.add_argument('--split', help='Evaluate trained model on given split',
-                             choices=['train', 'validation', 'test'], default=['test'], nargs='+')
+    eval_parser.add_argument('--split',
+                             help='Evaluate trained model on given split',
+                             choices=['train', 'validation', 'test'],
+                             default=['test'], nargs='+')
 
     # model-specific parsers
     model_parser = argparse.ArgumentParser(add_help=False)
-    model_parser.add_argument('--aggregation_mode', type=str, default='avg', choices=['sum', 'avg'],
+    model_parser.add_argument('--aggregation_mode', type=str, default='avg',
+                              choices=['sum', 'avg'],
                               help=' (default: %(default)s)')
 
     #######  SchNet  #######
-    schnet_parser = argparse.ArgumentParser(add_help=False, parents=[model_parser])
-    schnet_parser.add_argument('--features', type=int, help='Size of atom-wise representation (default: %(default)s)',
+    schnet_parser = argparse.ArgumentParser(add_help=False,
+                                            parents=[model_parser])
+    schnet_parser.add_argument('--features', type=int,
+                               help='Size of atom-wise representation (default: %(default)s)',
                                default=64)
-    schnet_parser.add_argument('--interactions', type=int, help='Number of interaction blocks (default: %(default)s)',
+    schnet_parser.add_argument('--interactions', type=int,
+                               help='Number of interaction blocks (default: %(default)s)',
                                default=6)
     schnet_parser.add_argument('--cutoff', type=float, default=5.,
                                help='Cutoff radius of local environment (default: %(default)s)')
@@ -91,22 +115,28 @@ def get_parser():
                                help='Number of Gaussians to expand distances (default: %(default)s)')
 
     ## setup subparser structure
-    cmd_subparsers = main_parser.add_subparsers(dest='mode', help='Command-specific arguments')
+    cmd_subparsers = main_parser.add_subparsers(dest='mode',
+                                                help='Command-specific arguments')
     cmd_subparsers.required = True
     subparser_train = cmd_subparsers.add_parser('train', help='Training help')
     subparser_eval = cmd_subparsers.add_parser('eval', help='Training help')
 
-    train_subparsers = subparser_train.add_subparsers(dest='model', help='Model-specific arguments')
+    train_subparsers = subparser_train.add_subparsers(dest='model',
+                                                      help='Model-specific arguments')
     train_subparsers.required = True
 
     subparser_export = cmd_subparsers.add_parser('export', help='Export help')
     subparser_export.add_argument('modelpath', help='Path of stored model')
-    subparser_export.add_argument('destpath', help='Destination path for exported model')
+    subparser_export.add_argument('destpath',
+                                  help='Destination path for exported model')
 
-    train_subparsers.add_parser('schnet', help='SchNet help', parents=[train_parser, schnet_parser])
+    train_subparsers.add_parser('schnet', help='SchNet help',
+                                parents=[train_parser, schnet_parser])
 
-    eval_subparsers = subparser_eval.add_subparsers(dest='model', help='Model-specific arguments')
-    eval_subparsers.add_parser('schnet', help='SchNet help', parents=[eval_parser, schnet_parser])
+    eval_subparsers = subparser_eval.add_subparsers(dest='model',
+                                                    help='Model-specific arguments')
+    eval_subparsers.add_parser('schnet', help='SchNet help',
+                               parents=[eval_parser, schnet_parser])
 
     return main_parser
 
@@ -121,21 +151,28 @@ def train(args, model, train_loader, val_loader, device):
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     optimizer = Adam(trainable_params, lr=args.lr)
 
-    schedule = spk.train.ReduceLROnPlateauHook(optimizer, patience=args.lr_patience, factor=args.lr_decay,
+    schedule = spk.train.ReduceLROnPlateauHook(optimizer,
+                                               patience=args.lr_patience,
+                                               factor=args.lr_decay,
                                                min_lr=args.lr_min,
-                                               window_length=1, stop_after_min=True)
+                                               window_length=1,
+                                               stop_after_min=True)
     hooks.append(schedule)
 
     if args.logger == 'csv':
         logger = spk.train.CSVHook(os.path.join(args.modelpath, 'log'),
-                                   [spk.metrics.MeanAbsoluteError(args.property, "y"),
-                                    spk.metrics.RootMeanSquaredError(args.property, "y")],
+                                   [spk.metrics.MeanAbsoluteError(
+                                       args.property, "y"),
+                                    spk.metrics.RootMeanSquaredError(
+                                        args.property, "y")],
                                    every_n_epochs=args.log_every_n_epochs)
         hooks.append(logger)
     elif args.logger == 'tensorboard':
         logger = spk.train.TensorboardHook(os.path.join(args.modelpath, 'log'),
-                                           [spk.metrics.MeanAbsoluteError(args.property, "y"),
-                                            spk.metrics.RootMeanSquaredError(args.property, "y")],
+                                           [spk.metrics.MeanAbsoluteError(
+                                               args.property, "y"),
+                                            spk.metrics.RootMeanSquaredError(
+                                                args.property, "y")],
                                            every_n_epochs=args.log_every_n_epochs)
         hooks.append(logger)
 
@@ -151,7 +188,8 @@ def train(args, model, train_loader, val_loader, device):
     trainer.train(device)
 
 
-def evaluate(args, model, property, train_loader, val_loader, test_loader, device):
+def evaluate(args, model, property, train_loader, val_loader, test_loader,
+             device):
     header = ['Subset', property + ' MAE', property + ' RMSE']
 
     metrics = [spk.metrics.MeanAbsoluteError(property, "y"),
@@ -160,18 +198,25 @@ def evaluate(args, model, property, train_loader, val_loader, test_loader, devic
 
     results = []
     if 'train' in args.split:
-        results.append(['training'] + ['%.5f' % i for i in evaluate_dataset(metrics, model, train_loader, device)])
+        results.append(['training'] + ['%.5f' % i for i in
+                                       evaluate_dataset(metrics, model,
+                                                        train_loader, device)])
 
     if 'validation' in args.split:
-        results.append(['validation'] + ['%.5f' % i for i in evaluate_dataset(metrics, model, val_loader, device)])
+        results.append(['validation'] + ['%.5f' % i for i in
+                                         evaluate_dataset(metrics, model,
+                                                          val_loader, device)])
 
     if 'test' in args.split:
-        results.append(['test'] + ['%.5f' % i for i in evaluate_dataset(metrics, model, test_loader, device)])
+        results.append(['test'] + ['%.5f' % i for i in
+                                   evaluate_dataset(metrics, model,
+                                                    test_loader, device)])
 
     header = ','.join(header)
     results = np.array(results)
 
-    np.savetxt(os.path.join(args.modelpath, 'evaluation.csv'), results, header=header, fmt='%s', delimiter=',')
+    np.savetxt(os.path.join(args.modelpath, 'evaluation.csv'), results,
+               header=header, fmt='%s', delimiter=',')
 
 
 def evaluate_dataset(metrics, model, loader, device):
@@ -194,13 +239,20 @@ def evaluate_dataset(metrics, model, loader, device):
     return results
 
 
-def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None, parallelize=False):
+def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None,
+              parallelize=False):
     if args.model == 'schnet':
-        representation = spk.representation.SchNet(args.features, args.features, args.interactions,
-                                                   args.cutoff, args.num_gaussians, normalize_filter=True)
-        atomwise_output = spk.atomistic.Atomwise(args.features, aggregation_mode=args.aggregation_mode,
+        representation = spk.representation.SchNet(args.features,
+                                                   args.features,
+                                                   args.interactions,
+                                                   args.cutoff,
+                                                   args.num_gaussians,
+                                                   normalize_filter=True)
+        atomwise_output = spk.atomistic.Atomwise(args.features,
+                                                 aggregation_mode=args.aggregation_mode,
                                                  mean=mean, stddev=stddev,
-                                                 atomref=atomref, train_embeddings=True)
+                                                 atomref=atomref,
+                                                 train_embeddings=True)
         model = spk.atomistic.AtomisticModel(representation, atomwise_output)
     else:
         raise ValueError('Unsupported model class:', args.model)
@@ -208,7 +260,8 @@ def get_model(args, atomref=None, mean=None, stddev=None, train_loader=None, par
     if parallelize:
         model = nn.DataParallel(model)
 
-    logging.info("The model you built has: {} parameters".format(compute_params(model)))
+    logging.info(
+        "The model you built has: {} parameters".format(compute_params(model)))
 
     return model
 
@@ -251,7 +304,8 @@ if __name__ == '__main__':
         train_args = read_from_json(jsonpath)
 
     # will download MaterialsProject if necessary
-    mp = spk.datasets.MaterialsProject(args.datapath, args.cutoff, apikey=args.apikey, download=True,
+    mp = spk.datasets.MaterialsProject(args.datapath, args.cutoff,
+                                       apikey=args.apikey, download=True,
                                        properties=[train_args.property])
 
     # splits the dataset in test, val, train sets
@@ -260,11 +314,14 @@ if __name__ == '__main__':
         if args.split_path is not None:
             copyfile(args.split_path, split_path)
 
-    data_train, data_val, data_test = mp.create_splits(*train_args.split, split_file=split_path)
+    data_train, data_val, data_test = mp.create_splits(*train_args.split,
+                                                       split_file=split_path)
 
-    train_loader = schnetpack.data.AtomsLoader(data_train, batch_size=args.batch_size, sampler=RandomSampler(data_train),
-                                               num_workers=4, pin_memory=True)
-    val_loader = schnetpack.data.AtomsLoader(data_val, batch_size=args.batch_size, num_workers=2, pin_memory=True)
+    train_loader = spk.data.AtomsLoader(data_train, batch_size=args.batch_size,
+                                        sampler=RandomSampler(data_train),
+                                        num_workers=4, pin_memory=True)
+    val_loader = spk.data.AtomsLoader(data_val, batch_size=args.batch_size,
+                                      num_workers=2, pin_memory=True)
 
     if args.mode == 'train':
         logging.info('calculate statistics...')
@@ -276,7 +333,7 @@ if __name__ == '__main__':
             logging.info("cached statistics was loaded...")
         else:
             mean, stddev = train_loader.get_statistics(train_args.property,
-                                                       True)#, atomref)
+                                                       True)  # , atomref)
             np.savez(split_path, train_idx=split_data['train_idx'],
                      val_idx=split_data['val_idx'],
                      test_idx=split_data['test_idx'], mean=mean,
@@ -285,7 +342,8 @@ if __name__ == '__main__':
         mean, stddev = None, None
 
     # Construct the model.
-    model = get_model(train_args, atomref=None, mean=mean, stddev=stddev, train_loader=train_loader,
+    model = get_model(train_args, atomref=None, mean=mean, stddev=stddev,
+                      train_loader=train_loader,
                       parallelize=args.parallel).to(device)
 
     if args.mode == 'eval':
@@ -294,8 +352,10 @@ if __name__ == '__main__':
         logging.info("Training...")
         train(args, model, train_loader, val_loader, device)
     elif args.mode == 'eval':
-        test_loader = schnetpack.data.AtomsLoader(data_test, batch_size=args.batch_size,
-                                                  num_workers=2, pin_memory=True)
-        evaluate(args, model, train_args.property, train_loader, val_loader, test_loader, device)
+        test_loader = spk.data.AtomsLoader(data_test,
+                                           batch_size=args.batch_size,
+                                           num_workers=2, pin_memory=True)
+        evaluate(args, model, train_args.property, train_loader, val_loader,
+                 test_loader, device)
     else:
         print('Unknown mode:', args.mode)

@@ -13,7 +13,6 @@ from torch.optim import Adam
 from torch.utils.data.sampler import RandomSampler
 
 import schnetpack as spk
-import schnetpack.data
 from schnetpack.datasets import QM9
 from schnetpack.utils import compute_params, to_json, read_from_json
 
@@ -45,7 +44,8 @@ def get_parser():
                               help='Destination for models and logs')
     train_parser.add_argument('--property', type=str,
                               help='QM9 property to be predicted (default: %(default)s)',
-                              default="energy_U0", choices=QM9.available_properties)
+                              default="energy_U0",
+                              choices=QM9.available_properties)
 
     train_parser.add_argument('--remove_uncharacterized',
                               help='Remove uncharacterized molecules from QM9',
@@ -407,11 +407,11 @@ if __name__ == '__main__':
                                                         split_file=split_path)
 
     logging.info('load data...')
-    train_loader = schnetpack.data.AtomsLoader(data_train, batch_size=args.batch_size,
-                                               sampler=RandomSampler(data_train),
-                                               num_workers=4, pin_memory=True)
-    val_loader = schnetpack.data.AtomsLoader(data_val, batch_size=args.batch_size,
-                                             num_workers=2, pin_memory=True)
+    train_loader = spk.data.AtomsLoader(data_train, batch_size=args.batch_size,
+                                        sampler=RandomSampler(data_train),
+                                        num_workers=4, pin_memory=True)
+    val_loader = spk.data.AtomsLoader(data_val, batch_size=args.batch_size,
+                                      num_workers=2, pin_memory=True)
 
     if args.mode == 'train':
         logging.info('calculate statistics...')
@@ -444,9 +444,9 @@ if __name__ == '__main__':
         logging.info("...training done!")
     elif args.mode == 'eval':
         logging.info("evaluating...")
-        test_loader = schnetpack.data.AtomsLoader(data_test,
-                                                  batch_size=args.batch_size,
-                                                  num_workers=2, pin_memory=True)
+        test_loader = spk.data.AtomsLoader(data_test,
+                                           batch_size=args.batch_size,
+                                           num_workers=2, pin_memory=True)
         with torch.no_grad():
             evaluate(args, model, train_args.property, train_loader,
                      val_loader, test_loader, device)
