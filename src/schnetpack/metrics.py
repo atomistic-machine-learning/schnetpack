@@ -1,6 +1,8 @@
+import warnings
+
 import numpy as np
 import torch
-import warnings
+
 from schnetpack.data import Structure
 
 __all__ = ['ModelBias', 'MeanSquaredError', 'RootMeanSquaredError',
@@ -85,9 +87,9 @@ class ModelBias(Metric):
         diff = self._get_diff(y, yp)
         self.l2loss += torch.sum(diff.view(-1)).detach().cpu().data.numpy()
         if self.element_wise:
-            self.n_entries +=\
+            self.n_entries += \
                 torch.sum(batch[Structure.atom_mask]
-                          ).detach().cpu().data.numpy()* y.shape[-1]
+                          ).detach().cpu().data.numpy() * y.shape[-1]
         else:
             self.n_entries += np.prod(y.shape)
 
@@ -144,9 +146,10 @@ class MeanSquaredError(Metric):
             yp = result
 
         diff = self._get_diff(y, yp)
-        self.l2loss += torch.sum(diff.view(-1) ** 2).detach().cpu().data.numpy()
+        self.l2loss += torch.sum(
+            diff.view(-1) ** 2).detach().cpu().data.numpy()
         if self.element_wise:
-            self.n_entries +=\
+            self.n_entries += \
                 torch.sum(batch[Structure.atom_mask]
                           ).detach().cpu().data.numpy() * y.shape[-1]
         else:
@@ -238,7 +241,7 @@ class MeanAbsoluteError(Metric):
         self.l1loss += torch.sum(torch.abs(diff).view(-1),
                                  0).detach().cpu().data.numpy()
         if self.element_wise:
-            self.n_entries +=\
+            self.n_entries += \
                 torch.sum(batch[Structure.atom_mask]
                           ).detach().cpu().data.numpy() * y.shape[-1]
         else:
@@ -270,9 +273,11 @@ class HeatmapMAE(MeanAbsoluteError):
                                          element_wise=element_wise)
 
     def add_batch(self, batch, result):
-        if self.element_wise and torch.sum(batch[Structure.atom_mask]==0) != 0:
-            warnings.warn('MAEHeatmap should not be used for element-wise'
+        if self.element_wise and torch.sum(
+                batch[Structure.atom_mask] == 0) != 0:
+            warnings.warn('MAEHeatmap should not be used for element-wise ' +
                           'properties with different sized molecules!')
+
         y = batch[self.target]
         if self.model_output is None:
             yp = result
@@ -285,7 +290,8 @@ class HeatmapMAE(MeanAbsoluteError):
             yp = result
 
         diff = self._get_diff(y, yp)
-        self.l1loss += torch.sum(torch.abs(diff), 0).detach().cpu().data.numpy()
+        self.l1loss += torch.sum(torch.abs(diff),
+                                 0).detach().cpu().data.numpy()
         self.n_entries += y.size(0)
 
     def aggregate(self):
@@ -307,7 +313,7 @@ class SumMAE(MeanAbsoluteError):
     def __init__(self, target, model_output=None, axis=1, name=None,
                  element_wise=False):
         name = 'SumMAE_' + target if name is None else name
-        self.axis= axis
+        self.axis = axis
         super(SumMAE, self).__init__(target, model_output, name=name,
                                      element_wise=element_wise)
 
@@ -436,8 +442,8 @@ class AngleMSE(MeanSquaredError):
 
         diff = self._get_diff(y, yp)
         self.l2loss += torch.sum(diff ** 2).detach().cpu().data.numpy()
-        self.n_entries +=\
-            torch.sum(torch.isnan(diff)==False).detach().cpu().data.numpy()
+        self.n_entries += \
+            torch.sum(torch.isnan(diff) == False).detach().cpu().data.numpy()
 
 
 class AngleMAE(MeanAbsoluteError):
@@ -484,8 +490,8 @@ class AngleMAE(MeanAbsoluteError):
 
         diff = self._get_diff(y, yp)
         self.l1loss += torch.sum(torch.abs(diff)).detach().cpu().data.numpy()
-        self.n_entries +=\
-            torch.sum(torch.isnan(diff)==False).detach().cpu().data.numpy()
+        self.n_entries += \
+            torch.sum(torch.isnan(diff) == False).detach().cpu().data.numpy()
 
 
 class AngleRMSE(RootMeanSquaredError):
@@ -532,6 +538,5 @@ class AngleRMSE(RootMeanSquaredError):
 
         diff = self._get_diff(y, yp)
         self.l2loss += torch.sum(diff ** 2).detach().cpu().data.numpy()
-        self.n_entries +=\
-            torch.sum(torch.isnan(diff)==False).detach().cpu().data.numpy()
-
+        self.n_entries += \
+            torch.sum(torch.isnan(diff) == False).detach().cpu().data.numpy()

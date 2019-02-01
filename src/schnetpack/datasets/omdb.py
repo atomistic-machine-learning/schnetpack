@@ -7,14 +7,14 @@ from ase.io import read
 from ase.db import connect
 from ase.units import eV
 
-from schnetpack.data import AtomsData
+from schnetpack.data import DownloadableAtomsData
 from schnetpack.environment import AseEnvironmentProvider
 
 __all__ = [
     'OrganicMaterialsDatabase'
 ]
 
-class OrganicMaterialsDatabase(AtomsData):
+class OrganicMaterialsDatabase(DownloadableAtomsData):
     """ Organic Materials Database (OMDB) of bulk organic crystals.
         Registration to the OMDB is free for academic users.
 

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from ase import Atoms
 
-import schnetpack as spk
+import schnetpack.data
 
 
 @pytest.fixture
@@ -29,8 +29,9 @@ def property_spec():
 
 @pytest.fixture
 def empty_asedata(tmpdir, max_atoms, property_spec):
-    return spk.data.AtomsData(os.path.join(str(tmpdir), 'test.db'),
-                              required_properties=list(property_spec.keys()))
+    return schnetpack.data.AtomsData(os.path.join(str(tmpdir), 'test.db'),
+                                     required_properties=list(
+                                         property_spec.keys()))
 
 
 @pytest.fixture
@@ -54,6 +55,17 @@ def example_data(max_atoms, num_data):
     return data
 
 
+@pytest.fixture
+def example_asedata(tmpdir, max_atoms, property_spec, example_data):
+    data = schnetpack.data.AtomsData(os.path.join(str(tmpdir), 'test.db'),
+                                     required_properties=list(
+                                         property_spec.keys()))
+    # add data
+    for ats, props in example_data:
+        data.add_system(ats, **props)
+    return data
+
+
 def test_add_and_read(empty_asedata, example_data):
     # add data
     for ats, props in example_data:
@@ -71,3 +83,14 @@ def test_empty_subset_of_subset(empty_asedata, example_data):
     data = test_add_and_read(empty_asedata, example_data)
     subset = data.create_subset([0, 1])
     subset.create_subset([])
+
+
+def test_merging(tmpdir, example_asedata):
+    merged_dbpath = os.path.join(str(tmpdir), 'merged.db')
+
+    merged_data = schnetpack.data.merge_datasets(merged_dbpath,
+                                   [example_asedata.dbpath,
+                                    example_asedata.dbpath])
+
+    assert len(merged_data) == 2*len(example_asedata)
+

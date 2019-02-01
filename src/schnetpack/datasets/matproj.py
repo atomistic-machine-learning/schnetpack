@@ -5,7 +5,7 @@ from ase import Atoms
 from ase.db import connect
 from ase.units import eV
 
-from schnetpack.data import AtomsData
+from schnetpack.data import DownloadableAtomsData
 from schnetpack.environment import AseEnvironmentProvider
 
 __all__ = [
@@ -13,7 +13,7 @@ __all__ = [
 ]
 
 
-class MaterialsProject(AtomsData):
+class MaterialsProject(DownloadableAtomsData):
     """ Materials Project data repository of bulk crystals.
 
         This class adds convenience functions to download Materials Project data into pytorch.

@@ -3,7 +3,7 @@ import os
 from ase.db import connect
 from ase.io.extxyz import read_xyz
 
-from schnetpack.data import AtomsData
+from schnetpack.data import DownloadableAtomsData
 from schnetpack.environment import SimpleEnvironmentProvider
 
 __all__ = ['ExtXYZ', 'parse_extxyz']
@@ -24,7 +24,7 @@ def parse_extxyz(dbpath, xyzpath):
                 conn.write(at, data={ExtXYZ.E: e, ExtXYZ.F: f})
 
 
-class ExtXYZ(AtomsData):
+class ExtXYZ(DownloadableAtomsData):
     '''
     Loader for MD data in extended XYZ format
 

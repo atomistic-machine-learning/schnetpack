@@ -11,10 +11,10 @@ from ase import Atoms
 from ase.db import connect
 from ase.units import Hartree
 
-from schnetpack.data import AtomsData
+from schnetpack.data import DownloadableAtomsData
 
 
-class ANI1(AtomsData):
+class ANI1(DownloadableAtomsData):
     """ ANI1 dataset.
 
         This class adds convenience functions to download ANI1 from figshare and load the data into pytorch.

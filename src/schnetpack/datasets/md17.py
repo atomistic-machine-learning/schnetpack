@@ -7,12 +7,12 @@ from urllib import request as request
 import numpy as np
 from ase import Atoms
 
-from schnetpack.data import AtomsData
+from schnetpack.data import DownloadableAtomsData
 
 __all__ = ['MD17']
 
 
-class MD17(AtomsData):
+class MD17(DownloadableAtomsData):
     """
     MD17 benchmark data set for molecular dynamics of small molecules
     containing molecular forces.
