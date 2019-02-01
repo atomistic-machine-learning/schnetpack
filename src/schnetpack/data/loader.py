@@ -174,7 +174,6 @@ class AtomsLoader(DataLoader):
                           for _ in property_names]
             logger.info("statistics will be calculated...")
 
-            count = 0
             for row in self:
                 for property_name, statistic, pa, ar in zip(property_names,
                                                             statistics,
@@ -182,9 +181,7 @@ class AtomsLoader(DataLoader):
                                                             atomrefs):
                     self._update_statistic(pa, ar, property_name,
                                            row, statistic)
-                count += 1
-                if count > 2:
-                    break
+
             stats = list(zip(*[s.get_statistics() for s in statistics]))
             mean, stddev = stats
 
