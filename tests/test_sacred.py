@@ -1,13 +1,9 @@
 from sacred_scripts.run_schnetpack import ex
 from sacred_scripts.run_md import md
-import tempfile
-import shutil
 import os
 from schnetpack.atomistic import Properties
 from schnetpack.datasets.iso17 import ISO17
 import pytest
-
-tmpdir = tempfile.mkdtemp('gdb9')
 
 
 @pytest.fixture
@@ -20,7 +16,7 @@ def properties(property_mapping):
     return [Properties.energy, Properties.forces]
 
 
-def test_run_training(property_mapping, properties):
+def test_run_training(property_mapping, properties, tmpdir):
     """
     Test if training is working and logs are created.
     """
@@ -77,7 +73,7 @@ def md_system(request):
     return system
 
 
-def test_run_md(md_thermostats, md_system):
+def test_run_md(md_thermostats, md_system, tmpdir):
     mol_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                             'data/test_molecule.xyz')
     model_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -110,10 +106,6 @@ def test_run_md(md_thermostats, md_system):
            config_updates=config_updates)
 
 
-thermos = [
-]
-
-
 @pytest.fixture(params=[
     None,
     'thermostat.piglet',
@@ -127,7 +119,7 @@ def rpmd_thermostats(request):
     return thermostat
 
 
-def test_run_rpmd(rpmd_thermostats):
+def test_run_rpmd(rpmd_thermostats, tmpdir):
     mol_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                             'data/test_molecule.xyz')
     model_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -157,7 +149,3 @@ def test_run_rpmd(rpmd_thermostats):
     md.run(command_name='simulate',
            named_configs=named_configs,
            config_updates=config_updates)
-
-
-def teardown_module():
-    shutil.rmtree(tmpdir)
