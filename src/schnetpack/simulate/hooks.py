@@ -4,7 +4,6 @@ import numpy as np
 import json
 import h5py
 
-
 __all__ = ['Checkpoint', 'RemoveCOMMotion', 'BiasPotential', 'FileLogger',
            'TensorboardLogger', 'TemperatureLogger', 'MoleculeStream',
            'PropertyStream']
@@ -59,14 +58,16 @@ class Checkpoint(SimulationHook):
 
 class RemoveCOMMotion(SimulationHook):
 
-    def __init__(self, every_n_steps=10):
+    def __init__(self, every_n_steps=10, remove_rotation=True):
         self.every_n_steps = every_n_steps
+        self.remove_rotation = remove_rotation
 
     def on_step_end(self, simulator):
         if simulator.step % self.every_n_steps == 0:
             simulator.system.remove_com()
             simulator.system.remove_com_translation()
-            simulator.system.remove_com_rotation()
+            if self.remove_rotation:
+                simulator.system.remove_com_rotation()
 
 
 class BiasPotential(SimulationHook):
@@ -99,8 +100,8 @@ class DataStream:
         raise NotImplementedError
 
     def flush_buffer(self, file_position, buffer_position):
-        self.data_group[file_position:file_position + buffer_position] =\
-            self.buffer[:buffer_position]
+        self.data_group[file_position:file_position + buffer_position] = \
+            self.buffer[:buffer_position].cpu()
         # Update number of meaningful entries
         self.data_group.attrs.modify('entries', file_position + buffer_position)
         self.data_group.flush()
@@ -157,7 +158,7 @@ class PropertyStream(DataStream):
         if not self.restart:
             # Store metadata on shape and position of properties in array
             self.data_group.attrs['shapes'] = json.dumps(properties_shape)
-            self.data_group.attrs['positions'] =\
+            self.data_group.attrs['positions'] = \
                 json.dumps(properties_positions)
 
     def update_buffer(self, buffer_position, simulator):
@@ -205,7 +206,7 @@ class SimulationStream(PropertyStream):
             'temperature_centroid': simulator.system.centroid_temperature
         }
 
-        properties_entries, properties_shape, properties_positions =\
+        properties_entries, properties_shape, properties_positions = \
             self._get_properties_structures(property_dictionary)
 
         data_shape = (self.n_replicas, self.n_molecules, properties_entries)
@@ -214,7 +215,7 @@ class SimulationStream(PropertyStream):
 
         if not self.restart:
             self.data_group.attrs['shapes'] = json.dumps(properties_shape)
-            self.data_group.attrs['positions'] =\
+            self.data_group.attrs['positions'] = \
                 json.dumps(properties_positions)
 
     def update_buffer(self, buffer_position, simulator):
@@ -246,13 +247,14 @@ class MoleculeStream(DataStream):
         if not self.restart:
             self.data_group.attrs['n_replicas'] = simulator.system.n_replicas
             self.data_group.attrs['n_molecules'] = simulator.system.n_molecules
-            self.data_group.attrs['n_atoms'] = simulator.system.n_atoms
-            self.data_group.attrs['atom_types'] = simulator.system.atom_types
+            self.data_group.attrs['n_atoms'] = simulator.system.n_atoms.cpu()
+            self.data_group.attrs['atom_types'] = simulator.system.atom_types.cpu()
+            self.data_group.attrs['time_step'] = simulator.integrator.time_step
 
     def update_buffer(self, buffer_position, simulator):
-        self.buffer[buffer_position:buffer_position + 1, ..., :3] =\
+        self.buffer[buffer_position:buffer_position + 1, ..., :3] = \
             simulator.system.positions
-        self.buffer[buffer_position:buffer_position + 1, ..., 3:] =\
+        self.buffer[buffer_position:buffer_position + 1, ..., 3:] = \
             simulator.system.velocities
 
 
@@ -263,9 +265,11 @@ class FileLoggerError(Exception):
 class FileLogger(SimulationHook):
 
     def __init__(self, filename, buffer_size,
-                 data_streams=[MoleculeStream, PropertyStream], restart=True):
+                 data_streams=[MoleculeStream, PropertyStream],
+                 every_n_steps=1, restart=False):
 
         self.restart = restart
+        self.every_n_steps = every_n_steps
 
         # Remove already existing file if not restarting simulation
         if not self.restart:
@@ -299,16 +303,16 @@ class FileLogger(SimulationHook):
         self.file.swmr_mode = True
 
     def on_step_end(self, simulator):
+        if simulator.step % self.every_n_steps == 0:
+            # If buffers are full, write to file
+            if self.buffer_position == self.buffer_size:
+                self._write_buffer()
 
-        # If buffers are full, write to file
-        if self.buffer_position == self.buffer_size:
-            self._write_buffer()
+            # Update stream buffers
+            for stream in self.data_steams:
+                stream.update_buffer(self.buffer_position, simulator)
 
-        # Update stream buffers
-        for stream in self.data_steams:
-            stream.update_buffer(self.buffer_position, simulator)
-
-        self.buffer_position += 1
+            self.buffer_position += 1
 
     def on_simulation_end(self, simulator):
         # Flush remaining data in buffer
@@ -319,7 +323,6 @@ class FileLogger(SimulationHook):
         self.file.close()
 
     def _write_buffer(self):
-
         for stream in self.data_steams:
             stream.flush_buffer(self.file_position, self.buffer_position)
 

@@ -102,7 +102,7 @@ class System:
         """
         molecules = read(path_to_file)
         if not type(molecules) == list:
-            molecules = [molecules]*2
+            molecules = [molecules]
         self.load_molecules(molecules=molecules)
 
     def load_molecules(self, molecules):

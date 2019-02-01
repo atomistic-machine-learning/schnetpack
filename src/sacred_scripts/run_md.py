@@ -1,7 +1,11 @@
 from sacred import Experiment
 import os
-import torch
-import yaml
+
+try:
+    import oyaml as yaml
+except ImportError:
+    import yaml
+
 from shutil import rmtree
 
 from schnetpack.sacred.calculator_ingredients import (calculator_ingradient,
@@ -15,27 +19,27 @@ from schnetpack.sacred.system_ingredients import (system_ingredient,
 from schnetpack.sacred.thermostat_ingredients import thermostat_ingredient, \
     build_thermostat
 
-
 md = Experiment('md', ingredients=[simulator_ingredient, calculator_ingradient,
                                    integrator_ingredient, system_ingredient,
                                    thermostat_ingredient])
+
+SETUP_STRING_WIDTH = 30
+SETUP_STRING = "\n\n{:s}\n{:s}\n{:s}".format(SETUP_STRING_WIDTH * "=",
+                                             f'{{:^{SETUP_STRING_WIDTH}s}}',
+                                             SETUP_STRING_WIDTH * '=')
 
 
 @md.config
 def config():
     """configuration for the simulation experiment"""
-    experiment_dir = './experiments'
+    experiment_dir = 'experiment'
     simulation_steps = 1000
     device = 'cpu'
-    path_to_molecules = os.path.join(experiment_dir, 'data/ethanol.xyz')
-    simulation_dir = os.path.join(experiment_dir, 'simulation')
-    training_dir = os.path.join(experiment_dir, 'training')
-    model_path = os.path.join(training_dir, 'best_model')
     overwrite = True
 
 
 @md.capture
-def save_config(_config, simulation_dir):
+def save_system_config(_config, experiment_dir):
     """
     Save the configuration to the model directory.
 
@@ -44,22 +48,21 @@ def save_config(_config, simulation_dir):
         simulation_dir (str): path to the simulation directory
 
     """
-    with open(os.path.join(simulation_dir, 'config.yaml'), 'w') as f:
+    with open(os.path.join(experiment_dir, 'config.yaml'), 'w') as f:
         yaml.dump(_config, f, default_flow_style=False)
 
 
 @md.capture
-def load_model(model_path):
-    return torch.load(model_path)
-
-
-@md.capture
-def setup_simulation(simulation_dir, device, path_to_molecules):
-    model = load_model()
-    calculator = build_calculator(model=model)
-    integrator = build_integrator()
-    system = build_system(device=device, path_to_molecules=path_to_molecules)
+def setup_simulation(_log, simulation_dir, device):
+    _log.info(SETUP_STRING.format('CALCULATOR SETUP'))
+    calculator = build_calculator(device=device)
+    _log.info(SETUP_STRING.format('SYSTEM SETUP'))
+    system = build_system(device=device)
+    _log.info(SETUP_STRING.format('INTEGRATOR SETUP'))
+    integrator = build_integrator(n_beads=system.n_replicas, device=device)
+    _log.info(SETUP_STRING.format('THERMOSTAT SETUP'))
     thermostat = build_thermostat()
+    _log.info(SETUP_STRING.format('SIMULATOR SETUP'))
     simulator = build_simulator(system=system,
                                 integrator_object=integrator,
                                 calculator_object=calculator,
@@ -69,7 +72,7 @@ def setup_simulation(simulation_dir, device, path_to_molecules):
 
 
 @md.capture
-def create_dirs(_log, simulation_dir, overwrite):
+def create_dirs(_log, experiment_dir, overwrite):
     """
     Create the directory for the experiment.
 
@@ -79,6 +82,9 @@ def create_dirs(_log, simulation_dir, overwrite):
         overwrite (bool): overwrites the model directory if True
 
     """
+
+    simulation_dir = os.path.join(experiment_dir, 'simulation')
+
     _log.info("Create model directory")
     if simulation_dir is None:
         raise ValueError('Config `experiment_dir` has to be set!')
@@ -96,15 +102,23 @@ def create_dirs(_log, simulation_dir, overwrite):
 
 
 @md.command
-def simulate(simulation_dir, simulation_steps):
+def simulate(experiment_dir, simulation_steps):
+    simulation_dir = os.path.join(experiment_dir, 'simulation')
     create_dirs()
-    save_config()
+    save_system_config()
     simulator = setup_simulation(simulation_dir=simulation_dir)
     simulator.simulate(simulation_steps)
 
 
+@md.command
+def save_config(_log, _config, experiment_dir):
+    file_name = f"{experiment_dir}_config.yaml"
+    with open(file_name, 'w') as f:
+        yaml.dump(_config, f, default_flow_style=False)
+    _log.info(f'Stored config to {file_name}')
+
+
 @md.automain
-def main():
-    print(md.config)
-
-
+def main(_log):
+    save_config()
+    _log.info('To run simulation call script with "simulate with <config file>"')

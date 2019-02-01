@@ -121,10 +121,14 @@ def load_gle_matrices(filename):
     a_matrix = GLEMatrixParser('A MATRIX:', stop='C MATRIX:', split='Matrix for normal mode')
     c_matrix = GLEMatrixParser('C MATRIX:', split='Matrix for normal mode')
 
-    with open(filename) as glefile:
-        for line in glefile:
-            a_matrix.read_line(line)
-            c_matrix.read_line(line)
+    try:
+        with open(filename) as glefile:
+            for line in glefile:
+                a_matrix.read_line(line)
+                c_matrix.read_line(line)
+    except FileNotFoundError:
+        raise FileNotFoundError('Could not open {:s} for reading. Please use GLE parameter files '
+                                'generated via http://gle4md.org/index.html?page=matrix'.format(filename))
 
     return a_matrix.matrix, c_matrix.matrix
 
