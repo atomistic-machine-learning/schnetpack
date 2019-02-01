@@ -23,7 +23,7 @@ def velocity_verlet():
 def ring_polymer():
     """configuration for the ring polymer integrator"""
     integrator = 'ring_polymer'
-    time_step = 0.5
+    time_step = 0.2
     temperature = 300.
 
 
