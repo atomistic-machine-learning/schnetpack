@@ -16,7 +16,7 @@ def config():
 @system_ingredient.named_config
 def ring_polymer():
     """configuration for the system ingredient"""
-    n_replicas = 8
+    n_replicas = 4
     path_to_molecules = 'ethanol.xyz'
 
 
