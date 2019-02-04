@@ -5,72 +5,123 @@ from schnetpack.simulate.simulator import Simulator
 from schnetpack.simulate.hooks import *
 from schnetpack.simulate.thermostats import *
 
-
 simulator_ingredient = Ingredient('simulator')
+
+DEFAULT_HOOKS = {
+    'file_logger': {
+        'every_n_steps': 1,
+        'buffer_size': 100,
+        'data_streams': ['molecule_stream', 'property_stream']
+    },
+    'checkpoint_logger': {
+        'every_n_steps': 100
+    }
+}
 
 
 @simulator_ingredient.config
 def config():
     """configuration for the simulator ingredient"""
-    logging_hooks = []
-    data_streams = []
-    step = 0
-    log_every_n_steps = 100
-    checkpoint_every_n_steps = 1000
+    simulator_hooks = DEFAULT_HOOKS
+    restart = False
+    load_system_state = False
 
 
 @simulator_ingredient.named_config
-def base_hooks():
-    """configuration for logging hooks"""
-    logging_hooks = ['file_logger', 'checkpoint_logger']
-    buffer_size = 1
-    data_streams = ['molecule_stream', 'property_stream']
-    restart = False
+def log_temperature():
+    simulator_hooks = DEFAULT_HOOKS
+    simulator_hooks['temperature_logger'] = {
+        'every_n_steps': 100
+    }
+
+
+@simulator_ingredient.named_config
+def remove_com_motion():
+    simulator_hooks = DEFAULT_HOOKS
+    simulator_hooks['remove_com_motion'] = {
+        'every_n_steps': 100,
+        'remove_rotation': True
+    }
 
 
 @simulator_ingredient.capture
-def build_simulator(system, integrator_object, calculator_object,
-                    logging_hooks, step, thermostat_object, simulation_dir):
+def build_simulator(_log, system, integrator_object, calculator_object, simulator_hooks, thermostat_object,
+                    simulation_dir, restart, load_system_state):
     hook_objects = [thermostat_object] if thermostat_object else []
-    hook_objects += build_logging_hooks(logging_hooks, simulation_dir)
-    return Simulator(system=system, integrator=integrator_object,
-                     calculator=calculator_object, simulator_hooks=hook_objects,
-                     step=step)
+    hook_objects += build_simulation_hooks(simulator_hooks, simulation_dir)
+
+    simulator = Simulator(system=system, integrator=integrator_object,
+                          calculator=calculator_object, simulator_hooks=hook_objects)
+
+    # If requested, read restart data
+    if restart:
+        state_dict = torch.load(restart)
+        simulator.restart(state_dict, soft=False)
+        _log.info(f'Restarting simulation from {restart}...')
+    elif load_system_state:
+        state_dict = torch.load(load_system_state)
+        simulator.load_system_state(state_dict)
+        _log.info(f'Loaded system state from {load_system_state}...')
+
+    return simulator
 
 
 @simulator_ingredient.capture
-def build_logging_hooks(simulator_hooks, simulation_dir):
+def build_simulation_hooks(simulator_hooks, simulation_dir):
     hook_objects = []
-    for hook in simulator_hooks:
-        if hook == 'file_logger':
-            hook_objects.append(get_file_logger(simulation_dir=simulation_dir))
-        elif hook == 'checkpoint_logger':
-            hook_objects.append(get_checkpoint_logger(simulation_dir=simulation_dir))
-        elif hook == 'remove_com_motion':
-            hook_objects.append(get_remove_com_motion_logger())
-        elif hook == 'bias_potential':
+    for hook_name, hook_options in simulator_hooks.items():
+        if hook_name == 'file_logger':
+            hook_objects.append(get_file_logger(simulation_dir=simulation_dir,
+                                                data_streams=hook_options['data_streams'],
+                                                buffer_size=hook_options['buffer_size'],
+                                                every_n_steps=hook_options['every_n_steps']))
+        elif hook_name == 'checkpoint_logger':
+            hook_objects.append(get_checkpoint_logger(simulation_dir=simulation_dir,
+                                                      every_n_steps=hook_options['every_n_steps']))
+        elif hook_name == 'tensorboard_logger':
+            hook_objects.append(get_tensorboard_logger(simulation_dir=simulation_dir,
+                                                       every_n_steps=hook_options['every_n_steps']))
+        elif hook_name == 'temperature_logger':
+            hook_objects.append(get_temperature_logger(simulation_dir=simulation_dir,
+                                                       every_n_steps=hook_options['every_n_steps']))
+        elif hook_name == 'remove_com_motion':
+            hook_objects.append(get_remove_com_motion(every_n_steps=hook_options['every_n_steps'],
+                                                      remove_rotation=hook_options['remove_rotation']))
+        elif hook_name == 'bias_potential':
             hook_objects.append(get_bias_potential())
-        elif hook == 'tensorboard_logger':
-            hook_objects.append(
-                get_tensorboard_logger(simulation_dir=simulation_dir))
-        elif hook == 'temperature_logger':
-            hook_objects.append(
-                get_temperature_logger(simulation_dir=simulation_dir))
         else:
             raise NotImplementedError
+
     return hook_objects
 
 
 @simulator_ingredient.capture
-def get_tensorboard_logger(simulation_dir, log_every_n_steps):
+def get_tensorboard_logger(_log, simulation_dir, every_n_steps):
     log_file = os.path.join(simulation_dir, 'tensorboard_log')
-    return TensorboardLogger(log_file=log_file, every_n_steps=log_every_n_steps)
+    return TensorboardLogger(log_file=log_file, every_n_steps=every_n_steps)
 
 
 @simulator_ingredient.capture
-def get_temperature_logger(simulation_dir, log_every_n_steps):
+def get_temperature_logger(_log, simulation_dir, every_n_steps):
     log_file = os.path.join(simulation_dir, 'temperature_log')
-    return TemperatureLogger(log_file=log_file, every_n_steps=log_every_n_steps)
+    _log.info(f'Logging temperature to {log_file} every {every_n_steps} steps.')
+    return TemperatureLogger(log_file=log_file, every_n_steps=every_n_steps)
+
+
+@simulator_ingredient.capture
+def get_checkpoint_logger(_log, simulation_dir, every_n_steps=1000):
+    checkpoint_file = os.path.join(simulation_dir, 'checkpoint_file.chk')
+    _log.info(f'Writing checkpoint file {checkpoint_file} every {every_n_steps} steps.')
+    return Checkpoint(checkpoint_file=checkpoint_file,
+                      every_n_steps=every_n_steps)
+
+
+@simulator_ingredient.capture
+def get_remove_com_motion(_log, every_n_steps, remove_rotation=False):
+    _log.info(f'Removing center of mass translation{("", " and rotation")[remove_rotation]}'
+              f' every {every_n_steps} steps.')
+    return RemoveCOMMotion(every_n_steps=every_n_steps,
+                           remove_rotation=remove_rotation)
 
 
 @simulator_ingredient.capture
@@ -79,22 +130,12 @@ def get_bias_potential():
 
 
 @simulator_ingredient.capture
-def get_remove_com_motion_logger(log_every_n_steps):
-    return RemoveCOMMotion(every_n_steps=log_every_n_steps)
-
-
-@simulator_ingredient.capture
-def get_file_logger(simulation_dir, buffer_size, data_streams, restart):
+def get_file_logger(_log, restart, simulation_dir, data_streams, buffer_size, every_n_steps):
     data_stream_classes = build_datastreams(data_streams)
-    log_file = os.path.join(simulation_dir, 'log')
-    return FileLogger(log_file, buffer_size, data_stream_classes, restart)
-
-
-@simulator_ingredient.capture
-def get_checkpoint_logger(simulation_dir, checkpoint_every_n_steps=1000):
-    checkpoint_file = os.path.join(simulation_dir, 'checkpoint_file')
-    return Checkpoint(checkpoint_file=checkpoint_file,
-                      every_n_steps=checkpoint_every_n_steps)
+    log_file = os.path.join(simulation_dir, 'simulation.hdf5')
+    _log.info(f'Writing data streams {", ".join(data_streams)} to {log_file} every {every_n_steps} steps.')
+    return FileLogger(log_file, buffer_size, data_stream_classes,
+                      restart=restart, every_n_steps=every_n_steps)
 
 
 @simulator_ingredient.capture

@@ -1,7 +1,6 @@
 from sacred import Ingredient
 from schnetpack.md.initial_conditions import MaxwellBoltzmannInit
 
-
 initializer_ing = Ingredient('initializer')
 
 
@@ -12,6 +11,12 @@ def config():
     init_temperature = 300
     remove_translation = False
     remove_rotation = False
+
+
+@initializer_ing.named_config
+def remove_com():
+    remove_translation = True
+    remove_rotation = True
 
 
 @initializer_ing.capture
