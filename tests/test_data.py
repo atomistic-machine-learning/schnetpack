@@ -71,3 +71,16 @@ def test_empty_subset_of_subset(empty_asedata, example_data):
     data = test_add_and_read(empty_asedata, example_data)
     subset = data.create_subset([0, 1])
     subset.create_subset([])
+
+
+def test_cached_dataset(empty_asedata, example_data):
+    data = test_add_and_read(empty_asedata, example_data)
+
+    # Test serial
+    cached = data.load_into_cache()
+    assert len(cached) == len(data)
+
+    # Test parallel
+    cached = data.load_into_cache(2)
+    assert len(cached) == len(data)
+

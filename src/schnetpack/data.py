@@ -23,6 +23,7 @@ import torch
 from ase.db import connect
 from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
+from multiprocessing import Pool
 
 from .environment import SimpleEnvironmentProvider, \
     collect_atom_triples
@@ -328,6 +329,31 @@ class AtomsData(BaseAtomsData):
             with connect(self.dbpath) as conn:
                 return conn.count()
         return len(self.subset)
+
+    def load_into_cache(self, n_workers=0):
+        """Load all of the data into memory
+
+        Args:
+            n_workers (int): Number of workers to do when pre-loading data
+        Returns:
+            (Dataset) Dataset with all of the entries loaded into memory
+        """
+
+        # Load all of the memory into
+        if n_workers == 0:
+            entries = [self[i] for i in range(len(self))]
+        else:
+            with Pool(n_workers) as p:
+                entries = p.map(self.__getitem__, range(len(self)))
+
+        # Make a wrapper class that will serve as a dataset
+        class CachedDataset(Dataset):
+            def __getitem__(self, item):
+                return entries[item]
+
+            def __len__(self):
+                return len(entries)
+        return CachedDataset()
 
     def download(self):
         """
