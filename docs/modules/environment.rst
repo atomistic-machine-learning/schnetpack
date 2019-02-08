@@ -12,11 +12,5 @@ Environment providers
 .. autoclass:: schnetpack.environment.SimpleEnvironmentProvider
    :members:
 
-.. autoclass:: schnetpack.environment.ASEEnvironmentProvider
-   :members:
-
-Pair providers
---------------
-
-.. autoclass:: schnetpack.environment.SimplePairProvider
+.. autoclass:: schnetpack.environment.AseEnvironmentProvider
    :members:

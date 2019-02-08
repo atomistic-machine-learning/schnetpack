@@ -28,5 +28,11 @@ Contents
 
    modules/index
 
+.. toctree::
+   :glob:
+   :caption: Sacred Scripts
+   :maxdepth: 2
+
+   sacredscripts/index
 
 
