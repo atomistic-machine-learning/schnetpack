@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 import pytest
+import torch
 from ase import Atoms
 
 import schnetpack as spk
@@ -84,3 +85,13 @@ def test_cached_dataset(empty_asedata, example_data):
     cached = data.load_into_cache(2)
     assert len(cached) == len(data)
 
+
+def test_rattle(empty_asedata, example_data):
+    data = test_add_and_read(empty_asedata, example_data)
+
+    # Before rattling, entries should be equal
+    assert torch.all(torch.eq(data[0]['_positions'], data[0]['_positions']))
+
+    # After rattling, drawing the same entry gives a different structure
+    data.rattle_atoms = 0.1
+    assert not torch.all(torch.eq(data[0]['_positions'], data[0]['_positions']))

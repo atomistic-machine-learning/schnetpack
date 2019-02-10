@@ -34,12 +34,17 @@ class AtomsDataError(Exception):
 
 
 class BaseAtomsData(Dataset):
+    """
+    TODO: Add in docs for the rest of the attributes (if not already)
+    Args:
+        rattle_atoms (float): Standard deviation of noise to add to the atomic coordinates
+    """
     available_properties = None
 
     def __init__(self, dbpath, subset=None, required_properties=None,
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True,
-                 load_charge=False):
+                 load_charge=False, rattle_atoms=None):
         self.dbpath = dbpath
         self.subset = subset
         self.required_properties = required_properties
@@ -49,6 +54,7 @@ class BaseAtomsData(Dataset):
         self.collect_triples = collect_triples
         self.centered = center_positions
         self.load_charge = load_charge
+        self.rattle_atoms = rattle_atoms
 
     def create_splits(self, num_train=None, num_val=None, split_file=None):
         """
@@ -314,13 +320,14 @@ class AtomsData(BaseAtomsData):
                  required_properties=None,
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True,
-                 load_charge=False, download=False):
+                 load_charge=False, download=False,
+                 rattle_atoms=None):
 
         super(AtomsData, self).__init__(dbpath, subset,
                                         required_properties,
                                         environment_provider,
                                         collect_triples, center_positions,
-                                        load_charge)
+                                        load_charge, rattle_atoms)
         if download:
             self.download()
 
@@ -445,6 +452,12 @@ class AtomsData(BaseAtomsData):
         with connect(self.dbpath) as conn:
             row = conn.get(idx + 1)
         at = row.toatoms()
+
+        # If desired, rattle the atoms
+        #  TODO: This should probably go in the base class somehow, so any other datasets will have it
+        #  TODO: What about unit cells?
+        if self.rattle_atoms is not None:
+            at.rattle(self.rattle_atoms, seed=None)
 
         # extract properties
         properties = {}
