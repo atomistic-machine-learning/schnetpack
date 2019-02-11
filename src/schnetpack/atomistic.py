@@ -101,7 +101,9 @@ class Atomwise(OutputModule):
         requires_dr (bool): True, if derivative w.r.t. atom positions is required (default: False)
         mean (torch.FloatTensor): mean of property (default: None)
         stddev (torch.FloatTensor): standard deviation of property (default: None)
-        atomref (torch.Tensor): reference single-atom properties
+        atomref (torch.Tensor): reference single-atom properties. Expects an (max_z + 1) x 1 array where atomref[Z]
+                                corresponds to the reference property of element Z. The value of atomref[0] must be
+                                zero, as this corresponds to the reference property for for "mask" atoms
         max_z (int): only relevant only if train_embeddings is true.
                      Specifies maximal nuclear charge of atoms. (default: 100)
         outnet (callable): Network used for atomistic outputs. Takes schnetpack input dictionary as input. Output is
