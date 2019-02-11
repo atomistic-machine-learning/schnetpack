@@ -14,3 +14,9 @@ Environment providers
 
 .. autoclass:: schnetpack.environment.AseEnvironmentProvider
    :members:
+
+
+Functions
+---------
+
+.. autofunction:: schnetpack.environment.collect_atom_triples

@@ -5,6 +5,7 @@ from schnetpack.data import Structure
 from schnetpack.nn import shifted_softplus, Dense
 
 
+__all__ = ['MLP', 'TiledMultiLayerNN', 'ElementalGate', 'GatedNetwork']
 class MLP(nn.Module):
     """
     Template for fully-connected neural network of the multilayer perceptron type.

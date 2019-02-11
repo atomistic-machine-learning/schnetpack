@@ -3,7 +3,7 @@ import torch
 import warnings
 from schnetpack.data import Structure
 
-__all__ = ['ModelBias', 'MeanSquaredError', 'RootMeanSquaredError',
+__all__ = ['Metric', 'ModelBias', 'MeanSquaredError', 'RootMeanSquaredError',
            'MeanAbsoluteError', 'HeatmapMAE', 'SumMAE', 'LengthMSE',
            'LengthMAE', 'LengthRMSE', 'AngleMSE', 'AngleMAE', 'AngleRMSE']
 

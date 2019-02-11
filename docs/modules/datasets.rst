@@ -9,6 +9,7 @@ Molecule datasets
 .. autoclass:: schnetpack.datasets.QM9
    :members:
 
+
 .. autoclass:: schnetpack.datasets.MD17
    :members:
 
@@ -26,3 +27,7 @@ Materials datasets
 
 .. autoclass:: schnetpack.datasets.MaterialsProject
    :members:
+
+.. autoclass:: schnetpack.datasets.OrganicMaterialsDatabase
+   :members:
+

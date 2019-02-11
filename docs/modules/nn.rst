@@ -51,6 +51,7 @@ Convolutions
 .. autoclass:: schnetpack.nn.CFConv
    :members:
 
+
 Cutoff
 ------
 
@@ -59,8 +60,18 @@ Cutoff
 .. autoclass:: schnetpack.nn.CosineCutoff
    :members:
 
+.. autofunction:: schnetpack.nn.cosine_cutoff
+
 .. autoclass:: schnetpack.nn.MollifierCutoff
    :members:
+
+.. autofunction:: schnetpack.nn.mollifier_cutoff
+
+.. autoclass:: schnetpack.nn.HardCutoff
+   :members:
+
+.. autofunction:: schnetpack.nn.hard_cutoff
+
 
 Neighbors
 ---------
@@ -70,11 +81,14 @@ Neighbors
 .. autoclass:: schnetpack.nn.AtomDistances
    :members:
 
+.. autofunction:: schnetpack.nn.atom_distances
+
 .. autoclass:: schnetpack.nn.TriplesDistances
    :members:
 
 .. autoclass:: schnetpack.nn.NeighborElements
    :members:
+
 
 Atom-centered symmetry functions
 --------------------------------
