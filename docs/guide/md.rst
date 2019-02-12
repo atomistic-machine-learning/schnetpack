@@ -15,16 +15,16 @@ experiment consists of different ingredients for the simulator, the
 calculator, the integrator, the system and the thermostat. The following
 parameters should be changed if needed:
 
--  **experiment\_dir (*str*) - path to the experiments folder
--  **simulation\_steps (*int*) - number of simulation steps
--  **device (*str*) - device to run the calculations on
--  **path\_to\_molecules (*str*) - path to the file with the molecule that
+-  **experiment\_dir** (*str*) - path to the experiments folder
+-  **simulation\_steps** (*int*) - number of simulation steps
+-  **device** (*str*) - device to run the calculations on
+-  **path\_to\_molecules** (*str*) - path to the file with the molecule that
    should be simulated
--  **simulation\_dir (*str*) - path to the simulation folder
--  **training\_dir (*str*) - path to the simulation folder that is created
+-  **simulation\_dir** (*str*) - path to the simulation folder
+-  **training\_dir** (*str*) - path to the simulation folder that is created
    by the training script
--  **model\_path (*str*) - path to the trained model
--  **overwrite (*bool*) - overwrite the simulation folder if set to True
+-  **model\_path** (*str*) - path to the trained model
+-  **overwrite** (*bool*) - overwrite the simulation folder if set to True
 
 If the model is trained with the use of the provided training script use
 the same *experiment\_dir* as in the training process. The trained model
@@ -36,12 +36,12 @@ Simulator Ingredient
 The simulator ingredient provides the simulator parameters with several
 logging possibilities. The following parameters can be set:
 
--  **logging\_hooks (*list*) - list with names of logging hooks
--  **data\_streams (*list*) - list with the data streams for the file
+-  **logging\_hooks** (*list*) - list with names of logging hooks
+-  **data\_streams** (*list*) - list with the data streams for the file
    logger
--  **step (*int*) - index of the initial simulation step
--  **log\_every\_n\_steps (*int*) - update logging hooks after n steps
--  **checkpoint\_every\_n\_steps (*int*) - store a checkpoint after n steps
+-  **step** (*int*) - index of the initial simulation step
+-  **log\_every\_n\_steps** (*int*) - update logging hooks after n steps
+-  **checkpoint\_every\_n\_steps** (*int*) - store a checkpoint after n steps
 
 In order to add basic loggers, call the named configuration
 *base\_hooks*.
@@ -52,12 +52,12 @@ Calculator Ingredient
 The calculator ingredient provides the parameters for the calculator
 class. The following parameters can be set:
 
--  **required\_properties (*list*) - list with properties that the
+-  **required\_properties** (*list*) - list with properties that the
    calculator should calculate
--  **force\_handle (*str*) - name of the force property in the model output
--  **position\_conversion (*float*) - conversion factor for positions
--  **force\_conversion (*float*) - conversion factor for forces
--  **property\_conversion (*dict*) - dictionary with conversions for other
+-  **force\_handle** (*str*) - name of the force property in the model output
+-  **position\_conversion** (*float*) - conversion factor for positions
+-  **force\_conversion** (*float*) - conversion factor for forces
+-  **property\_conversion** (*dict*) - dictionary with conversions for other
    properties
 
 Integrator Ingredient

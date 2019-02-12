@@ -106,5 +106,3 @@ def simulate(simulation_dir, simulation_steps):
 @md.automain
 def main():
     print(md.config)
-
-
