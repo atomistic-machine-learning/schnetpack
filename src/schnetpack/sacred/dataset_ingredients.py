@@ -15,6 +15,14 @@ def cfg():
 
 
 @dataset_ingredient.named_config
+def custom():
+    dbpath = './data/iso17/reference_eq.db'
+    fold = 'reference'
+    property_mapping = {Properties.energy: ISO17.E,
+                        Properties.forces: ISO17.F}
+
+
+@dataset_ingredient.named_config
 def qm9():
     """configuration for the QM9 dataset"""
     dbpath = './data/qm9.db'

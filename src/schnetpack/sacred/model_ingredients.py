@@ -1,4 +1,5 @@
 from sacred import Ingredient
+import torch
 
 from schnetpack.representation.schnet import SchNet
 from schnetpack.atomistic import AtomisticModel, ModelError, Properties, \
@@ -14,6 +15,7 @@ def cfg():
     """configuration for the model ingredient"""
     name = None
     n_atom_basis = -1
+    path = None
 
 
 @model_ingredient.named_config
@@ -135,3 +137,18 @@ def build_schnet(return_intermediate,
         charged_systems=False
     )
 
+
+@model_ingredient.capture
+def load_model(path):
+    """
+    Load a trained model.
+
+    Args:
+        path (str): Path to the trained model.
+
+    Returns:
+        Instance of the trained model
+    """
+    assert path is not None, 'Please provide a path to the model in order to ' \
+                             'load it!'
+    return torch.load(path)

@@ -6,21 +6,20 @@ import torch
 import yaml
 from sacred import Experiment
 from sacred.observers import MongoObserver
+from schnetpack.atomistic import Structure
 from schnetpack.sacred.dataset_ingredients import dataset_ingredient, \
     get_dataset, get_property_map
-from schnetpack.sacred.model_ingredients import model_ingredient, build_model
+from schnetpack.sacred.model_ingredients import model_ingredient, build_model,\
+    load_model
 from schnetpack.sacred.trainer_ingredients import train_ingredient, \
     setup_trainer
+from schnetpack.sacred.dataloader_ingredient import dataloader_ing, \
+    build_dataloaders, build_eval_loader, stats
 
-from schnetpack.data import AtomsLoader
-from schnetpack.atomistic import Properties
+
 
 ex = Experiment('experiment', ingredients=[model_ingredient, train_ingredient,
-                                           dataset_ingredient])
-
-
-def is_extensive(prop):
-    return prop == Properties.energy
+                                           dataloader_ing, dataset_ingredient])
 
 
 @ex.config
@@ -30,10 +29,6 @@ def cfg():
     loss_tradeoff = {}
     overwrite = True
     additional_outputs = []
-    batch_size = 100
-    num_train = 0.8
-    num_val = 0.1
-    num_workers = 2
     device = 'cpu'
     experiment_dir = './experiments'
     training_dir = os.path.join(experiment_dir, 'training')
@@ -41,6 +36,7 @@ def cfg():
     element_wise = ['forces']
     mean = None
     stddev = None
+    eval_file = None
 
 
 @ex.named_config
@@ -65,94 +61,6 @@ def save_config(_config, training_dir):
     """
     with open(os.path.join(training_dir, 'config.yaml'), 'w') as f:
         yaml.dump(_config, f, default_flow_style=False)
-
-
-@ex.capture
-def prepare_data(_seed, property_map,
-                 batch_size, num_train, num_val, num_workers):
-    """
-    Create the dataloaders for training.
-
-    Args:
-        _seed (int): seed for controlled randomness
-        property_map (dict): mapping between model properties and dataset
-            properties
-        batch_size (int): batch size
-        num_train (int): number of training samles
-        num_val (int): number of validation samples
-        num_workers (int): number of workers for the dataloaders
-
-    Returns:
-        schnetpack.data.Atomsloader objects for training, validation and
-        testing and the atomic reference data
-    """
-    # local seed
-    np.random.seed(_seed)
-
-    # load and split
-    data = get_dataset(dataset_properties=property_map.values())
-
-    if num_train < 1:
-        num_train = int(num_train * len(data))
-    if num_val < 1:
-        num_val = int(num_val * len(data))
-
-    train, val, test = data.create_splits(num_train, num_val)
-
-    train_loader = AtomsLoader(train, batch_size, True, pin_memory=True,
-                               num_workers=num_workers)
-    val_loader = AtomsLoader(val, batch_size, False, pin_memory=True,
-                             num_workers=num_workers)
-    test_loader = AtomsLoader(test, batch_size, False, pin_memory=True,
-                              num_workers=num_workers)
-
-    atomrefs = {p: data.get_atomref(tgt)
-                for p, tgt in property_map.items()
-                if tgt is not None}
-
-    return train_loader, val_loader, test_loader, atomrefs
-
-
-@ex.capture
-def stats(train_loader, atomrefs, property_map, mean, stddev, _config):
-    """
-    Calculate statistics of the input data.
-
-    Args:
-        train_loader (schnetpack.data.Atomsloader): loader for train data
-        atomrefs (torch.Tensor): atomic reference data
-        property_map (dict): mapping between the model properties and the
-            dataset properties
-        mean:
-        stddev:
-        _config (dict): configuration of the experiment
-
-    Returns:
-        mean and std for the configuration
-
-    """
-    props = [p for p, tgt in property_map.items() if tgt is not None]
-    targets = [property_map[p] for p in props if
-               p not in [Properties.polarizability, Properties.dipole_moment]]
-    atomrefs = [atomrefs[p] for p in props if
-                p not in [Properties.polarizability, Properties.dipole_moment]]
-    extensive = [is_extensive(p) for p in props if
-                 p not in [Properties.polarizability,
-                           Properties.dipole_moment]]
-
-    if len(targets) > 0:
-        if mean is None or stddev is None:
-            mean, stddev = train_loader.get_statistics(targets, extensive,
-                                                       atomrefs)
-            _config["mean"] = dict(
-                zip(props, [m.detach().cpu().numpy().tolist() for m in mean]))
-            _config["stddev"] = dict(
-                zip(props,
-                    [m.detach().cpu().numpy().tolist() for m in stddev]))
-    else:
-        _config["mean"] = {}
-        _config["stddev"] = {}
-    return _config['mean'], _config['stddev']
 
 
 @ex.capture
@@ -233,8 +141,9 @@ def train(_log, _config, training_dir, properties, additional_outputs, device,
     save_config()
 
     _log.info("Load data")
-    train_loader, val_loader, _, atomrefs = prepare_data(property_map=
-                                                         property_map)
+    dataset = get_dataset(dataset_properties=property_map.values())
+    train_loader, val_loader, _, atomrefs = \
+        build_dataloaders(property_map=property_map, dataset=dataset)
     mean, stddev = stats(train_loader, atomrefs, property_map)
 
     _log.info("Build model")
@@ -257,12 +166,41 @@ def train(_log, _config, training_dir, properties, additional_outputs, device,
 
 @ex.command
 def download():
-    get_dataset()
-
+    pass
 
 @ex.command
-def evaluate():
-    print("Evaluate")
+def evaluate(device, properties, eval_file):
+    assert eval_file is not None, 'Please define an evaluation file!'
+    dataloader = build_eval_loader(property_map=get_property_map(properties))
+    model = load_model()
+
+    predicted = {}
+
+    for batch in dataloader:
+        batch = {
+            k: v.to(device)
+            for k, v in batch.items()
+        }
+        result = model(batch)
+
+        for p in result.keys():
+            value = result[p].cpu().detach().numpy()
+            if p in predicted.keys():
+                predicted[p].append(value)
+            else:
+                predicted[p] = [value]
+
+        for p in [Structure.R, Structure.Z]:
+            value = batch[p].cpu().detach().numpy()
+            if p in predicted.keys():
+                predicted[p].append(value)
+            else:
+                predicted[p] = [value]
+
+    for p in predicted.keys():
+        predicted[p] = np.vstack(predicted[p])
+
+    np.savez(eval_file, **predicted)
 
 
 @ex.automain
