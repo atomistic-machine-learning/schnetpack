@@ -60,17 +60,11 @@ Cutoff
 .. autoclass:: schnetpack.nn.CosineCutoff
    :members:
 
-.. autofunction:: schnetpack.nn.cosine_cutoff
-
 .. autoclass:: schnetpack.nn.MollifierCutoff
    :members:
 
-.. autofunction:: schnetpack.nn.mollifier_cutoff
-
 .. autoclass:: schnetpack.nn.HardCutoff
    :members:
-
-.. autofunction:: schnetpack.nn.hard_cutoff
 
 
 Neighbors
