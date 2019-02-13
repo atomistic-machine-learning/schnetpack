@@ -22,12 +22,13 @@ class Trainer:
            hooks (list): hooks to customize training process (default: [])
            loss_is_normalized (bool): if true, the loss per datapoint will be reported. Otherwise, the accumulated loss
                                      (default: True)
+           map_location (str): Location to load tensors when restoring a checkpoint
        """
 
     def __init__(self, model_path, model, loss_fn, optimizer,
                  train_loader, validation_loader, keep_n_checkpoints=3,
                  checkpoint_interval=10, validation_interval=1, hooks=[],
-                 loss_is_normalized=True):
+                 loss_is_normalized=True, map_location=None):
         self.model_path = model_path
         self.checkpoint_path = os.path.join(self.model_path, 'checkpoints')
         self.best_model = os.path.join(self.model_path, 'best_model')
@@ -46,7 +47,7 @@ class Trainer:
         self.optimizer = optimizer
 
         if os.path.exists(self.checkpoint_path):
-            self.restore_checkpoint()
+            self.restore_checkpoint(map_location=map_location)
         else:
             os.makedirs(self.checkpoint_path)
             self.epoch = 0
@@ -100,7 +101,7 @@ class Trainer:
             for i in sidx[:-self.keep_n_checkpoints]:
                 os.remove(os.path.join(self.checkpoint_path, chpts[i]))
 
-    def restore_checkpoint(self, epoch=None):
+    def restore_checkpoint(self, epoch=None, map_location=None):
         if epoch is None:
             epoch = max([int(f.split('.')[0].split('-')[-1]) for f in
                          os.listdir(self.checkpoint_path)])
@@ -108,7 +109,7 @@ class Trainer:
 
         chkpt = os.path.join(self.checkpoint_path,
                              'checkpoint-' + str(epoch) + '.pth.tar')
-        self.state_dict = torch.load(chkpt)
+        self.state_dict = torch.load(chkpt, map_location=map_location)
 
     def train(self, device):
         r"""
