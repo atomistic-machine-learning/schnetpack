@@ -1,4 +1,6 @@
 import numpy as np
+from ase.db import connect
+
 from schnetpack.data.definitions import Structure
 
 
@@ -57,12 +59,30 @@ class Evaluator:
         raise NotImplementedError
 
 
-class XYZEvaluator(Evaluator):
+class NPZEvaluator(Evaluator):
 
     def __init__(self, model, dataloader, out_file):
         self.out_file = out_file
-        super(XYZEvaluator, self).__init__(model, dataloader)
+        super(NPZEvaluator, self).__init__(model=model, dataloader=dataloader)
 
     def evaluate(self, device):
         predicted = self._get_predicted(device)
         np.savez(self.out_file, **predicted)
+
+
+class DBEvaluator(Evaluator):
+
+    def __init__(self, model, dataloader):
+        self.dbpath = dataloader.dataset.dbpath
+        super(DBEvaluator, self).__init__(model=model, dataloader=dataloader)
+
+    def evaluate(self, device):
+        print('Updating database with results...')
+        predicted = self._get_predicted(device)
+        energies = predicted['energy']
+        forces = predicted['forces']
+        with connect(self.dbpath) as conn:
+            for i in range(conn.__len__()):
+                conn.update(i+1, data=dict(energy=energies[i],
+                                           forces=forces[i]))
+

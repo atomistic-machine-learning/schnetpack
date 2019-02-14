@@ -37,7 +37,7 @@ class AtomsData(Dataset):
     ENCODING = 'utf-8'
     available_properties = None
 
-    def __init__(self, dbpath, subset=None, required_properties=None,
+    def __init__(self, dbpath, subset=None, required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True,
                  load_charge=False):
