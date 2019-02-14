@@ -2,9 +2,8 @@ import numpy as np
 import torch
 from torch import nn as nn
 
-__all__ = [
-    'CosineCutoff', 'MollifierCutoff', 'HardCutoff'
-]
+
+__all__ = ['CosineCutoff', 'MollifierCutoff', 'HardCutoff']
 
 
 def cosine_cutoff(distances, cutoff=5.0):

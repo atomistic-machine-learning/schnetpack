@@ -12,11 +12,11 @@ Environment providers
 .. autoclass:: schnetpack.environment.SimpleEnvironmentProvider
    :members:
 
-.. autoclass:: schnetpack.environment.ASEEnvironmentProvider
+.. autoclass:: schnetpack.environment.AseEnvironmentProvider
    :members:
 
-Pair providers
---------------
 
-.. autoclass:: schnetpack.environment.SimplePairProvider
-   :members:
+Functions
+---------
+
+.. autofunction:: schnetpack.environment.collect_atom_triples

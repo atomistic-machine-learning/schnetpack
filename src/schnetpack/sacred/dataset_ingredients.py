@@ -11,7 +11,8 @@ def cfg():
     """configuration for the dataset ingredient"""
     dbpath = None
     dataset = 'CUSTOM'
-    property_mapping = {}
+    property_mapping = {Properties.energy: ISO17.E,
+                        Properties.forces: ISO17.F}
 
 
 @dataset_ingredient.named_config

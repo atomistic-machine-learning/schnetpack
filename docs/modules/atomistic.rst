@@ -1,8 +1,8 @@
 :mod:`schnetpack.atomistic`
 ===========================
 
-
 .. automodule:: schnetpack.atomistic
+
 
 General modules
 ---------------
@@ -19,16 +19,22 @@ General modules
 .. autoclass:: schnetpack.atomistic.ElementalAtomwise
    :members:
 
+.. autoclass:: schnetpack.atomistic.PropertyModel
+   :members:
+
 
 Property-specific modules
 -------------------------
-
 
 .. autoclass:: schnetpack.atomistic.Energy
    :members:
 
 .. autoclass:: schnetpack.atomistic.DipoleMoment
    :members:
+
+.. autoclass:: schnetpack.atomistic.Polarizability
+   :members:
+
 
 Property-specific element-wise modules
 --------------------------------------
@@ -38,3 +44,9 @@ Property-specific element-wise modules
 
 .. autoclass:: schnetpack.atomistic.ElementalDipoleMoment
    :members:
+
+
+Functions
+---------
+
+.. autofunction:: schnetpack.atomistic.symmetric_product

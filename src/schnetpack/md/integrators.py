@@ -3,6 +3,7 @@ import numpy as np
 
 from schnetpack.md.utils import NormalModeTransformer, MDUnits
 
+
 __all__ = ['VelocityVerlet', 'RingPolymer']
 
 

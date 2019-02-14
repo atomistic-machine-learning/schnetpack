@@ -6,7 +6,7 @@ import h5py
 
 __all__ = ['Checkpoint', 'RemoveCOMMotion', 'BiasPotential', 'FileLogger',
            'TensorboardLogger', 'TemperatureLogger', 'MoleculeStream',
-           'PropertyStream']
+           'PropertyStream', 'SimulationHook']
 
 
 class SimulationHook:
