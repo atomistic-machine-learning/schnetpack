@@ -30,6 +30,7 @@ Contents
    tutorials/trainmodel
    tutorials/asemodel
    tutorials/runmd
+   tutorials/evaluate
 
 .. toctree::
    :glob:
