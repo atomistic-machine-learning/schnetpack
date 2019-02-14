@@ -16,25 +16,25 @@ evaluator_ing = Ingredient('evaluator', ingredients=[dataloader_ing,
 @evaluator_ing.config
 def config():
     """configuration of the evaluator ingredient"""
-    name = 'to_npz'
-    out_file = 'evaluation.npz'
+    output = 'to_db'
+    out_file = None
 
 
 @evaluator_ing.named_config
 def overwrite_db():
-    name = 'to_db'
-    out_file = None
+    output = 'to_npz'
+    out_file = 'evaluation.npz'
 
 
 @evaluator_ing.capture
-def build_evaluator(model_path, name, output_dir):
+def build_evaluator(model_path, output, output_dir):
     data = get_eval_data()
     dataloader = build_eval_loader(data)
     model = torch.load(model_path)
-    if name == 'to_npz':
+    if output == 'to_npz':
         return get_npz_evaluator(model=model, dataloader=dataloader,
                                  output_dir=output_dir)
-    elif name == 'to_db':
+    elif output == 'to_db':
         return get_db_evaluator(model=model, dataloader=dataloader)
     else:
         raise NotImplementedError

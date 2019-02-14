@@ -9,6 +9,8 @@ def extend_xyz(xyz_path, properties, molecular_props=[]):
     Args:
         xyz_path (str): path to the xyz file
         properties (str): property-string
+        molecular_props (list): molecular properties contained in the comment
+            line
 
     """
     ext_xyz_path = xyz_path[:-4] + '_ext.xyz'
