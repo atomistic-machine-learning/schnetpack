@@ -50,8 +50,7 @@ def build_dataloaders(_seed, num_train, num_val, batch_size, num_workers,
 
 
 @dataloader_ing.capture
-def build_eval_loader(batch_size, num_workers, property_map):
-    data = get_dataset(dataset_properties=property_map.values())
+def build_eval_loader(data, batch_size, num_workers):
     return AtomsLoader(data, batch_size, pin_memory=True,
                        num_workers=num_workers)
 

@@ -1,21 +1,16 @@
 import os
 from shutil import rmtree
-
-import numpy as np
 import torch
 import yaml
 from sacred import Experiment
 from sacred.observers import MongoObserver
-from schnetpack.atomistic import Structure
 from schnetpack.sacred.dataset_ingredients import dataset_ingredient, \
     get_dataset, get_property_map
-from schnetpack.sacred.model_ingredients import model_ingredient, build_model,\
-    load_model
+from schnetpack.sacred.model_ingredients import model_ingredient, build_model
 from schnetpack.sacred.trainer_ingredients import train_ingredient, \
     setup_trainer
 from schnetpack.sacred.dataloader_ingredient import dataloader_ing, \
-    build_dataloaders, build_eval_loader, stats
-
+    build_dataloaders, stats
 
 
 ex = Experiment('experiment', ingredients=[model_ingredient, train_ingredient,
@@ -25,15 +20,13 @@ ex = Experiment('experiment', ingredients=[model_ingredient, train_ingredient,
 @ex.config
 def cfg():
     """configuration configuration for training experiment"""
-
     loss_tradeoff = {}
     overwrite = True
     additional_outputs = []
     device = 'cpu'
     experiment_dir = './experiments'
-    training_dir = os.path.join(experiment_dir, 'training')
+    train_dir = os.path.join(experiment_dir, 'training')
     properties = ['energy', 'forces']
-    element_wise = ['forces']
     mean = None
     stddev = None
     eval_file = None
@@ -50,21 +43,21 @@ def observe():
 
 
 @ex.capture
-def save_config(_config, training_dir):
+def save_config(_config, train_dir):
     """
     Save the configuration to the model directory.
 
     Args:
         _config (dict): configuration of the experiment
-        training_dir (str): path to the training directory
+        train_dir (str): path to the training directory
 
     """
-    with open(os.path.join(training_dir, 'config.yaml'), 'w') as f:
+    with open(os.path.join(train_dir, 'config.yaml'), 'w') as f:
         yaml.dump(_config, f, default_flow_style=False)
 
 
 @ex.capture
-def create_dirs(_log, training_dir, overwrite):
+def create_dirs(_log, train_dir, overwrite):
     """
     Create the directory for the experiment.
 
@@ -75,19 +68,19 @@ def create_dirs(_log, training_dir, overwrite):
 
     """
     _log.info("Create model directory")
-    if training_dir is None:
+    if train_dir is None:
         raise ValueError('Config `experiment_dir` has to be set!')
 
-    if os.path.exists(training_dir) and not overwrite:
+    if os.path.exists(train_dir) and not overwrite:
         raise ValueError(
             'Model directory already exists (set overwrite flag?):',
-            training_dir)
+            train_dir)
 
-    if os.path.exists(training_dir) and overwrite:
-        rmtree(training_dir)
+    if os.path.exists(train_dir) and overwrite:
+        rmtree(train_dir)
 
-    if not os.path.exists(training_dir):
-        os.makedirs(training_dir)
+    if not os.path.exists(train_dir):
+        os.makedirs(train_dir)
 
 
 @ex.capture
@@ -121,15 +114,14 @@ def build_loss(property_map, loss_tradeoff):
 
 
 @ex.command
-def train(_log, _config, training_dir, properties, additional_outputs, device,
-          element_wise):
+def train(_log, _config, train_dir, properties, additional_outputs, device):
     """
-    Build a trainer from the configuration and start the treining.
+    Build a trainer from the configuration and start the training.
 
     Args:
         _log:
         _config (dict): configuration dictionary
-        training_dir (str): path to the training directory
+        train_dir (str): path to the training directory
         properties (list): list of model properties
         additional_outputs (list): list of additional model properties that are
             not back-propagated
@@ -155,52 +147,12 @@ def train(_log, _config, training_dir, properties, additional_outputs, device,
     _log.info("Setup training")
     loss_fn = build_loss(property_map=property_map)
     trainer = setup_trainer(model=model, loss_fn=loss_fn,
-                            training_dir=training_dir,
+                            train_dir=train_dir,
                             train_loader=train_loader,
                             val_loader=val_loader,
-                            property_map=property_map,
-                            element_wise=element_wise)
+                            property_map=property_map)
     _log.info("Training")
     trainer.train(device)
-
-
-@ex.command
-def download():
-    pass
-
-@ex.command
-def evaluate(device, properties, eval_file):
-    assert eval_file is not None, 'Please define an evaluation file!'
-    dataloader = build_eval_loader(property_map=get_property_map(properties))
-    model = load_model()
-
-    predicted = {}
-
-    for batch in dataloader:
-        batch = {
-            k: v.to(device)
-            for k, v in batch.items()
-        }
-        result = model(batch)
-
-        for p in result.keys():
-            value = result[p].cpu().detach().numpy()
-            if p in predicted.keys():
-                predicted[p].append(value)
-            else:
-                predicted[p] = [value]
-
-        for p in [Structure.R, Structure.Z]:
-            value = batch[p].cpu().detach().numpy()
-            if p in predicted.keys():
-                predicted[p].append(value)
-            else:
-                predicted[p] = [value]
-
-    for p in predicted.keys():
-        predicted[p] = np.vstack(predicted[p])
-
-    np.savez(eval_file, **predicted)
 
 
 @ex.automain

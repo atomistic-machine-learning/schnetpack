@@ -13,14 +13,6 @@ model_ingredient = Ingredient('model')
 @model_ingredient.config
 def cfg():
     """configuration for the model ingredient"""
-    name = None
-    n_atom_basis = -1
-    path = None
-
-
-@model_ingredient.named_config
-def schnet():
-    """configuration for the SchNet model"""
     name = 'schnet'
     n_atom_basis = 128
     n_filters = 128
@@ -31,6 +23,7 @@ def schnet():
     coupled_interactions = False
     max_z = 100
     cutoff_network = 'hard'
+    path = None
 
 
 @model_ingredient.capture
