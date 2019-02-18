@@ -18,14 +18,36 @@ class MDUnits:
     """
     # Unit conversions
     fs2atu = 1e-15 / units._aut
-    eV2Ha = 1.0 / units.Ha
+    eV2Ha = units.eV / units.Ha
     d2amu = units._amu / units._me
-    angs2bohr = 1.0 / units.Bohr
+    angs2bohr = units.Angstrom / units.Bohr
     auforces2aseforces = angs2bohr / eV2Ha
 
     # Constants
     kB = units.kB / units.Ha
     hbar = 1.0
+
+    conversions = {
+        'kcal': units.kcal / units.Hartree,
+        'mol': 1 / units.mol,
+        'ev': units.eV / units.Hartree,
+        'bohr': 1.0,
+        'angstrom': units.Bohr,
+        'hartree': 1.0
+    }
+
+    @staticmethod
+    def parse_mdunit(unit):
+        if type(unit) == str:
+            parts = unit.lower().replace(" ", "").split('/')
+            scaling = 1.0
+            for part in parts:
+                if part not in MDUnits.conversions:
+                    raise KeyError('Unrecognized unit {:s}'.format(part))
+                scaling *= MDUnits.conversions[part]
+            return scaling
+        else:
+            return unit
 
 
 class YSWeights:
