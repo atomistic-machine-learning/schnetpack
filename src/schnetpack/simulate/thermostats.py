@@ -104,6 +104,7 @@ class GLEThermostat(ThermostatHook):
 
         # Get initial thermostat momenta
         self.thermostat_momenta = self._init_thermostat_momenta(simulator)
+        print(self.thermostat_momenta.shape)
 
     def _init_gle_matrices(self, simulator):
         a_matrix, c_matrix = load_gle_matrices(self.gle_file)
@@ -133,12 +134,27 @@ class GLEThermostat(ThermostatHook):
 
         # A does not need to be transposed, else c2 is imaginary
         c1 = linalg.expm(-0.5 * simulator.integrator.time_step * a_matrix)
+        print(c1)
+        print(c1.T)
+        exit()
 
         # c2 is symmetric
         c2 = linalg.sqrtm(c_matrix - np.dot(c1, np.dot(c_matrix, c1.T)))
 
+        # To myself: original expression is c1 = exp(-dt/2 * a.T)
+        # the C1 here is c1.T, since exp(-dt/2*a.T).T = exp(-dt/2*a)
+        # The formula for c2 is c2 = sqrtm(1-c1.T*c1)
+        # In our case, this becomes sqrtm(1-C1*C1.T)
+        # For the propagation we have the original expression c1*p, where
+        # p is a column vector (ndegrees x something)
+        # In our case P is (something x ndegrees), hence p.T
+        # The propagation then becomes P*C1 = p.T*c1.T = (c1*p).T
+        # c2 is symmetric ny construction, hence C2=c2
+
+        # TODO: the transpose here should be wrong!
         c1 = torch.from_numpy(c1.T).to(self.device).float()
         c2 = torch.from_numpy(c2).to(self.device).float()
+        # TODO: CHECK TRANSPOSE
         return c1, c2
 
     def _init_thermostat_momenta(self, simulator, free_particle_limit=True):
@@ -174,6 +190,8 @@ class GLEThermostat(ThermostatHook):
         # Apply transformation if requested
         if self.nm_transformation is not None:
             momenta = self.nm_transformation.normal2beads(momenta)
+
+        exit()
 
         simulator.system.momenta = momenta
 
@@ -231,6 +249,7 @@ class PIGLETThermostat(GLEThermostat):
         # Bring to correct shape for later matmul broadcasting
         c1 = torch.cat(all_c1)[:, None, None, :, :]
         c2 = torch.cat(all_c2)[:, None, None, :, :]
+        print(c1.shape, c2.shape)
         return c1, c2
 
 
@@ -373,14 +392,24 @@ class PILEGlobalThermostat(PILELocalThermostat):
 
         # Apply thermostat to centroid mode
         c1_centroid = self.c1[0]
+
+        print(self.c1.shape)
+        print(c1_centroid.shape)
+
         momenta_centroid = momenta[0]
         thermostat_noise_centroid = thermostat_noise[0]
 
+        print(thermostat_noise_centroid.shape, 'TNC')
+        print(thermostat_noise.shape, 'TN')
+
+        print(momenta_centroid.shape, 'momc')
+        print(simulator.system.masses.shape, 'Ms')
         # Compute kinetic energy of centroid
         kinetic_energy_factor = torch.sum(momenta_centroid ** 2 / simulator.system.masses[0]) / (
                 self.temperature_bath * MDUnits.kB * self.n_replicas)
 
         centroid_factor = (1 - c1_centroid) / kinetic_energy_factor
+        print(centroid_factor.shape, 'cf')
 
         alpha_sq = c1_centroid + torch.sum(thermostat_noise_centroid ** 2) * centroid_factor + \
                    2 * thermostat_noise_centroid[0, 0, 0] * torch.sqrt(c1_centroid * centroid_factor)
@@ -393,7 +422,9 @@ class PILEGlobalThermostat(PILELocalThermostat):
         momenta[0] = alpha * momenta[0]
 
         # Apply thermostat for remaining normal modes
+        print(self.thermostat_factor.shape, 'TF')
         momenta[1:] = self.c1[1:] * momenta[1:] + self.thermostat_factor * self.c2[1:] * thermostat_noise[1:]
+        exit()
 
         # Apply transformation if requested
         if self.nm_transformation is not None:
