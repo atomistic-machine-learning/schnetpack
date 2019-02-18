@@ -1,5 +1,7 @@
+import os
 from sacred import Ingredient
 from schnetpack.datasets import ANI1, ISO17, QM9, MD17, MaterialsProject
+from schnetpack.data.parsing import ext_xyz_to_db
 from schnetpack.data import AtomsData, AtomsDataError
 from schnetpack.atomistic import Properties
 
@@ -88,6 +90,10 @@ def get_property_map(properties, property_mapping, dbpath):
         dataset properties as values.
 
     """
+    if type(property_mapping) == str:
+        property_mapping =\
+            {key: value for key, value in
+             [prop.split(':') for prop in property_mapping.split(',')]}
     property_map = {}
     for prop in properties:
         if prop in property_mapping.keys():
@@ -163,7 +169,7 @@ def get_md17(dbpath, molecule, dataset_properties):
 
 
 @dataset_ingredient.capture
-def get_dataset(dbpath, dataset, dataset_properties=None):
+def get_dataset(_log, dbpath, dataset, dataset_properties=None):
     """
     Get a dataset from the configuration.
 
@@ -177,6 +183,7 @@ def get_dataset(dbpath, dataset, dataset_properties=None):
 
     """
     dataset = dataset.upper()
+    _log.info('Load {} dataset'.format(dataset))
     if dataset == 'QM9':
         return QM9(dbpath, properties=dataset_properties)
     elif dataset == 'ISO17':
@@ -188,6 +195,13 @@ def get_dataset(dbpath, dataset, dataset_properties=None):
     elif dataset == 'MATPROJ':
         return get_matproj(dataset_properties=dataset_properties)
     elif dataset == 'CUSTOM':
-        return AtomsData(dbpath, required_properties=dataset_properties)
+        file, extension = os.path.splitext(dbpath)
+        if extension == '.db':
+            return AtomsData(dbpath, required_properties=dataset_properties)
+        elif extension == '.xyz':
+            ext_xyz_to_db(dbpath=file+'.db', xyzpath=dbpath)
+            return AtomsData(file+'.db', required_properties=dataset_properties)
+        else:
+            raise NotImplementedError
     else:
         raise NotImplementedError

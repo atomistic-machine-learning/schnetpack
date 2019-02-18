@@ -1,5 +1,6 @@
 from ase.db import connect
 from ase.io.extxyz import read_xyz
+from tqdm import tqdm
 
 
 def extend_xyz(xyz_path, properties, molecular_props=[]):
@@ -44,7 +45,7 @@ def ext_xyz_to_db(dbpath, xyzpath, properties=[]):
     """
     with connect(dbpath, use_lock_file=False) as conn:
         with open(xyzpath) as f:
-            for at in read_xyz(f, index=slice(None)):
+            for at in tqdm(read_xyz(f, index=slice(None)), 'creating ase db'):
                 data = {}
                 if 'energy' in properties:
                     data['energy'] = at.get_total_energy()

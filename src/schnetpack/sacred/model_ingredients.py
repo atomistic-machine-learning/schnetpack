@@ -1,8 +1,7 @@
 from sacred import Ingredient
-import torch
 
 from schnetpack.representation.schnet import SchNet
-from schnetpack.atomistic import AtomisticModel, ModelError, Properties, \
+from schnetpack.atomistic import AtomisticModel, ModelError, \
     PropertyModel
 from schnetpack.nn.cutoff import *
 
@@ -23,7 +22,6 @@ def cfg():
     coupled_interactions = False
     max_z = 100
     cutoff_network = 'hard'
-    path = None
 
 
 @model_ingredient.capture
@@ -129,19 +127,3 @@ def build_schnet(return_intermediate,
         cutoff_network=cutoff_function,
         charged_systems=False
     )
-
-
-@model_ingredient.capture
-def load_model(path):
-    """
-    Load a trained model.
-
-    Args:
-        path (str): Path to the trained model.
-
-    Returns:
-        Instance of the trained model
-    """
-    assert path is not None, 'Please provide a path to the model in order to ' \
-                             'load it!'
-    return torch.load(path)

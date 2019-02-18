@@ -9,7 +9,7 @@ url = 'http://quantum-machine.org/gdml/data/xyz/ethanol_dft.zip'
 data_dir = './data'
 zip_file = os.path.join(data_dir, 'ethanol.zip')
 db_path = os.path.join(data_dir, 'ethanol.db')
-xyz_path = os.path.join(data_dir, 'ethanol_test.xyz')
+xyz_path = os.path.join(data_dir, 'ethanol.xyz')
 
 # create the data directory
 if not os.path.exists(data_dir):

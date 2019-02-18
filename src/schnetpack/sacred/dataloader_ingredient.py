@@ -50,12 +50,6 @@ def build_dataloaders(_seed, num_train, num_val, batch_size, num_workers,
 
 
 @dataloader_ing.capture
-def build_eval_loader(data, batch_size, num_workers):
-    return AtomsLoader(data, batch_size, pin_memory=True,
-                       num_workers=num_workers)
-
-
-@dataloader_ing.capture
 def stats(train_loader, atomrefs, property_map, mean, stddev, _config):
     """
     Calculate statistics of the input data.
@@ -95,3 +89,19 @@ def stats(train_loader, atomrefs, property_map, mean, stddev, _config):
         _config["mean"] = {}
         _config["stddev"] = {}
     return _config['mean'], _config['stddev']
+
+
+evaluation_loader_ing = Ingredient('dataloader')
+
+
+@evaluation_loader_ing.config
+def config():
+    batch_size = 32
+    num_workers = 4
+    pin_memory = True
+
+
+@evaluation_loader_ing.capture
+def build_eval_loader(data, batch_size, num_workers, pin_memory):
+    return AtomsLoader(data, batch_size, pin_memory=pin_memory,
+                       num_workers=num_workers)

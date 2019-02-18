@@ -130,8 +130,8 @@ class AtomsLoader(DataLoader):
     """
 
     def __init__(self, dataset, batch_size=1, shuffle=False, sampler=None,
-                 batch_sampler=None,
-                 num_workers=0, collate_fn=collate_aseatoms, pin_memory=False,
+                 batch_sampler=None, num_workers=0,
+                 collate_fn=collate_aseatoms, pin_memory=False,
                  drop_last=False,
                  timeout=0, worker_init_fn=None):
         super(AtomsLoader, self).__init__(dataset, batch_size, shuffle,

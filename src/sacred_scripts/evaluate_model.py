@@ -17,8 +17,10 @@ def config():
 
 
 @eval_ex.command
-def evaluate(model_path, output_dir, device):
+def evaluate(_log, model_path, output_dir, device):
+    _log.info('build evaluator...')
     evaluator = build_evaluator(model_path=model_path, output_dir=output_dir)
+    _log.info('evaluating...')
     evaluator.evaluate(device=device)
 
 

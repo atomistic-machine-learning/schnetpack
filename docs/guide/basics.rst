@@ -1,3 +1,6 @@
+.. _sacred-basics:
+
+=============
 Sacred Basics
 =============
 

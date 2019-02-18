@@ -19,22 +19,19 @@ The input data for the evaluation of the model needs to be a valid extended
 xyz-file as described in **add section** or an ``ase`` database. If the
 selected input data is provided as extended xyz file, it will automatically
 be transformed into an ``ase`` database, since SchNet is meant to be used
-with these databases. In order to select the extended xyz file as input you
-need to add ``evaluation_data.data_type=xyz evaluation_data
-.data_path=path/to/xyz_file.xyz``. If the input data is provided as database
-file just add ``evaluation_data.data_path=path/to/database.db`` to your run
-arguments.
+with these databases. The database will be stored next to the xyz-file. In
+order to select the input data file, add ``dataset.path=path/to/file`` to
+your run arguments. The input file needs to be a valid extended xyz file or
+an ase database.
 
 Selecting the output format
 ---------------------------
 
-The default output format is to overwrite the existing input database by
-adding the predicted properties. If you want to receive the predictions as
-npz file, add ``evaluator.output=to_npz evaluator.out_file=file_name.npz`` to
-your run arguments. This will automatically create the folder *evaluate*
-inside of your *experiment* directory. The directory for the output data and
-also for the *experiment* directory can be changed by adding
-``experiment_dir=...`` and ``output_dir=...``.
+By default, the evaluation of the input file will be stored as ase database
+in your evaluation folder. It is also possible to return the evaluated data
+as .npz file. Just add ``evaluator.out_file=filename.ext`` to your run
+arguments. The file-type of your evaluated data will be detected
+automatically according to the extension of your out_file.
 
 Selecting the device for evaluation
 -----------------------------------

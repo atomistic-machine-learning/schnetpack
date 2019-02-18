@@ -1,5 +1,6 @@
 import numpy as np
 from ase.db import connect
+from shutil import copyfile
 
 from schnetpack.data.definitions import Structure
 
@@ -72,8 +73,10 @@ class NPZEvaluator(Evaluator):
 
 class DBEvaluator(Evaluator):
 
-    def __init__(self, model, dataloader):
+    def __init__(self, model, dataloader, out_file):
         self.dbpath = dataloader.dataset.dbpath
+        self.out_file = out_file
+        copyfile(self.dbpath, self.out_file)
         super(DBEvaluator, self).__init__(model=model, dataloader=dataloader)
 
     def evaluate(self, device):
@@ -81,7 +84,7 @@ class DBEvaluator(Evaluator):
         predicted = self._get_predicted(device)
         energies = predicted['energy']
         forces = predicted['forces']
-        with connect(self.dbpath) as conn:
+        with connect(self.out_file) as conn:
             for i in range(conn.__len__()):
                 conn.update(i+1, data=dict(energy=energies[i],
                                            forces=forces[i]))

@@ -8,3 +8,4 @@ from schnetpack import environment
 from schnetpack import md
 from schnetpack import metrics
 from schnetpack import utils
+from schnetpack import ml_calculator

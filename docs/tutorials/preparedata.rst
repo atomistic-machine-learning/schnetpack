@@ -88,29 +88,36 @@ the comment line::
     H	-2.1422	-0.4239	0.0	-5.5147904611	-3.0206752464999997	-8.9092739811e-09
     H	1.9857	-0.1365	0.0	-2.4392777023	-10.83820307755	-6.07213606025e-08
 
-If your xyz-file has the same comment string as this example-file you can
-simply use the ``extend_xyz()`` function from ``schnetpack.datasets.extxyz``
-and define your property string. The function will then automatically
-transform your file.
+.. note::
+
+    In general your xyz-file should have a similar shape as the example above
+    . In case your file consists of molecular properties in the comment line
+    and atomic properties in the following lines, you should be able to use
+    the ``extend_xyz()`` function from ``schnetpack.data.parsing.extxyz`` in
+    order to transform your data. The function requires the names of the
+    molecular properties and the property string. For the ethanol file this
+    wold be ``extend_xyz(xyz_path='path/file.xyz',
+    properties='species:S:1:pos:R:3:forces:R:3', molecular_props=['energy']``.
 
 Transfering extended xyz-files to an ase database
 -------------------------------------------------
 
 SchNetPack generally requires the data as ase database. If the data is
 already transformed to extended xyz-files is can directly be transformed to
-an ase database by using ``parse_extxyz()`` from
-``schnetpack.datasets.extxyz``::
+an ase database by using ``ext_xyz_to_db()`` from
+``schnetpack.data.parsing``::
 
-    from schnetpack.datasets.extxyz import parse_extxyz
+    from schnetpack.data.parsing import ext_xyz_to_db
 
-    parse_extxyz('path/to/db/dataset.db', 'path/to/file/xyz_file.xyz')
+    ext_xyz_to_db('path/to/db/dataset.db', 'path/to/file/xyz_file.xyz',
+    properties=['energy', 'forces'])
 
 This will create a new ase database located at *path/to/db*.
 
 .. note::
 
-    The ``parse_extxyz()`` function should only be used for datasets that
-    have **energy** and **forces** properties. Other properties will not be
+    The ``ext_xyz_to_db()`` function should only be used for datasets that
+    have **energy** and/or **forces** properties. Other properties will not be
     transferred to the database.
 
 Using SchNetPack with extended xyz-files
@@ -118,7 +125,7 @@ Using SchNetPack with extended xyz-files
 
 Instead of converting your data manually to an ase database, you can also use
 the ``ExtXYZ`` dataset class from ``schnetpack.datasets.extxyz``. This will
-automatically create and use the ase database file.
+automatically use the ``ext_xyz_to_db()`` function to create an ase database.
 
 Using SchNetPack with ase databases
 -----------------------------------

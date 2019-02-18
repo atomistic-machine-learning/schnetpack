@@ -4,24 +4,10 @@ from ase.db import connect
 from ase.io.extxyz import read_xyz
 
 from schnetpack.data import DownloadableAtomsData
+from schnetpack.data.parsing import ext_xyz_to_db
 from schnetpack.environment import SimpleEnvironmentProvider
 
-__all__ = ['ExtXYZ', 'parse_extxyz']
-
-
-def parse_extxyz(dbpath, xyzpath):
-    r"""Parses file in XYZ format and writes content to sqllite database
-
-    Args:
-        dbpath(str): path to sqlite database
-        xyzpath (str): path to file with xyz file format
-    """
-    with connect(dbpath, use_lock_file=False) as conn:
-        with open(xyzpath) as f:
-            for at in read_xyz(f, index=slice(None)):
-                e = at.get_total_energy()
-                f = at.get_forces()
-                conn.write(at, data={ExtXYZ.E: e, ExtXYZ.F: f})
+__all__ = ['ExtXYZ']
 
 
 class ExtXYZ(DownloadableAtomsData):
@@ -40,7 +26,7 @@ class ExtXYZ(DownloadableAtomsData):
                  pair_provider=None, center_positions=True):
         if not os.path.exists(dbpath):
             os.makedirs(os.path.dirname(dbpath), exist_ok=True)
-            parse_extxyz(dbpath, xyzpath)
+            ext_xyz_to_db(dbpath, xyzpath, properties=self.available_properties)
         super(ExtXYZ, self).__init__(dbpath, subset, properties,
                                      environment_provider, pair_provider,
                                      center_positions)

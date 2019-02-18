@@ -20,16 +20,12 @@ ex = Experiment('experiment', ingredients=[model_ingredient, train_ingredient,
 @ex.config
 def cfg():
     """configuration configuration for training experiment"""
-    loss_tradeoff = {}
     overwrite = True
     additional_outputs = []
     device = 'cpu'
     experiment_dir = './experiments'
     train_dir = os.path.join(experiment_dir, 'training')
     properties = ['energy', 'forces']
-    mean = None
-    stddev = None
-    eval_file = None
 
 
 @ex.named_config
@@ -83,36 +79,6 @@ def create_dirs(_log, train_dir, overwrite):
         os.makedirs(train_dir)
 
 
-@ex.capture
-def build_loss(property_map, loss_tradeoff):
-    """
-    Build the loss function.
-
-    Args:
-        property_map (dict): mapping between the model properties and the
-            dataset properties
-        loss_tradeoff (dict): contains tradeoff factors for properties,
-            if needed
-
-    Returns:
-        loss function
-
-    """
-    def loss_fn(batch, result):
-        loss = 0.
-        for p, tgt in property_map.items():
-            if tgt is not None:
-                diff = batch[tgt] - result[p]
-                diff = diff ** 2
-                err_sq = torch.mean(diff)
-                if p in loss_tradeoff.keys():
-                    err_sq *= loss_tradeoff[p]
-                loss += err_sq
-        return loss
-
-    return loss_fn
-
-
 @ex.command
 def train(_log, _config, train_dir, properties, additional_outputs, device):
     """
@@ -145,11 +111,8 @@ def train(_log, _config, train_dir, properties, additional_outputs, device):
                         model_properties=model_properties,
                         additional_outputs=additional_outputs).to(device)
     _log.info("Setup training")
-    loss_fn = build_loss(property_map=property_map)
-    trainer = setup_trainer(model=model, loss_fn=loss_fn,
-                            train_dir=train_dir,
-                            train_loader=train_loader,
-                            val_loader=val_loader,
+    trainer = setup_trainer(model=model, train_dir=train_dir,
+                            train_loader=train_loader, val_loader=val_loader,
                             property_map=property_map)
     _log.info("Training")
     trainer.train(device)
