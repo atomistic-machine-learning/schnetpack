@@ -27,6 +27,7 @@ class MDUnits:
     kB = units.kB / units.Ha
     hbar = 1.0
 
+    # Conversion units use when reading in MD inputs
     conversions = {
         'kcal': units.kcal / units.Hartree,
         'mol': 1 / units.mol,
@@ -38,6 +39,20 @@ class MDUnits:
 
     @staticmethod
     def parse_mdunit(unit):
+        """
+        Auxiliary functions, used to determine the conversion factor of position and force units between MD propagation
+        and the provided ML Calculator. Allowed units are:
+            mol, kcal, eV, Bohr, Angstrom, Hartree and all combinations using '/' thereof (e.g. kcal/mol/Angstrom).
+
+        Args:
+            unit (str/float): Unit to be used to convert forces from Calculator units to atomic units used in the MD.
+                              Can be a str, which is converted to the corresponding numerical value or a float, which
+                              is returned.
+
+        Returns:
+            float: Factor used for conversion in the Calculator.
+
+        """
         if type(unit) == str:
             parts = unit.lower().replace(" ", "").split('/')
             scaling = 1.0
