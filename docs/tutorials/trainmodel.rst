@@ -88,3 +88,19 @@ training/validation-points (**num_train** and **num_val**). The default
 values are 4 workers with a batch size of 128 and 80% of the dataset for
 training and 10% for validation.
 
+Monitoring Training with TensorBoard
+------------------------------------
+
+The default training session will store TensorBoard files for monitoring your
+ training session in *path/to/eperiment_dir/training/log*. In order to use
+ TensorBoard open a new terminal and activate your environment that has
+ SchNetPack installed::
+
+    $ source activate your_env_name
+
+Now run TensorBoard on your log_dir::
+
+    $ tensorboard --logdir path/to/eperiment_dir/training/log
+
+This will return a message with the location of your TensorBoard. Copy this
+location to your browser and it will automatically show your training session.
