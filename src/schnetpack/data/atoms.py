@@ -281,7 +281,7 @@ class DownloadableAtomsData(AtomsData):
         else:
             logger.info('Starting download')
             folder = os.path.dirname(self.dbpath)
-            if not os.path.exists(folder):
+            if not os.path.exists(folder) and folder not in ['', '.']:
                 os.makedirs(folder)
             self._download()
 
