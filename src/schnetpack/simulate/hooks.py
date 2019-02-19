@@ -175,7 +175,7 @@ class DataStream:
                                    main file.
         """
         self.data_group[file_position:file_position + buffer_position] = \
-            self.buffer[:buffer_position].cpu()
+            self.buffer[:buffer_position].detach().cpu()
         # Update number of meaningful entries
         self.data_group.attrs.modify('entries', file_position + buffer_position)
         self.data_group.flush()
@@ -390,12 +390,14 @@ class MoleculeStream(DataStream):
         buffer_size (int): Size of the buffer, once full, data is stored to the hdf5 dataset.
         restart (bool): If the simulation is restarted, continue logging in the previously created dataset.
                         (default=False)
+        store_forces (bool): If requested, store forces in an additional 3 columns of the array. (default=False)
     """
 
-    def __init__(self, main_dataset, buffer_size, restart=False):
+    def __init__(self, main_dataset, buffer_size, restart=False, store_forces=True):
         super(MoleculeStream, self).__init__('molecules', main_dataset,
                                              buffer_size, restart=restart)
         self.written = 0
+        self.store_forces = store_forces
 
     def _init_data_stream(self, simulator):
         """
@@ -405,8 +407,13 @@ class MoleculeStream(DataStream):
         Args:
             simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
         """
-        data_shape = (simulator.system.n_replicas, simulator.system.n_molecules,
-                      simulator.system.max_n_atoms, 6)
+        # Get shape of array depending on whether forces should be stored.
+        if self.store_forces:
+            data_shape = (simulator.system.n_replicas, simulator.system.n_molecules,
+                          simulator.system.max_n_atoms, 9)
+        else:
+            data_shape = (simulator.system.n_replicas, simulator.system.n_molecules,
+                          simulator.system.max_n_atoms, 6)
 
         self._setup_data_groups(data_shape, simulator)
 
@@ -416,6 +423,12 @@ class MoleculeStream(DataStream):
             self.data_group.attrs['n_atoms'] = simulator.system.n_atoms.cpu()
             self.data_group.attrs['atom_types'] = simulator.system.atom_types.cpu()
             self.data_group.attrs['time_step'] = simulator.integrator.time_step
+
+            # Save indicator, whether forces are written
+            if self.store_forces:
+                self.data_group.attrs['has_forces'] = 1
+            else:
+                self.data_group.attrs['has_forces'] = 0
 
     def update_buffer(self, buffer_position, simulator):
         """
@@ -427,8 +440,13 @@ class MoleculeStream(DataStream):
         """
         self.buffer[buffer_position:buffer_position + 1, ..., :3] = \
             simulator.system.positions
-        self.buffer[buffer_position:buffer_position + 1, ..., 3:] = \
+        self.buffer[buffer_position:buffer_position + 1, ..., 3:6] = \
             simulator.system.velocities
+
+        # If requested, store forces
+        if self.store_forces:
+            self.buffer[buffer_position:buffer_position + 1, ..., 6:] = \
+                simulator.system.forces
 
 
 class FileLoggerError(Exception):
