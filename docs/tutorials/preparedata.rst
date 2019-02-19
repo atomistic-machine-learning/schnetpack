@@ -103,6 +103,10 @@ the comment line::
     wold be ``extend_xyz(xyz_path='path/file.xyz',
     properties='species:S:1:pos:R:3:forces:R:3', molecular_props=['energy']``.
 
+.. note::
+
+    An example-script for this section is located at *examples.preparedata.py*
+
 Transfering extended xyz-files to an ase database
 -------------------------------------------------
 
@@ -155,3 +159,4 @@ datasets select the proper dataset class from ``schnetpack.datasets`` and
 define the path to the database. If the database does not exist at the
 defined location, it will be downloaded automatically. If no properties are
 passed to the dataset, all available properties will be used.
+
