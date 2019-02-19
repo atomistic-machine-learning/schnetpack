@@ -1,4 +1,4 @@
-.. _sacred-basics:
+.. _sacred basics:
 
 =============
 Sacred Basics

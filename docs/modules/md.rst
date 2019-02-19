@@ -24,9 +24,6 @@ Integrators
 .. automodule:: schnetpack.md.integrators
 
 
-.. autoclass:: schnetpack.md.Integrator
-   :members:
-
 .. autoclass:: schnetpack.md.VelocityVerlet
    :members:
 

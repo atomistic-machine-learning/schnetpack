@@ -7,12 +7,6 @@
 .. autoclass:: schnetpack.data.Structure
    :members:
 
-.. autoclass:: schnetpack.data.BaseAtomsData
-   :members:
-
-.. autoclass:: schnetpack.data.MergedAtomsData
-   :members:
-
 .. autoclass:: schnetpack.data.AtomsData
    :members:
 

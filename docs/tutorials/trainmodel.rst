@@ -5,7 +5,8 @@ Train a model using the provided scripts
 ----------------------------------------
 
 The easiest way to train a sacred script on a dataset is to use the provided
-sacred scripts. A general guide to sacred can be found at :ref:'sacred-basics'.
+sacred scripts. A general guide to sacred can be found at section
+:ref:`sacred basics`.
 Use the training script by calling::
 
     run_schnetpack.py train with ...
@@ -42,7 +43,7 @@ order to connect the model properties to the dataset properties with ``dataset
 model_propery2:data_property2``. If your data is a valid extended xyz-file,
 with forces and/or energies, you could also pass an xyz-file instead of a
 database to ``dataset.dbpath``. This will automatically create a valid
-database for you. For more information visit section **todo add link**.
+database for you. For more information visit section :ref:`Prepare Data`.
 
 
 Training Settings

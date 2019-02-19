@@ -16,7 +16,7 @@ Requirements for the input data
 -------------------------------
 
 The input data for the evaluation of the model needs to be a valid extended
-xyz-file as described in **add section** or an ``ase`` database. If the
+xyz-file as described in :ref:`extended xyz` or an ``ase`` database. If the
 selected input data is provided as extended xyz file, it will automatically
 be transformed into an ``ase`` database, since SchNet is meant to be used
 with these databases. The database will be stored next to the xyz-file. In

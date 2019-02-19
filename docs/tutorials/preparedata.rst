@@ -1,5 +1,9 @@
+.. _Prepare Data:
+
 Prepare your data for SchNetPack
-================================
+********************************
+
+.. _extended xyz:
 
 Converting xyz-files to extended xyz
 ------------------------------------
