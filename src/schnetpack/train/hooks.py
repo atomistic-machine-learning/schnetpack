@@ -504,7 +504,7 @@ class ReduceLROnPlateauHook(Hook):
     def __init__(self, patience=25, factor=0.2, min_lr=1e-6,
                  window_length=1, stop_after_min=False):
         self.scheduler = None
-        self.patience = patience,
+        self.patience = patience
         self.factor = factor
         self.min_lr = min_lr
         self.window_length = window_length
