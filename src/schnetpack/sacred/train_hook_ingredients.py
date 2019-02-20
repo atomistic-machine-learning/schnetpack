@@ -136,10 +136,11 @@ def build_schedule_hook(name):
 
 
 @scheduling_hook_ing.capture
-def get_reduce_on_plateau_hook(patience, factor, lr_min):
+def get_reduce_on_plateau_hook(patience, factor, min_lr,
+                               window_length, stop_after_min):
     return ReduceLROnPlateauHook(patience=patience, factor=factor,
-                                 min_lr=lr_min, window_length=1,
-                                 stop_after_min=True)
+                                 min_lr=min_lr, window_length=window_length,
+                                 stop_after_min=stop_after_min)
 
 
 @scheduling_hook_ing.capture

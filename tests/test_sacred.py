@@ -26,17 +26,16 @@ def test_run_training(tmpdir, property_mapping, properties):
                           'data/test_iso.db')
 
     ex.run(command_name='train',
-           named_configs=['model.schnet'],
+           named_configs=[],
            config_updates={'experiment_dir': tmpdir,
                            'properties': properties,
                            'dataset.dbpath': dbpath,
                            'dataset.property_mapping': property_mapping,
-                           'trainer.max_epochs': 4,
-                           'batch_size': 2,
-                           'trainer.logging_hooks': ['csv'],
-                           'trainer.metrics': ['mae', 'rmse'],
-                           'num_train': 4,
-                           'num_val': 4,
+                           'dataloader.batch_size': 2,
+                           'metrics.names': ['mae', 'rmse'],
+                           'dataloader.num_train': 4,
+                           'dataloader.num_val': 4,
+                           'stopping_hooks.max_epochs': 4
                            })
 
     with open(os.path.join(tmpdir, 'training/log.csv'), 'r') as file:
