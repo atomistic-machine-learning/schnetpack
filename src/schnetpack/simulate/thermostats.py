@@ -10,10 +10,22 @@ from schnetpack.simulate.hooks import SimulationHook
 
 
 class ThermostatError(Exception):
+    """
+    Exception for thermostat class.
+    """
     pass
 
 
 class ThermostatHook(SimulationHook):
+    """
+    Basic thermostat hook for simulator class.
+
+    Args:
+        temperature_bath (float):
+        nm_transformation (schnetpack.md.utils):
+        detach (bool):
+    """
+
     # TODO: Could be made a torch nn.Module
 
     def __init__(self, temperature_bath, nm_transformation=None, detach=True):
@@ -104,7 +116,6 @@ class GLEThermostat(ThermostatHook):
 
         # Get initial thermostat momenta
         self.thermostat_momenta = self._init_thermostat_momenta(simulator)
-        print(self.thermostat_momenta.shape)
 
     def _init_gle_matrices(self, simulator):
         a_matrix, c_matrix = load_gle_matrices(self.gle_file)
@@ -134,9 +145,6 @@ class GLEThermostat(ThermostatHook):
 
         # A does not need to be transposed, else c2 is imaginary
         c1 = linalg.expm(-0.5 * simulator.integrator.time_step * a_matrix)
-        print(c1)
-        print(c1.T)
-        exit()
 
         # c2 is symmetric
         c2 = linalg.sqrtm(c_matrix - np.dot(c1, np.dot(c_matrix, c1.T)))
@@ -154,7 +162,6 @@ class GLEThermostat(ThermostatHook):
         # TODO: the transpose here should be wrong!
         c1 = torch.from_numpy(c1.T).to(self.device).float()
         c2 = torch.from_numpy(c2).to(self.device).float()
-        # TODO: CHECK TRANSPOSE
         return c1, c2
 
     def _init_thermostat_momenta(self, simulator, free_particle_limit=True):
@@ -190,8 +197,6 @@ class GLEThermostat(ThermostatHook):
         # Apply transformation if requested
         if self.nm_transformation is not None:
             momenta = self.nm_transformation.normal2beads(momenta)
-
-        exit()
 
         simulator.system.momenta = momenta
 
@@ -249,7 +254,6 @@ class PIGLETThermostat(GLEThermostat):
         # Bring to correct shape for later matmul broadcasting
         c1 = torch.cat(all_c1)[:, None, None, :, :]
         c2 = torch.cat(all_c2)[:, None, None, :, :]
-        print(c1.shape, c2.shape)
         return c1, c2
 
 
@@ -323,8 +327,11 @@ class LangevinThermostat(ThermostatHook):
 
 class PILELocalThermostat(LangevinThermostat):
 
-    def __init__(self, temperature_bath, time_constant, nm_transformation=NormalModeTransformer):
+    def __init__(self, temperature_bath, time_constant, nm_transformation=NormalModeTransformer,
+                 thermostat_centroid=True, damping=None):
         super(PILELocalThermostat, self).__init__(temperature_bath, time_constant, nm_transformation=nm_transformation)
+        self.thermostat_centroid = thermostat_centroid
+        self.damping = damping
 
     def _init_thermostat(self, simulator):
         if type(simulator.integrator) is not RingPolymer:
@@ -332,8 +339,14 @@ class PILELocalThermostat(LangevinThermostat):
 
         # Initialize friction coefficients
         gamma_normal = 2 * simulator.integrator.omega_normal
-        # Use seperate coefficient for centroid mode
-        gamma_normal[0] = 1.0 / self.time_constant
+
+        # Use seperate coefficient for centroid mode (default, unless using thermostatted RPMD)
+        if self.thermostat_centroid:
+            gamma_normal[0] = 1.0 / self.time_constant
+
+        # Apply TRPMD damping factor if provided
+        if self.damping is not None:
+            gamma_normal *= self.damping
 
         if self.nm_transformation is None:
             raise ThermostatError('Normal mode transformation required for PILE thermostat')
@@ -357,7 +370,9 @@ class PILELocalThermostat(LangevinThermostat):
             'c2': self.c2,
             'thermostat_factor': self.thermostat_factor,
             'temperature_bath': self.temperature_bath,
-            'n_replicas': self.n_replicas
+            'n_replicas': self.n_replicas,
+            'damping': self.damping,
+            'thermostat_centroid': self.thermostat_centroid
         }
         return state_dict
 
@@ -368,6 +383,8 @@ class PILELocalThermostat(LangevinThermostat):
         self.thermostat_factor = state_dict['thermostat_factor']
         self.temperature_bath = state_dict['temperature_bath']
         self.n_replicas = state_dict['n_replicas']
+        self.damping = state_dict['damping']
+        self.thermostat_centroid = state_dict['thermostat_centroid']
 
         # Set initialized flag
         self.initialized = True
@@ -393,23 +410,14 @@ class PILEGlobalThermostat(PILELocalThermostat):
         # Apply thermostat to centroid mode
         c1_centroid = self.c1[0]
 
-        print(self.c1.shape)
-        print(c1_centroid.shape)
-
         momenta_centroid = momenta[0]
         thermostat_noise_centroid = thermostat_noise[0]
 
-        print(thermostat_noise_centroid.shape, 'TNC')
-        print(thermostat_noise.shape, 'TN')
-
-        print(momenta_centroid.shape, 'momc')
-        print(simulator.system.masses.shape, 'Ms')
         # Compute kinetic energy of centroid
         kinetic_energy_factor = torch.sum(momenta_centroid ** 2 / simulator.system.masses[0]) / (
                 self.temperature_bath * MDUnits.kB * self.n_replicas)
 
         centroid_factor = (1 - c1_centroid) / kinetic_energy_factor
-        print(centroid_factor.shape, 'cf')
 
         alpha_sq = c1_centroid + torch.sum(thermostat_noise_centroid ** 2) * centroid_factor + \
                    2 * thermostat_noise_centroid[0, 0, 0] * torch.sqrt(c1_centroid * centroid_factor)
@@ -422,15 +430,20 @@ class PILEGlobalThermostat(PILELocalThermostat):
         momenta[0] = alpha * momenta[0]
 
         # Apply thermostat for remaining normal modes
-        print(self.thermostat_factor.shape, 'TF')
         momenta[1:] = self.c1[1:] * momenta[1:] + self.thermostat_factor * self.c2[1:] * thermostat_noise[1:]
-        exit()
 
         # Apply transformation if requested
         if self.nm_transformation is not None:
             momenta = self.nm_transformation.normal2beads(momenta)
 
         simulator.system.momenta = momenta
+
+
+class TRPMDThermostat(PILELocalThermostat):
+
+    def __init__(self, temperature_bath, damping, nm_transformation=NormalModeTransformer):
+        super(TRPMDThermostat, self).__init__(temperature_bath, 1.0, nm_transformation=nm_transformation,
+                                              thermostat_centroid=False, damping=damping)
 
 
 class NHCThermostat(ThermostatHook):
