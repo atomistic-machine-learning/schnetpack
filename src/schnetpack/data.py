@@ -20,7 +20,10 @@ from base64 import b64encode, b64decode
 
 import numpy as np
 import torch
+from io import StringIO
+from random import choice
 from ase.db import connect
+from ase.io.xyz import read_xyz
 from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
 from multiprocessing import Pool
@@ -38,13 +41,15 @@ class BaseAtomsData(Dataset):
     TODO: Add in docs for the rest of the attributes (if not already)
     Args:
         rattle_atoms (float): Standard deviation of noise to add to the atomic coordinates
+        conformers (bool): Whether to randomly pick a conformer. Conformers are expected to
+            be stored in a DB field named "conformers"
     """
     available_properties = None
 
     def __init__(self, dbpath, subset=None, required_properties=None,
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True,
-                 load_charge=False, rattle_atoms=None):
+                 load_charge=False, rattle_atoms=None, conformers=False):
         self.dbpath = dbpath
         self.subset = subset
         self.required_properties = required_properties
@@ -55,6 +60,7 @@ class BaseAtomsData(Dataset):
         self.centered = center_positions
         self.load_charge = load_charge
         self.rattle_atoms = rattle_atoms
+        self.conformers = conformers
 
     def create_splits(self, num_train=None, num_val=None, split_file=None):
         """
@@ -321,13 +327,13 @@ class AtomsData(BaseAtomsData):
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True,
                  load_charge=False, download=False,
-                 rattle_atoms=None):
+                 rattle_atoms=None, conformers=False):
 
         super(AtomsData, self).__init__(dbpath, subset,
                                         required_properties,
                                         environment_provider,
                                         collect_triples, center_positions,
-                                        load_charge, rattle_atoms)
+                                        load_charge, rattle_atoms, conformers)
         if download:
             self.download()
 
@@ -417,6 +423,10 @@ class AtomsData(BaseAtomsData):
             if self.available_properties is None \
             else self.available_properties
 
+        # If conformers are expected, make sure to store them
+        if self.conformers:
+            props = set(props).union(["conformers"])
+
         for pname in props:
             try:
                 prop = properties[pname]
@@ -453,6 +463,13 @@ class AtomsData(BaseAtomsData):
             row = conn.get(idx + 1)
         at = row.toatoms()
 
+        # If desired, pick a conformer
+        if self.conformers:
+            # Read in the list of conformers and convert the XYZ file
+            confs = self._unpack_property(row, 'conformers')
+            conf = choice(confs)
+            at = next(read_xyz(StringIO(conf)))
+
         # If desired, rattle the atoms
         #  TODO: This should probably go in the base class somehow, so any other datasets will have it
         #  TODO: What about unit cells?
@@ -464,10 +481,7 @@ class AtomsData(BaseAtomsData):
         for pname in self.required_properties:
             # new data format
             try:
-                shape = row.data['_shape_' + pname]
-                dtype = row.data['_dtype_' + pname]
-                prop = np.frombuffer(b64decode(row.data[pname]), dtype=dtype)
-                prop = prop.reshape(shape)
+                prop = self._unpack_property(row, pname)
             except:
                 # fallback
                 # Capture exception for ISO17 where energies are stored directly
@@ -486,11 +500,7 @@ class AtomsData(BaseAtomsData):
 
         if self.load_charge:
             if Structure.charge in row.data.keys():
-                shape = row.data['_shape_' + Structure.charge]
-                dtype = row.data['_dtype_' + Structure.charge]
-                prop = np.frombuffer(b64decode(row.data[Structure.charge]),
-                                     dtype=dtype)
-                prop = prop.reshape(shape)
+                prop = self._unpack_property(row, Structure.charge)
                 properties[Structure.charge] = torch.FloatTensor(prop)
             else:
                 properties[Structure.charge] = torch.FloatTensor(
@@ -506,6 +516,14 @@ class AtomsData(BaseAtomsData):
             at.cell.astype(np.float32))
 
         return at, properties
+
+    @staticmethod
+    def _unpack_property(row, pname):
+        shape = row.data['_shape_' + pname]
+        dtype = row.data['_dtype_' + pname]
+        prop = np.frombuffer(b64decode(row.data[pname]), dtype=dtype)
+        prop = prop.reshape(shape)
+        return prop
 
     def get_atomref(self, property):
         """
