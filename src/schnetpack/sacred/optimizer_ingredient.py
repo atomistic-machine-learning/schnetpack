@@ -8,7 +8,7 @@ optimizer_ing = Ingredient('optimizer')
 @optimizer_ing.config
 def config():
     name = 'adam'
-    learning_rate = 1e-2
+    learning_rate = 1e-4
 
 
 @optimizer_ing.capture

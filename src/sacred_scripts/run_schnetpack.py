@@ -1,6 +1,5 @@
 import os
 from shutil import rmtree
-import torch
 import yaml
 from sacred import Experiment
 from sacred.observers import MongoObserver
