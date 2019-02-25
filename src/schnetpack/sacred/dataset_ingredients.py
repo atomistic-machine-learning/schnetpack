@@ -13,16 +13,7 @@ def cfg():
     """configuration for the dataset ingredient"""
     dbpath = None
     dataset = 'CUSTOM'
-    property_mapping = {Properties.energy: ISO17.E,
-                        Properties.forces: ISO17.F}
-
-
-@dataset_ingredient.named_config
-def custom():
-    dbpath = './data/iso17/reference_eq.db'
-    fold = 'reference'
-    property_mapping = {Properties.energy: ISO17.E,
-                        Properties.forces: ISO17.F}
+    property_mapping = {}
 
 
 @dataset_ingredient.named_config
@@ -33,7 +24,7 @@ def qm9():
     property_mapping = {Properties.energy: QM9.U0,
                         Properties.dipole_moment: QM9.mu,
                         Properties.iso_polarizability: QM9.alpha}
-
+    print(property_mapping)
 
 @dataset_ingredient.named_config
 def iso17():
@@ -42,7 +33,7 @@ def iso17():
     dataset = 'ISO17'
     fold = 'reference'
     property_mapping = {Properties.energy: ISO17.E,
-                        Properties.forces:ISO17.F}
+                        Properties.forces: ISO17.F}
 
 
 @dataset_ingredient.named_config
