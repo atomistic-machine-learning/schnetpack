@@ -161,7 +161,7 @@ def get_berendsen_thermostat(bath_temperature, time_constant):
 def get_gle_thermostat(bath_temperature, gle_file):
     thermostat_info(name='GLE', temperature=bath_temperature,
                     addition=gle_file)
-    return GLEThermostat(bath_temperature=bath_temperature,
+    return GLEThermostat(temperature_bath=bath_temperature,
                          gle_file=gle_file)
 
 
