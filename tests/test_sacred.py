@@ -104,6 +104,7 @@ def test_run_md(md_thermostats, md_system, tmpdir):
     'thermostat.piglet',
     'thermostat.pile_local',
     'thermostat.pile_global',
+    'thermostat.trpmd',
     'thermostat.nhc_ring_polymer',
     'thermostat.nhc_ring_polymer_global'
 ])
