@@ -128,7 +128,8 @@ class BaseAtomsData(Dataset):
         subidx = idx if self.subset is None or len(idx) == 0 else np.array(self.subset)[idx]
         return type(self)(self.dbpath, subidx, self.required_properties,
                           self.environment_provider, self.collect_triples,
-                          self.centered, self.load_charge)
+                          self.centered, self.load_charge, self.rattle_atoms,
+                          self.conformers)
 
     def __len__(self):
         raise NotImplementedError
