@@ -4,7 +4,6 @@ from torch.optim import Adam
 
 import schnetpack as spk
 import schnetpack.atomistic as atm
-import schnetpack.data
 import schnetpack.representation as rep
 from schnetpack.datasets import *
 
@@ -13,8 +12,8 @@ data = QM9("qm9.db", properties=[QM9.U0], collect_triples=True)
 
 # split in train and val
 train, val, test = data.create_splits(100000, 10000)
-loader = schnetpack.data.AtomsLoader(train, batch_size=100, num_workers=4)
-val_loader = schnetpack.data.AtomsLoader(val)
+loader = spk.data.AtomsLoader(train, batch_size=100, num_workers=4)
+val_loader = spk.data.AtomsLoader(val)
 
 # create model
 reps = rep.BehlerSFBlock()
