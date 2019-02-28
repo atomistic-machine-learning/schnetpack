@@ -182,3 +182,14 @@ class Simulator:
                         raise ValueError(f'Could not find restart informationfor {hook.__class__} in state dict.')
                     else:
                         hook.state_dict = state_dict['simulator_hooks'][hook.__class__]
+
+    def load_system_state(self, state_dict):
+        """
+        Routine for only loading the system state of previous simulations.
+        This can e.g. be used for production runs, where an equilibrated system
+        is loaded, but the thermostat is changed.
+
+        Args:
+            state_dict (dict): State dict of the current simulation
+        """
+        self.system.state_dict = state_dict['system']

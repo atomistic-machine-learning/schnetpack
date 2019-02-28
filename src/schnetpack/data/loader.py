@@ -165,6 +165,8 @@ class AtomsLoader(DataLoader):
             atomrefs = [atomrefs]
         else:
             is_single = False
+            if atomrefs is None:
+                atomrefs = [None]*len(property_names)
 
         if type(per_atom) is not list:
             per_atom = [per_atom] * len(property_names)

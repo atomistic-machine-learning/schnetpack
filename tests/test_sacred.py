@@ -1,14 +1,11 @@
-from sacred_scripts.run_schnetpack import ex
-from sacred_scripts.run_md import md
-import tempfile
-import shutil
 import os
-from schnetpack.atomistic import Properties
-from schnetpack.datasets.iso17 import ISO17
+
 import pytest
 
-
-tmpdir = tempfile.mkdtemp('gdb9')
+from sacred_scripts.run_md import md
+from sacred_scripts.run_schnetpack import ex
+from schnetpack.atomistic import Properties
+from schnetpack.datasets.iso17 import ISO17
 
 
 @pytest.fixture
@@ -21,12 +18,13 @@ def properties(property_mapping):
     return [Properties.energy, Properties.forces]
 
 
-def test_run_training(property_mapping, properties):
+def test_run_training(tmpdir, property_mapping, properties):
     """
     Test if training is working and logs are created.
     """
     dbpath = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                           'data/test_iso.db')
+
     ex.run(command_name='train',
            named_configs=['model.schnet'],
            config_updates={'experiment_dir': tmpdir,
@@ -47,15 +45,100 @@ def test_run_training(property_mapping, properties):
     assert len(log) == 5
 
 
-def test_run_md():
+@pytest.fixture(params=[
+    None,
+    'thermostat.berendsen',
+    'thermostat.langevin',
+    'thermostat.gle',
+    'thermostat.nhc',
+    'thermostat.nhc_massive'
+])
+def md_thermostats(request):
+    thermostat = request.param
+    return thermostat
+
+
+@pytest.fixture(params=[
+    None,
+    'system.ring_polymer'
+])
+def md_system(request):
+    system = request.param
+    return system
+
+
+def test_run_md(md_thermostats, md_system, tmpdir):
     mol_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                             'data/test_molecule.xyz')
+    model_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                              'data/test_md_model.model')
+
+    # Default test configs
+    config_updates = {'experiment_dir': tmpdir,
+                      'system.path_to_molecules': mol_path,
+                      'calculator.model_path': model_path,
+                      'simulation_steps': 2}
+
+    named_configs = ['simulator.log_temperature',
+                     'simulator.remove_com_motion']
+
+    if md_thermostats is not None:
+        named_configs.append(md_thermostats)
+
+    if md_system is not None:
+        named_configs.append(md_system)
+
+    # Set input file path for GLE thermostat if used
+    if md_thermostats == 'thermostat.gle':
+        gle_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                'data/test_gle_thermostat.txt')
+        config_updates['thermostat.gle_file'] = gle_path
+
     md.run(command_name='simulate',
-           named_configs=['thermostat.berendsen', 'simulator.base_hooks'],
-           config_updates={'experiment_dir': tmpdir,
-                           'path_to_molecules': mol_path,
-                           'simulation_steps': 10})
+           named_configs=named_configs,
+           config_updates=config_updates)
 
 
-def teardown_module():
-    shutil.rmtree(tmpdir)
+@pytest.fixture(params=[
+    None,
+    'thermostat.piglet',
+    'thermostat.pile_local',
+    'thermostat.pile_global',
+    'thermostat.nhc_ring_polymer',
+    'thermostat.nhc_ring_polymer_global'
+])
+def rpmd_thermostats(request):
+    thermostat = request.param
+    return thermostat
+
+
+def test_run_rpmd(rpmd_thermostats, tmpdir):
+    mol_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                            'data/test_molecule.xyz')
+    model_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                              'data/test_md_model.model')
+
+    # Default test configs
+    config_updates = {'experiment_dir': tmpdir,
+                      'system.path_to_molecules': mol_path,
+                      'calculator.model_path': model_path,
+                      'simulation_steps': 2}
+
+    named_configs = ['simulator.log_temperature',
+                     'simulator.remove_com_motion',
+                     'system.ring_polymer',
+                     'integrator.ring_polymer',
+                     'initializer.remove_com']
+
+    if rpmd_thermostats is not None:
+        named_configs.append(rpmd_thermostats)
+
+    # Set input file path for GLE thermostat if used
+    if rpmd_thermostats == 'thermostat.piglet':
+        gle_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                'data/test_piglet_thermostat.txt')
+        config_updates['thermostat.gle_file'] = gle_path
+
+    md.run(command_name='simulate',
+           named_configs=named_configs,
+           config_updates=config_updates)
