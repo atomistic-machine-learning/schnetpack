@@ -3,7 +3,7 @@ Using SchNet to evaluate datasets
 
 Im order to predict energies and forces with SchNet run::
 
-   $ evaluate_model evaluate with ...
+   $ spk_eval evaluate with ...
 
 Selecting the model
 -------------------

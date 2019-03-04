@@ -9,7 +9,7 @@ sacred scripts. A general guide to sacred can be found at section
 :ref:`sacred basics`.
 Use the training script by calling::
 
-    run_schnetpack.py train with ...
+    spk_train.py train with ...
 
 The experiment will automatically create an experiment folder with a training
 folder in order to store all outputs. In order to set the experiment

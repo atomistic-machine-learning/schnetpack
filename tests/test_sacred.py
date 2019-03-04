@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-from sacred_scripts.run_md import md
-from sacred_scripts.run_schnetpack import ex
+from sacred_scripts.spk_md import md
+from sacred_scripts.spk_train import ex
 from schnetpack.atomistic import Properties
 from schnetpack.datasets.iso17 import ISO17
 
