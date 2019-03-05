@@ -37,7 +37,7 @@ def get_parser():
     train_parser = argparse.ArgumentParser(add_help=False,
                                            parents=[cmd_parser])
     train_parser.add_argument('datapath',
-                              help='Path / destination of OMDB dataset directory')
+                              help='Path / destination of OMDB dataset')
     train_parser.add_argument('modelpath',
                               help='Destination for models and logs')
     train_parser.add_argument('--property', type=str,
@@ -139,8 +139,7 @@ def train(args, model, train_loader, val_loader, device):
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     optimizer = Adam(trainable_params, lr=args.lr)
 
-    schedule = spk.train.ReduceLROnPlateauHook(optimizer,
-                                               patience=args.lr_patience,
+    schedule = spk.train.ReduceLROnPlateauHook(patience=args.lr_patience,
                                                factor=args.lr_decay,
                                                min_lr=args.lr_min,
                                                window_length=1,
