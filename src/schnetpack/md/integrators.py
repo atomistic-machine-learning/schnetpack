@@ -1,5 +1,5 @@
-import torch
 import numpy as np
+import torch
 
 from schnetpack.md.utils import NormalModeTransformer, MDUnits
 
@@ -204,9 +204,11 @@ class RingPolymer(Integrator):
 
         # Propagate ring polymer
         momenta_normal = self.propagator[:, 0, 0] * momenta_normal + \
-                         self.propagator[:, 0, 1] * positions_normal * system.masses
+                         self.propagator[:, 0,
+                         1] * positions_normal * system.masses
         positions_normal = self.propagator[:, 1, 0] * momenta_normal / \
-                           system.masses + self.propagator[:, 1, 1] * positions_normal
+                           system.masses + self.propagator[:, 1,
+                                           1] * positions_normal
 
         # Transform back to bead representation
         system.positions = self.transformation.normal2beads(positions_normal)

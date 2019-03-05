@@ -81,14 +81,15 @@ QM9 & ANI1
 ^^^^^^^^^^^^^^^^^^
 
 The QM9 and ANI1 example scripts allow to train and evaluate both SchNet and wACSF neural networks.
-In the following walk-through tutorial we focus on the qm9 scripts, but the same procedure applies for the
+In the following tutorial we focus on the qm9 scripts, but the same procedure applies for the
 ``schnetpack_ani1.py`` script as well. The training can be started using::
 
-   $ schnetpack_qm9.py train <schnet/wacsf> <datadir> <modeldir> --split num_train num_val [--cuda]
+   $ schnetpack_qm9.py train <schnet/wacsf> <dbpath> <modeldir> --split num_train num_val [--cuda]
 
 where num_train and num_val need to be replaced by the number of training and validation datapoints respectively.
-You can choose between SchNet and wACSF networks and have to provide directories to store the model and the QM9 dataset
-(will be downloaded if not in ``<datadir>``).
+You can choose between SchNet and wACSF networks and have to provide a directory to store the model and the location
+of the dataset, which has to be a ASE DB file (``.db`` or ``.json``). It will be downloaded automatically
+if it does not exist.
 
 .. note::
    Please be warned that the ANI-1 dataset its huge (more than 20gb).
@@ -108,7 +109,7 @@ This first comes by installing the version included in TensorFlow::
 
 To evaluate the trained model that showed the best validation error during training (i.e., early stopping), call::
 
-   $ schnetpack_qm9.py eval <schnet/wacsf> <datadir> <modeldir> [--split train val test] [--cuda]
+   $ schnetpack_qm9.py eval <schnet/wacsf> <dbpath> <modeldir> [--split train val test] [--cuda]
 
 which will write a result file ``evaluation.txt`` into the model directory.
 
