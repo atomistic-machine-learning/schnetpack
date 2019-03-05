@@ -38,7 +38,7 @@ def get_parser():
     train_parser = argparse.ArgumentParser(add_help=False,
                                            parents=[cmd_parser])
     train_parser.add_argument('datapath',
-                              help='Path / destination of ANI1 dataset directory')
+                              help='Path / destination of ANI1 dataset')
     train_parser.add_argument('modelpath',
                               help='Destination for models and logs')
     train_parser.add_argument('--property', type=str,
