@@ -9,10 +9,9 @@ eval_ex = Experiment('evaluation', ingredients=[evaluator_ing])
 
 @eval_ex.config
 def config():
-    experiment_dir = './experiments'
-    output_dir = os.path.join(experiment_dir, 'evaluation')
+    output_dir = 'evaluation'
     os.makedirs(output_dir, exist_ok=True)
-    model_path = os.path.join(experiment_dir, 'training/best_model')
+    model_path = './training/best_model'
     device = 'cpu'
 
 

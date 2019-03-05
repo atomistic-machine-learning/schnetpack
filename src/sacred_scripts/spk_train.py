@@ -22,8 +22,7 @@ def cfg():
     overwrite = True
     additional_outputs = []
     device = 'cpu'
-    experiment_dir = './experiments'
-    train_dir = os.path.join(experiment_dir, 'training')
+    model_dir = 'training'
     properties = ['energy', 'forces']
 
 
@@ -38,7 +37,7 @@ def observe():
 
 
 @ex.capture
-def save_config(_config, train_dir):
+def save_config(_config, model_dir):
     """
     Save the configuration to the model directory.
 
@@ -47,46 +46,46 @@ def save_config(_config, train_dir):
         train_dir (str): path to the training directory
 
     """
-    with open(os.path.join(train_dir, 'config.yaml'), 'w') as f:
+    with open(os.path.join(model_dir, 'config.yaml'), 'w') as f:
         yaml.dump(_config, f, default_flow_style=False)
 
 
 @ex.capture
-def create_dirs(_log, train_dir, overwrite):
+def create_dirs(_log, model_dir, overwrite):
     """
     Create the directory for the experiment.
 
     Args:
         _log:
-        experiment_dir (str): path to the experiment directory
+        model_dir (str): path to the training directory
         overwrite (bool): overwrites the model directory if True
 
     """
     _log.info("Create model directory")
-    if train_dir is None:
+    if model_dir is None:
         raise ValueError('Config `experiment_dir` has to be set!')
 
-    if os.path.exists(train_dir) and not overwrite:
+    if os.path.exists(model_dir) and not overwrite:
         raise ValueError(
             'Model directory already exists (set overwrite flag?):',
-            train_dir)
+            model_dir)
 
-    if os.path.exists(train_dir) and overwrite:
-        rmtree(train_dir)
+    if os.path.exists(model_dir) and overwrite:
+        rmtree(model_dir)
 
-    if not os.path.exists(train_dir):
-        os.makedirs(train_dir)
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
 
 
 @ex.command
-def train(_log, _config, train_dir, properties, additional_outputs, device):
+def train(_log, _config, model_dir, properties, additional_outputs, device):
     """
     Build a trainer from the configuration and start the training.
 
     Args:
         _log:
         _config (dict): configuration dictionary
-        train_dir (str): path to the training directory
+        model_dir (str): path to the training directory
         properties (list): list of model properties
         additional_outputs (list): list of additional model properties that are
             not back-propagated
@@ -110,7 +109,7 @@ def train(_log, _config, train_dir, properties, additional_outputs, device):
                         model_properties=model_properties,
                         additional_outputs=additional_outputs).to(device)
     _log.info("Setup training")
-    trainer = setup_trainer(model=model, train_dir=train_dir,
+    trainer = setup_trainer(model=model, train_dir=model_dir,
                             train_loader=train_loader, val_loader=val_loader,
                             property_map=property_map)
     _log.info("Training")

@@ -2,8 +2,8 @@ from sacred import Ingredient
 import numpy as np
 from schnetpack.data import AtomsLoader
 from schnetpack.atomistic import Properties
-from schnetpack.sacred.dataset_ingredients import dataset_ingredient, \
-    get_dataset
+from schnetpack.data import train_test_split
+
 
 dataloader_ing = Ingredient('dataloader')
 
@@ -33,7 +33,7 @@ def build_dataloaders(_seed, num_train, num_val, batch_size, num_workers,
     if num_val < 1:
         num_val = int(num_val * len(dataset))
 
-    train, val, test = dataset.create_splits(num_train, num_val)
+    train, val, test = train_test_split(dataset, num_train, num_val)
 
     train_loader = AtomsLoader(train, batch_size, True, pin_memory=True,
                                num_workers=num_workers)
