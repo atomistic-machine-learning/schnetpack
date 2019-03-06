@@ -4,7 +4,7 @@ from ase.db import connect
 from ase.io.extxyz import read_xyz
 
 from schnetpack.data import DownloadableAtomsData
-from schnetpack.data.parsing import ext_xyz_to_db
+from schnetpack.data.parsing import extxyz_to_db
 from schnetpack.environment import SimpleEnvironmentProvider
 
 __all__ = ['ExtXYZ']
@@ -26,7 +26,7 @@ class ExtXYZ(DownloadableAtomsData):
                  pair_provider=None, center_positions=True):
         if not os.path.exists(dbpath):
             os.makedirs(os.path.dirname(dbpath), exist_ok=True)
-            ext_xyz_to_db(dbpath, xyzpath, properties=self.available_properties)
+            extxyz_to_db(dbpath, xyzpath, db_properties=self.available_properties)
         super(ExtXYZ, self).__init__(dbpath, subset, properties,
                                      environment_provider, pair_provider,
                                      center_positions)

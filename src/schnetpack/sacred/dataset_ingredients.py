@@ -1,7 +1,7 @@
 import os
 from sacred import Ingredient
 from schnetpack.datasets import ANI1, ISO17, QM9, MD17, MaterialsProject
-from schnetpack.data.parsing import ext_xyz_to_db
+from schnetpack.data.parsing import extxyz_to_db
 from schnetpack.data import AtomsData, AtomsDataError
 from schnetpack.atomistic import Properties
 
@@ -190,7 +190,7 @@ def get_dataset(_log, dbpath, dataset, dataset_properties=None):
         if extension == '.db':
             return AtomsData(dbpath, required_properties=dataset_properties)
         elif extension == '.xyz':
-            ext_xyz_to_db(dbpath=file+'.db', xyzpath=dbpath)
+            extxyz_to_db(db_path=file + '.db', xyzpath=dbpath)
             return AtomsData(file+'.db', required_properties=dataset_properties)
         else:
             raise NotImplementedError
