@@ -17,6 +17,7 @@ from schnetpack.data import Structure
 import schnetpack.nn as L
 
 
+
 class AtomisticModel(nn.Module):
     """
     Assembles an atomistic model from a representation module and one or more output modules.

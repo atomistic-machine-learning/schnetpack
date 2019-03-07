@@ -16,7 +16,7 @@ def expand_tril(xs):
 
 class GDML(nn.Module):
     """
-    sGDML model.
+    Interface to a trained sGDML model.
 
     Args:
         model (Mapping): returned by GDMLTrain.train() from the sGDML package
