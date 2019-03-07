@@ -17,18 +17,10 @@ evaluator_ing = Ingredient('evaluator', ingredients=[evaluation_loader_ing,
 @evaluator_ing.config
 def config():
     """configuration of the evaluator ingredient"""
-    out_file = 'evaluation.db'
-
-
-@evaluator_ing.named_config
-def npz():
-    out_file = 'evaluation.npz'
-
 
 @evaluator_ing.capture
-def build_evaluator(_log, model_path, out_file, output_dir):
-    file_type = os.path.splitext(out_file)[1]
-    out_path = os.path.join(output_dir, out_file)
+def build_evaluator(_log, model_path, out_path):
+    file_type = os.path.splitext(out_path)[1]
     _log.info('loading data...')
     data = get_eval_data()
     dataloader = build_eval_loader(data)

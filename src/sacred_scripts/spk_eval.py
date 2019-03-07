@@ -9,16 +9,15 @@ eval_ex = Experiment('evaluation', ingredients=[evaluator_ing])
 
 @eval_ex.config
 def config():
-    output_dir = 'evaluation'
-    os.makedirs(output_dir, exist_ok=True)
+    out_path = './results.db'
     model_path = './training/best_model'
     device = 'cpu'
 
 
 @eval_ex.command
-def evaluate(_log, model_path, output_dir, device):
+def evaluate(_log, model_path, out_path, device):
     _log.info('build evaluator...')
-    evaluator = build_evaluator(model_path=model_path, output_dir=output_dir)
+    evaluator = build_evaluator(model_path=model_path, out_path=out_path)
     _log.info('evaluating...')
     evaluator.evaluate(device=device)
 

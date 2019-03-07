@@ -7,7 +7,7 @@ SchNetPack requires your data to be provided as ``ase`` database. If your
 data consists of ``.xyz`` or ``.extxyz`` files, you can use the parsing
 script, in order to convert your data. The script is called with::
 
-    $ spk_parse.py parse with file_path=path-to-in-file db_path=path-to-out-db
+    $ spk_parse.py parse with file_path=<file-path> db_path=<db-path>
 
 The script will automatically check your file extension in order to
 distinguish between ``.xyz`` and ``.extxyz`` files. If you provide an ``.xyz``
@@ -31,8 +31,8 @@ The data contains molecular properties in the second row and atomic
 properties in the following rows. In order to parse this snippet, add the
 definition of molecular properties and forces to your run arguments::
 
-    $ spk_parse.py parse with forces file_path=in-path.xyz db_path=db-path.db
-     "molecular_properties=['energy']"
+    $ spk_parse.py parse with forces file_path=<file-path> db_path=<db-path>
+      "molecular_properties=['energy']"
 
 .. note::
 

@@ -1,6 +1,6 @@
 import os
 from sacred import Ingredient
-from schnetpack.data.parsing import extxyz_to_db
+from schnetpack.data.parsing import generate_db
 from schnetpack.data.atoms import AtomsData
 
 
@@ -15,9 +15,9 @@ def config():
 @eval_data_ing.capture
 def get_eval_data(path):
     data_type = os.path.splitext(path)[1]
-    if data_type == '.xyz':
+    if data_type in ['.xyz', '.extxyz']:
         path_to_db = path[:-4] + '.db'
-        extxyz_to_db(path_to_db, path)
+        generate_db(path, path_to_db)
     elif data_type == '.db':
         path_to_db = path
     else:

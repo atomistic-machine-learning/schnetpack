@@ -23,6 +23,7 @@ setup(
              'src/sacred_scripts/spk_train.py',
              'src/sacred_scripts/spk_md.py',
              'src/sacred_scripts/spk_parse.py',
+             'src/sacred_scripts/spk_eval.py',
              'src/scripts/schnetpack_omdb.py'],
     package_dir={'': 'src'},
     python_requires='>=3.6',
