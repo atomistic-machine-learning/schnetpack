@@ -5,7 +5,7 @@ import torch.nn as nn
 
 def expand_tril(xs):
     n = int((1 + np.sqrt(8 * xs.shape[-1] + 1)) / 2)
-    xs_full = torch.zeros((xs.shape[0], n, n), dtype=xs.dtype)
+    xs_full = torch.zeros((xs.shape[0], n, n), dtype=xs.dtype, device=xs.device)
     i, j = np.tril_indices(n, k=-1)
     xs_full[:, i, j] = xs
     xs_full[:, j, i] = xs
@@ -50,17 +50,17 @@ class GDML(nn.Module):
         dists[:, i, j] = np.inf
         i, j = np.tril_indices(self._n_atoms, k=-1)
         xs = 1 / dists[:, i, j]
-        x_diffs = xs[:, None, :] - self._xs_train
-        x_dists = np.sqrt(5) * x_diffs.norm(p=2, dim=-1)
-        Ks = 5 / (3 * sig ** 3) * torch.exp(-x_dists / sig)
-        # TODO rewrite to enable single-precision evaluation
-        tmp1 = (x_diffs * self._Jx_alphas).sum(dim=-1)
-        tmp2 = (x_dists + sig) * Ks
-        Fs_x = (
-            5 / sig * ((Ks * tmp1)[:, :, None] * x_diffs).sum(dim=1)
-            - tmp2 @ self._Jx_alphas
-        )
-        Es = self._c + (tmp1 * tmp2).sum(dim=-1) * self._std
+        q = np.sqrt(5) / sig
+        x_diffs = (q * xs)[:, None, :] - q * self._xs_train
+        x_dists = x_diffs.norm(p=2, dim=-1)
+        exp_xs = 5 / (3 * sig ** 2) * torch.exp(-x_dists)
+        dot_x_diff_Jx_alphas = (x_diffs * self._Jx_alphas).sum(dim=-1)
+        exp_xs_1_x_dists = exp_xs * (1 + x_dists)
+        F1s_x = ((exp_xs * dot_x_diff_Jx_alphas)[:, :, None] * x_diffs).sum(dim=1)
+        F2s_x = exp_xs_1_x_dists @ self._Jx_alphas
+        Fs_x = F1s_x - F2s_x
+        Es = (exp_xs_1_x_dists * dot_x_diff_Jx_alphas).sum(dim=-1) / q
+        Es = self._c + Es * self._std
         Fs = (
             (expand_tril(Fs_x * self._std) / dists ** 3)[:, :, :, None]
             * (Rs[:, :, None, :] - Rs[:, None, :, :])
