@@ -32,14 +32,14 @@ SETUP_STRING = "\n\n{:s}\n{:s}\n{:s}".format(SETUP_STRING_WIDTH * "=",
 @md.config
 def config():
     """configuration for the simulation experiment"""
-    experiment_dir = 'experiment'
+    simulation_dir = 'experiment'
     simulation_steps = 1000
     device = 'cpu'
     overwrite = True
 
 
 @md.capture
-def save_system_config(_config, experiment_dir):
+def save_system_config(_config, simulation_dir):
     """
     Save the configuration to the model directory.
 
@@ -48,7 +48,7 @@ def save_system_config(_config, experiment_dir):
         simulation_dir (str): path to the simulation directory
 
     """
-    with open(os.path.join(experiment_dir, 'config.yaml'), 'w') as f:
+    with open(os.path.join(simulation_dir, 'config.yaml'), 'w') as f:
         yaml.dump(_config, f, default_flow_style=False)
 
 
@@ -72,7 +72,7 @@ def setup_simulation(_log, simulation_dir, device):
 
 
 @md.capture
-def create_dirs(_log, experiment_dir, overwrite):
+def create_dirs(_log, simulation_dir, overwrite):
     """
     Create the directory for the experiment.
 
@@ -83,11 +83,9 @@ def create_dirs(_log, experiment_dir, overwrite):
 
     """
 
-    simulation_dir = os.path.join(experiment_dir, 'simulation')
-
     _log.info("Create model directory")
     if simulation_dir is None:
-        raise ValueError('Config `experiment_dir` has to be set!')
+        raise ValueError('Config `simulation_dir` has to be set!')
 
     if os.path.exists(simulation_dir) and not overwrite:
         raise ValueError(
@@ -102,8 +100,7 @@ def create_dirs(_log, experiment_dir, overwrite):
 
 
 @md.command
-def simulate(experiment_dir, simulation_steps):
-    simulation_dir = os.path.join(experiment_dir, 'simulation')
+def simulate(simulation_dir, simulation_steps):
     create_dirs()
     save_system_config()
     simulator = setup_simulation(simulation_dir=simulation_dir)
@@ -111,8 +108,8 @@ def simulate(experiment_dir, simulation_steps):
 
 
 @md.command
-def save_config(_log, _config, experiment_dir):
-    file_name = f"{experiment_dir}_config.yaml"
+def save_config(_log, _config, simulation_dir):
+    file_name = f"{simulation_dir}_config.yaml"
     with open(file_name, 'w') as f:
         yaml.dump(_config, f, default_flow_style=False)
     _log.info(f'Stored config to {file_name}')

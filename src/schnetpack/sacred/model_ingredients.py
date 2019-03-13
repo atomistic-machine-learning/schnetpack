@@ -1,7 +1,7 @@
 from sacred import Ingredient
 
 from schnetpack.representation.schnet import SchNet
-from schnetpack.atomistic import AtomisticModel, ModelError, Properties, \
+from schnetpack.atomistic import AtomisticModel, ModelError, \
     PropertyModel
 from schnetpack.nn.cutoff import *
 
@@ -11,24 +11,19 @@ model_ingredient = Ingredient('model')
 
 @model_ingredient.config
 def cfg():
-    """configuration for the model ingredient"""
-    name = None
-    n_atom_basis = -1
-
-
-@model_ingredient.named_config
-def schnet():
-    """configuration for the SchNet model"""
-    name = 'schnet'
-    n_atom_basis = 128
-    n_filters = 128
-    n_interactions = 6
-    cutoff = 5.0
-    n_gaussians = 25
-    normalize_filter = False
-    coupled_interactions = False
-    max_z = 100
-    cutoff_network = 'hard'
+    r"""
+    configuration for model
+    """
+    name = 'schnet'     # name of the representation network
+    n_atom_basis = 128  #number of features used to describe atomic environments
+    n_filters = 128 # number of filters used in continuous-filter convolution
+    n_interactions = 6  # number of interaction layers
+    cutoff = 5.0        # cutoff
+    n_gaussians = 25    # number of Gaussians which are used to expand atom distances
+    normalize_filter = False    # if true, divide filter by number of neighbors over which convolution is applied
+    coupled_interactions = False    # use shared weights for interaction layers
+    max_z = 100     # maximum number of atoms in molecule
+    cutoff_network = 'hard'     # type of cutoff network
 
 
 @model_ingredient.capture
@@ -134,4 +129,3 @@ def build_schnet(return_intermediate,
         cutoff_network=cutoff_function,
         charged_systems=False
     )
-

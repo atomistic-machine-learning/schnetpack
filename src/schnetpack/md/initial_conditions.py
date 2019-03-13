@@ -1,6 +1,8 @@
 import torch
 
 
+__all__ = ['Initializer', 'MaxwellBoltzmannInit']
+
 class Initializer:
     """
     Basic initializer class template. Initializes the systems momenta to correspond to a certain temperature.

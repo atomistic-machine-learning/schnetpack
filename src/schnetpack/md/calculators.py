@@ -39,7 +39,6 @@ class MDCalculator:
         treated separately.
         """
         for p in self.required_properties:
-
             if p not in self.results:
                 raise MDCalculatorError('Requested property {:s} not in '
                                         'results'.format(p))

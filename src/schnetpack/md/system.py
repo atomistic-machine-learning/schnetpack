@@ -3,7 +3,6 @@ from ase.io import read
 
 from schnetpack.md.utils import MDUnits, compute_centroid, batch_inverse
 from schnetpack.md.neighbor_lists import SimpleNeighborList
-from schnetpack.md.initial_conditions import MaxwellBoltzmannInit
 
 
 class SystemException(Exception):

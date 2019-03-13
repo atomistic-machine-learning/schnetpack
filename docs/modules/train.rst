@@ -19,8 +19,6 @@ Hooks
 
 .. automodule:: schnetpack.train.hooks
 
-.. autoclass:: schnetpack.train.Hook
-   :members:
 
 .. autoclass:: schnetpack.train.LoggingHook
    :members:

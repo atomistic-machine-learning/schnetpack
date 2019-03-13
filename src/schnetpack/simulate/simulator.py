@@ -34,6 +34,7 @@ class Simulator:
                                         during simulations. Examples would be
                                         file loggers and thermostats.
         step (int): Index of the initial simulation step.
+
     """
 
     def __init__(self,
@@ -119,6 +120,7 @@ class Simulator:
             dict: State dict containing the current step, the system
                   parameters (positions, momenta, etc.) and all
                   simulator_hook state dicts
+
         """
         state_dict = {
             'step': self.step,
@@ -139,6 +141,7 @@ class Simulator:
         Args:
             state_dict (dict): state dict containing the entries 'step',
             'simulator_hooks' and 'system'.
+
         """
         self.step = state_dict['step']
         self.system.state_dict = state_dict['system']
@@ -164,6 +167,7 @@ class Simulator:
             state_dict (dict): State dict of the current simulation
             soft (bool): Flag to toggle hard/soft thermostat restarts (
                          default=False)
+
         """
         self.step = state_dict['step']
         self.system.state_dict = state_dict['system']

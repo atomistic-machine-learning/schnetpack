@@ -11,17 +11,23 @@ def atom_distances(positions, neighbors, cell=None, cell_offsets=None,
     neighbors to consider are stored in neighbors.
 
     Args:
-        positions (torch.Tensor): Atomic positions, differentiable torch Variable (B x N_at x 3)
-        neighbors (torch.Tensor): Indices of neighboring atoms (B x N_at x N_nbh)
+        positions (torch.Tensor): Atomic positions, differentiable torch
+            Variable (B x N_at x 3)
+        neighbors (torch.Tensor): Indices of neighboring
+            atoms (B x N_at x N_nbh)
         cell (torch.Tensor): cell for periodic systems (B x 3 x 3)
-        cell_offsets (torch.Tensor): offset of atom in cell coordinates (B x N_at x N_nbh x 3)
+        cell_offsets (torch.Tensor): offset of atom in cell
+            coordinates (B x N_at x N_nbh x 3)
         return_directions (bool): If true, also return direction cosines.
-        neighbor_mask (torch.Tensor, optional): Boolean mask for neighbor positions. Required for the stable
-                                                computation of forces in molecules with different sizes.
+        neighbor_mask (torch.Tensor, optional): Boolean mask for neighbor
+            positions. Required for the stable computation of forces in
+            molecules with different sizes.
 
     Returns:
-        torch.Tensor: Distances of every atom to its neighbors (B x N_at x N_nbh)
-        torch.Tensor: Direction cosines of every atom to its neighbors (B x N_at x N_nbh x 3) (optional)
+        torch.Tensor: Distances of every atom to its
+            neighbors (B x N_at x N_nbh)
+        torch.Tensor: Direction cosines of every atom to its
+            neighbors (B x N_at x N_nbh x 3) (optional)
     """
 
     # Construct auxiliary index vector
@@ -46,8 +52,9 @@ def atom_distances(positions, neighbors, cell=None, cell_offsets=None,
     distances = torch.norm(dist_vec, 2, 3)
 
     if neighbor_mask is not None:
-        # Avoid problems with zero distances in forces (instability of square root derivative at 0)
-        # This way is neccessary, as gradients do not work with inplace operations, such as e.g.
+        # Avoid problems with zero distances in forces (instability of square
+        # root derivative at 0) This way is neccessary, as gradients do not
+        # work with inplace operations, such as e.g.
         # -> distances[mask==0] = 0.0
         tmp_distances = torch.zeros_like(distances)
         tmp_distances[neighbor_mask != 0] = distances[neighbor_mask != 0]
@@ -83,15 +90,20 @@ class AtomDistances(nn.Module):
                 neighbor_mask=None):
         """
         Args:
-            positions (torch.Tensor): Atomic positions, differentiable torch Variable (B x N_at x 3)
-            neighbors (torch.Tensor): Indices of neighboring atoms (B x N_at x N_nbh)
+            positions (torch.Tensor): Atomic positions, differentiable torch
+                Variable (B x N_at x 3)
+            neighbors (torch.Tensor): Indices of neighboring
+                atoms (B x N_at x N_nbh)
             cell (torch.tensor): cell for periodic systems (B x 3 x 3)
-            cell_offsets (torch.Tensor): offset of atom in cell coordinates (B x N_at x N_nbh x 3)
-            neighbor_mask (torch.Tensor, optional): Boolean mask for neighbor positions. Required for the stable
-                                                    computation of forces in molecules with different sizes.
+            cell_offsets (torch.Tensor): offset of atom in cell
+                coordinates (B x N_at x N_nbh x 3)
+            neighbor_mask (torch.Tensor, optional): Boolean mask for neighbor
+                positions. Required for the stable computation of forces in
+                molecules with different sizes.
 
         Returns:
-            torch.Tensor: Distances of every atoms to its neighbors (B x N_at x N_nbh)
+            torch.Tensor: Distances of every atoms to its
+                neighbors (B x N_at x N_nbh)
         """
         return atom_distances(positions, neighbors, cell, cell_offsets,
                               return_directions=self.return_directions,
@@ -132,8 +144,8 @@ def triple_distances(positions, neighbors_j, neighbors_k):
 
 class TriplesDistances(nn.Module):
     """
-    Layer that gets all distances between atoms forming a triangle with the central atoms.
-    Required e.g. for angular symmetry functions.
+    Layer that gets all distances between atoms forming a triangle with the
+    central atoms. Required e.g. for angular symmetry functions.
     """
 
     def __init__(self):
@@ -157,8 +169,9 @@ class TriplesDistances(nn.Module):
 
 def neighbor_elements(atomic_numbers, neighbors):
     """
-    Return the atomic numbers associated with the neighboring atoms. Can also be used to gather other properties by
-    neighbors if different atom-wise Tensor is passed instead of atomic_numbers.
+    Return the atomic numbers associated with the neighboring atoms. Can also
+    be used to gather other properties by neighbors if different atom-wise
+    Tensor is passed instead of atomic_numbers.
 
     Args:
         atomic_numbers (torch.Tensor): Atomic numbers (Nbatch x Nat x 1)

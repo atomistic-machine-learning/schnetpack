@@ -23,6 +23,9 @@
 .. autoclass:: schnetpack.metrics.HeatmapMAE
    :members:
 
+.. autoclass:: schnetpack.metrics.SumMAE
+   :members:
+
 .. autoclass:: schnetpack.metrics.LengthMSE
    :members:
 
