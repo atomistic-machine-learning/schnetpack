@@ -10,25 +10,29 @@ dataset_ingredient = Ingredient("dataset")
 
 @dataset_ingredient.config
 def cfg():
-    """configuration for the dataset ingredient"""
-    dbpath = None
-    dataset = 'CUSTOM'
-    property_mapping = {}
+    """Settings for training dataset"""
+    dbpath = None           # path to ase.db
+    dataset = 'CUSTOM'      # dataset name; use for pre-implemented datasets
+    property_mapping = {}   # mapping from model properties to data properties
 
 
 @dataset_ingredient.named_config
 def qm9():
-    """configuration for the QM9 dataset"""
+    """Default settings for QM9 dataset."""
     dbpath = './data/qm9.db'
     dataset = 'QM9'
     property_mapping = {Properties.energy: QM9.U0,
                         Properties.dipole_moment: QM9.mu,
                         Properties.iso_polarizability: QM9.alpha}
-    print(property_mapping)
 
 @dataset_ingredient.named_config
 def iso17():
-    """configuration for the ISO17 dataset"""
+    """
+    Default settings for ISO17 dataset.
+
+    Adds:
+        fold (str): name of the dataset inside the iso17 folder
+    """
     dbpath = './data'
     dataset = 'ISO17'
     fold = 'reference'
@@ -38,7 +42,12 @@ def iso17():
 
 @dataset_ingredient.named_config
 def ani1():
-    """configuration for the ANI1 dataset"""
+    """
+    Default settings for ANI1 dataset.
+
+    Adds:
+        num_heavy_atoms (int): maximum number of heavy atoms
+    """
     dbpath = './data/ani1.db'
     dataset = 'ANI1'
     num_heavy_atoms = 2
@@ -47,7 +56,12 @@ def ani1():
 
 @dataset_ingredient.named_config
 def md17():
-    """configuration for the MD17 dataset"""
+    """
+    Default settings for MD17 dataset.
+
+    Adds:
+        molecule (str): name of the molecule that is included in MD17
+    """
     dbpath = './data'
     dataset = 'MD17'
     molecule = 'aspirin'
@@ -57,7 +71,13 @@ def md17():
 
 @dataset_ingredient.named_config
 def matproj():
-    """configuration for the Materials Project dataset"""
+    """
+    Default settings for Materials Project dataset.
+
+    Adds:
+        cutoff (float):
+        api_key (str): personal api key from https://materialsproject.org
+    """
     dbpath = './data/matproj.db'
     dataset = 'MATPROJ'
     cutoff = 5.

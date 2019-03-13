@@ -2,7 +2,6 @@ import os
 from shutil import rmtree
 import yaml
 from sacred import Experiment
-from sacred.observers import MongoObserver
 from schnetpack.sacred.dataset_ingredients import dataset_ingredient, \
     get_dataset, get_property_map
 from schnetpack.sacred.model_ingredients import model_ingredient, build_model
@@ -21,10 +20,10 @@ def cfg():
     r"""
     configuration for training script
     """
-    overwrite = True    # overwrite model_dir if True
-    additional_outputs = []     # additional model outputs
-    device = 'cpu'  # device that is used for training <cpu/cuda>
-    model_dir = 'training'  # directory for training outputs
+    overwrite = True                    # overwrite model_dir if True
+    additional_outputs = []             # additional model outputs
+    device = 'cpu'                 # device that is used for training <cpu/cuda>
+    model_dir = 'training'              # directory for training outputs
     properties = ['energy', 'forces']   # model properties
 
 

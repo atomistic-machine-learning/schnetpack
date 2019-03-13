@@ -26,6 +26,16 @@ def forces():
 
 @parsing.command
 def parse(file_path, db_path, atomic_properties, molecular_properties):
+    """
+    Runs the data parsing.
+
+    Args:
+        file_path (str): path to input file
+        db_path (str): path to output file
+        atomic_properties (str): property string for .xyz files
+        molecular_properties (list): list with molecular properties in
+            comment section
+    """
     generate_db(file_path, db_path, atomic_properties, molecular_properties)
 
 

@@ -20,6 +20,16 @@ def config():
 
 @evaluator_ing.capture
 def build_evaluator(_log, model_path, out_path):
+    """
+    Create the evaluator object.
+
+    Args:
+        model_path (str): oath to the trained model
+        out_path (str): path to the output file
+
+    Returns:
+        Evaluator object
+    """
     file_type = os.path.splitext(out_path)[1]
     _log.info('loading data...')
     data = get_eval_data()
@@ -38,9 +48,15 @@ def build_evaluator(_log, model_path, out_path):
 
 @evaluator_ing.capture
 def get_npz_evaluator(model, dataloader, out_path):
+    """
+    Build evaluator for npz output format.
+    """
     return NPZEvaluator(model, dataloader, out_path)
 
 
 @evaluator_ing.capture
 def get_db_evaluator(model, dataloader, out_path):
+    """
+    Build evaluator for ase.db output format.
+    """
     return DBEvaluator(model, dataloader, out_path)

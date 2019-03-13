@@ -114,12 +114,27 @@ evaluation_loader_ing = Ingredient('dataloader')
 
 @evaluation_loader_ing.config
 def config():
-    batch_size = 32
-    num_workers = 4
-    pin_memory = True
+    """
+    Settings for evaluation dataloader.
+    """
+    batch_size = 32         # batch size
+    num_workers = 4         # number of workers
+    pin_memory = True       # copy tensors into cuda pinned memory
 
 
 @evaluation_loader_ing.capture
 def build_eval_loader(data, batch_size, num_workers, pin_memory):
+    """
+    Build the dataloader for the evaluation data.
+
+    Args:
+        data: Dataset
+        batch_size (int): batch size
+        num_workers (int): number of workers
+        pin_memory (bool): copy tensors into cuda pinned memory
+
+    Returns:
+        DataLoader for evaluation data
+    """
     return AtomsLoader(data, batch_size, pin_memory=pin_memory,
                        num_workers=num_workers)

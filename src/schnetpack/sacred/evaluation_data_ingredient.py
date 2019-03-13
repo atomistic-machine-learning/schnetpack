@@ -9,11 +9,23 @@ eval_data_ing = Ingredient('dataset')
 
 @eval_data_ing.config
 def config():
-    path = 'data/ethanol_test_ext.xyz'
+    """
+    Settings for evaluation dataset with missing properties.
+    """
+    path = 'data/ethanol_test_ext.xyz'  # path to the input file
 
 
 @eval_data_ing.capture
 def get_eval_data(path):
+    """
+    Build dataset that needs to be evaluated.
+
+    Args:
+        path (str): path to the input file
+
+    Returns:
+        schnetpack.data.Atomsdata dataset
+    """
     data_type = os.path.splitext(path)[1]
     if data_type in ['.xyz', '.extxyz']:
         path_to_db = path[:-4] + '.db'
