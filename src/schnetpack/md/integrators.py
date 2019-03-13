@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 
+
 from schnetpack.md.utils import NormalModeTransformer, MDUnits
 
 

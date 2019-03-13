@@ -6,6 +6,9 @@ from ase import Atoms
 
 import schnetpack.data
 
+__all__ = ['max_atoms', 'example_asedata', 'property_spec', 'example_data',
+           'num_data']
+
 
 @pytest.fixture
 def max_atoms():

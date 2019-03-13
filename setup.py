@@ -34,6 +34,9 @@ setup(
         "tensorboardX",
         "h5py"
     ],
+    extras_require={
+        'test': ['pytest', 'sacred'],
+    },
     license='MIT',
     description='SchNetPack - Deep Neural Networks for Atomistic Systems',
     long_description=read('README.md')
