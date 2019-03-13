@@ -7,6 +7,6 @@ test
    :maxdepth: 1
 
    basics
-   training
    md
+
 

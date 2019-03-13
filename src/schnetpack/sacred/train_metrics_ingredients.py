@@ -6,8 +6,11 @@ metrics_ing = Ingredient('metrics')
 
 @metrics_ing.config
 def config():
-    names = []
-    element_wise = ['forces']
+    r"""
+    Settings for metrics that will be used for logging the training session.
+    """
+    names = []                  # names of logging metrics
+    element_wise = ['forces']   # list of elementwise properties (e.g. forces)
 
 
 @metrics_ing.capture
@@ -23,7 +26,6 @@ def build_metrics(names, property_map, element_wise):
 
     Returns:
         list of schnetpack.metrics.Metric objects
-
     """
     metrics_objects = []
     for metric in names:

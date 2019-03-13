@@ -18,22 +18,14 @@ ex = Experiment('experiment', ingredients=[model_ingredient, train_ingredient,
 
 @ex.config
 def cfg():
-    """configuration configuration for training experiment"""
-    overwrite = True
-    additional_outputs = []
-    device = 'cpu'
-    model_dir = 'training'
-    properties = ['energy', 'forces']
-
-
-@ex.named_config
-def observe():
-    """configuration for observing experiments"""
-
-    mongo_url = 'mongodb://127.0.0.1:27017'
-    mongo_db = 'test'
-    ex.observers.append(MongoObserver.create(url=mongo_url,
-                                             db_name=mongo_db))
+    r"""
+    configuration for training script
+    """
+    overwrite = True    # overwrite model_dir if True
+    additional_outputs = []     # additional model outputs
+    device = 'cpu'  # device that is used for training <cpu/cuda>
+    model_dir = 'training'  # directory for training outputs
+    properties = ['energy', 'forces']   # model properties
 
 
 @ex.capture
@@ -43,7 +35,7 @@ def save_config(_config, model_dir):
 
     Args:
         _config (dict): configuration of the experiment
-        train_dir (str): path to the training directory
+        model_dir (str): path to the training directory
 
     """
     with open(os.path.join(model_dir, 'config.yaml'), 'w') as f:
@@ -56,10 +48,8 @@ def create_dirs(_log, model_dir, overwrite):
     Create the directory for the experiment.
 
     Args:
-        _log:
         model_dir (str): path to the training directory
         overwrite (bool): overwrites the model directory if True
-
     """
     _log.info("Create model directory")
     if model_dir is None:
@@ -83,7 +73,6 @@ def train(_log, _config, model_dir, properties, additional_outputs, device):
     Build a trainer from the configuration and start the training.
 
     Args:
-        _log:
         _config (dict): configuration dictionary
         model_dir (str): path to the training directory
         properties (list): list of model properties

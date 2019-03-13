@@ -7,7 +7,10 @@ loss_ing = Ingredient('loss_function')
 
 @loss_ing.config
 def config():
-    loss_tradeoff = {}
+    r"""
+    Settings for the loss function that will be used during training.
+    """
+    loss_tradeoff = {}      # weighting  dictionary for loss calculation
 
 
 @loss_ing.capture

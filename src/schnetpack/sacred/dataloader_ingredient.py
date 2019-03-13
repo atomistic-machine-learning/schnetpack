@@ -14,17 +14,35 @@ def is_extensive(prop):
 
 @dataloader_ing.config
 def config():
-    num_workers = 4
-    num_train = 0.8
-    num_val = 0.1
-    batch_size = 128
-    mean = None
-    stddev = None
+    r"""
+    Settings for training dataloader
+    """
+    num_workers = 4     # number of workers
+    num_train = 0.8     # (rel.) number of training data
+    num_val = 0.1       # (rel.) number of validation data
+    batch_size = 128    # batch size
+    mean = None         # dict with property means of dataset
+    stddev = None       # dict with property stddev of dataset
 
 
 @dataloader_ing.capture
 def build_dataloaders(_seed, num_train, num_val, batch_size, num_workers,
                       property_map, dataset):
+    """
+    Build the dataloader that is used for training.
+
+    Args:
+        num_train (int/float): (rel.) number of datapoints for training
+        num_val (int/float): (rel.) number of datapoints for validation
+        batch_size (int): batch size
+        num_workers (int): number of workers
+        property_map (dict): mapping between model properties (keys) and dataset
+            properties (values)
+        dataset (schnetpack.data.AtomsData): dataset object
+
+    Returns:
+        dataloader for training
+    """
     # local seed
     np.random.seed(_seed)
 

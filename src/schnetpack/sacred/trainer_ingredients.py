@@ -13,7 +13,6 @@ train_ingredient = Ingredient('trainer', ingredients=[optimizer_ing,
 
 @train_ingredient.config
 def cfg():
-    """configuration for the trainer ingredient"""
     pass
 
 
