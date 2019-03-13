@@ -15,7 +15,6 @@ class MDCalculator:
                  property_conversion={}):
         self.results = {}
         self.force_handle = force_handle
-        print('*', required_properties)
         self.required_properties = required_properties
         self.position_conversion = position_conversion
         self.force_conversion = force_conversion
@@ -40,8 +39,6 @@ class MDCalculator:
         treated separately.
         """
         for p in self.required_properties:
-            print(self.results.keys())
-            print(self.required_properties)
             if p not in self.results:
                 raise MDCalculatorError('Requested property {:s} not in '
                                         'results'.format(p))
