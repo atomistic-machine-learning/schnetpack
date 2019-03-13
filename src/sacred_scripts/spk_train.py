@@ -20,7 +20,7 @@ def cfg():
     r"""
     configuration for training script
     """
-    overwrite = True                    # overwrite model_dir if True
+    overwrite = False                   # overwrite model_dir if True
     additional_outputs = []             # additional model outputs
     device = 'cpu'                 # device that is used for training <cpu/cuda>
     model_dir = 'training'              # directory for training outputs
@@ -52,7 +52,7 @@ def create_dirs(_log, model_dir, overwrite):
     """
     _log.info("Create model directory")
     if model_dir is None:
-        raise ValueError('Config `experiment_dir` has to be set!')
+        raise ValueError('Config `model_dir` has to be set!')
 
     if os.path.exists(model_dir) and not overwrite:
         raise ValueError(
