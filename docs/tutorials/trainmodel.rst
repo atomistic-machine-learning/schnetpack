@@ -18,7 +18,10 @@ location that you have defined with the ``model_dir`` argument. The new
 directory is used to store checkpoints, logging files and your best model of
 the training session. By setting the ``schedule_hooks`` to
 ``reduce_on_plateau`` the learning rate will automatically decrease during
-training, if the training does not improve any further.
+training, if the training does not improve any further. For a detailed view
+on the possible parameters run::
+
+    $ spk.train.py print_config
 
 Choosing the Dataset
 --------------------
