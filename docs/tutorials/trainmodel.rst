@@ -3,27 +3,27 @@
 Train a model with SchNetPack
 =============================
 
-
-The easiest way to train a model on a dataset is to use the provided
+The recommended way to train a model on a dataset is to use the provided
 sacred scripts. A general guide to sacred can be found at section
-:ref:`sacred basics`. In order to train a model run::
+:ref:`sacred basics`. The command to train a model is::
 
     $ spk_train.py train with model_dir=path/to/store/model dataset.<qm9/...>
       device=<cpu/cuda> schedule_hooks.reduce_on_plateau
 
-This will automatically download the dataset, train a SchNet model and use
-80% of the data for training, 10% of the data for validation and the
-remaining 10% for testing. Furthermore a new directory will be created at the
-location that you have defined with the ``model_dir`` argument. The new
-directory is used to store checkpoints, logging files and your best model of
-the training session. By setting the ``schedule_hooks`` to
-``reduce_on_plateau`` the learning rate will automatically decrease during
-training, if the training does not improve any further. For a detailed view
-on the possible parameters run::
+This will automatically download the specified dataset dataset, train a SchNet model
+and use 80% of the data for training, 10% of the data for validation and the remaining
+10% for testing.
+Furthermore a new directory will be created at the location that you have defined
+with the ``model_dir`` argument.
+The new directory is used to store checkpoints, logging files and your best model of
+the training session.
+By setting the ``schedule_hooks`` to ``reduce_on_plateau`` the learning rate will
+automatically decrease during training, if the training does not improve any further.
+For a detailed view on the possible parameters run::
 
     $ spk.train.py print_config
 
-Choosing the Dataset
+Selecting the Dataset
 --------------------
 
 You can either choose from a number of pre-implemented datasets which are
@@ -31,7 +31,8 @@ downloaded automatically, or train the model on your own data. In order to
 use the pre-implemented datasets, add ``dataset.<name>`` to your
 run arguments. Available datasets are QM9 (as ``qm9``), ISO17 (as ``iso17``),
 ANI1 (as ``ani1``), MD17 (as ``md17``) and Materials Project (as ``matproj``).
-In order to use your own data you must provide it as an ``ase.db``.
+
+In order to use your own data you must provide it as an ``ase db`` file.
 Visit :ref:`Prepare Data` for additional information on the requirements for
 your dataset. After preparing your data use ``dataset.dbpath=<path>`` instead
 of choosing a pre-implemented dataset. Additionally you will need to define a
@@ -52,3 +53,5 @@ TensorBoard open a new terminal and run::
 
 This will return the url of your TensorBoard. Paste the url to your browser and
 your training session will show up.
+
+

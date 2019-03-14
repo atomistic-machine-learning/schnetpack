@@ -106,4 +106,4 @@ def train(_log, _config, model_dir, properties, additional_outputs, device):
 
 @ex.automain
 def main():
-    print(ex.config)
+    train()

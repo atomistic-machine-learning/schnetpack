@@ -12,6 +12,8 @@ References
 """
 
 import os
+from collections import Iterable
+from .utils import DeprecationHelper
 
 import numpy as np
 import torch
@@ -21,19 +23,16 @@ from ase.io import read, write
 from ase.io.trajectory import Trajectory
 from ase.io.xyz import read_xyz, write_xyz
 from ase.md import VelocityVerlet, Langevin, MDLogger
-from ase.md.velocitydistribution import MaxwellBoltzmannDistribution,\
+from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, \
     Stationary, ZeroRotation
 from ase.optimize import QuasiNewton
 from ase.vibrations import Vibrations
 
-from collections import Iterable
-
 from schnetpack.atomistic import Energy, ElementalEnergy, Properties
 from schnetpack.data import Structure
-from schnetpack.environment import SimpleEnvironmentProvider,\
+from schnetpack.environment import SimpleEnvironmentProvider, \
     collect_atom_triples
-from schnetpack.representation import SchNet, BehlerSFBlock, StandardizeSF
-from schnetpack.utils import read_from_json
+from schnetpack.representation import BehlerSFBlock
 
 
 class MDModelError(Exception):
@@ -61,7 +60,7 @@ class Model:
         self.device = device
 
 
-class MLPotential(Calculator):
+class SpkCalculator(Calculator):
     """
     ASE calculator for schnetpack machine learning models.
 
@@ -163,26 +162,26 @@ class AtomsConverter:
         # Get neighbors and neighbor mask
         mask = torch.FloatTensor(nbh_idx) >= 0
         inputs[Structure.neighbor_mask] = mask.float()
-        inputs[Structure.neighbors] =\
+        inputs[Structure.neighbors] = \
             torch.LongTensor(nbh_idx.astype(np.int)) * mask.long()
 
         # Get cells
-        inputs[Structure.cell] =\
+        inputs[Structure.cell] = \
             torch.FloatTensor(atoms.cell.astype(np.float32))
-        inputs[Structure.cell_offset] =\
+        inputs[Structure.cell_offset] = \
             torch.FloatTensor(offsets.astype(np.float32))
 
         # Set index
-        #inputs['_idx'] = torch.LongTensor(np.array([idx], dtype=np.int))
+        # inputs['_idx'] = torch.LongTensor(np.array([idx], dtype=np.int))
 
         # If requested get masks and neighbor lists for neighbor pairs
         if self.collect_triples is not None:
             nbh_idx_j, nbh_idx_k = collect_atom_triples(nbh_idx)
-            inputs[Structure.neighbor_pairs_j] =\
+            inputs[Structure.neighbor_pairs_j] = \
                 torch.LongTensor(nbh_idx_j.astype(np.int))
-            inputs[Structure.neighbor_pairs_k] =\
+            inputs[Structure.neighbor_pairs_k] = \
                 torch.LongTensor(nbh_idx_k.astype(np.int))
-            inputs[Structure.neighbor_pairs_mask] =\
+            inputs[Structure.neighbor_pairs_mask] = \
                 torch.ones_like(inputs[Structure.neighbor_pairs_j]).float()
 
         # Add batch dimension and move to CPU/GPU
@@ -214,7 +213,7 @@ class AseInterface:
         self._load_molecule(molecule_path)
 
         # Set up calculator
-        calculator = MLPotential(ml_model)
+        calculator = SpkCalculator(ml_model)
         self.molecule.set_calculator(calculator)
 
         # Unless initialized, set dynamics to False
@@ -433,3 +432,5 @@ def load_model(modelpath, cuda=True):
     ml_model = Model(model, model_type, device)
 
     return ml_model
+
+MLPotential = DeprecationHelper(SpkCalculator, 'MLPotential')

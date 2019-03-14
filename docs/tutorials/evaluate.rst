@@ -1,7 +1,7 @@
 Using SchNet to evaluate Datasets
 =================================
 
-Im order to predict properties with a trained SchNet-model run::
+Im order to predict properties with a trained SchNet model run::
 
    $ spk_eval evaluate with model_path=<path> dataset.path=<input_data>
      out_path=<output_path> device=<cuda/cpu>
