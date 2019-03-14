@@ -9,7 +9,6 @@ def config():
     r"""
     Settings for metrics that will be used for logging the training session.
     """
-    names = []                  # names of logging metrics
     element_wise = ['forces']   # list of elementwise properties (e.g. forces)
 
 

@@ -5,7 +5,7 @@ from schnetpack.sacred.train_metrics_ingredients import metrics_ing,\
     build_metrics
 
 
-logging_hook_ing = Ingredient('logging_hooks', ingredients=[metrics_ing])
+logging_hook_ing = Ingredient('logging', ingredients=[metrics_ing])
 
 
 @logging_hook_ing.config
@@ -13,11 +13,12 @@ def config():
     r"""
     configuration for logging hooks
     """
-    names = ['csv', 'tensorboard']  # hooks that will be used during training
-
+    csv = True
+    tensorboard = True
+    metrics = ['mae', 'rmse']
 
 @logging_hook_ing.capture
-def build_logging_hooks(training_dir, property_map, names):
+def build_logging_hooks(training_dir, property_map, csv, tensorboard, metrics):
     """
     build a list of logging hooks
 
@@ -25,28 +26,24 @@ def build_logging_hooks(training_dir, property_map, names):
         training_dir (str): path to the training directory
         property_map (dict): property mapping between model and dataset
             properties
-        names (list): names of the logging hooks
+        csv (bool): use CSV logging
+        tensorboard (bool): use TensorBoard logging
 
     Returns:
         list of logging hooks
     """
-    metrics_objects = build_metrics(property_map=property_map)
+    metrics_objects = build_metrics(names=metrics, property_map=property_map)
     hook_objects = []
-    if not names:
-        return hook_objects
-    for hook in names:
-        if hook == 'tensorboard':
-            hook_objects.append(TensorboardHook(os.path.join(training_dir,
-                                                             'log'),
-                                                metrics_objects))
-        elif hook == 'csv':
-            hook_objects.append(CSVHook(training_dir, metrics_objects))
-        else:
-            raise NotImplementedError
+    if tensorboard:
+        hook_objects.append(TensorboardHook(os.path.join(training_dir,
+                                                         'log'),
+                                            metrics_objects))
+    if csv:
+        hook_objects.append(CSVHook(training_dir, metrics_objects))
     return hook_objects
 
 
-stopping_hook_ing = Ingredient('stopping_hooks')
+stopping_hook_ing = Ingredient('early_stopping')
 
 
 @stopping_hook_ing.config
@@ -99,7 +96,7 @@ def build_stopping_hooks(max_steps, max_epochs, patience):
     return hook_objects
 
 
-scheduling_hook_ing = Ingredient('schedule_hooks')
+scheduling_hook_ing = Ingredient('scheduling')
 
 
 @scheduling_hook_ing.config

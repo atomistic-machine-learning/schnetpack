@@ -7,7 +7,7 @@ SchNetPack requires your data to be provided as ``ase`` database. If your
 data consists of ``.xyz`` or ``.extxyz`` files, you can use the parsing
 script in order to convert your data. The script is called with::
 
-    $ spk_parse.py parse with file_path=<file-path> db_path=<db-path>
+    $ spk_parse.py parse with file_path=<file-path> db_path=tutorials/ethanol.db
 
 The script will automatically check your file extension in order to
 distinguish between ``.xyz`` and ``.extxyz`` files. If you provide an ``.xyz``
