@@ -51,6 +51,9 @@ def create_dirs(_log, model_dir, overwrite):
         overwrite (bool): overwrites the model directory if True
     """
     _log.info("Create model directory")
+    create_dirs()
+    save_config()
+
     if model_dir is None:
         raise ValueError('Config `model_dir` has to be set!')
 
@@ -81,8 +84,6 @@ def train(_log, _config, model_dir, properties, additional_outputs, device):
 
     """
     property_map = get_property_map(properties)
-    create_dirs()
-    save_config()
 
     _log.info("Load data")
     dataset = get_dataset(dataset_properties=property_map.values())
@@ -106,4 +107,4 @@ def train(_log, _config, model_dir, properties, additional_outputs, device):
 
 @ex.automain
 def main():
-    print(ex.config)
+    train()

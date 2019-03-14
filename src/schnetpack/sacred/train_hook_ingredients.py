@@ -15,10 +15,10 @@ def config():
     """
     csv = True
     tensorboard = True
-    metrics = ['mae', 'rmse']
+    errors = ['mae', 'rmse']
 
 @logging_hook_ing.capture
-def build_logging_hooks(training_dir, property_map, csv, tensorboard, metrics):
+def build_logging_hooks(training_dir, property_map, csv, tensorboard, errors):
     """
     build a list of logging hooks
 
@@ -32,7 +32,7 @@ def build_logging_hooks(training_dir, property_map, csv, tensorboard, metrics):
     Returns:
         list of logging hooks
     """
-    metrics_objects = build_metrics(names=metrics, property_map=property_map)
+    metrics_objects = build_metrics(names=errors, property_map=property_map)
     hook_objects = []
     if tensorboard:
         hook_objects.append(TensorboardHook(os.path.join(training_dir,

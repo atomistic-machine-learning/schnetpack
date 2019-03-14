@@ -1,14 +1,15 @@
 Using SchNet to evaluate Datasets
 =================================
 
-Im order to predict properties with a trained SchNet-model run::
+In order to predict missing properties with the model that has been trained in
+:ref:`train_model`, you can use the ``spk_eval.py`` script. For demonstration
+purposes you can use an ethanol snippet without energies and forces. Store
+the snippet in your tutorials folder and predict the labels by running::
 
-   $ spk_eval evaluate with model_path=<path> dataset.path=<input_data>
-     out_path=<output_path> device=<cuda/cpu>
+   $ spk_eval.py with model_dir=tutorials/model_dir dataset.path=tutorials/ethanol_missing.xyz out_path=tutorials/ethanol_eval.db device=cpu
 
-Select your trained model by setting the ``model_path`` argument to the path
-of your trained model. In order to generate a trained model visit
-:ref:`train model`. If you want to evaluate your data on a GPU, set
+Select your trained model by setting the ``model_dir`` argument to the directory
+of your trained model. If you want to evaluate your data on a GPU, set
 ``device=cuda``. The default device is set to CPU.
 
 Selecting the Input-Data

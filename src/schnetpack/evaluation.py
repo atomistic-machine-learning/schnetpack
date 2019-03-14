@@ -22,8 +22,6 @@ class Evaluator:
         Calculate the predictions for the dataloader.
 
         Args:
-            dataloader (torch.utils.Dataloader): Dataloader with data to
-                evaluate
             device (str): cpu or cuda
 
         Returns:
