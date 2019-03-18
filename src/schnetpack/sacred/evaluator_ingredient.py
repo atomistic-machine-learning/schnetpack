@@ -23,7 +23,8 @@ def build_evaluator(_log, model_path, in_path, out_path):
     Create the evaluator object.
 
     Args:
-        model_path (str): oath to the trained model
+        model_path (str): path to the trained model
+        in_path (str): path to input file
         out_path (str): path to the output file
 
     Returns:

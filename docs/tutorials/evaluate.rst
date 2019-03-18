@@ -6,7 +6,7 @@ In order to predict missing properties with the model that has been trained in
 purposes you can use an ethanol snippet without energies and forces. Store
 the snippet in your tutorials folder and predict the labels by running::
 
-   $ spk_eval.py with model_dir=tutorials/model_dir dataset.path=tutorials/ethanol_missing.xyz out_path=tutorials/ethanol_eval.db device=cpu
+   $ spk_eval.py with model_dir=tutorials/model_dir in_path=tutorials/ethanol_missing.xyz out_path=tutorials/ethanol_eval.db device=cpu
 
 Select your trained model by setting the ``model_dir`` argument to the directory
 of your trained model. If you want to evaluate your data on a GPU, set
@@ -16,7 +16,9 @@ Selecting the Input-Data
 ------------------------
 Select the input data that you want to evaluate by setting
 ``dataset.path``. Your data must be provided as ``.xyz``, ``.extxyt`` or as
-``ase.db``.
+``ase.db``. If you want to use the test split for the evaluation, add
+``test_set`` to your run arguments. This will automatically get the ids of
+the test split from your model directory.
 
 Selecting the Output-Format
 ---------------------------

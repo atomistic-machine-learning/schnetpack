@@ -19,7 +19,6 @@ def get_eval_data(path):
 
     Args:
         path (str): path to the input file
-        subset (np.array): ids of subset
 
     Returns:
         schnetpack.data.Atomsdata dataset

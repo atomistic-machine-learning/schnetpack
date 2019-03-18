@@ -14,15 +14,18 @@ def config():
     """
     Settings for the evaluation script.
     """
-    in_path = './data/md17/ethanol.db'
+    in_path = './data/md17/ethanol.db'      # path to input file
     out_path = './results.db'               # path to output file
-    model_dir = './training'    # path to trained model
+    model_dir = './training'                # path to trained model
     device = 'cpu'                          # device for evaluation
-    on_split = None
+    on_split = None                         # use test/val/train split file
 
 
 @eval_ex.named_config
 def test_set():
+    """
+    Evaluate the test data.
+    """
     on_split = 'test'
 
 
@@ -56,6 +59,7 @@ def evaluate(_log, model_dir, in_path, out_path, device, on_split):
     given input file.
 
     Args:
+        in_path (str): path of the input file
         model_dir (str): dir to the trained model
         out_path (str): path to the output file
         device (str): train model on CPU/GPU
