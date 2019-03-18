@@ -2,6 +2,7 @@ import os
 from shutil import rmtree
 import yaml
 from sacred import Experiment
+import numpy as np
 from schnetpack.sacred.dataset_ingredients import dataset_ingredient, \
     get_dataset, get_property_map
 from schnetpack.sacred.model_ingredients import model_ingredient, build_model
@@ -51,8 +52,6 @@ def create_dirs(_log, model_dir, overwrite):
         overwrite (bool): overwrites the model directory if True
     """
     _log.info("Create model directory")
-    create_dirs()
-    save_config()
 
     if model_dir is None:
         raise ValueError('Config `model_dir` has to be set!')
@@ -83,12 +82,19 @@ def train(_log, _config, model_dir, properties, additional_outputs, device):
         device (str): choose device for calculations (CPU/GPU)
 
     """
+    create_dirs()
+    save_config()
     property_map = get_property_map(properties)
 
     _log.info("Load data")
     dataset = get_dataset(dataset_properties=property_map.values())
-    train_loader, val_loader, _, atomrefs = \
+    train_loader, val_loader, test_loader, atomrefs = \
         build_dataloaders(property_map=property_map, dataset=dataset)
+    np.savez(os.path.join(model_dir, 'splits.npz'),
+             train=train_loader.dataset.subset,
+             val=val_loader.dataset.subset,
+             test=test_loader.dataset.subset,
+             atomrefs=atomrefs)
     mean, stddev = stats(train_loader, atomrefs, property_map)
 
     _log.info("Build model")

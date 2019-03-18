@@ -9,10 +9,7 @@ eval_data_ing = Ingredient('dataset')
 
 @eval_data_ing.config
 def config():
-    """
-    Settings for evaluation dataset with missing properties.
-    """
-    path = 'data/ethanol_test_ext.xyz'  # path to the input file
+    pass
 
 
 @eval_data_ing.capture
@@ -22,6 +19,7 @@ def get_eval_data(path):
 
     Args:
         path (str): path to the input file
+        subset (np.array): ids of subset
 
     Returns:
         schnetpack.data.Atomsdata dataset
