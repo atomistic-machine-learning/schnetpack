@@ -9,10 +9,7 @@ eval_data_ing = Ingredient('dataset')
 
 @eval_data_ing.config
 def config():
-    """
-    Settings for evaluation dataset with missing properties.
-    """
-    path = 'data/ethanol_test_ext.xyz'  # path to the input file
+    pass
 
 
 @eval_data_ing.capture

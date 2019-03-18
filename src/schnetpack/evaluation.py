@@ -22,8 +22,6 @@ class Evaluator:
         Calculate the predictions for the dataloader.
 
         Args:
-            dataloader (torch.utils.Dataloader): Dataloader with data to
-                evaluate
             device (str): cpu or cuda
 
         Returns:
@@ -80,7 +78,6 @@ class DBEvaluator(Evaluator):
         super(DBEvaluator, self).__init__(model=model, dataloader=dataloader)
 
     def evaluate(self, device):
-        print('Updating database with results...')
         predicted = self._get_predicted(device)
         energies = predicted['energy']
         forces = predicted['forces']
@@ -88,4 +85,3 @@ class DBEvaluator(Evaluator):
             for i in range(conn.__len__()):
                 conn.update(i+1, data=dict(energy=energies[i],
                                            forces=forces[i]))
-

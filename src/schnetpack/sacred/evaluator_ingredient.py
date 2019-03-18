@@ -1,11 +1,9 @@
 import os
 import torch
 from sacred import Ingredient
-
 from schnetpack.evaluation import NPZEvaluator, DBEvaluator
 from schnetpack.sacred.dataloader_ingredient import evaluation_loader_ing,\
     build_eval_loader
-from schnetpack.data.loader import AtomsLoader
 from schnetpack.sacred.evaluation_data_ingredient import eval_data_ing,\
     get_eval_data
 
@@ -18,13 +16,15 @@ evaluator_ing = Ingredient('evaluator', ingredients=[evaluation_loader_ing,
 def config():
     """configuration of the evaluator ingredient"""
 
+
 @evaluator_ing.capture
-def build_evaluator(_log, model_path, out_path):
+def build_evaluator(_log, model_path, in_path, out_path):
     """
     Create the evaluator object.
 
     Args:
-        model_path (str): oath to the trained model
+        model_path (str): path to the trained model
+        in_path (str): path to input file
         out_path (str): path to the output file
 
     Returns:
@@ -32,7 +32,8 @@ def build_evaluator(_log, model_path, out_path):
     """
     file_type = os.path.splitext(out_path)[1]
     _log.info('loading data...')
-    data = get_eval_data()
+
+    data = get_eval_data(path=in_path)
     dataloader = build_eval_loader(data)
     _log.info('loading model...')
     model = torch.load(model_path)

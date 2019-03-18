@@ -506,6 +506,9 @@ class ModelError(Exception):
 
 
 class Properties:
+    """
+    Collection of all available model properties.
+    """
     energy = 'energy'
     forces = 'forces'
     dipole_moment = 'dipole_moment'

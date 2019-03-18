@@ -8,27 +8,27 @@ from schnetpack.atomistic import Properties
 from schnetpack.datasets.iso17 import ISO17
 
 
-@pytest.fixture
+@pytest.fixture(scope='module')
 def property_mapping():
     return {Properties.energy: ISO17.E, Properties.forces: ISO17.F}
 
 
-@pytest.fixture
+@pytest.fixture(scope='module')
 def properties(property_mapping):
     return [Properties.energy, Properties.forces]
 
 
-@pytest.fixture
+@pytest.fixture(scope='module')
 def tmpdir():
     return tempfile.mkdtemp()
 
 
-@pytest.fixture
+@pytest.fixture(scope='module')
 def simulation_dir(tmpdir):
     return os.path.join(tmpdir, 'simulate')
 
 
-@pytest.fixture
+@pytest.fixture(scope='module')
 def training_dir(tmpdir):
     return os.path.join(tmpdir, 'train')
 
@@ -56,7 +56,7 @@ def md_system(request):
     return system
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope='module')
 def generate_model(training_dir, properties, property_mapping):
     dbpath = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                           'data/test_iso.db')
@@ -70,7 +70,7 @@ def generate_model(training_dir, properties, property_mapping):
                            'metrics.names': ['mae', 'rmse'],
                            'dataloader.num_train': 4,
                            'dataloader.num_val': 4,
-                           'stopping_hooks.max_epochs': 4
+                           'early_stopping.max_epochs': 4
                            })
 
 

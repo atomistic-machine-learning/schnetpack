@@ -7,10 +7,10 @@ The recommended way to train a model on a dataset is to use the provided
 sacred scripts. A general guide to sacred can be found at section
 :ref:`sacred basics`. The command to train a model is::
 
-    $ spk_train.py train with model_dir=path/to/store/model dataset.<qm9/...>
-      device=<cpu/cuda> schedule_hooks.reduce_on_plateau
+    $ spk_train.py with model_dir=tutorials/model_dir dataset.db_path=tutorials/ethanol.db device=cpu scheduling.reduce_on_plateau dataset.property_mapping='energy:energy'
 
-This will automatically download the specified dataset dataset, train a SchNet model
+
+This will automatically download the specified dataset, train a SchNet model
 and use 80% of the data for training, 10% of the data for validation and the remaining
 10% for testing.
 Furthermore a new directory will be created at the location that you have defined
@@ -26,12 +26,13 @@ For a detailed view on the possible parameters run::
 Selecting the Dataset
 --------------------
 
-You can either choose from a number of pre-implemented datasets which are
-downloaded automatically, or train the model on your own data. In order to
-use the pre-implemented datasets, add ``dataset.<name>`` to your
-run arguments. Available datasets are QM9 (as ``qm9``), ISO17 (as ``iso17``),
+You can either use your own datasets, as described in the example above, or
+use one of the pre-implemented datasets. These datasets will be downloaded
+and preprocessed automatically. In order to use the pre-implemented datasets,
+replace ``dataset.db_path`` and ``dataset.property_mapping`` with
+``dataset.<name>``. Available datasets are QM9 (as ``qm9``), ISO17 (as
+``iso17``),
 ANI1 (as ``ani1``), MD17 (as ``md17``) and Materials Project (as ``matproj``).
-
 In order to use your own data you must provide it as an ``ase db`` file.
 Visit :ref:`Prepare Data` for additional information on the requirements for
 your dataset. After preparing your data use ``dataset.dbpath=<path>`` instead

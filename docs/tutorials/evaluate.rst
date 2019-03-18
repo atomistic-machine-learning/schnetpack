@@ -3,19 +3,19 @@ Using SchNet to evaluate Datasets
 
 Im order to predict properties with a trained SchNet model run::
 
-   $ spk_eval evaluate with model_path=<path> dataset.path=<input_data>
-     out_path=<output_path> device=<cuda/cpu>
+   $ spk_eval.py with model_dir=tutorials/model_dir in_path=tutorials/ethanol_missing.xyz out_path=tutorials/ethanol_eval.db device=cpu
 
-Select your trained model by setting the ``model_path`` argument to the path
-of your trained model. In order to generate a trained model visit
-:ref:`train model`. If you want to evaluate your data on a GPU, set
+Select your trained model by setting the ``model_dir`` argument to the directory
+of your trained model. If you want to evaluate your data on a GPU, set
 ``device=cuda``. The default device is set to CPU.
 
 Selecting the Input-Data
 ------------------------
 Select the input data that you want to evaluate by setting
 ``dataset.path``. Your data must be provided as ``.xyz``, ``.extxyt`` or as
-``ase.db``.
+``ase.db``. If you want to use the test split for the evaluation, add
+``test_set`` to your run arguments. This will automatically get the IDs of
+the test split from your model directory.
 
 Selecting the Output-Format
 ---------------------------

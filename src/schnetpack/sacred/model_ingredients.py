@@ -16,7 +16,7 @@ def cfg():
     """
     name = 'schnet'     # name of the representation network
     n_atom_basis = 128  #number of features used to describe atomic environments
-    n_filters = 128 # number of filters used in continuous-filter convolution
+    n_filters = 128     # number of filters used in continuous-filter convolution
     n_interactions = 6  # number of interaction layers
     cutoff = 5.0        # cutoff
     n_gaussians = 25    # number of Gaussians which are used to expand atom distances

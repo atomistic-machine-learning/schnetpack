@@ -1,3 +1,5 @@
+import yaml
+import os
 from sacred import Experiment
 from schnetpack.data import generate_db
 
@@ -24,6 +26,21 @@ def forces():
     atomic_properties = 'Properties=species:S:1:pos:R:3:forces:R:3'
 
 
+@parsing.capture
+def save_config(_config, cfg_dir):
+    """
+    Save the evaluation configuration.
+
+    Args:
+        _config (dict): configuration of the experiment
+        cfg_dir (str): path to the config directory
+
+    """
+    os.makedirs(cfg_dir, exist_ok=True)
+    with open(os.path.join(cfg_dir, 'parse_config.yaml'), 'w') as f:
+        yaml.dump(_config, f, default_flow_style=False)
+
+
 @parsing.command
 def parse(file_path, db_path, atomic_properties, molecular_properties):
     """
@@ -36,9 +53,10 @@ def parse(file_path, db_path, atomic_properties, molecular_properties):
         molecular_properties (list): list with molecular properties in
             comment section
     """
+    save_config(cfg_dir=os.path.dirname(db_path))
     generate_db(file_path, db_path, atomic_properties, molecular_properties)
 
 
 @parsing.automain
 def main(_log):
-    _log.info('In order to run the parsing, call parse.')
+    parse()

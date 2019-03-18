@@ -7,7 +7,7 @@ SchNetPack requires your data to be provided as ``ase`` database. If your
 data consists of ``.xyz`` or ``.extxyz`` files, you can use the parsing
 script in order to convert your data. The script is called with::
 
-    $ spk_parse.py parse with file_path=<file-path> db_path=<db-path>
+    $ spk_parse.py with file_path=<file-path> db_path=<path-to-db>
 
 The script will automatically check your file extension in order to
 distinguish between ``.xyz`` and ``.extxyz`` files. If you provide an ``.xyz``
@@ -30,10 +30,10 @@ file for `ethanol <http://quantum-machine.org/gdml/data/xyz/ethanol_dft.zip>`_::
 The data contains ``molecular_properties`` in the second row and atomic
 properties in the following rows. All files contain at least the atom types and
 the atomic positions in the first columns. Some files may also contain atomic
-forces like the above ethanol snippet. In this case add the ``forces`` flag to the parse command::
+forces like the above ethanol snippet. In this case add the ``forces`` flag to
+the parse command::
 
-    $ spk_parse.py parse with forces file_path=<file-path> db_path=<db-path>
-      "molecular_properties=['energy']"
+    $ spk_parse.py with forces file_path=tutorials/ethanol.xyz db_path=tutorials/ethanol.db "molecular_properties=['energy']"
 
 .. note::
 
