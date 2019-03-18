@@ -6,7 +6,12 @@ from schnetpack.sacred.evaluator_ingredient import evaluator_ing,\
     build_evaluator
 import yaml
 
+
 eval_ex = Experiment('evaluation', ingredients=[evaluator_ing])
+
+
+class EvaluationError(Exception):
+    pass
 
 
 @eval_ex.config
@@ -14,7 +19,7 @@ def config():
     """
     Settings for the evaluation script.
     """
-    in_path = './data/md17/ethanol.db'      # path to input file
+    in_path = None                          # path to input file
     out_path = './results.db'               # path to output file
     model_dir = './training'                # path to trained model
     device = 'cpu'                          # device for evaluation
@@ -63,8 +68,10 @@ def evaluate(_log, model_dir, in_path, out_path, device, on_split):
         model_dir (str): dir to the trained model
         out_path (str): path to the output file
         device (str): train model on CPU/GPU
-        on_split (str): name of subset in modeldir
+        on_split (str): name of subset in model_dir
     """
+    if in_path is None:
+        raise EvaluationError('Input file is not defined!')
     model_path = os.path.join(model_dir, 'best_model')
     if on_split:
         split_path = np.load(os.path.join(model_dir, 'splits.npz'))
