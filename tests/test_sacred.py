@@ -70,7 +70,7 @@ def generate_model(training_dir, properties, property_mapping):
                            'metrics.names': ['mae', 'rmse'],
                            'dataloader.num_train': 4,
                            'dataloader.num_val': 4,
-                           'stopping_hooks.max_epochs': 4
+                           'early_stopping.max_epochs': 4
                            })
 
 
