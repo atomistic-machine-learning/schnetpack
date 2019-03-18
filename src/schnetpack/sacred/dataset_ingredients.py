@@ -1,7 +1,7 @@
 import os
 from sacred import Ingredient
 from schnetpack.datasets import ANI1, ISO17, QM9, MD17, MaterialsProject
-from schnetpack.data.parsing import extxyz_to_db
+from schnetpack.data.parsing import generate_db
 from schnetpack.data import AtomsData, AtomsDataError
 from schnetpack.atomistic import Properties
 
@@ -101,6 +101,8 @@ def get_property_map(properties, property_mapping, dbpath):
         dataset properties as values.
 
     """
+    if dbpath is None:
+        raise AtomsDataError("Please define your database path.")
     if type(property_mapping) == str:
         property_mapping =\
             {key: value for key, value in
@@ -110,9 +112,9 @@ def get_property_map(properties, property_mapping, dbpath):
         if prop in property_mapping.keys():
             property_map[prop] = property_mapping[prop]
         else:
-            raise AtomsDataError('"{}" is not a valid property that is '
-                                 'contained in the property_mapping for the '
-                                 'database located ad {}.'.format(prop, dbpath))
+            raise AtomsDataError('Invalid property mapping: "{}" is not a '
+                                 'valid property of the database located at'
+                                 '{}.'.format(prop, dbpath))
     return property_map
 
 
@@ -209,10 +211,6 @@ def get_dataset(_log, dbpath, dataset, dataset_properties=None):
         file, extension = os.path.splitext(dbpath)
         if extension == '.db':
             return AtomsData(dbpath, required_properties=dataset_properties)
-        elif extension == '.xyz':
-            extxyz_to_db(db_path=file + '.db', xyzpath=dbpath)
-            return AtomsData(file+'.db', required_properties=dataset_properties)
         else:
-            raise NotImplementedError
-    else:
-        raise NotImplementedError
+            generate_db(db_path=file + '.db', file_path=dbpath)
+            return AtomsData(file+'.db', required_properties=dataset_properties)
