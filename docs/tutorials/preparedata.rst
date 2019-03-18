@@ -13,7 +13,7 @@ The script will automatically check your file extension in order to
 distinguish between ``.xyz`` and ``.extxyz`` files. If you provide an ``.xyz``
 file, make sure to define the right molecular properties and if your
 data contains forces. The following example shows a snippet of an ``.xyz``
-file for `ethanol <http://quantum-machine.org/gdml/>`_::
+file for `ethanol <http://quantum-machine.org/gdml/data/xyz/ethanol_dft.zip>`_::
 
     9
     -97208.40600498248
@@ -30,18 +30,16 @@ file for `ethanol <http://quantum-machine.org/gdml/>`_::
 The data contains ``molecular_properties`` in the second row and atomic
 properties in the following rows. All files contain at least the atom types and
 the atomic positions in the first columns. Some files may also contain atomic
-forces. In this case add the ``forces`` flag to your run arguments. In order
-test the parsing script, download the ethanol dataset to a tutorials folder and
-run::
-
+forces like the above ethanol snippet. In this case add the ``forces`` flag to
+the parse command::
 
     $ spk_parse.py with forces file_path=tutorials/ethanol.xyz db_path=tutorials/ethanol.db "molecular_properties=['energy']"
 
 .. note::
 
-    Your xyz-file could contain other molecular properties than just energy so
-    you would need to add them to the ``molecular_properties`` list. The default
-    settings for molecular properties is **energy**.
+    Your xyz-file might contain other molecular properties in the comment line than energy.
+    In this case, you need to add them to the ``molecular_properties`` list.
+    By default settings, the molecular properties is set to ``['energy']``.
 
 If you provide your data as an ``.extxyz`` file, all necessary information is
 provided within your data. You do not need to define any molecular properties

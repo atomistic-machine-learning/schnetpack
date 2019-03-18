@@ -1,10 +1,7 @@
 Using SchNet to evaluate Datasets
 =================================
 
-In order to predict missing properties with the model that has been trained in
-:ref:`train_model`, you can use the ``spk_eval.py`` script. For demonstration
-purposes you can use an ethanol snippet without energies and forces. Store
-the snippet in your tutorials folder and predict the labels by running::
+Im order to predict properties with a trained SchNet model run::
 
    $ spk_eval.py with model_dir=tutorials/model_dir in_path=tutorials/ethanol_missing.xyz out_path=tutorials/ethanol_eval.db device=cpu
 
@@ -17,7 +14,7 @@ Selecting the Input-Data
 Select the input data that you want to evaluate by setting
 ``dataset.path``. Your data must be provided as ``.xyz``, ``.extxyt`` or as
 ``ase.db``. If you want to use the test split for the evaluation, add
-``test_set`` to your run arguments. This will automatically get the ids of
+``test_set`` to your run arguments. This will automatically get the IDs of
 the test split from your model directory.
 
 Selecting the Output-Format
