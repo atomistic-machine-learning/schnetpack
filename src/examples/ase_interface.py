@@ -1,6 +1,6 @@
 import torch
 from ase.db import connect
-from schnetpack.ase_interface import SpkCalculator, Model
+from schnetpack.ase_interface import SpkCalculator
 
 
 # path definitions
@@ -12,8 +12,7 @@ model = torch.load(path_to_model)
 conn = connect(path_to_db)
 ats = conn.get_atoms(1)
 # build calculator
-w_model = Model(model=model, type='schnet', device='cpu')
-calc = SpkCalculator(w_model)
+calc = SpkCalculator(model, device='cpu')
 # add calculator to atoms object
 ats.set_calculator(calc)
 

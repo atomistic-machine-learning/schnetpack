@@ -3,19 +3,19 @@
 Using a trained model with ASE
 ==============================
 
-In order to use SchNet as predictor for ase calculators, use the ``MLPotential``
-class from ``schnetpack.ase_interface``. The trained model needs to be
-wrapped in the ``Model`` class and can then be used by the calculator::
+In order to use SchNet as predictor for ase calculators, use the
+``SpkCalculator`` class from ``schnetpack.ase_interface``. The trained model
+needs to be wrapped in the ``Model`` class and can then be used by the
+calculator::
 
     import torch
-    from schnetpack.ase_interface import Model, MLPotential
+    from schnetpack.ase_interface import SpkCalculator
 
     # build wrapped model
     path_to_model = 'path/to/best_model'
     model = torch.load(path_to_model)
-    wrapped_model = Model(model, type='schnet', device='cpu')
     # build calculator
-    calculator = MLPotential(wrapped_model)
+    calculator = SpkCalculator(model, device='cpu')
 
 The calculator can then be used like any other ase calculator::
 
