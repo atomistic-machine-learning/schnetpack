@@ -4,8 +4,8 @@ from schnetpack.ase_interface import SpkCalculator
 
 
 # path definitions
-path_to_model = './../sacred_scripts/experiments/training/best_model'
-path_to_db = './data/snippet.db'
+path_to_model = 'tutorials/training/best_model'
+path_to_db = 'tutorials/data/md17/snippet.db'
 # load model
 model = torch.load(path_to_model)
 # get example atom
