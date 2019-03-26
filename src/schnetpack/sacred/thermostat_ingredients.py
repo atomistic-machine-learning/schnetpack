@@ -180,11 +180,13 @@ def get_pile_global_thermostat(bath_temperature, time_constant):
     return PILEGlobalThermostat(temperature_bath=bath_temperature,
                                 time_constant=time_constant)
 
+
 @thermostat_ingredient.capture
 def get_trmpmd_thermostat(bath_temperature, damping):
     thermostat_info(name='TRPMD', temperature=bath_temperature,
                     addition=damping)
     return TRPMDThermostat(bath_temperature, damping)
+
 
 @thermostat_ingredient.capture
 def get_nhc_thermostat(bath_temperature, time_constant, chain_length,

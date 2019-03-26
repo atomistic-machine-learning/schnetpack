@@ -8,10 +8,10 @@ from schnetpack.md.utils import MDUnits, load_gle_matrices, \
 from schnetpack.md.integrators import RingPolymer
 from schnetpack.simulate.hooks import SimulationHook
 
-
 __all__ = ['ThermostatHook', 'BerendsenThermostat', 'GLEThermostat',
            'PIGLETThermostat', 'LangevinThermostat', 'PILELocalThermostat',
-           'PILEGlobalThermostat', 'NHCThermostat', 'NHCRingPolymerThermostat']
+           'PILEGlobalThermostat', 'NHCThermostat', 'NHCRingPolymerThermostat',
+           'TRPMDThermostat']
 
 
 class ThermostatError(Exception):
@@ -92,7 +92,7 @@ class ThermostatHook(SimulationHook):
 
         # Re-apply atom masks for differently sized molecules, as some
         # thermostats add random noise
-        simulator.system.momenta =\
+        simulator.system.momenta = \
             simulator.system.momenta * simulator.system.atom_masks
 
         # Detach if requested
@@ -117,7 +117,7 @@ class ThermostatHook(SimulationHook):
 
         # Re-apply atom masks for differently sized molecules, as some
         # thermostats add random noise
-        simulator.system.momenta =\
+        simulator.system.momenta = \
             simulator.system.momenta * simulator.system.atom_masks
 
         # Detach if requested
@@ -180,7 +180,7 @@ class BerendsenThermostat(ThermostatHook):
         """
         scaling = 1.0 + simulator.integrator.time_step / self.time_constant * (
                 self.temperature_bath / simulator.system.temperature - 1)
-        simulator.system.momenta =\
+        simulator.system.momenta = \
             torch.sqrt(scaling[:, :, None, None]) * simulator.system.momenta
 
 
@@ -284,7 +284,7 @@ class GLEThermostat(ThermostatHook):
            The Journal of Chemical Physics, 133 (12), 124104. 2010.
         """
         if c_matrix is None:
-            c_matrix =\
+            c_matrix = \
                 np.eye(a_matrix.shape[-1]) * self.temperature_bath * MDUnits.kB
             # Check if normal GLE or GLE for ring polymers is needed:
             if type(simulator.integrator) is RingPolymer:
@@ -454,7 +454,6 @@ class PIGLETThermostat(GLEThermostat):
             raise ThermostatError('Error reading GLE matrices '
                                   'from {:s}'.format(self.gle_file))
         if a_matrix.shape[0] != self.n_replicas:
-
             raise ThermostatError('Expected {:d} beads but '
                                   'found {:d}.'.format(self.n_replicas,
                                                        a_matrix.shape[0]))
@@ -743,8 +742,8 @@ class PILEGlobalThermostat(PILELocalThermostat):
         centroid_factor = (1 - c1_centroid) / kinetic_energy_factor
 
         alpha_sq = c1_centroid + torch.sum(thermostat_noise_centroid ** 2) \
-            * centroid_factor + 2 * thermostat_noise_centroid[0, 0, 0] \
-            * torch.sqrt(c1_centroid * centroid_factor)
+                   * centroid_factor + 2 * thermostat_noise_centroid[0, 0, 0] \
+                   * torch.sqrt(c1_centroid * centroid_factor)
 
         alpha_sign = torch.sign(thermostat_noise_centroid[0, 0, 0]
                                 + torch.sqrt(c1_centroid / centroid_factor))
@@ -853,10 +852,10 @@ class NHCThermostat(ThermostatHook):
                                                                  time step, system, etc.
         """
         # Determine integration step via multi step and Yoshida Suzuki weights
-        integration_weights =\
+        integration_weights = \
             YSWeights(self.device).get_weights(self.integration_order)
         self.time_step = simulator.integrator.time_step * integration_weights \
-            / self.multi_step
+                         / self.multi_step
 
         # Determine shape of tensors and internal degrees of freedom
         n_replicas, n_molecules, n_atoms, xyz = simulator.system.momenta.shape
@@ -870,7 +869,7 @@ class NHCThermostat(ThermostatHook):
                                                  device=self.device)
         else:
             state_dimension = (n_replicas, n_molecules, 1, 1, self.chain_length)
-            self.degrees_of_freedom =\
+            self.degrees_of_freedom = \
                 3 * simulator.system.n_atoms.float()[None, :, None, None]
 
         # Set up masses
@@ -894,7 +893,7 @@ class NHCThermostat(ThermostatHook):
         self.masses = torch.ones(state_dimension, device=self.device)
         # Get masses of innermost thermostat
         self.masses[..., 0] = self.degrees_of_freedom * self.kb_temperature \
-            / self.frequency ** 2
+                              / self.frequency ** 2
         # Set masses of remaining thermostats
         self.masses[..., 1:] = self.kb_temperature / self.frequency ** 2
 
@@ -963,7 +962,7 @@ class NHCThermostat(ThermostatHook):
 
                 # Update velocities of outermost thermostat
                 self.velocities[..., -1] += 0.25 * self.forces[..., -1] \
-                    * time_step
+                                            * time_step
 
         return scaling_factor
 
@@ -1118,7 +1117,7 @@ class NHCRingPolymerThermostat(NHCThermostat):
         # Assume standard massive Nose-Hoover and initialize accordingly
         self.masses = torch.ones(state_dimension, device=self.device)
         self.masses *= self.kb_temperature \
-            / polymer_frequencies[:, None, None, None, None] ** 2
+                       / polymer_frequencies[:, None, None, None, None] ** 2
 
         # If a global thermostat is requested, we assign masses of 3N to
         # the first link in the chain on the centroid
