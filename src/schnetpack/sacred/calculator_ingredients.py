@@ -17,14 +17,15 @@ def config():
     position_conversion = 1.0 / MDUnits.angs2bohr
     force_conversion = 1.0 / MDUnits.auforces2aseforces
     property_conversion = {}
+
     model_path = 'eth_ens_01.model'
+    # If model is a directory, search for best_model file
+    if os.path.isdir(model_path):
+        model_path = os.path.join(model_path, 'best_model')
 
 
 @calculator_ingradient.capture
 def load_model(_log, model_path, device):
-    # If model is a directory, search for best_model file
-    if os.path.isdir(model_path):
-        model_path = os.path.join(model_path, 'best_model')
     _log.info('Loaded model from {:s}'.format(model_path))
     model = torch.load(model_path).to(device)
     return model
@@ -50,9 +51,6 @@ def build_calculator(_log, required_properties, force_handle,
         the calculator object
     """
     _log.info(f'Using {calculator}')
-
-    position_conversion = MDUnits.parse_mdunit(position_conversion)
-    force_conversion = MDUnits.parse_mdunit(force_conversion)
 
     if calculator == 'schnet_calculator':
 

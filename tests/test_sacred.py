@@ -43,7 +43,6 @@ def md_thermostats(request):
 
 @pytest.fixture(params=[None, 'thermostat.piglet', 'thermostat.pile_local',
                         'thermostat.pile_global',
-                        'thermostat.trpmd',
                         'thermostat.nhc_ring_polymer',
                         'thermostat.nhc_ring_polymer_global'])
 def rpmd_thermostats(request):

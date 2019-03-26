@@ -13,11 +13,9 @@ def thermostat_info(_log, name=None, temperature=None, addition=None):
     else:
         if temperature is not None:
             string += 'Using {:s} thermostat at {:.2f} K'.format(name, temperature)
-        if addition is not None:
+        elif addition is not None:
             if type(addition) == str:
                 string += ' and parameters loaded from {:s}.'.format(addition)
-            elif name == 'TRPMD':
-                string += ' with a damping factor of {:.1}.'.format(addition)
             else:
                 string += ' with a time constant of {:.1f} fs'.format(addition)
     _log.info(string)
@@ -78,14 +76,6 @@ def pile_global():
 
 
 @thermostat_ingredient.named_config
-def trpmd():
-    """configuration for the thermostatted ring-polymer thermostat"""
-    thermostat = 'trpmd'
-    bath_temperature = 300.
-    damping = 0.5
-
-
-@thermostat_ingredient.named_config
 def nhc():
     """configuration for the nhc thermostat"""
     thermostat = 'nhc'
@@ -98,7 +88,7 @@ def nhc():
 
 @thermostat_ingredient.named_config
 def nhc_massive():
-    """configuration for the massive nhc thermostat"""
+    """configuration for the nhc thermostat"""
     thermostat = 'nhc_massive'
     bath_temperature = 300.
     time_constant = 100.
@@ -161,7 +151,7 @@ def get_berendsen_thermostat(bath_temperature, time_constant):
 def get_gle_thermostat(bath_temperature, gle_file):
     thermostat_info(name='GLE', temperature=bath_temperature,
                     addition=gle_file)
-    return GLEThermostat(temperature_bath=bath_temperature,
+    return GLEThermostat(bath_temperature=bath_temperature,
                          gle_file=gle_file)
 
 
@@ -179,13 +169,6 @@ def get_pile_global_thermostat(bath_temperature, time_constant):
                     addition=time_constant)
     return PILEGlobalThermostat(temperature_bath=bath_temperature,
                                 time_constant=time_constant)
-
-
-@thermostat_ingredient.capture
-def get_trmpmd_thermostat(bath_temperature, damping):
-    thermostat_info(name='TRPMD', temperature=bath_temperature,
-                    addition=damping)
-    return TRPMDThermostat(bath_temperature, damping)
 
 
 @thermostat_ingredient.capture
@@ -237,8 +220,6 @@ def build_thermostat(thermostat):
         return get_nhc_ring_polymer_thermostat(local=True)
     elif thermostat == 'nhc_ring_polymer_global':
         return get_nhc_ring_polymer_thermostat(local=False)
-    elif thermostat == 'trpmd':
-        return get_trmpmd_thermostat()
     elif thermostat is None:
         return get_no_thermostat()
     else:
