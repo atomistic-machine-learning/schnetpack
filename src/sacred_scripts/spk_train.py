@@ -1,6 +1,4 @@
 import os
-from shutil import rmtree
-import yaml
 from sacred import Experiment
 import numpy as np
 from schnetpack.sacred.dataset_ingredients import dataset_ingredient, \
@@ -10,10 +8,13 @@ from schnetpack.sacred.trainer_ingredients import train_ingredient, \
     setup_trainer
 from schnetpack.sacred.dataloader_ingredient import dataloader_ing, \
     build_dataloaders, stats
+from schnetpack.sacred.folder_ingredient import create_dirs, save_config,\
+    folder_ing
 
 
 ex = Experiment('experiment', ingredients=[model_ingredient, train_ingredient,
-                                           dataloader_ing, dataset_ingredient])
+                                           dataloader_ing, dataset_ingredient,
+                                           folder_ing])
 
 
 @ex.config
@@ -21,51 +22,10 @@ def cfg():
     r"""
     configuration for training script
     """
-    overwrite = False                   # overwrite model_dir if True
     additional_outputs = []             # additional model outputs
     device = 'cpu'                 # device that is used for training <cpu/cuda>
     model_dir = 'training'              # directory for training outputs
     properties = ['energy', 'forces']   # model properties
-
-
-@ex.capture
-def save_config(_config, model_dir):
-    """
-    Save the configuration to the model directory.
-
-    Args:
-        _config (dict): configuration of the experiment
-        model_dir (str): path to the training directory
-
-    """
-    with open(os.path.join(model_dir, 'config.yaml'), 'w') as f:
-        yaml.dump(_config, f, default_flow_style=False)
-
-
-@ex.capture
-def create_dirs(_log, model_dir, overwrite):
-    """
-    Create the directory for the experiment.
-
-    Args:
-        model_dir (str): path to the training directory
-        overwrite (bool): overwrites the model directory if True
-    """
-    _log.info("Create model directory")
-
-    if model_dir is None:
-        raise ValueError('Config `model_dir` has to be set!')
-
-    if os.path.exists(model_dir) and not overwrite:
-        raise ValueError(
-            'Model directory already exists (set overwrite flag?):',
-            model_dir)
-
-    if os.path.exists(model_dir) and overwrite:
-        rmtree(model_dir)
-
-    if not os.path.exists(model_dir):
-        os.makedirs(model_dir)
 
 
 @ex.command
@@ -110,7 +70,7 @@ def train(_log, _config, model_dir, properties, additional_outputs, device):
 
 
 @ex.automain
-def main():
-    create_dirs()
-    save_config()
+def main(_log, _config, model_dir):
+    create_dirs(_log=_log, output_dir=model_dir)
+    save_config(_config=_config, output_dir=model_dir)
     train()
