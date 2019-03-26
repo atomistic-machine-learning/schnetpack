@@ -16,4 +16,4 @@
 .. autoclass:: schnetpack.data.StatisticsAccumulator
    :members:
 
-.. autofunction:: schnetpack.data.collate_atoms
+.. autofunction:: schnetpack.data.collate_aseatoms

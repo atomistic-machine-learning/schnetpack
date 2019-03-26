@@ -484,7 +484,6 @@ class ReduceLROnPlateauHook(Hook):
       step() function will be called every epoch.
 
       Args:
-        optimizer (Optimizer): Wrapped optimizer.
         factor (float): Factor by which the learning rate will be
             reduced. new_lr = lr * factor. (default: 0.2).
         patience (int): Number of epochs with no improvement after
@@ -502,10 +501,12 @@ class ReduceLROnPlateauHook(Hook):
                                reached (default: False).
       """
 
-    def __init__(self, optimizer, patience=25, factor=0.2, min_lr=1e-6,
+    def __init__(self, patience=25, factor=0.2, min_lr=1e-6,
                  window_length=1, stop_after_min=False):
-        self.scheduler = ReduceLROnPlateau(optimizer, patience=patience,
-                                           factor=factor, min_lr=min_lr)
+        self.scheduler = None
+        self.patience = patience
+        self.factor = factor
+        self.min_lr = min_lr
         self.window_length = window_length
         self.stop_after_min = stop_after_min
         self.window = []
@@ -523,6 +524,12 @@ class ReduceLROnPlateauHook(Hook):
         self.scheduler.best = state_dict['best']
         self.scheduler.cooldown_counter = state_dict['cooldown_counter']
         self.scheduler.num_bad_epochs = state_dict['num_bad_epochs']
+
+    def on_train_begin(self, trainer):
+        self.scheduler = ReduceLROnPlateau(trainer.optimizer,
+                                           patience=self.patience,
+                                           factor=self.factor,
+                                           min_lr=self.min_lr)
 
     def on_validation_end(self, trainer, val_loss):
         self.window.append(val_loss)
@@ -549,14 +556,18 @@ class ExponentialDecayHook(Hook):
       step.
 
       Args:
-        optimizer (Optimizer): Wrapped optimizer.
         gamma (float): Factor by which the learning rate will be
             reduced. new_lr = lr * gamma (default: 0.96).
         step_size (int): Period of learning rate decay (default: 100 000)
       """
 
-    def __init__(self, optimizer, gamma=0.96, step_size=100000):
-        self.scheduler = StepLR(optimizer, step_size, gamma)
+    def __init__(self, gamma=0.96, step_size=100000):
+        self.scheduler = None
+        self.gamma = gamma
+        self.step_size = step_size
+
+    def on_train_begin(self, trainer):
+        self.scheduler = StepLR(trainer.optimizer, self.step_size, self.gamma)
 
     def on_batch_end(self, trainer, train_batch, result, loss):
         self.scheduler.step()

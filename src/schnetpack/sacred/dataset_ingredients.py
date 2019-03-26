@@ -1,5 +1,7 @@
+import os
 from sacred import Ingredient
 from schnetpack.datasets import ANI1, ISO17, QM9, MD17, MaterialsProject
+from schnetpack.data.parsing import generate_db
 from schnetpack.data import AtomsData, AtomsDataError
 from schnetpack.atomistic import Properties
 
@@ -8,35 +10,44 @@ dataset_ingredient = Ingredient("dataset")
 
 @dataset_ingredient.config
 def cfg():
-    """configuration for the dataset ingredient"""
-    dbpath = None
-    dataset = 'CUSTOM'
-    property_mapping = {}
+    """Settings for training dataset"""
+    dbpath = None           # path to ase.db
+    dataset = 'CUSTOM'      # dataset name; use for pre-implemented datasets
+    property_mapping = {}   # mapping from model properties to data properties
 
 
 @dataset_ingredient.named_config
 def qm9():
-    """configuration for the QM9 dataset"""
+    """Default settings for QM9 dataset."""
     dbpath = './data/qm9.db'
     dataset = 'QM9'
     property_mapping = {Properties.energy: QM9.U0,
                         Properties.dipole_moment: QM9.mu,
                         Properties.iso_polarizability: QM9.alpha}
 
-
 @dataset_ingredient.named_config
 def iso17():
-    """configuration for the ISO17 dataset"""
+    """
+    Default settings for ISO17 dataset.
+
+    Adds:
+        fold (str): name of the dataset inside the iso17 folder
+    """
     dbpath = './data'
     dataset = 'ISO17'
     fold = 'reference'
     property_mapping = {Properties.energy: ISO17.E,
-                        Properties.forces:ISO17.F}
+                        Properties.forces: ISO17.F}
 
 
 @dataset_ingredient.named_config
 def ani1():
-    """configuration for the ANI1 dataset"""
+    """
+    Default settings for ANI1 dataset.
+
+    Adds:
+        num_heavy_atoms (int): maximum number of heavy atoms
+    """
     dbpath = './data/ani1.db'
     dataset = 'ANI1'
     num_heavy_atoms = 2
@@ -45,7 +56,12 @@ def ani1():
 
 @dataset_ingredient.named_config
 def md17():
-    """configuration for the MD17 dataset"""
+    """
+    Default settings for MD17 dataset.
+
+    Adds:
+        molecule (str): name of the molecule that is included in MD17
+    """
     dbpath = './data'
     dataset = 'MD17'
     molecule = 'aspirin'
@@ -55,7 +71,13 @@ def md17():
 
 @dataset_ingredient.named_config
 def matproj():
-    """configuration for the Materials Project dataset"""
+    """
+    Default settings for Materials Project dataset.
+
+    Adds:
+        cutoff (float):
+        api_key (str): personal api key from https://materialsproject.org
+    """
     dbpath = './data/matproj.db'
     dataset = 'MATPROJ'
     cutoff = 5.
@@ -79,14 +101,20 @@ def get_property_map(properties, property_mapping, dbpath):
         dataset properties as values.
 
     """
+    if dbpath is None:
+        raise AtomsDataError("Please define your database path.")
+    if type(property_mapping) == str:
+        property_mapping =\
+            {key: value for key, value in
+             [prop.split(':') for prop in property_mapping.split(',')]}
     property_map = {}
     for prop in properties:
         if prop in property_mapping.keys():
             property_map[prop] = property_mapping[prop]
         else:
-            raise AtomsDataError('"{}" is not a valid property that is '
-                                 'contained in the property_mapping for the '
-                                 'database located ad {}.'.format(prop, dbpath))
+            raise AtomsDataError('Invalid property mapping: "{}" is not a '
+                                 'valid property of the database located at'
+                                 '{}.'.format(prop, dbpath))
     return property_map
 
 
@@ -154,7 +182,7 @@ def get_md17(dbpath, molecule, dataset_properties):
 
 
 @dataset_ingredient.capture
-def get_dataset(dbpath, dataset, dataset_properties=None):
+def get_dataset(_log, dbpath, dataset, dataset_properties=None):
     """
     Get a dataset from the configuration.
 
@@ -168,6 +196,7 @@ def get_dataset(dbpath, dataset, dataset_properties=None):
 
     """
     dataset = dataset.upper()
+    _log.info('Load {} dataset'.format(dataset))
     if dataset == 'QM9':
         return QM9(dbpath, properties=dataset_properties)
     elif dataset == 'ISO17':
@@ -179,6 +208,9 @@ def get_dataset(dbpath, dataset, dataset_properties=None):
     elif dataset == 'MATPROJ':
         return get_matproj(dataset_properties=dataset_properties)
     elif dataset == 'CUSTOM':
-        return AtomsData(dbpath, required_properties=dataset_properties)
-    else:
-        raise NotImplementedError
+        file, extension = os.path.splitext(dbpath)
+        if extension == '.db':
+            return AtomsData(dbpath, required_properties=dataset_properties)
+        else:
+            generate_db(db_path=file + '.db', file_path=dbpath)
+            return AtomsData(file+'.db', required_properties=dataset_properties)

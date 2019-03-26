@@ -20,8 +20,10 @@ setup(
              'src/scripts/schnetpack_matproj.py',
              'src/scripts/schnetpack_molecular_dynamics.py',
              'src/scripts/schnetpack_ani1.py', 'src/scripts/schnetpack_load.py',
-             'src/sacred_scripts/run_schnetpack.py',
-             'src/sacred_scripts/run_md.py',
+             'src/sacred_scripts/spk_train.py',
+             'src/sacred_scripts/spk_md.py',
+             'src/sacred_scripts/spk_parse.py',
+             'src/sacred_scripts/spk_eval.py',
              'src/scripts/schnetpack_omdb.py'],
     package_dir={'': 'src'},
     python_requires='>=3.6',
@@ -32,6 +34,9 @@ setup(
         "tensorboardX",
         "h5py"
     ],
+    extras_require={
+        'test': ['pytest', 'sacred'],
+    },
     license='MIT',
     description='SchNetPack - Deep Neural Networks for Atomistic Systems',
     long_description=read('README.md')

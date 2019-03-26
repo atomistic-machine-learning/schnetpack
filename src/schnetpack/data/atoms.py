@@ -37,7 +37,7 @@ class AtomsData(Dataset):
     ENCODING = 'utf-8'
     available_properties = None
 
-    def __init__(self, dbpath, subset=None, required_properties=None,
+    def __init__(self, dbpath, subset=None, required_properties=[],
                  environment_provider=SimpleEnvironmentProvider(),
                  collect_triples=False, center_positions=True,
                  load_charge=False):
@@ -280,7 +280,7 @@ class DownloadableAtomsData(AtomsData):
                         'at {}'.format(self.dbpath))
         else:
             logger.info('Starting download')
-            folder = os.path.dirname(self.dbpath)
+            folder = os.path.dirname(os.path.abspath(self.dbpath))
             if not os.path.exists(folder):
                 os.makedirs(folder)
             self._download()

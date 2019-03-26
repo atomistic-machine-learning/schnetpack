@@ -18,10 +18,13 @@ class SchNetInteraction(nn.Module):
     systems with cosine cutoff.
 
     Args:
-        n_atom_basis (int): number of features used to describe atomic environments
-        n_spatial_basis (int): number of input features of filter-generating networks
+        n_atom_basis (int): number of features used to describe atomic
+            environments
+        n_spatial_basis (int): number of input features of filter-generating
+            networks
         n_filters (int): number of filters used in continuous-filter convolution
-        normalize_filter (bool): if true, divide filter by number of neighbors over which convolution is applied
+        normalize_filter (bool): if true, divide filter by number of neighbors
+            over which convolution is applied
     """
 
     def __init__(self, n_atom_basis, n_spatial_basis, n_filters, cutoff,

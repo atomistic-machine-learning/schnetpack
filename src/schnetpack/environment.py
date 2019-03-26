@@ -2,6 +2,10 @@ import numpy as np
 from ase.neighborlist import neighbor_list
 
 
+__all__ = ['BaseEnvironmentProvider', 'SimpleEnvironmentProvider',
+           'AseEnvironmentProvider']
+
+
 class BaseEnvironmentProvider:
     """
     Environment Providers are supposed to collect neighboring atoms within

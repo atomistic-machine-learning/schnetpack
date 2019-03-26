@@ -17,6 +17,7 @@ from schnetpack.data import Structure
 import schnetpack.nn as L
 
 
+
 class AtomisticModel(nn.Module):
     """
     Assembles an atomistic model from a representation module and one or more output modules.
@@ -505,6 +506,9 @@ class ModelError(Exception):
 
 
 class Properties:
+    """
+    Collection of all available model properties.
+    """
     energy = 'energy'
     forces = 'forces'
     dipole_moment = 'dipole_moment'

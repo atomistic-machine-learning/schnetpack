@@ -9,6 +9,11 @@ from schnetpack.md.integrators import RingPolymer
 from schnetpack.simulate.hooks import SimulationHook
 
 
+__all__ = ['ThermostatHook', 'BerendsenThermostat', 'GLEThermostat',
+           'PIGLETThermostat', 'LangevinThermostat', 'PILELocalThermostat',
+           'PILEGlobalThermostat', 'NHCThermostat', 'NHCRingPolymerThermostat']
+
+
 class ThermostatError(Exception):
     """
     Exception for thermostat class.
@@ -60,7 +65,8 @@ class ThermostatHook(SimulationHook):
         # Check if using normal modes is feasible and initialize
         if self.nm_transformation is not None:
             if type(simulator.integrator) is not RingPolymer:
-                raise ThermostatError('Normal mode transformation should only be used with ring polymer dynamics.')
+                raise ThermostatError('Normal mode transformation should only'
+                                      'be used with ring polymer dynamics.')
             else:
                 self.nm_transformation = self.nm_transformation(self.n_replicas, device=self.device)
 
@@ -84,8 +90,10 @@ class ThermostatHook(SimulationHook):
         # Apply thermostat
         self._apply_thermostat(simulator)
 
-        # Re-apply atom masks for differently sized molecules, as some thermostats add random noise
-        simulator.system.momenta = simulator.system.momenta * simulator.system.atom_masks
+        # Re-apply atom masks for differently sized molecules, as some
+        # thermostats add random noise
+        simulator.system.momenta =\
+            simulator.system.momenta * simulator.system.atom_masks
 
         # Detach if requested
         if self.detach:
@@ -107,8 +115,10 @@ class ThermostatHook(SimulationHook):
         # Apply thermostat
         self._apply_thermostat(simulator)
 
-        # Re-apply atom masks for differently sized molecules, as some thermostats add random noise
-        simulator.system.momenta = simulator.system.momenta * simulator.system.atom_masks
+        # Re-apply atom masks for differently sized molecules, as some
+        # thermostats add random noise
+        simulator.system.momenta =\
+            simulator.system.momenta * simulator.system.atom_masks
 
         # Detach if requested
         if self.detach:
@@ -170,7 +180,8 @@ class BerendsenThermostat(ThermostatHook):
         """
         scaling = 1.0 + simulator.integrator.time_step / self.time_constant * (
                 self.temperature_bath / simulator.system.temperature - 1)
-        simulator.system.momenta = torch.sqrt(scaling[:, :, None, None]) * simulator.system.momenta
+        simulator.system.momenta =\
+            torch.sqrt(scaling[:, :, None, None]) * simulator.system.momenta
 
 
 class GLEThermostat(ThermostatHook):
@@ -201,7 +212,8 @@ class GLEThermostat(ThermostatHook):
 
         self.gle_file = gle_file
 
-        # To be initialized on beginning of the simulation, once system and integrator are known
+        # To be initialized on beginning of the simulation, once system and
+        # integrator are known
         self.c1 = None
         self.c2 = None
         self.thermostat_momenta = None
@@ -236,9 +248,11 @@ class GLEThermostat(ThermostatHook):
         a_matrix, c_matrix = load_gle_matrices(self.gle_file)
 
         if a_matrix is None:
-            raise ThermostatError('Error reading GLE matrices from {:s}'.format(self.gle_file))
+            raise ThermostatError('Error reading GLE matrices'
+                                  ' from {:s}'.format(self.gle_file))
         elif a_matrix.shape[0] > 1:
-            raise ThermostatError('More than one A matrix found. Could be PIGLET input.')
+            raise ThermostatError('More than one A matrix found. Could be '
+                                  'PIGLET input.')
         else:
             # Remove leading dimension (for normal modes)
             a_matrix = a_matrix.squeeze()
@@ -270,14 +284,17 @@ class GLEThermostat(ThermostatHook):
            The Journal of Chemical Physics, 133 (12), 124104. 2010.
         """
         if c_matrix is None:
-            c_matrix = np.eye(a_matrix.shape[-1]) * self.temperature_bath * MDUnits.kB
+            c_matrix =\
+                np.eye(a_matrix.shape[-1]) * self.temperature_bath * MDUnits.kB
             # Check if normal GLE or GLE for ring polymers is needed:
             if type(simulator.integrator) is RingPolymer:
-                logging.info('RingPolymer integrator detected, initializing C accordingly.')
+                logging.info('RingPolymer integrator detected, initializing '
+                             'C accordingly.')
                 c_matrix *= simulator.system.n_replicas
         else:
             c_matrix = c_matrix.squeeze()
-            logging.info('C matrix for GLE loaded, provided temperature will be ignored.')
+            logging.info('C matrix for GLE loaded, provided temperature will '
+                         'be ignored.')
 
         # A does not need to be transposed, else c2 is imaginary
         c1 = linalg.expm(-0.5 * simulator.integrator.time_step * a_matrix)
@@ -315,9 +332,13 @@ class GLEThermostat(ThermostatHook):
         """
         degrees_of_freedom = self.c1.shape[-1]
         if not free_particle_limit:
-            initial_momenta = torch.zeros(*simulator.system.momenta.shape, degrees_of_freedom, device=self.device)
+            initial_momenta = torch.zeros(*simulator.system.momenta.shape,
+                                          degrees_of_freedom,
+                                          device=self.device)
         else:
-            initial_momenta = torch.randn(*simulator.system.momenta.shape, degrees_of_freedom, device=self.device)
+            initial_momenta = torch.randn(*simulator.system.momenta.shape,
+                                          degrees_of_freedom,
+                                          device=self.device)
             initial_momenta = torch.matmul(initial_momenta, self.c2)
         return initial_momenta
 
@@ -330,7 +351,8 @@ class GLEThermostat(ThermostatHook):
                                                                  time step, system, etc.
         """
         # Generate random noise
-        thermostat_noise = torch.randn(self.thermostat_momenta.shape, device=self.device)
+        thermostat_noise = torch.randn(self.thermostat_momenta.shape,
+                                       device=self.device)
 
         # Get current momenta
         momenta = simulator.system.momenta
@@ -343,8 +365,9 @@ class GLEThermostat(ThermostatHook):
         self.thermostat_momenta[:, :, :, :, 0] = momenta
 
         # Apply thermostat
-        self.thermostat_momenta = torch.matmul(self.thermostat_momenta, self.c1) + \
-                                  torch.matmul(thermostat_noise, self.c2) * self.thermostat_factor
+        self.thermostat_momenta = \
+            torch.matmul(self.thermostat_momenta, self.c1) \
+            + torch.matmul(thermostat_noise, self.c2) * self.thermostat_factor
 
         # Extract momenta
         momenta = self.thermostat_momenta[:, :, :, :, 0]
@@ -403,7 +426,11 @@ class PIGLETThermostat(GLEThermostat):
 
     def __init__(self, temperature_bath, gle_file,
                  nm_transformation=NormalModeTransformer):
-        super(PIGLETThermostat, self).__init__(temperature_bath, gle_file, nm_transformation=nm_transformation)
+
+        logging.info('Using PIGLET thermostat')
+        super(PIGLETThermostat,
+              self).__init__(temperature_bath, gle_file,
+                             nm_transformation=nm_transformation)
 
     def _init_gle_matrices(self, simulator):
         """
@@ -424,19 +451,29 @@ class PIGLETThermostat(GLEThermostat):
         a_matrix, c_matrix = load_gle_matrices(self.gle_file)
 
         if a_matrix is None:
-            raise ThermostatError('Error reading GLE matrices from {:s}'.format(self.gle_file))
+            raise ThermostatError('Error reading GLE matrices '
+                                  'from {:s}'.format(self.gle_file))
         if a_matrix.shape[0] != self.n_replicas:
-            raise ThermostatError('Expected {:d} beads but found {:d}.'.format(a_matrix.shape[0], self.n_replicas))
+
+            raise ThermostatError('Expected {:d} beads but '
+                                  'found {:d}.'.format(self.n_replicas,
+                                                       a_matrix.shape[0]))
+
         if not type(simulator.integrator) is RingPolymer:
-            raise ThermostatError('PIGLET thermostat should only be used with RPMD.')
+            raise ThermostatError('PIGLET thermostat should only be used with '
+                                  'RPMD.')
 
         all_c1 = []
         all_c2 = []
 
         # Generate main matrices
         for b in range(self.n_replicas):
-            c1, c2 = self._init_single_gle_matrix(a_matrix[b], (c_matrix[b], None)[c_matrix is None], simulator)
-            # Add extra dimension for use with torch.cat, correspond to normal modes of ring polymer
+            c1, c2 = self._init_single_gle_matrix(a_matrix[b],
+                                                  (c_matrix[b],
+                                                   None)[c_matrix is None],
+                                                  simulator)
+            # Add extra dimension for use with torch.cat, correspond to normal
+            # modes of ring polymer
             all_c1.append(c1[None, ...])
             all_c2.append(c2[None, ...])
 
@@ -464,7 +501,11 @@ class LangevinThermostat(ThermostatHook):
     """
 
     def __init__(self, temperature_bath, time_constant, nm_transformation=None):
-        super(LangevinThermostat, self).__init__(temperature_bath, nm_transformation=nm_transformation)
+
+        logging.info('Using Langevin thermostat')
+        super(LangevinThermostat,
+              self).__init__(temperature_bath,
+                             nm_transformation=nm_transformation)
 
         self.time_constant = time_constant * MDUnits.fs2atu
 
@@ -491,7 +532,8 @@ class LangevinThermostat(ThermostatHook):
         self.c2 = c2.to(self.device)[:, None, None, None]
 
         # Get mass and temperature factors
-        self.thermostat_factor = torch.sqrt(simulator.system.masses * MDUnits.kB * self.temperature_bath)
+        self.thermostat_factor = torch.sqrt(simulator.system.masses *
+                                            MDUnits.kB * self.temperature_bath)
 
     def _apply_thermostat(self, simulator):
         """
@@ -512,7 +554,8 @@ class LangevinThermostat(ThermostatHook):
         thermostat_noise = torch.randn(momenta.shape, device=self.device)
 
         # Apply thermostat
-        momenta = self.c1 * momenta + self.thermostat_factor * self.c2 * thermostat_noise
+        momenta = self.c1 * momenta + self.thermostat_factor * self.c2 \
+                  * thermostat_noise
 
         # Apply transformation if requested
         if self.nm_transformation is not None:
@@ -595,7 +638,8 @@ class PILELocalThermostat(LangevinThermostat):
             gamma_normal *= self.damping
 
         if self.nm_transformation is None:
-            raise ThermostatError('Normal mode transformation required for PILE thermostat')
+            raise ThermostatError('Normal mode transformation required for '
+                                  'PILE thermostat')
 
         # Initialize coefficient matrices
         c1 = torch.exp(-0.5 * simulator.integrator.time_step * gamma_normal)
@@ -606,8 +650,8 @@ class PILELocalThermostat(LangevinThermostat):
 
         # Get mass and temperature factors
         self.thermostat_factor = torch.sqrt(
-            simulator.system.masses * MDUnits.kB * self.n_replicas * self.temperature_bath
-        )
+            simulator.system.masses * MDUnits.kB * self.n_replicas
+            * self.temperature_bath)
 
     @property
     def state_dict(self):
@@ -658,9 +702,12 @@ class PILEGlobalThermostat(PILELocalThermostat):
        The Journal of chemical physics, 126(1), 014101. 2007.
     """
 
-    def __init__(self, temperature_bath, time_constant, nm_transformation=NormalModeTransformer):
-        super(PILEGlobalThermostat, self).__init__(temperature_bath, time_constant,
-                                                   nm_transformation=nm_transformation)
+    def __init__(self, temperature_bath, time_constant,
+                 nm_transformation=NormalModeTransformer):
+        logging.info('Using global PILE thermostat')
+        super(PILEGlobalThermostat,
+              self).__init__(temperature_bath, time_constant,
+                             nm_transformation=nm_transformation)
 
     def _apply_thermostat(self, simulator):
         """
@@ -689,15 +736,18 @@ class PILEGlobalThermostat(PILELocalThermostat):
         thermostat_noise_centroid = thermostat_noise[0]
 
         # Compute kinetic energy of centroid
-        kinetic_energy_factor = torch.sum(momenta_centroid ** 2 / simulator.system.masses[0]) / (
-                self.temperature_bath * MDUnits.kB * self.n_replicas)
+        kinetic_energy_factor = \
+            torch.sum(momenta_centroid ** 2 / simulator.system.masses[0]) \
+            / (self.temperature_bath * MDUnits.kB * self.n_replicas)
 
         centroid_factor = (1 - c1_centroid) / kinetic_energy_factor
 
-        alpha_sq = c1_centroid + torch.sum(thermostat_noise_centroid ** 2) * centroid_factor + \
-                   2 * thermostat_noise_centroid[0, 0, 0] * torch.sqrt(c1_centroid * centroid_factor)
+        alpha_sq = c1_centroid + torch.sum(thermostat_noise_centroid ** 2) \
+            * centroid_factor + 2 * thermostat_noise_centroid[0, 0, 0] \
+            * torch.sqrt(c1_centroid * centroid_factor)
 
-        alpha_sign = torch.sign(thermostat_noise_centroid[0, 0, 0] + torch.sqrt(c1_centroid / centroid_factor))
+        alpha_sign = torch.sign(thermostat_noise_centroid[0, 0, 0]
+                                + torch.sqrt(c1_centroid / centroid_factor))
 
         alpha = torch.sqrt(alpha_sq) * alpha_sign
 
@@ -705,7 +755,8 @@ class PILEGlobalThermostat(PILELocalThermostat):
         momenta[0] = alpha * momenta[0]
 
         # Apply thermostat for remaining normal modes
-        momenta[1:] = self.c1[1:] * momenta[1:] + self.thermostat_factor * self.c2[1:] * thermostat_noise[1:]
+        momenta[1:] = self.c1[1:] * momenta[1:] + self.thermostat_factor \
+                      * self.c2[1:] * thermostat_noise[1:]
 
         # Apply transformation if requested
         if self.nm_transformation is not None:
@@ -766,9 +817,11 @@ class NHCThermostat(ThermostatHook):
        Molecular Physics, 87(5), 1117-1157. 1996.
     """
 
-    def __init__(self, temperature_bath, time_constant, chain_length=3, massive=False,
-                 nm_transformation=None, multi_step=2, integration_order=3):
-        super(NHCThermostat, self).__init__(temperature_bath, nm_transformation=nm_transformation)
+    def __init__(self, temperature_bath, time_constant, chain_length=3,
+                 massive=False, nm_transformation=None, multi_step=2,
+                 integration_order=3):
+        super(NHCThermostat, self).__init__(temperature_bath,
+                                            nm_transformation=nm_transformation)
 
         self.chain_length = chain_length
         self.massive = massive
@@ -800,19 +853,25 @@ class NHCThermostat(ThermostatHook):
                                                                  time step, system, etc.
         """
         # Determine integration step via multi step and Yoshida Suzuki weights
-        integration_weights = YSWeights(self.device).get_weights(self.integration_order)
-        self.time_step = simulator.integrator.time_step * integration_weights / self.multi_step
+        integration_weights =\
+            YSWeights(self.device).get_weights(self.integration_order)
+        self.time_step = simulator.integrator.time_step * integration_weights \
+            / self.multi_step
 
         # Determine shape of tensors and internal degrees of freedom
         n_replicas, n_molecules, n_atoms, xyz = simulator.system.momenta.shape
 
         if self.massive:
-            state_dimension = (n_replicas, n_molecules, n_atoms, xyz, self.chain_length)
+            state_dimension = (n_replicas, n_molecules, n_atoms, xyz,
+                               self.chain_length)
             # Since momenta will be masked later, no need to set non-atoms to 0
-            self.degrees_of_freedom = torch.ones((n_replicas, n_molecules, n_atoms, xyz), device=self.device)
+            self.degrees_of_freedom = torch.ones((n_replicas, n_molecules,
+                                                  n_atoms, xyz),
+                                                 device=self.device)
         else:
             state_dimension = (n_replicas, n_molecules, 1, 1, self.chain_length)
-            self.degrees_of_freedom = 3 * simulator.system.n_atoms.float()[None, :, None, None]
+            self.degrees_of_freedom =\
+                3 * simulator.system.n_atoms.float()[None, :, None, None]
 
         # Set up masses
         self._init_masses(state_dimension, simulator)
@@ -834,7 +893,8 @@ class NHCThermostat(ThermostatHook):
         """
         self.masses = torch.ones(state_dimension, device=self.device)
         # Get masses of innermost thermostat
-        self.masses[..., 0] = self.degrees_of_freedom * self.kb_temperature / self.frequency ** 2
+        self.masses[..., 0] = self.degrees_of_freedom * self.kb_temperature \
+            / self.frequency ** 2
         # Set masses of remaining thermostats
         self.masses[..., 1:] = self.kb_temperature / self.frequency ** 2
 
@@ -855,7 +915,8 @@ class NHCThermostat(ThermostatHook):
            Molecular Physics, 87(5), 1117-1157. 1996.
         """
         # Compute forces on first thermostat
-        self.forces[..., 0] = (kinetic_energy - self.degrees_of_freedom * self.kb_temperature) / self.masses[..., 0]
+        self.forces[..., 0] = (kinetic_energy - self.degrees_of_freedom
+                               * self.kb_temperature) / self.masses[..., 0]
 
         scaling_factor = 1.0
         for _ in range(self.multi_step):
@@ -863,34 +924,46 @@ class NHCThermostat(ThermostatHook):
                 time_step = self.time_step[idx_ys]
 
                 # Update velocities of outermost bath
-                self.velocities[..., -1] += 0.25 * self.forces[..., -1] * time_step
+                self.velocities[..., -1] += \
+                    0.25 * self.forces[..., -1] * time_step
 
                 # Update the velocities moving through the beads of the chain
                 for chain in range(self.chain_length - 2, -1, -1):
-                    coeff = torch.exp(-0.125 * time_step * self.velocities[..., chain + 1])
-                    self.velocities[..., chain] = self.velocities[..., chain] * coeff ** 2 + \
-                                                  0.25 * self.forces[..., chain] * coeff * time_step
+                    coeff = torch.exp(-0.125 * time_step
+                                      * self.velocities[..., chain + 1])
+                    self.velocities[..., chain] = \
+                        self.velocities[..., chain] * coeff ** 2 + 0.25 \
+                        * self.forces[..., chain] * coeff * time_step
 
                 # Accumulate velocity scaling
-                scaling_factor *= torch.exp(-0.5 * time_step * self.velocities[..., 0])
+                scaling_factor *= torch.exp(-0.5 * time_step
+                                            * self.velocities[..., 0])
                 # Update forces of innermost thermostat
-                self.forces[..., 0] = (scaling_factor * scaling_factor * kinetic_energy
-                                       - self.degrees_of_freedom * self.kb_temperature) / self.masses[..., 0]
+                self.forces[..., 0] = \
+                    (scaling_factor * scaling_factor * kinetic_energy
+                     - self.degrees_of_freedom * self.kb_temperature) \
+                    / self.masses[..., 0]
 
                 # Update thermostat positions
-                # TODO: Only required if one is interested in the conserved quanity of the NHC.
-                # self.positions += 0.5 * self.velocities * time_step
+                # TODO: Only required if one is interested in the conserved
+                #  quanity of the NHC.
+                self.positions += 0.5 * self.velocities * time_step
 
                 # Update the thermostat velocities
                 for chain in range(self.chain_length - 1):
-                    coeff = torch.exp(-0.125 * time_step * self.velocities[..., chain + 1])
-                    self.velocities[..., chain] = self.velocities[..., chain] * coeff ** 2 + \
-                                                  0.25 * self.forces[..., chain] * coeff * time_step
-                    self.forces[..., chain + 1] = (self.masses[..., chain] * self.velocities[..., chain] ** 2
-                                                   - self.kb_temperature) / self.masses[..., chain + 1]
+                    coeff = torch.exp(-0.125 * time_step
+                                      * self.velocities[..., chain + 1])
+                    self.velocities[..., chain] = \
+                        self.velocities[..., chain] * coeff ** 2 + 0.25 \
+                        * self.forces[..., chain] * coeff * time_step
+                    self.forces[..., chain + 1] = \
+                        (self.masses[..., chain]
+                         * self.velocities[..., chain] ** 2
+                         - self.kb_temperature) / self.masses[..., chain + 1]
 
                 # Update velocities of outermost thermostat
-                self.velocities[..., -1] += 0.25 * self.forces[..., -1] * time_step
+                self.velocities[..., -1] += 0.25 * self.forces[..., -1] \
+                    * time_step
 
         return scaling_factor
 
@@ -908,13 +981,16 @@ class NHCThermostat(ThermostatHook):
                           corresponding degrees of freedom, depending on whether a massive NHC is used.
 
         """
-        # Compute the kinetic energy (factor of 1/2 can be removed, as it cancels with a times 2)
-        # TODO: Is no problem, as NM transformation never mixes atom dimension which carries the masses.
+        # Compute the kinetic energy (factor of 1/2 can be removed, as it
+        # cancels with a times 2)
+        # TODO: Is no problem, as NM transformation never mixes atom dimension
+        #  which carries the masses.
         kinetic_energy = momenta ** 2 / masses
         if self.massive:
             return kinetic_energy
         else:
-            return torch.sum(torch.sum(kinetic_energy, 3, keepdim=True), 2, keepdim=True)
+            return torch.sum(torch.sum(kinetic_energy, 3, keepdim=True), 2,
+                             keepdim=True)
 
     def _apply_thermostat(self, simulator):
         """
@@ -933,7 +1009,8 @@ class NHCThermostat(ThermostatHook):
         if self.nm_transformation is not None:
             momenta = self.nm_transformation.beads2normal(momenta)
 
-        kinetic_energy = self._compute_kinetic_energy(momenta, simulator.system.masses)
+        kinetic_energy = self._compute_kinetic_energy(momenta,
+                                                      simulator.system.masses)
 
         scaling_factor = self._propagate_thermostat(kinetic_energy)
         momenta = momenta * scaling_factor
@@ -1009,15 +1086,15 @@ class NHCRingPolymerThermostat(NHCThermostat):
        The Journal of Chemical Physics, 133 (12), 124104. 2010.
     """
 
-    def __init__(self, temperature_bath, time_constant, chain_length=3, local=True,
-                 nm_transformation=NormalModeTransformer, multi_step=2, integration_order=3):
-        super(NHCRingPolymerThermostat, self).__init__(temperature_bath,
-                                                       time_constant,
-                                                       chain_length=chain_length,
-                                                       massive=True,
-                                                       nm_transformation=nm_transformation,
-                                                       multi_step=multi_step,
-                                                       integration_order=integration_order)
+    def __init__(self, temperature_bath, time_constant, chain_length=3,
+                 local=True, nm_transformation=NormalModeTransformer,
+                 multi_step=2, integration_order=3):
+        super(NHCRingPolymerThermostat,
+              self).__init__(temperature_bath, time_constant,
+                             chain_length=chain_length, massive=True,
+                             nm_transformation=nm_transformation,
+                             multi_step=multi_step,
+                             integration_order=integration_order)
         self.local = local
 
     def _init_masses(self, state_dimension, simulator):
@@ -1035,17 +1112,22 @@ class NHCRingPolymerThermostat(NHCThermostat):
 
         # Initialize masses with the frequencies of the ring polymer
         polymer_frequencies = simulator.integrator.omega_normal
-        polymer_frequencies[0] = 0.5 * self.frequency  # 0.5 comes from Ceriotti paper, check
+        # 0.5 comes from Ceriotti paper, check
+        polymer_frequencies[0] = 0.5 * self.frequency
 
         # Assume standard massive Nose-Hoover and initialize accordingly
         self.masses = torch.ones(state_dimension, device=self.device)
-        self.masses *= self.kb_temperature / polymer_frequencies[:, None, None, None, None] ** 2
+        self.masses *= self.kb_temperature \
+            / polymer_frequencies[:, None, None, None, None] ** 2
 
-        # If a global thermostat is requested, we assign masses of 3N to the first link in the chain on the centroid
+        # If a global thermostat is requested, we assign masses of 3N to
+        # the first link in the chain on the centroid
         if not self.local:
-            self.masses[0, :, :, :, 0] *= 3 * simulator.system.n_atoms.float()[:, None, None]
+            self.masses[0, :, :, :, 0] *= \
+                3 * simulator.system.n_atoms.float()[:, None, None]
             # Degrees of freedom also need to be adapted
-            self.degrees_of_freedom[0, :, :, :] *= 3 * simulator.system.n_atoms.float()[:, None, None]
+            self.degrees_of_freedom[0, :, :, :] *= \
+                3 * simulator.system.n_atoms.float()[:, None, None]
 
     def _compute_kinetic_energy(self, momenta, masses):
         """
@@ -1061,9 +1143,12 @@ class NHCRingPolymerThermostat(NHCThermostat):
         """
         kinetic_energy = momenta ** 2 / masses
 
-        # In case of a global NHC for RPMD, use the whole centroid kinetic energy and broadcast it
+        # In case of a global NHC for RPMD, use the whole centroid kinetic
+        # energy and broadcast it
         if not self.local:
-            kinetic_energy_centroid = torch.sum(torch.sum(kinetic_energy[0, ...], 2, keepdim=True), 1, keepdim=True)
+            kinetic_energy_centroid = \
+                torch.sum(torch.sum(kinetic_energy[0, ...], 2, keepdim=True),
+                          1, keepdim=True)
             kinetic_energy[0, ...] = kinetic_energy_centroid
 
         return kinetic_energy
