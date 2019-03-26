@@ -24,18 +24,23 @@ class MDCalculator:
                                   units (Hartree/Bohr).
         property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
                                            the model. Only changes the units used for logging the various outputs.
+        detach (bool): Detach property computation graph after every calculator call. Enabled by default. Should only
+                       be disabled if one wants to e.g. compute derivatives over short trajectory snippets.
     """
 
     def __init__(self, required_properties,
                  force_handle,
                  position_conversion=1.0,
                  force_conversion=1.0,
-                 property_conversion={}):
+                 property_conversion={},
+                 detach=True):
         self.results = {}
         self.force_handle = force_handle
         self.required_properties = required_properties
         self.position_conversion = position_conversion
         self.force_conversion = force_conversion
+
+        self.detach = detach
 
         self.property_conversion = property_conversion
         self._init_default_conversion()
@@ -72,18 +77,24 @@ class MDCalculator:
         Args:
             system (schnetpack.md.System): System object containing current state of the simulation.
         """
-        for p in self.required_properties:
 
+        # Collect all requested properties (including forces)
+        for p in self.required_properties:
             if p not in self.results:
                 raise MDCalculatorError('Requested property {:s} not in '
                                         'results'.format(p))
-            elif p == self.force_handle:
-                self._set_system_forces(system)
             else:
+                # Detach properties if requested
+                if self.detach:
+                    self.results[p] = self.results[p].detach()
+
                 dim = self.results[p].shape
                 system.properties[p] = self.results[p].view(
                     system.n_replicas, system.n_molecules, *dim[1:]) * \
                                        self.property_conversion[p]
+
+            # Set the forces for the system (at this point, already detached)
+            self._set_system_forces(system)
 
     def _get_system_neighbors(self, system):
         """
@@ -165,18 +176,22 @@ class SchnetPackCalculator(MDCalculator):
                                   units (Hartree/Bohr).
         property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
                                            the model. Only changes the units used for logging the various outputs.
+        detach (bool): Detach property computation graph after every calculator call. Enabled by default. Should only
+                       be disabled if one wants to e.g. compute derivatives over short trajectory snippets.
     """
 
     def __init__(self, model, required_properties,
                  force_handle,
                  position_conversion=1.0 / MDUnits.angs2bohr,
                  force_conversion=1.0 / MDUnits.auforces2aseforces,
-                 property_conversion={}):
+                 property_conversion={},
+                 detach=True):
         super(SchnetPackCalculator, self).__init__(required_properties,
                                                    force_handle,
                                                    position_conversion,
                                                    force_conversion,
-                                                   property_conversion)
+                                                   property_conversion,
+                                                   detach)
 
         self.model = model
 
