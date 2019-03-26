@@ -6,7 +6,6 @@ from schnetpack.train.hooks import *
 from schnetpack.train.trainer import Trainer
 from schnetpack.metrics import *
 
-
 train_ingredient = Ingredient('trainer')
 
 
@@ -65,8 +64,8 @@ def get_early_stopping_hook(patience, threshold_ratio):
 
 
 @train_ingredient.capture
-def get_reduce_on_plateau_hook(optimizer, patience, lr_factor, lr_min):
-    return ReduceLROnPlateauHook(optimizer, patience=patience, factor=lr_factor,
+def get_reduce_on_plateau_hook(patience, lr_factor, lr_min, opt=None):
+    return ReduceLROnPlateauHook(opt, patience=patience, factor=lr_factor,
                                  min_lr=lr_min, window_length=1,
                                  stop_after_min=True)
 
@@ -95,9 +94,10 @@ def get_optimizer(optimizer, learning_rate, trainable_params):
     else:
         raise NotImplementedError
 
+
 @train_ingredient.capture
 def build_hooks(logging_hooks, schedule, training_dir, max_epochs, property_map,
-                early_stopping, lr_schedule, max_steps, element_wise):
+                early_stopping, lr_schedule, max_steps, element_wise, opt=None):
     """
     build a list with hook objects
 
@@ -118,7 +118,7 @@ def build_hooks(logging_hooks, schedule, training_dir, max_epochs, property_map,
     """
     metrics_objects = build_metrics(property_map=property_map,
                                     element_wise=element_wise)
-    hook_objects = build_schedule(schedule)
+    hook_objects = build_schedule(schedule, opt=opt)
     hook_objects += build_logging_hooks(logging_hooks=logging_hooks,
                                         training_dir=training_dir,
                                         metrics_objects=metrics_objects)
@@ -163,7 +163,7 @@ def build_logging_hooks(logging_hooks, training_dir, metrics_objects):
 
 
 @train_ingredient.capture
-def build_schedule(schedule):
+def build_schedule(schedule, opt=None):
     """
     builds a list with a single schedule hook
 
@@ -178,7 +178,7 @@ def build_schedule(schedule):
     if schedule is None:
         return hook_objects
     elif schedule == 'plateau':
-        hook_objects.append(get_reduce_on_plateau_hook())
+        hook_objects.append(get_reduce_on_plateau_hook(opt=opt))
     elif schedule == 'sgdr':
         hook_objects.append(get_warm_restart_hook())
     else:
@@ -205,11 +205,11 @@ def build_metrics(metrics, property_map, element_wise):
     for metric in metrics:
         metric = metric.lower()
         if metric == 'mae':
-            metrics_objects +=\
+            metrics_objects += \
                 [MeanAbsoluteError(tgt, p, element_wise=p in element_wise)
                  for p, tgt in property_map.items() if tgt is not None]
         elif metric == 'rmse':
-            metrics_objects +=\
+            metrics_objects += \
                 [RootMeanSquaredError(tgt, p, element_wise=p in element_wise)
                  for p, tgt in property_map.items() if tgt is not None]
         else:
@@ -237,13 +237,13 @@ def setup_trainer(model, training_dir, loss_fn, train_loader, val_loader,
         schnetpack.train.Trainer object
 
     """
-    hooks = build_hooks(training_dir=training_dir, property_map=property_map,
-                        element_wise=element_wise)
-
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     trainable_params = filter(lambda p: p not in exclude, trainable_params)
 
     optim = get_optimizer(trainable_params=trainable_params)
+
+    hooks = build_hooks(training_dir=training_dir, property_map=property_map,
+                        element_wise=element_wise, opt=optim)
 
     trainer = Trainer(training_dir, model, loss_fn, optim, train_loader,
                       val_loader, hooks=hooks)
