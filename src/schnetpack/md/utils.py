@@ -38,7 +38,10 @@ class MDUnits:
         'ev': units.eV / units.Hartree,
         'bohr': 1.0,
         'angstrom': units.Bohr,
-        'hartree': 1.0
+        'a': units.Bohr,
+        'angs': units.Bohr,
+        'hartree': 1.0,
+        'ha': 1.0
     }
 
     @staticmethod
@@ -457,6 +460,7 @@ class HDF5Loader:
 
     def get_property(self, property_name, mol_idx=0, replica_idx=None, atomistic=False):
         """
+        Extract property from dataset.
 
         Args:
             property_name (str): Name of the property as contained in the self.properties dictionary.
@@ -473,6 +477,10 @@ class HDF5Loader:
             np.array: N_steps x [ property dimensions... ] array containing the requested property collected during the
                       simulation.
         """
+
+        # Special case for atom types
+        if property_name == Structure.Z:
+            return self.properties[Structure.Z][mol_idx]
 
         # Check whether property is present
         if property_name not in self.properties:
