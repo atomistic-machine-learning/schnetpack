@@ -11,7 +11,10 @@ DEFAULT_HOOKS = {
     'file_logger': {
         'every_n_steps': 1,
         'buffer_size': 100,
-        'data_streams': ['molecule_stream', 'property_stream']
+        'data_streams': ['molecule_stream', 'property_stream'],
+        'stream_options': {
+            'log_properties': 'all'
+        }
     },
     'checkpoint_logger': {
         'every_n_steps': 100
@@ -71,10 +74,14 @@ def build_simulation_hooks(simulator_hooks, simulation_dir):
     hook_objects = []
     for hook_name, hook_options in simulator_hooks.items():
         if hook_name == 'file_logger':
+            # Sets a default if not given explicitly
+            if 'stream_options' not in hook_options:
+                hook_options['stream_options'] = {}
             hook_objects.append(get_file_logger(simulation_dir=simulation_dir,
                                                 data_streams=hook_options['data_streams'],
                                                 buffer_size=hook_options['buffer_size'],
-                                                every_n_steps=hook_options['every_n_steps']))
+                                                every_n_steps=hook_options['every_n_steps'],
+                                                stream_options=hook_options['stream_options']))
         elif hook_name == 'checkpoint_logger':
             hook_objects.append(get_checkpoint_logger(simulation_dir=simulation_dir,
                                                       every_n_steps=hook_options['every_n_steps']))
@@ -130,8 +137,8 @@ def get_bias_potential():
 
 
 @simulator_ingredient.capture
-def get_file_logger(_log, restart, simulation_dir, data_streams, buffer_size, every_n_steps):
-    data_stream_classes = build_datastreams(data_streams)
+def get_file_logger(_log, restart, simulation_dir, data_streams, buffer_size, every_n_steps, stream_options):
+    data_stream_classes = build_datastreams(data_streams, stream_options)
     log_file = os.path.join(simulation_dir, 'simulation.hdf5')
     _log.info(f'Writing data streams {", ".join(data_streams)} to {log_file} every {every_n_steps} steps.')
     return FileLogger(log_file, buffer_size, data_stream_classes,
@@ -139,13 +146,27 @@ def get_file_logger(_log, restart, simulation_dir, data_streams, buffer_size, ev
 
 
 @simulator_ingredient.capture
-def build_datastreams(datastreams):
+def build_datastreams(datastreams, stream_options):
+    # TODO: Options should be given here
     stream_classes = []
+
     for datastream in datastreams:
+
         if datastream == 'molecule_stream':
-            stream_classes.append(MoleculeStream)
+            stream_classes.append(MoleculeStream())
+
         elif datastream == 'property_stream':
-            stream_classes.append(PropertyStream)
+            # If present, check for additional options
+            if 'log_properties' in stream_options:
+                log_properties = stream_options['log_properties']
+                # Map all to default
+                if log_properties == 'all':
+                    log_properties = None
+                elif type(log_properties) is not list:
+                    raise TypeError('Expected a list of properties in stream_options.')
+                stream_classes.append(PropertyStream(target_properties=log_properties))
+            else:
+                stream_classes.append(PropertyStream())
         else:
             raise NotImplementedError
     return stream_classes
