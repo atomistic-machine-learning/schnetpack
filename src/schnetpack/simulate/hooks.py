@@ -116,22 +116,19 @@ class DataStream:
 
     Args:
         group_name (str): Name of the data group entry.
-        main_dataset (h5py.File): Main h5py dataset object.
-        buffer_size (int): Size of the buffer, once full, data is stored to the hdf5 dataset.
-        restart (bool): If the simulation is restarted, continue logging in the previously created dataset.
-                        (default=False)
     """
 
-    def __init__(self, group_name, main_dataset, buffer_size, restart=False):
+    def __init__(self, group_name):
         self.group_name = group_name
-        self.main_dataset = main_dataset
-        self.buffer_size = buffer_size
-        self.restart = restart
-
         self.buffer = None
         self.data_group = None
 
-    def init_data_stream(self, simulator):
+        self.main_dataset = None
+        self.buffer_size = None
+        self.restart = None
+        self.every_n_steps = None
+
+    def init_data_stream(self, simulator, main_dataset, buffer_size, restart=False, every_n_steps=1):
         """
         Wrapper for initializing the data containers based on the instructions provided in the current simulator. For
         every data stream, the current number of valid entries is stored, which is updated periodically. This is
@@ -140,7 +137,18 @@ class DataStream:
 
         Args:
             simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            main_dataset (h5py.File): Main h5py dataset object.
+            buffer_size (int): Size of the buffer, once full, data is stored to the hdf5 dataset.
+            restart (bool): If the simulation is restarted, continue logging in the previously created dataset.
+                            (default=False)
+            every_n_steps (int): How often simulation steps are logged. Used e.g. to determine overall time step in
+                                 MoleculeStream.
         """
+        self.main_dataset = main_dataset
+        self.buffer_size = buffer_size
+        self.restart = restart
+        self.every_n_steps = every_n_steps
+
         self._init_data_stream(simulator)
         # Write number of meaningful entries into attributes
         if not self.restart:
@@ -219,19 +227,16 @@ class PropertyStream(DataStream):
     flattened property array.
 
     Args:
-        main_dataset (h5py.File): Main h5py dataset object.
-        buffer_size (int): Size of the buffer, once full, data is stored to the hdf5 dataset.
-        restart (bool): If the simulation is restarted, continue logging in the previously created dataset.
-                        (default=False)
+        target_properties (list): List of properties to be written to the hdf5 database. If no list is given, defaults
+                                  to None, which means all properties are stored.
     """
 
-    def __init__(self, main_dataset, buffer_size, restart=False):
-        super(PropertyStream, self).__init__('properties', main_dataset,
-                                             buffer_size, restart=restart)
-
+    def __init__(self, target_properties=None):
+        super(PropertyStream, self).__init__('properties')
         self.n_replicas = None
         self.n_molecules = None
         self.properties_slices = {}
+        self.target_properties = target_properties
 
     def _init_data_stream(self, simulator):
         """
@@ -270,9 +275,12 @@ class PropertyStream(DataStream):
             buffer_position (int): Current position in the buffer.
             simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
         """
+        # These are already detached in the calculator by default.
         for p in self.properties_slices:
             self.buffer[buffer_position:buffer_position + 1, ..., self.properties_slices[p]] = \
-                simulator.system.properties[p].view(self.n_replicas, self.n_molecules, -1).detach()
+                simulator.system.properties[p].view(self.n_replicas, self.n_molecules, -1)
+            # self.buffer[buffer_position:buffer_position + 1, ..., self.properties_slices[p]] = \
+            #     simulator.system.properties[p].view(self.n_replicas, self.n_molecules, -1).detach()
 
     def _get_properties_structures(self, property_dict):
         """
@@ -292,6 +300,10 @@ class PropertyStream(DataStream):
         properties_positions = {}
 
         for p in property_dict:
+
+            if self.target_properties is not None and p not in self.target_properties:
+                continue
+
             # Store shape for metadata
             properties_shape[p] = [int(i) for i in property_dict[p].shape[2:]]
             # Use shape to determine overall array dimensions
@@ -312,18 +324,10 @@ class SimulationStream(PropertyStream):
     n_steps x n_replicas x n_molecules x n_properties, where n_steps is the number of simulation steps, n_replicas and
     n_molecules is the number of simulation replicas and different molecules and n_properties is the length of the
     flattened property array.
-
-    Args:
-        main_dataset (h5py.File): Main h5py dataset object.
-        buffer_size (int): Size of the buffer, once full, data is stored to the hdf5 dataset.
-        restart (bool): If the simulation is restarted, continue logging in the previously created dataset.
-                        (default=False)
     """
 
-    def __init__(self, main_dataset, buffer_size, restart=False):
-        super(SimulationStream, self).__init__(main_dataset, buffer_size,
-                                               restart=restart)
-
+    def __init__(self):
+        super(SimulationStream, self).__init__()
         self.group_name = 'simulation'
 
     def _init_data_stream(self, simulator):
@@ -384,20 +388,11 @@ class MoleculeStream(DataStream):
     first 3 of the final 6 components are the Cartesian positions and the last 3 the velocities in atomic units. Atom
     types, the numbers of replicas, molecules and atoms, as well as the length of the time step in atomic units
     (for spectra) are stored in the group attributes.
-
-    Args:
-        main_dataset (h5py.File): Main h5py dataset object.
-        buffer_size (int): Size of the buffer, once full, data is stored to the hdf5 dataset.
-        restart (bool): If the simulation is restarted, continue logging in the previously created dataset.
-                        (default=False)
-        store_forces (bool): If requested, store forces in an additional 3 columns of the array. (default=False)
     """
 
-    def __init__(self, main_dataset, buffer_size, restart=False, store_forces=True):
-        super(MoleculeStream, self).__init__('molecules', main_dataset,
-                                             buffer_size, restart=restart)
+    def __init__(self):
+        super(MoleculeStream, self).__init__('molecules')
         self.written = 0
-        self.store_forces = store_forces
 
     def _init_data_stream(self, simulator):
         """
@@ -408,12 +403,8 @@ class MoleculeStream(DataStream):
             simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         # Get shape of array depending on whether forces should be stored.
-        if self.store_forces:
-            data_shape = (simulator.system.n_replicas, simulator.system.n_molecules,
-                          simulator.system.max_n_atoms, 9)
-        else:
-            data_shape = (simulator.system.n_replicas, simulator.system.n_molecules,
-                          simulator.system.max_n_atoms, 6)
+        data_shape = (simulator.system.n_replicas, simulator.system.n_molecules,
+                      simulator.system.max_n_atoms, 6)
 
         self._setup_data_groups(data_shape, simulator)
 
@@ -422,13 +413,8 @@ class MoleculeStream(DataStream):
             self.data_group.attrs['n_molecules'] = simulator.system.n_molecules
             self.data_group.attrs['n_atoms'] = simulator.system.n_atoms.cpu()
             self.data_group.attrs['atom_types'] = simulator.system.atom_types.cpu()
-            self.data_group.attrs['time_step'] = simulator.integrator.time_step
-
-            # Save indicator, whether forces are written
-            if self.store_forces:
-                self.data_group.attrs['has_forces'] = 1
-            else:
-                self.data_group.attrs['has_forces'] = 0
+            self.data_group.attrs['time_step'] = simulator.integrator.time_step * self.every_n_steps
+            self.data_group.attrs['every_n_steps'] = self.every_n_steps
 
     def update_buffer(self, buffer_position, simulator):
         """
@@ -440,13 +426,8 @@ class MoleculeStream(DataStream):
         """
         self.buffer[buffer_position:buffer_position + 1, ..., :3] = \
             simulator.system.positions
-        self.buffer[buffer_position:buffer_position + 1, ..., 3:6] = \
+        self.buffer[buffer_position:buffer_position + 1, ..., 3:] = \
             simulator.system.velocities
-
-        # If requested, store forces
-        if self.store_forces:
-            self.buffer[buffer_position:buffer_position + 1, ..., 6:] = \
-                simulator.system.forces
 
 
 class FileLoggerError(Exception):
@@ -475,7 +456,7 @@ class FileLogger(SimulationHook):
     """
 
     def __init__(self, filename, buffer_size,
-                 data_streams=[MoleculeStream, PropertyStream],
+                 data_streams=[MoleculeStream(), PropertyStream()],
                  every_n_steps=1, restart=False):
 
         self.restart = restart
@@ -492,8 +473,7 @@ class FileLogger(SimulationHook):
         # Precondition data streams
         self.data_steams = []
         for stream in data_streams:
-            self.data_steams += [stream(self.file, self.buffer_size,
-                                        restart=self.restart)]
+            self.data_steams += [stream]
 
         # Counter for file writes
         self.file_position = 0
@@ -509,7 +489,8 @@ class FileLogger(SimulationHook):
         """
         # Construct stream buffers and data groups
         for stream in self.data_steams:
-            stream.init_data_stream(simulator)
+            stream.init_data_stream(simulator, self.file, self.buffer_size, restart=self.restart,
+                                    every_n_steps=self.every_n_steps)
             # Upon restart, get current position in file
             if self.restart:
                 self.file_position = stream.data_group.attrs['entries']
