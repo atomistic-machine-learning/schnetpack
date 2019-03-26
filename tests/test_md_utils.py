@@ -69,7 +69,8 @@ def unit_conversion():
         'kcal / mol / Bohr': units.kcal / units.Hartree / units.mol * units.Angstrom,
         'eV': units.eV / units.Ha,
         'Ha': 1.0,
-        'Hartree': 1.0
+        'Hartree': 1.0,
+        0.57667: 0.57667
     }
     return conversions
 
