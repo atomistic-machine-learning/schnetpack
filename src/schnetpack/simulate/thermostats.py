@@ -3,21 +3,34 @@ import numpy as np
 import scipy.linalg as linalg
 import logging
 
-from schnetpack.md.utils import MDUnits, load_gle_matrices, \
-    NormalModeTransformer, YSWeights
+from schnetpack.md.utils import (
+    MDUnits,
+    load_gle_matrices,
+    NormalModeTransformer,
+    YSWeights,
+)
 from schnetpack.md.integrators import RingPolymer
 from schnetpack.simulate.hooks import SimulationHook
 
-__all__ = ['ThermostatHook', 'BerendsenThermostat', 'GLEThermostat',
-           'PIGLETThermostat', 'LangevinThermostat', 'PILELocalThermostat',
-           'PILEGlobalThermostat', 'NHCThermostat', 'NHCRingPolymerThermostat',
-           'TRPMDThermostat']
+__all__ = [
+    "ThermostatHook",
+    "BerendsenThermostat",
+    "GLEThermostat",
+    "PIGLETThermostat",
+    "LangevinThermostat",
+    "PILELocalThermostat",
+    "PILEGlobalThermostat",
+    "NHCThermostat",
+    "NHCRingPolymerThermostat",
+    "TRPMDThermostat",
+]
 
 
 class ThermostatError(Exception):
     """
     Exception for thermostat class.
     """
+
     pass
 
 
@@ -65,10 +78,14 @@ class ThermostatHook(SimulationHook):
         # Check if using normal modes is feasible and initialize
         if self.nm_transformation is not None:
             if type(simulator.integrator) is not RingPolymer:
-                raise ThermostatError('Normal mode transformation should only'
-                                      'be used with ring polymer dynamics.')
+                raise ThermostatError(
+                    "Normal mode transformation should only"
+                    "be used with ring polymer dynamics."
+                )
             else:
-                self.nm_transformation = self.nm_transformation(self.n_replicas, device=self.device)
+                self.nm_transformation = self.nm_transformation(
+                    self.n_replicas, device=self.device
+                )
 
         if not self.initialized:
             self._init_thermostat(simulator)
@@ -92,8 +109,9 @@ class ThermostatHook(SimulationHook):
 
         # Re-apply atom masks for differently sized molecules, as some
         # thermostats add random noise
-        simulator.system.momenta = \
+        simulator.system.momenta = (
             simulator.system.momenta * simulator.system.atom_masks
+        )
 
         # Detach if requested
         if self.detach:
@@ -117,8 +135,9 @@ class ThermostatHook(SimulationHook):
 
         # Re-apply atom masks for differently sized molecules, as some
         # thermostats add random noise
-        simulator.system.momenta = \
+        simulator.system.momenta = (
             simulator.system.momenta * simulator.system.atom_masks
+        )
 
         # Detach if requested
         if self.detach:
@@ -179,9 +198,11 @@ class BerendsenThermostat(ThermostatHook):
                                                                  time step, system, etc.
         """
         scaling = 1.0 + simulator.integrator.time_step / self.time_constant * (
-                self.temperature_bath / simulator.system.temperature - 1)
-        simulator.system.momenta = \
+            self.temperature_bath / simulator.system.temperature - 1
+        )
+        simulator.system.momenta = (
             torch.sqrt(scaling[:, :, None, None]) * simulator.system.momenta
+        )
 
 
 class GLEThermostat(ThermostatHook):
@@ -207,8 +228,9 @@ class GLEThermostat(ThermostatHook):
     """
 
     def __init__(self, temperature_bath, gle_file, nm_transformation=None):
-        super(GLEThermostat, self).__init__(temperature_bath,
-                                            nm_transformation=nm_transformation)
+        super(GLEThermostat, self).__init__(
+            temperature_bath, nm_transformation=nm_transformation
+        )
 
         self.gle_file = gle_file
 
@@ -248,11 +270,13 @@ class GLEThermostat(ThermostatHook):
         a_matrix, c_matrix = load_gle_matrices(self.gle_file)
 
         if a_matrix is None:
-            raise ThermostatError('Error reading GLE matrices'
-                                  ' from {:s}'.format(self.gle_file))
+            raise ThermostatError(
+                "Error reading GLE matrices" " from {:s}".format(self.gle_file)
+            )
         elif a_matrix.shape[0] > 1:
-            raise ThermostatError('More than one A matrix found. Could be '
-                                  'PIGLET input.')
+            raise ThermostatError(
+                "More than one A matrix found. Could be " "PIGLET input."
+            )
         else:
             # Remove leading dimension (for normal modes)
             a_matrix = a_matrix.squeeze()
@@ -284,17 +308,18 @@ class GLEThermostat(ThermostatHook):
            The Journal of Chemical Physics, 133 (12), 124104. 2010.
         """
         if c_matrix is None:
-            c_matrix = \
-                np.eye(a_matrix.shape[-1]) * self.temperature_bath * MDUnits.kB
+            c_matrix = np.eye(a_matrix.shape[-1]) * self.temperature_bath * MDUnits.kB
             # Check if normal GLE or GLE for ring polymers is needed:
             if type(simulator.integrator) is RingPolymer:
-                logging.info('RingPolymer integrator detected, initializing '
-                             'C accordingly.')
+                logging.info(
+                    "RingPolymer integrator detected, initializing " "C accordingly."
+                )
                 c_matrix *= simulator.system.n_replicas
         else:
             c_matrix = c_matrix.squeeze()
-            logging.info('C matrix for GLE loaded, provided temperature will '
-                         'be ignored.')
+            logging.info(
+                "C matrix for GLE loaded, provided temperature will " "be ignored."
+            )
 
         # A does not need to be transposed, else c2 is imaginary
         c1 = linalg.expm(-0.5 * simulator.integrator.time_step * a_matrix)
@@ -332,13 +357,13 @@ class GLEThermostat(ThermostatHook):
         """
         degrees_of_freedom = self.c1.shape[-1]
         if not free_particle_limit:
-            initial_momenta = torch.zeros(*simulator.system.momenta.shape,
-                                          degrees_of_freedom,
-                                          device=self.device)
+            initial_momenta = torch.zeros(
+                *simulator.system.momenta.shape, degrees_of_freedom, device=self.device
+            )
         else:
-            initial_momenta = torch.randn(*simulator.system.momenta.shape,
-                                          degrees_of_freedom,
-                                          device=self.device)
+            initial_momenta = torch.randn(
+                *simulator.system.momenta.shape, degrees_of_freedom, device=self.device
+            )
             initial_momenta = torch.matmul(initial_momenta, self.c2)
         return initial_momenta
 
@@ -351,8 +376,9 @@ class GLEThermostat(ThermostatHook):
                                                                  time step, system, etc.
         """
         # Generate random noise
-        thermostat_noise = torch.randn(self.thermostat_momenta.shape,
-                                       device=self.device)
+        thermostat_noise = torch.randn(
+            self.thermostat_momenta.shape, device=self.device
+        )
 
         # Get current momenta
         momenta = simulator.system.momenta
@@ -365,9 +391,10 @@ class GLEThermostat(ThermostatHook):
         self.thermostat_momenta[:, :, :, :, 0] = momenta
 
         # Apply thermostat
-        self.thermostat_momenta = \
-            torch.matmul(self.thermostat_momenta, self.c1) \
+        self.thermostat_momenta = (
+            torch.matmul(self.thermostat_momenta, self.c1)
             + torch.matmul(thermostat_noise, self.c2) * self.thermostat_factor
+        )
 
         # Extract momenta
         momenta = self.thermostat_momenta[:, :, :, :, 0]
@@ -381,23 +408,23 @@ class GLEThermostat(ThermostatHook):
     @property
     def state_dict(self):
         state_dict = {
-            'c1': self.c1,
-            'c2': self.c2,
-            'thermostat_factor': self.thermostat_factor,
-            'thermostat_momenta': self.thermostat_momenta,
-            'temperature_bath': self.temperature_bath,
-            'n_replicas': self.n_replicas
+            "c1": self.c1,
+            "c2": self.c2,
+            "thermostat_factor": self.thermostat_factor,
+            "thermostat_momenta": self.thermostat_momenta,
+            "temperature_bath": self.temperature_bath,
+            "n_replicas": self.n_replicas,
         }
         return state_dict
 
     @state_dict.setter
     def state_dict(self, state_dict):
-        self.c1 = state_dict['c1']
-        self.c2 = state_dict['c2']
-        self.thermostat_factor = state_dict['thermostat_factor']
-        self.thermostat_momenta = state_dict['thermostat_momenta']
-        self.temperature_bath = state_dict['temperature_bath']
-        self.n_replicas = state_dict['n_replicas']
+        self.c1 = state_dict["c1"]
+        self.c2 = state_dict["c2"]
+        self.thermostat_factor = state_dict["thermostat_factor"]
+        self.thermostat_momenta = state_dict["thermostat_momenta"]
+        self.temperature_bath = state_dict["temperature_bath"]
+        self.n_replicas = state_dict["n_replicas"]
 
         # Set initialized flag
         self.initialized = True
@@ -424,13 +451,14 @@ class PIGLETThermostat(GLEThermostat):
        The Journal of chemical physics, 145(5), 054101. 2016.
     """
 
-    def __init__(self, temperature_bath, gle_file,
-                 nm_transformation=NormalModeTransformer):
+    def __init__(
+        self, temperature_bath, gle_file, nm_transformation=NormalModeTransformer
+    ):
 
-        logging.info('Using PIGLET thermostat')
-        super(PIGLETThermostat,
-              self).__init__(temperature_bath, gle_file,
-                             nm_transformation=nm_transformation)
+        logging.info("Using PIGLET thermostat")
+        super(PIGLETThermostat, self).__init__(
+            temperature_bath, gle_file, nm_transformation=nm_transformation
+        )
 
     def _init_gle_matrices(self, simulator):
         """
@@ -451,26 +479,26 @@ class PIGLETThermostat(GLEThermostat):
         a_matrix, c_matrix = load_gle_matrices(self.gle_file)
 
         if a_matrix is None:
-            raise ThermostatError('Error reading GLE matrices '
-                                  'from {:s}'.format(self.gle_file))
+            raise ThermostatError(
+                "Error reading GLE matrices " "from {:s}".format(self.gle_file)
+            )
         if a_matrix.shape[0] != self.n_replicas:
-            raise ThermostatError('Expected {:d} beads but '
-                                  'found {:d}.'.format(self.n_replicas,
-                                                       a_matrix.shape[0]))
+            raise ThermostatError(
+                "Expected {:d} beads but "
+                "found {:d}.".format(self.n_replicas, a_matrix.shape[0])
+            )
 
         if not type(simulator.integrator) is RingPolymer:
-            raise ThermostatError('PIGLET thermostat should only be used with '
-                                  'RPMD.')
+            raise ThermostatError("PIGLET thermostat should only be used with " "RPMD.")
 
         all_c1 = []
         all_c2 = []
 
         # Generate main matrices
         for b in range(self.n_replicas):
-            c1, c2 = self._init_single_gle_matrix(a_matrix[b],
-                                                  (c_matrix[b],
-                                                   None)[c_matrix is None],
-                                                  simulator)
+            c1, c2 = self._init_single_gle_matrix(
+                a_matrix[b], (c_matrix[b], None)[c_matrix is None], simulator
+            )
             # Add extra dimension for use with torch.cat, correspond to normal
             # modes of ring polymer
             all_c1.append(c1[None, ...])
@@ -501,10 +529,10 @@ class LangevinThermostat(ThermostatHook):
 
     def __init__(self, temperature_bath, time_constant, nm_transformation=None):
 
-        logging.info('Using Langevin thermostat')
-        super(LangevinThermostat,
-              self).__init__(temperature_bath,
-                             nm_transformation=nm_transformation)
+        logging.info("Using Langevin thermostat")
+        super(LangevinThermostat, self).__init__(
+            temperature_bath, nm_transformation=nm_transformation
+        )
 
         self.time_constant = time_constant * MDUnits.fs2atu
 
@@ -531,8 +559,9 @@ class LangevinThermostat(ThermostatHook):
         self.c2 = c2.to(self.device)[:, None, None, None]
 
         # Get mass and temperature factors
-        self.thermostat_factor = torch.sqrt(simulator.system.masses *
-                                            MDUnits.kB * self.temperature_bath)
+        self.thermostat_factor = torch.sqrt(
+            simulator.system.masses * MDUnits.kB * self.temperature_bath
+        )
 
     def _apply_thermostat(self, simulator):
         """
@@ -553,8 +582,9 @@ class LangevinThermostat(ThermostatHook):
         thermostat_noise = torch.randn(momenta.shape, device=self.device)
 
         # Apply thermostat
-        momenta = self.c1 * momenta + self.thermostat_factor * self.c2 \
-                  * thermostat_noise
+        momenta = (
+            self.c1 * momenta + self.thermostat_factor * self.c2 * thermostat_noise
+        )
 
         # Apply transformation if requested
         if self.nm_transformation is not None:
@@ -565,21 +595,21 @@ class LangevinThermostat(ThermostatHook):
     @property
     def state_dict(self):
         state_dict = {
-            'c1': self.c1,
-            'c2': self.c2,
-            'thermostat_factor': self.thermostat_factor,
-            'temperature_bath': self.temperature_bath,
-            'n_replicas': self.n_replicas
+            "c1": self.c1,
+            "c2": self.c2,
+            "thermostat_factor": self.thermostat_factor,
+            "temperature_bath": self.temperature_bath,
+            "n_replicas": self.n_replicas,
         }
         return state_dict
 
     @state_dict.setter
     def state_dict(self, state_dict):
-        self.c1 = state_dict['c1']
-        self.c2 = state_dict['c2']
-        self.thermostat_factor = state_dict['thermostat_factor']
-        self.temperature_bath = state_dict['temperature_bath']
-        self.n_replicas = state_dict['n_replicas']
+        self.c1 = state_dict["c1"]
+        self.c2 = state_dict["c2"]
+        self.thermostat_factor = state_dict["thermostat_factor"]
+        self.temperature_bath = state_dict["temperature_bath"]
+        self.n_replicas = state_dict["n_replicas"]
 
         # Set initialized flag
         self.initialized = True
@@ -607,9 +637,17 @@ class PILELocalThermostat(LangevinThermostat):
        The Journal of Chemical Physics, 133 (12), 124104. 2010.
     """
 
-    def __init__(self, temperature_bath, time_constant, nm_transformation=NormalModeTransformer,
-                 thermostat_centroid=True, damping=None):
-        super(PILELocalThermostat, self).__init__(temperature_bath, time_constant, nm_transformation=nm_transformation)
+    def __init__(
+        self,
+        temperature_bath,
+        time_constant,
+        nm_transformation=NormalModeTransformer,
+        thermostat_centroid=True,
+        damping=None,
+    ):
+        super(PILELocalThermostat, self).__init__(
+            temperature_bath, time_constant, nm_transformation=nm_transformation
+        )
         self.thermostat_centroid = thermostat_centroid
         self.damping = damping
 
@@ -623,7 +661,7 @@ class PILELocalThermostat(LangevinThermostat):
                                                                  time step, system, etc.
         """
         if type(simulator.integrator) is not RingPolymer:
-            raise ThermostatError('PILE thermostats can only be used in RPMD')
+            raise ThermostatError("PILE thermostats can only be used in RPMD")
 
         # Initialize friction coefficients
         gamma_normal = 2 * simulator.integrator.omega_normal
@@ -637,8 +675,9 @@ class PILELocalThermostat(LangevinThermostat):
             gamma_normal *= self.damping
 
         if self.nm_transformation is None:
-            raise ThermostatError('Normal mode transformation required for '
-                                  'PILE thermostat')
+            raise ThermostatError(
+                "Normal mode transformation required for " "PILE thermostat"
+            )
 
         # Initialize coefficient matrices
         c1 = torch.exp(-0.5 * simulator.integrator.time_step * gamma_normal)
@@ -649,31 +688,34 @@ class PILELocalThermostat(LangevinThermostat):
 
         # Get mass and temperature factors
         self.thermostat_factor = torch.sqrt(
-            simulator.system.masses * MDUnits.kB * self.n_replicas
-            * self.temperature_bath)
+            simulator.system.masses
+            * MDUnits.kB
+            * self.n_replicas
+            * self.temperature_bath
+        )
 
     @property
     def state_dict(self):
         state_dict = {
-            'c1': self.c1,
-            'c2': self.c2,
-            'thermostat_factor': self.thermostat_factor,
-            'temperature_bath': self.temperature_bath,
-            'n_replicas': self.n_replicas,
-            'damping': self.damping,
-            'thermostat_centroid': self.thermostat_centroid
+            "c1": self.c1,
+            "c2": self.c2,
+            "thermostat_factor": self.thermostat_factor,
+            "temperature_bath": self.temperature_bath,
+            "n_replicas": self.n_replicas,
+            "damping": self.damping,
+            "thermostat_centroid": self.thermostat_centroid,
         }
         return state_dict
 
     @state_dict.setter
     def state_dict(self, state_dict):
-        self.c1 = state_dict['c1']
-        self.c2 = state_dict['c2']
-        self.thermostat_factor = state_dict['thermostat_factor']
-        self.temperature_bath = state_dict['temperature_bath']
-        self.n_replicas = state_dict['n_replicas']
-        self.damping = state_dict['damping']
-        self.thermostat_centroid = state_dict['thermostat_centroid']
+        self.c1 = state_dict["c1"]
+        self.c2 = state_dict["c2"]
+        self.thermostat_factor = state_dict["thermostat_factor"]
+        self.temperature_bath = state_dict["temperature_bath"]
+        self.n_replicas = state_dict["n_replicas"]
+        self.damping = state_dict["damping"]
+        self.thermostat_centroid = state_dict["thermostat_centroid"]
 
         # Set initialized flag
         self.initialized = True
@@ -701,12 +743,13 @@ class PILEGlobalThermostat(PILELocalThermostat):
        The Journal of chemical physics, 126(1), 014101. 2007.
     """
 
-    def __init__(self, temperature_bath, time_constant,
-                 nm_transformation=NormalModeTransformer):
-        logging.info('Using global PILE thermostat')
-        super(PILEGlobalThermostat,
-              self).__init__(temperature_bath, time_constant,
-                             nm_transformation=nm_transformation)
+    def __init__(
+        self, temperature_bath, time_constant, nm_transformation=NormalModeTransformer
+    ):
+        logging.info("Using global PILE thermostat")
+        super(PILEGlobalThermostat, self).__init__(
+            temperature_bath, time_constant, nm_transformation=nm_transformation
+        )
 
     def _apply_thermostat(self, simulator):
         """
@@ -735,18 +778,24 @@ class PILEGlobalThermostat(PILELocalThermostat):
         thermostat_noise_centroid = thermostat_noise[0]
 
         # Compute kinetic energy of centroid
-        kinetic_energy_factor = \
-            torch.sum(momenta_centroid ** 2 / simulator.system.masses[0]) \
-            / (self.temperature_bath * MDUnits.kB * self.n_replicas)
+        kinetic_energy_factor = torch.sum(
+            momenta_centroid ** 2 / simulator.system.masses[0]
+        ) / (self.temperature_bath * MDUnits.kB * self.n_replicas)
 
         centroid_factor = (1 - c1_centroid) / kinetic_energy_factor
 
-        alpha_sq = c1_centroid + torch.sum(thermostat_noise_centroid ** 2) \
-                   * centroid_factor + 2 * thermostat_noise_centroid[0, 0, 0] \
-                   * torch.sqrt(c1_centroid * centroid_factor)
+        alpha_sq = (
+            c1_centroid
+            + torch.sum(thermostat_noise_centroid ** 2) * centroid_factor
+            + 2
+            * thermostat_noise_centroid[0, 0, 0]
+            * torch.sqrt(c1_centroid * centroid_factor)
+        )
 
-        alpha_sign = torch.sign(thermostat_noise_centroid[0, 0, 0]
-                                + torch.sqrt(c1_centroid / centroid_factor))
+        alpha_sign = torch.sign(
+            thermostat_noise_centroid[0, 0, 0]
+            + torch.sqrt(c1_centroid / centroid_factor)
+        )
 
         alpha = torch.sqrt(alpha_sq) * alpha_sign
 
@@ -754,8 +803,10 @@ class PILEGlobalThermostat(PILELocalThermostat):
         momenta[0] = alpha * momenta[0]
 
         # Apply thermostat for remaining normal modes
-        momenta[1:] = self.c1[1:] * momenta[1:] + self.thermostat_factor \
-                      * self.c2[1:] * thermostat_noise[1:]
+        momenta[1:] = (
+            self.c1[1:] * momenta[1:]
+            + self.thermostat_factor * self.c2[1:] * thermostat_noise[1:]
+        )
 
         # Apply transformation if requested
         if self.nm_transformation is not None:
@@ -783,9 +834,16 @@ class TRPMDThermostat(PILELocalThermostat):
        The Journal of Chemical Physics, 140(23), 234116. 2014.
     """
 
-    def __init__(self, temperature_bath, damping, nm_transformation=NormalModeTransformer):
-        super(TRPMDThermostat, self).__init__(temperature_bath, 1.0, nm_transformation=nm_transformation,
-                                              thermostat_centroid=False, damping=damping)
+    def __init__(
+        self, temperature_bath, damping, nm_transformation=NormalModeTransformer
+    ):
+        super(TRPMDThermostat, self).__init__(
+            temperature_bath,
+            1.0,
+            nm_transformation=nm_transformation,
+            thermostat_centroid=False,
+            damping=damping,
+        )
 
 
 class NHCThermostat(ThermostatHook):
@@ -816,11 +874,19 @@ class NHCThermostat(ThermostatHook):
        Molecular Physics, 87(5), 1117-1157. 1996.
     """
 
-    def __init__(self, temperature_bath, time_constant, chain_length=3,
-                 massive=False, nm_transformation=None, multi_step=2,
-                 integration_order=3):
-        super(NHCThermostat, self).__init__(temperature_bath,
-                                            nm_transformation=nm_transformation)
+    def __init__(
+        self,
+        temperature_bath,
+        time_constant,
+        chain_length=3,
+        massive=False,
+        nm_transformation=None,
+        multi_step=2,
+        integration_order=3,
+    ):
+        super(NHCThermostat, self).__init__(
+            temperature_bath, nm_transformation=nm_transformation
+        )
 
         self.chain_length = chain_length
         self.massive = massive
@@ -852,25 +918,25 @@ class NHCThermostat(ThermostatHook):
                                                                  time step, system, etc.
         """
         # Determine integration step via multi step and Yoshida Suzuki weights
-        integration_weights = \
-            YSWeights(self.device).get_weights(self.integration_order)
-        self.time_step = simulator.integrator.time_step * integration_weights \
-                         / self.multi_step
+        integration_weights = YSWeights(self.device).get_weights(self.integration_order)
+        self.time_step = (
+            simulator.integrator.time_step * integration_weights / self.multi_step
+        )
 
         # Determine shape of tensors and internal degrees of freedom
         n_replicas, n_molecules, n_atoms, xyz = simulator.system.momenta.shape
 
         if self.massive:
-            state_dimension = (n_replicas, n_molecules, n_atoms, xyz,
-                               self.chain_length)
+            state_dimension = (n_replicas, n_molecules, n_atoms, xyz, self.chain_length)
             # Since momenta will be masked later, no need to set non-atoms to 0
-            self.degrees_of_freedom = torch.ones((n_replicas, n_molecules,
-                                                  n_atoms, xyz),
-                                                 device=self.device)
+            self.degrees_of_freedom = torch.ones(
+                (n_replicas, n_molecules, n_atoms, xyz), device=self.device
+            )
         else:
             state_dimension = (n_replicas, n_molecules, 1, 1, self.chain_length)
-            self.degrees_of_freedom = \
+            self.degrees_of_freedom = (
                 3 * simulator.system.n_atoms.float()[None, :, None, None]
+            )
 
         # Set up masses
         self._init_masses(state_dimension, simulator)
@@ -892,8 +958,9 @@ class NHCThermostat(ThermostatHook):
         """
         self.masses = torch.ones(state_dimension, device=self.device)
         # Get masses of innermost thermostat
-        self.masses[..., 0] = self.degrees_of_freedom * self.kb_temperature \
-                              / self.frequency ** 2
+        self.masses[..., 0] = (
+            self.degrees_of_freedom * self.kb_temperature / self.frequency ** 2
+        )
         # Set masses of remaining thermostats
         self.masses[..., 1:] = self.kb_temperature / self.frequency ** 2
 
@@ -914,8 +981,9 @@ class NHCThermostat(ThermostatHook):
            Molecular Physics, 87(5), 1117-1157. 1996.
         """
         # Compute forces on first thermostat
-        self.forces[..., 0] = (kinetic_energy - self.degrees_of_freedom
-                               * self.kb_temperature) / self.masses[..., 0]
+        self.forces[..., 0] = (
+            kinetic_energy - self.degrees_of_freedom * self.kb_temperature
+        ) / self.masses[..., 0]
 
         scaling_factor = 1.0
         for _ in range(self.multi_step):
@@ -923,25 +991,25 @@ class NHCThermostat(ThermostatHook):
                 time_step = self.time_step[idx_ys]
 
                 # Update velocities of outermost bath
-                self.velocities[..., -1] += \
-                    0.25 * self.forces[..., -1] * time_step
+                self.velocities[..., -1] += 0.25 * self.forces[..., -1] * time_step
 
                 # Update the velocities moving through the beads of the chain
                 for chain in range(self.chain_length - 2, -1, -1):
-                    coeff = torch.exp(-0.125 * time_step
-                                      * self.velocities[..., chain + 1])
-                    self.velocities[..., chain] = \
-                        self.velocities[..., chain] * coeff ** 2 + 0.25 \
-                        * self.forces[..., chain] * coeff * time_step
+                    coeff = torch.exp(
+                        -0.125 * time_step * self.velocities[..., chain + 1]
+                    )
+                    self.velocities[..., chain] = (
+                        self.velocities[..., chain] * coeff ** 2
+                        + 0.25 * self.forces[..., chain] * coeff * time_step
+                    )
 
                 # Accumulate velocity scaling
-                scaling_factor *= torch.exp(-0.5 * time_step
-                                            * self.velocities[..., 0])
+                scaling_factor *= torch.exp(-0.5 * time_step * self.velocities[..., 0])
                 # Update forces of innermost thermostat
-                self.forces[..., 0] = \
-                    (scaling_factor * scaling_factor * kinetic_energy
-                     - self.degrees_of_freedom * self.kb_temperature) \
-                    / self.masses[..., 0]
+                self.forces[..., 0] = (
+                    scaling_factor * scaling_factor * kinetic_energy
+                    - self.degrees_of_freedom * self.kb_temperature
+                ) / self.masses[..., 0]
 
                 # Update thermostat positions
                 # TODO: Only required if one is interested in the conserved
@@ -950,19 +1018,20 @@ class NHCThermostat(ThermostatHook):
 
                 # Update the thermostat velocities
                 for chain in range(self.chain_length - 1):
-                    coeff = torch.exp(-0.125 * time_step
-                                      * self.velocities[..., chain + 1])
-                    self.velocities[..., chain] = \
-                        self.velocities[..., chain] * coeff ** 2 + 0.25 \
-                        * self.forces[..., chain] * coeff * time_step
-                    self.forces[..., chain + 1] = \
-                        (self.masses[..., chain]
-                         * self.velocities[..., chain] ** 2
-                         - self.kb_temperature) / self.masses[..., chain + 1]
+                    coeff = torch.exp(
+                        -0.125 * time_step * self.velocities[..., chain + 1]
+                    )
+                    self.velocities[..., chain] = (
+                        self.velocities[..., chain] * coeff ** 2
+                        + 0.25 * self.forces[..., chain] * coeff * time_step
+                    )
+                    self.forces[..., chain + 1] = (
+                        self.masses[..., chain] * self.velocities[..., chain] ** 2
+                        - self.kb_temperature
+                    ) / self.masses[..., chain + 1]
 
                 # Update velocities of outermost thermostat
-                self.velocities[..., -1] += 0.25 * self.forces[..., -1] \
-                                            * time_step
+                self.velocities[..., -1] += 0.25 * self.forces[..., -1] * time_step
 
         return scaling_factor
 
@@ -988,8 +1057,9 @@ class NHCThermostat(ThermostatHook):
         if self.massive:
             return kinetic_energy
         else:
-            return torch.sum(torch.sum(kinetic_energy, 3, keepdim=True), 2,
-                             keepdim=True)
+            return torch.sum(
+                torch.sum(kinetic_energy, 3, keepdim=True), 2, keepdim=True
+            )
 
     def _apply_thermostat(self, simulator):
         """
@@ -1008,8 +1078,7 @@ class NHCThermostat(ThermostatHook):
         if self.nm_transformation is not None:
             momenta = self.nm_transformation.beads2normal(momenta)
 
-        kinetic_energy = self._compute_kinetic_energy(momenta,
-                                                      simulator.system.masses)
+        kinetic_energy = self._compute_kinetic_energy(momenta, simulator.system.masses)
 
         scaling_factor = self._propagate_thermostat(kinetic_energy)
         momenta = momenta * scaling_factor
@@ -1023,39 +1092,39 @@ class NHCThermostat(ThermostatHook):
     @property
     def state_dict(self):
         state_dict = {
-            'chain_length': self.chain_length,
-            'massive': self.massive,
-            'frequency': self.frequency,
-            'kb_temperature': self.kb_temperature,
-            'degrees_of_freedom': self.degrees_of_freedom,
-            'masses': self.masses,
-            'velocities': self.velocities,
-            'forces': self.forces,
-            'positions': self.positions,
-            'time_step': self.time_step,
-            'temperature_bath': self.temperature_bath,
-            'n_replicas': self.n_replicas,
-            'multi_step': self.multi_step,
-            'integration_order': self.integration_order
+            "chain_length": self.chain_length,
+            "massive": self.massive,
+            "frequency": self.frequency,
+            "kb_temperature": self.kb_temperature,
+            "degrees_of_freedom": self.degrees_of_freedom,
+            "masses": self.masses,
+            "velocities": self.velocities,
+            "forces": self.forces,
+            "positions": self.positions,
+            "time_step": self.time_step,
+            "temperature_bath": self.temperature_bath,
+            "n_replicas": self.n_replicas,
+            "multi_step": self.multi_step,
+            "integration_order": self.integration_order,
         }
         return state_dict
 
     @state_dict.setter
     def state_dict(self, state_dict):
-        self.chain_length = state_dict['chain_length']
-        self.massive = state_dict['massive']
-        self.frequency = state_dict['frequency']
-        self.kb_temperature = state_dict['kb_temperature']
-        self.degrees_of_freedom = state_dict['degrees_of_freedom']
-        self.masses = state_dict['masses']
-        self.velocities = state_dict['velocities']
-        self.forces = state_dict['forces']
-        self.positions = state_dict['positions']
-        self.time_step = state_dict['time_step']
-        self.temperature_bath = state_dict['temperature_bath']
-        self.n_replicas = state_dict['n_replicas']
-        self.multi_step = state_dict['multi_step']
-        self.integration_order = state_dict['integration_order']
+        self.chain_length = state_dict["chain_length"]
+        self.massive = state_dict["massive"]
+        self.frequency = state_dict["frequency"]
+        self.kb_temperature = state_dict["kb_temperature"]
+        self.degrees_of_freedom = state_dict["degrees_of_freedom"]
+        self.masses = state_dict["masses"]
+        self.velocities = state_dict["velocities"]
+        self.forces = state_dict["forces"]
+        self.positions = state_dict["positions"]
+        self.time_step = state_dict["time_step"]
+        self.temperature_bath = state_dict["temperature_bath"]
+        self.n_replicas = state_dict["n_replicas"]
+        self.multi_step = state_dict["multi_step"]
+        self.integration_order = state_dict["integration_order"]
 
         self.initialized = True
 
@@ -1085,15 +1154,25 @@ class NHCRingPolymerThermostat(NHCThermostat):
        The Journal of Chemical Physics, 133 (12), 124104. 2010.
     """
 
-    def __init__(self, temperature_bath, time_constant, chain_length=3,
-                 local=True, nm_transformation=NormalModeTransformer,
-                 multi_step=2, integration_order=3):
-        super(NHCRingPolymerThermostat,
-              self).__init__(temperature_bath, time_constant,
-                             chain_length=chain_length, massive=True,
-                             nm_transformation=nm_transformation,
-                             multi_step=multi_step,
-                             integration_order=integration_order)
+    def __init__(
+        self,
+        temperature_bath,
+        time_constant,
+        chain_length=3,
+        local=True,
+        nm_transformation=NormalModeTransformer,
+        multi_step=2,
+        integration_order=3,
+    ):
+        super(NHCRingPolymerThermostat, self).__init__(
+            temperature_bath,
+            time_constant,
+            chain_length=chain_length,
+            massive=True,
+            nm_transformation=nm_transformation,
+            multi_step=multi_step,
+            integration_order=integration_order,
+        )
         self.local = local
 
     def _init_masses(self, state_dimension, simulator):
@@ -1116,17 +1195,20 @@ class NHCRingPolymerThermostat(NHCThermostat):
 
         # Assume standard massive Nose-Hoover and initialize accordingly
         self.masses = torch.ones(state_dimension, device=self.device)
-        self.masses *= self.kb_temperature \
-                       / polymer_frequencies[:, None, None, None, None] ** 2
+        self.masses *= (
+            self.kb_temperature / polymer_frequencies[:, None, None, None, None] ** 2
+        )
 
         # If a global thermostat is requested, we assign masses of 3N to
         # the first link in the chain on the centroid
         if not self.local:
-            self.masses[0, :, :, :, 0] *= \
+            self.masses[0, :, :, :, 0] *= (
                 3 * simulator.system.n_atoms.float()[:, None, None]
+            )
             # Degrees of freedom also need to be adapted
-            self.degrees_of_freedom[0, :, :, :] *= \
+            self.degrees_of_freedom[0, :, :, :] *= (
                 3 * simulator.system.n_atoms.float()[:, None, None]
+            )
 
     def _compute_kinetic_energy(self, momenta, masses):
         """
@@ -1145,9 +1227,9 @@ class NHCRingPolymerThermostat(NHCThermostat):
         # In case of a global NHC for RPMD, use the whole centroid kinetic
         # energy and broadcast it
         if not self.local:
-            kinetic_energy_centroid = \
-                torch.sum(torch.sum(kinetic_energy[0, ...], 2, keepdim=True),
-                          1, keepdim=True)
+            kinetic_energy_centroid = torch.sum(
+                torch.sum(kinetic_energy[0, ...], 2, keepdim=True), 1, keepdim=True
+            )
             kinetic_energy[0, ...] = kinetic_energy_centroid
 
         return kinetic_energy
@@ -1155,40 +1237,40 @@ class NHCRingPolymerThermostat(NHCThermostat):
     @property
     def state_dict(self):
         state_dict = {
-            'chain_length': self.chain_length,
-            'massive': self.massive,
-            'frequency': self.frequency,
-            'kb_temperature': self.kb_temperature,
-            'degrees_of_freedom': self.degrees_of_freedom,
-            'masses': self.masses,
-            'velocities': self.velocities,
-            'forces': self.forces,
-            'positions': self.positions,
-            'time_step': self.time_step,
-            'temperature_bath': self.temperature_bath,
-            'n_replicas': self.n_replicas,
-            'multi_step': self.multi_step,
-            'integration_order': self.integration_order,
-            'local': self.local
+            "chain_length": self.chain_length,
+            "massive": self.massive,
+            "frequency": self.frequency,
+            "kb_temperature": self.kb_temperature,
+            "degrees_of_freedom": self.degrees_of_freedom,
+            "masses": self.masses,
+            "velocities": self.velocities,
+            "forces": self.forces,
+            "positions": self.positions,
+            "time_step": self.time_step,
+            "temperature_bath": self.temperature_bath,
+            "n_replicas": self.n_replicas,
+            "multi_step": self.multi_step,
+            "integration_order": self.integration_order,
+            "local": self.local,
         }
         return state_dict
 
     @state_dict.setter
     def state_dict(self, state_dict):
-        self.chain_length = state_dict['chain_length']
-        self.massive = state_dict['massive']
-        self.frequency = state_dict['frequency']
-        self.kb_temperature = state_dict['kb_temperature']
-        self.degrees_of_freedom = state_dict['degrees_of_freedom']
-        self.masses = state_dict['masses']
-        self.velocities = state_dict['velocities']
-        self.forces = state_dict['forces']
-        self.positions = state_dict['positions']
-        self.time_step = state_dict['time_step']
-        self.temperature_bath = state_dict['temperature_bath']
-        self.n_replicas = state_dict['n_replicas']
-        self.multi_step = state_dict['multi_step']
-        self.integration_order = state_dict['integration_order']
-        self.local = state_dict['local']
+        self.chain_length = state_dict["chain_length"]
+        self.massive = state_dict["massive"]
+        self.frequency = state_dict["frequency"]
+        self.kb_temperature = state_dict["kb_temperature"]
+        self.degrees_of_freedom = state_dict["degrees_of_freedom"]
+        self.masses = state_dict["masses"]
+        self.velocities = state_dict["velocities"]
+        self.forces = state_dict["forces"]
+        self.positions = state_dict["positions"]
+        self.time_step = state_dict["time_step"]
+        self.temperature_bath = state_dict["temperature_bath"]
+        self.n_replicas = state_dict["n_replicas"]
+        self.multi_step = state_dict["multi_step"]
+        self.integration_order = state_dict["integration_order"]
+        self.local = state_dict["local"]
 
         self.initialized = True

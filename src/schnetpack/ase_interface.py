@@ -23,15 +23,17 @@ from ase.io import read, write
 from ase.io.trajectory import Trajectory
 from ase.io.xyz import read_xyz, write_xyz
 from ase.md import VelocityVerlet, Langevin, MDLogger
-from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, \
-    Stationary, ZeroRotation
+from ase.md.velocitydistribution import (
+    MaxwellBoltzmannDistribution,
+    Stationary,
+    ZeroRotation,
+)
 from ase.optimize import QuasiNewton
 from ase.vibrations import Vibrations
 
 from schnetpack.atomistic import Energy, ElementalEnergy, Properties
 from schnetpack.data import Structure
-from schnetpack.environment import SimpleEnvironmentProvider, \
-    collect_atom_triples
+from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
 from schnetpack.representation import BehlerSFBlock
 
 
@@ -54,20 +56,28 @@ class SpkCalculator(Calculator):
             required if angular descriptors are used. Default is none.
         **kwargs: Additional arguments for basic ase calculator class
     """
-    implemented_properties = ['energy', 'forces']
 
-    def __init__(self, model, device='cpu', collect_triples=False,
-                 environment_provider=SimpleEnvironmentProvider(), **kwargs):
+    implemented_properties = ["energy", "forces"]
+
+    def __init__(
+        self,
+        model,
+        device="cpu",
+        collect_triples=False,
+        environment_provider=SimpleEnvironmentProvider(),
+        **kwargs
+    ):
         Calculator.__init__(self, **kwargs)
 
         self.model = model
 
-        self.atoms_converter = \
-            AtomsConverter(environment_provider=environment_provider,
-                           collect_triples=collect_triples, device=device)
+        self.atoms_converter = AtomsConverter(
+            environment_provider=environment_provider,
+            collect_triples=collect_triples,
+            device=device,
+        )
 
-    def calculate(self, atoms=None, properties=['energy'],
-                  system_changes=all_changes):
+    def calculate(self, atoms=None, properties=["energy"], system_changes=all_changes):
         """
         Args:
             atoms (ase.Atoms): ASE atoms object.
@@ -87,10 +97,10 @@ class SpkCalculator(Calculator):
         # Convert outputs to calculator format
         if Properties.energy in properties:
             energy = model_results[Properties.energy].cpu().data.numpy()
-            results['energy'] = energy.reshape(-1)
+            results["energy"] = energy.reshape(-1)
         if Properties.forces in properties:
             forces = model_results[Properties.forces].cpu().data.numpy()
-            results['forces'] = forces.reshape((len(atoms), 3))
+            results["forces"] = forces.reshape((len(atoms), 3))
 
         self.results = results
 
@@ -107,8 +117,12 @@ class AtomsConverter:
         device (str): Device for computation (default='cpu')
     """
 
-    def __init__(self, environment_provider=SimpleEnvironmentProvider(),
-                 collect_triples=False, device=torch.device('cpu')):
+    def __init__(
+        self,
+        environment_provider=SimpleEnvironmentProvider(),
+        collect_triples=False,
+        device=torch.device("cpu"),
+    ):
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
 
@@ -128,8 +142,7 @@ class AtomsConverter:
 
         # Elemental composition
         inputs[Structure.Z] = torch.LongTensor(atoms.numbers.astype(np.int))
-        inputs[Structure.atom_mask] = \
-            torch.ones_like(inputs[Structure.Z]).float()
+        inputs[Structure.atom_mask] = torch.ones_like(inputs[Structure.Z]).float()
 
         # Set positions
         positions = atoms.positions.astype(np.float32)
@@ -141,14 +154,13 @@ class AtomsConverter:
         # Get neighbors and neighbor mask
         mask = torch.FloatTensor(nbh_idx) >= 0
         inputs[Structure.neighbor_mask] = mask.float()
-        inputs[Structure.neighbors] = \
+        inputs[Structure.neighbors] = (
             torch.LongTensor(nbh_idx.astype(np.int)) * mask.long()
+        )
 
         # Get cells
-        inputs[Structure.cell] = \
-            torch.FloatTensor(atoms.cell.astype(np.float32))
-        inputs[Structure.cell_offset] = \
-            torch.FloatTensor(offsets.astype(np.float32))
+        inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
+        inputs[Structure.cell_offset] = torch.FloatTensor(offsets.astype(np.float32))
 
         # Set index
         # inputs['_idx'] = torch.LongTensor(np.array([idx], dtype=np.int))
@@ -156,12 +168,15 @@ class AtomsConverter:
         # If requested get masks and neighbor lists for neighbor pairs
         if self.collect_triples is not None:
             nbh_idx_j, nbh_idx_k = collect_atom_triples(nbh_idx)
-            inputs[Structure.neighbor_pairs_j] = \
-                torch.LongTensor(nbh_idx_j.astype(np.int))
-            inputs[Structure.neighbor_pairs_k] = \
-                torch.LongTensor(nbh_idx_k.astype(np.int))
-            inputs[Structure.neighbor_pairs_mask] = \
-                torch.ones_like(inputs[Structure.neighbor_pairs_j]).float()
+            inputs[Structure.neighbor_pairs_j] = torch.LongTensor(
+                nbh_idx_j.astype(np.int)
+            )
+            inputs[Structure.neighbor_pairs_k] = torch.LongTensor(
+                nbh_idx_k.astype(np.int)
+            )
+            inputs[Structure.neighbor_pairs_mask] = torch.ones_like(
+                inputs[Structure.neighbor_pairs_j]
+            ).float()
 
         # Add batch dimension and move to CPU/GPU
         for key, value in inputs.items():
@@ -206,12 +221,12 @@ class AseInterface:
             molecule_path (str): Path to molecular geometry
         """
         file_format = os.path.splitext(molecule_path)[-1]
-        if file_format == 'xyz':
+        if file_format == "xyz":
             self.molecule = read_xyz(molecule_path)
         else:
             self.molecule = read(molecule_path)
 
-    def save_molecule(self, name, file_format='xyz', append=False):
+    def save_molecule(self, name, file_format="xyz", append=False):
         """
         Save the current molecular geometry.
 
@@ -221,15 +236,13 @@ class AseInterface:
             append (bool): If set to true, geometry is added to end of file
                 (default False).
         """
-        molecule_path = os.path.join(self.working_dir,
-                                     "%s.%s" % (name, file_format))
+        molecule_path = os.path.join(self.working_dir, "%s.%s" % (name, file_format))
         if file_format == "xyz":
             # For extended xyz format, plain is needed since ase can not parse
             # the extxyz it writes
             write_xyz(molecule_path, self.molecule, plain=True)
         else:
-            write(molecule_path, self.molecule, format=file_format,
-                  append=append)
+            write(molecule_path, self.molecule, format=file_format, append=append)
 
     def calculate_single_point(self):
         """
@@ -243,10 +256,17 @@ class AseInterface:
         self.molecule.energy = energy
         self.molecule.forces = forces
 
-        self.save_molecule('single_point', file_format='extxyz')
+        self.save_molecule("single_point", file_format="extxyz")
 
-    def init_md(self, name, time_step=0.5, temp_init=300, temp_bath=None,
-                reset=False, interval=1):
+    def init_md(
+        self,
+        name,
+        time_step=0.5,
+        temp_init=300,
+        temp_bath=None,
+        reset=False,
+        interval=1,
+    ):
         """
         Initialize an ase molecular dynamics trajectory. The logfile needs to
         be specifies, so that old trajectories are not overwritten. This
@@ -275,22 +295,31 @@ class AseInterface:
         if temp_bath is None:
             self.dynamics = VelocityVerlet(self.molecule, time_step * units.fs)
         else:
-            self.dynamics = Langevin(self.molecule, time_step * units.fs,
-                                     temp_bath * units.kB, 0.01)
+            self.dynamics = Langevin(
+                self.molecule, time_step * units.fs, temp_bath * units.kB, 0.01
+            )
 
         # Create monitors for logfile and a trajectory file
         logfile = os.path.join(self.working_dir, "%s.log" % name)
         trajfile = os.path.join(self.working_dir, "%s.traj" % name)
-        logger = MDLogger(self.dynamics, self.molecule, logfile, stress=False,
-                          peratom=False, header=True, mode='a')
-        trajectory = Trajectory(trajfile, 'w', self.molecule)
+        logger = MDLogger(
+            self.dynamics,
+            self.molecule,
+            logfile,
+            stress=False,
+            peratom=False,
+            header=True,
+            mode="a",
+        )
+        trajectory = Trajectory(trajfile, "w", self.molecule)
 
         # Attach monitors to trajectory
         self.dynamics.attach(logger, interval=interval)
         self.dynamics.attach(trajectory.write, interval=interval)
 
-    def _init_velocities(self, temp_init=300, remove_translation=True,
-                         remove_rotation=True):
+    def _init_velocities(
+        self, temp_init=300, remove_translation=True, remove_rotation=True
+    ):
         """
         Initialize velocities for molecular dynamics
 
@@ -316,8 +345,9 @@ class AseInterface:
             steps (int): Number of simulation steps performed
         """
         if not self.dynamics:
-            raise AttributeError("Dynamics need to be initialized using the"
-                                 " 'setup_md' function")
+            raise AttributeError(
+                "Dynamics need to be initialized using the" " 'setup_md' function"
+            )
 
         self.dynamics.run(steps)
 
@@ -330,11 +360,13 @@ class AseInterface:
             fmax (float): Maximum residual force change (default 1.e-2)
             steps (int): Maximum number of steps (default 1000)
         """
-        name = 'optimization'
+        name = "optimization"
         optimize_file = os.path.join(self.working_dir, name)
-        optimizer = \
-            QuasiNewton(self.molecule, trajectory='%s.traj' % optimize_file,
-                        restart='%s.pkl' % optimize_file)
+        optimizer = QuasiNewton(
+            self.molecule,
+            trajectory="%s.traj" % optimize_file,
+            restart="%s.pkl" % optimize_file,
+        )
         optimizer.run(fmax, steps)
 
         # Save final geometry in xyz format
@@ -362,4 +394,4 @@ class AseInterface:
             frequencies.write_jmol()
 
 
-MLPotential = DeprecationHelper(SpkCalculator, 'MLPotential')
+MLPotential = DeprecationHelper(SpkCalculator, "MLPotential")

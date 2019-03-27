@@ -27,26 +27,39 @@ class SchNetInteraction(nn.Module):
             over which convolution is applied
     """
 
-    def __init__(self, n_atom_basis, n_spatial_basis, n_filters, cutoff,
-                 cutoff_network=HardCutoff, normalize_filter=False):
+    def __init__(
+        self,
+        n_atom_basis,
+        n_spatial_basis,
+        n_filters,
+        cutoff,
+        cutoff_network=HardCutoff,
+        normalize_filter=False,
+    ):
         super(SchNetInteraction, self).__init__()
 
         # initialize filters
         self.filter_network = nn.Sequential(
-            schnetpack.nn.base.Dense(n_spatial_basis, n_filters,
-                                     activation=schnetpack.nn.activations.shifted_softplus),
-            schnetpack.nn.base.Dense(n_filters, n_filters)
+            schnetpack.nn.base.Dense(
+                n_spatial_basis,
+                n_filters,
+                activation=schnetpack.nn.activations.shifted_softplus,
+            ),
+            schnetpack.nn.base.Dense(n_filters, n_filters),
         )
 
         self.cutoff_network = cutoff_network(cutoff)
 
         # initialize interaction blocks
-        self.cfconv = schnetpack.nn.cfconv.CFConv(n_atom_basis, n_filters,
-                                                  n_atom_basis,
-                                                  self.filter_network,
-                                                  cutoff_network=self.cutoff_network,
-                                                  activation=schnetpack.nn.activations.shifted_softplus,
-                                                  normalize_filter=normalize_filter)
+        self.cfconv = schnetpack.nn.cfconv.CFConv(
+            n_atom_basis,
+            n_filters,
+            n_atom_basis,
+            self.filter_network,
+            cutoff_network=self.cutoff_network,
+            activation=schnetpack.nn.activations.shifted_softplus,
+            normalize_filter=normalize_filter,
+        )
         self.dense = schnetpack.nn.base.Dense(n_atom_basis, n_atom_basis)
 
     def forward(self, x, r_ij, neighbors, neighbor_mask, f_ij=None):
@@ -100,12 +113,22 @@ class SchNet(nn.Module):
        The Journal of Chemical Physics 148 (24), 241722. 2018.
     """
 
-    def __init__(self, n_atom_basis=128, n_filters=128, n_interactions=1,
-                 cutoff=5.0, n_gaussians=25,
-                 normalize_filter=False, coupled_interactions=False,
-                 return_intermediate=False, max_z=100,
-                 cutoff_network=HardCutoff, trainable_gaussians=False,
-                 distance_expansion=None, charged_systems=False):
+    def __init__(
+        self,
+        n_atom_basis=128,
+        n_filters=128,
+        n_interactions=1,
+        cutoff=5.0,
+        n_gaussians=25,
+        normalize_filter=False,
+        coupled_interactions=False,
+        return_intermediate=False,
+        max_z=100,
+        cutoff_network=HardCutoff,
+        trainable_gaussians=False,
+        distance_expansion=None,
+        charged_systems=False,
+    ):
         super(SchNet, self).__init__()
 
         # atom type embeddings
@@ -115,7 +138,8 @@ class SchNet(nn.Module):
         self.distances = schnetpack.nn.neighbors.AtomDistances()
         if distance_expansion is None:
             self.distance_expansion = schnetpack.nn.acsf.GaussianSmearing(
-                0.0, cutoff, n_gaussians, trainable=trainable_gaussians)
+                0.0, cutoff, n_gaussians, trainable=trainable_gaussians
+            )
         else:
             self.distance_expansion = distance_expansion
 
@@ -124,7 +148,7 @@ class SchNet(nn.Module):
         self.charged_systems = charged_systems
         if charged_systems:
             self.charge = nn.Parameter(torch.Tensor(1, n_atom_basis))
-            self.charge.data.normal_(0, 1. / math.sqrt(n_atom_basis))
+            self.charge.data.normal_(0, 1.0 / math.sqrt(n_atom_basis))
 
         # interaction network
         if coupled_interactions:
@@ -136,18 +160,25 @@ class SchNet(nn.Module):
                         n_filters=n_filters,
                         cutoff_network=cutoff_network,
                         cutoff=cutoff,
-                        normalize_filter=normalize_filter)
-                ] * n_interactions)
+                        normalize_filter=normalize_filter,
+                    )
+                ]
+                * n_interactions
+            )
         else:
-            self.interactions = nn.ModuleList([
-                SchNetInteraction(n_atom_basis=n_atom_basis,
-                                  n_spatial_basis=n_gaussians,
-                                  n_filters=n_filters,
-                                  cutoff_network=cutoff_network,
-                                  cutoff=cutoff,
-                                  normalize_filter=normalize_filter)
-                for _ in range(n_interactions)
-            ])
+            self.interactions = nn.ModuleList(
+                [
+                    SchNetInteraction(
+                        n_atom_basis=n_atom_basis,
+                        n_spatial_basis=n_gaussians,
+                        n_filters=n_filters,
+                        cutoff_network=cutoff_network,
+                        cutoff=cutoff,
+                        normalize_filter=normalize_filter,
+                    )
+                    for _ in range(n_interactions)
+                ]
+            )
 
     def forward(self, inputs):
         """
@@ -171,13 +202,14 @@ class SchNet(nn.Module):
 
         if False and self.charged_systems and Structure.charge in inputs.keys():
             n_atoms = torch.sum(atom_mask, dim=1, keepdim=True)
-            charge = inputs[Structure.charge] / n_atoms # B
+            charge = inputs[Structure.charge] / n_atoms  # B
             charge = charge[:, None] * self.charge  # B x F
             x = x + charge
 
         # spatial features
-        r_ij = self.distances(positions, neighbors, cell, cell_offset,
-                              neighbor_mask=neighbor_mask)
+        r_ij = self.distances(
+            positions, neighbors, cell, cell_offset, neighbor_mask=neighbor_mask
+        )
         f_ij = self.distance_expansion(r_ij)
 
         # interactions

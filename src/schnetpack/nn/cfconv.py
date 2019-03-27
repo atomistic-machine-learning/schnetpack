@@ -4,9 +4,7 @@ from torch import nn as nn
 from schnetpack.nn import Dense
 from schnetpack.nn.base import Aggregate
 
-__all__ = [
-    'CFConv'
-]
+__all__ = ["CFConv"]
 
 
 class CFConv(nn.Module):
@@ -26,9 +24,17 @@ class CFConv(nn.Module):
         axis (int): axis over which convolution should be applied
     """
 
-    def __init__(self, n_in, n_filters, n_out, filter_network,
-                 cutoff_network=None,
-                 activation=None, normalize_filter=False, axis=2):
+    def __init__(
+        self,
+        n_in,
+        n_filters,
+        n_out,
+        filter_network,
+        cutoff_network=None,
+        activation=None,
+        normalize_filter=False,
+        axis=2,
+    ):
         super(CFConv, self).__init__()
         self.in2f = Dense(n_in, n_filters, bias=False)
         self.f2out = Dense(n_filters, n_out, activation=activation)

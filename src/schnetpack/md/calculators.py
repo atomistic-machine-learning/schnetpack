@@ -6,6 +6,7 @@ class MDCalculatorError(Exception):
     """
     Exception for MDCalculator base class.
     """
+
     pass
 
 
@@ -28,12 +29,15 @@ class MDCalculator:
                        be disabled if one wants to e.g. compute derivatives over short trajectory snippets.
     """
 
-    def __init__(self, required_properties,
-                 force_handle,
-                 position_conversion=1.0,
-                 force_conversion=1.0,
-                 property_conversion={},
-                 detach=True):
+    def __init__(
+        self,
+        required_properties,
+        force_handle,
+        position_conversion=1.0,
+        force_conversion=1.0,
+        property_conversion={},
+        detach=True,
+    ):
         self.results = {}
         self.force_handle = force_handle
         self.required_properties = required_properties
@@ -81,17 +85,21 @@ class MDCalculator:
         # Collect all requested properties (including forces)
         for p in self.required_properties:
             if p not in self.results:
-                raise MDCalculatorError('Requested property {:s} not in '
-                                        'results'.format(p))
+                raise MDCalculatorError(
+                    "Requested property {:s} not in " "results".format(p)
+                )
             else:
                 # Detach properties if requested
                 if self.detach:
                     self.results[p] = self.results[p].detach()
 
                 dim = self.results[p].shape
-                system.properties[p] = self.results[p].view(
-                    system.n_replicas, system.n_molecules, *dim[1:]) * \
-                                       self.property_conversion[p]
+                system.properties[p] = (
+                    self.results[p].view(
+                        system.n_replicas, system.n_molecules, *dim[1:]
+                    )
+                    * self.property_conversion[p]
+                )
 
             # Set the forces for the system (at this point, already detached)
             self._set_system_forces(system)
@@ -111,13 +119,15 @@ class MDCalculator:
                               dimensions.
         """
         if system.neighbor_list is None:
-            raise ValueError('System does not have neighbor list.')
+            raise ValueError("System does not have neighbor list.")
         neighbor_list, neighbor_mask = system.neighbor_list.get_neighbors()
 
-        neighbor_list = neighbor_list.view(-1, system.max_n_atoms,
-                                           system.max_n_atoms - 1)
-        neighbor_mask = neighbor_mask.view(-1, system.max_n_atoms,
-                                           system.max_n_atoms - 1)
+        neighbor_list = neighbor_list.view(
+            -1, system.max_n_atoms, system.max_n_atoms - 1
+        )
+        neighbor_mask = neighbor_mask.view(
+            -1, system.max_n_atoms, system.max_n_atoms - 1
+        )
         return neighbor_list, neighbor_mask
 
     def _get_system_molecules(self, system):
@@ -133,8 +143,9 @@ class MDCalculator:
             torch.FloatTensor: (n_replicas*n_molecules) x n_atoms tensor holding nuclear charges
             torch.FloatTensor: (n_replicas*n_molecules) x n_atoms binary tensor indicating padded atom dimensions
         """
-        positions = system.positions.view(-1, system.max_n_atoms,
-                                          3) * self.position_conversion
+        positions = (
+            system.positions.view(-1, system.max_n_atoms, 3) * self.position_conversion
+        )
 
         atom_types = system.atom_types.view(-1, system.max_n_atoms)
         atom_masks = system.atom_masks.view(-1, system.max_n_atoms)
@@ -150,9 +161,10 @@ class MDCalculator:
             system (schnetpack.md.System): System object containing current state of the simulation.
         """
         forces = self.results[self.force_handle]
-        system.forces = forces.view(system.n_replicas, system.n_molecules,
-                                    system.max_n_atoms, 3) * \
-                        self.force_conversion
+        system.forces = (
+            forces.view(system.n_replicas, system.n_molecules, system.max_n_atoms, 3)
+            * self.force_conversion
+        )
 
     def _get_ase_molecules(self, system):
         """
@@ -180,18 +192,24 @@ class SchnetPackCalculator(MDCalculator):
                        be disabled if one wants to e.g. compute derivatives over short trajectory snippets.
     """
 
-    def __init__(self, model, required_properties,
-                 force_handle,
-                 position_conversion=1.0 / MDUnits.angs2bohr,
-                 force_conversion=1.0 / MDUnits.auforces2aseforces,
-                 property_conversion={},
-                 detach=True):
-        super(SchnetPackCalculator, self).__init__(required_properties,
-                                                   force_handle,
-                                                   position_conversion,
-                                                   force_conversion,
-                                                   property_conversion,
-                                                   detach)
+    def __init__(
+        self,
+        model,
+        required_properties,
+        force_handle,
+        position_conversion=1.0 / MDUnits.angs2bohr,
+        force_conversion=1.0 / MDUnits.auforces2aseforces,
+        property_conversion={},
+        detach=True,
+    ):
+        super(SchnetPackCalculator, self).__init__(
+            required_properties,
+            force_handle,
+            position_conversion,
+            force_conversion,
+            property_conversion,
+            detach,
+        )
 
         self.model = model
 
@@ -228,7 +246,7 @@ class SchnetPackCalculator(MDCalculator):
             Structure.cell: None,
             Structure.cell_offset: None,
             Structure.neighbors: neighbors,
-            Structure.neighbor_mask: neighbor_mask
+            Structure.neighbor_mask: neighbor_mask,
         }
 
         return inputs

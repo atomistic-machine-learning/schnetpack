@@ -6,7 +6,6 @@ from schnetpack.atomistic import Structure
 
 
 class Evaluator:
-
     def __init__(self, model, dataloader):
         """
         Base class for model predictions.
@@ -30,10 +29,7 @@ class Evaluator:
         predicted = {}
         for batch in self.dataloader:
             # build batch for prediction
-            batch = {
-                k: v.to(device)
-                for k, v in batch.items()
-            }
+            batch = {k: v.to(device) for k, v in batch.items()}
             # predict
             result = self.model(batch)
             # store prediction batches to dict
@@ -51,18 +47,25 @@ class Evaluator:
                 else:
                     predicted[p] = [value]
 
-        max_shapes = {prop: max([list(val.shape) for val in values])
-                      for prop, values in predicted.items()}
+        max_shapes = {
+            prop: max([list(val.shape) for val in values])
+            for prop, values in predicted.items()
+        }
         for prop, values in predicted.items():
             max_shape = max_shapes[prop]
-            predicted[prop] = \
-                np.vstack([np.lib.pad(batch,
-                                      [[0, add_dims] for add_dims in max_shape
-                                       - np.array(batch.shape)],
-                                      mode='constant') for batch in
-                           values])
-
-
+            predicted[prop] = np.vstack(
+                [
+                    np.lib.pad(
+                        batch,
+                        [
+                            [0, add_dims]
+                            for add_dims in max_shape - np.array(batch.shape)
+                        ],
+                        mode="constant",
+                    )
+                    for batch in values
+                ]
+            )
 
         return predicted
 
@@ -71,7 +74,6 @@ class Evaluator:
 
 
 class NPZEvaluator(Evaluator):
-
     def __init__(self, model, dataloader, out_file):
         self.out_file = out_file
         super(NPZEvaluator, self).__init__(model=model, dataloader=dataloader)
@@ -82,7 +84,6 @@ class NPZEvaluator(Evaluator):
 
 
 class DBEvaluator(Evaluator):
-
     def __init__(self, model, dataloader, out_file):
         self.dbpath = dataloader.dataset.dbpath
         self.out_file = out_file
@@ -98,8 +99,10 @@ class DBEvaluator(Evaluator):
                 z = atomic_numbers[i, mask]
                 r = positions[i, mask]
                 ats = Atoms(numbers=z, positions=r)
-                data = {prop: self._unpad(mask, values[i]) for prop, values in
-                        predicted.items()}
+                data = {
+                    prop: self._unpad(mask, values[i])
+                    for prop, values in predicted.items()
+                }
                 conn.write(ats, data=data)
 
     def _unpad(self, mask, values):

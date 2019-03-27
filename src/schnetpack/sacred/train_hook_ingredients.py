@@ -1,11 +1,10 @@
 import os
 from sacred import Ingredient
 from schnetpack.train.hooks import *
-from schnetpack.sacred.train_metrics_ingredients import metrics_ing,\
-    build_metrics
+from schnetpack.sacred.train_metrics_ingredients import metrics_ing, build_metrics
 
 
-logging_hook_ing = Ingredient('logging', ingredients=[metrics_ing])
+logging_hook_ing = Ingredient("logging", ingredients=[metrics_ing])
 
 
 @logging_hook_ing.config
@@ -15,7 +14,8 @@ def config():
     """
     csv = True
     tensorboard = True
-    errors = ['mae', 'rmse']
+    errors = ["mae", "rmse"]
+
 
 @logging_hook_ing.capture
 def build_logging_hooks(training_dir, property_map, csv, tensorboard, errors):
@@ -35,15 +35,15 @@ def build_logging_hooks(training_dir, property_map, csv, tensorboard, errors):
     metrics_objects = build_metrics(names=errors, property_map=property_map)
     hook_objects = []
     if tensorboard:
-        hook_objects.append(TensorboardHook(os.path.join(training_dir,
-                                                         'log'),
-                                            metrics_objects))
+        hook_objects.append(
+            TensorboardHook(os.path.join(training_dir, "log"), metrics_objects)
+        )
     if csv:
         hook_objects.append(CSVHook(training_dir, metrics_objects))
     return hook_objects
 
 
-stopping_hook_ing = Ingredient('early_stopping')
+stopping_hook_ing = Ingredient("early_stopping")
 
 
 @stopping_hook_ing.config
@@ -51,9 +51,9 @@ def config():
     r"""
     Settings for hooks that are used for early stopping during training.
     """
-    max_steps = None        # maximum number of steps
-    max_epochs = None       # maximum number of epochs
-    patience = None         # maximum number of training epochs without improvement on val loss
+    max_steps = None  # maximum number of steps
+    max_epochs = None  # maximum number of epochs
+    patience = None  # maximum number of training epochs without improvement on val loss
     threshold_ratio = None  # threshold of validation loss
 
 
@@ -96,7 +96,7 @@ def build_stopping_hooks(max_steps, max_epochs, patience):
     return hook_objects
 
 
-scheduling_hook_ing = Ingredient('scheduling')
+scheduling_hook_ing = Ingredient("scheduling")
 
 
 @scheduling_hook_ing.config
@@ -104,7 +104,7 @@ def config():
     r"""
     Settings for hooks that schedule the learning rate during training.
     """
-    name = None     # name of scheduling hook
+    name = None  # name of scheduling hook
 
 
 @scheduling_hook_ing.named_config
@@ -118,7 +118,7 @@ def reduce_on_plateau():
         window_length (int):
         stop_after_min (bool):
     """
-    name = 'reduce_on_plateau'
+    name = "reduce_on_plateau"
     patience = 25
     factor = 0.2
     min_lr = 1e-6
@@ -134,9 +134,9 @@ def exponential_decay():
         gamma (float): lr decay factor
         step_size (int): decay learning after step_size steps
     """
-    name = 'exponential_decay'
-    gamma=0.96
-    step_size=100000
+    name = "exponential_decay"
+    gamma = 0.96
+    step_size = 100000
 
 
 @scheduling_hook_ing.named_config
@@ -151,12 +151,12 @@ def warm_restart():
         lr_factor (float):
         patience (int):
     """
-    name = 'warm_restart'
+    name = "warm_restart"
     T0 = 10
     Tmult = 2
     each_step = False
     lr_min = 1e-6
-    lr_factor = 1.
+    lr_factor = 1.0
     patience = 1
 
 
@@ -168,7 +168,7 @@ def lr_schedule():
         schedule: custom schedule
         each_step (bool): update lr at each step if True
     """
-    name = 'lr_schedule'
+    name = "lr_schedule"
     schedule = None
     each_step = False
 
@@ -185,24 +185,27 @@ def build_schedule_hook(name):
     """
     if name is None:
         return []
-    elif name == 'reduce_on_plateau':
+    elif name == "reduce_on_plateau":
         return [get_reduce_on_plateau_hook()]
-    elif name == 'exponential_decay':
+    elif name == "exponential_decay":
         return [get_exponential_decay_hook()]
-    elif name == 'warm_restart':
+    elif name == "warm_restart":
         return [get_warm_restart_hook()]
-    elif name == 'lr_schedule':
+    elif name == "lr_schedule":
         return [get_lr_scheduler_hook()]
     else:
         raise NotImplementedError
 
 
 @scheduling_hook_ing.capture
-def get_reduce_on_plateau_hook(patience, factor, min_lr,
-                               window_length, stop_after_min):
-    return ReduceLROnPlateauHook(patience=patience, factor=factor,
-                                 min_lr=min_lr, window_length=window_length,
-                                 stop_after_min=stop_after_min)
+def get_reduce_on_plateau_hook(patience, factor, min_lr, window_length, stop_after_min):
+    return ReduceLROnPlateauHook(
+        patience=patience,
+        factor=factor,
+        min_lr=min_lr,
+        window_length=window_length,
+        stop_after_min=stop_after_min,
+    )
 
 
 @scheduling_hook_ing.capture
@@ -212,9 +215,14 @@ def get_exponential_decay_hook(gamma, step_size):
 
 @scheduling_hook_ing.capture
 def get_warm_restart_hook(t0, Tmult, each_step, lr_min, lr_factor, patience):
-    return WarmRestartHook(T0=t0, Tmult=Tmult, each_step=each_step,
-                           lr_min=lr_min, lr_factor=lr_factor,
-                           patience=patience)
+    return WarmRestartHook(
+        T0=t0,
+        Tmult=Tmult,
+        each_step=each_step,
+        lr_min=lr_min,
+        lr_factor=lr_factor,
+        patience=patience,
+    )
 
 
 @scheduling_hook_ing.capture
@@ -224,9 +232,9 @@ def get_lr_scheduler_hook(schedule, each_step):
     return LRScheduleHook(schedule, each_step)
 
 
-hooks_ing = Ingredient('hooks', ingredients=[logging_hook_ing,
-                                             stopping_hook_ing,
-                                             scheduling_hook_ing])
+hooks_ing = Ingredient(
+    "hooks", ingredients=[logging_hook_ing, stopping_hook_ing, scheduling_hook_ing]
+)
 
 
 @hooks_ing.config
@@ -250,4 +258,3 @@ def build_hooks(train_dir, property_map):
     hook_objects += build_schedule_hook()
     hook_objects += build_stopping_hooks()
     return hook_objects
-

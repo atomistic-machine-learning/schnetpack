@@ -9,7 +9,7 @@ from ase import Atoms
 
 from schnetpack.data import DownloadableAtomsData
 
-__all__ = ['MD17']
+__all__ = ["MD17"]
 
 
 class MD17(DownloadableAtomsData):
@@ -40,54 +40,71 @@ class MD17(DownloadableAtomsData):
     See: http://quantum-machine.org/datasets/
     """
 
-    energy = 'energy'
-    forces = 'forces'
+    energy = "energy"
+    forces = "forces"
     available_properties = [energy, forces]
 
-    datasets_dict = dict(aspirin='aspirin_dft.npz',
-                         #aspirin_ccsd='aspirin_ccsd.zip',
-                         azobenzene='azobenzene_dft.npz',
-                         benzene='benzene_dft.npz',
-                         ethanol='ethanol_dft.npz',
-                         #ethanol_ccsdt='ethanol_ccsd_t.zip',
-                         malonaldehyde='malonaldehyde_dft.npz',
-                         #malonaldehyde_ccsdt='malonaldehyde_ccsd_t.zip',
-                         naphthalene='naphthalene_dft.npz',
-                         paracetamol='paracetamol_dft.npz',
-                         salicylic_acid='salicylic_dft.npz',
-                         toluene='toluene_dft.npz',
-                         #toluene_ccsdt='toluene_ccsd_t.zip',
-                         uracil='uracil_dft.npz'
-                         )
+    datasets_dict = dict(
+        aspirin="aspirin_dft.npz",
+        # aspirin_ccsd='aspirin_ccsd.zip',
+        azobenzene="azobenzene_dft.npz",
+        benzene="benzene_dft.npz",
+        ethanol="ethanol_dft.npz",
+        # ethanol_ccsdt='ethanol_ccsd_t.zip',
+        malonaldehyde="malonaldehyde_dft.npz",
+        # malonaldehyde_ccsdt='malonaldehyde_ccsd_t.zip',
+        naphthalene="naphthalene_dft.npz",
+        paracetamol="paracetamol_dft.npz",
+        salicylic_acid="salicylic_dft.npz",
+        toluene="toluene_dft.npz",
+        # toluene_ccsdt='toluene_ccsd_t.zip',
+        uracil="uracil_dft.npz",
+    )
 
     existing_datasets = datasets_dict.keys()
 
-    def __init__(self, datapath, molecule=None, subset=None, download=True,
-                 collect_triples=False, properties=None):
+    def __init__(
+        self,
+        datapath,
+        molecule=None,
+        subset=None,
+        download=True,
+        collect_triples=False,
+        properties=None,
+    ):
         self.datapath = datapath
         self.molecule = molecule
-        dbpath = os.path.join(datapath, 'md17', molecule + '.db')
+        dbpath = os.path.join(datapath, "md17", molecule + ".db")
 
-        super(MD17, self).__init__(dbpath=dbpath, subset=subset,
-                                   required_properties=properties,
-                                   collect_triples=collect_triples,
-                                   download=download)
+        super(MD17, self).__init__(
+            dbpath=dbpath,
+            subset=subset,
+            required_properties=properties,
+            collect_triples=collect_triples,
+            download=download,
+        )
 
     def create_subset(self, idx):
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
-        return MD17(datapath=self.datapath, molecule=self.molecule,
-                    subset=subidx, download=False,
-                    collect_triples=self.collect_triples,
-                    properties=self.required_properties)
+        return MD17(
+            datapath=self.datapath,
+            molecule=self.molecule,
+            subset=subidx,
+            download=False,
+            collect_triples=self.collect_triples,
+            properties=self.required_properties,
+        )
 
     def _download(self):
 
         logging.info("Downloading {} data".format(self.molecule))
         tmpdir = tempfile.mkdtemp("MD")
         rawpath = os.path.join(tmpdir, self.datasets_dict[self.molecule])
-        url = "http://www.quantum-machine.org/gdml/data/npz/" + \
-              self.datasets_dict[self.molecule]
+        url = (
+            "http://www.quantum-machine.org/gdml/data/npz/"
+            + self.datasets_dict[self.molecule]
+        )
 
         request.urlretrieve(url, rawpath)
 
@@ -95,16 +112,15 @@ class MD17(DownloadableAtomsData):
 
         data = np.load(rawpath)
 
-        numbers = data['z']
+        numbers = data["z"]
         atoms_list = []
         properties_list = []
-        for positions, energies, forces in zip(data['R'], data['E'],
-                                               data['F']):
+        for positions, energies, forces in zip(data["R"], data["E"], data["F"]):
             properties_list.append(dict(energy=energies, forces=forces))
             atoms_list.append(Atoms(positions=positions, numbers=numbers))
 
         self.add_systems(atoms_list, properties_list)
 
         logging.info("Cleanining up the mess...")
-        logging.info('{} molecule done'.format(self.molecule))
+        logging.info("{} molecule done".format(self.molecule))
         shutil.rmtree(tmpdir)

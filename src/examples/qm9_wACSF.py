@@ -26,8 +26,7 @@ trainable_params = filter(lambda p: p.requires_grad, model.parameters())
 # create trainer
 opt = Adam(trainable_params, lr=1e-4)
 loss = lambda b, p: F.mse_loss(p["y"], b[QM9.U0])
-trainer = spk.train.Trainer("wacsf/", model, loss,
-                      opt, loader, val_loader)
+trainer = spk.train.Trainer("wacsf/", model, loss, opt, loader, val_loader)
 
 # start training
 trainer.train(torch.device("cpu"))

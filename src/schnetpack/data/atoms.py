@@ -21,8 +21,7 @@ import torch
 from ase.db import connect
 from torch.utils.data import Dataset
 
-from schnetpack.environment import SimpleEnvironmentProvider, \
-    collect_atom_triples
+from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
 from .definitions import Structure
 from .partitioning import train_test_split
 
@@ -34,13 +33,19 @@ class AtomsDataError(Exception):
 
 
 class AtomsData(Dataset):
-    ENCODING = 'utf-8'
+    ENCODING = "utf-8"
     available_properties = None
 
-    def __init__(self, dbpath, subset=None, required_properties=[],
-                 environment_provider=SimpleEnvironmentProvider(),
-                 collect_triples=False, center_positions=True,
-                 load_charge=False):
+    def __init__(
+        self,
+        dbpath,
+        subset=None,
+        required_properties=[],
+        environment_provider=SimpleEnvironmentProvider(),
+        collect_triples=False,
+        center_positions=True,
+        load_charge=False,
+    ):
         self.dbpath = dbpath
         self.subset = subset
         self.required_properties = required_properties
@@ -53,9 +58,9 @@ class AtomsData(Dataset):
 
     def create_splits(self, num_train=None, num_val=None, split_file=None):
         warnings.warn(
-            "create_splits is deprecated, " +
-            "use schnetpack.data.train_test_split instead",
-            DeprecationWarning
+            "create_splits is deprecated, "
+            + "use schnetpack.data.train_test_split instead",
+            DeprecationWarning,
         )
         return train_test_split(self, num_train, num_val, split_file)
 
@@ -69,11 +74,18 @@ class AtomsData(Dataset):
             schnetpack.data.AtomsData: dataset with subset of original data
         """
         idx = np.array(idx)
-        subidx = idx if self.subset is None or len(idx) == 0 \
-            else np.array(self.subset)[idx]
-        return type(self)(self.dbpath, subidx, self.required_properties,
-                          self.environment_provider, self.collect_triples,
-                          self.centered, self.load_charge)
+        subidx = (
+            idx if self.subset is None or len(idx) == 0 else np.array(self.subset)[idx]
+        )
+        return type(self)(
+            self.dbpath,
+            subidx,
+            self.required_properties,
+            self.environment_provider,
+            self.collect_triples,
+            self.centered,
+            self.load_charge,
+        )
 
     def __len__(self):
         if self.subset is None:
@@ -87,18 +99,20 @@ class AtomsData(Dataset):
         # get atom environment
         nbh_idx, offsets = self.environment_provider.get_environment(at)
 
-        properties[Structure.neighbors] = torch.LongTensor(
-            nbh_idx.astype(np.int))
+        properties[Structure.neighbors] = torch.LongTensor(nbh_idx.astype(np.int))
         properties[Structure.cell_offset] = torch.FloatTensor(
-            offsets.astype(np.float32))
-        properties['_idx'] = torch.LongTensor(np.array([idx], dtype=np.int))
+            offsets.astype(np.float32)
+        )
+        properties["_idx"] = torch.LongTensor(np.array([idx], dtype=np.int))
 
         if self.collect_triples:
             nbh_idx_j, nbh_idx_k = collect_atom_triples(nbh_idx)
             properties[Structure.neighbor_pairs_j] = torch.LongTensor(
-                nbh_idx_j.astype(np.int))
+                nbh_idx_j.astype(np.int)
+            )
             properties[Structure.neighbor_pairs_k] = torch.LongTensor(
-                nbh_idx_k.astype(np.int))
+                nbh_idx_k.astype(np.int)
+            )
 
         return properties
 
@@ -141,9 +155,11 @@ class AtomsData(Dataset):
 
         data = {}
 
-        props = properties.keys() \
-            if self.available_properties is None \
+        props = (
+            properties.keys()
+            if self.available_properties is None
             else self.available_properties
+        )
 
         for pname in props:
             try:
@@ -155,14 +171,15 @@ class AtomsData(Dataset):
                 pshape = prop.shape
                 ptype = prop.dtype
             except:
-                raise AtomsDataError("Required property `" + pname +
-                                     "` has to be `numpy.ndarray`.")
+                raise AtomsDataError(
+                    "Required property `" + pname + "` has to be `numpy.ndarray`."
+                )
 
             base64_bytes = b64encode(prop.tobytes())
             base64_string = base64_bytes.decode(AtomsData.ENCODING)
             data[pname] = base64_string
-            data['_shape_' + pname] = pshape
-            data['_dtype_' + pname] = str(ptype)
+            data["_shape_" + pname] = pshape
+            data["_dtype_" + pname] = str(ptype)
 
         conn.write(atoms, data=data)
 
@@ -186,8 +203,8 @@ class AtomsData(Dataset):
         for pname in self.required_properties:
             # new data format
             try:
-                shape = row.data['_shape_' + pname]
-                dtype = row.data['_dtype_' + pname]
+                shape = row.data["_shape_" + pname]
+                dtype = row.data["_dtype_" + pname]
                 prop = np.frombuffer(b64decode(row.data[pname]), dtype=dtype)
                 prop = prop.reshape(shape)
             except:
@@ -207,15 +224,15 @@ class AtomsData(Dataset):
 
         if self.load_charge:
             if Structure.charge in row.data.keys():
-                shape = row.data['_shape_' + Structure.charge]
-                dtype = row.data['_dtype_' + Structure.charge]
-                prop = np.frombuffer(b64decode(row.data[Structure.charge]),
-                                     dtype=dtype)
+                shape = row.data["_shape_" + Structure.charge]
+                dtype = row.data["_dtype_" + Structure.charge]
+                prop = np.frombuffer(b64decode(row.data[Structure.charge]), dtype=dtype)
                 prop = prop.reshape(shape)
                 properties[Structure.charge] = torch.FloatTensor(prop)
             else:
                 properties[Structure.charge] = torch.FloatTensor(
-                    np.array([0.], dtype=np.float32))
+                    np.array([0.0], dtype=np.float32)
+                )
 
         # extract/calculate structure
         properties[Structure.Z] = torch.LongTensor(at.numbers.astype(np.int))
@@ -223,8 +240,7 @@ class AtomsData(Dataset):
         if self.centered:
             positions -= at.get_center_of_mass()
         properties[Structure.R] = torch.FloatTensor(positions)
-        properties[Structure.cell] = torch.FloatTensor(
-            at.cell.astype(np.float32))
+        properties[Structure.cell] = torch.FloatTensor(at.cell.astype(np.float32))
 
         return at, properties
 
@@ -238,7 +254,7 @@ class AtomsData(Dataset):
         Returns:
             list: list with atomrefs
         """
-        labels = self.get_metadata('atref_labels')
+        labels = self.get_metadata("atref_labels")
         if labels is None:
             return None
 
@@ -247,8 +263,7 @@ class AtomsData(Dataset):
 
         if len(col) == 1:
             col = col[0]
-            atomref = np.array(self.get_metadata('atomrefs'))[:,
-                      col:col + 1]
+            atomref = np.array(self.get_metadata("atomrefs"))[:, col : col + 1]
         else:
             atomref = None
 
@@ -256,18 +271,27 @@ class AtomsData(Dataset):
 
 
 class DownloadableAtomsData(AtomsData):
+    def __init__(
+        self,
+        dbpath,
+        subset=None,
+        required_properties=None,
+        environment_provider=SimpleEnvironmentProvider(),
+        collect_triples=False,
+        center_positions=True,
+        load_charge=False,
+        download=False,
+    ):
 
-    def __init__(self, dbpath, subset=None, required_properties=None,
-                 environment_provider=SimpleEnvironmentProvider(),
-                 collect_triples=False, center_positions=True,
-                 load_charge=False, download=False):
-
-        super(DownloadableAtomsData, self).__init__(dbpath, subset,
-                                                    required_properties,
-                                                    environment_provider,
-                                                    collect_triples,
-                                                    center_positions,
-                                                    load_charge)
+        super(DownloadableAtomsData, self).__init__(
+            dbpath,
+            subset,
+            required_properties,
+            environment_provider,
+            collect_triples,
+            center_positions,
+            load_charge,
+        )
         if download:
             self.download()
 
@@ -276,10 +300,12 @@ class DownloadableAtomsData(AtomsData):
         Wrapper function for the download method.
         """
         if os.path.exists(self.dbpath):
-            logger.info('The dataset has already been downloaded and stored '
-                        'at {}'.format(self.dbpath))
+            logger.info(
+                "The dataset has already been downloaded and stored "
+                "at {}".format(self.dbpath)
+            )
         else:
-            logger.info('Starting download')
+            logger.info("Starting download")
             folder = os.path.dirname(os.path.abspath(self.dbpath))
             if not os.path.exists(folder):
                 os.makedirs(folder)

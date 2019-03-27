@@ -48,21 +48,22 @@ class SymmetryFunctions(nn.Module):
            The Journal of Chemical Physics 148 (24), 241709. 2018.
     """
 
-    def __init__(self,
-                 n_radial=22,
-                 n_angular=5,
-                 zetas={1},
-                 cutoff=snn.CosineCutoff,
-                 cutoff_radius=5.0,
-                 centered=False,
-                 crossterms=False,
-                 elements=frozenset((1, 6, 7, 8, 9)),
-                 sharez=True,
-                 trainz=False,
-                 initz='weighted',
-                 len_embedding=5,
-                 pairwise_elements=False
-                 ):
+    def __init__(
+        self,
+        n_radial=22,
+        n_angular=5,
+        zetas={1},
+        cutoff=snn.CosineCutoff,
+        cutoff_radius=5.0,
+        centered=False,
+        crossterms=False,
+        elements=frozenset((1, 6, 7, 8, 9)),
+        sharez=True,
+        trainz=False,
+        initz="weighted",
+        len_embedding=5,
+        pairwise_elements=False,
+    ):
 
         super(SymmetryFunctions, self).__init__()
 
@@ -83,15 +84,19 @@ class SymmetryFunctions(nn.Module):
         if self.n_angular > 0:
             # Get basic filters
             self.theta_filter = snn.BehlerAngular(zetas=zetas)
-            self.angular_filter = snn.GaussianSmearing(start=1.0,
-                                                       stop=self.cutoff_radius - 0.5,
-                                                       n_gaussians=n_angular,
-                                                       centered=True)
-            self.ADF = snn.AngularDistribution(self.angular_filter,
-                                               self.theta_filter,
-                                               cutoff_functions=self.cutoff,
-                                               crossterms=crossterms,
-                                               pairwise_elements=pairwise_elements)
+            self.angular_filter = snn.GaussianSmearing(
+                start=1.0,
+                stop=self.cutoff_radius - 0.5,
+                n_gaussians=n_angular,
+                centered=True,
+            )
+            self.ADF = snn.AngularDistribution(
+                self.angular_filter,
+                self.theta_filter,
+                cutoff_functions=self.cutoff,
+                crossterms=crossterms,
+                pairwise_elements=pairwise_elements,
+            )
         else:
             self.ADF = None
 
@@ -101,12 +106,15 @@ class SymmetryFunctions(nn.Module):
                 radial_start = 1.0
             else:
                 radial_start = 0.5
-            self.radial_filter = snn.GaussianSmearing(start=radial_start,
-                                                      stop=self.cutoff_radius - 0.5,
-                                                      n_gaussians=n_radial,
-                                                      centered=centered)
-            self.RDF = snn.RadialDistribution(self.radial_filter,
-                                              cutoff_function=self.cutoff)
+            self.radial_filter = snn.GaussianSmearing(
+                start=radial_start,
+                stop=self.cutoff_radius - 0.5,
+                n_gaussians=n_radial,
+                centered=centered,
+            )
+            self.RDF = snn.RadialDistribution(
+                self.radial_filter, cutoff_function=self.cutoff
+            )
         else:
             self.RDF = None
 
@@ -128,13 +136,15 @@ class SymmetryFunctions(nn.Module):
         # Compute total number of symmetry functions
         if not pairwise_elements:
             self.n_symfuncs = (
-                                          self.n_radial + self.n_angular * self.n_theta) * self.n_elements
+                self.n_radial + self.n_angular * self.n_theta
+            ) * self.n_elements
         else:
             # if the outer product is used, all unique pairs of elements are considered, leading to the factor of
             # (N+1)/2
             self.n_symfuncs = (
-                                          self.n_radial + self.n_angular * self.n_theta * (
-                                          self.n_elements + 1) // 2) * self.n_elements
+                self.n_radial
+                + self.n_angular * self.n_theta * (self.n_elements + 1) // 2
+            ) * self.n_elements
 
     def initz(self, mode, elements):
         """
@@ -157,25 +167,27 @@ class SymmetryFunctions(nn.Module):
         maxelements = max(elements)
         nelements = len(elements)
 
-        if mode == 'weighted':
+        if mode == "weighted":
             weights = torch.arange(maxelements + 1)[:, None]
             z_weights = nn.Embedding(maxelements + 1, 1)
             z_weights.weight.data = weights
             self.n_elements = 1
-        elif mode == 'onehot':
+        elif mode == "onehot":
             weights = torch.zeros(maxelements + 1, nelements)
             for idx, Z in enumerate(elements):
                 weights[Z, idx] = 1.0
             z_weights = nn.Embedding(maxelements + 1, nelements)
             z_weights.weight.data = weights
             self.n_elements = nelements
-        elif mode == 'embedding':
+        elif mode == "embedding":
             z_weights = nn.Embedding(maxelements + 1, self.len_embedding)
             self.n_elements = self.len_embedding
         else:
             raise NotImplementedError(
                 "Unregognized option {:s} for initializing elemental weights. Use 'weighted', 'onehot' or 'embedding'.".format(
-                    mode))
+                    mode
+                )
+            )
 
         return z_weights
 
@@ -200,10 +212,12 @@ class SymmetryFunctions(nn.Module):
             # Get atom types of neighbors
             Z_ij = snn.neighbor_elements(Z_rad, neighbors)
             # Compute distances
-            distances = snn.atom_distances(positions, neighbors,
-                                           neighbor_mask=neighbor_mask)
-            radial_sf = self.RDF(distances, elemental_weights=Z_ij,
-                                 neighbor_mask=neighbor_mask)
+            distances = snn.atom_distances(
+                positions, neighbors, neighbor_mask=neighbor_mask
+            )
+            radial_sf = self.RDF(
+                distances, elemental_weights=Z_ij, neighbor_mask=neighbor_mask
+            )
         else:
             radial_sf = None
 
@@ -213,8 +227,10 @@ class SymmetryFunctions(nn.Module):
                 idx_j = inputs[Structure.neighbor_pairs_j]
                 idx_k = inputs[Structure.neighbor_pairs_k]
             except KeyError as e:
-                raise HDNNException('Angular symmetry functions require ' +
-                                    '`collect_triples=True` in AtomsData.')
+                raise HDNNException(
+                    "Angular symmetry functions require "
+                    + "`collect_triples=True` in AtomsData."
+                )
             neighbor_pairs_mask = inputs[Structure.neighbor_pairs_mask]
 
             # Get element contributions of the pairs
@@ -224,9 +240,13 @@ class SymmetryFunctions(nn.Module):
             # Compute triple distances
             r_ij, r_ik, r_jk = snn.triple_distances(positions, idx_j, idx_k)
 
-            angular_sf = self.ADF(r_ij, r_ik, r_jk,
-                                  elemental_weights=(Z_ij, Z_ik),
-                                  triple_masks=neighbor_pairs_mask)
+            angular_sf = self.ADF(
+                r_ij,
+                r_ik,
+                r_jk,
+                elemental_weights=(Z_ij, Z_ik),
+                triple_masks=neighbor_pairs_mask,
+            )
         else:
             angular_sf = None
 
@@ -261,19 +281,26 @@ class BehlerSFBlock(SymmetryFunctions):
                        len_embedding (default=False).
     """
 
-    def __init__(self, n_radial=22, n_angular=5, zetas={1}, cutoff_radius=5.0,
-                 elements=frozenset((1, 6, 7, 8, 9)),
-                 centered=False, crossterms=False, mode='weighted'):
+    def __init__(
+        self,
+        n_radial=22,
+        n_angular=5,
+        zetas={1},
+        cutoff_radius=5.0,
+        elements=frozenset((1, 6, 7, 8, 9)),
+        centered=False,
+        crossterms=False,
+        mode="weighted",
+    ):
         # Determine mode.
-        if mode == 'weighted':
-            initz = 'weighted'
+        if mode == "weighted":
+            initz = "weighted"
             pairwise_elements = False
-        elif mode == 'Behler':
-            initz = 'onehot'
+        elif mode == "Behler":
+            initz = "onehot"
             pairwise_elements = True
         else:
-            raise NotImplementedError(
-                "Unrecognized symmetry function %s" % mode)
+            raise NotImplementedError("Unrecognized symmetry function %s" % mode)
 
         # Construct symmetry functions.
         super(BehlerSFBlock, self).__init__(
@@ -285,7 +312,7 @@ class BehlerSFBlock(SymmetryFunctions):
             crossterms=crossterms,
             elements=elements,
             initz=initz,
-            pairwise_elements=pairwise_elements
+            pairwise_elements=pairwise_elements,
         )
 
 
@@ -310,8 +337,7 @@ class StandardizeSF(nn.Module):
         self.n_symfuncs = SFBlock.n_symfuncs
 
         if data_loader is not None:
-            symfunc_statistics = StatisticsAccumulator(batch=True,
-                                                       atomistic=True)
+            symfunc_statistics = StatisticsAccumulator(batch=True, atomistic=True)
             SFBlock = SFBlock.to(device)
 
             for sample in data_loader:

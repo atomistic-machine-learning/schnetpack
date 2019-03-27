@@ -17,7 +17,6 @@ from schnetpack.data import Structure
 import schnetpack.nn as L
 
 
-
 class AtomisticModel(nn.Module):
     """
     Assembles an atomistic model from a representation module and one or more output modules.
@@ -55,7 +54,7 @@ class AtomisticModel(nn.Module):
         """
         if self.requires_dr:
             inputs[Structure.R].requires_grad_()
-        inputs['representation'] = self.representation(inputs)
+        inputs["representation"] = self.representation(inputs)
 
         if isinstance(self.output_modules, nn.ModuleList):
             outs = {}
@@ -120,13 +119,24 @@ class Atomwise(OutputModule):
 
     """
 
-    def __init__(self, n_in=128, n_out=1, aggregation_mode='sum', n_layers=2,
-                 n_neurons=None,
-                 activation=schnetpack.nn.activations.shifted_softplus,
-                 return_contributions=False,
-                 requires_dr=False, create_graph=False, mean=None, stddev=None,
-                 atomref=None, max_z=100, outnet=None,
-                 train_embeddings=False):
+    def __init__(
+        self,
+        n_in=128,
+        n_out=1,
+        aggregation_mode="sum",
+        n_layers=2,
+        n_neurons=None,
+        activation=schnetpack.nn.activations.shifted_softplus,
+        return_contributions=False,
+        requires_dr=False,
+        create_graph=False,
+        mean=None,
+        stddev=None,
+        atomref=None,
+        max_z=100,
+        outnet=None,
+        train_embeddings=False,
+    ):
         super(Atomwise, self).__init__(requires_dr)
 
         self.n_layers = n_layers
@@ -139,19 +149,20 @@ class Atomwise(OutputModule):
         if atomref is not None:
             self.atomref = nn.Embedding.from_pretrained(
                 torch.from_numpy(atomref.astype(np.float32)),
-                freeze=not train_embeddings)
+                freeze=not train_embeddings,
+            )
         elif train_embeddings:
             self.atomref = nn.Embedding.from_pretrained(
                 torch.from_numpy(np.zeros((max_z, 1), dtype=np.float32)),
-                freeze=not train_embeddings)
+                freeze=not train_embeddings,
+            )
         else:
             self.atomref = None
 
         if outnet is None:
             self.out_net = nn.Sequential(
-                schnetpack.nn.base.GetItem('representation'),
-                schnetpack.nn.blocks.MLP(n_in, n_out, n_neurons, n_layers,
-                                         activation)
+                schnetpack.nn.base.GetItem("representation"),
+                schnetpack.nn.blocks.MLP(n_in, n_out, n_neurons, n_layers, activation),
             )
         else:
             self.out_net = outnet
@@ -159,9 +170,9 @@ class Atomwise(OutputModule):
         # Make standardization separate
         self.standardize = schnetpack.nn.base.ScaleShift(mean, stddev)
 
-        if aggregation_mode == 'sum':
+        if aggregation_mode == "sum":
             self.atom_pool = schnetpack.nn.base.Aggregate(axis=1, mean=False)
-        elif aggregation_mode == 'avg':
+        elif aggregation_mode == "avg":
             self.atom_pool = schnetpack.nn.base.Aggregate(axis=1, mean=True)
 
     def forward(self, inputs):
@@ -182,7 +193,7 @@ class Atomwise(OutputModule):
         result = {"y": y}
 
         if self.return_contributions:
-            result['yi'] = yi
+            result["yi"] = yi
 
         return result
 
@@ -213,17 +224,38 @@ class Energy(Atomwise):
             If requires_dr is true additionally returns forces
         """
 
-    def __init__(self, n_in, aggregation_mode='sum', n_layers=2,
-                 n_neurons=None,
-                 activation=schnetpack.nn.activations.shifted_softplus,
-                 return_contributions=False, create_graph=False,
-                 return_force=False, mean=None, stddev=None, atomref=None,
-                 max_z=100, outnet=None):
-        super(Energy, self).__init__(n_in, 1, aggregation_mode, n_layers,
-                                     n_neurons, activation,
-                                     return_contributions, return_force,
-                                     create_graph, mean, stddev,
-                                     atomref, max_z, outnet)
+    def __init__(
+        self,
+        n_in,
+        aggregation_mode="sum",
+        n_layers=2,
+        n_neurons=None,
+        activation=schnetpack.nn.activations.shifted_softplus,
+        return_contributions=False,
+        create_graph=False,
+        return_force=False,
+        mean=None,
+        stddev=None,
+        atomref=None,
+        max_z=100,
+        outnet=None,
+    ):
+        super(Energy, self).__init__(
+            n_in,
+            1,
+            aggregation_mode,
+            n_layers,
+            n_neurons,
+            activation,
+            return_contributions,
+            return_force,
+            create_graph,
+            mean,
+            stddev,
+            atomref,
+            max_z,
+            outnet,
+        )
 
     def forward(self, inputs):
         r"""
@@ -232,10 +264,13 @@ class Energy(Atomwise):
         result = super(Energy, self).forward(inputs)
 
         if self.requires_dr:
-            forces = -grad(result["y"], inputs[Structure.R],
-                           grad_outputs=torch.ones_like(result["y"]),
-                           create_graph=self.create_graph)[0]
-            result['dydx'] = forces
+            forces = -grad(
+                result["y"],
+                inputs[Structure.R],
+                grad_outputs=torch.ones_like(result["y"]),
+                create_graph=self.create_graph,
+            )[0]
+            result["dydx"] = forces
 
         return result
 
@@ -267,18 +302,33 @@ class DipoleMoment(Atomwise):
         If requires_dr is true returns derivative w.r.t. atom positions
     """
 
-    def __init__(self, n_in, n_layers=2, n_neurons=None,
-                 activation=schnetpack.nn.activations.shifted_softplus,
-                 return_charges=False, requires_dr=False, outnet=None,
-                 predict_magnitude=False,
-                 mean=torch.FloatTensor([0.0]),
-                 stddev=torch.FloatTensor([1.0])):
+    def __init__(
+        self,
+        n_in,
+        n_layers=2,
+        n_neurons=None,
+        activation=schnetpack.nn.activations.shifted_softplus,
+        return_charges=False,
+        requires_dr=False,
+        outnet=None,
+        predict_magnitude=False,
+        mean=torch.FloatTensor([0.0]),
+        stddev=torch.FloatTensor([1.0]),
+    ):
         self.return_charges = return_charges
         self.predict_magnitude = predict_magnitude
-        super(DipoleMoment, self).__init__(n_in, 1, 'sum', n_layers, n_neurons,
-                                           activation=activation,
-                                           requires_dr=requires_dr, mean=mean,
-                                           stddev=stddev, outnet=outnet)
+        super(DipoleMoment, self).__init__(
+            n_in,
+            1,
+            "sum",
+            n_layers,
+            n_neurons,
+            activation=activation,
+            requires_dr=requires_dr,
+            mean=mean,
+            stddev=stddev,
+            outnet=outnet,
+        )
 
     def forward(self, inputs):
         """
@@ -297,7 +347,7 @@ class DipoleMoment(Atomwise):
             result = {"y": y}
 
         if self.return_charges:
-            result['yi'] = charges
+            result["yi"] = charges
 
         return result
 
@@ -308,23 +358,48 @@ class ElementalAtomwise(Atomwise):
     Particularly useful for networks of Behler-Parrinello type.
     """
 
-    def __init__(self, n_in, n_out=1, aggregation_mode='sum', n_layers=3,
-                 requires_dr=False, create_graph=False,
-                 elements=frozenset((1, 6, 7, 8, 9)), n_hidden=50,
-                 activation=schnetpack.nn.activations.shifted_softplus,
-                 return_contributions=False, mean=None, stddev=None,
-                 atomref=None, max_z=100):
-        outnet = schnetpack.nn.blocks.GatedNetwork(n_in, n_out, elements,
-                                                   n_hidden=n_hidden,
-                                                   n_layers=n_layers,
-                                                   activation=activation)
+    def __init__(
+        self,
+        n_in,
+        n_out=1,
+        aggregation_mode="sum",
+        n_layers=3,
+        requires_dr=False,
+        create_graph=False,
+        elements=frozenset((1, 6, 7, 8, 9)),
+        n_hidden=50,
+        activation=schnetpack.nn.activations.shifted_softplus,
+        return_contributions=False,
+        mean=None,
+        stddev=None,
+        atomref=None,
+        max_z=100,
+    ):
+        outnet = schnetpack.nn.blocks.GatedNetwork(
+            n_in,
+            n_out,
+            elements,
+            n_hidden=n_hidden,
+            n_layers=n_layers,
+            activation=activation,
+        )
 
-        super(ElementalAtomwise, self).__init__(n_in, n_out, aggregation_mode,
-                                                n_layers, None, activation,
-                                                return_contributions,
-                                                requires_dr, create_graph,
-                                                mean, stddev, atomref,
-                                                max_z, outnet)
+        super(ElementalAtomwise, self).__init__(
+            n_in,
+            n_out,
+            aggregation_mode,
+            n_layers,
+            None,
+            activation,
+            return_contributions,
+            requires_dr,
+            create_graph,
+            mean,
+            stddev,
+            atomref,
+            max_z,
+            outnet,
+        )
 
 
 class ElementalEnergy(Energy):
@@ -349,25 +424,47 @@ class ElementalEnergy(Energy):
         max_z (int): ignored if atomref is not learned (default: 100)
     """
 
-    def __init__(self, n_in, n_out=1, aggregation_mode='sum', n_layers=3,
-                 return_force=False, create_graph=False,
-                 elements=frozenset((1, 6, 7, 8, 9)), n_hidden=50,
-                 activation=schnetpack.nn.activations.shifted_softplus,
-                 return_contributions=False, mean=None,
-                 stddev=None, atomref=None, max_z=100):
-        outnet = schnetpack.nn.blocks.GatedNetwork(n_in, n_out, elements,
-                                                   n_hidden=n_hidden,
-                                                   n_layers=n_layers,
-                                                   activation=activation)
+    def __init__(
+        self,
+        n_in,
+        n_out=1,
+        aggregation_mode="sum",
+        n_layers=3,
+        return_force=False,
+        create_graph=False,
+        elements=frozenset((1, 6, 7, 8, 9)),
+        n_hidden=50,
+        activation=schnetpack.nn.activations.shifted_softplus,
+        return_contributions=False,
+        mean=None,
+        stddev=None,
+        atomref=None,
+        max_z=100,
+    ):
+        outnet = schnetpack.nn.blocks.GatedNetwork(
+            n_in,
+            n_out,
+            elements,
+            n_hidden=n_hidden,
+            n_layers=n_layers,
+            activation=activation,
+        )
 
-        super(ElementalEnergy, self).__init__(n_in, aggregation_mode, n_layers,
-                                              None, activation,
-                                              return_contributions,
-                                              create_graph=create_graph,
-                                              return_force=return_force,
-                                              mean=mean,
-                                              stddev=stddev, atomref=atomref,
-                                              max_z=max_z, outnet=outnet)
+        super(ElementalEnergy, self).__init__(
+            n_in,
+            aggregation_mode,
+            n_layers,
+            None,
+            activation,
+            return_contributions,
+            create_graph=create_graph,
+            return_force=return_force,
+            mean=mean,
+            stddev=stddev,
+            atomref=atomref,
+            max_z=max_z,
+            outnet=outnet,
+        )
 
 
 class ElementalDipoleMoment(DipoleMoment):
@@ -390,34 +487,73 @@ class ElementalDipoleMoment(DipoleMoment):
         stddev (torch.FloatTensor): standard deviation of energy
     """
 
-    def __init__(self, n_in, n_out=1, n_layers=3, return_charges=False,
-                 requires_dr=False, predict_magnitude=False,
-                 elements=frozenset((1, 6, 7, 8, 9)), n_hidden=50,
-                 activation=schnetpack.nn.activations.shifted_softplus,
-                 mean=None, stddev=None):
-        outnet = schnetpack.nn.blocks.GatedNetwork(n_in, n_out, elements,
-                                                   n_hidden=n_hidden,
-                                                   n_layers=n_layers,
-                                                   activation=activation)
+    def __init__(
+        self,
+        n_in,
+        n_out=1,
+        n_layers=3,
+        return_charges=False,
+        requires_dr=False,
+        predict_magnitude=False,
+        elements=frozenset((1, 6, 7, 8, 9)),
+        n_hidden=50,
+        activation=schnetpack.nn.activations.shifted_softplus,
+        mean=None,
+        stddev=None,
+    ):
+        outnet = schnetpack.nn.blocks.GatedNetwork(
+            n_in,
+            n_out,
+            elements,
+            n_hidden=n_hidden,
+            n_layers=n_layers,
+            activation=activation,
+        )
 
-        super(ElementalDipoleMoment, self).__init__(n_in, n_layers, None,
-                                                    activation, return_charges,
-                                                    requires_dr,
-                                                    outnet, predict_magnitude,
-                                                    mean, stddev)
+        super(ElementalDipoleMoment, self).__init__(
+            n_in,
+            n_layers,
+            None,
+            activation,
+            return_charges,
+            requires_dr,
+            outnet,
+            predict_magnitude,
+            mean,
+            stddev,
+        )
 
 
 class Polarizability(Atomwise):
-
-    def __init__(self, n_in, pool_mode='sum', n_layers=2, n_neurons=None,
-                 activation=L.shifted_softplus, return_isotropic=False,
-                 return_contributions=False, create_graph=False, outnet=None,
-                 cutoff_network=None):
-        super(Polarizability, self).__init__(n_in, 2, pool_mode, n_layers,
-                                             n_neurons, activation,
-                                             return_contributions, True,
-                                             create_graph, None, None, None,
-                                             100, outnet)
+    def __init__(
+        self,
+        n_in,
+        pool_mode="sum",
+        n_layers=2,
+        n_neurons=None,
+        activation=L.shifted_softplus,
+        return_isotropic=False,
+        return_contributions=False,
+        create_graph=False,
+        outnet=None,
+        cutoff_network=None,
+    ):
+        super(Polarizability, self).__init__(
+            n_in,
+            2,
+            pool_mode,
+            n_layers,
+            n_neurons,
+            activation,
+            return_contributions,
+            True,
+            create_graph,
+            None,
+            None,
+            None,
+            100,
+            outnet,
+        )
         self.return_isotropic = return_isotropic
         self.nbh_agg = L.Aggregate(2)
         self.atom_agg = L.Aggregate(1)
@@ -431,8 +567,7 @@ class Polarizability(Atomwise):
         atom_mask = inputs[Structure.atom_mask]
 
         # Get environment distances and positions
-        distances, dist_vecs = L.atom_distances(positions, neighbors,
-                                                return_vecs=True)
+        distances, dist_vecs = L.atom_distances(positions, neighbors, return_vecs=True)
 
         # Get atomic contributions
         contributions = self.out_net(inputs)
@@ -449,7 +584,7 @@ class Polarizability(Atomwise):
 
         # Redistribute contributions to neighbors
         # B x A x N x 1
-        #neighbor_contributions = L.neighbor_elements(c1, neighbors)
+        # neighbor_contributions = L.neighbor_elements(c1, neighbors)
         neighbor_contributions = L.neighbor_elements(contributions, neighbors)
 
         if self.cutoff_network is not None:
@@ -461,12 +596,14 @@ class Polarizability(Atomwise):
 
         # B x A x N x 3
         atomic_dipoles = self.nbh_agg(
-            dist_vecs * neighbor_contributions1[..., None], nbh_mask)
+            dist_vecs * neighbor_contributions1[..., None], nbh_mask
+        )
         # B x A x N x 3
 
         masked_dist = (distances ** 3 * nbh_mask) + (1 - nbh_mask)
-        nbh_fields = dist_vecs * neighbor_contributions2[..., None] / \
-                     masked_dist[..., None]
+        nbh_fields = (
+            dist_vecs * neighbor_contributions2[..., None] / masked_dist[..., None]
+        )
         atomic_fields = self.nbh_agg(nbh_fields, nbh_mask)
         field_norm = torch.norm(atomic_fields, dim=-1, keepdim=True)
         field_norm = field_norm + (field_norm < 1e-10).float()
@@ -480,14 +617,14 @@ class Polarizability(Atomwise):
         global_polar = self.atom_agg(atomic_polar, atom_mask[..., None])
 
         result = {
-            #"y_i": atomic_polar,
+            # "y_i": atomic_polar,
             "y": global_polar
         }
 
         if self.return_isotropic:
-            result["y_iso"] = torch.mean(torch.diagonal(global_polar,
-                                                        dim1=-2, dim2=-1),
-                                         dim=-1, keepdim=True)
+            result["y_iso"] = torch.mean(
+                torch.diagonal(global_polar, dim1=-2, dim2=-1), dim=-1, keepdim=True
+            )
         return result
 
 
@@ -509,21 +646,22 @@ class Properties:
     """
     Collection of all available model properties.
     """
-    energy = 'energy'
-    forces = 'forces'
-    dipole_moment = 'dipole_moment'
-    total_dipole_moment = 'total_dipole_moment'
-    polarizability = 'polarizability'
-    iso_polarizability = 'iso_polarizability'
-    at_polarizability = 'at_polarizability'
-    charges = 'charges'
-    energy_contributions = 'energy_contributions'
+
+    energy = "energy"
+    forces = "forces"
+    dipole_moment = "dipole_moment"
+    total_dipole_moment = "total_dipole_moment"
+    polarizability = "polarizability"
+    iso_polarizability = "iso_polarizability"
+    at_polarizability = "at_polarizability"
+    charges = "charges"
+    energy_contributions = "energy_contributions"
 
 
 class PropertyModel(nn.Module):
-
-    def __init__(self, n_in, properties, mean, stddev, atomrefs,
-                 cutoff_network, cutoff):
+    def __init__(
+        self, n_in, properties, mean, stddev, atomrefs, cutoff_network, cutoff
+    ):
         super(PropertyModel, self).__init__()
 
         self.n_in = n_in
@@ -549,16 +687,20 @@ class PropertyModel(nn.Module):
                 atomref = None
 
             energy_module = Energy(
-                n_in, aggregation_mode='sum', return_force=self.need_forces,
+                n_in,
+                aggregation_mode="sum",
+                return_force=self.need_forces,
                 return_contributions=self.need_energy_contributions,
-                mean=mu, stddev=std, atomref=atomref, create_graph=True)
+                mean=mu,
+                stddev=std,
+                atomref=atomref,
+                create_graph=True,
+            )
             outputs[Properties.energy] = energy_module
-            self.bias[Properties.energy] = energy_module.out_net[1].out_net[
-                1].bias
+            self.bias[Properties.energy] = energy_module.out_net[1].out_net[1].bias
         if self.need_dipole or self.need_total_dipole:
             dipole_module = DipoleMoment(
-                n_in, predict_magnitude=self.need_total_dipole,
-                return_charges=True,
+                n_in, predict_magnitude=self.need_total_dipole, return_charges=True
             )
             if self.need_dipole:
                 outputs[Properties.dipole_moment] = dipole_module
@@ -566,8 +708,10 @@ class PropertyModel(nn.Module):
                 outputs[Properties.total_dipole_moment] = dipole_module
         if self.need_polarizability or self.need_iso_polarizability:
             polar_module = Polarizability(
-                n_in, return_isotropic=self.need_iso_polarizability,
-                cutoff_network=self.cutoff_network)
+                n_in,
+                return_isotropic=self.need_iso_polarizability,
+                cutoff_network=self.cutoff_network,
+            )
             outputs[Properties.polarizability] = polar_module
 
         self.output_dict = nn.ModuleDict(outputs)
@@ -580,24 +724,22 @@ class PropertyModel(nn.Module):
         self.need_polarizability = Properties.polarizability in properties
         self.need_at_polarizability = Properties.at_polarizability in properties
         self.need_iso_polarizability = Properties.iso_polarizability in properties
-        self.need_energy_contributions = \
-            Properties.energy_contributions in properties
+        self.need_energy_contributions = Properties.energy_contributions in properties
 
     def forward(self, inputs):
         outs = {}
         for prop, mod in self.output_dict.items():
             o = mod(inputs)
-            outs[prop] = o['y']
+            outs[prop] = o["y"]
             if prop == Properties.energy and self.need_forces:
-                outs[Properties.forces] = o['dydx']
+                outs[Properties.forces] = o["dydx"]
             if prop == Properties.energy and self.need_energy_contributions:
-                outs[Properties.energy_contributions] = o['yi']
-            if prop in [Properties.dipole_moment,
-                        Properties.total_dipole_moment]:
-                outs[Properties.charges] = o['yi']
+                outs[Properties.energy_contributions] = o["yi"]
+            if prop in [Properties.dipole_moment, Properties.total_dipole_moment]:
+                outs[Properties.charges] = o["yi"]
             if prop == Properties.polarizability:
                 if self.need_iso_polarizability:
-                    outs[Properties.iso_polarizability] = o['y_iso']
+                    outs[Properties.iso_polarizability] = o["y_iso"]
                 if self.need_at_polarizability:
-                    outs[Properties.at_polarizability] = o['y_i']
+                    outs[Properties.at_polarizability] = o["y_i"]
         return outs
