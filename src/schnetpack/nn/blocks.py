@@ -5,7 +5,9 @@ from schnetpack.data import Structure
 from schnetpack.nn import shifted_softplus, Dense
 
 
-__all__ = ['MLP', 'TiledMultiLayerNN', 'ElementalGate', 'GatedNetwork']
+__all__ = ["MLP", "TiledMultiLayerNN", "ElementalGate", "GatedNetwork"]
+
+
 class MLP(nn.Module):
     """
     Template for fully-connected neural network of the multilayer perceptron type.
@@ -22,7 +24,9 @@ class MLP(nn.Module):
         activation (callable): Activation function (default: shifted softplus)
     """
 
-    def __init__(self, n_in, n_out, n_hidden=None, n_layers=2, activation=shifted_softplus):
+    def __init__(
+        self, n_in, n_out, n_hidden=None, n_layers=2, activation=shifted_softplus
+    ):
         super(MLP, self).__init__()
         # If no neurons are given, initialize
         if n_hidden is None:
@@ -37,7 +41,10 @@ class MLP(nn.Module):
                 n_hidden = [n_hidden] * (n_layers - 1)
             self.n_neurons = [n_in] + n_hidden + [n_out]
 
-        layers = [Dense(self.n_neurons[i], self.n_neurons[i + 1], activation=activation) for i in range(n_layers - 1)]
+        layers = [
+            Dense(self.n_neurons[i], self.n_neurons[i + 1], activation=activation)
+            for i in range(n_layers - 1)
+        ]
         layers.append(Dense(self.n_neurons[-2], self.n_neurons[-1], activation=None))
 
         self.out_net = nn.Sequential(*layers)
@@ -68,12 +75,22 @@ class TiledMultiLayerNN(nn.Module):
         n_layers (int): number of layers (default: 3)
     """
 
-    def __init__(self, n_in, n_out, n_tiles, n_hidden=50, n_layers=3, activation=shifted_softplus):
+    def __init__(
+        self, n_in, n_out, n_tiles, n_hidden=50, n_layers=3, activation=shifted_softplus
+    ):
         super(TiledMultiLayerNN, self).__init__()
-        self.mlps = nn.ModuleList([
-            MLP(n_in, n_out, n_hidden=n_hidden, n_layers=n_layers, activation=activation)
-            for _ in range(n_tiles)
-        ])
+        self.mlps = nn.ModuleList(
+            [
+                MLP(
+                    n_in,
+                    n_out,
+                    n_hidden=n_hidden,
+                    n_layers=n_layers,
+                    activation=activation,
+                )
+                for _ in range(n_tiles)
+            ]
+        )
 
     def forward(self, inputs):
         """
@@ -155,13 +172,28 @@ class GatedNetwork(nn.Module):
 
     """
 
-    def __init__(self, nin, nout, elements, n_hidden=50, n_layers=3, trainable=False, onehot=True,
-                 activation=shifted_softplus):
+    def __init__(
+        self,
+        nin,
+        nout,
+        elements,
+        n_hidden=50,
+        n_layers=3,
+        trainable=False,
+        onehot=True,
+        activation=shifted_softplus,
+    ):
         super(GatedNetwork, self).__init__()
         self.nelem = len(elements)
         self.gate = ElementalGate(elements, trainable=trainable, onehot=onehot)
-        self.network = TiledMultiLayerNN(nin, nout, self.nelem, n_hidden=n_hidden, n_layers=n_layers,
-                                         activation=activation)
+        self.network = TiledMultiLayerNN(
+            nin,
+            nout,
+            self.nelem,
+            n_hidden=n_hidden,
+            n_layers=n_layers,
+            activation=activation,
+        )
 
     def forward(self, inputs):
         """

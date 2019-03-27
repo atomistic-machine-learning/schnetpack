@@ -2,7 +2,7 @@ import torch
 from sacred import Ingredient
 
 
-loss_ing = Ingredient('loss_function')
+loss_ing = Ingredient("loss_function")
 
 
 @loss_ing.config
@@ -10,7 +10,7 @@ def config():
     r"""
     Settings for the loss function that will be used during training.
     """
-    loss_tradeoff = {}      # weighting  dictionary for loss calculation
+    loss_tradeoff = {}  # weighting  dictionary for loss calculation
 
 
 @loss_ing.capture
@@ -28,8 +28,9 @@ def build_loss(property_map, loss_tradeoff):
         loss function
 
     """
+
     def loss_fn(batch, result):
-        loss = 0.
+        loss = 0.0
         for p, tgt in property_map.items():
             if tgt is not None:
                 diff = batch[tgt] - result[p]

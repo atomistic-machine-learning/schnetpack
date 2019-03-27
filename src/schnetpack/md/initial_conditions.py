@@ -1,7 +1,8 @@
 import torch
 
 
-__all__ = ['Initializer', 'MaxwellBoltzmannInit']
+__all__ = ["Initializer", "MaxwellBoltzmannInit"]
+
 
 class Initializer:
     """

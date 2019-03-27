@@ -24,38 +24,40 @@ def collate_aseatoms(examples):
 
     # initialize maximum sizes
     max_size = {
-        prop: np.array(val.size(), dtype=np.int)
-        for prop, val in properties.items()
+        prop: np.array(val.size(), dtype=np.int) for prop, val in properties.items()
     }
 
     # get maximum sizes
     for properties in examples[1:]:
         for prop, val in properties.items():
-            max_size[prop] = np.maximum(max_size[prop],
-                                        np.array(val.size(), dtype=np.int))
+            max_size[prop] = np.maximum(
+                max_size[prop], np.array(val.size(), dtype=np.int)
+            )
 
     # initialize batch
     batch = {
         p: torch.zeros(len(examples), *[int(ss) for ss in size]).type(
-            examples[0][p].type()) for p, size in
-        max_size.items()
+            examples[0][p].type()
+        )
+        for p, size in max_size.items()
     }
     has_atom_mask = Structure.atom_mask in batch.keys()
     has_neighbor_mask = Structure.neighbor_mask in batch.keys()
 
     if not has_neighbor_mask:
         batch[Structure.neighbor_mask] = torch.zeros_like(
-            batch[Structure.neighbors]).float()
+            batch[Structure.neighbors]
+        ).float()
     if not has_atom_mask:
-        batch[Structure.atom_mask] = torch.zeros_like(
-            batch[Structure.Z]).float()
+        batch[Structure.atom_mask] = torch.zeros_like(batch[Structure.Z]).float()
 
     # If neighbor pairs are requested, construct mask placeholders
     # Since the structure of both idx_j and idx_k is identical
     # (not the values), only one cutoff mask has to be generated
     if Structure.neighbor_pairs_j in properties:
         batch[Structure.neighbor_pairs_mask] = torch.zeros_like(
-            batch[Structure.neighbor_pairs_j]).float()
+            batch[Structure.neighbor_pairs_j]
+        ).float()
 
     # build batch and pad
     for k, properties in enumerate(examples):
@@ -129,16 +131,33 @@ class AtomsLoader(DataLoader):
 
     """
 
-    def __init__(self, dataset, batch_size=1, shuffle=False, sampler=None,
-                 batch_sampler=None, num_workers=0,
-                 collate_fn=collate_aseatoms, pin_memory=False,
-                 drop_last=False,
-                 timeout=0, worker_init_fn=None):
-        super(AtomsLoader, self).__init__(dataset, batch_size, shuffle,
-                                          sampler, batch_sampler,
-                                          num_workers, collate_fn, pin_memory,
-                                          drop_last,
-                                          timeout, worker_init_fn)
+    def __init__(
+        self,
+        dataset,
+        batch_size=1,
+        shuffle=False,
+        sampler=None,
+        batch_sampler=None,
+        num_workers=0,
+        collate_fn=collate_aseatoms,
+        pin_memory=False,
+        drop_last=False,
+        timeout=0,
+        worker_init_fn=None,
+    ):
+        super(AtomsLoader, self).__init__(
+            dataset,
+            batch_size,
+            shuffle,
+            sampler,
+            batch_sampler,
+            num_workers,
+            collate_fn,
+            pin_memory,
+            drop_last,
+            timeout,
+            worker_init_fn,
+        )
 
     def get_statistics(self, property_names, per_atom=False, atomrefs=None):
         """
@@ -166,23 +185,20 @@ class AtomsLoader(DataLoader):
         else:
             is_single = False
             if atomrefs is None:
-                atomrefs = [None]*len(property_names)
+                atomrefs = [None] * len(property_names)
 
         if type(per_atom) is not list:
             per_atom = [per_atom] * len(property_names)
 
         with torch.no_grad():
-            statistics = [StatisticsAccumulator(batch=True)
-                          for _ in property_names]
+            statistics = [StatisticsAccumulator(batch=True) for _ in property_names]
             logger.info("statistics will be calculated...")
 
             for row in self:
-                for property_name, statistic, pa, ar in zip(property_names,
-                                                            statistics,
-                                                            per_atom,
-                                                            atomrefs):
-                    self._update_statistic(pa, ar, property_name,
-                                           row, statistic)
+                for property_name, statistic, pa, ar in zip(
+                    property_names, statistics, per_atom, atomrefs
+                ):
+                    self._update_statistic(pa, ar, property_name, row, statistic)
 
             stats = list(zip(*[s.get_statistics() for s in statistics]))
             mean, stddev = stats
@@ -193,16 +209,15 @@ class AtomsLoader(DataLoader):
 
             return mean, stddev
 
-    def _update_statistic(self, atomistic, atomref, property_name, row,
-                          statistics):
+    def _update_statistic(self, atomistic, atomref, property_name, row, statistics):
         """
         Helper function to update iterative mean / stddev statistics
         """
         property_value = row[property_name]
         if atomref is not None:
-            z = row['_atomic_numbers']
+            z = row["_atomic_numbers"]
             p0 = torch.sum(torch.from_numpy(atomref[z]).float(), dim=1)
             property_value -= p0
         if atomistic:
-            property_value /= torch.sum(row['_atom_mask'], dim=1, keepdim=True)
+            property_value /= torch.sum(row["_atom_mask"], dim=1, keepdim=True)
         statistics.add_sample(property_value)

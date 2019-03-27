@@ -1,10 +1,9 @@
 import os
 from sacred import Experiment
 from schnetpack.data import generate_db
-from schnetpack.sacred.folder_ingredient import save_config, create_dirs,\
-    folder_ing
+from schnetpack.sacred.folder_ingredient import save_config, create_dirs, folder_ing
 
-parsing = Experiment('parsing', ingredients=[folder_ing])
+parsing = Experiment("parsing", ingredients=[folder_ing])
 
 
 @parsing.config
@@ -12,11 +11,12 @@ def config():
     """
     Settings for the db parser.
     """
-    file_path = None                    # path to the input file
-    db_path = None                      # path to the output db
-    atomic_properties =\
-        'Properties=species:S:1:pos:R:3'# atomic properties of the input file
-    molecular_properties = ['energy']   # molecular properties of the input file
+    file_path = None  # path to the input file
+    db_path = None  # path to the output db
+    atomic_properties = (
+        "Properties=species:S:1:pos:R:3"
+    )  # atomic properties of the input file
+    molecular_properties = ["energy"]  # molecular properties of the input file
 
 
 @parsing.named_config
@@ -24,12 +24,11 @@ def forces():
     """
     Adds forces to the atomic property string.
     """
-    atomic_properties = 'Properties=species:S:1:pos:R:3:forces:R:3'
+    atomic_properties = "Properties=species:S:1:pos:R:3:forces:R:3"
 
 
 @parsing.command
-def parse(_log, _config, file_path, db_path, atomic_properties,
-          molecular_properties):
+def parse(_log, _config, file_path, db_path, atomic_properties, molecular_properties):
     """
     Runs the data parsing.
 
