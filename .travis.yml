@@ -1,17 +1,17 @@
 language: python
 
-python:
-  - "3.6"
-
 install:
   - pip install -r docs/sphinx-requirements.txt
-  - pip install pytest
-  - pip install pytest-cov
   - pip install coveralls
-  - pip install .
+  - pip install tox
+
+matrix:
+  include:
+    python: 3.6
+    env: TOXENV=py36
 
 script:
-  - pytest --cov=schnetpack
-  
+  - tox
+
 after_success:
   - coveralls
