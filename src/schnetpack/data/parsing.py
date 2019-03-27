@@ -48,17 +48,14 @@ def extxyz_to_db(extxyz_path, db_path):
         extxyz_path (str): path to extxyz-file
         db_path(str): path to sqlite database
     """
-    max_n_atoms = 0
     with connect(db_path, use_lock_file=False) as conn:
         with open(extxyz_path) as f:
             for at in tqdm(read_xyz(f, index=slice(None)), 'creating ase db'):
-                max_n_atoms = max(max_n_atoms, at.natoms)
                 data = {}
                 if at.has('forces'):
                     data['forces'] = at.get_forces()
                 data.update(at.info)
                 conn.write(at, data=data)
-        conn.metadata = dict(max_n_atoms=max_n_atoms)
 
 
 def xyz_to_db(xyz_path, db_path,
