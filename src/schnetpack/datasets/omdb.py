@@ -2,7 +2,6 @@ import os
 import tarfile
 
 import numpy as np
-from ase import Atoms
 from ase.io import read
 from ase.db import connect
 from ase.units import eV
