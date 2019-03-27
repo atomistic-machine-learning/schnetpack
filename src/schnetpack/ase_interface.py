@@ -35,29 +35,8 @@ from schnetpack.environment import SimpleEnvironmentProvider, \
 from schnetpack.representation import BehlerSFBlock
 
 
-class MDModelError(Exception):
+class SpkCalculatorError(Exception):
     pass
-
-
-class Model:
-    """
-    Basic wrapper for model to pass the calculator, etc.
-
-    Args:
-        model (callable): ML model
-        type (str): Model type, allowed is 'schnet'/'wacsf'
-        device (str): Device, either GPU or CPU
-    """
-    implemented = {"wacsf", "schnet"}
-
-    def __init__(self, model, type, device):
-        if type not in self.implemented:
-            raise NotImplementedError(
-                "Unrecognized model type {:s}".format(type))
-
-        self.model = model
-        self.type = type
-        self.device = device
 
 
 class SpkCalculator(Calculator):
@@ -65,8 +44,11 @@ class SpkCalculator(Calculator):
     ASE calculator for schnetpack machine learning models.
 
     Args:
-        ml_model (object): Model class containing the callable model, device
-            and the model type (schnet/wacsf)
+        ml_model (schnetpack.atomistic.AtomisticModel): Trained model for
+            calculations
+        device (str): select to run calculations on 'cuda' or 'cpu'
+        collect_triples (bool): Set to True if angular features are needed,
+            for example, while using 'wascf' models
         environment_provider (callable): Provides neighbor lists
         pair_provider (callable): Provides list of neighbor pairs. Only
             required if angular descriptors are used. Default is none.
@@ -74,14 +56,11 @@ class SpkCalculator(Calculator):
     """
     implemented_properties = ['energy', 'forces']
 
-    def __init__(self, ml_model,
+    def __init__(self, model, device='cpu', collect_triples=False,
                  environment_provider=SimpleEnvironmentProvider(), **kwargs):
         Calculator.__init__(self, **kwargs)
 
-        self.model = ml_model.model
-
-        collect_triples = ml_model.type == 'wacsf'
-        device = ml_model.device
+        self.model = model
 
         self.atoms_converter = \
             AtomsConverter(environment_provider=environment_provider,
@@ -382,55 +361,5 @@ class AseInterface:
         if write_jmol:
             frequencies.write_jmol()
 
-
-def load_model(modelpath, cuda=True):
-    """
-    Load an exported model and prepare it for simulations with ASE. The model
-    needs to be able to provide energies and forces.
-
-    Args:
-        modelpath (str): Path to exported model files.
-        cuda (bool): Use cuda (default=True).
-
-    Returns:
-        object: Model class specified in molecular_dynamics. Contains the model,
-            model type and device.
-    """
-
-    # Set cuda if requested
-    device = torch.device("cuda" if cuda else "cpu")
-    model = torch.load(modelpath).to(device)
-
-    # Determine model type
-    if isinstance(model.representation, BehlerSFBlock):
-        model_type = 'wacsf'
-    else:
-        model_type = 'schnet'
-
-    # Set gradiant flags properly
-    model.requires_dr = True
-
-    has_energy = False
-    if isinstance(model.output_modules, Iterable):
-        for module in model.output_modules:
-            if isinstance(module, Energy) or isinstance(module,
-                                                        ElementalEnergy):
-                has_energy = True
-            module.requires_dr = True
-    else:
-        if isinstance(model.output_modules, Energy) or \
-                isinstance(model.output_modules, ElementalEnergy):
-            has_energy = True
-        model.output_modules.requires_dr = True
-
-    if not has_energy:
-        raise MDModelError(
-            'Molecular dynamics model requires an Energy/ElementalEnergy '
-            'output layer for predicting forces.')
-
-    # Store into model wrapper for calculator
-    ml_model = Model(model, model_type, device)
-
-    return ml_model
 
 MLPotential = DeprecationHelper(SpkCalculator, 'MLPotential')

@@ -4,10 +4,11 @@ from sacred import Experiment
 from ase.db import connect
 from schnetpack.sacred.evaluator_ingredient import evaluator_ing,\
     build_evaluator
-import yaml
+from schnetpack.sacred.folder_ingredient import create_dirs, save_config,\
+    folder_ing
 
 
-eval_ex = Experiment('evaluation', ingredients=[evaluator_ing])
+eval_ex = Experiment('evaluation', ingredients=[evaluator_ing, folder_ing])
 
 
 class EvaluationError(Exception):
@@ -35,20 +36,6 @@ def test_set():
 
 
 @eval_ex.capture
-def save_config(_config, cfg_dir):
-    """
-    Save the evaluation configuration.
-
-    Args:
-        _config (dict): configuration of the experiment
-        cfg_dir (str): path to the config directory
-
-    """
-    with open(os.path.join(cfg_dir, 'eval_config.yaml'), 'w') as f:
-        yaml.dump(_config, f, default_flow_style=False)
-
-
-@eval_ex.capture
 def build_subset_db(_log, subset, dbpath, dbsplitpath):
     _log.info('creating subset database')
     new_db = connect(dbsplitpath)
@@ -58,7 +45,7 @@ def build_subset_db(_log, subset, dbpath, dbsplitpath):
 
 
 @eval_ex.command
-def evaluate(_log, model_dir, in_path, out_path, device, on_split):
+def evaluate(_log, _config, model_dir, in_path, out_path, device, on_split):
     """
     Predict missing physical properties using a trained SchNet model for a
     given input file.
@@ -70,6 +57,9 @@ def evaluate(_log, model_dir, in_path, out_path, device, on_split):
         device (str): train model on CPU/GPU
         on_split (str): name of subset in model_dir
     """
+    out_dir = os.path.dirname(out_path)
+    create_dirs(_log=_log, output_dir=out_dir)
+    save_config(_config=_config, output_dir=out_dir)
     if in_path is None:
         raise EvaluationError('Input file is not defined!')
     model_path = os.path.join(model_dir, 'best_model')
@@ -79,7 +69,6 @@ def evaluate(_log, model_dir, in_path, out_path, device, on_split):
         dbsplitpath = in_path[:-3] + '_' + on_split + '.db'
         build_subset_db(subset=subset, dbpath=in_path, dbsplitpath=dbsplitpath)
         in_path = dbsplitpath
-    save_config(cfg_dir=os.path.dirname(out_path))
     _log.info('build evaluator...')
     evaluator = build_evaluator(model_path=model_path, in_path=in_path,
                                 out_path=out_path)

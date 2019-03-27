@@ -61,8 +61,7 @@ def md_system(request):
 def generate_model(training_dir, properties, property_mapping):
     dbpath = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                           'data/test_iso.db')
-    ex.run(command_name='train',
-           named_configs=[],
+    ex.run(named_configs=[],
            config_updates={'model_dir': training_dir,
                            'properties': properties,
                            'dataset.dbpath': dbpath,
