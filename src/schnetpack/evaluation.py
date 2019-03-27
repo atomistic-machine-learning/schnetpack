@@ -6,7 +6,6 @@ from schnetpack.data.definitions import Structure
 
 
 class Evaluator:
-
     def __init__(self, model, dataloader):
         """
         Base class for model predictions.
@@ -29,10 +28,7 @@ class Evaluator:
         """
         predicted = {}
         for batch in self.dataloader:
-            batch = {
-                k: v.to(device)
-                for k, v in batch.items()
-            }
+            batch = {k: v.to(device) for k, v in batch.items()}
             result = self.model(batch)
 
             for p in result.keys():
@@ -59,7 +55,6 @@ class Evaluator:
 
 
 class NPZEvaluator(Evaluator):
-
     def __init__(self, model, dataloader, out_file):
         self.out_file = out_file
         super(NPZEvaluator, self).__init__(model=model, dataloader=dataloader)
@@ -70,7 +65,6 @@ class NPZEvaluator(Evaluator):
 
 
 class DBEvaluator(Evaluator):
-
     def __init__(self, model, dataloader, out_file):
         self.dbpath = dataloader.dataset.dbpath
         self.out_file = out_file
@@ -79,9 +73,8 @@ class DBEvaluator(Evaluator):
 
     def evaluate(self, device):
         predicted = self._get_predicted(device)
-        energies = predicted['energy']
-        forces = predicted['forces']
+        energies = predicted["energy"]
+        forces = predicted["forces"]
         with connect(self.out_file) as conn:
             for i in range(conn.__len__()):
-                conn.update(i+1, data=dict(energy=energies[i],
-                                           forces=forces[i]))
+                conn.update(i + 1, data=dict(energy=energies[i], forces=forces[i]))

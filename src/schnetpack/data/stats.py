@@ -10,7 +10,6 @@ from .definitions import Structure
 
 
 class StatisticsAccumulator:
-
     def __init__(self, batch=False, atomistic=False):
         """
         Use the incremental Welford algorithm described in [1]_ to accumulate

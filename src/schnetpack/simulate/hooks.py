@@ -4,9 +4,17 @@ import numpy as np
 import json
 import h5py
 
-__all__ = ['Checkpoint', 'RemoveCOMMotion', 'BiasPotential', 'FileLogger',
-           'TensorboardLogger', 'TemperatureLogger', 'MoleculeStream',
-           'PropertyStream', 'SimulationHook']
+__all__ = [
+    "Checkpoint",
+    "RemoveCOMMotion",
+    "BiasPotential",
+    "FileLogger",
+    "TensorboardLogger",
+    "TemperatureLogger",
+    "MoleculeStream",
+    "PropertyStream",
+    "SimulationHook",
+]
 
 
 class SimulationHook:
@@ -128,7 +136,9 @@ class DataStream:
         self.restart = None
         self.every_n_steps = None
 
-    def init_data_stream(self, simulator, main_dataset, buffer_size, restart=False, every_n_steps=1):
+    def init_data_stream(
+        self, simulator, main_dataset, buffer_size, restart=False, every_n_steps=1
+    ):
         """
         Wrapper for initializing the data containers based on the instructions provided in the current simulator. For
         every data stream, the current number of valid entries is stored, which is updated periodically. This is
@@ -152,7 +162,7 @@ class DataStream:
         self._init_data_stream(simulator)
         # Write number of meaningful entries into attributes
         if not self.restart:
-            self.data_group.attrs['entries'] = 0
+            self.data_group.attrs["entries"] = 0
 
     def _init_data_stream(self, simulator):
         """
@@ -182,10 +192,11 @@ class DataStream:
             buffer_position (int): Most recent entry in the buffer. Used to ensure no buffer entries are written to the
                                    main file.
         """
-        self.data_group[file_position:file_position + buffer_position] = \
+        self.data_group[file_position : file_position + buffer_position] = (
             self.buffer[:buffer_position].detach().cpu()
+        )
         # Update number of meaningful entries
-        self.data_group.attrs.modify('entries', file_position + buffer_position)
+        self.data_group.attrs.modify("entries", file_position + buffer_position)
         self.data_group.flush()
 
     def _setup_data_groups(self, data_shape, simulator):
@@ -199,21 +210,25 @@ class DataStream:
             simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         # Initialize the buffer
-        self.buffer = torch.zeros(self.buffer_size, *data_shape,
-                                  device=simulator.system.device)
+        self.buffer = torch.zeros(
+            self.buffer_size, *data_shape, device=simulator.system.device
+        )
 
         if self.restart:
             # Load previous data stream and resize
             self.data_group = self.main_dataset[self.group_name]
-            self.data_group.resize((simulator.n_steps
-                                    + self.data_group.attrs['entries'],)
-                                   + data_shape)
+            self.data_group.resize(
+                (simulator.n_steps + self.data_group.attrs["entries"],) + data_shape
+            )
         else:
             # Otherwise, generate new data group in the dataset
             self.data_group = self.main_dataset.create_dataset(
-                self.group_name, shape=(simulator.n_steps,) + data_shape,
-                chunks=self.buffer.shape, dtype=np.float32,
-                maxshape=(None,) + data_shape)
+                self.group_name,
+                shape=(simulator.n_steps,) + data_shape,
+                chunks=self.buffer.shape,
+                dtype=np.float32,
+                maxshape=(None,) + data_shape,
+            )
 
 
 class PropertyStream(DataStream):
@@ -232,7 +247,7 @@ class PropertyStream(DataStream):
     """
 
     def __init__(self, target_properties=None):
-        super(PropertyStream, self).__init__('properties')
+        super(PropertyStream, self).__init__("properties")
         self.n_replicas = None
         self.n_molecules = None
         self.properties_slices = {}
@@ -250,12 +265,14 @@ class PropertyStream(DataStream):
         self.n_molecules = simulator.system.n_molecules
 
         if simulator.system.properties is None:
-            raise FileLoggerError('Shape of properties could not be determined,'
-                                  'please call calculator')
+            raise FileLoggerError(
+                "Shape of properties could not be determined," "please call calculator"
+            )
 
         # Determine present properties, order and shape thereof
-        properties_entries, properties_shape, properties_positions = \
-            self._get_properties_structures(simulator.system.properties)
+        properties_entries, properties_shape, properties_positions = self._get_properties_structures(
+            simulator.system.properties
+        )
 
         data_shape = (self.n_replicas, self.n_molecules, properties_entries)
 
@@ -263,9 +280,8 @@ class PropertyStream(DataStream):
 
         if not self.restart:
             # Store metadata on shape and position of properties in array
-            self.data_group.attrs['shapes'] = json.dumps(properties_shape)
-            self.data_group.attrs['positions'] = \
-                json.dumps(properties_positions)
+            self.data_group.attrs["shapes"] = json.dumps(properties_shape)
+            self.data_group.attrs["positions"] = json.dumps(properties_positions)
 
     def update_buffer(self, buffer_position, simulator):
         """
@@ -277,8 +293,11 @@ class PropertyStream(DataStream):
         """
         # These are already detached in the calculator by default.
         for p in self.properties_slices:
-            self.buffer[buffer_position:buffer_position + 1, ..., self.properties_slices[p]] = \
-                simulator.system.properties[p].view(self.n_replicas, self.n_molecules, -1)
+            self.buffer[
+                buffer_position : buffer_position + 1, ..., self.properties_slices[p]
+            ] = simulator.system.properties[p].view(
+                self.n_replicas, self.n_molecules, -1
+            )
             # self.buffer[buffer_position:buffer_position + 1, ..., self.properties_slices[p]] = \
             #     simulator.system.properties[p].view(self.n_replicas, self.n_molecules, -1).detach()
 
@@ -328,7 +347,7 @@ class SimulationStream(PropertyStream):
 
     def __init__(self):
         super(SimulationStream, self).__init__()
-        self.group_name = 'simulation'
+        self.group_name = "simulation"
 
     def _init_data_stream(self, simulator):
         """
@@ -342,23 +361,23 @@ class SimulationStream(PropertyStream):
 
         # Create an auxiliary property array from the current system state
         property_dictionary = {
-            'kinetic_energy': simulator.system.kinetic_energy,
-            'kinetic_energy_centroid': simulator.system.centroid_kinetic_energy,
-            'temperature': simulator.system.temperature,
-            'temperature_centroid': simulator.system.centroid_temperature
+            "kinetic_energy": simulator.system.kinetic_energy,
+            "kinetic_energy_centroid": simulator.system.centroid_kinetic_energy,
+            "temperature": simulator.system.temperature,
+            "temperature_centroid": simulator.system.centroid_temperature,
         }
 
-        properties_entries, properties_shape, properties_positions = \
-            self._get_properties_structures(property_dictionary)
+        properties_entries, properties_shape, properties_positions = self._get_properties_structures(
+            property_dictionary
+        )
 
         data_shape = (self.n_replicas, self.n_molecules, properties_entries)
 
         self._setup_data_groups(data_shape, simulator)
 
         if not self.restart:
-            self.data_group.attrs['shapes'] = json.dumps(properties_shape)
-            self.data_group.attrs['positions'] = \
-                json.dumps(properties_positions)
+            self.data_group.attrs["shapes"] = json.dumps(properties_shape)
+            self.data_group.attrs["positions"] = json.dumps(properties_positions)
 
     def update_buffer(self, buffer_position, simulator):
         """
@@ -369,15 +388,16 @@ class SimulationStream(PropertyStream):
             simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         property_dictionary = {
-            'temperature': simulator.system.temperature,
-            'kinetic_energy': simulator.system.kinetic_energy,
-            'temperature_centroid': simulator.system.centroid_temperature,
-            'kinetic_energy_centroid': simulator.system.centroid_kinetic_energy
+            "temperature": simulator.system.temperature,
+            "kinetic_energy": simulator.system.kinetic_energy,
+            "temperature_centroid": simulator.system.centroid_temperature,
+            "kinetic_energy_centroid": simulator.system.centroid_kinetic_energy,
         }
 
         for p in self.properties_slices:
-            self.buffer[buffer_position:buffer_position + 1, ..., self.properties_slices[p]] = \
-                property_dictionary[p].view(-1, self.n_molecules, 1)
+            self.buffer[
+                buffer_position : buffer_position + 1, ..., self.properties_slices[p]
+            ] = property_dictionary[p].view(-1, self.n_molecules, 1)
 
 
 class MoleculeStream(DataStream):
@@ -391,7 +411,7 @@ class MoleculeStream(DataStream):
     """
 
     def __init__(self):
-        super(MoleculeStream, self).__init__('molecules')
+        super(MoleculeStream, self).__init__("molecules")
         self.written = 0
 
     def _init_data_stream(self, simulator):
@@ -403,18 +423,24 @@ class MoleculeStream(DataStream):
             simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         # Get shape of array depending on whether forces should be stored.
-        data_shape = (simulator.system.n_replicas, simulator.system.n_molecules,
-                      simulator.system.max_n_atoms, 6)
+        data_shape = (
+            simulator.system.n_replicas,
+            simulator.system.n_molecules,
+            simulator.system.max_n_atoms,
+            6,
+        )
 
         self._setup_data_groups(data_shape, simulator)
 
         if not self.restart:
-            self.data_group.attrs['n_replicas'] = simulator.system.n_replicas
-            self.data_group.attrs['n_molecules'] = simulator.system.n_molecules
-            self.data_group.attrs['n_atoms'] = simulator.system.n_atoms.cpu()
-            self.data_group.attrs['atom_types'] = simulator.system.atom_types.cpu()
-            self.data_group.attrs['time_step'] = simulator.integrator.time_step * self.every_n_steps
-            self.data_group.attrs['every_n_steps'] = self.every_n_steps
+            self.data_group.attrs["n_replicas"] = simulator.system.n_replicas
+            self.data_group.attrs["n_molecules"] = simulator.system.n_molecules
+            self.data_group.attrs["n_atoms"] = simulator.system.n_atoms.cpu()
+            self.data_group.attrs["atom_types"] = simulator.system.atom_types.cpu()
+            self.data_group.attrs["time_step"] = (
+                simulator.integrator.time_step * self.every_n_steps
+            )
+            self.data_group.attrs["every_n_steps"] = self.every_n_steps
 
     def update_buffer(self, buffer_position, simulator):
         """
@@ -424,16 +450,19 @@ class MoleculeStream(DataStream):
             buffer_position (int): Current position in the buffer.
             simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
         """
-        self.buffer[buffer_position:buffer_position + 1, ..., :3] = \
-            simulator.system.positions
-        self.buffer[buffer_position:buffer_position + 1, ..., 3:] = \
-            simulator.system.velocities
+        self.buffer[
+            buffer_position : buffer_position + 1, ..., :3
+        ] = simulator.system.positions
+        self.buffer[
+            buffer_position : buffer_position + 1, ..., 3:
+        ] = simulator.system.velocities
 
 
 class FileLoggerError(Exception):
     """
     Exception for the FileLogger class.
     """
+
     pass
 
 
@@ -455,9 +484,14 @@ class FileLogger(SimulationHook):
                         (default=False)
     """
 
-    def __init__(self, filename, buffer_size,
-                 data_streams=[MoleculeStream(), PropertyStream()],
-                 every_n_steps=1, restart=False):
+    def __init__(
+        self,
+        filename,
+        buffer_size,
+        data_streams=[MoleculeStream(), PropertyStream()],
+        every_n_steps=1,
+        restart=False,
+    ):
 
         self.restart = restart
         self.every_n_steps = every_n_steps
@@ -467,7 +501,7 @@ class FileLogger(SimulationHook):
             if os.path.exists(filename):
                 os.remove(filename)
 
-        self.file = h5py.File(filename, 'a', libver='latest')
+        self.file = h5py.File(filename, "a", libver="latest")
         self.buffer_size = buffer_size
 
         # Precondition data streams
@@ -489,11 +523,16 @@ class FileLogger(SimulationHook):
         """
         # Construct stream buffers and data groups
         for stream in self.data_steams:
-            stream.init_data_stream(simulator, self.file, self.buffer_size, restart=self.restart,
-                                    every_n_steps=self.every_n_steps)
+            stream.init_data_stream(
+                simulator,
+                self.file,
+                self.buffer_size,
+                restart=self.restart,
+                every_n_steps=self.every_n_steps,
+            )
             # Upon restart, get current position in file
             if self.restart:
-                self.file_position = stream.data_group.attrs['entries']
+                self.file_position = stream.data_group.attrs["entries"]
 
         # Enable single writer, multiple reader flag
         self.file.swmr_mode = True
@@ -553,6 +592,7 @@ class TensorboardLogger(SimulationHook):
 
     def __init__(self, log_file, every_n_steps=100):
         from tensorboardX import SummaryWriter
+
         self.log_file = log_file
         self.every_n_steps = every_n_steps
         self.writer = SummaryWriter(self.log_file)
@@ -598,13 +638,13 @@ class TensorboardLogger(SimulationHook):
         logger_dict = {}
 
         for molecule in range(self.n_molecules):
-            mol_name = '{:s}/molecule_{:02d}'.format(group_name, molecule + 1)
+            mol_name = "{:s}/molecule_{:02d}".format(group_name, molecule + 1)
 
             if property_centroid is not None:
-                logger_dict['centroid'] = property_centroid[0, molecule]
+                logger_dict["centroid"] = property_centroid[0, molecule]
 
             for replica in range(self.n_replicas):
-                rep_name = 'r{:02d}'.format(replica + 1)
+                rep_name = "r{:02d}".format(replica + 1)
                 logger_dict[rep_name] = property[replica, molecule]
 
             self.writer.add_scalars(mol_name, logger_dict, step)
@@ -630,8 +670,7 @@ class TemperatureLogger(TensorboardLogger):
     """
 
     def __init__(self, log_file, every_n_steps=100):
-        super(TemperatureLogger, self).__init__(log_file,
-                                                every_n_steps=every_n_steps)
+        super(TemperatureLogger, self).__init__(log_file, every_n_steps=every_n_steps)
 
     def on_step_end(self, simulator):
         """
@@ -643,7 +682,8 @@ class TemperatureLogger(TensorboardLogger):
         if simulator.step % self.every_n_steps == 0:
             # Use the _log_group routine to log the systems temperatures
             self._log_group(
-                'temperature',
+                "temperature",
                 simulator.step,
                 simulator.system.temperature,
-                property_centroid=simulator.system.centroid_temperature)
+                property_centroid=simulator.system.centroid_temperature,
+            )

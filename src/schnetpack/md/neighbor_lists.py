@@ -68,17 +68,24 @@ class SimpleNeighborList(MDNeighborList):
         radii or zero-padding arising from molecules of different size (neighbor_mask).
         """
         # Construct basic, unmasked tile
-        basic_tile = torch.arange(self.system.max_n_atoms, device=self.system.device)[None, :].repeat(
-            self.system.max_n_atoms, 1)
+        basic_tile = torch.arange(self.system.max_n_atoms, device=self.system.device)[
+            None, :
+        ].repeat(self.system.max_n_atoms, 1)
         # Remove self interactions
         diagonal_mask = torch.eye(self.system.max_n_atoms, device=self.system.device)
-        basic_tile = basic_tile[diagonal_mask != 1].view(self.system.max_n_atoms, self.system.max_n_atoms - 1)
+        basic_tile = basic_tile[diagonal_mask != 1].view(
+            self.system.max_n_atoms, self.system.max_n_atoms - 1
+        )
 
         # Tile neighbor lists and mask to get replica and molecule dimensions
-        neighbors_list = basic_tile[None, None, :, :].repeat(self.system.n_replicas, self.system.n_molecules, 1, 1)
+        neighbors_list = basic_tile[None, None, :, :].repeat(
+            self.system.n_replicas, self.system.n_molecules, 1, 1
+        )
 
         # Construct the neighbor mask as an outer product of the atom masks, where self interactions are removed
-        self.neighbor_mask = self.system.atom_masks.transpose(2, 3)[..., 1:] * self.system.atom_masks
+        self.neighbor_mask = (
+            self.system.atom_masks.transpose(2, 3)[..., 1:] * self.system.atom_masks
+        )
 
         # Multiply neighbor list by mask to remove superfluous entries
         self.neighbor_list = neighbors_list * self.neighbor_mask.long()

@@ -37,13 +37,7 @@ class Simulator:
 
     """
 
-    def __init__(self,
-                 system,
-                 integrator,
-                 calculator,
-                 simulator_hooks=[],
-                 step=0
-                 ):
+    def __init__(self, system, integrator, calculator, simulator_hooks=[], step=0):
 
         self.system = system
         self.integrator = integrator
@@ -123,10 +117,11 @@ class Simulator:
 
         """
         state_dict = {
-            'step': self.step,
-            'system': self.system.state_dict,
-            'simulator_hooks': {hook.__class__: hook.state_dict for hook in
-                                self.simulator_hooks}
+            "step": self.step,
+            "system": self.system.state_dict,
+            "simulator_hooks": {
+                hook.__class__: hook.state_dict for hook in self.simulator_hooks
+            },
         }
         return state_dict
 
@@ -143,13 +138,13 @@ class Simulator:
             'simulator_hooks' and 'system'.
 
         """
-        self.step = state_dict['step']
-        self.system.state_dict = state_dict['system']
+        self.step = state_dict["step"]
+        self.system.state_dict = state_dict["system"]
 
         # Set state dicts of all hooks
         for hook in self.simulator_hooks:
-            if hook.__class__ in state_dict['simulator_hooks']:
-                hook.state_dict = state_dict['simulator_hooks'][hook.__class__]
+            if hook.__class__ in state_dict["simulator_hooks"]:
+                hook.state_dict = state_dict["simulator_hooks"][hook.__class__]
 
     def restart(self, state_dict, soft=False):
         """
@@ -169,23 +164,25 @@ class Simulator:
                          default=False)
 
         """
-        self.step = state_dict['step']
-        self.system.state_dict = state_dict['system']
+        self.step = state_dict["step"]
+        self.system.state_dict = state_dict["system"]
 
         if soft:
             # Do the same as in a basic state dict setting
             for hook in self.simulator_hooks:
-                if hook.__class__ in state_dict['simulator_hooks']:
-                    hook.state_dict = state_dict['simulator_hooks'][hook.__class__]
+                if hook.__class__ in state_dict["simulator_hooks"]:
+                    hook.state_dict = state_dict["simulator_hooks"][hook.__class__]
         else:
             # Hard restart, require all thermostats to be there
             for hook in self.simulator_hooks:
                 # Check if hook is thermostat
-                if hasattr(hook, 'temperature_bath'):
-                    if hook.__class__ not in state_dict['simulator_hooks']:
-                        raise ValueError(f'Could not find restart informationfor {hook.__class__} in state dict.')
+                if hasattr(hook, "temperature_bath"):
+                    if hook.__class__ not in state_dict["simulator_hooks"]:
+                        raise ValueError(
+                            f"Could not find restart informationfor {hook.__class__} in state dict."
+                        )
                     else:
-                        hook.state_dict = state_dict['simulator_hooks'][hook.__class__]
+                        hook.state_dict = state_dict["simulator_hooks"][hook.__class__]
 
     def load_system_state(self, state_dict):
         """
@@ -196,4 +193,4 @@ class Simulator:
         Args:
             state_dict (dict): State dict of the current simulation
         """
-        self.system.state_dict = state_dict['system']
+        self.system.state_dict = state_dict["system"]

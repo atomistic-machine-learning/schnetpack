@@ -3,17 +3,29 @@ from shutil import rmtree
 import yaml
 from sacred import Experiment
 import numpy as np
-from schnetpack.sacred.dataset_ingredients import dataset_ingredient, \
-    get_dataset, get_property_map
+from schnetpack.sacred.dataset_ingredients import (
+    dataset_ingredient,
+    get_dataset,
+    get_property_map,
+)
 from schnetpack.sacred.model_ingredients import model_ingredient, build_model
-from schnetpack.sacred.trainer_ingredients import train_ingredient, \
-    setup_trainer
-from schnetpack.sacred.dataloader_ingredient import dataloader_ing, \
-    build_dataloaders, stats
+from schnetpack.sacred.trainer_ingredients import train_ingredient, setup_trainer
+from schnetpack.sacred.dataloader_ingredient import (
+    dataloader_ing,
+    build_dataloaders,
+    stats,
+)
 
 
-ex = Experiment('experiment', ingredients=[model_ingredient, train_ingredient,
-                                           dataloader_ing, dataset_ingredient])
+ex = Experiment(
+    "experiment",
+    ingredients=[
+        model_ingredient,
+        train_ingredient,
+        dataloader_ing,
+        dataset_ingredient,
+    ],
+)
 
 
 @ex.config
@@ -21,11 +33,11 @@ def cfg():
     r"""
     configuration for training script
     """
-    overwrite = False                   # overwrite model_dir if True
-    additional_outputs = []             # additional model outputs
-    device = 'cpu'                 # device that is used for training <cpu/cuda>
-    model_dir = 'training'              # directory for training outputs
-    properties = ['energy', 'forces']   # model properties
+    overwrite = False  # overwrite model_dir if True
+    additional_outputs = []  # additional model outputs
+    device = "cpu"  # device that is used for training <cpu/cuda>
+    model_dir = "training"  # directory for training outputs
+    properties = ["energy", "forces"]  # model properties
 
 
 @ex.capture
@@ -38,7 +50,7 @@ def save_config(_config, model_dir):
         model_dir (str): path to the training directory
 
     """
-    with open(os.path.join(model_dir, 'config.yaml'), 'w') as f:
+    with open(os.path.join(model_dir, "config.yaml"), "w") as f:
         yaml.dump(_config, f, default_flow_style=False)
 
 
@@ -54,12 +66,12 @@ def create_dirs(_log, model_dir, overwrite):
     _log.info("Create model directory")
 
     if model_dir is None:
-        raise ValueError('Config `model_dir` has to be set!')
+        raise ValueError("Config `model_dir` has to be set!")
 
     if os.path.exists(model_dir) and not overwrite:
         raise ValueError(
-            'Model directory already exists (set overwrite flag?):',
-            model_dir)
+            "Model directory already exists (set overwrite flag?):", model_dir
+        )
 
     if os.path.exists(model_dir) and overwrite:
         rmtree(model_dir)
@@ -88,25 +100,35 @@ def train(_log, _config, model_dir, properties, additional_outputs, device):
 
     _log.info("Load data")
     dataset = get_dataset(dataset_properties=property_map.values())
-    train_loader, val_loader, test_loader, atomrefs = \
-        build_dataloaders(property_map=property_map, dataset=dataset)
-    np.savez(os.path.join(model_dir, 'splits.npz'),
-             train=train_loader.dataset.subset,
-             val=val_loader.dataset.subset,
-             test=test_loader.dataset.subset,
-             atomrefs=atomrefs)
+    train_loader, val_loader, test_loader, atomrefs = build_dataloaders(
+        property_map=property_map, dataset=dataset
+    )
+    np.savez(
+        os.path.join(model_dir, "splits.npz"),
+        train=train_loader.dataset.subset,
+        val=val_loader.dataset.subset,
+        test=test_loader.dataset.subset,
+        atomrefs=atomrefs,
+    )
     mean, stddev = stats(train_loader, atomrefs, property_map)
 
     _log.info("Build model")
-    model_properties = [p for p, tgt in property_map.items() if
-                        tgt is not None]
-    model = build_model(mean=mean, stddev=stddev, atomrefs=atomrefs,
-                        model_properties=model_properties,
-                        additional_outputs=additional_outputs).to(device)
+    model_properties = [p for p, tgt in property_map.items() if tgt is not None]
+    model = build_model(
+        mean=mean,
+        stddev=stddev,
+        atomrefs=atomrefs,
+        model_properties=model_properties,
+        additional_outputs=additional_outputs,
+    ).to(device)
     _log.info("Setup training")
-    trainer = setup_trainer(model=model, train_dir=model_dir,
-                            train_loader=train_loader, val_loader=val_loader,
-                            property_map=property_map)
+    trainer = setup_trainer(
+        model=model,
+        train_dir=model_dir,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        property_map=property_map,
+    )
     _log.info("Training")
     trainer.train(device)
 

@@ -1,12 +1,11 @@
 from sacred import Ingredient
 
 from schnetpack.representation.schnet import SchNet
-from schnetpack.atomistic import AtomisticModel, ModelError, \
-    PropertyModel
+from schnetpack.atomistic import AtomisticModel, ModelError, PropertyModel
 from schnetpack.nn.cutoff import *
 
 
-model_ingredient = Ingredient('model')
+model_ingredient = Ingredient("model")
 
 
 @model_ingredient.config
@@ -14,21 +13,31 @@ def cfg():
     r"""
     configuration for model
     """
-    name = 'schnet'     # name of the representation network
-    n_atom_basis = 128  #number of features used to describe atomic environments
-    n_filters = 128     # number of filters used in continuous-filter convolution
+    name = "schnet"  # name of the representation network
+    n_atom_basis = 128  # number of features used to describe atomic environments
+    n_filters = 128  # number of filters used in continuous-filter convolution
     n_interactions = 6  # number of interaction layers
-    cutoff = 5.0        # cutoff
-    n_gaussians = 25    # number of Gaussians which are used to expand atom distances
-    normalize_filter = False    # if true, divide filter by number of neighbors over which convolution is applied
-    coupled_interactions = False    # use shared weights for interaction layers
-    max_z = 100     # maximum number of atoms in molecule
-    cutoff_network = 'hard'     # type of cutoff network
+    cutoff = 5.0  # cutoff
+    n_gaussians = 25  # number of Gaussians which are used to expand atom distances
+    normalize_filter = (
+        False
+    )  # if true, divide filter by number of neighbors over which convolution is applied
+    coupled_interactions = False  # use shared weights for interaction layers
+    max_z = 100  # maximum number of atoms in molecule
+    cutoff_network = "hard"  # type of cutoff network
 
 
 @model_ingredient.capture
-def build_model(mean, stddev, model_properties, atomrefs, additional_outputs,
-                n_atom_basis, name, cutoff):
+def build_model(
+    mean,
+    stddev,
+    model_properties,
+    atomrefs,
+    additional_outputs,
+    n_atom_basis,
+    name,
+    cutoff,
+):
     """
     Build the model from a given config.
 
@@ -47,17 +56,21 @@ def build_model(mean, stddev, model_properties, atomrefs, additional_outputs,
     Returns:
         Model object
     """
-    if name == 'schnet':
+    if name == "schnet":
         representation = build_schnet(return_intermediate=False)
     else:
-        raise ModelError(
-            'Unknown model: {:s}'.format(name))
+        raise ModelError("Unknown model: {:s}".format(name))
 
     cutoff_function = get_cutoff()
-    output = PropertyModel(n_atom_basis, model_properties + additional_outputs,
-                           mean, stddev, atomrefs,
-                           cutoff_network=cutoff_function,
-                           cutoff=cutoff)
+    output = PropertyModel(
+        n_atom_basis,
+        model_properties + additional_outputs,
+        mean,
+        stddev,
+        atomrefs,
+        cutoff_network=cutoff_function,
+        cutoff=cutoff,
+    )
     model = AtomisticModel(representation, output)
     return model
 
@@ -74,23 +87,29 @@ def get_cutoff(cutoff_network):
         Cutoff network object
 
     """
-    if cutoff_network == 'hard':
+    if cutoff_network == "hard":
         cutoff_function = HardCutoff
-    elif cutoff_network == 'cosine':
+    elif cutoff_network == "cosine":
         cutoff_function = CosineCutoff
-    elif cutoff_network == 'mollifier':
+    elif cutoff_network == "mollifier":
         cutoff_function = MollifierCutoff
     else:
-        raise ModelError(
-            'Unrecognized cutoff {:s}'.format(cutoff_network))
+        raise ModelError("Unrecognized cutoff {:s}".format(cutoff_network))
     return cutoff_function
 
 
 @model_ingredient.capture
-def build_schnet(return_intermediate,
-                 n_atom_basis, n_filters, n_interactions, cutoff,
-                 n_gaussians, normalize_filter,
-                 coupled_interactions, max_z):
+def build_schnet(
+    return_intermediate,
+    n_atom_basis,
+    n_filters,
+    n_interactions,
+    cutoff,
+    n_gaussians,
+    normalize_filter,
+    coupled_interactions,
+    max_z,
+):
     """
     Build and return SchNet object.
 
@@ -127,5 +146,5 @@ def build_schnet(return_intermediate,
         return_intermediate=return_intermediate,
         max_z=max_z,
         cutoff_network=cutoff_function,
-        charged_systems=False
+        charged_systems=False,
     )

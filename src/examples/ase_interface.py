@@ -4,20 +4,19 @@ from schnetpack.ase_interface import SpkCalculator, Model
 
 
 # path definitions
-path_to_model = './../sacred_scripts/experiments/training/best_model'
-path_to_db = './data/snippet.db'
+path_to_model = "./../sacred_scripts/experiments/training/best_model"
+path_to_db = "./data/snippet.db"
 # load model
 model = torch.load(path_to_model)
 # get example atom
 conn = connect(path_to_db)
 ats = conn.get_atoms(1)
 # build calculator
-w_model = Model(model=model, type='schnet', device='cpu')
+w_model = Model(model=model, type="schnet", device="cpu")
 calc = SpkCalculator(w_model)
 # add calculator to atoms object
 ats.set_calculator(calc)
 
-#test
-print('forces:', ats.get_forces())
-print('total_energy', ats.get_total_energy())
-
+# test
+print("forces:", ats.get_forces())
+print("total_energy", ats.get_total_energy())

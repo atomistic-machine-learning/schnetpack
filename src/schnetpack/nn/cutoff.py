@@ -3,7 +3,7 @@ import torch
 from torch import nn as nn
 
 
-__all__ = ['CosineCutoff', 'MollifierCutoff', 'HardCutoff']
+__all__ = ["CosineCutoff", "MollifierCutoff", "HardCutoff"]
 
 
 def cosine_cutoff(distances, cutoff=5.0):
@@ -36,7 +36,7 @@ class CosineCutoff(nn.Module):
 
     def __init__(self, cutoff=5.0):
         super(CosineCutoff, self).__init__()
-        self.register_buffer('cutoff', torch.FloatTensor([cutoff]))
+        self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
 
     def forward(self, distances):
         """
@@ -79,7 +79,7 @@ class MollifierCutoff(nn.Module):
 
     def __init__(self, cutoff=5.0):
         super(MollifierCutoff, self).__init__()
-        self.register_buffer('cutoff', torch.FloatTensor([cutoff]))
+        self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
 
     def forward(self, distances):
         """
@@ -118,7 +118,7 @@ class HardCutoff(nn.Module):
 
     def __init__(self, cutoff=5.0):
         super(HardCutoff, self).__init__()
-        self.register_buffer('cutoff', torch.FloatTensor([cutoff]))
+        self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
 
     def forward(self, distances):
         """

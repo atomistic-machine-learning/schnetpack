@@ -54,13 +54,16 @@ class System:
                                in the calculator (default is
                                SimpleNeighborList).
     """
+
     # TODO: Introduce periodic boundary conditions
 
-    def __init__(self,
-                 n_replicas,
-                 device='cuda',
-                 neighborlist=SimpleNeighborList,
-                 initializer=None):
+    def __init__(
+        self,
+        n_replicas,
+        device="cuda",
+        neighborlist=SimpleNeighborList,
+        initializer=None,
+    ):
 
         # Specify device
         self.device = device
@@ -119,8 +122,9 @@ class System:
         self.n_molecules = len(molecules)
 
         # 2) Construct array with number of atoms in each molecule
-        self.n_atoms = torch.zeros(self.n_molecules, dtype=torch.long,
-                                   device=self.device)
+        self.n_atoms = torch.zeros(
+            self.n_molecules, dtype=torch.long, device=self.device
+        )
 
         for i in range(self.n_molecules):
             self.n_atoms[i] = molecules[i].get_number_of_atoms()
@@ -130,31 +134,35 @@ class System:
         self.max_n_atoms = int(torch.max(self.n_atoms))
 
         # 4) Construct basic properties and masks
-        self.atom_types = torch.zeros(self.n_replicas, self.n_molecules,
-                                      self.max_n_atoms,
-                                      device=self.device).long()
-        self.atom_masks = torch.zeros(self.n_replicas, self.n_molecules,
-                                      self.max_n_atoms, device=self.device)
-        self.masses = torch.ones(self.n_molecules, self.max_n_atoms,
-                                 device=self.device)
+        self.atom_types = torch.zeros(
+            self.n_replicas, self.n_molecules, self.max_n_atoms, device=self.device
+        ).long()
+        self.atom_masks = torch.zeros(
+            self.n_replicas, self.n_molecules, self.max_n_atoms, device=self.device
+        )
+        self.masses = torch.ones(self.n_molecules, self.max_n_atoms, device=self.device)
 
         # Relevant for dynamic properties: positions, momenta, forces
-        self.positions = torch.zeros(self.n_replicas, self.n_molecules,
-                                     self.max_n_atoms, 3, device=self.device)
-        self.momenta = torch.zeros(self.n_replicas, self.n_molecules,
-                                   self.max_n_atoms, 3, device=self.device)
+        self.positions = torch.zeros(
+            self.n_replicas, self.n_molecules, self.max_n_atoms, 3, device=self.device
+        )
+        self.momenta = torch.zeros(
+            self.n_replicas, self.n_molecules, self.max_n_atoms, 3, device=self.device
+        )
 
         # 5) Populate arrays according to the data provided in molecules
         for i in range(self.n_molecules):
             # Static properties
-            self.atom_types[:, i, :self.n_atoms[i]] = torch.from_numpy(
-                molecules[i].get_atomic_numbers())
-            self.atom_masks[:, i, :self.n_atoms[i]] = 1.0
-            self.masses[i, :self.n_atoms[i]] = torch.from_numpy(
-                molecules[i].get_masses() * MDUnits.d2amu)
+            self.atom_types[:, i, : self.n_atoms[i]] = torch.from_numpy(
+                molecules[i].get_atomic_numbers()
+            )
+            self.atom_masks[:, i, : self.n_atoms[i]] = 1.0
+            self.masses[i, : self.n_atoms[i]] = torch.from_numpy(
+                molecules[i].get_masses() * MDUnits.d2amu
+            )
 
             # Dynamic properties
-            self.positions[:, i, :self.n_atoms[i], :] = torch.from_numpy(
+            self.positions[:, i, : self.n_atoms[i], :] = torch.from_numpy(
                 molecules[i].positions * MDUnits.angs2bohr
             )
 
@@ -183,8 +191,7 @@ class System:
         # Mask mass array
         masses = self.masses * self.atom_masks
         # Compute center of mass
-        center_of_mass = torch.sum(self.positions * masses,
-                                   2) / torch.sum(masses, 2)
+        center_of_mass = torch.sum(self.positions * masses, 2) / torch.sum(masses, 2)
         return center_of_mass
 
     def remove_com(self):
@@ -201,8 +208,10 @@ class System:
         Remove all components in the current momenta associated with
         translational motion.
         """
-        self.momenta -= torch.sum(self.momenta, 2, keepdim=True) / \
-                        self.n_atoms.float()[None, :, None, None]
+        self.momenta -= (
+            torch.sum(self.momenta, 2, keepdim=True)
+            / self.n_atoms.float()[None, :, None, None]
+        )
         # Apply atom masks to avoid artificial shifts
         self.momenta *= self.atom_masks
 
@@ -216,23 +225,25 @@ class System:
                            order to accelerated the simulation (default=True).
         """
         # Compute the moment of inertia tensor
-        moment_of_inertia = torch.sum(self.positions ** 2, 3, keepdim=True)[..., None] \
-                            * torch.eye(3, device=self.device)[None, None, None, :, :] \
-                            - self.positions[..., :, None] * self.positions[..., None, :]
+        moment_of_inertia = (
+            torch.sum(self.positions ** 2, 3, keepdim=True)[..., None]
+            * torch.eye(3, device=self.device)[None, None, None, :, :]
+            - self.positions[..., :, None] * self.positions[..., None, :]
+        )
         moment_of_inertia = torch.sum(moment_of_inertia * self.masses[..., None], 2)
 
         # Compute the angular momentum
-        angular_momentum = torch.sum(torch.cross(self.positions,
-                                                 self.momenta, -1), 2)
+        angular_momentum = torch.sum(torch.cross(self.positions, self.momenta, -1), 2)
 
         # Compute the angular velocities
-        angular_velocities = torch.matmul(angular_momentum[:, :, None, :],
-                                          batch_inverse(moment_of_inertia))
+        angular_velocities = torch.matmul(
+            angular_momentum[:, :, None, :], batch_inverse(moment_of_inertia)
+        )
 
         # Compute individual atomic contributions
         rotational_velocities = torch.cross(
-            angular_velocities.repeat(1, 1, self.max_n_atoms, 1),
-            self.positions, -1)
+            angular_velocities.repeat(1, 1, self.max_n_atoms, 1), self.positions, -1
+        )
 
         if detach:
             rotational_velocities = rotational_velocities.detach()
@@ -302,8 +313,9 @@ class System:
         """
         # Apply atom mask
         momenta = self.momenta * self.atom_masks
-        kinetic_energy = 0.5 * torch.sum(torch.sum(momenta ** 2,
-                                                   3) / self.masses[..., 0], 2)
+        kinetic_energy = 0.5 * torch.sum(
+            torch.sum(momenta ** 2, 3) / self.masses[..., 0], 2
+        )
         return kinetic_energy.detach()
 
     @property
@@ -316,8 +328,11 @@ class System:
             torch.Tensor: Tensor of the instantaneous temperatures (in
                           Kelvin) with the shape n_replicas x n_molecules
         """
-        temperature = 2.0 / (3.0 * MDUnits.kB * self.n_atoms.float()[None,
-                                                :]) * self.kinetic_energy
+        temperature = (
+            2.0
+            / (3.0 * MDUnits.kB * self.n_atoms.float()[None, :])
+            * self.kinetic_energy
+        )
         return temperature
 
     @property
@@ -333,8 +348,9 @@ class System:
         """
         # Apply atom mask
         centroid_momenta = self.centroid_momenta * self.atom_masks
-        kinetic_energy = 0.5 * torch.sum(torch.sum(centroid_momenta ** 2,
-                                                   3) / self.masses[..., 0], 2)
+        kinetic_energy = 0.5 * torch.sum(
+            torch.sum(centroid_momenta ** 2, 3) / self.masses[..., 0], 2
+        )
         return kinetic_energy
 
     @property
@@ -348,8 +364,11 @@ class System:
             torch.Tensor: Tensor of the instantaneous centroid temperatures (
                           in Kelvin) with the shape 1 x n_molecules
         """
-        temperature = 2.0 / (3.0 * self.n_atoms.float()[None, :] *
-                             MDUnits.kB) * self.centroid_kinetic_energy
+        temperature = (
+            2.0
+            / (3.0 * self.n_atoms.float()[None, :] * MDUnits.kB)
+            * self.centroid_kinetic_energy
+        )
         return temperature
 
     @property
@@ -362,13 +381,13 @@ class System:
                   current state of the system during simulation.
         """
         state_dict = {
-            'positions': self.positions,
-            'momenta': self.momenta,
-            'forces': self.forces,
-            'properties': self.properties,
-            'n_atoms': self.n_atoms,
-            'atom_types': self.atom_types,
-            'masses': self.masses
+            "positions": self.positions,
+            "momenta": self.momenta,
+            "forces": self.forces,
+            "properties": self.properties,
+            "n_atoms": self.n_atoms,
+            "atom_types": self.atom_types,
+            "masses": self.masses,
         }
         return state_dict
 
@@ -381,13 +400,13 @@ class System:
         Args:
             state_dict (dict): State dict of the system state.
         """
-        self.positions = state_dict['positions']
-        self.momenta = state_dict['momenta']
-        self.forces = state_dict['forces']
-        self.properties = state_dict['properties']
-        self.n_atoms = state_dict['n_atoms']
-        self.atom_types = state_dict['atom_types']
-        self.masses = state_dict['masses']
+        self.positions = state_dict["positions"]
+        self.momenta = state_dict["momenta"]
+        self.forces = state_dict["forces"]
+        self.properties = state_dict["properties"]
+        self.n_atoms = state_dict["n_atoms"]
+        self.atom_types = state_dict["atom_types"]
+        self.masses = state_dict["masses"]
 
         self.n_replicas = self.positions.shape[0]
         self.n_molecules = self.positions.shape[1]
@@ -395,7 +414,7 @@ class System:
 
         # Build atom masks according to the present number of atoms
         for i in range(self.n_molecules):
-            self.atom_masks[:, i, :self.n_atoms[i], :] = 1.0
+            self.atom_masks[:, i, : self.n_atoms[i], :] = 1.0
 
         # Rebuild neighbor lists with new system specifications
         if self.neighbor_list is not None:

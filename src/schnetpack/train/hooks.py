@@ -6,9 +6,17 @@ import numpy as np
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
 
 __all__ = [
-    'Hook', 'LoggingHook', 'TensorboardHook', 'CSVHook', 'EarlyStoppingHook',
-    'MaxEpochHook', 'MaxStepHook', 'LRScheduleHook', 'ReduceLROnPlateauHook',
-    'ExponentialDecayHook', 'WarmRestartHook'
+    "Hook",
+    "LoggingHook",
+    "TensorboardHook",
+    "CSVHook",
+    "EarlyStoppingHook",
+    "MaxEpochHook",
+    "MaxStepHook",
+    "LRScheduleHook",
+    "ReduceLROnPlateauHook",
+    "ExponentialDecayHook",
+    "WarmRestartHook",
 ]
 
 
@@ -74,8 +82,14 @@ class LoggingHook(Hook):
                 (default: True)
     """
 
-    def __init__(self, log_path, metrics, log_train_loss=True,
-                 log_validation_loss=True, log_learning_rate=True):
+    def __init__(
+        self,
+        log_path,
+        metrics,
+        log_train_loss=True,
+        log_validation_loss=True,
+        log_learning_rate=True,
+    ):
         self.log_train_loss = log_train_loss
         self.log_validation_loss = log_validation_loss
         self.log_learning_rate = log_learning_rate
@@ -87,7 +101,7 @@ class LoggingHook(Hook):
 
     def on_epoch_begin(self, trainer):
         if self.log_train_loss:
-            self._train_loss = 0.
+            self._train_loss = 0.0
             self._counter = 0
         else:
             self._train_loss = None
@@ -127,12 +141,19 @@ class CSVHook(LoggingHook):
                     (default: 1)
         """
 
-    def __init__(self, log_path, metrics, log_train_loss=True,
-                 log_validation_loss=True, log_learning_rate=True,
-                 every_n_epochs=1):
-        log_path = os.path.join(log_path, 'log.csv')
-        super(CSVHook, self).__init__(log_path, metrics, log_train_loss,
-                                      log_validation_loss, log_learning_rate)
+    def __init__(
+        self,
+        log_path,
+        metrics,
+        log_train_loss=True,
+        log_validation_loss=True,
+        log_learning_rate=True,
+        every_n_epochs=1,
+    ):
+        log_path = os.path.join(log_path, "log.csv")
+        super(CSVHook, self).__init__(
+            log_path, metrics, log_train_loss, log_validation_loss, log_learning_rate
+        )
         self._offset = 0
         self._restart = False
         self.every_n_epochs = every_n_epochs
@@ -141,11 +162,11 @@ class CSVHook(LoggingHook):
 
         if os.path.exists(self.log_path):
             remove_file = False
-            with open(self.log_path, 'r') as f:
+            with open(self.log_path, "r") as f:
                 # Ensure there is one entry apart from header
                 lines = f.readlines()
                 if len(lines) > 1:
-                    self._offset = float(lines[-1].split(',')[0]) - time.time()
+                    self._offset = float(lines[-1].split(",")[0]) - time.time()
                     self._restart = True
                 else:
                     remove_file = True
@@ -162,27 +183,27 @@ class CSVHook(LoggingHook):
                 os.makedirs(log_dir)
 
         if not self._restart:
-            log = ''
-            log += 'Time'
+            log = ""
+            log += "Time"
 
             if self.log_learning_rate:
-                log += ',Learning rate'
+                log += ",Learning rate"
 
             if self.log_train_loss:
-                log += ',Train loss'
+                log += ",Train loss"
 
             if self.log_validation_loss:
-                log += ',Validation loss'
+                log += ",Validation loss"
 
             if len(self.metrics) > 0:
-                log += ','
+                log += ","
 
             for i, metric in enumerate(self.metrics):
                 log += str(metric.name)
                 if i < len(self.metrics) - 1:
-                    log += ','
+                    log += ","
 
-            with open(self.log_path, 'a+') as f:
+            with open(self.log_path, "a+") as f:
                 f.write(log + os.linesep)
 
     def on_validation_end(self, trainer, val_loss):
@@ -191,35 +212,35 @@ class CSVHook(LoggingHook):
             log = str(ctime)
 
             if self.log_learning_rate:
-                log += ',' + str(trainer.optimizer.param_groups[0]['lr'])
+                log += "," + str(trainer.optimizer.param_groups[0]["lr"])
 
             if self.log_train_loss:
                 if hasattr(self._train_loss, "__iter__"):
-                    train_string = ','.join([str(k) for k in self._train_loss])
-                    log += ',' + train_string
+                    train_string = ",".join([str(k) for k in self._train_loss])
+                    log += "," + train_string
                 else:
-                    log += ',' + str(self._train_loss)
+                    log += "," + str(self._train_loss)
 
             if self.log_validation_loss:
                 if hasattr(val_loss, "__iter__"):
-                    valid_string = ','.join([str(k) for k in val_loss])
-                    log += ',' + valid_string
+                    valid_string = ",".join([str(k) for k in val_loss])
+                    log += "," + valid_string
                 else:
-                    log += ',' + str(val_loss)
+                    log += "," + str(val_loss)
 
             if len(self.metrics) > 0:
-                log += ','
+                log += ","
 
             for i, metric in enumerate(self.metrics):
                 m = metric.aggregate()
                 if hasattr(m, "__iter__"):
-                    log += ','.join([str(j) for j in m])
+                    log += ",".join([str(j) for j in m])
                 else:
                     log += str(m)
                 if i < len(self.metrics) - 1:
-                    log += ','
+                    log += ","
 
-            with open(self.log_path, 'a') as f:
+            with open(self.log_path, "a") as f:
                 f.write(log + os.linesep)
 
 
@@ -243,13 +264,22 @@ class TensorboardHook(LoggingHook):
                 (default: 1)
     """
 
-    def __init__(self, log_path, metrics, log_train_loss=True,
-                 log_validation_loss=True, log_learning_rate=True,
-                 every_n_epochs=1, img_every_n_epochs=10, log_histogram=False):
+    def __init__(
+        self,
+        log_path,
+        metrics,
+        log_train_loss=True,
+        log_validation_loss=True,
+        log_learning_rate=True,
+        every_n_epochs=1,
+        img_every_n_epochs=10,
+        log_histogram=False,
+    ):
         from tensorboardX import SummaryWriter
-        super(TensorboardHook, self).__init__(log_path, metrics, log_train_loss,
-                                              log_validation_loss,
-                                              log_learning_rate)
+
+        super(TensorboardHook, self).__init__(
+            log_path, metrics, log_train_loss, log_validation_loss, log_learning_rate
+        )
         self.writer = SummaryWriter(self.log_path)
         self.every_n_epochs = every_n_epochs
         self.log_histogram = log_histogram
@@ -258,13 +288,15 @@ class TensorboardHook(LoggingHook):
     def on_epoch_end(self, trainer):
         if trainer.epoch % self.every_n_epochs == 0:
             if self.log_train_loss:
-                self.writer.add_scalar("train/loss",
-                                       self._train_loss / self._counter,
-                                       trainer.epoch)
+                self.writer.add_scalar(
+                    "train/loss", self._train_loss / self._counter, trainer.epoch
+                )
             if self.log_learning_rate:
-                self.writer.add_scalar("train/learning_rate",
-                                       trainer.optimizer.param_groups[0]['lr'],
-                                       trainer.epoch)
+                self.writer.add_scalar(
+                    "train/learning_rate",
+                    trainer.optimizer.param_groups[0]["lr"],
+                    trainer.epoch,
+                )
 
     def on_validation_end(self, trainer, val_loss):
         if trainer.epoch % self.every_n_epochs == 0:
@@ -272,11 +304,13 @@ class TensorboardHook(LoggingHook):
                 m = metric.aggregate()
 
                 if np.isscalar(m):
-                    self.writer.add_scalar("metrics/%s" % metric.name, float(m),
-                                           trainer.epoch)
+                    self.writer.add_scalar(
+                        "metrics/%s" % metric.name, float(m), trainer.epoch
+                    )
                 elif m.ndim == 2:
                     if trainer.epoch % self.img_every_n_epochs == 0:
                         import matplotlib.pyplot as plt
+
                         # tensorboardX only accepts images as numpy arrays.
                         # we therefore convert plots in numpy array
                         # see https://github.com/lanpa/tensorboard-pytorch/blob/master/examples/matplotlib_demo.py
@@ -284,24 +318,27 @@ class TensorboardHook(LoggingHook):
                         plt.colorbar(plt.pcolor(m))
                         fig.canvas.draw()
 
-                        np_image = np.fromstring(fig.canvas.tostring_rgb(),
-                                                 dtype='uint8')
+                        np_image = np.fromstring(
+                            fig.canvas.tostring_rgb(), dtype="uint8"
+                        )
                         np_image = np_image.reshape(
-                            fig.canvas.get_width_height()[::-1] + (3,))
+                            fig.canvas.get_width_height()[::-1] + (3,)
+                        )
 
                         plt.close(fig)
 
-                        self.writer.add_image("metrics/%s" % metric.name,
-                                              np_image, trainer.epoch)
+                        self.writer.add_image(
+                            "metrics/%s" % metric.name, np_image, trainer.epoch
+                        )
 
             if self.log_validation_loss:
-                self.writer.add_scalar("train/val_loss", float(val_loss),
-                                       trainer.step)
+                self.writer.add_scalar("train/val_loss", float(val_loss), trainer.step)
 
             if self.log_histogram:
                 for name, param in trainer._model.named_parameters():
-                    self.writer.add_histogram(name, param.detach().cpu().numpy(),
-                                              trainer.epoch)
+                    self.writer.add_histogram(
+                        name, param.detach().cpu().numpy(), trainer.epoch
+                    )
 
     def on_train_ends(self, trainer):
         self.writer.close()
@@ -324,18 +361,18 @@ class EarlyStoppingHook(Hook):
     """
 
     def __init__(self, patience, threshold_ratio=0.0001):
-        self.best_loss = float('Inf')
+        self.best_loss = float("Inf")
         self.counter = 0
         self.threshold_ratio = threshold_ratio
         self.patience = patience
 
     @property
     def state_dict(self):
-        return {'counter': self.counter}
+        return {"counter": self.counter}
 
     @state_dict.setter
     def state_dict(self, state_dict):
-        self.counter = state_dict['counter']
+        self.counter = state_dict["counter"]
 
     def on_validation_end(self, trainer, val_loss):
         if val_loss > (1 - self.threshold_ratio) * self.best_loss:
@@ -349,9 +386,9 @@ class EarlyStoppingHook(Hook):
 
 
 class WarmRestartHook(Hook):
-
-    def __init__(self, T0=10, Tmult=2, each_step=False, lr_min=1e-6,
-                 lr_factor=1., patience=1):
+    def __init__(
+        self, T0=10, Tmult=2, each_step=False, lr_min=1e-6, lr_factor=1.0, patience=1
+    ):
         self.scheduler = None
         self.each_step = each_step
         self.T0 = T0
@@ -362,13 +399,13 @@ class WarmRestartHook(Hook):
         self.patience = patience
         self.waiting = 0
 
-        self.best_previous = float('Inf')
-        self.best_current = float('Inf')
+        self.best_previous = float("Inf")
+        self.best_current = float("Inf")
 
     def on_train_begin(self, trainer):
-        self.scheduler =\
-            torch.optim.lr_scheduler.CosineAnnealingLR(trainer.optimizer,
-                                                       self.Tmax, self.lr_min)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            trainer.optimizer, self.Tmax, self.lr_min
+        )
         self.init_opt_state = trainer.optimizer.state_dict()
 
     def on_batch_begin(self, trainer, train_batch):
@@ -388,8 +425,7 @@ class WarmRestartHook(Hook):
             self.scheduler.last_epoch = -1
             self.scheduler.T_max = self.Tmax
             self.scheduler.base_lrs = [
-                base_lr * self.lr_factor
-                for base_lr in self.scheduler.base_lrs
+                base_lr * self.lr_factor for base_lr in self.scheduler.base_lrs
             ]
             trainer.optimizer.load_state_dict(self.init_opt_state)
 
@@ -457,11 +493,11 @@ class LRScheduleHook(Hook):
 
     @property
     def state_dict(self):
-        return {'scheduler': self.scheduler.state_dict()}
+        return {"scheduler": self.scheduler.state_dict()}
 
     @state_dict.setter
     def state_dict(self, state_dict):
-        self.scheduler.load_state_dict(state_dict['scheduler'])
+        self.scheduler.load_state_dict(state_dict["scheduler"])
 
     def on_train_begin(self, trainer):
         self.scheduler.last_epoch = trainer.epoch - 1
@@ -501,8 +537,14 @@ class ReduceLROnPlateauHook(Hook):
                                reached (default: False).
       """
 
-    def __init__(self, patience=25, factor=0.2, min_lr=1e-6,
-                 window_length=1, stop_after_min=False):
+    def __init__(
+        self,
+        patience=25,
+        factor=0.2,
+        min_lr=1e-6,
+        window_length=1,
+        stop_after_min=False,
+    ):
         self.scheduler = None
         self.patience = patience
         self.factor = factor
@@ -514,22 +556,24 @@ class ReduceLROnPlateauHook(Hook):
     @property
     def state_dict(self):
         return {
-            'best': self.scheduler.best,
-            'cooldown_counter': self.scheduler.cooldown_counter,
-            'num_bad_epochs': self.scheduler.num_bad_epochs
+            "best": self.scheduler.best,
+            "cooldown_counter": self.scheduler.cooldown_counter,
+            "num_bad_epochs": self.scheduler.num_bad_epochs,
         }
 
     @state_dict.setter
     def state_dict(self, state_dict):
-        self.scheduler.best = state_dict['best']
-        self.scheduler.cooldown_counter = state_dict['cooldown_counter']
-        self.scheduler.num_bad_epochs = state_dict['num_bad_epochs']
+        self.scheduler.best = state_dict["best"]
+        self.scheduler.cooldown_counter = state_dict["cooldown_counter"]
+        self.scheduler.num_bad_epochs = state_dict["num_bad_epochs"]
 
     def on_train_begin(self, trainer):
-        self.scheduler = ReduceLROnPlateau(trainer.optimizer,
-                                           patience=self.patience,
-                                           factor=self.factor,
-                                           min_lr=self.min_lr)
+        self.scheduler = ReduceLROnPlateau(
+            trainer.optimizer,
+            patience=self.patience,
+            factor=self.factor,
+            min_lr=self.min_lr,
+        )
 
     def on_validation_end(self, trainer, val_loss):
         self.window.append(val_loss)
@@ -540,9 +584,8 @@ class ReduceLROnPlateauHook(Hook):
         self.scheduler.step(accum_loss)
 
         if self.stop_after_min:
-            for i, param_group in enumerate(
-                    self.scheduler.optimizer.param_groups):
-                old_lr = float(param_group['lr'])
+            for i, param_group in enumerate(self.scheduler.optimizer.param_groups):
+                old_lr = float(param_group["lr"])
                 if old_lr <= self.scheduler.min_lrs[i]:
                     trainer._stop = True
 
@@ -581,7 +624,8 @@ class UpdatePrioritiesHook(Hook):
         self.update_fn = priority_fn
 
     def on_batch_end(self, trainer, train_batch, result, loss):
-        idx = train_batch['_idx']
+        idx = train_batch["_idx"]
         self.prioritized_sampler.update_weights(
             idx.data.cpu().squeeze(),
-            self.update_fn(train_batch, result).data.cpu().squeeze())
+            self.update_fn(train_batch, result).data.cpu().squeeze(),
+        )
