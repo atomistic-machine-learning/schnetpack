@@ -115,7 +115,8 @@ class TestSacred:
                                     'data/test_gle_thermostat.txt')
             config_updates['thermostat.gle_file'] = gle_path
 
-        md.run(named_configs=named_configs,
+        md.run(command_name='simulate',
+               named_configs=named_configs,
                config_updates=config_updates)
 
     def test_run_rpmd(self, training_dir, simulation_dir, rpmd_thermostats,
@@ -147,5 +148,6 @@ class TestSacred:
                                     'data/test_piglet_thermostat.txt')
             config_updates['thermostat.gle_file'] = gle_path
 
-        md.run(named_configs=named_configs,
+        md.run(command_name='simulate',
+               named_configs=named_configs,
                config_updates=config_updates)
