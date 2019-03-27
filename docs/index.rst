@@ -26,12 +26,9 @@ Contents
    :caption: Tutorials
    :maxdepth: 2
 
-   tutorials/preparedata
-   tutorials/trainmodel
-   tutorials/asemodel
-   tutorials/runmd
-   tutorials/evaluate
    tutorials/tutorial_qm9.rst
+   tutorials/tutorial_ethanol.rst
+
 
 .. toctree::
    :glob:
@@ -39,6 +36,11 @@ Contents
    :maxdepth: 2
 
    guide/index
+   guide/preparedata
+   guide/trainmodel
+   guide/asemodel
+   guide/runmd
+   guide/evaluate
 
 
 .. toctree::

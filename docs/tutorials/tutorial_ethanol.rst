@@ -1,10 +1,10 @@
-.. _tutorial qm9:
+.. _tut etha:
 
-Tutorial: Using SchNetPack with QM9
-===================================
+Tutorial: Using SchNetPack with custom Data
+===========================================
 
 This tutorial will explain how to use SchNetPack for training a SchNet model
-on the QM9 dataset and how the trained model can be used for further
+on custom datasets and how the trained model can be used for further
 experiments. We will start by creating a new environment for the installation of
 SchNetPack. Therefore open a new terminal and use::
 
@@ -25,24 +25,47 @@ desired location and create a new directory::
     cd schnet_tutorial
 
 
-.. _tut qm9 train::
+.. _tut etha prep:
 
-Training a Model on QM9
------------------------
+Prepare the Data for Training
+-----------------------------
 
-In order to get started with ``schnetpack`` we will need to train a model.
-For this tutorial we will make use of the training script and train a new
-model on the QM9 dataset. The script will automatically download the dataset
-and create a new directory with the training outputs. Run the script by
-calling::
+This tutorial will use an ethanol dataset which can be downloaded
+`here <http://quantum-machine.org/gdml/data/xyz/ethanol_dft.zip>`_. First of all you
+will need to create a data directory in the tutorial folder. Therefore run::
 
-    spk_train.py with model_dir=training dataset.qm9 device=<cpu/cuda>
+    mkdir data
+
+Move the downloaded dataset to the data folder and unzip it with::
+
+    unzip data/ethanol_dft.zip
+
+The dataset should be provided as an xyz-file. In order to use the dataset for
+training you will need to use the parsing script. This will convert the xyz-file to
+an ``ase.db`` which is suitable for SchNetPack. Run the script with::
+
+    spk_parse.py with forces file_path=data/ethanol.xyz db_path=data/ethanol.db
+
+You will end up with a new file in your data directory.
+
+
+.. _tut etha train:
+
+Train a Model on the Ethanol Dataset
+------------------------------------
+
+Since the ethanol dataset contains forces and energies we would also like to train
+the model on energies **and** forces. For custom datasets it is necessary to define a
+property mapping to connect the model properties to the dataset. Train the ethanol
+dataset with::
+
+    spk_train.py with model_dir=training_ethanol dataset.db_path=data/ethanol.db dataset.property_mapping='energy:energy,forces:forces'
 
 This will automatically start the training session and store all outputs including
 your trained model to the directory that has been defined with ``model_dir``.
 
 
-.. _monitoring tut qm9:
+.. _tut etha monitoring:
 
 Monitoring your Training Session
 --------------------------------
@@ -68,19 +91,19 @@ your browser and the TensorBoard should show up:
 |TensorBoard|
 
 
-.. _tut qm9 eval:
+.. _tut etha eval:
 
 Evaluating Datasets with a trained Model
 ----------------------------------------
 
 When the training session has ended you can use the trained model to predict
-properties for other datasets. You will find a small database with QM9 molecules here
+properties for other datasets. You will find a small dataset with ethanol molecules here
 xxrefxx. Download the snippet and store it in the data directory of your tutorial
-folder. In order to test the trained model, the energy labels of the molecules inside
-the database have been removed. For predicting the missing labels you can use the
-evaluation script::
+folder. If you open the dataset you will notice that the molecules do not contain any
+values for energy or forces. The missing properties will be predicted by using the
+trained model::
 
-    spk_eval.py with in_path=data/qm9_missing.db out_path=data/qm9_predicted.db model_dir=training
+    spk_eval.py with in_path=data/ethanol_missing.xyz out_path=data/ethanol_predicted.db model_dir=training_ethanol
 
 The script will look inside the ``model_dir`` and find the best model of the training
 session, which will automatically be used for the predictions. You will end up with a
@@ -88,28 +111,25 @@ new ``ase.db`` file in your data directory, which contains the energy values in 
 *data* column.
 
 
-.. _tut qm9 calc:
+.. _tut etha calc:
 
 Using a trained Model as a Calculator for ASE
 ---------------------------------------------
 
 The trained model can also be used as a calculator for ``ase``. For the purpose of
-this tutorial we will write a small example script which predicts the energy of an
-``ase.Atoms`` object. For this tutorial we will predict the missing energy value of
-the first atom in the database snippet that has been downloaded in :ref:`tut qm9 eval`.
-First of all you will need to open your favorite editor and create a new Python file.
-The file should be stored at your tutorial directory. Start the file by doing the
-necessary imports::
+this tutorial we will write a small example script which reads a molecule from our
+test snippet that has been downloaded in section :ref:`tut etha eval` and predict its
+properties. Therefore we start with the necessary imports::
 
     import torch
-    from ase.db import connect
+    from ase.io import read
     from schnetpack.ase_interface import SpkCalculator
 
 Secondly build an ``ase`` calculator from our model. Therefore you will need to load
 the model and use the ``SpkCalculator`` class::
 
     # load model
-    path_to_model = 'training/best_model'
+    path_to_model = 'training_ethanol/best_model'
     model = torch.load(path_to_model)
     # build calculator
     calculator = SpkCalculator(model, device='cpu')
@@ -117,15 +137,13 @@ the model and use the ``SpkCalculator`` class::
 Afterwards you will need to load an ``ase.Atoms`` object from the database and set
 the calculator::
 
-    # connect to database
-    conn = connect('data/qm9_missing.db')
-    # get first molecule
-    atoms = conn.get_atoms(1)
+    atoms = read('ethanol_missing.xyz')
     # set calculator
     atoms.set_calculator(calculator)
 
 At last just print the result::
 
     print('energy', atoms.get_total_energy())
+    print('forces', atoms.forces())
 
 Execute the script and you should see the energy prediction.
