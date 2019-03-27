@@ -10,9 +10,8 @@ from ase.units import eV
 from schnetpack.data import DownloadableAtomsData
 from schnetpack.environment import AseEnvironmentProvider
 
-__all__ = [
-    'OrganicMaterialsDatabase'
-]
+__all__ = ["OrganicMaterialsDatabase"]
+
 
 class OrganicMaterialsDatabase(DownloadableAtomsData):
     """ Organic Materials Database (OMDB) of bulk organic crystals.
@@ -32,30 +31,30 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
 
     """
 
-    BandGap = 'band_gap'
-    
-    properties = [
-        BandGap
-    ]
+    BandGap = "band_gap"
 
-    units = dict(
-        zip(properties,
-            [
-                eV
-            ]
-            )
-    )
+    properties = [BandGap]
 
-    def __init__(self, path, cutoff, download=True, subset=None,
-            properties=[], collect_triples=False):
+    units = dict(zip(properties, [eV]))
+
+    def __init__(
+        self,
+        path,
+        cutoff,
+        download=True,
+        subset=None,
+        properties=[],
+        collect_triples=False,
+    ):
         self.path = path
         self.cutoff = cutoff
 
-        self.dbpath = self.path.replace('.tar.gz', '.db')
+        self.dbpath = self.path.replace(".tar.gz", ".db")
 
         if not os.path.exists(self.path) and not os.path.exists(self.dbpath):
-            raise FileNotFoundError('Download OMDB dataset (e.g. OMDB-GAP1.tar.gz) from https://omdb.diracmaterials.org/dataset/ and set datapath to this file')
-
+            raise FileNotFoundError(
+                "Download OMDB dataset (e.g. OMDB-GAP1.tar.gz) from https://omdb.diracmaterials.org/dataset/ and set datapath to this file"
+            )
 
         environment_provider = AseEnvironmentProvider(cutoff)
 
@@ -63,30 +62,35 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
             # Convert OMDB .tar.gz into a .db file
             self._convert()
 
-        super(OrganicMaterialsDatabase, self).__init__(self.dbpath, subset, properties,
-                                               environment_provider,
-                                               collect_triples)
+        super(OrganicMaterialsDatabase, self).__init__(
+            self.dbpath, subset, properties, environment_provider, collect_triples
+        )
 
     def create_subset(self, idx):
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
 
-        return OrganicMaterialsDatabase(self.path, self.cutoff, download=False,
-                                subset=subidx, properties=self.properties,
-                                collect_triples=self.collect_triples)
+        return OrganicMaterialsDatabase(
+            self.path,
+            self.cutoff,
+            download=False,
+            subset=subidx,
+            properties=self.properties,
+            collect_triples=self.collect_triples,
+        )
 
     def _convert(self):
         """
         Converts .tar.gz to a .db file
         """
-        print('Converting %s to a .db file..' % self.path)
-        tar = tarfile.open(self.path, 'r:gz')
+        print("Converting %s to a .db file.." % self.path)
+        tar = tarfile.open(self.path, "r:gz")
         names = tar.getnames()
         tar.extractall()
         tar.close()
 
-        structures = read('structures.xyz', index=':')
-        Y = np.loadtxt('bandgaps.csv')
+        structures = read("structures.xyz", index=":")
+        Y = np.loadtxt("bandgaps.csv")
         [os.remove(name) for name in names]
 
         with connect(self.dbpath) as con:

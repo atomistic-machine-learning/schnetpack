@@ -20,6 +20,7 @@ class MDUnits:
         kB: Boltzmann constant in units of Hartree per Kelvin.
         hbar: Reduced Planck constant in atomic units.
     """
+
     # Unit conversions
     fs2atu = 1e-15 / units._aut
     eV2Ha = units.eV / units.Ha
@@ -33,15 +34,15 @@ class MDUnits:
 
     # Conversion units use when reading in MD inputs
     conversions = {
-        'kcal': units.kcal / units.Hartree,
-        'mol': 1 / units.mol,
-        'ev': units.eV / units.Hartree,
-        'bohr': 1.0,
-        'angstrom': units.Bohr,
-        'a': units.Bohr,
-        'angs': units.Bohr,
-        'hartree': 1.0,
-        'ha': 1.0
+        "kcal": units.kcal / units.Hartree,
+        "mol": 1 / units.mol,
+        "ev": units.eV / units.Hartree,
+        "bohr": 1.0,
+        "angstrom": units.Bohr,
+        "a": units.Bohr,
+        "angs": units.Bohr,
+        "hartree": 1.0,
+        "ha": 1.0,
     }
 
     @staticmethod
@@ -61,11 +62,11 @@ class MDUnits:
 
         """
         if type(unit) == str:
-            parts = unit.lower().replace(" ", "").split('/')
+            parts = unit.lower().replace(" ", "").split("/")
             scaling = 1.0
             for part in parts:
                 if part not in MDUnits.conversions:
-                    raise KeyError('Unrecognized unit {:s}'.format(part))
+                    raise KeyError("Unrecognized unit {:s}".format(part))
                 scaling *= MDUnits.conversions[part]
             return scaling
         else:
@@ -79,21 +80,30 @@ class YSWeights:
     Args:
         device (str): Device used for computation (default='cuda').
     """
-    YS_weights = {3: np.array([1.35120719195966,
-                               -1.70241438391932,
-                               1.35120719195966]),
-                  5: np.array([0.41449077179438,
-                               0.41449077179438,
-                               -0.65796308717750,
-                               0.41449077179438,
-                               0.41449077179438]),
-                  7: np.array([-1.17767998417887,
-                               0.23557321335936,
-                               0.78451361047756,
-                               1.31518632068390,
-                               0.78451361047756,
-                               0.23557321335936,
-                               -1.17767998417887])}
+
+    YS_weights = {
+        3: np.array([1.35120719195966, -1.70241438391932, 1.35120719195966]),
+        5: np.array(
+            [
+                0.41449077179438,
+                0.41449077179438,
+                -0.65796308717750,
+                0.41449077179438,
+                0.41449077179438,
+            ]
+        ),
+        7: np.array(
+            [
+                -1.17767998417887,
+                0.23557321335936,
+                0.78451361047756,
+                1.31518632068390,
+                0.78451361047756,
+                0.23557321335936,
+                -1.17767998417887,
+            ]
+        ),
+    }
 
     def __init__(self, device):
         self.device = device
@@ -109,9 +119,13 @@ class YSWeights:
             torch.Tensor: Tensor of the integration weights
         """
         if order not in self.YS_weights:
-            raise ValueError('Order {:d} not supported for YS integration weights'.format(order))
+            raise ValueError(
+                "Order {:d} not supported for YS integration weights".format(order)
+            )
         else:
-            ys_weights = torch.from_numpy(self.YS_weights[order]).float().to(self.device)
+            ys_weights = (
+                torch.from_numpy(self.YS_weights[order]).float().to(self.device)
+            )
         return ys_weights
 
 
@@ -143,7 +157,9 @@ def batch_inverse(tensor):
     Returns:
         torch.Tensor: Tensor of the inverted square matrices with the same shape as the input tensor.
     """
-    eye = tensor.new_ones(tensor.size(-1), device=tensor.device).diag().expand_as(tensor)
+    eye = (
+        tensor.new_ones(tensor.size(-1), device=tensor.device).diag().expand_as(tensor)
+    )
     tensor_inv, _ = torch.gesv(eye, tensor)
     return tensor_inv
 
@@ -162,8 +178,10 @@ def load_gle_matrices(filename):
         tuple: Tuple of two square torch tensors containing the a_matrix and c_matrix parameters required to
                initialize GLE type thermostats.
     """
-    a_matrix = GLEMatrixParser('A MATRIX:', stop='C MATRIX:', split='Matrix for normal mode')
-    c_matrix = GLEMatrixParser('C MATRIX:', split='Matrix for normal mode')
+    a_matrix = GLEMatrixParser(
+        "A MATRIX:", stop="C MATRIX:", split="Matrix for normal mode"
+    )
+    c_matrix = GLEMatrixParser("C MATRIX:", split="Matrix for normal mode")
 
     try:
         with open(filename) as glefile:
@@ -171,8 +189,10 @@ def load_gle_matrices(filename):
                 a_matrix.read_line(line)
                 c_matrix.read_line(line)
     except FileNotFoundError:
-        raise FileNotFoundError('Could not open {:s} for reading. Please use GLE parameter files '
-                                'generated via http://gle4md.org/index.html?page=matrix'.format(filename))
+        raise FileNotFoundError(
+            "Could not open {:s} for reading. Please use GLE parameter files "
+            "generated via http://gle4md.org/index.html?page=matrix".format(filename)
+        )
 
     return a_matrix.matrix, c_matrix.matrix
 
@@ -189,15 +209,16 @@ class GLEMatrixParser:
         split (str): If the given token is encountered, matrices are split at this point. If None (default), no split is
                      performed.
     """
+
     # Automatically recognized format and converts to units
     unit_conversions = {
-        'atomic time units^-1': 1,
-        'picoseconds^-1': 1 / 1000 / MDUnits.fs2atu,
-        'seconds^-1': units._aut,
-        'femtoseconds^-1': 1 / MDUnits.fs2atu,
-        'eV': 1 / units.Ha,
-        'atomic energy units': 1,
-        'K': MDUnits.kB
+        "atomic time units^-1": 1,
+        "picoseconds^-1": 1 / 1000 / MDUnits.fs2atu,
+        "seconds^-1": units._aut,
+        "femtoseconds^-1": 1 / MDUnits.fs2atu,
+        "eV": 1 / units.Ha,
+        "atomic energy units": 1,
+        "K": MDUnits.kB,
     }
 
     def __init__(self, start, stop=None, split=None):
@@ -223,10 +244,10 @@ class GLEMatrixParser:
             if self.start in line:
                 self.read = True
                 # Get units used
-                unit_name = line.split('(')[-1].replace(')', '')
+                unit_name = line.split("(")[-1].replace(")", "")
                 self.units = self.unit_conversions[unit_name]
             elif self.read:
-                if line.startswith('#'):
+                if line.startswith("#"):
                     # Check for stop and split tokens
                     if self.stop is not None and self.stop in line:
                         self.read = False
@@ -282,7 +303,7 @@ class NormalModeTransformer:
        The Journal of Chemical Physics, 133, 124105. 2010.
     """
 
-    def __init__(self, n_beads, device='cuda'):
+    def __init__(self, n_beads, device="cuda"):
         self.n_beads = n_beads
 
         self.device = device
@@ -334,7 +355,9 @@ class NormalModeTransformer:
         Returns:
             torch.Tensor: System tensor in normal mode representation with the same shape as the input tensor.
         """
-        return torch.mm(self.c_transform, x_beads.view(self.n_beads, -1)).view(x_beads.shape)
+        return torch.mm(self.c_transform, x_beads.view(self.n_beads, -1)).view(
+            x_beads.shape
+        )
 
     def normal2beads(self, x_normal):
         """
@@ -347,7 +370,9 @@ class NormalModeTransformer:
         Returns:
             torch.Tensor: System tensor in bead representation with the same shape as the input tensor.
         """
-        return torch.mm(self.c_transform.transpose(0, 1), x_normal.view(self.n_beads, -1)).view(x_normal.shape)
+        return torch.mm(
+            self.c_transform.transpose(0, 1), x_normal.view(self.n_beads, -1)
+        ).view(x_normal.shape)
 
 
 class RunningAverage:
@@ -376,6 +401,7 @@ class HDF5LoaderError(Exception):
     """
     Exception for HDF5 loader class.
     """
+
     pass
 
 
@@ -393,22 +419,26 @@ class HDF5Loader:
     """
 
     def __init__(self, hdf5_database, skip_initial=0, load_properties=True):
-        self.database = h5py.File(hdf5_database, 'r', swmr=True, libver='latest')
+        self.database = h5py.File(hdf5_database, "r", swmr=True, libver="latest")
         self.skip_initial = skip_initial
         self.data_groups = list(self.database.keys())
 
         self.properties = {}
 
         # Load basic structure properties and MD info
-        if 'molecules' not in self.data_groups:
-            raise HDF5LoaderError('Molecule data not found in {:s}'.format(hdf5_database))
+        if "molecules" not in self.data_groups:
+            raise HDF5LoaderError(
+                "Molecule data not found in {:s}".format(hdf5_database)
+            )
         else:
             self._load_molecule_data()
 
         # If requested, load other properties predicted by the model stored via PropertyStream
         if load_properties:
-            if 'properties' not in self.data_groups:
-                raise HDF5LoaderError('Molecule properties not found in {:s}'.format(hdf5_database))
+            if "properties" not in self.data_groups:
+                raise HDF5LoaderError(
+                    "Molecule properties not found in {:s}".format(hdf5_database)
+                )
             else:
                 self._load_properties()
 
@@ -417,9 +447,13 @@ class HDF5Loader:
         if len(loaded_properties) == 1:
             loaded_properties = str(loaded_properties[0])
         else:
-            loaded_properties = ", ".join(loaded_properties[:-1]) + ' and ' + loaded_properties[-1]
+            loaded_properties = (
+                ", ".join(loaded_properties[:-1]) + " and " + loaded_properties[-1]
+            )
 
-        logging.info('Loaded properties {:s} from {:s}'.format(loaded_properties, hdf5_database))
+        logging.info(
+            "Loaded properties {:s} from {:s}".format(loaded_properties, hdf5_database)
+        )
 
     def _load_molecule_data(self):
         """
@@ -427,20 +461,24 @@ class HDF5Loader:
         present for the Loader.
         """
         # This is for molecule streams
-        structures = self.database['molecules']
+        structures = self.database["molecules"]
 
         # General database info
         # TODO: Could be moved to global attrs if available
-        self.n_replicas = structures.attrs['n_replicas']
-        self.n_molecules = structures.attrs['n_molecules']
-        self.n_atoms = structures.attrs['n_atoms']
-        self.entries = structures.attrs['entries']
-        self.time_step = structures.attrs['time_step']
+        self.n_replicas = structures.attrs["n_replicas"]
+        self.n_molecules = structures.attrs["n_molecules"]
+        self.n_atoms = structures.attrs["n_atoms"]
+        self.entries = structures.attrs["entries"]
+        self.time_step = structures.attrs["time_step"]
 
         # Write to main property dictionary
-        self.properties[Structure.Z] = structures.attrs['atom_types'][0, ...]
-        self.properties[Structure.R] = structures[self.skip_initial:self.entries, ..., :3]
-        self.properties['velocities'] = structures[self.skip_initial:self.entries, ..., 3:]
+        self.properties[Structure.Z] = structures.attrs["atom_types"][0, ...]
+        self.properties[Structure.R] = structures[
+            self.skip_initial : self.entries, ..., :3
+        ]
+        self.properties["velocities"] = structures[
+            self.skip_initial : self.entries, ..., 3:
+        ]
 
     def _load_properties(self):
         """
@@ -448,15 +486,23 @@ class HDF5Loader:
         Properties are then reshaped to original form and stores in the self.properties dictionary.
         """
         # And for property stream
-        properties = self.database['properties']
-        property_shape = json.loads(properties.attrs['shapes'])
-        property_positions = json.loads(properties.attrs['positions'])
+        properties = self.database["properties"]
+        property_shape = json.loads(properties.attrs["shapes"])
+        property_positions = json.loads(properties.attrs["positions"])
 
         # Reformat properties
         for prop in property_positions:
             prop_pos = slice(*property_positions[prop])
-            self.properties[prop] = properties[self.skip_initial:self.entries, :, :, prop_pos].reshape(
-                (self.entries - self.skip_initial, self.n_replicas, self.n_molecules, *property_shape[prop]))
+            self.properties[prop] = properties[
+                self.skip_initial : self.entries, :, :, prop_pos
+            ].reshape(
+                (
+                    self.entries - self.skip_initial,
+                    self.n_replicas,
+                    self.n_molecules,
+                    *property_shape[prop],
+                )
+            )
 
     def get_property(self, property_name, mol_idx=0, replica_idx=None, atomistic=False):
         """
@@ -484,12 +530,14 @@ class HDF5Loader:
 
         # Check whether property is present
         if property_name not in self.properties:
-            raise HDF5LoaderError(f'Property {property_name} not found in database.')
+            raise HDF5LoaderError(f"Property {property_name} not found in database.")
 
         # Mask by number of atoms if property is declared atomistic
         if atomistic:
             n_atoms = self.n_atoms[mol_idx]
-            target_property = self.properties[property_name][:, :, mol_idx, :n_atoms, ...]
+            target_property = self.properties[property_name][
+                :, :, mol_idx, :n_atoms, ...
+            ]
         else:
             target_property = self.properties[property_name][:, :, mol_idx, ...]
 
@@ -514,7 +562,9 @@ class HDF5Loader:
         Returns:
             np.array: N_steps x N_atoms x 3 array containing the atom velocities of the simulation in atomic units.
         """
-        return self.get_property('velocities', mol_idx=mol_idx, replica_idx=replica_idx, atomistic=True)
+        return self.get_property(
+            "velocities", mol_idx=mol_idx, replica_idx=replica_idx, atomistic=True
+        )
 
     def get_positions(self, mol_idx=0, replica_idx=None):
         """
@@ -529,4 +579,6 @@ class HDF5Loader:
         Returns:
             np.array: N_steps x N_atoms x 3 array containing the atom positions of the simulation in atomic units.
         """
-        return self.get_property(Structure.R, mol_idx=mol_idx, replica_idx=replica_idx, atomistic=True)
+        return self.get_property(
+            Structure.R, mol_idx=mol_idx, replica_idx=replica_idx, atomistic=True
+        )

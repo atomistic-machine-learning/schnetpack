@@ -4,7 +4,8 @@ from shutil import rmtree
 from sacred import Ingredient
 
 
-folder_ing = Ingredient('folder')
+folder_ing = Ingredient("folder")
+
 
 @folder_ing.config
 def config():
@@ -21,7 +22,7 @@ def save_config(_config, output_dir):
         output_dir (str): path to the training directory
 
     """
-    with open(os.path.join(output_dir, 'config.yaml'), 'w') as f:
+    with open(os.path.join(output_dir, "config.yaml"), "w") as f:
         yaml.dump(_config, f, default_flow_style=False)
 
 
@@ -37,12 +38,12 @@ def create_dirs(_log, output_dir, overwrite):
     _log.info("Create model directory")
 
     if output_dir is None:
-        raise ValueError('Config `output_dir` has to be set!')
+        raise ValueError("Config `output_dir` has to be set!")
 
     if os.path.exists(output_dir) and not overwrite:
         raise ValueError(
-            'Output directory already exists (set overwrite flag?):',
-            output_dir)
+            "Output directory already exists (set overwrite flag?):", output_dir
+        )
 
     if os.path.exists(output_dir) and overwrite:
         rmtree(output_dir)

@@ -2,9 +2,15 @@ import torch
 from torch import nn as nn
 
 
-def atom_distances(positions, neighbors, cell=None, cell_offsets=None,
-                   return_vecs=False,
-                   return_directions=False, neighbor_mask=None):
+def atom_distances(
+    positions,
+    neighbors,
+    cell=None,
+    cell_offsets=None,
+    return_vecs=False,
+    return_directions=False,
+    neighbor_mask=None,
+):
     """
     Use advanced torch indexing to compute differentiable distances
     of every central atom to its relevant neighbors. Indices of the
@@ -32,8 +38,9 @@ def atom_distances(positions, neighbors, cell=None, cell_offsets=None,
 
     # Construct auxiliary index vector
     n_batch = positions.size()[0]
-    idx_m = torch.arange(n_batch, device=positions.device, dtype=torch.long)[:,
-            None, None]
+    idx_m = torch.arange(n_batch, device=positions.device, dtype=torch.long)[
+        :, None, None
+    ]
     # Get atomic positions of all neighboring indices
     pos_xyz = positions[idx_m, neighbors[:, :, :], :]
 
@@ -86,8 +93,9 @@ class AtomDistances(nn.Module):
         super(AtomDistances, self).__init__()
         self.return_directions = return_directions
 
-    def forward(self, positions, neighbors, cell=None, cell_offsets=None,
-                neighbor_mask=None):
+    def forward(
+        self, positions, neighbors, cell=None, cell_offsets=None, neighbor_mask=None
+    ):
         """
         Args:
             positions (torch.Tensor): Atomic positions, differentiable torch
@@ -105,9 +113,14 @@ class AtomDistances(nn.Module):
             torch.Tensor: Distances of every atoms to its
                 neighbors (B x N_at x N_nbh)
         """
-        return atom_distances(positions, neighbors, cell, cell_offsets,
-                              return_directions=self.return_directions,
-                              neighbor_mask=neighbor_mask)
+        return atom_distances(
+            positions,
+            neighbors,
+            cell,
+            cell_offsets,
+            return_directions=self.return_directions,
+            neighbor_mask=neighbor_mask,
+        )
 
 
 def triple_distances(positions, neighbors_j, neighbors_k):
@@ -127,8 +140,9 @@ def triple_distances(positions, neighbors_j, neighbors_k):
 
     """
     nbatch, natoms, nangles = neighbors_k.size()
-    idx_m = torch.arange(nbatch, device=positions.device, dtype=torch.long)[:,
-            None, None]
+    idx_m = torch.arange(nbatch, device=positions.device, dtype=torch.long)[
+        :, None, None
+    ]
     # if positions.is_cuda:
     #    idx_m = idx_m.pin_memory().cuda(async=True)
     pos_j = positions[idx_m, neighbors_j[:], :]
@@ -184,8 +198,9 @@ def neighbor_elements(atomic_numbers, neighbors):
     # Get molecules in batch
     n_batch = atomic_numbers.size()[0]
     # Construct auxiliary index
-    idx_m = torch.arange(n_batch, device=atomic_numbers.device,
-                         dtype=torch.long)[:, None, None]
+    idx_m = torch.arange(n_batch, device=atomic_numbers.device, dtype=torch.long)[
+        :, None, None
+    ]
     # Get neighbors via advanced indexing
     neighbor_numbers = atomic_numbers[idx_m, neighbors[:, :, :]]
     return neighbor_numbers

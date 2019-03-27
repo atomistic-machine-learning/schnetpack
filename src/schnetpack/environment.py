@@ -2,8 +2,11 @@ import numpy as np
 from ase.neighborlist import neighbor_list
 
 
-__all__ = ['BaseEnvironmentProvider', 'SimpleEnvironmentProvider',
-           'AseEnvironmentProvider']
+__all__ = [
+    "BaseEnvironmentProvider",
+    "SimpleEnvironmentProvider",
+    "AseEnvironmentProvider",
+]
 
 
 class BaseEnvironmentProvider:
@@ -15,7 +18,7 @@ class BaseEnvironmentProvider:
     """
 
     def get_environment(self, atoms):
-        '''
+        """
         Returns the neighbor indices and offsets
 
         Args:
@@ -28,17 +31,17 @@ class BaseEnvironmentProvider:
                 systems (otherwise zero matrix) of shape
                 n_atoms x n_max_neighbors x 3
 
-        '''
+        """
 
         raise NotImplementedError
 
 
 class SimpleEnvironmentProvider(BaseEnvironmentProvider):
-    '''
+    """
     A simple environment provider for small molecules where all atoms are each
     other's neighbors. It calculates full distance matrices and does not
     support cutoffs or periodic boundary conditions.
-    '''
+    """
 
     def get_environment(self, atoms, grid=None):
         n_atoms = atoms.get_number_of_atoms()
@@ -48,23 +51,25 @@ class SimpleEnvironmentProvider(BaseEnvironmentProvider):
             offsets = np.zeros((n_atoms, 1, 3), dtype=np.float32)
         else:
             neighborhood_idx = np.tile(
-                np.arange(n_atoms, dtype=np.float32)[np.newaxis], (n_atoms, 1))
+                np.arange(n_atoms, dtype=np.float32)[np.newaxis], (n_atoms, 1)
+            )
 
             neighborhood_idx = neighborhood_idx[
-                ~np.eye(n_atoms, dtype=np.bool)].reshape(n_atoms, n_atoms - 1)
+                ~np.eye(n_atoms, dtype=np.bool)
+            ].reshape(n_atoms, n_atoms - 1)
 
             if grid is not None:
                 n_grid = grid.shape[0]
-                neighborhood_idx = np.hstack(
-                    [neighborhood_idx, -np.ones((n_atoms, 1))])
+                neighborhood_idx = np.hstack([neighborhood_idx, -np.ones((n_atoms, 1))])
                 grid_nbh = np.tile(
-                    np.arange(n_atoms, dtype=np.float32)[np.newaxis],
-                    (n_grid, 1))
+                    np.arange(n_atoms, dtype=np.float32)[np.newaxis], (n_grid, 1)
+                )
                 neighborhood_idx = np.vstack([neighborhood_idx, grid_nbh])
 
             offsets = np.zeros(
                 (neighborhood_idx.shape[0], neighborhood_idx.shape[1], 3),
-                dtype=np.float32)
+                dtype=np.float32,
+            )
         return neighborhood_idx, offsets
 
 
@@ -83,24 +88,24 @@ class AseEnvironmentProvider(BaseEnvironmentProvider):
             raise NotImplementedError
 
         n_atoms = atoms.get_number_of_atoms()
-        idx_i, idx_j, idx_S = neighbor_list('ijS', atoms, self.cutoff,
-                                            self_interaction=False)
+        idx_i, idx_j, idx_S = neighbor_list(
+            "ijS", atoms, self.cutoff, self_interaction=False
+        )
         if idx_i.shape[0] > 0:
             uidx, n_nbh = np.unique(idx_i, return_counts=True)
             n_max_nbh = np.max(n_nbh)
 
             n_nbh = np.tile(n_nbh[:, np.newaxis], (1, n_max_nbh))
-            nbh_range = np.tile(np.arange(n_max_nbh, dtype=np.int)[np.newaxis],
-                                (n_nbh.shape[0], 1))
+            nbh_range = np.tile(
+                np.arange(n_max_nbh, dtype=np.int)[np.newaxis], (n_nbh.shape[0], 1)
+            )
 
             mask = np.zeros((n_atoms, np.max(n_max_nbh)), dtype=np.bool)
             mask[uidx, :] = nbh_range < n_nbh
-            neighborhood_idx = -np.ones((n_atoms, np.max(n_max_nbh)),
-                                        dtype=np.float32)
+            neighborhood_idx = -np.ones((n_atoms, np.max(n_max_nbh)), dtype=np.float32)
             neighborhood_idx[mask] = idx_j
 
-            offset = np.zeros((n_atoms, np.max(n_max_nbh), 3),
-                              dtype=np.float32)
+            offset = np.zeros((n_atoms, np.max(n_max_nbh), 3), dtype=np.float32)
             offset[mask] = idx_S
         else:
             neighborhood_idx = -np.ones((n_atoms, 1), dtype=np.float32)

@@ -2,8 +2,14 @@ import os
 import numpy as np
 
 
-def train_test_split(data, num_train=None, num_val=None, split_file=None,
-                     stratify_partitions=False, num_per_partition=False):
+def train_test_split(
+    data,
+    num_train=None,
+    num_val=None,
+    split_file=None,
+    stratify_partitions=False,
+    num_per_partition=False,
+):
     """
     Splits the dataset into train/validation/test splits, writes split to
     an npz file and returns subsets. Either the sizes of training and
@@ -25,17 +31,19 @@ def train_test_split(data, num_train=None, num_val=None, split_file=None,
     """
     if split_file is not None and os.path.exists(split_file):
         S = np.load(split_file)
-        train_idx = S['train_idx'].tolist()
-        val_idx = S['val_idx'].tolist()
-        test_idx = S['test_idx'].tolist()
+        train_idx = S["train_idx"].tolist()
+        val_idx = S["val_idx"].tolist()
+        test_idx = S["test_idx"].tolist()
     else:
         if num_train is None or num_val is None:
             raise ValueError(
-                'You have to supply either split sizes (num_train /' +
-                ' num_val) or an npz file with splits.')
+                "You have to supply either split sizes (num_train /"
+                + " num_val) or an npz file with splits."
+            )
 
         assert num_train + num_val <= len(
-            data), 'Dataset is smaller than num_train + num_val!'
+            data
+        ), "Dataset is smaller than num_train + num_val!"
 
         num_train = num_train if num_train > 1 else num_train * len(data)
         num_val = num_val if num_val > 1 else num_val * len(data)
@@ -43,7 +51,7 @@ def train_test_split(data, num_train=None, num_val=None, split_file=None,
         num_val = int(num_val)
 
         if stratify_partitions:
-            partitions = data.get_metadata('partitions')
+            partitions = data.get_metadata("partitions")
             n_partitions = len(partitions)
             if num_per_partition:
                 num_train_part = num_train
@@ -58,18 +66,19 @@ def train_test_split(data, num_train=None, num_val=None, split_file=None,
             for start, stop in partitions.values():
                 idx = np.random.permutation(np.arange(start, stop))
                 train_idx += idx[:num_train_part].tolist()
-                val_idx += idx[num_train_part:num_train_part + num_val_part].tolist()
-                test_idx += idx[num_train_part + num_val_part:].tolist()
+                val_idx += idx[num_train_part : num_train_part + num_val_part].tolist()
+                test_idx += idx[num_train_part + num_val_part :].tolist()
 
         else:
             idx = np.random.permutation(len(data))
             train_idx = idx[:num_train].tolist()
-            val_idx = idx[num_train:num_train + num_val].tolist()
-            test_idx = idx[num_train + num_val:].tolist()
+            val_idx = idx[num_train : num_train + num_val].tolist()
+            test_idx = idx[num_train + num_val :].tolist()
 
         if split_file is not None:
-            np.savez(split_file, train_idx=train_idx, val_idx=val_idx,
-                     test_idx=test_idx)
+            np.savez(
+                split_file, train_idx=train_idx, val_idx=val_idx, test_idx=test_idx
+            )
 
     train = data.create_subset(train_idx)
     val = data.create_subset(val_idx)

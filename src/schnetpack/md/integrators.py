@@ -5,7 +5,7 @@ import numpy as np
 from schnetpack.md.utils import NormalModeTransformer, MDUnits
 
 
-__all__ = ['VelocityVerlet', 'RingPolymer']
+__all__ = ["VelocityVerlet", "RingPolymer"]
 
 
 class Integrator:
@@ -26,7 +26,7 @@ class Integrator:
                        to formulate differentiable MD.
     """
 
-    def __init__(self, time_step, detach=True, device='cuda'):
+    def __init__(self, time_step, detach=True, device="cuda"):
         self.time_step = time_step * MDUnits.fs2atu
         self.detach = detach
         self.device = device
@@ -80,7 +80,7 @@ class VelocityVerlet(Integrator):
         time_step (float): Integration time step in femto seconds.
     """
 
-    def __init__(self, time_step, device='cuda'):
+    def __init__(self, time_step, device="cuda"):
         super(VelocityVerlet, self).__init__(time_step, device=device)
 
     def _main_step(self, system):
@@ -94,8 +94,9 @@ class VelocityVerlet(Integrator):
             system (object): System class containing all molecules and their
                              replicas.
         """
-        system.positions = system.positions + self.time_step * system.momenta \
-                           / system.masses
+        system.positions = (
+            system.positions + self.time_step * system.momenta / system.masses
+        )
         system.positions = system.positions.detach()
 
 
@@ -126,8 +127,14 @@ class RingPolymer(Integrator):
        The Journal of Chemical Physics, 133, 124105. 2010.
     """
 
-    def __init__(self, n_beads, time_step, temperature,
-                 transformation=NormalModeTransformer, device='cuda'):
+    def __init__(
+        self,
+        n_beads,
+        time_step,
+        temperature,
+        transformation=NormalModeTransformer,
+        device="cuda",
+    ):
         super(RingPolymer, self).__init__(time_step, device=device)
 
         self.n_beads = n_beads
@@ -138,9 +145,13 @@ class RingPolymer(Integrator):
 
         # Set up omega_normal, the ring polymer frequencies in normal mode
         # representation
-        self.omega_normal = 2 * self.omega * torch.sin(
-            torch.arange(self.n_beads, device=device).float() * np.pi /
-            self.n_beads)
+        self.omega_normal = (
+            2
+            * self.omega
+            * torch.sin(
+                torch.arange(self.n_beads, device=device).float() * np.pi / self.n_beads
+            )
+        )
 
         # Initialize the propagator matrices
         self.propagator = self._init_propagator()
@@ -205,10 +216,14 @@ class RingPolymer(Integrator):
         momenta_normal = self.transformation.beads2normal(system.momenta)
 
         # Propagate ring polymer
-        momenta_normal = self.propagator[:, 0, 0] * momenta_normal + \
-                         self.propagator[:, 0, 1] * positions_normal * system.masses
-        positions_normal = self.propagator[:, 1, 0] * momenta_normal / \
-                           system.masses + self.propagator[:, 1, 1] * positions_normal
+        momenta_normal = (
+            self.propagator[:, 0, 0] * momenta_normal
+            + self.propagator[:, 0, 1] * positions_normal * system.masses
+        )
+        positions_normal = (
+            self.propagator[:, 1, 0] * momenta_normal / system.masses
+            + self.propagator[:, 1, 1] * positions_normal
+        )
 
         # Transform back to bead representation
         system.positions = self.transformation.normal2beads(positions_normal)

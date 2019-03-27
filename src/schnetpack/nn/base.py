@@ -4,9 +4,7 @@ from torch.nn.init import xavier_uniform_
 
 from schnetpack.nn.initializers import zeros_initializer
 
-__all__ = [
-    'Dense', 'GetItem', 'ScaleShift', 'Standardize', 'Aggregate'
-]
+__all__ = ["Dense", "GetItem", "ScaleShift", "Standardize", "Aggregate"]
 
 
 class Dense(nn.Linear):
@@ -21,8 +19,15 @@ class Dense(nn.Linear):
         bias_init (callable): function that takes bias tensor and initializes (default: zeros initializer)
     """
 
-    def __init__(self, in_features, out_features, bias=True, activation=None,
-                 weight_init=xavier_uniform_, bias_init=zeros_initializer):
+    def __init__(
+        self,
+        in_features,
+        out_features,
+        bias=True,
+        activation=None,
+        weight_init=xavier_uniform_,
+        bias_init=zeros_initializer,
+    ):
         self.weight_init = weight_init
         self.bias_init = bias_init
         self.activation = activation
@@ -87,8 +92,8 @@ class ScaleShift(nn.Module):
 
     def __init__(self, mean, stddev):
         super(ScaleShift, self).__init__()
-        self.register_buffer('mean', mean)
-        self.register_buffer('stddev', stddev)
+        self.register_buffer("mean", mean)
+        self.register_buffer("stddev", stddev)
 
     def forward(self, input):
         """
@@ -116,9 +121,9 @@ class Standardize(nn.Module):
 
     def __init__(self, mean, stddev, eps=1e-9):
         super(Standardize, self).__init__()
-        self.register_buffer('mean', mean)
-        self.register_buffer('stddev', stddev)
-        self.register_buffer('eps', torch.ones_like(stddev) * eps)
+        self.register_buffer("mean", mean)
+        self.register_buffer("stddev", stddev)
+        self.register_buffer("eps", torch.ones_like(stddev) * eps)
 
     def forward(self, input):
         """

@@ -30,13 +30,23 @@ class Trainer:
                                       (default: True)
        """
 
-    def __init__(self, model_path, model, loss_fn, optimizer,
-                 train_loader, validation_loader, keep_n_checkpoints=3,
-                 checkpoint_interval=10, validation_interval=1, hooks=[],
-                 loss_is_normalized=True):
+    def __init__(
+        self,
+        model_path,
+        model,
+        loss_fn,
+        optimizer,
+        train_loader,
+        validation_loader,
+        keep_n_checkpoints=3,
+        checkpoint_interval=10,
+        validation_interval=1,
+        hooks=[],
+        loss_is_normalized=True,
+    ):
         self.model_path = model_path
-        self.checkpoint_path = os.path.join(self.model_path, 'checkpoints')
-        self.best_model = os.path.join(self.model_path, 'best_model')
+        self.checkpoint_path = os.path.join(self.model_path, "checkpoints")
+        self.best_model = os.path.join(self.model_path, "best_model")
         self.train_loader = train_loader
         self.validation_loader = validation_loader
         self.validation_interval = validation_interval
@@ -57,11 +67,10 @@ class Trainer:
             os.makedirs(self.checkpoint_path)
             self.epoch = 0
             self.step = 0
-            self.best_loss = float('inf')
+            self.best_loss = float("inf")
 
     def _check_is_parallel(self):
-        return True if isinstance(self._model,
-                                  torch.nn.DataParallel) else False
+        return True if isinstance(self._model, torch.nn.DataParallel) else False
 
     def _load_model_state_dict(self, state_dict):
         if self._check_is_parallel():
@@ -72,47 +81,54 @@ class Trainer:
     @property
     def state_dict(self):
         state_dict = {
-            'epoch': self.epoch,
-            'step': self.step,
-            'model': self._model.state_dict() if not self._check_is_parallel() else self._model.module.state_dict(),
-            'best_loss': self.best_loss,
-            'optimizer': self.optimizer.state_dict(),
-            'hooks': [h.state_dict for h in self.hooks]
+            "epoch": self.epoch,
+            "step": self.step,
+            "model": self._model.state_dict()
+            if not self._check_is_parallel()
+            else self._model.module.state_dict(),
+            "best_loss": self.best_loss,
+            "optimizer": self.optimizer.state_dict(),
+            "hooks": [h.state_dict for h in self.hooks],
         }
         return state_dict
 
     @state_dict.setter
     def state_dict(self, state_dict):
-        self.epoch = state_dict['epoch']
-        self.step = state_dict['step']
-        self.best_loss = state_dict['best_loss']
-        self.optimizer.load_state_dict(state_dict['optimizer'])
-        self._load_model_state_dict(state_dict['model'])
+        self.epoch = state_dict["epoch"]
+        self.step = state_dict["step"]
+        self.best_loss = state_dict["best_loss"]
+        self.optimizer.load_state_dict(state_dict["optimizer"])
+        self._load_model_state_dict(state_dict["model"])
 
-        for h, s in zip(self.hooks, self.state_dict['hooks']):
+        for h, s in zip(self.hooks, self.state_dict["hooks"]):
             h.state_dict = s
 
     def store_checkpoint(self):
-        chkpt = os.path.join(self.checkpoint_path,
-                             'checkpoint-' + str(self.epoch) + '.pth.tar')
+        chkpt = os.path.join(
+            self.checkpoint_path, "checkpoint-" + str(self.epoch) + ".pth.tar"
+        )
         torch.save(self.state_dict, chkpt)
 
-        chpts = [f for f in os.listdir(self.checkpoint_path)
-                 if f.endswith('.pth.tar')]
+        chpts = [f for f in os.listdir(self.checkpoint_path) if f.endswith(".pth.tar")]
         if len(chpts) > self.keep_n_checkpoints:
-            chpt_epochs = [int(f.split('.')[0].split('-')[-1]) for f in chpts]
+            chpt_epochs = [int(f.split(".")[0].split("-")[-1]) for f in chpts]
             sidx = np.argsort(chpt_epochs)
-            for i in sidx[:-self.keep_n_checkpoints]:
+            for i in sidx[: -self.keep_n_checkpoints]:
                 os.remove(os.path.join(self.checkpoint_path, chpts[i]))
 
     def restore_checkpoint(self, epoch=None):
         if epoch is None:
-            epoch = max([int(f.split('.')[0].split('-')[-1]) for f in
-                         os.listdir(self.checkpoint_path)])
+            epoch = max(
+                [
+                    int(f.split(".")[0].split("-")[-1])
+                    for f in os.listdir(self.checkpoint_path)
+                ]
+            )
         epoch = str(epoch)
 
-        chkpt = os.path.join(self.checkpoint_path,
-                             'checkpoint-' + str(epoch) + '.pth.tar')
+        chkpt = os.path.join(
+            self.checkpoint_path, "checkpoint-" + str(epoch) + ".pth.tar"
+        )
         self.state_dict = torch.load(chkpt)
 
     def train(self, device):
@@ -123,11 +139,11 @@ class Trainer:
             device (torch.torch.Device): device on which training takes place
 
         """
-#        try:
-#            from tqdm import tqdm
-#            progress = True
-#        except:
-#            progress = False
+        #        try:
+        #            from tqdm import tqdm
+        #            progress = True
+        #        except:
+        #            progress = False
 
         self._stop = False
 
@@ -145,9 +161,9 @@ class Trainer:
                     break
 
                 # perform training epoch
-#                if progress:
-#                    train_iter = tqdm(self.train_loader)
-#                else:
+                #                if progress:
+                #                    train_iter = tqdm(self.train_loader)
+                #                else:
                 train_iter = self.train_loader
 
                 for train_batch in train_iter:
@@ -157,10 +173,7 @@ class Trainer:
                         h.on_batch_begin(self, train_batch)
 
                     # move input to gpu, if needed
-                    train_batch = {
-                        k: v.to(device)
-                        for k, v in train_batch.items()
-                    }
+                    train_batch = {k: v.to(device) for k, v in train_batch.items()}
 
                     result = self._model(train_batch)
                     loss = self.loss_fn(train_batch, result)
@@ -183,7 +196,7 @@ class Trainer:
                     for h in self.hooks:
                         h.on_validation_begin(self)
 
-                    val_loss = 0.
+                    val_loss = 0.0
                     n_val = 0
                     for val_batch in self.validation_loader:
                         # append batch_size
@@ -194,22 +207,19 @@ class Trainer:
                             h.on_validation_batch_begin(self)
 
                         # move input to gpu, if needed
-                        val_batch = {
-                            k: v.to(device)
-                            for k, v in val_batch.items()
-                        }
+                        val_batch = {k: v.to(device) for k, v in val_batch.items()}
 
                         val_result = self._model(val_batch)
-                        val_batch_loss = self.loss_fn(val_batch,
-                                                      val_result).data.cpu().numpy()
+                        val_batch_loss = (
+                            self.loss_fn(val_batch, val_result).data.cpu().numpy()
+                        )
                         if self.loss_is_normalized:
                             val_loss += val_batch_loss * vsize
                         else:
                             val_loss += val_batch_loss
 
                         for h in self.hooks:
-                            h.on_validation_batch_end(self, val_batch,
-                                                      val_result)
+                            h.on_validation_batch_end(self, val_batch, val_result)
 
                     # weighted average over batches
                     if self.loss_is_normalized:
