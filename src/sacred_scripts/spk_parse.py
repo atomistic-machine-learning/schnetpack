@@ -28,7 +28,8 @@ def forces():
 
 
 @parsing.command
-def parse(file_path, db_path, atomic_properties, molecular_properties):
+def parse(_log, _config, file_path, db_path, atomic_properties,
+          molecular_properties):
     """
     Runs the data parsing.
 
@@ -39,12 +40,12 @@ def parse(file_path, db_path, atomic_properties, molecular_properties):
         molecular_properties (list): list with molecular properties in
             comment section
     """
+    output_dir = os.path.dirname(db_path)
+    create_dirs(_log=_log, output_dir=output_dir)
+    save_config(_config=_config, output_dir=output_dir)
     generate_db(file_path, db_path, atomic_properties, molecular_properties)
 
 
 @parsing.automain
-def main(_log, _config, db_path):
-    output_dir = os.path.dirname(db_path)
-    create_dirs(_log=_log, output_dir=output_dir)
-    save_config(_config=_config, output_dir=output_dir)
+def main():
     parse()

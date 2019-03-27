@@ -45,7 +45,7 @@ def build_subset_db(_log, subset, dbpath, dbsplitpath):
 
 
 @eval_ex.command
-def evaluate(_log, model_dir, in_path, out_path, device, on_split):
+def evaluate(_log, _config, model_dir, in_path, out_path, device, on_split):
     """
     Predict missing physical properties using a trained SchNet model for a
     given input file.
@@ -57,6 +57,9 @@ def evaluate(_log, model_dir, in_path, out_path, device, on_split):
         device (str): train model on CPU/GPU
         on_split (str): name of subset in model_dir
     """
+    out_dir = os.path.dirname(out_path)
+    create_dirs(_log=_log, output_dir=out_dir)
+    save_config(_config=_config, output_dir=out_dir)
     if in_path is None:
         raise EvaluationError('Input file is not defined!')
     model_path = os.path.join(model_dir, 'best_model')
@@ -74,8 +77,5 @@ def evaluate(_log, model_dir, in_path, out_path, device, on_split):
 
 
 @eval_ex.automain
-def main(_log, _config, out_path):
-    out_dir = os.path.dirname(out_path)
-    create_dirs(_log=_log, output_dir=out_dir)
-    save_config(_config=_config, output_dir=out_dir)
+def main():
     evaluate()

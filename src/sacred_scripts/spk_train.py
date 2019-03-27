@@ -42,6 +42,8 @@ def train(_log, _config, model_dir, properties, additional_outputs, device):
         device (str): choose device for calculations (CPU/GPU)
 
     """
+    create_dirs(_log=_log, output_dir=model_dir)
+    save_config(_config=_config, output_dir=model_dir)
     property_map = get_property_map(properties)
 
     _log.info("Load data")
@@ -70,7 +72,5 @@ def train(_log, _config, model_dir, properties, additional_outputs, device):
 
 
 @ex.automain
-def main(_log, _config, model_dir):
-    create_dirs(_log=_log, output_dir=model_dir)
-    save_config(_config=_config, output_dir=model_dir)
+def main():
     train()
