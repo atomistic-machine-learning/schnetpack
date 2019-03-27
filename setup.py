@@ -32,7 +32,10 @@ setup(
         "numpy",
         "ase>=3.16",
         "tensorboardX",
-        "h5py"
+        "sacred",
+        "tqdm",
+        "h5py",
+        "PyYAML"
     ],
     extras_require={
         'test': ['pytest', 'sacred'],

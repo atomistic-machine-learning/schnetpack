@@ -25,7 +25,7 @@ def cfg():
     additional_outputs = []             # additional model outputs
     device = 'cpu'                 # device that is used for training <cpu/cuda>
     model_dir = 'training'              # directory for training outputs
-    properties = ['energy', 'forces']   # model properties
+    properties = ['energy']   # model properties
 
 
 @ex.command

@@ -31,6 +31,7 @@ Contents
    tutorials/asemodel
    tutorials/runmd
    tutorials/evaluate
+   tutorials/tutorial_qm9.rst
 
 .. toctree::
    :glob:
