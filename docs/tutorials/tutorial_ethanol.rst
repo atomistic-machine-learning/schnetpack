@@ -54,15 +54,7 @@ You will end up with a new file in your data directory.
 Train a Model on the Ethanol Dataset
 ------------------------------------
 
-Since the ethanol dataset contains forces and energies we would also like to train
-the model on energies **and** forces. For custom datasets it is necessary to define a
-property mapping to connect the model properties to the dataset. Train the ethanol
-dataset with::
-
-    spk_train.py with model_dir=training_ethanol dataset.db_path=data/ethanol.db dataset.property_mapping='energy:energy,forces:forces'
-
-This will automatically start the training session and store all outputs including
-your trained model to the directory that has been defined with ``model_dir``.
+TODO
 
 
 .. _tut etha monitoring:

@@ -23,24 +23,13 @@ Contents
 
 .. toctree::
    :glob:
-   :caption: Tutorials
-   :maxdepth: 2
-
-   tutorials/tutorial_qm9.rst
-   tutorials/tutorial_ethanol.rst
-
-
-.. toctree::
-   :glob:
    :caption: User Guide
    :maxdepth: 2
 
-   guide/index
    guide/preparedata
-   guide/trainmodel
    guide/asemodel
+   guide/trainmodel
    guide/runmd
-   guide/evaluate
 
 
 .. toctree::

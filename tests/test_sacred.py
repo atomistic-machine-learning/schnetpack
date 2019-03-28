@@ -3,7 +3,6 @@ import pytest
 import tempfile
 
 from sacred_scripts.spk_md import md
-from sacred_scripts.spk_train import ex
 from schnetpack.atomistic import Properties
 from schnetpack.datasets.iso17 import ISO17
 
@@ -58,46 +57,26 @@ def md_system(request):
 
 
 @pytest.fixture(scope='module')
-def generate_model(training_dir, properties, property_mapping):
-    dbpath = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                          'data/test_iso.db')
-    ex.run(named_configs=[],
-           config_updates={'model_dir': training_dir,
-                           'properties': properties,
-                           'dataset.dbpath': dbpath,
-                           'dataset.property_mapping': property_mapping,
-                           'dataloader.batch_size': 2,
-                           'metrics.names': ['mae', 'rmse'],
-                           'dataloader.num_train': 4,
-                           'dataloader.num_val': 4,
-                           'early_stopping.max_epochs': 4
-                           })
+def model_path(training_dir, properties, property_mapping):
+    model = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                         'data/test_md_model.model')
+    return model
 
 
 class TestSacred:
 
-    def test_run_training(self, training_dir, generate_model):
-        """
-        Test if training is working and logs are created.
-        """
-        with open(os.path.join(training_dir, 'log.csv'), 'r') as file:
-            log = file.readlines()
-        assert len(log[0].split(',')) == 8
-        assert len(log) == 5
-
+    @pytest.mark.filterwarnings("ignore")
     def test_run_md(self, training_dir, simulation_dir, md_thermostats,
-                    md_system, generate_model):
+                    md_system, model_path):
         mol_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                 'data/test_molecule.xyz')
-        model_path = os.path.join(training_dir, 'best_model')
 
         # Default test configs
         config_updates = {'simulation_dir': simulation_dir,
                           'system.path_to_molecules': mol_path,
                           'calculator.model_path': model_path,
-                          'calculator.required_properties': ['energy',
-                                                             'forces'],
-                          'calculator.force_handle': 'forces',
+                          'calculator.required_properties': ['y', 'dydx'],
+                          'calculator.force_handle': 'dydx',
                           'simulation_steps': 2}
 
         named_configs = ['simulator.log_temperature',
@@ -119,18 +98,18 @@ class TestSacred:
                named_configs=named_configs,
                config_updates=config_updates)
 
+    @pytest.mark.filterwarnings("ignore")
     def test_run_rpmd(self, training_dir, simulation_dir, rpmd_thermostats,
-                      generate_model):
+                      model_path):
         mol_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                 'data/test_molecule.xyz')
-        model_path = os.path.join(training_dir, 'best_model')
 
         # Default test configs
         config_updates = {'simulation_dir': simulation_dir,
                           'system.path_to_molecules': mol_path,
                           'calculator.model_path': model_path,
-                          'calculator.force_handle': 'forces',
-                          'calculator.required_properties': ['energy', 'forces'],
+                          'calculator.force_handle': 'dydx',
+                          'calculator.required_properties': ['y', 'dydx'],
                           'simulation_steps': 2}
 
         named_configs = ['simulator.log_temperature',

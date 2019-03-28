@@ -30,16 +30,7 @@ desired location and create a new directory::
 Training a Model on QM9
 -----------------------
 
-In order to get started with ``schnetpack`` we will need to train a model.
-For this tutorial we will make use of the training script and train a new
-model on the QM9 dataset. The script will automatically download the dataset
-and create a new directory with the training outputs. Run the script by
-calling::
-
-    spk_train.py with model_dir=training dataset.qm9 device=<cpu/cuda>
-
-This will automatically start the training session and store all outputs including
-your trained model to the directory that has been defined with ``model_dir``.
+TODO
 
 
 .. _monitoring tut qm9:
