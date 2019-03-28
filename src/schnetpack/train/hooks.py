@@ -108,7 +108,7 @@ class LoggingHook(Hook):
 
     def on_batch_end(self, trainer, train_batch, result, loss):
         if self.log_train_loss:
-            n_samples = result.shape[0]
+            n_samples = list(result.values())[0].size(0)
             self._train_loss += float(loss.data) * n_samples
             self._counter += n_samples
 
