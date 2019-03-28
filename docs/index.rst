@@ -23,21 +23,13 @@ Contents
 
 .. toctree::
    :glob:
-   :caption: Tutorials
-   :maxdepth: 2
-
-   tutorials/preparedata
-   tutorials/trainmodel
-   tutorials/asemodel
-   tutorials/runmd
-   tutorials/evaluate
-
-.. toctree::
-   :glob:
    :caption: User Guide
    :maxdepth: 2
 
-   guide/index
+   guide/preparedata
+   guide/asemodel
+   guide/trainmodel
+   guide/runmd
 
 
 .. toctree::
