@@ -13,20 +13,23 @@ __all__ = ["OrganicMaterialsDatabase"]
 
 
 class OrganicMaterialsDatabase(DownloadableAtomsData):
-    """ Organic Materials Database (OMDB) of bulk organic crystals.
-        Registration to the OMDB is free for academic users.
+    """Organic Materials Database (OMDB) of bulk organic crystals.
 
-        This dataset: DFT (PBE) band gap (OMDB-GAP1 dataset) for 12500 non-magnetic materials.
+    Registration to the OMDB is free for academic users. This database contains DFT
+    (PBE) band gap (OMDB-GAP1 database) for 12500 non-magnetic materials.
 
-        arXiv: https://arxiv.org/abs/1810.12814 "Band gap prediction for large organic crystal structures with machine learning"
-        Bart Olsthoorn, R. Matthias Geilhufe, Stanislav S. Borysov, Alexander V. Balatsky
-        (Submitted on 30 Oct 2018)
+    Args:
+        path (str): path to directory containing database.
+        cutoff (float): cutoff for bulk interactions.
+        download (bool, optional): enable downloading if database does not exists.
+        subset (list): indices to subset. Set to None for entire database.
+        properties (list, optional): properties in omdb, e.g. band_gap.
+        collect_triples (bool, optional): Set to True if angular features are needed.
 
-        Args:
-            path (str): path to directory containing mp database.
-            cutoff (float): cutoff for bulk interactions
-            subset (list): indices of subset. Set to None for entire dataset (default: None)
-            properties (list): properties, e.g. band_gap
+    References:
+        arXiv: https://arxiv.org/abs/1810.12814 "Band gap prediction for large organic
+        crystal structures with machine learning" Bart Olsthoorn, R. Matthias Geilhufe,
+        Stanislav S. Borysov, Alexander V. Balatsky (Submitted on 30 Oct 2018)
 
     """
 

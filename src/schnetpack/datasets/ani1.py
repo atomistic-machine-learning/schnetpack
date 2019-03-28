@@ -15,21 +15,25 @@ from schnetpack.data import DownloadableAtomsData
 
 
 class ANI1(DownloadableAtomsData):
-    """ ANI1 dataset.
+    """ANI1 benchmark database.
 
-        This class adds convenience functions to download ANI1 from figshare and load the data into pytorch.
+    This class adds convenience functions to download ANI1 from figshare and
+    load the data into pytorch.
 
-        Args:
-            path (str): path to directory containing ANI1 database.
-            download (bool): enable downloading if database does not exists (default: True)
-            subset (list): indices of subset. Set to None for entire dataset (default: None)
-            properties (list): properties in ani, e.g. energy (default: ['energy'])
-            calculate_triples (bool): enables triples for Behler type networks (default: False)
-            num_heavy_atoms (int): number of heavy atoms (see Table 1 in Ref. [#ani1]_) (default: 1)
-            high_energies (bool): add high energy conformations (see 'Technical Validation' of Ref. [#ani1]_) (default: False)
+    Args:
 
-        References:
-            .. [#ani1] https://arxiv.org/abs/1708.04987
+        dbpath (str): path to directory containing database.
+        download (bool, optional): enable downloading if database does not exists.
+        subset (list, optional): indices to subset. Set to None for entire database.
+        properties (list, optional): properties in ani1, e.g. energy.
+        collect_triples (bool, optional): Set to True if angular features are needed.
+        num_heavy_atoms (int, optional): number of heavy atoms.
+            (See 'Table 1' in Ref. [#ani1]_)
+        high_energies (bool, optional): add high energy conformations.
+            (See 'Technical Validation' of Ref. [#ani1]_)
+
+    References:
+        .. [#ani1] https://arxiv.org/abs/1708.04987
 
     """
 
@@ -72,13 +76,14 @@ class ANI1(DownloadableAtomsData):
         )
 
     def create_subset(self, idx):
-        """
-        Returns a new dataset that only consists of provided indices.
+        """Return a new database that only consists of provided indices.
+
         Args:
-            idx (numpy.ndarray): subset indices
+            idx (numpy.ndarray): indices to subset.
 
         Returns:
-            schnetpack.data.AtomsData: dataset with subset of original data
+            schnetpack.data.AtomsData: database with subset of original data.
+
         """
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]

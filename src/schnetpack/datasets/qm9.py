@@ -16,20 +16,22 @@ __all__ = ["QM9"]
 
 
 class QM9(DownloadableAtomsData):
-    """ QM9 benchmark dataset for organic molecules with up to nine heavy atoms from {C, O, N, F}.
+    """QM9 benchmark database for organic molecules.
 
-        This class adds convenience functions to download QM9 from figshare and load the data into pytorch.
+    The QM9 database contains small organic molecules with up to nine non-hydrogen atoms
+    from including C, O, N, F. This class adds convenient functions to download QM9 from
+    figshare and load the data into pytorch.
 
-        Args:
-            path (str): path to directory containing qm9 database.
-            download (bool): enable downloading if database does not exists (default: True)
-            subset (list): indices of subset. Set to None for entire dataset (default: None)
-            properties (list): properties in qm9, e.g. U0
-            pair_provider (BaseEnvironmentProvider):
-            remove_uncharacterized (bool): remove uncharacterized molecules from dataset (according to [#qm9_1]_)
+    Args:
+        dbpath (str): path to directory containing database.
+        download (bool, optional): enable downloading if database does not exists.
+        subset (list, optional): indices to subset. Set to None for entire database.
+        properties (list, optional): properties in qm9, e.g. U0.
+        collect_triples (bool, optional): Set to True if angular features are needed.
+        remove_uncharacterized (bool, optional): remove uncharacterized molecules.
 
-        References:
-            .. [#qm9_1] https://ndownloader.figshare.com/files/3195404
+    References:
+        .. [#qm9_1] https://ndownloader.figshare.com/files/3195404
 
     """
 
