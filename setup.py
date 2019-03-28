@@ -31,6 +31,7 @@ setup(
         "torch>=0.4.1",
         "numpy",
         "ase>=3.16",
+        "h5py",
         "tensorboardX",
         "tqdm",
         "pyyaml",
