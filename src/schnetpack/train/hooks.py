@@ -108,8 +108,9 @@ class LoggingHook(Hook):
 
     def on_batch_end(self, trainer, train_batch, result, loss):
         if self.log_train_loss:
-            self._train_loss += float(loss.data)
-            self._counter += 1
+            n_samples = result.shape[0]
+            self._train_loss += float(loss.data) * n_samples
+            self._counter += n_samples
 
     def on_validation_begin(self, trainer):
         for metric in self.metrics:
@@ -215,18 +216,10 @@ class CSVHook(LoggingHook):
                 log += "," + str(trainer.optimizer.param_groups[0]["lr"])
 
             if self.log_train_loss:
-                if hasattr(self._train_loss, "__iter__"):
-                    train_string = ",".join([str(k) for k in self._train_loss])
-                    log += "," + train_string
-                else:
-                    log += "," + str(self._train_loss)
+                log += "," + str(self._train_loss / self._counter)
 
             if self.log_validation_loss:
-                if hasattr(val_loss, "__iter__"):
-                    valid_string = ",".join([str(k) for k in val_loss])
-                    log += "," + valid_string
-                else:
-                    log += "," + str(val_loss)
+                log += "," + str(val_loss)
 
             if len(self.metrics) > 0:
                 log += ","
