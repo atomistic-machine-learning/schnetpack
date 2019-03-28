@@ -32,7 +32,6 @@ setup(
         "numpy",
         "ase>=3.16",
         "tensorboardX",
-        "h5py",
         "tqdm",
         "pyyaml",
     ],
