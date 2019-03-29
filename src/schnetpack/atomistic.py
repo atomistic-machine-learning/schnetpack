@@ -127,8 +127,8 @@ class Atomwise(OutputModule):
         n_layers=2,
         n_neurons=None,
         activation=schnetpack.nn.activations.shifted_softplus,
-        return_contributions=False,
-        requires_dr=False,
+        contribution_property=None,
+        dr_property=None,
         create_graph=False,
         mean=None,
         stddev=None,
@@ -136,12 +136,15 @@ class Atomwise(OutputModule):
         max_z=100,
         outnet=None,
         train_embeddings=False,
+        property="y"
     ):
-        super(Atomwise, self).__init__(requires_dr)
+        super(Atomwise, self).__init__()
 
         self.n_layers = n_layers
         self.create_graph = create_graph
-        self.return_contributions = return_contributions
+        self.property = property
+        self.contribution_property = contribution_property
+        self.dr_property = dr_property
 
         mean = torch.FloatTensor([0.0]) if mean is None else mean
         stddev = torch.FloatTensor([1.0]) if stddev is None else stddev
@@ -190,87 +193,20 @@ class Atomwise(OutputModule):
             yi = yi + y0
 
         y = self.atom_pool(yi, atom_mask)
-        result = {"y": y}
-
-        if self.return_contributions:
-            result["yi"] = yi
-
-        return result
-
-
-class Energy(Atomwise):
-    """
-        Predicts energy.
-
-        Args:
-            n_in (int): input dimension of representation
-            pool_mode (str): one of {sum, avg} (default: sum)
-            n_layers (int): number of nn in output network (default: 2)
-            n_neurons (list of int or None): number of neurons in each layer of the output network.
-                                              If `None`, divide neurons by 2 in each layer. (default: none)
-            activation (function): activation function for hidden nn (default: spk.nn.activations.shifted_softplus)
-            return_contributions (bool): If True, latent atomic contributions are returned as well (default: False)
-            create_graph (bool): if True, graph of forces is created (default: False)
-            return_force (bool): if True, forces will be calculated (default: False)
-            mean (torch.FloatTensor): mean of energy (default: None)
-            stddev (torch.FloatTensor): standard deviation of the energy (default: None)
-            atomref (torch.Tensor): reference single-atom properties
-            outnet (callable): network used for atomistic outputs. Takes schnetpack input dictionary as input. Output is
-                               not normalized. If set to None (default), a pyramidal network is generated automatically.
-
-        Returns:
-            tuple: Prediction for energy.
-
-            If requires_dr is true additionally returns forces
-        """
-
-    def __init__(
-        self,
-        n_in,
-        aggregation_mode="sum",
-        n_layers=2,
-        n_neurons=None,
-        activation=schnetpack.nn.activations.shifted_softplus,
-        return_contributions=False,
-        create_graph=False,
-        return_force=False,
-        mean=None,
-        stddev=None,
-        atomref=None,
-        max_z=100,
-        outnet=None,
-    ):
-        super(Energy, self).__init__(
-            n_in,
-            1,
-            aggregation_mode,
-            n_layers,
-            n_neurons,
-            activation,
-            return_contributions,
-            return_force,
-            create_graph,
-            mean,
-            stddev,
-            atomref,
-            max_z,
-            outnet,
-        )
-
-    def forward(self, inputs):
-        r"""
-        predicts energy
-        """
-        result = super(Energy, self).forward(inputs)
-
-        if self.requires_dr:
-            forces = -grad(
-                result["y"],
+        # add property
+        result = {self.property: y}
+        # add property contributions
+        if self.contribution_property:
+            result[self.contribution_property] = yi
+        # add property derivative
+        if self.dr_property:
+            dy = -grad(
+                result[self.property],
                 inputs[Structure.R],
-                grad_outputs=torch.ones_like(result["y"]),
+                grad_outputs=torch.ones_like(result[self.property]),
                 create_graph=self.create_graph,
             )[0]
-            result["dydx"] = forces
+            result["dydx"] = dy
 
         return result
 
@@ -308,14 +244,14 @@ class DipoleMoment(Atomwise):
         n_layers=2,
         n_neurons=None,
         activation=schnetpack.nn.activations.shifted_softplus,
-        return_charges=False,
-        requires_dr=False,
+        contribution_property=None,
+        dr_property=None,
         outnet=None,
         predict_magnitude=False,
         mean=torch.FloatTensor([0.0]),
         stddev=torch.FloatTensor([1.0]),
     ):
-        self.return_charges = return_charges
+        self.contribution_property = contribution_property
         self.predict_magnitude = predict_magnitude
         super(DipoleMoment, self).__init__(
             n_in,
@@ -324,7 +260,7 @@ class DipoleMoment(Atomwise):
             n_layers,
             n_neurons,
             activation=activation,
-            requires_dr=requires_dr,
+            contribution_property=contribution_property,
             mean=mean,
             stddev=stddev,
             outnet=outnet,
@@ -364,12 +300,12 @@ class ElementalAtomwise(Atomwise):
         n_out=1,
         aggregation_mode="sum",
         n_layers=3,
-        requires_dr=False,
+        dr_property=None,
         create_graph=False,
         elements=frozenset((1, 6, 7, 8, 9)),
         n_hidden=50,
         activation=schnetpack.nn.activations.shifted_softplus,
-        return_contributions=False,
+        contribution_property=False,
         mean=None,
         stddev=None,
         atomref=None,
@@ -391,136 +327,14 @@ class ElementalAtomwise(Atomwise):
             n_layers,
             None,
             activation,
-            return_contributions,
-            requires_dr,
+            contribution_property,
+            dr_property,
             create_graph,
             mean,
             stddev,
             atomref,
             max_z,
             outnet,
-        )
-
-
-class ElementalEnergy(Energy):
-    """
-    Predicts atom-wise contributions, but uses one separate network for every chemical element of
-    the central atoms.
-    Particularly useful for networks of Behler-Parrinello type.
-
-    Args:
-        n_in (int): input dimension of representation
-        n_out (int): output dimension of target property (default: 1)
-        pool_mode (str): one of {sum, avg} (default: sum)
-        n_layers (int): number of layers in output network (default: 3)
-        return_force (bool): True, if derivative w.r.t. atom positions is required (default: False)
-        elements (set of int): List of atomic numbers present in the training set {1,6,7,8,9} for QM9. (default: (1,6,7,8,9)
-        n_hidden (int): number of neurons in each hidden layer of the output network. (default: 50)
-        activation (torch.Function): activation function for hidden nn (default: schnetpack.nn.activations.shifted_softplus)
-        return_contributions (bool): If True, latent atomic con tributions are returned as well (default: False)
-        mean (torch.FloatTensor): mean of energy
-        stddev (torch.FloatTensor): standard deviation of energy
-        atomref (torch.tensor): reference single-atom properties
-        max_z (int): ignored if atomref is not learned (default: 100)
-    """
-
-    def __init__(
-        self,
-        n_in,
-        n_out=1,
-        aggregation_mode="sum",
-        n_layers=3,
-        return_force=False,
-        create_graph=False,
-        elements=frozenset((1, 6, 7, 8, 9)),
-        n_hidden=50,
-        activation=schnetpack.nn.activations.shifted_softplus,
-        return_contributions=False,
-        mean=None,
-        stddev=None,
-        atomref=None,
-        max_z=100,
-    ):
-        outnet = schnetpack.nn.blocks.GatedNetwork(
-            n_in,
-            n_out,
-            elements,
-            n_hidden=n_hidden,
-            n_layers=n_layers,
-            activation=activation,
-        )
-
-        super(ElementalEnergy, self).__init__(
-            n_in,
-            aggregation_mode,
-            n_layers,
-            None,
-            activation,
-            return_contributions,
-            create_graph=create_graph,
-            return_force=return_force,
-            mean=mean,
-            stddev=stddev,
-            atomref=atomref,
-            max_z=max_z,
-            outnet=outnet,
-        )
-
-
-class ElementalDipoleMoment(DipoleMoment):
-    """
-    Predicts partial charges and computes dipole moment using serparate NNs for every different element.
-    Particularly useful for networks of Behler-Parrinello type.
-
-    Args:
-        n_in (int): input dimension of representation
-        n_out (int): output dimension of representation (default: 1)
-        n_layers (int): number of layers in output network (default: 3)
-        return_charges (bool): If True, latent atomic charges are returned as well (default: False)
-        requires_dr (bool): Set True, if derivative w.r.t. atom positions is required (default: False)
-        predict_magnitude (bool): if True, predict the magnitude of the dipole moment instead of the vector (default: False)
-        elements (set of int): List of atomic numbers present in the training set {1,6,7,8,9} for QM9. (default: frozenset(1,6,7,8,9))
-        n_hidden (int): number of neurons in each layer of the output network. (default: 50)
-        activation (function): activation function for hidden nn (default: schnetpack.nn.activations.shifted_softplus)
-        activation (function): activation function for hidden nn
-        mean (torch.FloatTensor): mean of energy
-        stddev (torch.FloatTensor): standard deviation of energy
-    """
-
-    def __init__(
-        self,
-        n_in,
-        n_out=1,
-        n_layers=3,
-        return_charges=False,
-        requires_dr=False,
-        predict_magnitude=False,
-        elements=frozenset((1, 6, 7, 8, 9)),
-        n_hidden=50,
-        activation=schnetpack.nn.activations.shifted_softplus,
-        mean=None,
-        stddev=None,
-    ):
-        outnet = schnetpack.nn.blocks.GatedNetwork(
-            n_in,
-            n_out,
-            elements,
-            n_hidden=n_hidden,
-            n_layers=n_layers,
-            activation=activation,
-        )
-
-        super(ElementalDipoleMoment, self).__init__(
-            n_in,
-            n_layers,
-            None,
-            activation,
-            return_charges,
-            requires_dr,
-            outnet,
-            predict_magnitude,
-            mean,
-            stddev,
         )
 
 
@@ -659,6 +473,81 @@ class Properties:
 
 
 class PropertyModel(nn.Module):
+    """
+
+    """
+
+    def __init__(
+            self,
+            n_in,
+            properties,
+            mean,
+            stddev,
+            atomrefs
+    ):
+        super(PropertyModel).__init__()
+        self.n_in = n_in
+        self.mean = mean
+        self.stddev = stddev
+        self.atomrefs = atomrefs
+        self.output_modules = self._build_modules(properties)
+
+    def _build_modules(self, properties):
+        """
+        Build the output modules from the property dict.
+        Args:
+            properties (dict): property dict
+
+        Returns (nn.ModuleList):
+            list of output modules
+        """
+        # split by output type
+        property_modules = {}
+        contrib_properties = {}
+        derivative_properties = {}
+        for prop_name, module_type in properties.items():
+            split_type = module_type.split(':')
+            if len(split_type) == 1:
+                property_modules[prop_name] = module_type
+            elif split_type[0] == 'contrib':
+                contrib_properties[split_type[1]] = prop_name
+            elif split_type[0] == 'der':
+                derivative_properties[split_type[1]] = prop_name
+            else:
+                raise NotImplementedError
+        # build models
+        output_models = nn.ModuleList()
+        for prop_name, prop_type in property_modules.items():
+            contribution_property = None
+            dr_property = None
+            if prop_name in contrib_properties.keys():
+                contribution_property = contrib_properties[prop_name]
+            if prop_name in derivative_properties.keys():
+                dr_property = derivative_properties[prop_name]
+            output_models.append(self._get_module(module_type, prop_name,
+                                                  contribution_property, dr_property))
+
+    def _get_module(self, module_type, prop_name, contribution_property, dr_property):
+        if module_type == 'atomwise':
+            return Atomwise(n_in=self.n_in, property=prop_name,
+                            contribution_property=contribution_property,
+                            dr_property=dr_property)
+        elif module_type == 'atomwise_avg':
+            return Atomwise(n_in=self.n_in, property=prop_name,
+                            contribution_property=contribution_property,
+                            dr_property=dr_property, aggregation_mode='avg')
+        elif module_type == 'elementalatomwise':
+            return ElementalAtomwise(n_in=self.n_in, property=prop_name,
+                                     contribution_property=contribution_property,
+                                     dr_property=dr_property)
+        elif
+
+
+        def forward(self, *input):
+            pass
+
+
+class OldPropertyModel(nn.Module):
     def __init__(
         self, n_in, properties, mean, stddev, atomrefs, cutoff_network, cutoff
     ):
