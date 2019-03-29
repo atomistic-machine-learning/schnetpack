@@ -62,7 +62,7 @@ def mollifier_cutoff(distances, cutoff=5.0, eps=1e-7):
         torch.Tensor: Tensor holding values of the cutoff function
                       (Nbatch x Nat x Nneigh)
     """
-    mask = (distances+eps < cutoff).float()
+    mask = (distances + eps < cutoff).float()
     exponent = 1.0 - 1.0 / (1.0 - torch.pow(distances * mask / cutoff, 2))
     cutoffs = torch.exp(exponent)
     cutoffs = cutoffs * mask
