@@ -58,7 +58,7 @@ class MollifierCutoff(nn.Module):
 
     """
 
-    def __init__(self, cutoff=5.0, eps=1.e-7):
+    def __init__(self, cutoff=5.0, eps=1.0e-7):
         super(MollifierCutoff, self).__init__()
         self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
         self.register_buffer("eps", torch.FloatTensor([eps]))
