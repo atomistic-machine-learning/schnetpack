@@ -1,8 +1,44 @@
 
 import torch
+import numpy as np
 
 from numpy.testing import assert_allclose
-from schnetpack.nn.cutoff import HardCutoff
+from schnetpack.nn.cutoff import CosineCutoff, HardCutoff
+
+
+def test_cutoff_cosine_default():
+    # cosine cutoff with default radius
+    cutoff = CosineCutoff()
+    # check cutoff radius
+    assert_allclose(5.0, cutoff.cutoff)
+    # random tensor with elements in [0, 1)
+    torch.manual_seed(42)
+    dist = torch.rand((1, 15), dtype=torch.float)
+    # check cutoff values
+    assert_allclose(0.5 * (1. + torch.cos(dist * np.pi / 5.)), cutoff(dist))
+    assert_allclose(0.5 * (1. + torch.cos(2. * dist * np.pi / 5.)), cutoff(2. * dist))
+    assert_allclose(0.5 * (1. + torch.cos(4. * dist * np.pi / 5.)), cutoff(4. * dist))
+    # compute cutoff values and expected values
+    comp = cutoff(5.5 * dist)
+    expt = 0.5 * (1. + torch.cos(5.5 * dist * np.pi / 5.))
+    expt[5.5 * dist >= 5.0] = 0.
+    assert_allclose(expt, comp)
+
+
+def test_cutoff_cosine():
+    # cosine cutoff with radius 1.8
+    cutoff = CosineCutoff(cutoff=1.8)
+    # check cutoff radius
+    assert_allclose(1.8, cutoff.cutoff)
+    # random tensor with elements in [0, 1)
+    torch.manual_seed(42)
+    dist = torch.rand((10, 5, 20), dtype=torch.float)
+    # check cutoff values
+    assert_allclose(0.5 * (1. + torch.cos(dist * np.pi / 1.8)), cutoff(dist))
+    # compute expected values for 3.5 times distance
+    values = 0.5 * (1. + torch.cos(3.5 * dist * np.pi / 1.8))
+    values[3.5 * dist >= 1.8] = 0.
+    assert_allclose(values, cutoff(3.5 * dist))
 
 
 def test_cutoff_hard_default():
