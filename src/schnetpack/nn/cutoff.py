@@ -49,7 +49,7 @@ class CosineCutoff(nn.Module):
         return cosine_cutoff(distances, cutoff=self.cutoff)
 
 
-def mollifier_cutoff(distances, cutoff=5.0):
+def mollifier_cutoff(distances, cutoff=5.0, eps=1e-7):
     """
     Infinitely differentiable cutoff based on a mollifier function.
     (See https://en.wikipedia.org/wiki/Mollifier)
@@ -62,7 +62,7 @@ def mollifier_cutoff(distances, cutoff=5.0):
         torch.Tensor: Tensor holding values of the cutoff function
                       (Nbatch x Nat x Nneigh)
     """
-    mask = (distances <= cutoff).float()
+    mask = (distances+eps < cutoff).float()
     exponent = 1.0 - 1.0 / (1.0 - torch.pow(distances * mask / cutoff, 2))
     cutoffs = torch.exp(exponent)
     cutoffs = cutoffs * mask
