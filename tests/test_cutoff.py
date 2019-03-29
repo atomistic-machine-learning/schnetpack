@@ -3,7 +3,7 @@ import torch
 import numpy as np
 
 from numpy.testing import assert_allclose
-from schnetpack.nn.cutoff import CosineCutoff, HardCutoff
+from schnetpack.nn.cutoff import CosineCutoff, MollifierCutoff, HardCutoff
 
 
 def test_cutoff_cosine_default():
@@ -39,6 +39,46 @@ def test_cutoff_cosine():
     values = 0.5 * (1. + torch.cos(3.5 * dist * np.pi / 1.8))
     values[3.5 * dist >= 1.8] = 0.
     assert_allclose(values, cutoff(3.5 * dist))
+
+
+def test_cutoff_mollifier_default():
+    # mollifier cutoff with default radius
+    cutoff = MollifierCutoff()
+    # check cutoff radius
+    assert_allclose(5.0, cutoff.cutoff)
+    # tensor of zeros
+    dist = torch.zeros((5, 2, 3))
+    assert_allclose(torch.ones(5, 2, 3), cutoff(dist))
+    # random tensor with elements in [0, 1)
+    torch.manual_seed(42)
+    dist = torch.rand((20, 1), dtype=torch.float)
+    # check cutoff values
+    assert_allclose(torch.exp(1. - 1. / (1. - (dist / 5.)**2)), cutoff(dist))
+    # compute cutoff values and expected values
+    comp = cutoff(6. * dist)
+    expt = torch.exp(1. - 1. / (1. - (6. * dist / 5.)**2))
+    expt[6. * dist >= 5.0] = 0.
+    assert_allclose(expt, comp)
+
+
+def test_cutoff_mollifier():
+    # mollifier cutoff with radius 2.3
+    cutoff = MollifierCutoff(cutoff=2.3)
+    # check cutoff radius
+    assert_allclose(2.3, cutoff.cutoff)
+    # tensor of zeros
+    dist = torch.zeros((4, 1, 1))
+    assert_allclose(torch.ones(4, 1, 1), cutoff(dist))
+    # random tensor with elements in [0, 1)
+    torch.manual_seed(42)
+    dist = torch.rand((1, 3, 9), dtype=torch.float)
+    # check cutoff values
+    assert_allclose(torch.exp(1. - 1. / (1. - (dist / 2.3)**2)), cutoff(dist))
+    # compute cutoff values and expected values
+    comp = cutoff(3.8 * dist)
+    expt = torch.exp(1. - 1. / (1. - (3.8 * dist / 2.3)**2))
+    expt[3.8 * dist >= 2.3] = 0.
+    assert_allclose(expt, comp)
 
 
 def test_cutoff_hard_default():
