@@ -1,8 +1,5 @@
 import os
 
-from ase.db import connect
-from ase.io.extxyz import read_xyz
-
 from schnetpack.data import DownloadableAtomsData
 from schnetpack.data.parsing import extxyz_to_db
 from schnetpack.environment import SimpleEnvironmentProvider
