@@ -7,11 +7,18 @@ __all__ = ["CosineCutoff", "MollifierCutoff", "HardCutoff"]
 
 
 class CosineCutoff(nn.Module):
-    """
-    Class wrapper for cosine cutoff function.
+    r"""Class of Behler cosine cutoff.
+
+    .. math::
+       f(r) = \begin{cases}
+        0.5 \times \left[1 + \cos\left(\frac{\pi r}{r_\text{cutoff}}\right)\right]
+          & r < r_\text{cutoff} \\
+        0 & r \geqslant r_\text{cutoff} \\
+        \end{cases}
 
     Args:
-        cutoff (float): Cutoff radius.
+        cutoff (float, optional): cutoff radius.
+
     """
 
     def __init__(self, cutoff=5.0):
@@ -19,12 +26,14 @@ class CosineCutoff(nn.Module):
         self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
 
     def forward(self, distances):
-        """
+        """Compute cutoff.
+
         Args:
-            distances (torch.Tensor): Interatomic distances.
+            distances (torch.Tensor): values of interatomic distances.
 
         Returns:
-            torch.Tensor: Values of cutoff function.
+            torch.Tensor: values of cutoff function.
+
         """
         # Compute values of cutoff function
         cutoffs = 0.5 * (torch.cos(distances * np.pi / self.cutoff) + 1.0)
@@ -34,12 +43,18 @@ class CosineCutoff(nn.Module):
 
 
 class MollifierCutoff(nn.Module):
-    """
-    Class wrapper for mollifier cutoff function.
+    r"""Class for mollifier cutoff scaled to have a value of 1 at :math:`r=0`.
+
+    .. math::
+       f(r) = \begin{cases}
+        \exp\left(1 - \frac{1}{1 - \left(\frac{r}{r_\text{cutoff}}\right)^2}\right)
+          & r < r_\text{cutoff} \\
+        0 & r \geqslant r_\text{cutoff} \\
+        \end{cases}
 
     Args:
         cutoff (float, optional): Cutoff radius.
-        eps (float, optional):
+        eps (float, optional): offset added to distances for numerical stability.
 
     """
 
@@ -49,12 +64,14 @@ class MollifierCutoff(nn.Module):
         self.register_buffer("eps", torch.FloatTensor([eps]))
 
     def forward(self, distances):
-        """
+        """Compute cutoff.
+
         Args:
-            distances (torch.Tensor): Interatomic distances.
+            distances (torch.Tensor): values of interatomic distances.
 
         Returns:
-            torch.Tensor: Values of cutoff function.
+            torch.Tensor: values of cutoff function.
+
         """
         mask = (distances + self.eps < self.cutoff).float()
         exponent = 1.0 - 1.0 / (1.0 - torch.pow(distances * mask / self.cutoff, 2))
@@ -64,11 +81,17 @@ class MollifierCutoff(nn.Module):
 
 
 class HardCutoff(nn.Module):
-    """
-    Class wrapper for hard cutoff function.
+    r"""Class of hard cutoff.
+
+    .. math::
+       f(r) = \begin{cases}
+        r & r \leqslant r_\text{cutoff} \\
+        0 & r > r_\text{cutoff} \\
+        \end{cases}
 
     Args:
-        cutoff (float): Cutoff radius.
+        cutoff (float): cutoff radius.
+
     """
 
     def __init__(self, cutoff=5.0):
@@ -76,12 +99,14 @@ class HardCutoff(nn.Module):
         self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
 
     def forward(self, distances):
-        """
+        """Compute cutoff.
+
         Args:
-            distances (torch.Tensor): Interatomic distances.
+            distances (torch.Tensor): values of interatomic distances.
 
         Returns:
-            torch.Tensor: Values of cutoff function.
+            torch.Tensor: values of cutoff function.
+
         """
         mask = (distances <= self.cutoff).float()
         return distances * mask
