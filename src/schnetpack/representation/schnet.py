@@ -1,15 +1,14 @@
-import math
 
 import torch
 import torch.nn as nn
 
-import schnetpack.nn.acsf
-import schnetpack.nn.activations
-import schnetpack.nn.base
-import schnetpack.nn.cfconv
-import schnetpack.nn.neighbors
+from schnetpack.nn.base import Dense
 from schnetpack.data import Structure
+from schnetpack.nn.cfconv import CFConv
 from schnetpack.nn.cutoff import HardCutoff
+from schnetpack.nn.acsf import GaussianSmearing
+from schnetpack.nn.neighbors import AtomDistances
+from schnetpack.nn.activations import shifted_softplus
 
 
 class SchNetInteraction(nn.Module):
@@ -40,27 +39,23 @@ class SchNetInteraction(nn.Module):
 
         # initialize filters
         self.filter_network = nn.Sequential(
-            schnetpack.nn.base.Dense(
-                n_spatial_basis,
-                n_filters,
-                activation=schnetpack.nn.activations.shifted_softplus,
-            ),
-            schnetpack.nn.base.Dense(n_filters, n_filters),
+            Dense(n_spatial_basis, n_filters, activation=shifted_softplus),
+            Dense(n_filters, n_filters),
         )
 
         self.cutoff_network = cutoff_network(cutoff)
 
         # initialize interaction blocks
-        self.cfconv = schnetpack.nn.cfconv.CFConv(
+        self.cfconv = CFConv(
             n_atom_basis,
             n_filters,
             n_atom_basis,
             self.filter_network,
             cutoff_network=self.cutoff_network,
-            activation=schnetpack.nn.activations.shifted_softplus,
+            activation=shifted_softplus,
             normalize_filter=normalize_filter,
         )
-        self.dense = schnetpack.nn.base.Dense(n_atom_basis, n_atom_basis)
+        self.dense = Dense(n_atom_basis, n_atom_basis)
 
     def forward(self, x, r_ij, neighbors, neighbor_mask, f_ij=None):
         """
@@ -135,9 +130,9 @@ class SchNet(nn.Module):
         self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
 
         # spatial features
-        self.distances = schnetpack.nn.neighbors.AtomDistances()
+        self.distances = AtomDistances()
         if distance_expansion is None:
-            self.distance_expansion = schnetpack.nn.acsf.GaussianSmearing(
+            self.distance_expansion = GaussianSmearing(
                 0.0, cutoff, n_gaussians, trainable=trainable_gaussians
             )
         else:
@@ -148,7 +143,7 @@ class SchNet(nn.Module):
         self.charged_systems = charged_systems
         if charged_systems:
             self.charge = nn.Parameter(torch.Tensor(1, n_atom_basis))
-            self.charge.data.normal_(0, 1.0 / math.sqrt(n_atom_basis))
+            self.charge.data.normal_(0, 1.0 / n_atom_basis**0.5)
 
         # interaction network
         if coupled_interactions:
