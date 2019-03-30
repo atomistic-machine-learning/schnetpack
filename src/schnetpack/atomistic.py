@@ -18,24 +18,20 @@ from schnetpack.nn.neighbors import atom_distances, neighbor_elements
 
 
 class AtomisticModel(nn.Module):
-    """
-    Assembles an atomistic model from a representation module and one or more output modules.
-
-    Returns either the predicted property or a dict (output_module -> property),
-    depending on whether output_modules is a Module or an iterable.
+    """Assemble a model from atom-wise representation module and output module(s).
 
     Args:
-        representation(nn.Module): neural network that builds atom-wise features of shape batch x atoms x features
-        output_modules(nn.OutputModule or iterable of nn.OutputModule): predicts desired property from representation
-
+        representation(nn.Module): network block that computes atom-wise embeddings.
+        output_modules(nn.OutputModule or iterable of nn.OutputModule): network block
+            that predicts desired property from representation.
 
     """
 
     def __init__(self, representation, output_modules):
         super(AtomisticModel, self).__init__()
-
+        # atom-wise representation network
         self.representation = representation
-
+        # output network(s) computing desired property
         if isinstance(output_modules, Iterable):
             self.output_modules = nn.ModuleList(output_modules)
             self.requires_dr = False
@@ -48,21 +44,28 @@ class AtomisticModel(nn.Module):
             self.requires_dr = output_modules.requires_dr
 
     def forward(self, inputs):
-        r"""
-        predicts property
+        r"""Compute assembled network output.
+
+        Args:
+            inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+
+        Returns:
+            dict:
+            Returns either the predicted property or a dict (output_module -> property)
+            depending on whether output_modules is a Module or an iterable.
 
         """
         if self.requires_dr:
             inputs[Structure.R].requires_grad_()
+        # compute atom-wise embeddings & add it to inputs dictionary
         inputs["representation"] = self.representation(inputs)
-
+        # compute network output (i.e. desired property) from atom-wise representation
         if isinstance(self.output_modules, nn.ModuleList):
             outs = {}
             for output_module in self.output_modules:
                 outs[output_module] = output_module(inputs)
         else:
             outs = self.output_modules(inputs)
-
         return outs
 
 
