@@ -120,15 +120,16 @@ class ScaleShift(nn.Module):
 
 
 class Standardize(nn.Module):
-    """
-    Standardization routine for NN close to input,
-    e.g. symmetry functions. Values of mean and sttdev must
-    be computed via pass over data set.
+    r"""Standardize layer for shifting and scaling.
+
+    .. math::
+       y = \frac{x - \mu}{\sigma}
 
     Args:
-        mean (torch.Tensor): Mean of data.
-        stddev (torch.Tensor): Standard deviation of data.
-        eps (float): Small offset to avoid zero division.
+        mean (torch.Tensor): mean value :math:`\mu`.
+        stddev (torch.Tensor): standard deviation value :math:`\sigma`.
+        eps (float, optional): small offset value to avoid zero division.
+
     """
 
     def __init__(self, mean, stddev, eps=1e-9):
@@ -138,12 +139,14 @@ class Standardize(nn.Module):
         self.register_buffer("eps", torch.ones_like(stddev) * eps)
 
     def forward(self, input):
-        """
+        """Compute layer output.
+
         Args:
-            input (torch.Tensor): Input data.
+            input (torch.Tensor): input data.
 
         Returns:
-            torch.Tensor: Transformed data.
+            torch.Tensor: layer output.
+
         """
         # Add small number to catch divide by zero
         y = (input - self.mean) / (self.stddev + self.eps)
