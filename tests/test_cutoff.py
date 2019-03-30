@@ -15,16 +15,16 @@ def test_cutoff_cosine_default():
     dist = torch.rand((1, 15), dtype=torch.float)
     # check cutoff values
     expt = 0.5 * (1. + torch.cos(dist * np.pi / 5.))
-    torch.allclose(expt, cutoff(dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt, cutoff(dist), atol=0., rtol=1.0e-7)
     expt = 0.5 * (1. + torch.cos(2. * dist * np.pi / 5.))
-    torch.allclose(expt, cutoff(2. * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt, cutoff(2. * dist), atol=0., rtol=1.0e-7)
     expt = 0.5 * (1. + torch.cos(4. * dist * np.pi / 5.))
-    torch.allclose(expt, cutoff(4. * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt, cutoff(4. * dist), atol=0., rtol=1.0e-7)
     # compute cutoff values and expected values
     comp = cutoff(5.5 * dist)
     expt = 0.5 * (1. + torch.cos(5.5 * dist * np.pi / 5.))
     expt[5.5 * dist >= 5.0] = 0.
-    torch.allclose(expt, comp, atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt, comp, atol=0., rtol=1.0e-7)
 
 
 def test_cutoff_cosine():
@@ -37,11 +37,11 @@ def test_cutoff_cosine():
     dist = torch.rand((10, 5, 20), dtype=torch.float)
     # check cutoff values
     expt = 0.5 * (1. + torch.cos(dist * np.pi / 1.8))
-    torch.allclose(expt, cutoff(dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt, cutoff(dist), atol=0., rtol=1.0e-7)
     # compute expected values for 3.5 times distance
     values = 0.5 * (1. + torch.cos(3.5 * dist * np.pi / 1.8))
     values[3.5 * dist >= 1.8] = 0.
-    torch.allclose(values, cutoff(3.5 * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(values, cutoff(3.5 * dist), atol=0., rtol=1.0e-7)
 
 
 def test_cutoff_mollifier_default():
@@ -51,18 +51,18 @@ def test_cutoff_mollifier_default():
     assert abs(5.0 - cutoff.cutoff) < 1.e-12
     # tensor of zeros
     dist = torch.zeros((5, 2, 3))
-    torch.allclose(torch.ones(5, 2, 3), cutoff(dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(torch.ones(5, 2, 3), cutoff(dist), atol=0., rtol=1.0e-7)
     # random tensor with elements in [0, 1)
     torch.manual_seed(42)
     dist = torch.rand((20, 1), dtype=torch.float)
     # check cutoff values
     expt = torch.exp(1. - 1. / (1. - (dist / 5.)**2))
-    torch.allclose(expt, cutoff(dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt, cutoff(dist), atol=0., rtol=1.0e-7)
     # compute cutoff values and expected values
     comp = cutoff(6. * dist)
     expt = torch.exp(1. - 1. / (1. - (6. * dist / 5.)**2))
     expt[6. * dist >= 5.0] = 0.
-    torch.allclose(expt, comp, atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt, comp, atol=0., rtol=1.0e-7)
 
 
 def test_cutoff_mollifier():
@@ -72,18 +72,18 @@ def test_cutoff_mollifier():
     assert abs(2.3 - cutoff.cutoff) < 1.e-12
     # tensor of zeros
     dist = torch.zeros((4, 1, 1))
-    torch.allclose(torch.ones(4, 1, 1), cutoff(dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(torch.ones(4, 1, 1), cutoff(dist), atol=0., rtol=1.0e-7)
     # random tensor with elements in [0, 1)
     torch.manual_seed(42)
     dist = torch.rand((1, 3, 9), dtype=torch.float)
     # check cutoff values
     expt = torch.exp(1. - 1. / (1. - (dist / 2.3)**2))
-    torch.allclose(expt, cutoff(dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt, cutoff(dist), atol=0., rtol=1.0e-7)
     # compute cutoff values and expected values
     comp = cutoff(3.8 * dist)
     expt = torch.exp(1. - 1. / (1. - (3.8 * dist / 2.3)**2))
     expt[3.8 * dist >= 2.3] = 0.
-    torch.allclose(expt, comp, atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt, comp, atol=0., rtol=1.0e-7)
 
 
 def test_cutoff_hard_default():
@@ -95,16 +95,16 @@ def test_cutoff_hard_default():
     torch.manual_seed(42)
     dist = torch.rand((1, 20), dtype=torch.float)
     # check cutoff values
-    torch.allclose(dist, cutoff(dist), atol=0., rtol=1.0e-7)
-    torch.allclose(0.5 * dist, cutoff(0.5 * dist), atol=0., rtol=1.0e-7)
-    torch.allclose(3.5 * dist, cutoff(3.5 * dist), atol=0., rtol=1.0e-7)
-    torch.allclose(4.9 * dist, cutoff(4.9 * dist), atol=0., rtol=1.0e-7)
-    torch.allclose(5.0 * dist, cutoff(5.0 * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(dist, cutoff(dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(0.5 * dist, cutoff(0.5 * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(3.5 * dist, cutoff(3.5 * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(4.9 * dist, cutoff(4.9 * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(5.0 * dist, cutoff(5.0 * dist), atol=0., rtol=1.0e-7)
     # compute cutoff values and expected values
     comp = cutoff(7.5 * dist)
     expt = 7.5 * dist
     expt[expt >= 5.0] = 0.
-    torch.allclose(expt, comp, atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt, comp, atol=0., rtol=1.0e-7)
 
 
 def test_cutoff_hard():
@@ -116,11 +116,11 @@ def test_cutoff_hard():
     torch.manual_seed(42)
     dist = torch.rand((30, 20, 10), dtype=torch.float)
     # check cutoff values
-    torch.allclose(dist, cutoff(dist), atol=0., rtol=1.0e-7)
-    torch.allclose(0.5 * dist, cutoff(0.5 * dist), atol=0., rtol=1.0e-7)
-    torch.allclose(2.2 * dist, cutoff(2.2 * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(dist, cutoff(dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(0.5 * dist, cutoff(0.5 * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(2.2 * dist, cutoff(2.2 * dist), atol=0., rtol=1.0e-7)
     # compute cutoff values and expected values
     comp = cutoff(3.7 * dist)
     expt = 3.7 * dist
     expt[expt >= 2.5] = 0.
-    torch.allclose(expt, comp, atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt, comp, atol=0., rtol=1.0e-7)
