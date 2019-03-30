@@ -64,26 +64,28 @@ class Dense(nn.Linear):
 
 
 class GetItem(nn.Module):
-    """
-    Extracts a single item from the standard SchNetPack input dictionary.
+    """Extraction layer to get an item from SchNetPack dictionary of input tensors.
 
     Args:
         key (str): Property to be extracted from SchNetPack input tensors.
+
     """
 
     def __init__(self, key):
         super(GetItem, self).__init__()
         self.key = key
 
-    def forward(self, input):
-        """
+    def forward(self, inputs):
+        """Compute layer output.
+
         Args:
-            input (dict of torch.Tensor): SchNetPack format dictionary of input tensors.
+            inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
 
         Returns:
-            torch.Tensor: Extracted item.
+            torch.Tensor: layer output.
+
         """
-        return input[self.key]
+        return inputs[self.key]
 
 
 class ScaleShift(nn.Module):
