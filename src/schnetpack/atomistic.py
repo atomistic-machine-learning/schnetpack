@@ -10,11 +10,11 @@ import torch.nn as nn
 from torch import nn as nn
 from torch.autograd import grad
 
-import schnetpack.nn.activations
-import schnetpack.nn.base
-import schnetpack.nn.blocks
+from schnetpack.nn.base import GetItem, ScaleShift, Aggregate
+from schnetpack.nn.blocks import MLP, GatedNetwork
 from schnetpack.data import Structure
-import schnetpack.nn as L
+from schnetpack.nn.activations import shifted_softplus
+from schnetpack.nn.neighbors import atom_distances, neighbor_elements
 
 
 class AtomisticModel(nn.Module):
@@ -126,7 +126,7 @@ class Atomwise(OutputModule):
         aggregation_mode="sum",
         n_layers=2,
         n_neurons=None,
-        activation=schnetpack.nn.activations.shifted_softplus,
+        activation=shifted_softplus,
         return_contributions=False,
         requires_dr=False,
         create_graph=False,
@@ -161,19 +161,19 @@ class Atomwise(OutputModule):
 
         if outnet is None:
             self.out_net = nn.Sequential(
-                schnetpack.nn.base.GetItem("representation"),
-                schnetpack.nn.blocks.MLP(n_in, n_out, n_neurons, n_layers, activation),
+                GetItem("representation"),
+                MLP(n_in, n_out, n_neurons, n_layers, activation),
             )
         else:
             self.out_net = outnet
 
         # Make standardization separate
-        self.standardize = schnetpack.nn.base.ScaleShift(mean, stddev)
+        self.standardize = ScaleShift(mean, stddev)
 
         if aggregation_mode == "sum":
-            self.atom_pool = schnetpack.nn.base.Aggregate(axis=1, mean=False)
+            self.atom_pool = Aggregate(axis=1, mean=False)
         elif aggregation_mode == "avg":
-            self.atom_pool = schnetpack.nn.base.Aggregate(axis=1, mean=True)
+            self.atom_pool = Aggregate(axis=1, mean=True)
 
     def forward(self, inputs):
         r"""
@@ -230,7 +230,7 @@ class Energy(Atomwise):
         aggregation_mode="sum",
         n_layers=2,
         n_neurons=None,
-        activation=schnetpack.nn.activations.shifted_softplus,
+        activation=shifted_softplus,
         return_contributions=False,
         create_graph=False,
         return_force=False,
@@ -307,7 +307,7 @@ class DipoleMoment(Atomwise):
         n_in,
         n_layers=2,
         n_neurons=None,
-        activation=schnetpack.nn.activations.shifted_softplus,
+        activation=shifted_softplus,
         return_charges=False,
         requires_dr=False,
         outnet=None,
@@ -368,14 +368,14 @@ class ElementalAtomwise(Atomwise):
         create_graph=False,
         elements=frozenset((1, 6, 7, 8, 9)),
         n_hidden=50,
-        activation=schnetpack.nn.activations.shifted_softplus,
+        activation=shifted_softplus,
         return_contributions=False,
         mean=None,
         stddev=None,
         atomref=None,
         max_z=100,
     ):
-        outnet = schnetpack.nn.blocks.GatedNetwork(
+        outnet = GatedNetwork(
             n_in,
             n_out,
             elements,
@@ -434,14 +434,14 @@ class ElementalEnergy(Energy):
         create_graph=False,
         elements=frozenset((1, 6, 7, 8, 9)),
         n_hidden=50,
-        activation=schnetpack.nn.activations.shifted_softplus,
+        activation=shifted_softplus,
         return_contributions=False,
         mean=None,
         stddev=None,
         atomref=None,
         max_z=100,
     ):
-        outnet = schnetpack.nn.blocks.GatedNetwork(
+        outnet = GatedNetwork(
             n_in,
             n_out,
             elements,
@@ -497,11 +497,11 @@ class ElementalDipoleMoment(DipoleMoment):
         predict_magnitude=False,
         elements=frozenset((1, 6, 7, 8, 9)),
         n_hidden=50,
-        activation=schnetpack.nn.activations.shifted_softplus,
+        activation=shifted_softplus,
         mean=None,
         stddev=None,
     ):
-        outnet = schnetpack.nn.blocks.GatedNetwork(
+        outnet = GatedNetwork(
             n_in,
             n_out,
             elements,
@@ -531,7 +531,7 @@ class Polarizability(Atomwise):
         pool_mode="sum",
         n_layers=2,
         n_neurons=None,
-        activation=L.shifted_softplus,
+        activation=shifted_softplus,
         return_isotropic=False,
         return_contributions=False,
         create_graph=False,
@@ -567,7 +567,7 @@ class Polarizability(Atomwise):
         atom_mask = inputs[Structure.atom_mask]
 
         # Get environment distances and positions
-        distances, dist_vecs = L.atom_distances(positions, neighbors, return_vecs=True)
+        distances, dist_vecs = atom_distances(positions, neighbors, return_vecs=True)
 
         # Get atomic contributions
         contributions = self.out_net(inputs)
@@ -584,8 +584,8 @@ class Polarizability(Atomwise):
 
         # Redistribute contributions to neighbors
         # B x A x N x 1
-        # neighbor_contributions = L.neighbor_elements(c1, neighbors)
-        neighbor_contributions = L.neighbor_elements(contributions, neighbors)
+        # neighbor_contributions = neighbor_elements(c1, neighbors)
+        neighbor_contributions = neighbor_elements(contributions, neighbors)
 
         if self.cutoff_network is not None:
             f_cut = self.cutoff_network(distances)[..., None]
