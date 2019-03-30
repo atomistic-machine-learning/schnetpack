@@ -89,13 +89,15 @@ class GetItem(nn.Module):
 
 
 class ScaleShift(nn.Module):
-    """
-    Standardization layer encoding the standardization of output layers according to:
-    :math:`X_\sigma = (X - \mu_X) / \sigma_X`
+    r"""Scale and shift layer for standardization.
+
+    .. math::
+       y = x \times \sigma + \mu
 
     Args:
-        mean (torch.Tensor): Mean of data.
-        stddev (torch.Tensor): Standard deviation of data.
+        mean (torch.Tensor): mean value :math:`\mu`.
+        stddev (torch.Tensor): standard deviation value :math:`\sigma`.
+
     """
 
     def __init__(self, mean, stddev):
@@ -104,12 +106,14 @@ class ScaleShift(nn.Module):
         self.register_buffer("stddev", stddev)
 
     def forward(self, input):
-        """
+        """Compute layer output.
+
         Args:
-            input (torch.Tensor): Input data.
+            input (torch.Tensor): input data.
 
         Returns:
-            torch.Tensor: Transformed data.
+            torch.Tensor: layer output.
+
         """
         y = input * self.stddev + self.mean
         return y
