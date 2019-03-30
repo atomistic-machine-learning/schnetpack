@@ -4,19 +4,24 @@ from torch.nn.init import xavier_uniform_
 
 from schnetpack.nn.initializers import zeros_initializer
 
+
 __all__ = ["Dense", "GetItem", "ScaleShift", "Standardize", "Aggregate"]
 
 
 class Dense(nn.Linear):
-    """ Applies a dense layer with activation: :math:`y = activation(Wx + b)`
+    r"""Fully connected linear layer with activation function.
+
+    .. math::
+       y = activation(xW^T + b)
 
     Args:
-        in_features (int): number of input feature
-        out_features (int): number of output features
-        bias (bool): If set to False, the layer will not adapt the bias. (default: True)
-        activation (callable): activation function (default: None)
-        weight_init (callable): function that takes weight tensor and initializes (default: xavier)
-        bias_init (callable): function that takes bias tensor and initializes (default: zeros initializer)
+        in_features (int): number of input feature :math:`x`.
+        out_features (int): number of output features :math:`y`.
+        bias (bool, optional): if False, the layer will not adapt bias :math:`b`.
+        activation (callable, optional): if None, no activation function is used.
+        weight_init (callable, optional): weight initializer from current weight.
+        bias_init (callable, optional): bias initializer from current bias.
+
     """
 
     def __init__(
@@ -31,29 +36,30 @@ class Dense(nn.Linear):
         self.weight_init = weight_init
         self.bias_init = bias_init
         self.activation = activation
-
+        # initialize linear layer y = xW^T + b
         super(Dense, self).__init__(in_features, out_features, bias)
 
     def reset_parameters(self):
-        """
-        Reinitialize model parameters.
-        """
+        """Reinitialize model weight and bias values."""
         self.weight_init(self.weight)
         if self.bias is not None:
             self.bias_init(self.bias)
 
     def forward(self, inputs):
-        """
+        """Compute layer output.
+
         Args:
-            inputs (dict of torch.Tensor): SchNetPack format dictionary of input tensors.
+            inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
 
         Returns:
-            torch.Tensor: Output of the dense layer.
+            torch.Tensor: layer output.
+
         """
+        # compute linear layer y = xW^T + b
         y = super(Dense, self).forward(inputs)
+        # add activation function
         if self.activation:
             y = self.activation(y)
-
         return y
 
 
