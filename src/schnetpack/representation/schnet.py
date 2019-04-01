@@ -1,4 +1,3 @@
-
 import torch
 import torch.nn as nn
 
@@ -143,7 +142,7 @@ class SchNet(nn.Module):
         self.charged_systems = charged_systems
         if charged_systems:
             self.charge = nn.Parameter(torch.Tensor(1, n_atom_basis))
-            self.charge.data.normal_(0, 1.0 / n_atom_basis**0.5)
+            self.charge.data.normal_(0, 1.0 / n_atom_basis ** 0.5)
 
         # interaction network
         if coupled_interactions:
