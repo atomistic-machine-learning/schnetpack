@@ -269,7 +269,6 @@ def train(args, model, train_loader, val_loader, device):
     optimizer = Adam(trainable_params, lr=args.lr)
 
     schedule = spk.train.ReduceLROnPlateauHook(
-        optimizer,
         patience=args.lr_patience,
         factor=args.lr_decay,
         min_lr=args.lr_min,

@@ -67,11 +67,11 @@ class AtomisticModel(nn.Module):
 
 
 class OutputModule(nn.Module):
-    r"""
-    Base class for output modules.
+    r"""Base class for output modules.
 
     Args:
-        requires_dr (bool): specifies if the derivative of the ouput is required
+        requires_dr (bool, optional): specifies if the derivative of the ouput is required.
+
     """
 
     def __init__(self, requires_dr=False):
@@ -199,30 +199,30 @@ class Atomwise(OutputModule):
 
 
 class Energy(Atomwise):
+    """Energy Prediction Class.
+
+    Args:
+        n_in (int): dimension of input representation.
+        aggregation_mode (str, optional): Mode of aggregation. Should be one of
+            - sum
+            - avg
+        n_layers (int, optional): number of nn in output network.
+        n_neurons (list of int or None, optional): number of neurons in each layer
+            of the output network. If None, divide neurons by 2 in each layer.
+        activation (callable, optional): activation function for hidden nn.
+        return_contributions (bool, optional): if True, latent atomic contributions
+            are returned as well.
+        create_graph (bool, optional): if True, graph of forces is created.
+        return_force (bool, optional): if True, forces will be calculated.
+        mean (torch.FloatTensor, optional): mean of energy.
+        stddev (torch.FloatTensor, optional): standard deviation of the energy.
+        atomref (torch.Tensor, optional): reference single-atom properties.
+        max_z (int, optional):
+        outnet (callable, optional): network used for atomistic outputs.
+            Takes schnetpack input dictionary as input. Output is not normalized.
+            If set to None, a pyramidal network is generated automatically.
+
     """
-        Predicts energy.
-
-        Args:
-            n_in (int): input dimension of representation
-            pool_mode (str): one of {sum, avg} (default: sum)
-            n_layers (int): number of nn in output network (default: 2)
-            n_neurons (list of int or None): number of neurons in each layer of the output network.
-                                              If `None`, divide neurons by 2 in each layer. (default: none)
-            activation (function): activation function for hidden nn (default: spk.nn.activations.shifted_softplus)
-            return_contributions (bool): If True, latent atomic contributions are returned as well (default: False)
-            create_graph (bool): if True, graph of forces is created (default: False)
-            return_force (bool): if True, forces will be calculated (default: False)
-            mean (torch.FloatTensor): mean of energy (default: None)
-            stddev (torch.FloatTensor): standard deviation of the energy (default: None)
-            atomref (torch.Tensor): reference single-atom properties
-            outnet (callable): network used for atomistic outputs. Takes schnetpack input dictionary as input. Output is
-                               not normalized. If set to None (default), a pyramidal network is generated automatically.
-
-        Returns:
-            tuple: Prediction for energy.
-
-            If requires_dr is true additionally returns forces
-        """
 
     def __init__(
         self,

@@ -21,7 +21,7 @@ __all__ = [
 
 
 class Hook:
-    """ Base class for hooks """
+    """Base class for hooks."""
 
     @property
     def state_dict(self):
@@ -66,20 +66,15 @@ class Hook:
 
 
 class LoggingHook(Hook):
-    """ Base class for hooks for logging.
+    """Base class for logging hooks.
 
-        This class serves as base class for logging hooks.
+    Args:
+        log_path (str): path to directory in which log files will be stored.
+        metrics (list): metrics to log; each metric has to be a subclass of spk.Metric.
+        log_train_loss (bool, optional): enable logging of training loss.
+        log_validation_loss (bool, optional): enable logging of validation loss.
+        log_learning_rate (bool, optional): enable logging of current learning rate.
 
-        Args:
-            log_path (str): path to directory to which log files will be written.
-            metrics (list): list containing all metrics that will be logged.
-                Metrics have to be subclass of spk.Metric.
-            log_train_loss (bool): enable logging of training loss
-                (default: True)
-            log_validation_loss (bool): enable logging of validation loss
-                (default: True)
-            log_learning_rate (bool): enable logging of current learning rate
-                (default: True)
     """
 
     def __init__(
@@ -108,8 +103,9 @@ class LoggingHook(Hook):
 
     def on_batch_end(self, trainer, train_batch, result, loss):
         if self.log_train_loss:
-            self._train_loss += float(loss.data)
-            self._counter += 1
+            n_samples = list(result.values())[0].size(0)
+            self._train_loss += float(loss.data) * n_samples
+            self._counter += n_samples
 
     def on_validation_begin(self, trainer):
         for metric in self.metrics:
@@ -121,25 +117,17 @@ class LoggingHook(Hook):
 
 
 class CSVHook(LoggingHook):
-    """ Hook for logging to csv files.
+    """Hook for logging training process to CSV files.
 
-            This class provides an interface to write logging information about
-            the training process to csv files.
+    Args:
+        log_path (str): path to directory in which log files will be stored.
+        metrics (list): metrics to log; each metric has to be a subclass of spk.Metric.
+        log_train_loss (bool, optional): enable logging of training loss.
+        log_validation_loss (bool, optional): enable logging of validation loss.
+        log_learning_rate (bool, optional): enable logging of current learning rate.
+        every_n_epochs (int, optional): epochs after which logging takes place.
 
-            Args:
-                log_path (str): path to directory to which log files will be
-                    written.
-                metrics (list): list containing all metrics to be logged.
-                    Metrics have to be subclass of spk.Metric.
-                log_train_loss (bool): enable logging of training loss
-                    (default: True)
-                log_validation_loss (bool): enable logging of validation loss
-                    (default: True)
-                log_learning_rate (bool): enable logging of current learning
-                    rate (default: True)
-                every_n_epochs (int): interval after which logging takes place
-                    (default: 1)
-        """
+    """
 
     def __init__(
         self,
@@ -215,18 +203,10 @@ class CSVHook(LoggingHook):
                 log += "," + str(trainer.optimizer.param_groups[0]["lr"])
 
             if self.log_train_loss:
-                if hasattr(self._train_loss, "__iter__"):
-                    train_string = ",".join([str(k) for k in self._train_loss])
-                    log += "," + train_string
-                else:
-                    log += "," + str(self._train_loss)
+                log += "," + str(self._train_loss / self._counter)
 
             if self.log_validation_loss:
-                if hasattr(val_loss, "__iter__"):
-                    valid_string = ",".join([str(k) for k in val_loss])
-                    log += "," + valid_string
-                else:
-                    log += "," + str(val_loss)
+                log += "," + str(val_loss)
 
             if len(self.metrics) > 0:
                 log += ","
@@ -245,23 +225,18 @@ class CSVHook(LoggingHook):
 
 
 class TensorboardHook(LoggingHook):
-    """ Hook for logging to tensorboard.
+    """Hook for logging training process to tensorboard.
 
-        This class provides an interface to write logging information about the
-        training process to tensorboard.
+    Args:
+        log_path (str): path to directory in which log files will be stored.
+        metrics (list): metrics to log; each metric has to be a subclass of spk.Metric.
+        log_train_loss (bool, optional): enable logging of training loss.
+        log_validation_loss (bool, optional): enable logging of validation loss.
+        log_learning_rate (bool, optional): enable logging of current learning rate.
+        every_n_epochs (int, optional): epochs after which logging takes place.
+        img_every_n_epochs (int, optional):
+        log_histogram (bool, optional):
 
-        Args:
-            log_path (str): path to directory to which log files will be written.
-            metrics (list): list containing all metrics that will be logged.
-                Metrics have to be subclass of spk.Metric.
-            log_train_loss (bool): enable logging of training loss
-                (default: True)
-            log_validation_loss (bool): enable logging of validation loss
-                (default: True)
-            log_learning_rate (bool): enable logging of current learning rate
-                (default: True)
-            every_n_epochs (int): interval after which logging takes place
-                (default: 1)
     """
 
     def __init__(
@@ -348,16 +323,14 @@ class TensorboardHook(LoggingHook):
 
 
 class EarlyStoppingHook(Hook):
-    """ Hook for early stopping.
+    r"""Hook to stop training if validation loss fails to improve.
 
-        This hook can be used to stop training early if the validation loss has
-        not improved over a certain number of epochs.
+    Args:
+        patience (int): number of epochs which can pass without improvement
+            of validation loss before training ends.
+        threshold_ratio (float, optional): counter increases if
+            curr_val_loss > (1-threshold_ratio) * best_loss
 
-        Args:
-            patience (int): number of epochs which can pass without improvement
-                of validation loss before training ends.
-            threshold_ratio (float): counter increases if
-                curr_val_loss>(1-threshold_ratio)*best_loss (default: 0.0001)
     """
 
     def __init__(self, patience, threshold_ratio=0.0001):
@@ -440,13 +413,11 @@ class WarmRestartHook(Hook):
 
 
 class MaxEpochHook(Hook):
-    """Hook for stopping after a maximal number of epochs.
+    """Hook to stop training if a maximal number of epochs is reached.
 
-       This hook can be used to stop training early if a certain number of
-       epochs have passed.
+    Args:
+       max_epochs (int): maximal number of epochs.
 
-       Args:
-           max_epochs (int): maximal number of epochs.
    """
 
     def __init__(self, max_epochs):
@@ -458,13 +429,11 @@ class MaxEpochHook(Hook):
 
 
 class MaxStepHook(Hook):
-    """ Hook for stopping after a maximal number of steps.
+    """Hook to stop training if a maximal number of steps is reached.
 
-        This hook can be used to stop training early if a certain number of
-        steps have passed.
+    Args:
+        max_steps (int): maximal number of steps.
 
-        Args:
-            max_steps (int): maximal number of steps.
     """
 
     def __init__(self, max_steps):
@@ -478,14 +447,14 @@ class MaxStepHook(Hook):
 class LRScheduleHook(Hook):
     """Base class for learning rate scheduling hooks.
 
-      This class provides a thin wrapper around
-      torch.optim.lr_schedule._LRScheduler.
+    This class provides a thin wrapper around torch.optim.lr_schedule._LRScheduler.
 
-      Args:
-          scheduler (torch.optim.lr_schedule._LRScheduler): scheduler.
-          each_step (bool): if set to true (false) scheduler.step() is called
-                            every step (every epoch) (default: False)
-      """
+    Args:
+        scheduler (torch.optim.lr_schedule._LRScheduler): scheduler.
+        each_step (bool, optional): if set to True scheduler.step() is called every
+            step, otherwise every epoch.
+
+    """
 
     def __init__(self, scheduler, each_step=False):
         self.scheduler = scheduler
@@ -512,30 +481,28 @@ class LRScheduleHook(Hook):
 
 
 class ReduceLROnPlateauHook(Hook):
-    """Hook for reduce plateau learning rate scheduling.
+    r"""Hook for reduce plateau learning rate scheduling.
 
-      This class provides a thin wrapper around
-      torch.optim.lr_schedule.ReduceLROnPlateau. It takes the parameters
-      of ReduceLROnPlateau as arguments and creates a scheduler from it whose
-      step() function will be called every epoch.
+    This class provides a thin wrapper around
+    torch.optim.lr_schedule.ReduceLROnPlateau. It takes the parameters
+    of ReduceLROnPlateau as arguments and creates a scheduler from it whose
+    step() function will be called every epoch.
 
-      Args:
-        factor (float): Factor by which the learning rate will be
-            reduced. new_lr = lr * factor. (default: 0.2).
-        patience (int): Number of epochs with no improvement after
-            which learning rate will be reduced. For example, if
-            `patience = 2`, then we will ignore the first 2 epochs
-            with no improvement, and will only decrease the LR after the
-            3rd epoch if the loss still hasn't improved then.
-            (default: 25).
-        min_lr (float or list): A scalar or a list of scalars. A
-            lower bound on the learning rate of all param groups
-            or each group respectively. (default: 1e-6).
-        window_length (int): window over which the accumulated loss will be
-                             averaged. (default: 1).
-        stop_after_min (bool): if enabled stops after minimal learning rate is
-                               reached (default: False).
-      """
+    Args:
+        patience (int, optional): number of epochs with no improvement after which
+            learning rate will be reduced. For example, if `patience = 2`, then we
+            will ignore the first 2 epochs with no improvement, and will only
+            decrease the LR after the 3rd epoch if the loss still hasn't improved then.
+        factor (float, optional): factor by which the learning rate will be reduced.
+            new_lr = lr * factor.
+        min_lr (float or list, optional): scalar or list of scalars. A lower bound on
+            the learning rate of all param groups or each group respectively.
+        window_length (int, optional): window over which the accumulated loss will
+            be averaged.
+        stop_after_min (bool, optional): if enabled stops after minimal learning rate
+            is reached.
+
+    """
 
     def __init__(
         self,
@@ -593,16 +560,17 @@ class ReduceLROnPlateauHook(Hook):
 class ExponentialDecayHook(Hook):
     """Hook for reduce plateau learning rate scheduling.
 
-      This class provides a thin wrapper around torch.optim.lr_schedule.StepLR.
-      It takes the parameters of StepLR as arguments and creates a scheduler
-      from it whose step() function will be called every
-      step.
+    This class provides a thin wrapper around torch.optim.lr_schedule.StepLR.
+    It takes the parameters of StepLR as arguments and creates a scheduler
+    from it whose step() function will be called every
+    step.
 
-      Args:
+    Args:
         gamma (float): Factor by which the learning rate will be
-            reduced. new_lr = lr * gamma (default: 0.96).
-        step_size (int): Period of learning rate decay (default: 100 000)
-      """
+            reduced. new_lr = lr * gamma
+        step_size (int): Period of learning rate decay.
+
+    """
 
     def __init__(self, gamma=0.96, step_size=100000):
         self.scheduler = None

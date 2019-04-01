@@ -12,17 +12,19 @@ __all__ = ["MaterialsProject"]
 
 
 class MaterialsProject(DownloadableAtomsData):
-    """ Materials Project data repository of bulk crystals.
+    """Materials Project (MP) database of bulk crystals.
 
-        This class adds convenience functions to download Materials Project data into pytorch.
+    This class adds convenient functions to download Materials Project data into
+    pytorch.
 
-        Args:
-            path (str): path to directory containing mp database.
-            cutoff (float): cutoff for bulk interactions
-            apikey (str): materials project key needed to download the data (default: None)
-            download (bool): enable downloading if database does not exists (default: True)
-            subset (list): indices of subset. Set to None for entire dataset (default: None)
-            properties (list): properties, e.g. formation_energy_per_atom
+    Args:
+        dbpath (str): path to directory containing database.
+        cutoff (float): cutoff for bulk interactions.
+        apikey (str, optional): materials project key needed to download the data.
+        download (bool, optional): enable downloading if database does not exists.
+        subset (list, optional): indices to subset. Set to None for entire database.
+        properties (list, optional): properties in mp, e.g. formation_energy_per_atom.
+        collect_triples (bool, optional): Set to True if angular features are needed.
 
     """
 
