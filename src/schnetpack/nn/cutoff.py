@@ -85,7 +85,7 @@ class HardCutoff(nn.Module):
 
     .. math::
        f(r) = \begin{cases}
-        r & r \leqslant r_\text{cutoff} \\
+        1 & r \leqslant r_\text{cutoff} \\
         0 & r > r_\text{cutoff} \\
         \end{cases}
 
@@ -109,4 +109,4 @@ class HardCutoff(nn.Module):
 
         """
         mask = (distances <= self.cutoff).float()
-        return distances * mask
+        return mask
