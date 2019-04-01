@@ -93,8 +93,7 @@ class AngularDistribution(nn.Module):
             # angular_term = angular_term * triple_masks
             # is not working (nan*0 = nan)
             angular_term[triple_masks == 0] = 0.0
-            triple_masks = torch.unsqueeze(triple_masks, -1)
-            angular_distribution = angular_distribution * triple_masks
+            angular_distribution[triple_masks == 0] = 0.0
 
         # Apply weights here, since dimension is still the same
         if elemental_weights is not None:

@@ -57,6 +57,7 @@ def atomic_numbers(batchsize, n_atoms):
     atoms = np.random.randint(1, 9, (1, n_atoms))
     return torch.LongTensor(np.repeat(atoms, batchsize, axis=0))
 
+
 @pytest.fixture
 def atom_mask(atomic_numbers):
     return torch.ones(atomic_numbers.shape)
@@ -84,9 +85,10 @@ def cell_offset(batchsize, n_atoms):
 
 @pytest.fixture
 def neighbors(batchsize, n_atoms):
-    neighbors = np.array([range(n_atoms)]*n_atoms)
+    neighbors = np.array([range(n_atoms)] * n_atoms)
     neighbors = neighbors[~np.eye(neighbors.shape[0], dtype=bool)].reshape(
-        neighbors.shape[0], -1)[np.newaxis, :]
+        neighbors.shape[0], -1
+    )[np.newaxis, :]
     return torch.LongTensor(np.repeat(neighbors, batchsize, axis=0))
 
 
@@ -96,7 +98,9 @@ def neighbor_mask(batchsize, n_atoms):
 
 
 @pytest.fixture
-def schnet_batch(atomic_numbers, atom_mask, positions, cell, cell_offset, neighbors, neighbor_mask):
+def schnet_batch(
+    atomic_numbers, atom_mask, positions, cell, cell_offset, neighbors, neighbor_mask
+):
     inputs = {}
     inputs[Structure.Z] = atomic_numbers
     inputs[Structure.R] = positions
@@ -133,7 +137,7 @@ def assert_params_changed(model, input, exclude=[]):
         exclude (list): layers that are not necessarily updated
     """
     # save state-dict
-    torch.save(model.state_dict(), 'before')
+    torch.save(model.state_dict(), "before")
     # do one training step
     optimizer = Adam(model.parameters())
     loss_fn = MSELoss()
@@ -144,11 +148,13 @@ def assert_params_changed(model, input, exclude=[]):
     optimizer.step()
     # check if all trainable parameters have changed
     after = model.state_dict()
-    before = torch.load('before')
+    before = torch.load("before")
     for key in before.keys():
         if np.array([key.startswith(exclude_layer) for exclude_layer in exclude]).any():
             continue
-        assert (before[key] != after[key]).any(), '{} layer has not been updated!'.format(key)
+        assert (
+            before[key] != after[key]
+        ).any(), "{} layer has not been updated!".format(key)
 
 
 def assert_equal_shape(model, batch, out_shape):
@@ -161,21 +167,32 @@ def assert_equal_shape(model, batch, out_shape):
         out_shape (list): desired output shape
     """
     pred = model(*batch)
-    assert list(pred.shape) == out_shape, 'Model does not return expected shape!'
+    assert list(pred.shape) == out_shape, "Model does not return expected shape!"
 
 
 def test_parameter_update_schnet(schnet_batch):
     model = SchNet()
     schnet_batch = [schnet_batch]
-    assert_params_changed(model, schnet_batch, exclude=['distance_expansion', 'interactions.0.cutoff_network',
-                                                        'interactions.0.cfconv.cutoff_network'])
+    assert_params_changed(
+        model,
+        schnet_batch,
+        exclude=[
+            "distance_expansion",
+            "interactions.0.cutoff_network",
+            "interactions.0.cfconv.cutoff_network",
+        ],
+    )
+
 
 def test_parameter_update_schnet_with_cutoff(schnet_batch, n_atom_basis):
     model_cosine = SchNet(n_atom_basis, cutoff_network=CosineCutoff)
     model_mollifier = SchNet(n_atom_basis, cutoff_network=MollifierCutoff)
     schnet_batch = [schnet_batch]
-    exclude = ['distance_expansion', 'interactions.0.cutoff_network',
-               'interactions.0.cfconv.cutoff_network']
+    exclude = [
+        "distance_expansion",
+        "interactions.0.cutoff_network",
+        "interactions.0.cfconv.cutoff_network",
+    ]
 
     assert_params_changed(model_cosine, schnet_batch, exclude=exclude)
     assert_params_changed(model_mollifier, schnet_batch, exclude=exclude)
@@ -184,8 +201,14 @@ def test_parameter_update_schnet_with_cutoff(schnet_batch, n_atom_basis):
 def test_gaussian_smearing_is_trainable(schnet_batch):
     model = SchNet(trainable_gaussians=True)
     schnet_batch = [schnet_batch]
-    assert_params_changed(model, schnet_batch, exclude=['interactions.0.cutoff_network',
-                                                        'interactions.0.cfconv.cutoff_network'])
+    assert_params_changed(
+        model,
+        schnet_batch,
+        exclude=[
+            "interactions.0.cutoff_network",
+            "interactions.0.cfconv.cutoff_network",
+        ],
+    )
 
 
 def test_shape_schnet(schnet_batch, batchsize, n_atoms, n_atom_basis):
@@ -201,19 +224,39 @@ def test_shape_schnet_with_cutoff(schnet_batch, batchsize, n_atoms, n_atom_basis
     model_mollifier = SchNet(n_atom_basis=n_atom_basis, cutoff_network=MollifierCutoff)
 
     assert_equal_shape(model_cosine, schnet_batch, [batchsize, n_atoms, n_atom_basis])
-    assert_equal_shape(model_mollifier, schnet_batch, [batchsize, n_atoms, n_atom_basis])
+    assert_equal_shape(
+        model_mollifier, schnet_batch, [batchsize, n_atoms, n_atom_basis]
+    )
 
 
-def test_shape_schnetinteraction(batchsize, n_atoms, n_atom_basis, single_spatial_basis,
-                                 n_filters, atomic_env, distances, neighbors, neighbor_mask):
+def test_shape_schnetinteraction(
+    batchsize,
+    n_atoms,
+    n_atom_basis,
+    single_spatial_basis,
+    n_filters,
+    atomic_env,
+    distances,
+    neighbors,
+    neighbor_mask,
+):
     model = SchNetInteraction(n_atom_basis, single_spatial_basis, n_filters, 5.0)
     out_shape = [batchsize, n_atoms, n_filters]
     inputs = [atomic_env, distances, neighbors, neighbor_mask]
     assert_equal_shape(model, inputs, out_shape)
 
 
-def test_shape_cfconv(batchsize, n_atom_basis, n_filters, filter_network, atomic_env,
-                      distances, neighbors, neighbor_mask, n_atoms):
+def test_shape_cfconv(
+    batchsize,
+    n_atom_basis,
+    n_filters,
+    filter_network,
+    atomic_env,
+    distances,
+    neighbors,
+    neighbor_mask,
+    n_atoms,
+):
     model = CFConv(n_atom_basis, n_filters, n_atom_basis, filter_network)
     out_shape = [batchsize, n_atoms, n_atom_basis]
     inputs = [atomic_env, distances, neighbors, neighbor_mask]
@@ -250,7 +293,7 @@ def test_shape_scale_shift():
     std = torch.rand(1)
     model = ScaleShift(mean, std)
     input_data = torch.rand((3, 4, 5))
-    inputs=[input_data]
+    inputs = [input_data]
     assert_equal_shape(model, inputs, list(input_data.shape))
 
 
@@ -259,21 +302,21 @@ def test_shape_standardize():
     std = torch.rand(1)
     model = Standardize(mean, std)
     input_data = torch.rand((3, 4, 5))
-    inputs=[input_data]
+    inputs = [input_data]
     assert_equal_shape(model, inputs, list(input_data.shape))
 
 
 def test_shape_aggregate():
     model = Aggregate(axis=1)
     input_data = torch.rand((3, 4, 5))
-    inputs=[input_data]
+    inputs = [input_data]
     out_shape = [3, 5]
     assert_equal_shape(model, inputs, out_shape)
 
 
 def test_shape_mlp():
     input_data = torch.rand((3, 4, 5))
-    inputs=[input_data]
+    inputs = [input_data]
     out_shape = [3, 4, 10]
     model = MLP(input_data.shape[-1], out_shape[-1])
     assert_equal_shape(model, inputs, out_shape)
@@ -281,10 +324,10 @@ def test_shape_mlp():
 
 def test_shape_tiled_multilayer_network():
     input_data = torch.rand((3, 4, 5))
-    inputs=[input_data]
+    inputs = [input_data]
     out = 10
     tiles = 3
-    out_shape = [3, 4, out*tiles]
+    out_shape = [3, 4, out * tiles]
     model = TiledMultiLayerNN(input_data.shape[-1], out, tiles)
     assert_equal_shape(model, inputs, out_shape)
 
@@ -312,7 +355,11 @@ def test_shape_cutoffs(distances):
 def test_hard_cutoff_functionality(batchsize, n_atoms):
     cutoff = 20
     hard = HardCutoff(cutoff=cutoff)
-    distances = torch.arange(1, batchsize*n_atoms*(n_atoms-1)+1).reshape(batchsize, n_atoms, n_atoms-1).float()
+    distances = (
+        torch.arange(1, batchsize * n_atoms * (n_atoms - 1) + 1)
+        .reshape(batchsize, n_atoms, n_atoms - 1)
+        .float()
+    )
 
     assert torch.sum(hard(distances) != 0) == cutoff
 
@@ -329,5 +376,5 @@ def teardown_module():
     """
     Remove artifacts that have been created during testing.
     """
-    if os.path.exists('before'):
-        os.remove('before')
+    if os.path.exists("before"):
+        os.remove("before")
