@@ -94,17 +94,18 @@ def test_cutoff_hard_default():
     # random tensor with elements in [0, 1)
     torch.manual_seed(42)
     dist = torch.rand((1, 20), dtype=torch.float)
+    # compute expected values
+    def expt(distances):
+        res = torch.ones_like(distances, dtype=torch.float)
+        res[distances > 5.0] = 0.
+        return res
     # check cutoff values
-    assert torch.allclose(dist, cutoff(dist), atol=0., rtol=1.0e-7)
-    assert torch.allclose(0.5 * dist, cutoff(0.5 * dist), atol=0., rtol=1.0e-7)
-    assert torch.allclose(3.5 * dist, cutoff(3.5 * dist), atol=0., rtol=1.0e-7)
-    assert torch.allclose(4.9 * dist, cutoff(4.9 * dist), atol=0., rtol=1.0e-7)
-    assert torch.allclose(5.0 * dist, cutoff(5.0 * dist), atol=0., rtol=1.0e-7)
-    # compute cutoff values and expected values
-    comp = cutoff(7.5 * dist)
-    expt = 7.5 * dist
-    expt[expt >= 5.0] = 0.
-    assert torch.allclose(expt, comp, atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt(dist), cutoff(dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt(0.5 * dist), cutoff(0.5 * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt(3.5 * dist), cutoff(3.5 * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt(4.9 * dist), cutoff(4.9 * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt(5.0 * dist), cutoff(5.0 * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt(7.5 * dist), cutoff(7.5 * dist), atol=0., rtol=1.0e-7)
 
 
 def test_cutoff_hard():
@@ -115,12 +116,13 @@ def test_cutoff_hard():
     # random tensor with elements in [0, 1)
     torch.manual_seed(42)
     dist = torch.rand((30, 20, 10), dtype=torch.float)
+    # compute expected values
+    def expt(distances):
+        res = torch.ones_like(distances, dtype=torch.float)
+        res[distances > 2.5] = 0.
+        return res
     # check cutoff values
-    assert torch.allclose(dist, cutoff(dist), atol=0., rtol=1.0e-7)
-    assert torch.allclose(0.5 * dist, cutoff(0.5 * dist), atol=0., rtol=1.0e-7)
-    assert torch.allclose(2.2 * dist, cutoff(2.2 * dist), atol=0., rtol=1.0e-7)
-    # compute cutoff values and expected values
-    comp = cutoff(3.7 * dist)
-    expt = 3.7 * dist
-    expt[expt >= 2.5] = 0.
-    assert torch.allclose(expt, comp, atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt(dist), cutoff(dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt(0.5 * dist), cutoff(0.5 * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt(2.2 * dist), cutoff(2.2 * dist), atol=0., rtol=1.0e-7)
+    assert torch.allclose(expt(3.7 * dist), cutoff(3.7 * dist), atol=0., rtol=1.0e-7)
