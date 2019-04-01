@@ -20,6 +20,7 @@ def batch():
     )
 
 
+
 @pytest.fixture
 def result():
     return dict(
@@ -41,6 +42,7 @@ def diff(batch, result):
     )
 
 
+
 @pytest.fixture
 def mse_result(diff):
     return dict(
@@ -49,12 +51,14 @@ def mse_result(diff):
     )
 
 
+
 @pytest.fixture
 def mae_result(diff):
     return dict(
         dydx=torch.sum(torch.abs(diff["dydx"])).detach().cpu().data.numpy() / 15,
         y=torch.sum(torch.abs(diff["y"])).detach().cpu().data.numpy() / 2,
     )
+
 
 
 @pytest.fixture
@@ -73,6 +77,7 @@ def bias_result(diff):
     )
 
 
+
 @pytest.fixture
 def heatmap_mae_result(diff):
     return dict(
@@ -81,9 +86,11 @@ def heatmap_mae_result(diff):
     )
 
 
+
 @pytest.fixture
 def energy_mse():
     return MeanSquaredError("_energy", "y", name="energy")
+
 
 
 @pytest.fixture
@@ -91,9 +98,11 @@ def forces_mse():
     return MeanSquaredError("_forces", "dydx", name="forces", element_wise=True)
 
 
+
 @pytest.fixture
 def energy_rmse():
     return RootMeanSquaredError("_energy", "y", name="energy")
+
 
 
 @pytest.fixture
@@ -106,9 +115,11 @@ def energy_bias():
     return ModelBias("_energy", "y", name="energy")
 
 
+
 @pytest.fixture
 def forces_bias():
     return ModelBias("_forces", "dydx", name="forces", element_wise=True)
+
 
 
 @pytest.fixture
@@ -116,9 +127,11 @@ def energy_mae():
     return MeanAbsoluteError("_energy", "y", name="energy")
 
 
+
 @pytest.fixture
 def forces_mae():
     return MeanAbsoluteError("_forces", "dydx", name="forces", element_wise=True)
+
 
 
 @pytest.fixture
@@ -126,14 +139,17 @@ def energy_heatmapmae():
     return HeatmapMAE("_energy", "y")
 
 
+
 @pytest.fixture
 def forces_heatmapmae():
     return HeatmapMAE("_forces", "dydx", element_wise=True)
 
 
+
 @pytest.fixture
 def dipole_angle_mae():
     return AngleMAE("_dipole_moment", "_dipole_moment")
+
 
 
 @pytest.fixture

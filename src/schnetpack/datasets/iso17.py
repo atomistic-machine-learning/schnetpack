@@ -7,8 +7,7 @@ import numpy as np
 from urllib import request as request
 from urllib.error import HTTPError, URLError
 
-from schnetpack.data import DownloadableAtomsData, AtomsDataError
-from schnetpack.environment import SimpleEnvironmentProvider
+from schnetpack.data import DownloadableAtomsData
 
 
 class ISO17(DownloadableAtomsData):

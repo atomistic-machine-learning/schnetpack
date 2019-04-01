@@ -12,7 +12,7 @@ from schnetpack.data import Structure
 from schnetpack.nn.acsf import GaussianSmearing
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.nn.base import Dense, GetItem, ScaleShift, Standardize, Aggregate
-from schnetpack.nn.blocks import MLP, TiledMultiLayerNN, ElementalGate, GatedNetwork
+from schnetpack.nn.blocks import MLP, TiledMultiLayerNN, ElementalGate
 from schnetpack.nn.cutoff import CosineCutoff, MollifierCutoff, HardCutoff
 from schnetpack.nn.neighbors import NeighborElements
 

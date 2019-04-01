@@ -1,7 +1,6 @@
 import numpy as np
 from ase.db import connect
 from ase import Atoms
-from shutil import copyfile
 from schnetpack.atomistic import Structure
 
 

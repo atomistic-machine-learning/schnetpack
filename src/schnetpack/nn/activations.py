@@ -1,17 +1,18 @@
 import numpy as np
-from torch.nn import functional as F
+from torch.nn import functional
 
 
 def shifted_softplus(x):
-    """
-    Shifted softplus activation function of the form:
-    :math:`y = ln( e^{-x} + 1 ) - ln(2)`
+    r"""Compute shifted soft-plus activation function.
+
+    .. math::
+       y = \ln\left(1 + e^{-x}\right) - \ln(2)
 
     Args:
-        x (torch.Tensor): Input tensor
+        x (torch.Tensor): input tensor.
 
     Returns:
-        torch.Tensor: Shifted softplus applied to x
+        torch.Tensor: shifted soft-plus of input.
 
     """
-    return F.softplus(x) - np.log(2.0)
+    return functional.softplus(x) - np.log(2.0)
