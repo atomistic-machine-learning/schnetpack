@@ -103,9 +103,18 @@ class LoggingHook(Hook):
 
     def on_batch_end(self, trainer, train_batch, result, loss):
         if self.log_train_loss:
-            n_samples = list(result.values())[0].size(0)
+            n_samples = self._batch_size(result)
             self._train_loss += float(loss.data) * n_samples
             self._counter += n_samples
+
+    def _batch_size(self, result):
+        if type(result) is dict:
+            n_samples = list(result.values())[0].size(0)
+        elif type(result) in [list, tuple]:
+            n_samples = result[0].size(0)
+        else:
+            n_samples = result.size(0)
+        return n_samples
 
     def on_validation_begin(self, trainer):
         for metric in self.metrics:
