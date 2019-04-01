@@ -27,12 +27,12 @@ class AngularDistribution(nn.Module):
     """
 
     def __init__(
-            self,
-            radial_filter,
-            angular_filter,
-            cutoff_functions=CosineCutoff,
-            crossterms=False,
-            pairwise_elements=False,
+        self,
+        radial_filter,
+        angular_filter,
+        cutoff_functions=CosineCutoff,
+        crossterms=False,
+        pairwise_elements=False,
     ):
         super(AngularDistribution, self).__init__()
         self.radial_filter = radial_filter
@@ -69,7 +69,7 @@ class AngularDistribution(nn.Module):
 
         # Use cosine rule to compute cos( theta_ijk )
         cos_theta = (torch.pow(r_ij, 2) + torch.pow(r_ik, 2) - torch.pow(r_jk, 2)) / (
-                2.0 * r_ij * r_ik
+            2.0 * r_ij * r_ik
         )
 
         # Required in order to catch NaNs during backprop
@@ -101,8 +101,8 @@ class AngularDistribution(nn.Module):
                 Z_ij, Z_ik = elemental_weights
                 Z_ijk = Z_ij * Z_ik
                 angular_distribution = (
-                        torch.unsqueeze(angular_distribution, -1)
-                        * torch.unsqueeze(Z_ijk, -2).float()
+                    torch.unsqueeze(angular_distribution, -1)
+                    * torch.unsqueeze(Z_ijk, -2).float()
                 )
             else:
                 # Outer product to emulate vanilla SF behavior
@@ -121,8 +121,8 @@ class AngularDistribution(nn.Module):
         # (Nb x Nat x NNeigpair x Nang) for angular_term, where the latter dims are orthogonal
         # To multiply them:
         angular_distribution = (
-                angular_distribution[:, :, :, :, None, :]
-                * angular_term[:, :, :, None, :, None]
+            angular_distribution[:, :, :, :, None, :]
+            * angular_term[:, :, :, None, :, None]
         )
         # For the sum over all contributions
         angular_distribution = torch.sum(angular_distribution, 2)
@@ -217,7 +217,7 @@ class GaussianSmearing(nn.Module):
     """
 
     def __init__(
-            self, start=0.0, stop=5.0, n_gaussians=50, centered=False, trainable=False
+        self, start=0.0, stop=5.0, n_gaussians=50, centered=False, trainable=False
     ):
         super(GaussianSmearing, self).__init__()
         offset = torch.linspace(start, stop, n_gaussians)
@@ -287,8 +287,8 @@ class RadialDistribution(nn.Module):
         # Weigh elements if requested
         if elemental_weights is not None:
             radial_distribution = (
-                    radial_distribution[:, :, :, :, None]
-                    * elemental_weights[:, :, :, None, :].float()
+                radial_distribution[:, :, :, :, None]
+                * elemental_weights[:, :, :, None, :].float()
             )
 
         radial_distribution = torch.sum(radial_distribution, 2)
