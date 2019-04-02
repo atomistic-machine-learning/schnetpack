@@ -423,7 +423,7 @@ def get_model(
 ):
     if train_args.cutoff_function == "hard":
         cutoff_network = HardCutoff()
-    elif train_args.cutoff_function == "cos":
+    elif train_args.cutoff_function == "cosine":
         cutoff_network = CosineCutoff()
     elif train_args.cutoff_function == "mollifier":
         cutoff_network = MollifierCutoff()
