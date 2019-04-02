@@ -184,7 +184,7 @@ def gaussian_smearing(distances, offset, widths, centered=False):
         torch.Tensor: smeared distances (B x N_at x N_nbh x N_gauss)
 
     """
-    if centered == False:
+    if not centered:
         # Compute width of Gaussians (using an overlap of 1 STDDEV)
         # widths = offset[1] - offset[0]
         coeff = -0.5 / torch.pow(widths, 2)
