@@ -14,6 +14,7 @@ from torch.utils.data.sampler import RandomSampler
 
 import schnetpack as spk
 from schnetpack.datasets import MD17
+from schnetpack.nn.cutoff import HardCutoff, CosineCutoff, MollifierCutoff
 from schnetpack.utils import compute_params, to_json, read_from_json
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -157,6 +158,12 @@ def get_parser():
         type=float,
         default=5.0,
         help="Cutoff radius of local environment (default: %(default)s)",
+    )
+    schnet_parser.add_argument(
+        "--cutoff_function",
+        help="Functional form of the cutoff",
+        choices=["hard", "cosine", "mollifier"],
+        default="hard",
     )
     schnet_parser.add_argument(
         "--num_gaussians",
@@ -414,6 +421,13 @@ def get_model(
     parallelize=False,
     mode="train",
 ):
+    if train_args.cutoff_function == "hard":
+        cutoff_network = HardCutoff()
+    elif train_args.cutoff_function == "cos":
+        cutoff_network = CosineCutoff()
+    elif train_args.cutoff_function == "mollifier":
+        cutoff_network = MollifierCutoff()
+
     if args.model == "schnet":
         representation = spk.representation.SchNet(
             args.features,
@@ -421,6 +435,7 @@ def get_model(
             args.interactions,
             args.cutoff,
             args.num_gaussians,
+            cutoff_network=cutoff_network,
         )
         atomwise_output = spk.atomistic.Energy(
             args.features,
