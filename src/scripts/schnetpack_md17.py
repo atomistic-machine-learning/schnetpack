@@ -422,11 +422,11 @@ def get_model(
     mode="train",
 ):
     if train_args.cutoff_function == "hard":
-        cutoff_network = HardCutoff()
+        cutoff_network = HardCutoff
     elif train_args.cutoff_function == "cosine":
-        cutoff_network = CosineCutoff()
+        cutoff_network = CosineCutoff
     elif train_args.cutoff_function == "mollifier":
-        cutoff_network = MollifierCutoff()
+        cutoff_network = MollifierCutoff
 
     if args.model == "schnet":
         representation = spk.representation.SchNet(
