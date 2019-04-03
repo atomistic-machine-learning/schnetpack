@@ -50,9 +50,9 @@ class AtomisticModel(nn.Module):
             inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
 
         Returns:
-            dict:
-            Returns either the predicted property or a dict (output_module -> property)
-            depending on whether output_modules is a Module or an iterable.
+            If `output_modules` is an instance on nn.OutputModule, predicted tensor
+            is returned. If `output_modules` is a sequence of nn.OutputModule
+            instances, a dictionary of {output_module: predicted_tensor} is returned.
 
         """
         if self.requires_dr:
