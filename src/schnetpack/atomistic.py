@@ -70,20 +70,24 @@ class AtomisticModel(nn.Module):
 
 
 class OutputModule(nn.Module):
-    r"""Base class for output modules.
+    """Base class for output modules.
 
     Args:
-        requires_dr (bool, optional): specifies if the derivative of the ouput is required.
+        requires_dr (bool, optional): if True, `forward` method returns the derivative
+            of the output as well.
 
     """
 
     def __init__(self, requires_dr=False):
-        self.requires_dr = requires_dr
         super(OutputModule, self).__init__()
+        self.requires_dr = requires_dr
 
     def forward(self, inputs):
-        r"""
-        Should be overwritten
+        """Define the computation performed at every call.
+
+        Args:
+            inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+
         """
         raise NotImplementedError
 
