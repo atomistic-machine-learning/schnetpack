@@ -218,7 +218,7 @@ class SchNet(nn.Module):
             x = x + v
 
             if self.return_intermediate:
-                xs.append(xs)
+                xs.append(x)
 
         if self.return_intermediate:
             return x, xs
