@@ -170,56 +170,53 @@ class BehlerAngular(nn.Module):
 
 
 def gaussian_smearing(distances, offset, widths, centered=False):
-    """
-    Perform gaussian smearing on interatomic distances.
+    r"""Smear interatomic distance values using Gaussian functions.
 
     Args:
-        distances (torch.Tensor): Variable holding the interatomic distances (B x N_at x N_nbh)
-        offset (torch.Tensor): torch tensor of offsets
-        centered (bool): If this flag is chosen, Gaussians are centered at the origin and the
-                  offsets are used to provide their widths (used e.g. for angular functions).
-                  Default is False.
+        distances (torch.Tensor): interatomic distances of (N_b x N_at x N_nbh) shape.
+        offset (torch.Tensor): offsets values of Gaussian functions.
+        widths: width values of Gaussian functions.
+        centered (bool, optional): If True, Gaussians are centered at the origin and
+            the offsets are used to as their widths (used e.g. for angular functions).
 
     Returns:
-        torch.Tensor: smeared distances (B x N_at x N_nbh x N_gauss)
+        torch.Tensor: smeared distances (N_b x N_at x N_nbh x N_g).
 
     """
     if not centered:
-        # Compute width of Gaussians (using an overlap of 1 STDDEV)
-        # widths = offset[1] - offset[0]
+        # compute width of Gaussian functions (using an overlap of 1 STDDEV)
         coeff = -0.5 / torch.pow(widths, 2)
         # Use advanced indexing to compute the individual components
         diff = distances[:, :, :, None] - offset[None, None, None, :]
     else:
-        # If Gaussians are centered, use offsets to compute widths
+        # if Gaussian functions are centered, use offsets to compute widths
         coeff = -0.5 / torch.pow(offset, 2)
-        # If centered Gaussians are requested, don't substract anything
+        # if Gaussian functions are centered, no offset is subtracted
         diff = distances[:, :, :, None]
-    # Compute and return Gaussians
+    # compute smear distance values
     gauss = torch.exp(coeff * torch.pow(diff, 2))
     return gauss
 
 
 class GaussianSmearing(nn.Module):
-    """
-    Wrapper class of gaussian_smearing function. Places a predefined number of Gaussian functions within the
-    specified limits.
+    r"""Smear layer using a set of Gaussian functions.
 
     Args:
-        start (float): Center of first Gaussian.
-        stop (float): Center of last Gaussian.
-        n_gaussians (int): Total number of Gaussian functions.
-        centered (bool):  if this flag is chosen, Gaussians are centered at the origin and the
-              offsets are used to provide their widths (used e.g. for angular functions).
-              Default is False.
-        trainable (bool): If set to True, widths and positions of Gaussians are adjusted during training. Default
-              is False.
+        start (float, optional): center of first Gaussian function, :math:`\mu_0`.
+        stop (float, optional): center of last Gaussian function, :math:`\mu_{N_g}`
+        n_gaussians (int, optional): total number of Gaussian functions, :math:`N_g`.
+        centered (bool, optional): If True, Gaussians are centered at the origin and
+            the offsets are used to as their widths (used e.g. for angular functions).
+        trainable (bool, optional): If True, widths and offset of Gaussian functions
+            are adjusted during training process.
+
     """
 
     def __init__(
         self, start=0.0, stop=5.0, n_gaussians=50, centered=False, trainable=False
     ):
         super(GaussianSmearing, self).__init__()
+        # compute offset and width of Gaussian functions
         offset = torch.linspace(start, stop, n_gaussians)
         widths = torch.FloatTensor((offset[1] - offset[0]) * torch.ones_like(offset))
         if trainable:
@@ -231,12 +228,14 @@ class GaussianSmearing(nn.Module):
         self.centered = centered
 
     def forward(self, distances):
-        """
+        """Compute smeared-gaussian distance values.
+
         Args:
-            distances (torch.Tensor): Tensor of interatomic distances.
+            distances (torch.Tensor): interatomic distance values of
+                (N_b x N_at x N_nbh) shape.
 
         Returns:
-            torch.Tensor: Tensor of convolved distances.
+            torch.Tensor: layer output of (N_b x N_at x N_nbh x N_g) shape.
 
         """
         return gaussian_smearing(

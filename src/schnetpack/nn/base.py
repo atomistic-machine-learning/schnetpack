@@ -49,7 +49,7 @@ class Dense(nn.Linear):
         """Compute layer output.
 
         Args:
-            inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+            inputs (dict of torch.Tensor): batch of input values.
 
         Returns:
             torch.Tensor: layer output.

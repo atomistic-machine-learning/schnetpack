@@ -8,32 +8,32 @@ def atom_distances(
     cell=None,
     cell_offsets=None,
     return_vecs=False,
-    return_directions=False,
+    normalize_vecs=False,
     neighbor_mask=None,
 ):
-    """
-    Use advanced torch indexing to compute differentiable distances
-    of every central atom to its relevant neighbors. Indices of the
-    neighbors to consider are stored in neighbors.
+    r"""Compute distance of every atom to its neighbors.
+
+    This function uses advanced torch indexing to compute differentiable distances
+    of every central atom to its relevant neighbors.
 
     Args:
-        positions (torch.Tensor): Atomic positions, differentiable torch
-            Variable (B x N_at x 3)
-        neighbors (torch.Tensor): Indices of neighboring
-            atoms (B x N_at x N_nbh)
-        cell (torch.Tensor): cell for periodic systems (B x 3 x 3)
-        cell_offsets (torch.Tensor): offset of atom in cell
-            coordinates (B x N_at x N_nbh x 3)
-        return_directions (bool): If true, also return direction cosines.
-        neighbor_mask (torch.Tensor, optional): Boolean mask for neighbor
-            positions. Required for the stable computation of forces in
-            molecules with different sizes.
+        positions (torch.Tensor): atomic Cartesian coordinates with (N_b x N_at x 3)
+            shape.
+        neighbors (torch.Tensor): indices of neighboring atoms to consider with
+            (N_b x N_at x N_nbh) shape.
+        cell (torch.tensor, optional): periodic cell of (N_b x 3 x 3) shape.
+        cell_offsets (torch.Tensor, optional): offset of atom in cell coordinates
+            with (N_b x N_at x N_nbh x 3) shape.
+        return_vecs (bool, optional): if True, also returns direction vectors.
+        normalize_vecs (bool, optional): if True, normalize direction vectors.
+        neighbor_mask (torch.Tensor, optional): boolean mask for neighbor positions.
 
     Returns:
-        torch.Tensor: Distances of every atom to its
-            neighbors (B x N_at x N_nbh)
-        torch.Tensor: Direction cosines of every atom to its
-            neighbors (B x N_at x N_nbh x 3) (optional)
+        torch.Tensor: distance of every atom to its neighbors with
+            (N_b x N_at x N_nbh) shape.
+        torch.Tensor: direction cosines of every atom to its neighbors with
+            (N_b x N_at x N_nbh x 3) shape.
+
     """
 
     # Construct auxiliary index vector
@@ -67,26 +67,23 @@ def atom_distances(
         tmp_distances[neighbor_mask != 0] = distances[neighbor_mask != 0]
         distances = tmp_distances
 
-    if return_directions or return_vecs:
+    if return_vecs:
         tmp_distances = torch.ones_like(distances)
         tmp_distances[neighbor_mask != 0] = distances[neighbor_mask != 0]
 
-        if return_directions:
+        if normalize_vecs:
             dist_vec = dist_vec / tmp_distances[:, :, :, None]
         return distances, dist_vec
     return distances
 
 
 class AtomDistances(nn.Module):
-    """
-    Layer that calculates all pair-wise distances between atoms.
-
-    Use advanced torch indexing to compute differentiable distances
-    of every central atom to its relevant neighbors. Indices of the
-    neighbors to consider are stored in neighbors.
+    r"""Layer for computing distance of every atom to its neighbors.
 
     Args:
-        return_directions (bool): If true, also return direction cosines.
+        return_directions (bool, optional): if True, the `forward` method also returns
+            normalized direction vectors.
+
     """
 
     def __init__(self, return_directions=False):
@@ -96,29 +93,31 @@ class AtomDistances(nn.Module):
     def forward(
         self, positions, neighbors, cell=None, cell_offsets=None, neighbor_mask=None
     ):
-        """
+        r"""Compute distance of every atom to its neighbors.
+
         Args:
-            positions (torch.Tensor): Atomic positions, differentiable torch
-                Variable (B x N_at x 3)
-            neighbors (torch.Tensor): Indices of neighboring
-                atoms (B x N_at x N_nbh)
-            cell (torch.tensor): cell for periodic systems (B x 3 x 3)
-            cell_offsets (torch.Tensor): offset of atom in cell
-                coordinates (B x N_at x N_nbh x 3)
-            neighbor_mask (torch.Tensor, optional): Boolean mask for neighbor
+            positions (torch.Tensor): atomic Cartesian coordinates with
+                (N_b x N_at x 3) shape.
+            neighbors (torch.Tensor): indices of neighboring atoms to consider
+                with (N_b x N_at x N_nbh) shape.
+            cell (torch.tensor, optional): periodic cell of (N_b x 3 x 3) shape.
+            cell_offsets (torch.Tensor, optional): offset of atom in cell coordinates
+                with (N_b x N_at x N_nbh x 3) shape.
+            neighbor_mask (torch.Tensor, optional): boolean mask for neighbor
                 positions. Required for the stable computation of forces in
                 molecules with different sizes.
 
         Returns:
-            torch.Tensor: Distances of every atoms to its
-                neighbors (B x N_at x N_nbh)
+            torch.Tensor: layer output of (N_b x N_at x N_nbh) shape.
+
         """
         return atom_distances(
             positions,
             neighbors,
             cell,
             cell_offsets,
-            return_directions=self.return_directions,
+            return_vecs=self.return_directions,
+            normalize_vecs=True,
             neighbor_mask=neighbor_mask,
         )
 
