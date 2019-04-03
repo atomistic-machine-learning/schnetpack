@@ -11,18 +11,17 @@ from schnetpack.nn.activations import shifted_softplus
 
 
 class SchNetInteraction(nn.Module):
-    """
-    SchNet interaction block for modeling quantum interactions of atomistic
-    systems with cosine cutoff.
+    r"""SchNet interaction block for modeling interactions of atomistic systems.
 
     Args:
-        n_atom_basis (int): number of features used to describe atomic
-            environments
-        n_spatial_basis (int): number of input features of filter-generating
-            networks
-        n_filters (int): number of filters used in continuous-filter convolution
-        normalize_filter (bool): if true, divide filter by number of neighbors
-            over which convolution is applied
+        n_atom_basis (int): number of features to describe atomic environments.
+        n_spatial_basis (int): number of input features of filter-generating networks.
+        n_filters (int): number of filters used in continuous-filter convolution.
+        cutoff (float): cutoff radius.
+        cutoff_network (nn.Module, optional): cutoff layer.
+        normalize_filter (bool, optional): if True, divide aggregated filter by number
+            of neighbors over which convolution is applied.
+
     """
 
     def __init__(
@@ -35,16 +34,14 @@ class SchNetInteraction(nn.Module):
         normalize_filter=False,
     ):
         super(SchNetInteraction, self).__init__()
-
-        # initialize filters
+        # filter block used in interaction block
         self.filter_network = nn.Sequential(
             Dense(n_spatial_basis, n_filters, activation=shifted_softplus),
             Dense(n_filters, n_filters),
         )
-
+        # cutoff layer used in interaction block
         self.cutoff_network = cutoff_network(cutoff)
-
-        # initialize interaction blocks
+        # interaction block
         self.cfconv = CFConv(
             n_atom_basis,
             n_filters,
@@ -54,21 +51,27 @@ class SchNetInteraction(nn.Module):
             activation=shifted_softplus,
             normalize_filter=normalize_filter,
         )
-        self.dense = Dense(n_atom_basis, n_atom_basis)
+        # dense layer
+        self.dense = Dense(n_atom_basis, n_atom_basis, bias=True, activation=None)
 
     def forward(self, x, r_ij, neighbors, neighbor_mask, f_ij=None):
-        """
+        """Compute interaction output.
+
         Args:
-            x (torch.Tensor): Atom-wise input representations.
-            r_ij (torch.Tensor): Interatomic distances.
-            neighbors (torch.Tensor): Indices of neighboring atoms.
-            neighbor_mask (torch.Tensor): Mask to indicate virtual neighbors
-                introduced via zeros padding.
-            f_ij (torch.Tensor): Use at your own risk.
+            x (torch.Tensor): input representation/embedding of atomic environments
+                with (N_b, N_a, n_atom_basis) shape.
+            r_ij (torch.Tensor): interatomic distances of (N_b, N_a, N_nbh) shape.
+            neighbors (torch.Tensor): indices of neighbors of (N_b, N_a, N_nbh) shape.
+            neighbor_mask (torch.Tensor): mask to filter out non-existing neighbors
+                introduced via padding.
+            f_ij (torch.Tensor, optional): expanded interatomic distances in a basis.
+                If None, r_ij.unsqueeze(-1) is used.
 
         Returns:
-            torch.Tensor: SchNet representation.
+            torch.Tensor: block output with (N_b, N_a, n_atom_basis) shape.
+
         """
+        # continuous-filter convolution interaction block followed by Dense layer
         v = self.cfconv(x, r_ij, neighbors, neighbor_mask, f_ij)
         v = self.dense(v)
         return v
