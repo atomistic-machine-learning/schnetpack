@@ -78,36 +78,43 @@ class SchNetInteraction(nn.Module):
 
 
 class SchNet(nn.Module):
-    """
-    SchNet architecture for learning representations of atomistic systems
-    as described in [#schnet1]_ [#schnet_transfer]_ [#schnet3]_
+    """SchNet architecture for learning representations of atomistic systems.
 
     Args:
-        n_atom_basis (int): number of features used to describe atomic environments
-        n_filters (int): number of filters used in continuous-filter convolution
-        n_interactions (int): number of interaction blocks
-        cutoff (float): cutoff radius of filters
-        n_gaussians (int): number of Gaussians which are used to expand atom distances
-        normalize_filter (bool): if true, divide filter by number of neighbors
-            over which convolution is applied
-        coupled_interactions (bool): if true, share the weights across
+        n_atom_basis (int, optional): number of features to describe atomic environments.
+            This determines the size of each embedding vector; i.e. embeddings_dim.
+        n_filters (int, optional): number of filters used in continuous-filter convolution
+        n_interactions (int, optional): number of interaction blocks.
+        cutoff (float, optional): cutoff radius.
+        n_gaussians (int, optional): number of Gaussian functions used to expand
+            atomic distances.
+        normalize_filter (bool, optional): if True, divide aggregated filter by number
+            of neighbors over which convolution is applied.
+        coupled_interactions (bool, optional): if True, share the weights across
             interaction blocks and filter-generating networks.
-        return_intermediate (bool): if true, also return intermediate feature
-            representations after each interaction block
-        max_z (int): maximum allowed nuclear charge in dataset. This determines
-            the size of the embedding matrix.
+        return_intermediate (bool, optional): if True, `forward` method also returns
+            intermediate atomic representations after each interaction block is applied.
+        max_z (int, optional): maximum nuclear charge allowed in database. This
+            determines the size of the dictionary of embedding; i.e. num_embeddings.
+        cutoff_network (nn.Module, optional): cutoff layer.
+        trainable_gaussians (bool, optional): If True, widths and offset of Gaussian
+            functions are adjusted during training process.
+        distance_expansion (nn.Module, optional): layer for expanding interatomic
+            distances in a basis.
+        charged_systems (bool, optional):
 
-    References
-    ----------
+    References:
     .. [#schnet1] Schütt, Arbabzadah, Chmiela, Müller, Tkatchenko:
        Quantum-chemical insights from deep tensor neural networks.
        Nature Communications, 8, 13890. 2017.
     .. [#schnet_transfer] Schütt, Kindermans, Sauceda, Chmiela, Tkatchenko, Müller:
-       SchNet: A continuous-filter convolutional neural network for modeling quantum interactions.
+       SchNet: A continuous-filter convolutional neural network for modeling quantum
+       interactions.
        In Advances in Neural Information Processing Systems, pp. 992-1002. 2017.
     .. [#schnet3] Schütt, Sauceda, Kindermans, Tkatchenko, Müller:
        SchNet - a deep learning architecture for molceules and materials.
        The Journal of Chemical Physics 148 (24), 241722. 2018.
+
     """
 
     def __init__(
@@ -128,11 +135,14 @@ class SchNet(nn.Module):
     ):
         super(SchNet, self).__init__()
 
-        # atom type embeddings
+        # make a lookup table to store embeddings for each element (up to atomic
+        # number max_z) each of which is a vector of size n_atom_basis
         self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
 
-        # spatial features
+        # layer for computing interatomic distances
         self.distances = AtomDistances()
+
+        # layer for expanding interatomic distances in a basis
         if distance_expansion is None:
             self.distance_expansion = GaussianSmearing(
                 0.0, cutoff, n_gaussians, trainable=trainable_gaussians
@@ -140,15 +150,9 @@ class SchNet(nn.Module):
         else:
             self.distance_expansion = distance_expansion
 
-        self.return_intermediate = return_intermediate
-
-        self.charged_systems = charged_systems
-        if charged_systems:
-            self.charge = nn.Parameter(torch.Tensor(1, n_atom_basis))
-            self.charge.data.normal_(0, 1.0 / n_atom_basis ** 0.5)
-
-        # interaction network
+        # block for computing interaction
         if coupled_interactions:
+            # use the same SchNetInteraction instance (hence the same weights)
             self.interactions = nn.ModuleList(
                 [
                     SchNetInteraction(
@@ -163,6 +167,7 @@ class SchNet(nn.Module):
                 * n_interactions
             )
         else:
+            # use one SchNetInteraction instance for each interaction
             self.interactions = nn.ModuleList(
                 [
                     SchNetInteraction(
@@ -177,15 +182,26 @@ class SchNet(nn.Module):
                 ]
             )
 
+        # set attributes
+        self.return_intermediate = return_intermediate
+        self.charged_systems = charged_systems
+        if charged_systems:
+            self.charge = nn.Parameter(torch.Tensor(1, n_atom_basis))
+            self.charge.data.normal_(0, 1.0 / n_atom_basis ** 0.5)
+
     def forward(self, inputs):
-        """
+        """Compute atomic representations/embeddings.
+
         Args:
-            inputs (dict of torch.Tensor): SchNetPack format dictionary of input tensors.
+            inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
 
         Returns:
-            torch.Tensor: Final Atom-wise SchNet representation.
-            torch.Tensor: Atom-wise SchNet representation of intermediate layers.
+            torch.Tensor: atom-wise representation.
+            list of torch.Tensor: intermediate atom-wise representations, if
+            return_intermediate=True was used.
+
         """
+        # get tensors from input dictionary
         atomic_numbers = inputs[Structure.Z]
         positions = inputs[Structure.R]
         cell = inputs[Structure.cell]
@@ -194,7 +210,7 @@ class SchNet(nn.Module):
         neighbor_mask = inputs[Structure.neighbor_mask]
         atom_mask = inputs[Structure.atom_mask]
 
-        # atom embedding
+        # get atom embeddings for the input atomic numbers
         x = self.embedding(atomic_numbers)
 
         if False and self.charged_systems and Structure.charge in inputs.keys():
@@ -203,20 +219,19 @@ class SchNet(nn.Module):
             charge = charge[:, None] * self.charge  # B x F
             x = x + charge
 
-        # spatial features
+        # compute interatomic distance of every atom to its neighbors
         r_ij = self.distances(
             positions, neighbors, cell, cell_offset, neighbor_mask=neighbor_mask
         )
+        # expand interatomic distances (for example, Gaussian smearing)
         f_ij = self.distance_expansion(r_ij)
-
-        # interactions
+        # store intermediate representations
         if self.return_intermediate:
             xs = [x]
-
+        # compute interaction block to update atomic embeddings
         for interaction in self.interactions:
             v = interaction(x, r_ij, neighbors, neighbor_mask, f_ij=f_ij)
             x = x + v
-
             if self.return_intermediate:
                 xs.append(x)
 
