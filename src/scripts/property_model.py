@@ -35,7 +35,7 @@ def loss_fn(properties):
 
 
 # basic settings
-batch_size = 50
+batch_size = 128
 data_dir = 'data'
 model_dir = 'training'
 os.makedirs(data_dir, exist_ok=True)
@@ -46,7 +46,7 @@ os.makedirs(model_dir)
 # data preparation
 properties = [QM9.U0]#, QM9.U0, QM9.homo, QM9.lumo]
 dataset = QM9(os.path.join(data_dir, 'qm9.db'))
-train, val, test = train_test_split(data=dataset, num_train=1000, num_val=100,
+train, val, test = train_test_split(data=dataset, num_train=0.8, num_val=0.1,
                                     split_file='training/split.npz')
 train_loader = AtomsLoader(train, batch_size=batch_size)
 val_loader = AtomsLoader(val, batch_size=batch_size)
@@ -75,4 +75,4 @@ trainer = Trainer(model_dir, model=model, hooks=hooks, loss_fn=loss,
                   validation_loader=val_loader)
 
 # run training
-trainer.train(device='cpu')
+trainer.train(device='cuda')
