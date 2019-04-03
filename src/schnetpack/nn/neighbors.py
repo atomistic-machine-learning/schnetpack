@@ -8,7 +8,7 @@ def atom_distances(
     cell=None,
     cell_offsets=None,
     return_vecs=False,
-    return_directions=False,
+    normalize_vecs=False,
     neighbor_mask=None,
 ):
     r"""Compute distance of every atom to its neighbors.
@@ -24,8 +24,8 @@ def atom_distances(
         cell (torch.tensor, optional): periodic cell of (N_b x 3 x 3) shape.
         cell_offsets (torch.Tensor, optional): offset of atom in cell coordinates
             with (N_b x N_at x N_nbh x 3) shape.
-        return_vecs (bool, optional):
-        return_directions (bool, optional): If True, also returns direction cosines.
+        return_vecs (bool, optional): if True, also returns direction vectors.
+        normalize_vecs (bool, optional): if True, normalize direction vectors.
         neighbor_mask (torch.Tensor, optional): boolean mask for neighbor positions.
 
     Returns:
@@ -67,11 +67,11 @@ def atom_distances(
         tmp_distances[neighbor_mask != 0] = distances[neighbor_mask != 0]
         distances = tmp_distances
 
-    if return_directions or return_vecs:
+    if return_vecs:
         tmp_distances = torch.ones_like(distances)
         tmp_distances[neighbor_mask != 0] = distances[neighbor_mask != 0]
 
-        if return_directions:
+        if normalize_vecs:
             dist_vec = dist_vec / tmp_distances[:, :, :, None]
         return distances, dist_vec
     return distances
@@ -81,7 +81,8 @@ class AtomDistances(nn.Module):
     r"""Layer for computing distance of every atom to its neighbors.
 
     Args:
-        return_directions (bool, optional): If True, also returns direction cosines.
+        return_directions (bool, optional): if True, the `forward` method also returns
+            normalized direction vectors.
 
     """
 
@@ -115,7 +116,8 @@ class AtomDistances(nn.Module):
             neighbors,
             cell,
             cell_offsets,
-            return_directions=self.return_directions,
+            return_vecs=self.return_directions,
+            normalize_vecs=True,
             neighbor_mask=neighbor_mask,
         )
 
