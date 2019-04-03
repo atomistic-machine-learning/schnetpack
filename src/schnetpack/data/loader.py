@@ -169,7 +169,7 @@ class AtomsLoader(DataLoader):
                                           mean and standard deviation should
                                           be computed
             per_atom (bool): If set to true, averages over atoms
-            atomref (np.ndarray): atomref (default: None)
+            atomref (dict): atomref (default: None)
             split_file (str): path to split file. If specified, mean and std
                               will be cached in this file (default: None)
 
@@ -195,10 +195,11 @@ class AtomsLoader(DataLoader):
             logger.info("statistics will be calculated...")
 
             for row in self:
-                for property_name, statistic, pa, ar in zip(
-                    property_names, statistics, per_atom, atomrefs
+                for property_name, statistic, pa in zip(
+                    property_names, statistics, per_atom
                 ):
-                    self._update_statistic(pa, ar, property_name, row, statistic)
+                    self._update_statistic(pa, atomrefs[property_name], property_name,
+                                           row, statistic)
 
             stats = list(zip(*[s.get_statistics() for s in statistics]))
             mean, stddev = stats

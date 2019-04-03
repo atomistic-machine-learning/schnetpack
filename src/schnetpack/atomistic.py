@@ -151,7 +151,7 @@ class Atomwise(OutputModule):
 
         if atomref is not None:
             self.atomref = nn.Embedding.from_pretrained(
-                torch.from_numpy(atomref.astype(np.float32)),
+                torch.from_numpy(atomref[self.property].astype(np.float32)),
                 freeze=not train_embeddings,
             )
         elif train_embeddings:
@@ -205,8 +205,10 @@ class Atomwise(OutputModule):
                 inputs[Structure.R],
                 grad_outputs=torch.ones_like(result[self.property]),
                 create_graph=self.create_graph,
+                # todo: check here
+                retain_graph=True
             )[0]
-            result["dydx"] = dy
+            result[self.dr_property] = dy
 
         return result
 
@@ -310,6 +312,7 @@ class ElementalAtomwise(Atomwise):
         stddev=None,
         atomref=None,
         max_z=100,
+        property="y"
     ):
         outnet = schnetpack.nn.blocks.GatedNetwork(
             n_in,
@@ -335,6 +338,7 @@ class ElementalAtomwise(Atomwise):
             atomref,
             max_z,
             outnet,
+            property=property
         )
 
 
@@ -479,20 +483,67 @@ class PropertyModel(nn.Module):
 
     def __init__(
             self,
+            output_modules
+    ):
+        super(PropertyModel, self).__init__()
+        if type(output_modules) == list:
+            output_modules = nn.ModuleList(output_modules)
+        self.output_modules = output_modules
+        self.requires_dr = any([om.dr_property for om in output_modules])
+
+    def forward(self, input):
+        outs = {}
+        for output_model in self.output_modules:
+            outs.update(output_model(input))
+        return outs
+
+
+class NewAtomisticModel(nn.Module):
+
+    def __init__(self, representation, property_model):
+        super(NewAtomisticModel, self).__init__()
+        self.representation = representation
+        self.output_layer = property_model
+        self.requires_dr = property_model.requires_dr
+
+    def forward(self, inputs):
+        if self.requires_dr:
+            inputs[Structure.R].requires_grad_()
+        inputs["representation"] = self.representation(inputs)
+        return self.output_layer(inputs)
+
+
+class EasyPropertyModel(PropertyModel):
+
+    def __init__(
+            self,
             n_in,
             properties,
-            mean,
-            stddev,
-            atomrefs
+            n_layers=2,
+            n_neurons=None,
+            activation=schnetpack.nn.activations.shifted_softplus,
+            mean=None,
+            stddev=None,
+            atomrefs=None,
+            max_z=100,
+            outnet=None,
+            train_embeddings=False
     ):
-        super(PropertyModel).__init__()
         self.n_in = n_in
+        self.n_layers = n_layers
+        self.n_neurons = n_neurons
+        self.activation = activation
+        self.max_z = max_z
+        self.outnet = outnet
+        self.train_embeddings = train_embeddings
         self.mean = mean
         self.stddev = stddev
         self.atomrefs = atomrefs
-        self.output_modules = self._build_modules(properties)
 
-    def _build_modules(self, properties):
+        output_modules = self.get_output_modules(properties)
+        super(EasyPropertyModel, self).__init__(output_modules)
+
+    def get_output_modules(self, properties):
         """
         Build the output modules from the property dict.
         Args:
@@ -516,7 +567,7 @@ class PropertyModel(nn.Module):
             else:
                 raise NotImplementedError
         # build models
-        output_models = nn.ModuleList()
+        output_models = []
         for prop_name, prop_type in property_modules.items():
             contribution_property = None
             dr_property = None
@@ -524,111 +575,37 @@ class PropertyModel(nn.Module):
                 contribution_property = contrib_properties[prop_name]
             if prop_name in derivative_properties.keys():
                 dr_property = derivative_properties[prop_name]
-            output_models.append(self._get_module(module_type, prop_name,
-                                                  contribution_property, dr_property))
+            output_models.append(self._build_module(prop_type, prop_name,
+                                                    contribution_property, dr_property))
+        return nn.ModuleList(output_models)
 
-    def _get_module(self, module_type, prop_name, contribution_property, dr_property):
+    def _build_module(self, module_type, prop_name, contribution_property, dr_property):
+        # todo: check create graph
         if module_type == 'atomwise':
             return Atomwise(n_in=self.n_in, property=prop_name,
                             contribution_property=contribution_property,
-                            dr_property=dr_property)
+                            dr_property=dr_property, n_layers=self.n_layers,
+                            n_neurons=self.n_neurons, activation=self.activation,
+                            max_z=self.max_z, outnet=self.outnet,
+                            train_embeddings=self.train_embeddings, mean=self.mean,
+                            stddev=self.stddev, atomref=self.atomrefs)
         elif module_type == 'atomwise_avg':
             return Atomwise(n_in=self.n_in, property=prop_name,
                             contribution_property=contribution_property,
-                            dr_property=dr_property, aggregation_mode='avg')
+                            dr_property=dr_property, n_layers=self.n_layers,
+                            n_neurons=self.n_neurons, activation=self.activation,
+                            max_z=self.max_z, outnet=self.outnet,
+                            train_embeddings=self.train_embeddings, mean=self.mean,
+                            stddev=self.stddev, atomref=self.atomrefs,
+                            aggregation_mode='avg')
         elif module_type == 'elementalatomwise':
-            return ElementalAtomwise(n_in=self.n_in, property=prop_name,
-                                     contribution_property=contribution_property,
-                                     dr_property=dr_property)
-        elif
-
-
-        def forward(self, *input):
-            pass
-
-
-class OldPropertyModel(nn.Module):
-    def __init__(
-        self, n_in, properties, mean, stddev, atomrefs, cutoff_network, cutoff
-    ):
-        super(PropertyModel, self).__init__()
-
-        self.n_in = n_in
-        self.properties = properties
-
-        self._init_property_flags(properties)
-        self.requires_dr = self.need_forces
-
-        # if self.need_total_dipole and self.need_dipole:
-        #     raise ModelError("Only one of dipole_moment and " + \
-        #                      "total_dipole_moment can be specified!")
-
-        self.cutoff_network = cutoff_network(cutoff)
-
-        outputs = {}
-        self.bias = {}
-        if self.need_energy or self.need_forces:
-            mu = torch.tensor(mean[Properties.energy])
-            std = torch.tensor(stddev[Properties.energy])
-            try:
-                atomref = atomrefs[Properties.energy]
-            except:
-                atomref = None
-
-            energy_module = Energy(
-                n_in,
-                aggregation_mode="sum",
-                return_force=self.need_forces,
-                return_contributions=self.need_energy_contributions,
-                mean=mu,
-                stddev=std,
-                atomref=atomref,
-                create_graph=True,
-            )
-            outputs[Properties.energy] = energy_module
-            self.bias[Properties.energy] = energy_module.out_net[1].out_net[1].bias
-        if self.need_dipole or self.need_total_dipole:
-            dipole_module = DipoleMoment(
-                n_in, predict_magnitude=self.need_total_dipole, return_charges=True
-            )
-            if self.need_dipole:
-                outputs[Properties.dipole_moment] = dipole_module
-            else:
-                outputs[Properties.total_dipole_moment] = dipole_module
-        if self.need_polarizability or self.need_iso_polarizability:
-            polar_module = Polarizability(
-                n_in,
-                return_isotropic=self.need_iso_polarizability,
-                cutoff_network=self.cutoff_network,
-            )
-            outputs[Properties.polarizability] = polar_module
-
-        self.output_dict = nn.ModuleDict(outputs)
-
-    def _init_property_flags(self, properties):
-        self.need_energy = Properties.energy in properties
-        self.need_forces = Properties.forces in properties
-        self.need_dipole = Properties.dipole_moment in properties
-        self.need_total_dipole = Properties.total_dipole_moment in properties
-        self.need_polarizability = Properties.polarizability in properties
-        self.need_at_polarizability = Properties.at_polarizability in properties
-        self.need_iso_polarizability = Properties.iso_polarizability in properties
-        self.need_energy_contributions = Properties.energy_contributions in properties
-
-    def forward(self, inputs):
-        outs = {}
-        for prop, mod in self.output_dict.items():
-            o = mod(inputs)
-            outs[prop] = o["y"]
-            if prop == Properties.energy and self.need_forces:
-                outs[Properties.forces] = o["dydx"]
-            if prop == Properties.energy and self.need_energy_contributions:
-                outs[Properties.energy_contributions] = o["yi"]
-            if prop in [Properties.dipole_moment, Properties.total_dipole_moment]:
-                outs[Properties.charges] = o["yi"]
-            if prop == Properties.polarizability:
-                if self.need_iso_polarizability:
-                    outs[Properties.iso_polarizability] = o["y_iso"]
-                if self.need_at_polarizability:
-                    outs[Properties.at_polarizability] = o["y_i"]
-        return outs
+            return ElementalAtomwise(
+                n_in=self.n_in, aggregation_mode="sum", n_layers=self.n_layers,
+                dr_property=dr_property, create_graph=False,
+                elements=frozenset((1, 6, 7, 8, 9)), n_hidden=50,
+                activation=self.activation,
+                contribution_property=contribution_property,
+                mean=self.mean, stddev=self.stddev, atomref=self.atomrefs,
+                max_z=100, property=prop_name)
+        else:
+            raise NotImplementedError
