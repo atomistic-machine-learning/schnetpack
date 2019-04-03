@@ -93,36 +93,38 @@ class OutputModule(nn.Module):
 
 
 class Atomwise(OutputModule):
-    """
-    Predicts atom-wise contributions and accumulates global prediction, e.g. for the energy.
+    """Predict atom-wise contributions and accumulate global prediction.
 
     Args:
-        n_in (int): input dimension of representation (default: 128)
-        n_out (int): output dimension of target property (default: 1)
-        pool_mode (str): one of {sum, avg} (default: sum)
-        n_layers (int): number of nn in output network (default: 2)
-        n_neurons (list of int or None): number of neurons in each layer of the output network.
-                                          If `None`, divide neurons by 2 in each layer. (default: None)
-        activation (function): activation function for hidden nn (default: spk.nn.activations.shifted_softplus)
-        return_contributions (bool): If True, latent atomic contributions are returned as well (default: False)
-        requires_dr (bool): True, if derivative w.r.t. atom positions is required (default: False)
-        mean (torch.FloatTensor): mean of property (default: None)
-        stddev (torch.FloatTensor): standard deviation of property (default: None)
-        atomref (torch.Tensor): reference single-atom properties. Expects an (max_z + 1) x 1 array where atomref[Z]
-                                corresponds to the reference property of element Z. The value of atomref[0] must be
-                                zero, as this corresponds to the reference property for for "mask" atoms
-        max_z (int): only relevant only if train_embeddings is true.
-                     Specifies maximal nuclear charge of atoms. (default: 100)
-        outnet (callable): Network used for atomistic outputs. Takes schnetpack input dictionary as input. Output is
-                           not normalized. If set to None (default), a pyramidal network is generated automatically.
-        train_embeddings (bool): if set to true, atomref will be ignored and learned from data (default: None)
-
-    Returns:
-        tuple: prediction for property
-
-        If return_contributions is true additionally returns atom-wise contributions.
-
-        If requires_dr is true additionally returns derivative w.r.t. atom positions.
+        n_in (int, optional): input dimension of atom-wise representation.
+        n_out (int, optional): output dimension of target property.
+        aggregation_mode (str, optional): pooling method of atom-wise predictions.
+            Options: 'sum' (sum atom-wise output) or 'avg' (average atom-wise output).
+        n_layers (int, optional): total number of layers in the network.
+        n_neurons (list of int, optional): number of neurons in each layer of the
+            output network. If `None`, divide neurons by 2 in each layer.
+        activation (callable, optional): activation function. All hidden layers would
+            the same activation function except the output layer that does not apply
+            any activation function.
+        return_contributions (bool, optional): if True, `forward` method returns
+            atom-wise predictions as well.
+        requires_dr (bool, optional): if True, derivative w.r.t. atom positions is
+            required.
+        create_graph ():
+        mean (torch.FloatTensor, optional): property mean used in output `ScaleShift`.
+        stddev (torch.FloatTensor, optional): property standard deviation used in
+            output `ScaleShift`.
+        atomref (torch.Tensor, optional): reference atom-wise properties.
+            Expects an (max_z + 1) x 1 array where atomref[Z] corresponds to the
+            reference property of element Z. The value of atomref[0] must be
+            zero, as this corresponds to the reference property for for "mask" atoms.
+        max_z (int, optional): maximum nuclear charge allowed in database. This
+            determines the size of the dictionary of embedding; i.e. num_embeddings.
+            Only relevant only if train_embeddings=True.
+        outnet (callable, optional): network used for atomistic prediction which takes
+            SchNetPack dictionary of input tensors. If None, a pyramidal network is
+            generated automatically.
+        train_embeddings (bool, optional): if True, atomref will be learned from data.
 
     """
 
@@ -150,9 +152,6 @@ class Atomwise(OutputModule):
         self.create_graph = create_graph
         self.return_contributions = return_contributions
 
-        mean = torch.FloatTensor([0.0]) if mean is None else mean
-        stddev = torch.FloatTensor([1.0]) if stddev is None else stddev
-
         if atomref is not None:
             self.atomref = nn.Embedding.from_pretrained(
                 torch.from_numpy(atomref.astype(np.float32)),
@@ -165,43 +164,55 @@ class Atomwise(OutputModule):
             )
         else:
             self.atomref = None
-
+        # network block
         if outnet is None:
+            # assign fully connected feed-forward block as network block
             self.out_net = nn.Sequential(
                 GetItem("representation"),
-                MLP(n_in, n_out, n_neurons, n_layers, activation),
+                MLP(n_in, n_out, n_neurons, n_layers, activation=activation),
             )
         else:
             self.out_net = outnet
-
-        # Make standardization separate
+        # assign mean and standard deviation of property
+        mean = torch.FloatTensor([0.0]) if mean is None else mean
+        stddev = torch.FloatTensor([1.0]) if stddev is None else stddev
+        # standardization layer
         self.standardize = ScaleShift(mean, stddev)
-
+        # pooling layer
         if aggregation_mode == "sum":
             self.atom_pool = Aggregate(axis=1, mean=False)
         elif aggregation_mode == "avg":
             self.atom_pool = Aggregate(axis=1, mean=True)
+        else:
+            raise ValueError("Invalid aggregation_mode={0}!".format(aggregation_mode))
 
     def forward(self, inputs):
-        r"""
-        predicts atomwise property
+        r"""Compute atom-wise outputs and aggregate them.
+
+        Args:
+            inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+
+        Returns:
+            dict: network results; the key "y" contains aggregated output.
+                If return_contributions=True, the key "yi" would contain atom-wise
+                contributions.
+
         """
+        # get atomic number and mask
         atomic_numbers = inputs[Structure.Z]
         atom_mask = inputs[Structure.atom_mask]
-
+        # compute atom-wise predictions and standardize them
         yi = self.out_net(inputs)
         yi = self.standardize(yi)
-
+        # add atom-wise reference values
         if self.atomref is not None:
             y0 = self.atomref(atomic_numbers)
             yi = yi + y0
-
-        y = self.atom_pool(yi, atom_mask)
-        result = {"y": y}
-
+        # store aggregated atom-wise predictions
+        result = {"y": self.atom_pool(yi, atom_mask)}
+        # store atom-wise contributions to predicted value
         if self.return_contributions:
             result["yi"] = yi
-
         return result
 
 
