@@ -7,7 +7,7 @@ def get_parser():
         "--batch_size",
         type=int,
         help="Mini-batch size for training and prediction (default: %(default)s)",
-        default=100,
+        default=128,
     )
     parser.add_argument(
         "--device",

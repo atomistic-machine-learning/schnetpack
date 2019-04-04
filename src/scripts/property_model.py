@@ -59,7 +59,7 @@ hooks = logging_hooks + scheduleing_hooks
 # trainer
 loss = loss_fn(properties)
 trainer = Trainer(model_dir, model=model, hooks=hooks, loss_fn=loss,
-                  optimizer=Adam(params=model.parameters(), lr=1e-3),
+                  optimizer=Adam(params=model.parameters(), lr=1e-4),
                   train_loader=train_loader,
                   validation_loader=val_loader)
 
