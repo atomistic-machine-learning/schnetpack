@@ -48,7 +48,7 @@ class Metric:
         raise NotImplementedError
 
     def reset(self):
-        """ Reset the metric after aggregation to collect new batches """
+        """Reset metric attributes after aggregation to collect new batches."""
         pass
 
 
@@ -77,6 +77,7 @@ class ModelBias(Metric):
         self.n_entries = 0.0
 
     def reset(self):
+        """Reset metric attributes after aggregation to collect new batches."""
         self.l2loss = 0.0
         self.n_entries = 0.0
 
@@ -142,6 +143,7 @@ class MeanSquaredError(Metric):
         self.n_entries = 0.0
 
     def reset(self):
+        """Reset metric attributes after aggregation to collect new batches."""
         self.l2loss = 0.0
         self.n_entries = 0.0
 
@@ -242,6 +244,7 @@ class MeanAbsoluteError(Metric):
         self.n_entries = 0.0
 
     def reset(self):
+        """Reset metric attributes after aggregation to collect new batches."""
         self.l1loss = 0.0
         self.n_entries = 0.0
 
