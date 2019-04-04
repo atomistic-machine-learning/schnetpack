@@ -2,11 +2,8 @@ r"""
 Classes for output modules.
 """
 
-from collections import Iterable
-
 import numpy as np
 import torch
-import torch.nn as nn
 from torch import nn as nn
 from torch.autograd import grad
 
@@ -15,6 +12,64 @@ import schnetpack.nn.base
 import schnetpack.nn.blocks
 from schnetpack.data import Structure
 import schnetpack.nn as L
+
+
+class ModelError(Exception):
+    pass
+
+
+class PropertyModel(nn.Module):
+    """
+    Forward representation trough multiple output models.
+
+    Args:
+        output_modules (list): list of output modules
+    """
+
+    def __init__(
+            self,
+            output_modules
+    ):
+        super(PropertyModel, self).__init__()
+        if type(output_modules) == list:
+            output_modules = nn.ModuleList(output_modules)
+        self.output_modules = output_modules
+        self.requires_dr = any([om.dr_property for om in output_modules])
+
+    def forward(self, inputs):
+        outs = {}
+        for output_model in self.output_modules:
+            outs.update(output_model(inputs))
+        return outs
+
+
+class AtomisticModel(nn.Module):
+    """
+    Join a representation model with output modules.
+
+    Args:
+        representation (schnetpack.representation): Representation block of the model.
+        output_model (schnetpack.atomwise.PropertyModel): Output block of the model.
+            Needed for predicting properties.
+
+    Returns:
+         dict: property predictions
+    """
+    def __init__(
+            self,
+            representation,
+            output_model
+    ):
+        super(AtomisticModel, self).__init__()
+        self.representation = representation
+        self.output_layer = output_model
+        self.requires_dr = output_model.requires_dr
+
+    def forward(self, inputs):
+        if self.requires_dr:
+            inputs[Structure.R].requires_grad_()
+        inputs["representation"] = self.representation(inputs)
+        return self.output_layer(inputs)
 
 
 class Atomwise(nn.Module):
@@ -29,10 +84,12 @@ class Atomwise(nn.Module):
         n_neurons (list of int or None): number of neurons in each layer of the output network.
                                           If `None`, divide neurons by 2 in each layer. (default: None)
         activation (function): activation function for hidden nn (default: spk.nn.activations.shifted_softplus)
-        return_contributions (bool): If True, latent atomic contributions are returned as well (default: False)
-        requires_dr (bool): True, if derivative w.r.t. atom positions is required (default: False)
-        mean (torch.FloatTensor): mean of property (default: None)
-        stddev (torch.FloatTensor): standard deviation of property (default: None)
+        property (str): name of the output property
+        contribution_property (str): Name of property contributions in return dict.
+            No contributions returned if None.
+        dr_property (str): Name of property derivative. No derivative returned if None.
+        mean (dict): mean of property
+        stddev (dict): standard deviation of property (default: None)
         atomref (torch.Tensor): reference single-atom properties. Expects an (max_z + 1) x 1 array where atomref[Z]
                                 corresponds to the reference property of element Z. The value of atomref[0] must be
                                 zero, as this corresponds to the reference property for for "mask" atoms
@@ -59,6 +116,7 @@ class Atomwise(nn.Module):
         n_layers=2,
         n_neurons=None,
         activation=schnetpack.nn.activations.shifted_softplus,
+        property="y",
         contribution_property=None,
         dr_property=None,
         create_graph=False,
@@ -68,7 +126,6 @@ class Atomwise(nn.Module):
         max_z=100,
         outnet=None,
         train_embeddings=False,
-        property="y"
     ):
         super(Atomwise, self).__init__()
 
@@ -193,6 +250,7 @@ class DipoleMoment(Atomwise):
             n_neurons,
             activation=activation,
             contribution_property=contribution_property,
+            dr_property=dr_property,
             mean=mean,
             stddev=stddev,
             outnet=outnet,
@@ -281,26 +339,26 @@ class Polarizability(Atomwise):
         n_neurons=None,
         activation=L.shifted_softplus,
         return_isotropic=False,
-        return_contributions=False,
+        contribution_property=False,
         create_graph=False,
         outnet=None,
         cutoff_network=None,
     ):
         super(Polarizability, self).__init__(
-            n_in,
-            2,
-            pool_mode,
-            n_layers,
-            n_neurons,
-            activation,
-            return_contributions,
-            True,
-            create_graph,
-            None,
-            None,
-            None,
-            100,
-            outnet,
+            n_in=n_in,
+            n_layers=n_layers,
+            aggregation_mode=pool_mode,
+            n_neurons=n_neurons,
+            activation=activation,
+            property="y",
+            contribution_property=contribution_property,
+            dr_property=None,
+            create_graph=create_graph,
+            mean=None,
+            stddev=None,
+            atomref=None,
+            max_z=100,
+            outnet=outnet,
         )
         self.return_isotropic = return_isotropic
         self.nbh_agg = L.Aggregate(2)
@@ -384,158 +442,3 @@ def symmetric_product(tensor):
     idx = list(range(len(shape)))
     idx[-1], idx[-2] = idx[-2], idx[-1]
     return 0.5 * (tensor + tensor.permute(*idx))
-
-
-class ModelError(Exception):
-    pass
-
-
-class Properties:
-    """
-    Collection of all available model properties.
-    """
-
-    energy = "energy"
-    forces = "forces"
-    dipole_moment = "dipole_moment"
-    total_dipole_moment = "total_dipole_moment"
-    polarizability = "polarizability"
-    iso_polarizability = "iso_polarizability"
-    at_polarizability = "at_polarizability"
-    charges = "charges"
-    energy_contributions = "energy_contributions"
-
-
-class PropertyModel(nn.Module):
-    """
-
-    """
-
-    def __init__(
-            self,
-            output_modules
-    ):
-        super(PropertyModel, self).__init__()
-        if type(output_modules) == list:
-            output_modules = nn.ModuleList(output_modules)
-        self.output_modules = output_modules
-        self.requires_dr = any([om.dr_property for om in output_modules])
-
-    def forward(self, input):
-        outs = {}
-        for output_model in self.output_modules:
-            outs.update(output_model(input))
-        return outs
-
-
-class NewAtomisticModel(nn.Module):
-
-    def __init__(self, representation, property_model):
-        super(NewAtomisticModel, self).__init__()
-        self.representation = representation
-        self.output_layer = property_model
-        self.requires_dr = property_model.requires_dr
-
-    def forward(self, inputs):
-        if self.requires_dr:
-            inputs[Structure.R].requires_grad_()
-        inputs["representation"] = self.representation(inputs)
-        return self.output_layer(inputs)
-
-
-class EasyPropertyModel(PropertyModel):
-
-    def __init__(
-            self,
-            n_in,
-            properties,
-            n_layers=2,
-            n_neurons=None,
-            activation=schnetpack.nn.activations.shifted_softplus,
-            mean=None,
-            stddev=None,
-            atomrefs=None,
-            max_z=100,
-            outnet=None,
-            train_embeddings=False
-    ):
-        self.n_in = n_in
-        self.n_layers = n_layers
-        self.n_neurons = n_neurons
-        self.activation = activation
-        self.max_z = max_z
-        self.outnet = outnet
-        self.train_embeddings = train_embeddings
-        self.mean = mean
-        self.stddev = stddev
-        self.atomrefs = atomrefs
-
-        output_modules = self.get_output_modules(properties)
-        super(EasyPropertyModel, self).__init__(output_modules)
-
-    def get_output_modules(self, properties):
-        """
-        Build the output modules from the property dict.
-        Args:
-            properties (dict): property dict
-
-        Returns (nn.ModuleList):
-            list of output modules
-        """
-        # split by output type
-        property_modules = {}
-        contrib_properties = {}
-        derivative_properties = {}
-        for prop_name, module_type in properties.items():
-            split_type = module_type.split(':')
-            if len(split_type) == 1:
-                property_modules[prop_name] = module_type
-            elif split_type[0] == 'contrib':
-                contrib_properties[split_type[1]] = prop_name
-            elif split_type[0] == 'der':
-                derivative_properties[split_type[1]] = prop_name
-            else:
-                raise NotImplementedError
-        # build models
-        output_models = []
-        for prop_name, prop_type in property_modules.items():
-            contribution_property = None
-            dr_property = None
-            if prop_name in contrib_properties.keys():
-                contribution_property = contrib_properties[prop_name]
-            if prop_name in derivative_properties.keys():
-                dr_property = derivative_properties[prop_name]
-            output_models.append(self._build_module(prop_type, prop_name,
-                                                    contribution_property, dr_property))
-        return nn.ModuleList(output_models)
-
-    def _build_module(self, module_type, prop_name, contribution_property, dr_property):
-        # todo: check create graph
-        if module_type == 'atomwise':
-            return Atomwise(n_in=self.n_in, property=prop_name,
-                            contribution_property=contribution_property,
-                            dr_property=dr_property, n_layers=self.n_layers,
-                            n_neurons=self.n_neurons, activation=self.activation,
-                            max_z=self.max_z, outnet=self.outnet,
-                            train_embeddings=self.train_embeddings, mean=self.mean,
-                            stddev=self.stddev, atomref=self.atomrefs)
-        elif module_type == 'atomwise_avg':
-            return Atomwise(n_in=self.n_in, property=prop_name,
-                            contribution_property=contribution_property,
-                            dr_property=dr_property, n_layers=self.n_layers,
-                            n_neurons=self.n_neurons, activation=self.activation,
-                            max_z=self.max_z, outnet=self.outnet,
-                            train_embeddings=self.train_embeddings, mean=self.mean,
-                            stddev=self.stddev, atomref=self.atomrefs,
-                            aggregation_mode='avg')
-        elif module_type == 'elementalatomwise':
-            return ElementalAtomwise(
-                n_in=self.n_in, aggregation_mode="sum", n_layers=self.n_layers,
-                dr_property=dr_property, create_graph=False,
-                elements=frozenset((1, 6, 7, 8, 9)), n_hidden=50,
-                activation=self.activation,
-                contribution_property=contribution_property,
-                mean=self.mean, stddev=self.stddev, atomref=self.atomrefs,
-                max_z=100, property=prop_name)
-        else:
-            raise NotImplementedError
