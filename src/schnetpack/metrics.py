@@ -44,7 +44,7 @@ class Metric:
         raise NotImplementedError
 
     def aggregate(self):
-        """ Aggregate metric over all previously added batches """
+        """Aggregate metric over all previously added batches."""
         raise NotImplementedError
 
     def reset(self):
@@ -208,6 +208,7 @@ class RootMeanSquaredError(MeanSquaredError):
         )
 
     def aggregate(self):
+        """Aggregate metric over all previously added batches."""
         return np.sqrt(self.l2loss / self.n_entries)
 
 
@@ -283,6 +284,7 @@ class MeanAbsoluteError(Metric):
             self.n_entries += np.prod(y.shape)
 
     def aggregate(self):
+        """Aggregate metric over all previously added batches."""
         return self.l1loss / self.n_entries
 
 
@@ -330,6 +332,7 @@ class HeatmapMAE(MeanAbsoluteError):
         self.n_entries += y.size(0)
 
     def aggregate(self):
+        """Aggregate metric over all previously added batches."""
         return self.l1loss / self.n_entries
 
 
