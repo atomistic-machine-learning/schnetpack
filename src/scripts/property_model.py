@@ -21,6 +21,7 @@ args = parser.parse_args()
 # basic settings
 data_dir = args.data_path
 model_dir = args.model_dir
+logging.info('datapath: {}'.format(os.path.abspath(data_dir)))
 os.makedirs(data_dir, exist_ok=True)
 if os.path.exists(model_dir):
     rmtree(model_dir)

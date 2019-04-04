@@ -30,8 +30,8 @@ def get_parser():
     parser.add_argument(
         "--split",
         help="Split into [train] [validation] and use remaining for testing",
-        type=int,
+        type=float,
         nargs=2,
-        default=[None, None],
+        default=[0.8, 0.1],
     )
     return parser
