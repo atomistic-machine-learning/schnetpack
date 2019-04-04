@@ -17,6 +17,7 @@ class Trainer:
        optimizer (torch.optim.optimizer.Optimizer): training optimizer.
        train_loader (torch.utils.data.DataLoader): data loader for training set.
        validation_loader (torch.utils.data.DataLoader): data loader for validation set.
+       max_epochs (int, optional): maximum number of training epochs.
        keep_n_checkpoints (int, optional): number of saved checkpoints.
        checkpoint_interval (int, optional): intervals after which checkpoints is saved.
        hooks (list, optional): hooks to customize training process.
@@ -33,6 +34,7 @@ class Trainer:
         optimizer,
         train_loader,
         validation_loader,
+        max_epochs=100000,
         keep_n_checkpoints=3,
         checkpoint_interval=10,
         validation_interval=1,
@@ -48,6 +50,7 @@ class Trainer:
         self.keep_n_checkpoints = keep_n_checkpoints
         self.hooks = hooks
         self.loss_is_normalized = loss_is_normalized
+        self.max_epochs = max_epochs
 
         self._model = model
         self._stop = False
@@ -145,7 +148,7 @@ class Trainer:
             h.on_train_begin(self)
 
         try:
-            while True:
+            while self.epoch < self.max_epochs:
                 self.epoch += 1
 
                 for h in self.hooks:
