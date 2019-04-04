@@ -27,4 +27,11 @@ def get_parser():
         help="path to dataset",
         default='data',
     )
+    parser.add_argument(
+        "--split",
+        help="Split into [train] [validation] and use remaining for testing",
+        type=int,
+        nargs=2,
+        default=[None, None],
+    )
     return parser

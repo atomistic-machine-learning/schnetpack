@@ -144,7 +144,7 @@ class Trainer:
         #            progress = True
         #        except:
         #            progress = False
-
+        self._model.to(device)
         self._stop = False
 
         for h in self.hooks:

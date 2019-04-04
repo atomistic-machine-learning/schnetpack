@@ -30,7 +30,8 @@ os.makedirs(model_dir)
 logging.info('get dataset')
 properties = [QM9.U0]#, QM9.U0, QM9.homo, QM9.lumo]
 dataset = QM9(os.path.join(data_dir, 'qm9.db'))
-train, val, test = train_test_split(data=dataset, num_train=0.8, num_val=0.1,
+train, val, test = train_test_split(data=dataset, num_train=args.split[0],
+                                    num_val=args.split[1],
                                     split_file='training/split.npz')
 train_loader = AtomsLoader(train, batch_size=args.batch_size)
 val_loader = AtomsLoader(val, batch_size=args.batch_size)
@@ -41,8 +42,8 @@ mean, stddev = train_loader.get_statistics(properties, atomrefs=atomrefs)
 # model build
 logging.info('build model')
 representation = SchNet(n_interactions=6)
-output_modules = [Atomwise(property=p, mean=mean[0], stddev=stddev[0]) for p in
-                  properties]
+output_modules = [Atomwise(property=p, mean=mean[0], stddev=stddev[0],
+                           atomref=atomrefs) for p in properties]
 property_model = PropertyModel(output_modules=output_modules)
 model = NewAtomisticModel(representation, property_model)
 
@@ -51,13 +52,14 @@ logging.info('build trainer')
 metrics = [MeanAbsoluteError(p, p) for p in properties]
 logging_hooks = [TensorboardHook(log_path=model_dir, metrics=metrics),
                  CSVHook(log_path=model_dir, metrics=metrics)]
-scheduleing_hooks = [ReduceLROnPlateauHook(patience=25, window_length=3)]
+scheduleing_hooks = [ReduceLROnPlateauHook(patience=25, window_length=3, factor=0.8)]
 hooks = logging_hooks + scheduleing_hooks
 
 # trainer
 loss = loss_fn(properties)
 trainer = Trainer(model_dir, model=model, hooks=hooks, loss_fn=loss,
-                  optimizer=Adam(params=model.parameters()), train_loader=train_loader,
+                  optimizer=Adam(params=model.parameters(), lr=1e-3),
+                  train_loader=train_loader,
                   validation_loader=val_loader)
 
 # run training
