@@ -83,3 +83,9 @@ class StatisticsAccumulator:
         stddev = np.sqrt(self.M2 / self.count)
 
         return mean, stddev
+
+    def get_mean(self):
+        return self.mean
+
+    def get_stddev(self):
+        return np.sqrt(self.M2 / self.count)
