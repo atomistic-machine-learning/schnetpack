@@ -50,7 +50,7 @@ def create_dirs(_log, output_dir, overwrite):
     if os.path.exists(output_dir) and overwrite:
         rmtree(output_dir)
 
-    if not os.path.exists(output_dir):
+    if not os.path.exists(output_dir) and output_dir not in ['', '.']:
         os.makedirs(output_dir)
 
 
