@@ -179,36 +179,24 @@ class AtomsLoader(DataLoader):
 
         """
         if type(property_names) is not list:
-            is_single = True
             property_names = [property_names]
-            atomrefs = [atomrefs]
-        else:
-            is_single = False
-            if atomrefs is None:
-                atomrefs = [None] * len(property_names)
-
-        if type(per_atom) is not list:
-            per_atom = [per_atom] * len(property_names)
+        if type(per_atom) is not dict:
+            per_atom = {prop: per_atom for prop in property_names}
 
         with torch.no_grad():
-            statistics = [StatisticsAccumulator(batch=True) for _ in property_names]
+            statistics = {prop: StatisticsAccumulator(batch=True)
+                          for prop in property_names}
             logger.info("statistics will be calculated...")
 
             for row in self:
-                for property_name, statistic, pa in zip(
-                    property_names, statistics, per_atom
-                ):
-                    self._update_statistic(pa, atomrefs[property_name], property_name,
-                                           row, statistic)
+                for prop in property_names:
+                    self._update_statistic(per_atom[prop], atomrefs[prop], prop, row,
+                                           statistics[prop])
 
-            stats = list(zip(*[s.get_statistics() for s in statistics]))
-            mean, stddev = stats
+            means = {prop: s.get_mean() for prop, s in statistics.items()}
+            stddevs = {prop:s.get_stddev() for prop, s in statistics.items()}
 
-            if is_single:
-                mean = mean[0]
-                stddev = stddev[0]
-
-            return mean, stddev
+            return means, stddevs
 
     def _update_statistic(self, atomistic, atomref, property_name, row, statistics):
         """
