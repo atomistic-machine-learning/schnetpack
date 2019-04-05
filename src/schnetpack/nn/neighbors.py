@@ -138,7 +138,7 @@ def triple_distances(positions, neighbors_j, neighbors_k):
         torch.Tensor: Distance between neighbors
 
     """
-    nbatch, natoms, nangles = neighbors_k.size()
+    nbatch, _, _ = neighbors_k.size()
     idx_m = torch.arange(nbatch, device=positions.device, dtype=torch.long)[
         :, None, None
     ]
