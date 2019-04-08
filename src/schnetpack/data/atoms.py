@@ -269,6 +269,19 @@ class AtomsData(Dataset):
 
         return atomref
 
+    def get_atomrefs(self, properties):
+        """
+        Return multiple atomrefs as dict.
+
+        Args:
+            properties (list or str): Desired properties for which the atomrefs are
+                calculated.
+
+        Returns:
+            dict: atomic references
+        """
+        return {p: self.get_atomref(p) for p in properties}
+
 
 class DownloadableAtomsData(AtomsData):
     def __init__(

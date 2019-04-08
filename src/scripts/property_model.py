@@ -37,7 +37,7 @@ train, val, test = train_test_split(data=dataset, num_train=args.split[0],
 train_loader = AtomsLoader(train, batch_size=args.batch_size)
 val_loader = AtomsLoader(val, batch_size=args.batch_size)
 test_loader = AtomsLoader(test, batch_size=args.batch_size)
-atomrefs = {p: dataset.get_atomref(p) for p in properties}
+atomrefs = dataset.get_atomrefs(properties)
 means, stddevs = train_loader.get_statistics(properties, per_atom=True,
                                              atomrefs=atomrefs)
 
