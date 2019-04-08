@@ -135,9 +135,9 @@ def test_loader(example_asedata, batch_size):
             assert entry.shape[0] == min(batch_size, len(loader.dataset))
 
     mu, std = loader.get_statistics('energy')
-    assert mu == 5.
-    assert std == 0.
+    assert mu['energy'] == torch.FloatTensor([5.])
+    assert std['energy'] == torch.FloatTensor([0.])
 
     mu, std = loader.get_statistics(['energy'])
-    assert mu[0] == torch.FloatTensor([5.])
-    assert std[0] == torch.FloatTensor([0.])
+    assert mu['energy'] == torch.FloatTensor([5.])
+    assert std['energy'] == torch.FloatTensor([0.])

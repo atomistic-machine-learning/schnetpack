@@ -182,6 +182,8 @@ class AtomsLoader(DataLoader):
             property_names = [property_names]
         if type(per_atom) is not dict:
             per_atom = {prop: per_atom for prop in property_names}
+        if atomrefs is None:
+            atomrefs = {prop: None for prop in property_names}
 
         with torch.no_grad():
             statistics = {prop: StatisticsAccumulator(batch=True)
@@ -194,7 +196,7 @@ class AtomsLoader(DataLoader):
                                            statistics[prop])
 
             means = {prop: s.get_mean() for prop, s in statistics.items()}
-            stddevs = {prop:s.get_stddev() for prop, s in statistics.items()}
+            stddevs = {prop: s.get_stddev() for prop, s in statistics.items()}
 
             return means, stddevs
 
