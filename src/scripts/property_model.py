@@ -2,7 +2,8 @@ import logging
 from torch.optim import Adam
 import os
 from shutil import rmtree
-from schnetpack.atomistic import PropertyModel, AtomisticModel, Atomwise
+from schnetpack.atomistic import AtomisticModel
+from schnetpack.output_modules import Atomwise
 from schnetpack.datasets import QM9
 from schnetpack.data import AtomsLoader, train_test_split
 from schnetpack.representation import SchNet
@@ -45,8 +46,7 @@ logging.info('build model')
 representation = SchNet(n_interactions=6)
 output_modules = [Atomwise(property=p, mean=means[p], stddev=stddevs[p],
                            atomref=atomrefs[p]) for p in properties]
-property_model = PropertyModel(output_modules=output_modules)
-model = AtomisticModel(representation, property_model)
+model = AtomisticModel(representation, output_modules)
 
 # hooks
 logging.info('build trainer')

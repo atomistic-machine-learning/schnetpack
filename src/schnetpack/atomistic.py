@@ -13,8 +13,8 @@ class AtomisticModel(nn.Module):
 
     Args:
         representation (torch.nn.Module): Representation block of the model.
-        output_model (schnetpack.atomwise.OutputBlock): Output block of the model.
-            Needed for predicting properties.
+        output_modules (list or nn.ModuleList or spk.output_modules.Atomwise): Output
+            block of the model. Needed for predicting properties.
 
     Returns:
          dict: property predictions
@@ -22,46 +22,36 @@ class AtomisticModel(nn.Module):
     def __init__(
             self,
             representation,
-            output_model
+            output_modules
     ):
         super(AtomisticModel, self).__init__()
         self.representation = representation
-        self.output_layer = output_model
-        self.requires_dr = output_model.requires_dr
+        if type(output_modules) == list:
+            output_modules = nn.ModuleList(output_modules)
+        self.output_modules = output_modules
+        self.requires_dr = any([om.derivative for om in self.output_modules])
 
     def forward(self, inputs):
         if self.requires_dr:
             inputs[Structure.R].requires_grad_()
         inputs["representation"] = self.representation(inputs)
-        return self.output_layer(inputs)
-
-
-class OutputBlock(nn.Module):
-    """
-    Forward representation trough multiple output models.
-
-    Args:
-        output_modules (list): list of output modules
-    """
-
-    def __init__(
-            self,
-            output_modules
-    ):
-        super(OutputBlock, self).__init__()
-        if type(output_modules) == list:
-            output_modules = nn.ModuleList(output_modules)
-        self.output_modules = output_modules
-        self.requires_dr = any([om.dr_property for om in output_modules])
-
-    def forward(self, inputs):
-        """
-        Forward inputs through output modules.
-
-        Returns:
-            dict: properties and predictions
-        """
         outs = {}
         for output_model in self.output_modules:
             outs.update(output_model(inputs))
         return outs
+
+
+class Properties:
+    """
+    Collection of all available model properties.
+    """
+
+    energy = "energy"
+    forces = "forces"
+    dipole_moment = "dipole_moment"
+    total_dipole_moment = "total_dipole_moment"
+    polarizability = "polarizability"
+    iso_polarizability = "iso_polarizability"
+    at_polarizability = "at_polarizability"
+    charges = "charges"
+    energy_contributions = "energy_contributions"

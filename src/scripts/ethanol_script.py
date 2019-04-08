@@ -2,7 +2,8 @@ import logging
 from torch.optim import Adam
 import os
 from shutil import rmtree
-from schnetpack.atomistic import PropertyModel, AtomisticModel, Atomwise
+from schnetpack.atomistic import AtomisticModel
+from schnetpack.output_modules import Atomwise
 from schnetpack.data import AtomsData, AtomsLoader, train_test_split
 from schnetpack.representation import SchNet
 from schnetpack.train import Trainer, TensorboardHook, CSVHook, ReduceLROnPlateauHook
@@ -37,18 +38,15 @@ train_loader = AtomsLoader(train, batch_size=args.batch_size)
 val_loader = AtomsLoader(val, batch_size=args.batch_size)
 test_loader = AtomsLoader(test, batch_size=args.batch_size)
 atomrefs = {p: dataset.get_atomref(p) for p in properties}
-stats = train_loader.get_statistics(properties, atomrefs=atomrefs)
-means = {prop: mean for prop, mean in zip(properties, stats[0])}
-stddevs = {prop: stddev for prop, stddev in zip(properties, stats[1])}
+means, stddevs = train_loader.get_statistics(properties, atomrefs=atomrefs)
 
 # model build
 logging.info('build model')
 representation = SchNet(n_interactions=6)
-output_modules = [Atomwise(property='energy', dr_property='forces',
+output_modules = [Atomwise(property='energy', derivative='forces',
                            mean=means['energy'], stddev=stddevs['energy'])]
 
-property_model = PropertyModel(output_modules=output_modules)
-model = AtomisticModel(representation, property_model)
+model = AtomisticModel(representation, output_modules)
 
 # hooks
 logging.info('build trainer')
