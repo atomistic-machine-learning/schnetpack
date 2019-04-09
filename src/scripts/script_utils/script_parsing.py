@@ -27,14 +27,14 @@ def get_parser():
 
     ## training
     train_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
-    train_parser.add_argument("datapath", help="Path / destination of ANI1 dataset")
+    train_parser.add_argument("datapath", help="Path / destination of dataset")
     train_parser.add_argument("modelpath", help="Destination for models and logs")
     train_parser.add_argument(
         "--property",
         type=str,
-        help="ANI-1 property to be predicted (default: %(default)s)",
+        help="Property to be predicted (default: %(default)s)",
         default="energy",
-        choices=ANI1.properties,
+        choices=ANI1.available_properties,
     )
     train_parser.add_argument(
         "--seed", type=int, default=None, help="Set random seed for torch and numpy."
@@ -100,7 +100,7 @@ def get_parser():
 
     ## evaluation
     eval_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
-    eval_parser.add_argument("datapath", help="Path of ANI1 dataset")
+    eval_parser.add_argument("datapath", help="Path to dataset")
     eval_parser.add_argument("modelpath", help="Path of stored model")
     eval_parser.add_argument(
         "--split",
