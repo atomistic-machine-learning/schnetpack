@@ -17,7 +17,6 @@ class Trainer:
        optimizer (torch.optim.optimizer.Optimizer): training optimizer.
        train_loader (torch.utils.data.DataLoader): data loader for training set.
        validation_loader (torch.utils.data.DataLoader): data loader for validation set.
-       max_epochs (int, optional): maximum number of training epochs.
        keep_n_checkpoints (int, optional): number of saved checkpoints.
        checkpoint_interval (int, optional): intervals after which checkpoints is saved.
        hooks (list, optional): hooks to customize training process.
@@ -34,7 +33,6 @@ class Trainer:
         optimizer,
         train_loader,
         validation_loader,
-        max_epochs=100000,
         keep_n_checkpoints=3,
         checkpoint_interval=10,
         validation_interval=1,
@@ -50,7 +48,6 @@ class Trainer:
         self.keep_n_checkpoints = keep_n_checkpoints
         self.hooks = hooks
         self.loss_is_normalized = loss_is_normalized
-        self.max_epochs = max_epochs
 
         self._model = model
         self._stop = False
@@ -129,18 +126,16 @@ class Trainer:
         )
         self.state_dict = torch.load(chkpt)
 
-    def train(self, device):
-        """Train the model on a specified device.
+    def train(self, device, n_epochs):
+        """Train the model for the given number of epochs on a specified device.
 
         Args:
             device (torch.torch.Device): device on which training takes place.
+            n_epochs (int): number of training epochs.
+
+        Note: Depending on the `hooks`, training can stop earlier than `n_epochs`.
 
         """
-        #        try:
-        #            from tqdm import tqdm
-        #            progress = True
-        #        except:
-        #            progress = False
         self._model.to(device)
         self._stop = False
 
@@ -148,7 +143,8 @@ class Trainer:
             h.on_train_begin(self)
 
         try:
-            while self.epoch < self.max_epochs:
+            for _ in range(n_epochs):
+                # increase number of epochs by 1
                 self.epoch += 1
 
                 for h in self.hooks:
@@ -233,9 +229,13 @@ class Trainer:
 
                 if self._stop:
                     break
-
+            #
+            # Training Ends
+            #
+            # run hooks & store checkpoint
             for h in self.hooks:
                 h.on_train_ends(self)
+            self.store_checkpoint()
 
         except Exception as e:
             for h in self.hooks:
