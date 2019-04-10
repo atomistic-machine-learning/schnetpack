@@ -50,6 +50,13 @@ class Hook:
         pass
 
     def on_batch_begin(self, trainer, train_batch):
+        """Log at the beginning of train batch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+            train_batch (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+
+        """
         pass
 
     def on_batch_end(self, trainer, train_batch, result, loss):
@@ -404,6 +411,13 @@ class WarmRestartHook(Hook):
         self.init_opt_state = trainer.optimizer.state_dict()
 
     def on_batch_begin(self, trainer, train_batch):
+        """Log at the beginning of train batch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+            train_batch (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+
+        """
         if self.each_step:
             self.scheduler.step()
 
@@ -475,6 +489,14 @@ class MaxStepHook(Hook):
         self.max_steps = max_steps
 
     def on_batch_begin(self, trainer, train_batch):
+        """Log at the beginning of train batch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+            train_batch (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+
+        """
+        # stop training if max_steps is reached
         if trainer.step > self.max_steps:
             trainer._stop = True
 
@@ -507,6 +529,13 @@ class LRScheduleHook(Hook):
         self.scheduler.last_epoch = trainer.epoch - 1
 
     def on_batch_begin(self, trainer, train_batch):
+        """Log at the beginning of train batch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+            train_batch (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+
+        """
         if self.each_step:
             self.scheduler.step()
 
