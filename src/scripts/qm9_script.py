@@ -10,7 +10,7 @@ from schnetpack.representation import SchNet
 from schnetpack.train import Trainer, TensorboardHook, CSVHook, ReduceLROnPlateauHook
 from schnetpack.metrics import MeanAbsoluteError
 from schnetpack.utils import loss_fn
-from scripts.arg_parsing import get_parser
+from scripts.script_utils.arg_parsing import get_parser
 
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))

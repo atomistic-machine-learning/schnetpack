@@ -9,7 +9,7 @@ from schnetpack.representation import SchNet
 from schnetpack.train import Trainer, TensorboardHook, CSVHook, ReduceLROnPlateauHook
 from schnetpack.metrics import MeanAbsoluteError
 from schnetpack.utils import loss_fn
-from scripts.arg_parsing import get_parser
+from scripts.script_utils.arg_parsing import get_parser
 
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -44,7 +44,8 @@ means, stddevs = train_loader.get_statistics(properties, atomrefs=atomrefs)
 logging.info('build model')
 representation = SchNet(n_interactions=6)
 output_modules = [Atomwise(property='energy', derivative='forces',
-                           mean=means['energy'], stddev=stddevs['energy'])]
+                           mean=means['energy'], stddev=stddevs['energy'],
+                           negative_dr=True)]
 
 model = AtomisticModel(representation, output_modules)
 
