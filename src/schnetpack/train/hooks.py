@@ -41,6 +41,12 @@ class Hook:
         pass
 
     def on_epoch_begin(self, trainer):
+        """Log at the beginning of train epoch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+
+        """
         pass
 
     def on_batch_begin(self, trainer, train_batch):
@@ -95,6 +101,13 @@ class LoggingHook(Hook):
         self.metrics = metrics
 
     def on_epoch_begin(self, trainer):
+        """Log at the beginning of train epoch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+
+        """
+        # reset train_loss and counter
         if self.log_train_loss:
             self._train_loss = 0.0
             self._counter = 0
@@ -395,6 +408,12 @@ class WarmRestartHook(Hook):
             self.scheduler.step()
 
     def on_epoch_begin(self, trainer):
+        """Log at the beginning of train epoch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+
+        """
         if not self.each_step:
             self.scheduler.step()
 
@@ -433,6 +452,13 @@ class MaxEpochHook(Hook):
         self.max_epochs = max_epochs
 
     def on_epoch_begin(self, trainer):
+        """Log at the beginning of train epoch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+
+        """
+        # stop training if max_epochs is reached
         if trainer.epoch > self.max_epochs:
             trainer._stop = True
 
@@ -485,6 +511,12 @@ class LRScheduleHook(Hook):
             self.scheduler.step()
 
     def on_epoch_begin(self, trainer):
+        """Log at the beginning of train epoch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+
+        """
         if not self.each_step:
             self.scheduler.step()
 
