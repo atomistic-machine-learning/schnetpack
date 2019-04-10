@@ -2,11 +2,8 @@ import argparse
 
 from schnetpack.datasets import ANI1
 
-
-def get_parser():
+def get_main_parser():
     """ Setup parser for command line arguments """
-    main_parser = argparse.ArgumentParser()
-
     ## command-specific
     cmd_parser = argparse.ArgumentParser(add_help=False)
     cmd_parser.add_argument(
@@ -24,18 +21,14 @@ def get_parser():
         help="Mini-batch size for training and prediction (default: %(default)s)",
         default=400,
     )
+    return cmd_parser
 
+
+def add_subparsers(cmd_parser):
     ## training
     train_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
     train_parser.add_argument("datapath", help="Path / destination of dataset")
     train_parser.add_argument("modelpath", help="Destination for models and logs")
-    train_parser.add_argument(
-        "--property",
-        type=str,
-        help="Property to be predicted (default: %(default)s)",
-        default="energy",
-        choices=ANI1.available_properties,
-    )
     train_parser.add_argument(
         "--seed", type=int, default=None, help="Set random seed for torch and numpy."
     )
@@ -207,7 +200,7 @@ def get_parser():
     )
 
     ## setup subparser structure
-    cmd_subparsers = main_parser.add_subparsers(
+    cmd_subparsers = cmd_parser.add_subparsers(
         dest="mode", help="Command-specific arguments"
     )
     cmd_subparsers.required = True
@@ -241,5 +234,3 @@ def get_parser():
     eval_subparsers.add_parser(
         "wacsf", help="wACSF help", parents=[eval_parser, wacsf_parser]
     )
-
-    return main_parser

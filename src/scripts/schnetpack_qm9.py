@@ -11,7 +11,7 @@ from torch.utils.data.sampler import RandomSampler
 
 import schnetpack as spk
 from schnetpack.datasets import QM9
-from scripts.script_utils.script_parsing import main_parser
+from scripts.script_utils.script_parsing import get_main_parser, add_subparsers
 from scripts.script_utils.setup import setup_run
 from scripts.script_utils.model import get_representation, get_model
 from scripts.script_utils.training import train
@@ -19,26 +19,26 @@ from scripts.script_utils.evaluation import evaluate
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-def qm9_parser(main_parser):
-    main_parser.add_argument(
+def add_qm9_arguments(base_parser):
+    base_parser.add_argument(
         "--property",
         type=str,
         help="Property to be predicted (default: %(default)s)",
-        default=QM9.U0,
+        default="dipole_moment",
         choices=QM9.available_properties,
     )
-    main_parser.add_argument(
+    base_parser.add_argument(
         "--remove_uncharacterized",
         type=bool,
         help="Remove uncharacterized molecules from QM9",
         default=False,
     )
-    return main_parser
 
 
 if __name__ == "__main__":
-    parser = main_parser
-    parser = qm9_parser(parser)
+    parser = get_main_parser()
+    add_qm9_arguments(parser)
+    add_subparsers(parser)
     args = parser.parse_args()
 
     device = torch.device("cuda" if args.cuda else "cpu")
@@ -111,7 +111,7 @@ if __name__ == "__main__":
             if args.property == QM9.mu:
                 output_module = spk.output_modules.DipoleMoment(
                     args.features, predict_magnitude=True, mean=mean[args.property],
-                    stddev=stddev[args.property]
+                    stddev=stddev[args.property], property=args.property
                 )
             else:
                 output_module = spk.output_modules.Atomwise(
@@ -122,7 +122,7 @@ if __name__ == "__main__":
                     atomref=atomref[args.property],
                     property=args.property,
                 )
-        elif args.model == "wascf":
+        elif args.model == "wacsf":
             elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
             if args.property == QM9.mu:
                 output_module = spk.output_modules.ElementalDipoleMoment(
@@ -131,6 +131,7 @@ if __name__ == "__main__":
                     n_layers=args.n_layers,
                     predict_magnitude=True,
                     elements=elements,
+                    property=args.property,
                 )
             else:
                 output_module = spk.output_modules.ElementalAtomwise(
@@ -142,6 +143,7 @@ if __name__ == "__main__":
                     stddev=stddev[args.property],
                     atomref=atomref[args.property],
                     elements=elements,
+                    property=args.property,
                 )
         else:
             raise NotImplementedError

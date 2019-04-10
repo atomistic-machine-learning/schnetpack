@@ -15,29 +15,27 @@ from ase.data import atomic_numbers
 import schnetpack as spk
 from scripts.script_utils.model import get_representation, get_model
 from scripts.script_utils.setup import setup_run
-from scripts.script_utils.script_parsing import get_parser
+from scripts.script_utils.script_parsing import get_main_parser, add_subparsers
 from schnetpack.datasets import ANI1
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
 def ani1_parser(main_parser):
-    ani1_parser = argparse.ArgumentParser(add_help=False, parents=[main_parser])
-    ani1_parser.add_argument("datapath", help="Path / destination of dataset")
-    ani1_parser.add_argument("modelpath", help="Destination for models and logs")
-    ani1_parser.add_argument(
+    #ani1_parser = argparse.ArgumentParser(add_help=False, parents=[main_parser])
+    main_parser.add_argument(
         "--property",
         type=str,
         help="Property to be predicted (default: %(default)s)",
         default="energy",
         choices=ANI1.available_properties,
     )
-    return main_parser
 
 
 if __name__ == "__main__":
-    # get parser
-    parser = get_parser()
-    parser = ani1_parser(parser)
+    parser = get_main_parser()
+    # add ani1 specific arguments
+    ani1_parser(parser)
+    add_subparsers(parser)
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
