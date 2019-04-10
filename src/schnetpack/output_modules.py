@@ -70,6 +70,7 @@ class Atomwise(nn.Module):
         derivative=None,
         negative_dr=False,
         create_graph=False,
+        # todo: check
         retain_graph=True,
         mean=None,
         stddev=None,
@@ -321,6 +322,62 @@ class ElementalAtomwise(Atomwise):
             atomref=atomref,
             max_z=max_z,
             outnet=outnet
+        )
+
+
+class ElementalDipoleMoment(DipoleMoment):
+    """
+    Predicts partial charges and computes dipole moment using serparate NNs for every different element.
+    Particularly useful for networks of Behler-Parrinello type.
+    Args:
+        n_in (int): input dimension of representation
+        n_out (int): output dimension of representation (default: 1)
+        n_layers (int): number of layers in output network (default: 3)
+        return_charges (bool): If True, latent atomic charges are returned as well (default: False)
+        requires_dr (bool): Set True, if derivative w.r.t. atom positions is required (default: False)
+        predict_magnitude (bool): if True, predict the magnitude of the dipole moment instead of the vector (default: False)
+        elements (set of int): List of atomic numbers present in the training set {1,6,7,8,9} for QM9. (default: frozenset(1,6,7,8,9))
+        n_hidden (int): number of neurons in each layer of the output network. (default: 50)
+        activation (function): activation function for hidden nn (default: schnetpack.nn.activations.shifted_softplus)
+        activation (function): activation function for hidden nn
+        mean (torch.FloatTensor): mean of energy
+        stddev (torch.FloatTensor): standard deviation of energy
+    """
+
+    def __init__(
+        self,
+        n_in,
+        n_out=1,
+        n_layers=3,
+        contributions=False,
+        property="y",
+        predict_magnitude=False,
+        elements=frozenset((1, 6, 7, 8, 9)),
+        n_hidden=50,
+        activation=schnetpack.nn.activations.shifted_softplus,
+        mean=None,
+        stddev=None,
+    ):
+        outnet = schnetpack.nn.blocks.GatedNetwork(
+            n_in,
+            n_out,
+            elements,
+            n_hidden=n_hidden,
+            n_layers=n_layers,
+            activation=activation,
+        )
+
+        super(ElementalDipoleMoment, self).__init__(
+            n_in,
+            n_layers,
+            None,
+            activation=activation,
+            property=property,
+            contributions=contributions,
+            outnet=outnet,
+            predict_magnitude=predict_magnitude,
+            mean=mean,
+            stddev=stddev,
         )
 
 
