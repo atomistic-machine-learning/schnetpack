@@ -78,13 +78,14 @@ class Trainer:
         state_dict = {
             "epoch": self.epoch,
             "step": self.step,
-            "model": self._model.state_dict()
-            if not self._check_is_parallel()
-            else self._model.module.state_dict(),
             "best_loss": self.best_loss,
             "optimizer": self.optimizer.state_dict(),
             "hooks": [h.state_dict for h in self.hooks],
         }
+        if self._check_is_parallel():
+            state_dict["model"] = self._model.module.state_dict()
+        else:
+            state_dict["model"] = self._model.state_dict()
         return state_dict
 
     @state_dict.setter
