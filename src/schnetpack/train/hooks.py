@@ -455,7 +455,7 @@ class WarmRestartHook(Hook):
 
 
 class MaxEpochHook(Hook):
-    """Hook to stop training if a maximal number of epochs is reached.
+    """Hook to stop training when a maximum number of epochs is reached.
 
     Args:
        max_epochs (int): maximal number of epochs.
@@ -478,10 +478,10 @@ class MaxEpochHook(Hook):
 
 
 class MaxStepHook(Hook):
-    """Hook to stop training if a maximal number of steps is reached.
+    """Hook to stop training when a maximum number of steps is reached.
 
     Args:
-        max_steps (int): maximal number of steps.
+        max_steps (int): maximum number of steps.
 
     """
 
