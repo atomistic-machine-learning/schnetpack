@@ -119,7 +119,6 @@ class Trainer:
                     for f in os.listdir(self.checkpoint_path)
                 ]
             )
-        epoch = str(epoch)
 
         chkpt = os.path.join(
             self.checkpoint_path, "checkpoint-" + str(epoch) + ".pth.tar"
