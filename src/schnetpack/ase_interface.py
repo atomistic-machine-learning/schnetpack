@@ -31,7 +31,7 @@ from ase.md.velocitydistribution import (
 from ase.optimize import QuasiNewton
 from ase.vibrations import Vibrations
 
-from schnetpack.atomistic import Atomwise, ElementalAtomwise, Properties
+from schnetpack.atomistic import Properties
 from schnetpack.data import Structure
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
 from schnetpack.representation import BehlerSFBlock
