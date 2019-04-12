@@ -23,7 +23,7 @@ setup(
              'src/sacred_scripts/spk_md.py',
              'src/sacred_scripts/spk_parse.py',
              'src/scripts/schnetpack_omdb.py',
-             'src/scripts/property_model.py'],
+             ],
     package_dir={'': 'src'},
     python_requires='>=3.6',
     install_requires=[
