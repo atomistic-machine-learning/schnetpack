@@ -1,28 +1,24 @@
 #!/usr/bin/env python
 import logging
 import os
-from shutil import copyfile
-import argparse
-
-import numpy as np
-import schnetpack.output_modules
 import torch
+
+import schnetpack.output_modules
 from scripts.script_utils.evaluation import evaluate
 from scripts.script_utils.training import train
-from torch.utils.data.sampler import RandomSampler
 from ase.data import atomic_numbers
 
 import schnetpack as spk
-from scripts.script_utils.model import get_representation, get_model
-from scripts.script_utils.setup import setup_run
-from scripts.script_utils.script_parsing import get_main_parser, add_subparsers
 from schnetpack.datasets import ANI1
+from scripts.script_utils import setup_run, get_representation, get_model, \
+    get_main_parser, add_subparsers, get_loaders, get_statistics
+
+
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-def ani1_parser(main_parser):
-    #ani1_parser = argparse.ArgumentParser(add_help=False, parents=[main_parser])
-    main_parser.add_argument(
+def add_ani1_arguments(parser):
+    parser.add_argument(
         "--property",
         type=str,
         help="Property to be predicted (default: %(default)s)",
@@ -32,83 +28,55 @@ def ani1_parser(main_parser):
 
 
 if __name__ == "__main__":
+    # parse arguments
     parser = get_main_parser()
-    # add ani1 specific arguments
-    ani1_parser(parser)
+    add_ani1_arguments(parser)
     add_subparsers(parser)
     args = parser.parse_args()
-    device = torch.device("cuda" if args.cuda else "cpu")
-
-    # get train args from file or dump them
     train_args = setup_run(args)
 
-    # will download ANI1 if necessary, calculate_triples is required for
-    # wACSF angular functions
+    # set device
+    device = torch.device("cuda" if args.cuda else "cpu")
+
+    # define metrics
+    metrics = [
+        spk.metrics.MeanAbsoluteError(train_args.property, train_args.property),
+        spk.metrics.RootMeanSquaredError(train_args.property, train_args.property),
+    ]
+
+    # build dataset
     logging.info("ANI1 will be loaded...")
     ani1 = spk.datasets.ANI1(
         args.datapath,
         download=True,
         properties=[train_args.property],
         collect_triples=args.model == "wacsf",
-        num_heavy_atoms=2
+        # todo: remove
+        num_heavy_atoms=2,
     )
+
+    # get atomrefs
     atomref = ani1.get_atomrefs(train_args.property)
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")
-    if args.mode == "train":
-        if args.split_path is not None:
-            copyfile(args.split_path, split_path)
-
-    logging.info("create splits...")
-    data_train, data_val, data_test = ani1.create_splits(
-        *args.split, split_file=split_path
-    )
-
-    logging.info("load data...")
-    train_loader = spk.data.AtomsLoader(
-        data_train,
-        batch_size=args.batch_size,
-        sampler=RandomSampler(data_train),
-        num_workers=4,
-        pin_memory=True,
-    )
-    val_loader = spk.data.AtomsLoader(
-        data_val, batch_size=args.batch_size, num_workers=2, pin_memory=True
-    )
-
-    metrics = [
-        spk.metrics.MeanAbsoluteError(train_args.property, train_args.property),
-        spk.metrics.RootMeanSquaredError(train_args.property, train_args.property),
-    ]
+    train_loader, val_loader, test_loader = \
+        get_loaders(logging, args, dataset=ani1, split_path=split_path)
 
     if args.mode == "train":
+        # get statistics
         logging.info("calculate statistics...")
-        split_data = np.load(split_path)
-        if "mean" in split_data.keys():
-            mean = split_data["mean"].item()
-            stddev = split_data["stddev"].item()
-            calc_stats = False
-            logging.info("cached statistics was loaded...")
-        else:
-            mean, stddev = train_loader.get_statistics(
-                train_args.property, True, atomref
-            )
-            np.savez(
-                split_path,
-                train_idx=split_data["train_idx"],
-                val_idx=split_data["val_idx"],
-                test_idx=split_data["test_idx"],
-                mean=mean,
-                stddev=stddev,
-            )
+        mean, stddev = get_statistics(split_path, logging, train_loader, train_args,
+                                      atomref)
 
-        # construct the model
+        # build representation
         representation = get_representation(
             train_args,
             train_loader=train_loader,
             mode=args.mode
         )
+
+        # build output module
         if args.model == "schnet":
             output_modules = schnetpack.output_modules.Atomwise(
                 args.features,
@@ -119,7 +87,6 @@ if __name__ == "__main__":
                 property='energy'
             )
         elif args.model == "wacsf":
-            # Build HDNN model
             elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
             output_modules = spk.output_modules.ElementalAtomwise(
                 n_in=representation.n_symfuncs,
@@ -132,21 +99,27 @@ if __name__ == "__main__":
                 elements=elements,
                 property='energy'
             )
+        else:
+            raise NotImplementedError("Model {} is not known".format(args.model))
+
+        # build AtomisticModel
         model = get_model(
             representation=representation,
             output_modules=output_modules,
             parallelize=args.parallel,
         )
+
+        # run training
         logging.info("training...")
         train(args, model, train_loader, val_loader, device, metrics)
         logging.info("...training done!")
 
     elif args.mode == "eval":
+        # load model
         model = torch.load(os.path.join(args.modelpath, "best_model"))
+
+        # run evaluation
         logging.info("evaluating...")
-        test_loader = spk.data.AtomsLoader(
-            data_test, batch_size=args.batch_size, num_workers=4, pin_memory=True
-        )
         with torch.no_grad():
             evaluate(
                 args,
@@ -159,4 +132,4 @@ if __name__ == "__main__":
             )
         logging.info("... done!")
     else:
-        print("Unknown mode:", args.mode)
+        raise NotImplementedError("Unknown mode:", args.mode)

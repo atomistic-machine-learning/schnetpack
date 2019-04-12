@@ -4,3 +4,4 @@ from .evaluation import *
 from .training import *
 from .setup import *
 from .arg_parsing import *
+from .data import *

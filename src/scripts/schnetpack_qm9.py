@@ -1,13 +1,10 @@
 #!/usr/bin/env python
 import logging
 import os
-from shutil import copyfile
 
-import numpy as np
 import schnetpack.output_modules
 import torch
 from ase.data import atomic_numbers
-from torch.utils.data.sampler import RandomSampler
 
 import schnetpack as spk
 from schnetpack.datasets import QM9
@@ -16,6 +13,7 @@ from scripts.script_utils.setup import setup_run
 from scripts.script_utils.model import get_representation, get_model
 from scripts.script_utils.training import train
 from scripts.script_utils.evaluation import evaluate
+from scripts.script_utils import get_statistics, get_loaders
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
@@ -24,7 +22,7 @@ def add_qm9_arguments(base_parser):
         "--property",
         type=str,
         help="Property to be predicted (default: %(default)s)",
-        default="dipole_moment",
+        default=QM9.U0,
         choices=QM9.available_properties,
     )
     base_parser.add_argument(
@@ -36,16 +34,23 @@ def add_qm9_arguments(base_parser):
 
 
 if __name__ == "__main__":
+    # parse arguments
     parser = get_main_parser()
     add_qm9_arguments(parser)
     add_subparsers(parser)
     args = parser.parse_args()
-
-    device = torch.device("cuda" if args.cuda else "cpu")
-
     train_args = setup_run(args)
 
-    # will download qm9 if necessary, calculate_triples is required for wACSF angular functions
+    # set device
+    device = torch.device("cuda" if args.cuda else "cpu")
+
+    # define metrics
+    metrics = [
+        spk.metrics.MeanAbsoluteError(train_args.property, train_args.property),
+        spk.metrics.RootMeanSquaredError(train_args.property, train_args.property),
+    ]
+
+    # build dataset
     logging.info("QM9 will be loaded...")
     qm9 = QM9(
         args.datapath,
@@ -54,59 +59,29 @@ if __name__ == "__main__":
         collect_triples=args.model == "wacsf",
         remove_uncharacterized=train_args.remove_uncharacterized,
     )
+
+    # get atomrefs
     atomref = qm9.get_atomrefs(train_args.property)
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")
-    if args.mode == "train":
-        if args.split_path is not None:
-            copyfile(args.split_path, split_path)
-
-    logging.info("create splits...")
-    data_train, data_val, data_test = qm9.create_splits(
-        *train_args.split, split_file=split_path
-    )
-
-    logging.info("load data...")
-    train_loader = spk.data.AtomsLoader(
-        data_train,
-        batch_size=args.batch_size,
-        sampler=RandomSampler(data_train),
-        num_workers=4,
-        pin_memory=True,
-    )
-    val_loader = spk.data.AtomsLoader(
-        data_val, batch_size=args.batch_size, num_workers=2, pin_memory=True
-    )
+    train_loader, val_loader, test_loader = \
+        get_loaders(logging, args, dataset=qm9, split_path=split_path)
 
     if args.mode == "train":
+        # get statistics
         logging.info("calculate statistics...")
-        split_data = np.load(split_path)
-        if "mean" in split_data.keys():
-            mean = split_data["mean"].item()
-            stddev = split_data["stddev"].item()
-            calc_stats = False
-            logging.info("cached statistics was loaded...")
-        else:
-            mean, stddev = train_loader.get_statistics(
-                train_args.property, True, atomref
-            )
-            np.savez(
-                split_path,
-                train_idx=split_data["train_idx"],
-                val_idx=split_data["val_idx"],
-                test_idx=split_data["test_idx"],
-                mean=mean,
-                stddev=stddev,
-            )
+        mean, stddev = get_statistics(split_path, logging, train_loader, train_args,
+                                      atomref)
 
-        # construct the model
+        # build representation
         representation = get_representation(
-            train_args,
+            args,
             train_loader=train_loader,
             mode=args.mode
         )
 
+        # build output module
         if args.model == "schnet":
             if args.property == QM9.mu:
                 output_module = spk.output_modules.DipoleMoment(
@@ -148,27 +123,24 @@ if __name__ == "__main__":
         else:
             raise NotImplementedError
 
+        # build AtomisticModel
         model = get_model(
             representation=representation,
             output_modules=output_module,
             parallelize=args.parallel,
         )
 
-    metrics = [
-        spk.metrics.MeanAbsoluteError(train_args.property, train_args.property),
-        spk.metrics.RootMeanSquaredError(train_args.property, train_args.property),
-    ]
-
-    if args.mode == "train":
+        # run training
         logging.info("training...")
         train(args, model, train_loader, val_loader, device, metrics=metrics)
         logging.info("...training done!")
+
     elif args.mode == "eval":
+        # load model
         model = torch.load(os.path.join(args.modelpath, "best_model"))
+
+        # run evaluation
         logging.info("evaluating...")
-        test_loader = spk.data.AtomsLoader(
-            data_test, batch_size=args.batch_size, num_workers=2, pin_memory=True
-        )
         with torch.no_grad():
             evaluate(
                 args,
@@ -181,4 +153,4 @@ if __name__ == "__main__":
             )
         logging.info("... done!")
     else:
-        print("Unknown mode:", args.mode)
+        raise NotImplementedError("Unknown mode:", args.mode)

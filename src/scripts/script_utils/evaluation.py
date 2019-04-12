@@ -1,11 +1,9 @@
 import os
-
 import numpy as np
-import schnetpack as spk
 
 
 def evaluate(args, model, train_loader, val_loader, test_loader, device,
-             metrics):
+             metrics, custom_header=None):
 
     header = []
     results = []
@@ -19,6 +17,9 @@ def evaluate(args, model, train_loader, val_loader, test_loader, device,
     if "test" in args.split:
         header += ["Test MAE", "Test RMSE"]
         results += evaluate_dataset(metrics, model, test_loader, device)
+
+    if custom_header:
+        header = custom_header
     header = " ".join(header)
     results = np.array(results)
 
