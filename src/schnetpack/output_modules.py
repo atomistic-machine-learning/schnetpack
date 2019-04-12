@@ -147,7 +147,7 @@ class Atomwise(nn.Module):
             result[self.contributions] = yi
 
         if self.derivative:
-            sign = -1 * int(self.negative_dr)
+            sign = -1. if self.negative_dr else 1.
             dy = grad(
                 result[self.property],
                 inputs[Structure.R],
@@ -156,7 +156,6 @@ class Atomwise(nn.Module):
                 retain_graph=True
             )[0]
             result[self.derivative] = sign * dy
-
         return result
 
 

@@ -82,8 +82,8 @@ if __name__ == "__main__":
     metrics = [
         spk.metrics.MeanAbsoluteError(MD17.energy, MD17.energy),
         spk.metrics.RootMeanSquaredError(MD17.energy, MD17.energy),
-        spk.metrics.MeanAbsoluteError(MD17.forces, MD17.forces),
-        spk.metrics.RootMeanSquaredError(MD17.forces, MD17.forces),
+        spk.metrics.MeanAbsoluteError(MD17.forces, MD17.forces, element_wise=True),
+        spk.metrics.RootMeanSquaredError(MD17.forces, MD17.forces, element_wise=True),
     ]
 
     header = [
@@ -125,7 +125,8 @@ if __name__ == "__main__":
                 stddev=stddev[args.property],
                 atomref=atomref[args.property],
                 property=args.property,
-                derivative="forces"
+                derivative="forces",
+                negative_dr=True,
             )
         elif args.model == "wascf":
             elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
