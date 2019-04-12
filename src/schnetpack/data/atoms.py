@@ -280,6 +280,8 @@ class AtomsData(Dataset):
         Returns:
             dict: atomic references
         """
+        if type(properties) is not list:
+            properties = [properties]
         return {p: self.get_atomref(p) for p in properties}
 
 

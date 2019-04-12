@@ -26,6 +26,8 @@ class AtomisticModel(nn.Module):
     ):
         super(AtomisticModel, self).__init__()
         self.representation = representation
+        if type(output_modules) not in [list, nn.ModuleList]:
+            output_modules = [output_modules]
         if type(output_modules) == list:
             output_modules = nn.ModuleList(output_modules)
         self.output_modules = output_modules
