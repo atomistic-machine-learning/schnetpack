@@ -10,19 +10,20 @@ from schnetpack.representation import SchNet
 from schnetpack.train import Trainer, TensorboardHook, CSVHook, ReduceLROnPlateauHook
 from schnetpack.metrics import MeanAbsoluteError
 from schnetpack.utils import loss_fn
-from scripts.script_utils.arg_parsing import get_parser
 
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
-parser = get_parser()
-args = parser.parse_args()
-
 # basic settings
-data_dir = args.data_path
-model_dir = args.model_dir
-logging.info('datapath: {}'.format(os.path.abspath(data_dir)))
-os.makedirs(data_dir, exist_ok=True)
+db_path = 'data/qm9.db'
+data_dir = os.path.dirname(db_path)
+model_dir = 'qm9_model'
+num_train, num_val = [1000, 100]
+batch_size = 64
+device = 'cpu'
+
+# create folders
+logging.info('datapath: {}'.format(db_path))
 if os.path.exists(model_dir):
     rmtree(model_dir)
 os.makedirs(model_dir)
@@ -30,13 +31,15 @@ os.makedirs(model_dir)
 # data preparation
 logging.info('get dataset')
 properties = [QM9.U0, QM9.homo, QM9.lumo]
-dataset = QM9(os.path.join(data_dir, 'qm9.db'))
-train, val, test = train_test_split(data=dataset, num_train=args.split[0],
-                                    num_val=args.split[1],
-                                    split_file='training/split.npz')
-train_loader = AtomsLoader(train, batch_size=args.batch_size)
-val_loader = AtomsLoader(val, batch_size=args.batch_size)
-test_loader = AtomsLoader(test, batch_size=args.batch_size)
+dataset = QM9(db_path)
+train, val, test = train_test_split(data=dataset, num_train=num_train,
+                                    num_val=num_val,
+                                    split_file=os.path.join(model_dir, 'split.npz'))
+train_loader = AtomsLoader(train, batch_size=batch_size)
+val_loader = AtomsLoader(val, batch_size=batch_size)
+test_loader = AtomsLoader(test, batch_size=batch_size)
+
+# statistics
 atomrefs = dataset.get_atomrefs(properties)
 means, stddevs = train_loader.get_statistics(properties, per_atom=True,
                                              atomrefs=atomrefs)
@@ -65,4 +68,4 @@ trainer = Trainer(model_dir, model=model, hooks=hooks, loss_fn=loss,
 
 # run training
 logging.info('training')
-trainer.train(device=args.device)
+trainer.train(device=device)
