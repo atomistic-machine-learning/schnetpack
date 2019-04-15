@@ -4,12 +4,25 @@ from ase.data import atomic_numbers
 import torch.nn as nn
 from schnetpack.utils import compute_params
 from schnetpack.atomistic import AtomisticModel
+from schnetpack.nn.cutoff import HardCutoff, MollifierCutoff, CosineCutoff
 
 
 def get_representation(
     args,
     train_loader=None,
 ):
+    # build cutoff module
+    if args.cutoff_function == "hard":
+        cutoff_network = HardCutoff
+    elif args.cutoff_function == "cosine":
+        cutoff_network = CosineCutoff
+    elif args.cutoff_function == "mollifier":
+        cutoff_network = MollifierCutoff
+    else:
+        raise NotImplementedError("cutoff_function {} is unknown".format(
+            args.cutoff_function))
+
+    # build representation
     if args.model == "schnet":
          return spk.representation.SchNet(
             args.features,
@@ -17,6 +30,7 @@ def get_representation(
             args.interactions,
             args.cutoff,
             args.num_gaussians,
+            cutoff_network=cutoff_network,
         )
 
     elif args.model == "wacsf":
