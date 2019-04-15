@@ -1,12 +1,8 @@
 #!/usr/bin/env python
 import logging
 import os
-from shutil import copyfile
-
-import numpy as np
 import torch
 from ase.data import atomic_numbers
-from torch.utils.data.sampler import RandomSampler
 
 import schnetpack as spk
 from schnetpack.datasets import MD17
@@ -18,13 +14,6 @@ logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
 def add_md17_arguments(parser):
-    parser.add_argument(
-        "--property",
-        type=str,
-        help="Property to be predicted (default: %(default)s)",
-        default=MD17.energy,
-        choices=MD17.available_properties,
-    )
     parser.add_argument(
         "--molecule",
         type=str,
@@ -38,7 +27,11 @@ if __name__ == "__main__":
     # parse arguments
     parser = get_main_parser()
     add_md17_arguments(parser)
-    add_subparsers(parser)
+    add_subparsers(
+        parser,
+        defaults=dict(property=MD17.energy,
+                      elements=["H", "C", "O"]),
+        choices=dict(property=MD17.available_properties))
     args = parser.parse_args()
     train_args = setup_run(args)
 

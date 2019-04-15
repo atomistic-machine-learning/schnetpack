@@ -17,21 +17,13 @@ from scripts.script_utils import setup_run, get_representation, get_model, \
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-def add_ani1_arguments(parser):
-    parser.add_argument(
-        "--property",
-        type=str,
-        help="Property to be predicted (default: %(default)s)",
-        default="energy",
-        choices=ANI1.available_properties,
-    )
-
-
 if __name__ == "__main__":
     # parse arguments
     parser = get_main_parser()
-    add_ani1_arguments(parser)
-    add_subparsers(parser)
+    add_subparsers(
+        parser,
+        defaults=dict(property=ANI1.energy),
+        choices=dict(property=ANI1.available_properties))
     args = parser.parse_args()
     train_args = setup_run(args)
 

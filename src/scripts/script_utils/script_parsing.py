@@ -1,6 +1,5 @@
 import argparse
 
-from schnetpack.datasets import ANI1
 
 def get_main_parser():
     """ Setup parser for command line arguments """
@@ -11,26 +10,43 @@ def get_main_parser():
     )
     cmd_parser.add_argument(
         "--parallel",
-        help="Run data-parallel on all available GPUs (specify with environment variable"
-        + " CUDA_VISIBLE_DEVICES)",
+        help="Run data-parallel on all available GPUs (specify with environment"
+             " variable CUDA_VISIBLE_DEVICES)",
         action="store_true",
     )
     cmd_parser.add_argument(
         "--batch_size",
         type=int,
         help="Mini-batch size for training and prediction (default: %(default)s)",
-        default=400,
+        default=100,
     )
     return cmd_parser
 
 
-def add_subparsers(cmd_parser):
+def add_subparsers(cmd_parser, defaults={}, choices={}):
     ## training
     train_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])
-    train_parser.add_argument("datapath", help="Path / destination of dataset")
-    train_parser.add_argument("modelpath", help="Destination for models and logs")
     train_parser.add_argument(
-        "--seed", type=int, default=None, help="Set random seed for torch and numpy."
+        "--property",
+        type=str,
+        help="Organic Materials Database property to be predicted"
+             " (default: %(default)s)",
+        default=defaults["property"],
+        choices=choices["property"],
+    )
+    train_parser.add_argument(
+        "datapath",
+        help="Path / destination of dataset"
+    )
+    train_parser.add_argument(
+        "modelpath",
+        help="Destination for models and logs"
+    )
+    train_parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Set random seed for torch and numpy."
     )
     train_parser.add_argument(
         "--overwrite", help="Remove previous model directory.", action="store_true"
@@ -38,7 +54,9 @@ def add_subparsers(cmd_parser):
 
     # data split
     train_parser.add_argument(
-        "--split_path", help="Path / destination of npz with data splits", default=None
+        "--split_path",
+        help="Path / destination of npz with data splits",
+        default=None
     )
     train_parser.add_argument(
         "--split",
@@ -62,8 +80,9 @@ def add_subparsers(cmd_parser):
     train_parser.add_argument(
         "--lr_patience",
         type=int,
-        help="Epochs without improvement before reducing the learning rate (default: %(default)s)",
-        default=6,
+        help="Epochs without improvement before reducing the learning rate "
+             "(default: %(default)s)",
+        default=25 if "lr_patience" not in defaults.keys else defaults["lr_patience"],
     )
     train_parser.add_argument(
         "--lr_decay",
@@ -108,7 +127,8 @@ def add_subparsers(cmd_parser):
     model_parser.add_argument(
         "--aggregation_mode",
         type=str,
-        default="sum",
+        default="sum" if "aggragation_mode" not in defaults.keys() else
+            defaults["aggragation_mode"],
         choices=["sum", "avg"],
         help=" (default: %(default)s)",
     )
@@ -116,16 +136,29 @@ def add_subparsers(cmd_parser):
     #######  SchNet  #######
     schnet_parser = argparse.ArgumentParser(add_help=False, parents=[model_parser])
     schnet_parser.add_argument(
-        "--features", type=int, help="Size of atom-wise representation", default=256
+        "--features",
+        type=int,
+        help="Size of atom-wise representation",
+        default=256 if "features" not in defaults.keys() else defaults["features"],
     )
     schnet_parser.add_argument(
-        "--interactions", type=int, help="Number of interaction blocks", default=6
+        "--interactions",
+        type=int,
+        help="Number of interaction blocks",
+        default=6
     )
     schnet_parser.add_argument(
         "--cutoff",
         type=float,
         default=5.0,
         help="Cutoff radius of local environment (default: %(default)s)",
+    )
+
+    schnet_parser.add_argument(
+        "--cutoff_function",
+        help="Functional form of the cutoff",
+        choices=["hard", "cosine", "mollifier"],
+        default="hard",
     )
     schnet_parser.add_argument(
         "--num_gaussians",
@@ -194,9 +227,11 @@ def add_subparsers(cmd_parser):
     )
     wacsf_parser.add_argument(
         "--elements",
-        default=["H", "C", "N", "O", "F"],
+        default=["H", "C", "N", "O", "F"] if "elements" not in defaults.keys() else
+            defaults["elements"],
         nargs="+",
-        help="List of elements to be used for symmetry functions (default: %(default)s).",
+        help="List of elements to be used for symmetry functions "
+             "(default: %(default)s).",
     )
 
     ## setup subparser structure
@@ -208,7 +243,10 @@ def add_subparsers(cmd_parser):
     subparser_eval = cmd_subparsers.add_parser("eval", help="Eval help")
 
     subparser_export = cmd_subparsers.add_parser("export", help="Export help")
-    subparser_export.add_argument("modelpath", help="Path of stored model")
+    subparser_export.add_argument(
+        "modelpath",
+        help="Path of stored model"
+    )
     subparser_export.add_argument(
         "destpath", help="Destination path for exported model"
     )

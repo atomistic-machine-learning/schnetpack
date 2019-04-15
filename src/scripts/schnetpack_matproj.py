@@ -17,20 +17,18 @@ def add_matproj_arguments(parser):
         help="API key for Materials Project (see https://materialsproject.org/open)",
         default=None,
     )
-    parser.add_argument(
-        "--property",
-        type=str,
-        help="Materials Project property to be predicted (default: %(default)s)",
-        default="formation_energy_per_atom",
-        choices=MaterialsProject.available_properties,
-    )
 
 
 if __name__ == "__main__":
     # parse arguments
     parser = get_main_parser()
     add_matproj_arguments(parser)
-    add_subparsers(parser)
+    add_subparsers(
+        parser,
+        defaults=dict(property=MaterialsProject.EformationPerAtom,
+                      features=64,
+                      aggregation_mode="mean"),
+        choices=dict(property=MaterialsProject.available_properties))
     args = parser.parse_args()
     train_args = setup_run(args)
 

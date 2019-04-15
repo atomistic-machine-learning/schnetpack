@@ -37,7 +37,10 @@ if __name__ == "__main__":
     # parse arguments
     parser = get_main_parser()
     add_qm9_arguments(parser)
-    add_subparsers(parser)
+    add_subparsers(
+        parser,
+        defaults=dict(property=QM9.U0),
+        choices=dict(property=QM9.available_properties))
     args = parser.parse_args()
     train_args = setup_run(args)
 

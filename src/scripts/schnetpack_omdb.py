@@ -1,15 +1,10 @@
 #!/usr/bin/env python
 import logging
 import os
-from shutil import copyfile
-
-
-import numpy as np
-import schnetpack.output_modules
 import torch
-from torch.utils.data.sampler import RandomSampler
 
 import schnetpack as spk
+import schnetpack.output_modules
 from schnetpack.datasets import OrganicMaterialsDatabase
 from scripts.script_utils import setup_run, get_model, get_representation, train,\
     evaluate, get_main_parser, add_subparsers, get_loaders, get_statistics
@@ -18,21 +13,17 @@ from scripts.script_utils import setup_run, get_model, get_representation, train
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-def add_omdb_arguments(parser):
-    parser.add_argument(
-        "--property",
-        type=str,
-        help="Organic Materials Database property to be predicted (default: %(default)s)",
-        default="band_gap",
-        choices=OrganicMaterialsDatabase.properties,
-    )
-
-
 if __name__ == "__main__":
     # parse arguments
     parser = get_main_parser()
-    add_omdb_arguments(parser)
-    add_subparsers(parser)
+    add_subparsers(
+        parser,
+        defaults=dict(property=OrganicMaterialsDatabase.BandGap,
+                      features=64,
+                      patience=6,
+                      aggregation_mode="mean"),
+        choices=dict(property=OrganicMaterialsDatabase.available_properties))
+
     args = parser.parse_args()
     train_args = setup_run(args)
 
