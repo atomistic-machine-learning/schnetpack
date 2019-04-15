@@ -82,7 +82,7 @@ def add_subparsers(cmd_parser, defaults={}, choices={}):
         type=int,
         help="Epochs without improvement before reducing the learning rate "
              "(default: %(default)s)",
-        default=25 if "lr_patience" not in defaults.keys else defaults["lr_patience"],
+        default=25 if "lr_patience" not in defaults.keys() else defaults["lr_patience"],
     )
     train_parser.add_argument(
         "--lr_decay",
