@@ -8,7 +8,8 @@ import schnetpack as spk
 from schnetpack.datasets import MD17
 from schnetpack.output_modules import Atomwise, ElementalAtomwise
 from scripts.script_utils import get_main_parser, add_subparsers, train, \
-    get_representation, get_model, evaluate, setup_run, get_statistics, get_loaders
+    get_representation, get_model, evaluate, setup_run, get_statistics, get_loaders,\
+    tradeoff_loff_fn
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
@@ -20,6 +21,12 @@ def add_md17_arguments(parser):
         help="Choose molecule inside the MD17 dataset",
         default="ethanol",
         choices=MD17.datasets_dict.keys(),
+    )
+    parser.add_argument(
+        "--rho",
+        type=float,
+        help="Energy-force trade-off. For rho=0, use forces only. (default: %(default)s)",
+        default=0.1,
     )
 
 
@@ -111,7 +118,9 @@ if __name__ == "__main__":
 
         # run training
         logging.info("training...")
-        train(args, model, train_loader, val_loader, device, metrics=metrics)
+        loss_fn = tradeoff_loff_fn(args, "forces")
+        train(args, model, train_loader, val_loader, device, metrics=metrics,
+              loss_fn=loss_fn)
         logging.info("...training done!")
 
     elif args.mode == "eval":
