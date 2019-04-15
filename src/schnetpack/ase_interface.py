@@ -57,7 +57,9 @@ class SpkCalculator(Calculator):
         **kwargs: Additional arguments for basic ase calculator class
     """
 
-    implemented_properties = ["energy", "forces"]
+    energy = "energy"
+    forces = "forces"
+    implemented_properties = [energy, forces]
 
     def __init__(
         self,
@@ -65,6 +67,8 @@ class SpkCalculator(Calculator):
         device="cpu",
         collect_triples=False,
         environment_provider=SimpleEnvironmentProvider(),
+        energy=None,
+        forces=None,
         **kwargs
     ):
         Calculator.__init__(self, **kwargs)
@@ -76,6 +80,9 @@ class SpkCalculator(Calculator):
             collect_triples=collect_triples,
             device=device,
         )
+
+        self.model_energy = energy
+        self.model_forces = forces
 
     def calculate(self, atoms=None, properties=["energy"], system_changes=all_changes):
         """
@@ -95,12 +102,12 @@ class SpkCalculator(Calculator):
 
         results = {}
         # Convert outputs to calculator format
-        if Properties.energy in properties:
-            energy = model_results[Properties.energy].cpu().data.numpy()
-            results["energy"] = energy.reshape(-1)
-        if Properties.forces in properties:
-            forces = model_results[Properties.forces].cpu().data.numpy()
-            results["forces"] = forces.reshape((len(atoms), 3))
+        if self.model_energy is not None:
+            energy = model_results[self.model_energy].cpu().data.numpy()
+            results[self.energy] = energy.reshape(-1)
+        if self.model_forces is not None:
+            forces = model_results[self.model_forces].cpu().data.numpy()
+            results[self.forces] = forces.reshape((len(atoms), 3))
 
         self.results = results
 
