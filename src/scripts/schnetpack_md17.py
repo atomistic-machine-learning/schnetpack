@@ -80,7 +80,6 @@ if __name__ == "__main__":
         representation = get_representation(
             args,
             train_loader,
-            mode="train"
         )
 
         # build output module

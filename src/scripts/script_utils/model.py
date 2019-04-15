@@ -9,7 +9,6 @@ from schnetpack.atomistic import AtomisticModel
 def get_representation(
     args,
     train_loader=None,
-    mode="train",
 ):
     if args.model == "schnet":
          return spk.representation.SchNet(
@@ -38,19 +37,20 @@ def get_representation(
             "Using {:d} {:s}-type SF".format(representation.n_symfuncs, sfmode)
         )
         # Standardize representation if requested
-        if args.standardize and mode == "train":
+        if args.standardize:
             if train_loader is None:
                 raise ValueError(
-                    "Specification of a trainig_loader is required to standardize wACSF"
+                    "Specification of a training_loader is required to standardize "
+                    "wACSF"
                 )
             else:
                 logging.info("Computing and standardizing symmetry function statistics")
-        else:
-            train_loader = None
+                return spk.representation.StandardizeSF(
+                    representation, train_loader, cuda=args.cuda
+                )
 
-        return spk.representation.StandardizeSF(
-            representation, train_loader, cuda=args.cuda
-        )
+        else:
+            return representation
 
     else:
         raise NotImplementedError("Unknown model class:", args.model)
