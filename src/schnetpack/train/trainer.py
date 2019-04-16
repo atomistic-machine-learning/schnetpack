@@ -177,7 +177,6 @@ class Trainer:
 
                     result = self._model(train_batch)
                     loss = self.loss_fn(train_batch, result)
-
                     loss.backward()
                     self.optimizer.step()
                     self.step += 1
