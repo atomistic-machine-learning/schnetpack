@@ -1,12 +1,8 @@
 import logging
-
 import numpy as np
-import torch
-from torch.autograd import Variable
+
 
 logger = logging.getLogger(__name__)
-
-from .definitions import Structure
 
 
 class StatisticsAccumulator:

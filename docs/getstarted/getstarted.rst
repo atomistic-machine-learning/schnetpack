@@ -11,12 +11,14 @@ Installation
 Requirements
 ^^^^^^^^^^^^
 
-* Python_ 3.x
+* Python_ (>=3.6)
 * NumPy_
-* Pytorch_ 0.4 (or newer)
-* Ase_
+* Pytorch_ (>=0.4.1)
+* Ase_ (>=3.16)
 * TensorboardX_ (tensorboard logging instead of .csv)
 * h5py_
+* tqdm_
+* PyYaml_
 
 .. _Python: http://www.python.org/
 .. _NumPy: http://docs.scipy.org/doc/numpy/reference/
@@ -24,38 +26,42 @@ Requirements
 .. _TensorboardX: https://github.com/lanpa/tensorboardX
 .. _h5py: https://www.h5py.org
 .. _Ase: https://wiki.fysik.dtu.dk/ase/index.html
-.. _PyPI: https://pypi.org/project/schnetpack
-
+.. _tqdm: https://github.com/tqdm/tqdm
+.. _PyYaml: https://pyyaml.org/
 
 
 ..
     Installing using pip
     ^^^^^^^^^^^^^^^^^^^^
     .. highlight:: bash
-    
-    
+
+
     The simplest way to install SchNetPack is through pip which will automatically get the source code from PyPI_::
-    
+
         $ pip install --upgrade schnetpack
-    
+
     Now, once all the requirements are satisfied, you should be ready to use SchNetPack.
 
 
 Building from source
 ^^^^^^^^^^^^^^^^^^^^
-You can directly build a path from source through
-git clone. To do so, just type::
 
-   $ git clone git@gitlab.tubit.tu-berlin.de:atomistic-ml/schnetpack.git <dest_dir>
+You can directly build a path from source through git clone. To do so, just type::
+
+   $ git clone https://github.com/atomistic-machine-learning/schnetpack.git <dest_dir>
 
 then move in the new directory ``<dest_dir>``::
 
    $ cd <dest_dir>
 
-and install both requirements and schnetpack::
+install both requirements and schnetpack::
 
    $ pip install -r requirements.txt
    $ python setup.py install
+
+and run tests::
+
+   $ pytest
 
 Once that's done, you are ready to go!
 
@@ -78,7 +84,7 @@ Provided Scripts
 ================
 
 QM9 & ANI1
-^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^
 
 The QM9 and ANI1 example scripts allow to train and evaluate both SchNet and wACSF neural networks.
 In the following tutorial we focus on the qm9 scripts, but the same procedure applies for the
@@ -169,7 +175,6 @@ The ``md17`` dataset allows to do molecular dynamics of small molecules containi
 Materials Project
 ^^^^^^^^^^^^^^^^^
 A repository of bulk crystals containing atom types ranging across the whole periodic table up to Z = 94 [#mp]_.
-
 
 
 ==========

@@ -5,30 +5,25 @@ import torch
 
 
 class Trainer:
-    r"""
-       Class to train models.
+    r"""Class to train a model.
 
-       Runs an internal training loop, takes care of validation and can be
-       extended with custom functionality using hooks.
+    This contains an internal training loop which takes care of validation and can be
+    extended with custom functionality using hooks.
 
-       Args:
-           model_path (str): path to the model directory
-           model (torch.Module): model to be trained
-           loss_fn (callable): loss function used for training the model
-           optimizer (torch.optim.optimizer.Optimizer): optimizer used for
-                                                        training
-           train_loader (torch.utils.data.DataLoader): data loader for training
-                                                       set
-           validation_loader (torch.utils.data.DataLoader): data loader for
-                                                            validation set
-           keep_n_checkpoints (int): number of saved checkpoints (default: 3)
-           checkpoint_interval (int): interval after which checkpoints is saved
-                                      (default: 10)
-           hooks (list): hooks to customize training process (default: [])
-           loss_is_normalized (bool): if true, the loss per datapoint will be
-                                      reported. Otherwise, the accumulated loss
-                                      (default: True)
-       """
+    Args:
+       model_path (str): path to the model directory.
+       model (torch.Module): model to be trained.
+       loss_fn (callable): training loss function.
+       optimizer (torch.optim.optimizer.Optimizer): training optimizer.
+       train_loader (torch.utils.data.DataLoader): data loader for training set.
+       validation_loader (torch.utils.data.DataLoader): data loader for validation set.
+       keep_n_checkpoints (int, optional): number of saved checkpoints.
+       checkpoint_interval (int, optional): intervals after which checkpoints is saved.
+       hooks (list, optional): hooks to customize training process.
+       loss_is_normalized (bool, optional): if True, the loss per data point will be
+           reported. Otherwise, the accumulated loss is reported.
+
+   """
 
     def __init__(
         self,
@@ -132,11 +127,10 @@ class Trainer:
         self.state_dict = torch.load(chkpt)
 
     def train(self, device):
-        r"""
-        Starts training of model on a specified device.
+        """Train the model on a specified device.
 
         Args:
-            device (torch.torch.Device): device on which training takes place
+            device (torch.torch.Device): device on which training takes place.
 
         """
         #        try:
