@@ -34,6 +34,9 @@ class AtomisticModel(nn.Module):
         self.requires_dr = any([om.derivative for om in self.output_modules])
 
     def forward(self, inputs):
+        """
+        Forward representation output through output modules.
+        """
         if self.requires_dr:
             inputs[Structure.R].requires_grad_()
         inputs["representation"] = self.representation(inputs)

@@ -17,4 +17,5 @@ SchNetpack consists of the following modules:
    md
    simulate
    utils
+   output_modules
 

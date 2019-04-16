@@ -178,7 +178,6 @@ class DipoleMoment(Atomwise):
         mean (torch.FloatTensor or None): mean of dipole (default: None)
         stddev (torch.FloatTensor or None): stddev of dipole (default: None)
 
-
     Returns:
         dict: vector for the dipole moment
 
@@ -328,6 +327,7 @@ class ElementalDipoleMoment(DipoleMoment):
     """
     Predicts partial charges and computes dipole moment using serparate NNs for every different element.
     Particularly useful for networks of Behler-Parrinello type.
+
     Args:
         n_in (int): input dimension of representation
         n_out (int): output dimension of representation (default: 1)
@@ -383,39 +383,6 @@ class ElementalDipoleMoment(DipoleMoment):
 class Polarizability(Atomwise):
     """
     Predicts polarizability of input molecules.
-
-        Args:
-        n_in (int): input dimension of representation (default: 128)
-        n_out (int): output dimension of target property (default: 1)
-        aggregation_mode (str): one of {sum, avg} (default: sum)
-        n_layers (int): number of nn in output network (default: 2)
-        n_neurons (list of int or None): number of neurons in each layer of the output
-            network. If `None`, divide neurons by 2 in each layer. (default: None)
-        activation (function): activation function for hidden nn
-            (default: spk.nn.activations.shifted_softplus)
-        property (str): name of the output property (default: "y")
-        contributions (str or None): Name of property contributions in return dict.
-            No contributions returned if None. (default: None)
-        derivative (str or None): Name of property derivative. No derivative
-            returned if None. (default: None)
-        negative_dr (bool): Multiply the derivative with -1 if True. (default: False)
-        create_graph (bool): If False, the graph used to compute the grad will be
-            freed. Note that in nearly all cases setting this option to True is not nee
-            ded and often can be worked around in a much more efficient way. Defaults to
-            the value of create_graph. (default: False)
-        retain_graph (bool): If True, graph of the derivative will be constructed,
-            allowing to compute higher order derivative products. (default: True)
-        mean (torch.Tensor or None): mean of property
-        stddev (torch.Tensor or None): standard deviation of property (default: None)
-        atomref (torch.Tensor or None): reference single-atom properties. Expects
-            an (max_z + 1) x 1 array where atomref[Z] corresponds to the reference
-            property of element Z. The value of atomref[0] must be zero, as this
-            corresponds to the reference property for for "mask" atoms. (default: None)
-        max_z (int): only relevant only if train_embeddings is true. Specifies
-            maximal nuclear charge of atoms. (default: 100)
-        outnet (callable): Network used for atomistic outputs. Takes schnetpack input
-            dictionary as input. Output is not normalized. If set to None,
-            a pyramidal network is generated automatically. (default: None)
 
     Args:
         n_in (int): input dimension of representation (default: 128)
