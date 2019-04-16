@@ -19,13 +19,6 @@ logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 def add_qm9_arguments(base_parser):
     base_parser.add_argument(
-        "--property",
-        type=str,
-        help="Property to be predicted (default: %(default)s)",
-        default=QM9.U0,
-        choices=QM9.available_properties,
-    )
-    base_parser.add_argument(
         "--remove_uncharacterized",
         type=bool,
         help="Remove uncharacterized molecules from QM9",
