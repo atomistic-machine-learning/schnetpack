@@ -21,8 +21,6 @@ def evaluate(args, model, train_loader, val_loader, test_loader, device,
 
     if custom_header:
         header = custom_header
-    header = " ".join(header)
-    results = np.array(results)
 
     eval_file = os.path.join(args.modelpath, "evaluation.txt")
     with open(eval_file, "w") as file:
