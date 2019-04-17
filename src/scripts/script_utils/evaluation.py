@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import csv
 
 
 def evaluate(args, model, train_loader, val_loader, test_loader, device,
@@ -23,12 +24,11 @@ def evaluate(args, model, train_loader, val_loader, test_loader, device,
     header = " ".join(header)
     results = np.array(results)
 
-    np.savetxt(
-        os.path.join(args.modelpath, "evaluation.txt"),
-        results,
-        header=header,
-        fmt="%.5f",
-    )
+    eval_file = os.path.join(args.modelpath, "evaluation.txt")
+    with open(eval_file, "w") as file:
+        wr = csv.writer(file)
+        wr.writerow(header)
+        wr.writerow(results)
 
 
 def evaluate_dataset(metrics, model, loader, device):
