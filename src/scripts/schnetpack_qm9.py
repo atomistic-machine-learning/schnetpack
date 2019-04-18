@@ -145,6 +145,7 @@ if __name__ == "__main__":
                 test_loader,
                 device,
                 metrics=metrics,
+                to_kcal=True,
             )
         logging.info("... done!")
     else:

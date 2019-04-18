@@ -4,7 +4,7 @@ import csv
 
 
 def evaluate(args, model, train_loader, val_loader, test_loader, device,
-             metrics, custom_header=None):
+             metrics, custom_header=None, to_kcal=False):
 
     header = []
     results = []
@@ -21,6 +21,10 @@ def evaluate(args, model, train_loader, val_loader, test_loader, device,
 
     if custom_header:
         header = custom_header
+
+    # unit conversion
+    if to_kcal:
+        results = [r * 23.06054 for r in results]
 
     eval_file = os.path.join(args.modelpath, "evaluation.txt")
     with open(eval_file, "w") as file:

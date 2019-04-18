@@ -127,15 +127,10 @@ if __name__ == "__main__":
 
         # header for output file
         header = [
-            "Subset",
             "Energy MAE",
             "Energy RMSE",
             "Force MAE",
             "Force RMSE",
-            "Force Length MAE",
-            "Force Length RMSE",
-            "Force Angle MAE",
-            "Angle RMSE",
         ]
 
         # load model
