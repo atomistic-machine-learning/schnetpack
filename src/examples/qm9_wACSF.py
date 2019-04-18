@@ -1,3 +1,4 @@
+import schnetpack.output_modules
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam
@@ -17,7 +18,7 @@ val_loader = spk.data.AtomsLoader(val)
 
 # create model
 reps = rep.BehlerSFBlock()
-output = atm.ElementalAtomwise(reps.n_symfuncs)
+output = schnetpack.output_modules.ElementalAtomwise(reps.n_symfuncs)
 model = atm.AtomisticModel(reps, output)
 
 # filter for trainable parameters (https://github.com/pytorch/pytorch/issues/679)

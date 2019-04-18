@@ -35,9 +35,9 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
 
     BandGap = "band_gap"
 
-    properties = [BandGap]
+    available_properties = [BandGap]
 
-    units = dict(zip(properties, [eV]))
+    units = dict(zip(available_properties, [eV]))
 
     def __init__(
         self,
@@ -77,7 +77,7 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
             self.cutoff,
             download=False,
             subset=subidx,
-            properties=self.properties,
+            properties=self.required_properties,
             collect_triples=self.collect_triples,
         )
 

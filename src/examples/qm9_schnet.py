@@ -1,3 +1,4 @@
+import schnetpack.output_modules
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam
@@ -17,7 +18,7 @@ val_loader = spk.data.AtomsLoader(val)
 
 # create model
 reps = rep.SchNet()
-output = atm.Atomwise()
+output = schnetpack.output_modules.Atomwise()
 model = atm.AtomisticModel(reps, output)
 
 # create trainergit add

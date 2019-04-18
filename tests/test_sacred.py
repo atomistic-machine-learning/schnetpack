@@ -87,14 +87,12 @@ class TestSacred:
         )
 
         # Default test configs
-        config_updates = {
-            "simulation_dir": simulation_dir,
-            "system.path_to_molecules": mol_path,
-            "calculator.model_path": model_path,
-            "calculator.required_properties": ["y", "dydx"],
-            "calculator.force_handle": "dydx",
-            "simulation_steps": 2,
-        }
+        config_updates = {'simulation_dir': simulation_dir,
+                          'system.path_to_molecules': mol_path,
+                          'calculator.model_path': model_path,
+                          'calculator.required_properties': ['energy', 'forces'],
+                          'calculator.force_handle': 'forces',
+                          'simulation_steps': 2}
 
         named_configs = ["simulator.log_temperature", "simulator.remove_com_motion"]
 
@@ -125,14 +123,12 @@ class TestSacred:
         )
 
         # Default test configs
-        config_updates = {
-            "simulation_dir": simulation_dir,
-            "system.path_to_molecules": mol_path,
-            "calculator.model_path": model_path,
-            "calculator.force_handle": "dydx",
-            "calculator.required_properties": ["y", "dydx"],
-            "simulation_steps": 2,
-        }
+        config_updates = {'simulation_dir': simulation_dir,
+                          'system.path_to_molecules': mol_path,
+                          'calculator.model_path': model_path,
+                          'calculator.force_handle': 'forces',
+                          'calculator.required_properties': ['energy', 'forces'],
+                          'simulation_steps': 2}
 
         named_configs = [
             "simulator.log_temperature",

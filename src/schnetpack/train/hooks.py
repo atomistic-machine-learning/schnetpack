@@ -531,17 +531,11 @@ class ReduceLROnPlateauHook(Hook):
 
     @property
     def state_dict(self):
-        return {
-            "best": self.scheduler.best,
-            "cooldown_counter": self.scheduler.cooldown_counter,
-            "num_bad_epochs": self.scheduler.num_bad_epochs,
-        }
+        return {"scheduler": self.scheduler}
 
     @state_dict.setter
     def state_dict(self, state_dict):
-        self.scheduler.best = state_dict["best"]
-        self.scheduler.cooldown_counter = state_dict["cooldown_counter"]
-        self.scheduler.num_bad_epochs = state_dict["num_bad_epochs"]
+        self.scheduler = state_dict["scheduler"]
 
     def on_train_begin(self, trainer):
         self.scheduler = ReduceLROnPlateau(
