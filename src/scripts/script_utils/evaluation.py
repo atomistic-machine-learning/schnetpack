@@ -3,8 +3,17 @@ import numpy as np
 import csv
 
 
-def evaluate(args, model, train_loader, val_loader, test_loader, device,
-             metrics, custom_header=None, to_kcal=False):
+def evaluate(
+    args,
+    model,
+    train_loader,
+    val_loader,
+    test_loader,
+    device,
+    metrics,
+    custom_header=None,
+    to_kcal=False,
+):
 
     header = []
     results = []

@@ -147,13 +147,13 @@ class Atomwise(nn.Module):
             result[self.contributions] = yi
 
         if self.derivative:
-            sign = -1. if self.negative_dr else 1.
+            sign = -1.0 if self.negative_dr else 1.0
             dy = grad(
                 result[self.property],
                 inputs[Structure.R],
                 grad_outputs=torch.ones_like(result[self.property]),
                 create_graph=self.create_graph,
-                retain_graph=True
+                retain_graph=True,
             )[0]
             result[self.derivative] = sign * dy
         return result
@@ -194,13 +194,12 @@ class DipoleMoment(Atomwise):
         n_layers=2,
         n_neurons=None,
         activation=schnetpack.nn.activations.shifted_softplus,
-        property='y',
+        property="y",
         contributions=None,
         predict_magnitude=False,
         mean=None,
         stddev=None,
         outnet=None,
-
     ):
         self.predict_magnitude = predict_magnitude
         super(DipoleMoment, self).__init__(
@@ -214,7 +213,7 @@ class DipoleMoment(Atomwise):
             stddev=stddev,
             outnet=outnet,
             property=property,
-            contributions=contributions
+            contributions=contributions,
         )
 
     def forward(self, inputs):
@@ -319,7 +318,7 @@ class ElementalAtomwise(Atomwise):
             stddev=stddev,
             atomref=atomref,
             max_z=max_z,
-            outnet=outnet
+            outnet=outnet,
         )
 
 

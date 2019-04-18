@@ -7,9 +7,18 @@ from ase.data import atomic_numbers
 import schnetpack as spk
 from schnetpack.datasets import MD17
 from schnetpack.output_modules import Atomwise, ElementalAtomwise
-from scripts.script_utils import get_main_parser, add_subparsers, train, \
-    get_representation, get_model, evaluate, setup_run, get_statistics, get_loaders,\
-    tradeoff_loff_fn
+from scripts.script_utils import (
+    get_main_parser,
+    add_subparsers,
+    train,
+    get_representation,
+    get_model,
+    evaluate,
+    setup_run,
+    get_statistics,
+    get_loaders,
+    tradeoff_loff_fn,
+)
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
@@ -36,9 +45,9 @@ if __name__ == "__main__":
     add_md17_arguments(parser)
     add_subparsers(
         parser,
-        defaults=dict(property=MD17.energy,
-                      elements=["H", "C", "O"]),
-        choices=dict(property=MD17.available_properties))
+        defaults=dict(property=MD17.energy, elements=["H", "C", "O"]),
+        choices=dict(property=MD17.available_properties),
+    )
     args = parser.parse_args()
     train_args = setup_run(args)
 
@@ -67,20 +76,19 @@ if __name__ == "__main__":
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")
-    train_loader, val_loader, test_loader = \
-        get_loaders(logging, args, dataset=md17, split_path=split_path)
+    train_loader, val_loader, test_loader = get_loaders(
+        logging, args, dataset=md17, split_path=split_path
+    )
 
     if args.mode == "train":
         # get statistics
         logging.info("calculate statistics...")
-        mean, stddev = get_statistics(split_path, logging, train_loader, train_args,
-                                      atomref)
+        mean, stddev = get_statistics(
+            split_path, logging, train_loader, train_args, atomref
+        )
 
         # build representation
-        representation = get_representation(
-            args,
-            train_loader,
-        )
+        representation = get_representation(args, train_loader)
 
         # build output module
         if args.model == "schnet":
@@ -113,33 +121,44 @@ if __name__ == "__main__":
             raise NotImplementedError
 
         # build AtomisticModel
-        model = get_model(representation, output_modules=output_module,
-                          parallelize=args.parallel)
+        model = get_model(
+            representation, output_modules=output_module, parallelize=args.parallel
+        )
 
         # run training
         logging.info("training...")
         loss_fn = tradeoff_loff_fn(args, "forces")
-        train(args, model, train_loader, val_loader, device, metrics=metrics,
-              loss_fn=loss_fn)
+        train(
+            args,
+            model,
+            train_loader,
+            val_loader,
+            device,
+            metrics=metrics,
+            loss_fn=loss_fn,
+        )
         logging.info("...training done!")
 
     elif args.mode == "eval":
 
         # header for output file
-        header = [
-            "Energy MAE",
-            "Energy RMSE",
-            "Force MAE",
-            "Force RMSE",
-        ]
+        header = ["Energy MAE", "Energy RMSE", "Force MAE", "Force RMSE"]
 
         # load model
         model = torch.load(os.path.join(args.modelpath, "best_model"))
 
         # run evaluation
         logging.info("evaluating...")
-        evaluate(args, model, train_loader, val_loader, test_loader, device,
-                 metrics, custom_header=header)
+        evaluate(
+            args,
+            model,
+            train_loader,
+            val_loader,
+            test_loader,
+            device,
+            metrics,
+            custom_header=header,
+        )
         logging.info("... done!")
     else:
         raise NotImplementedError("Unknown mode:", args.mode)

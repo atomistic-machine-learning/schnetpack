@@ -19,11 +19,8 @@ class AtomisticModel(nn.Module):
     Returns:
          dict: property predictions
     """
-    def __init__(
-            self,
-            representation,
-            output_modules
-    ):
+
+    def __init__(self, representation, output_modules):
         super(AtomisticModel, self).__init__()
         self.representation = representation
         if type(output_modules) not in [list, nn.ModuleList]:

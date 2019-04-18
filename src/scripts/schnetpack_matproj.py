@@ -5,8 +5,17 @@ import torch
 
 import schnetpack as spk
 from schnetpack.datasets import MaterialsProject
-from scripts.script_utils import get_representation, get_model, setup_run, \
-    train, evaluate, get_main_parser, add_subparsers, get_statistics, get_loaders
+from scripts.script_utils import (
+    get_representation,
+    get_model,
+    setup_run,
+    train,
+    evaluate,
+    get_main_parser,
+    add_subparsers,
+    get_statistics,
+    get_loaders,
+)
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
@@ -25,10 +34,13 @@ if __name__ == "__main__":
     add_matproj_arguments(parser)
     add_subparsers(
         parser,
-        defaults=dict(property=MaterialsProject.EformationPerAtom,
-                      features=64,
-                      aggregation_mode="mean"),
-        choices=dict(property=MaterialsProject.available_properties))
+        defaults=dict(
+            property=MaterialsProject.EformationPerAtom,
+            features=64,
+            aggregation_mode="mean",
+        ),
+        choices=dict(property=MaterialsProject.available_properties),
+    )
     args = parser.parse_args()
     train_args = setup_run(args)
 
@@ -55,20 +67,19 @@ if __name__ == "__main__":
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")
-    train_loader, val_loader, test_loader = \
-        get_loaders(logging, args, dataset=mp, split_path=split_path)
+    train_loader, val_loader, test_loader = get_loaders(
+        logging, args, dataset=mp, split_path=split_path
+    )
 
     if args.mode == "train":
         # get statistics
         logging.info("calculate statistics...")
-        mean, stddev = get_statistics(split_path, logging, train_loader, train_args,
-                                      atomref)
+        mean, stddev = get_statistics(
+            split_path, logging, train_loader, train_args, atomref
+        )
 
         # build representation
-        representation = get_representation(
-            train_args,
-            train_loader=train_loader,
-        )
+        representation = get_representation(train_args, train_loader=train_loader)
 
         # build output module
         if args.model == "schnet":

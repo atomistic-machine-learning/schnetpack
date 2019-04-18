@@ -13,9 +13,7 @@ def get_statistics(split_path, logging, train_loader, train_args, atomref):
         calc_stats = False
         logging.info("cached statistics was loaded...")
     else:
-        mean, stddev = train_loader.get_statistics(
-            train_args.property, True, atomref
-        )
+        mean, stddev = train_loader.get_statistics(train_args.property, True, atomref)
         np.savez(
             split_path,
             train_idx=split_data["train_idx"],

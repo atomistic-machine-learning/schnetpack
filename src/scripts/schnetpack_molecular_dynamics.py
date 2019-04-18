@@ -50,9 +50,7 @@ def get_parser():
     main_parser.add_argument("model_path", help="Path of trained model")
     main_parser.add_argument("simulation_dir", help="Path to store MD data")
     main_parser.add_argument(
-        "--device",
-        help="Choose between 'cpu' and 'cuda'",
-        default="cpu"
+        "--device", help="Choose between 'cpu' and 'cuda'", default="cpu"
     )
 
     # Optimization:
@@ -123,15 +121,15 @@ def get_parser():
         "--energy",
         type=str,
         help="Property name to the energy property in the dataset which has been "
-             "used for training the model",
+        "used for training the model",
         default="energy",
     )
     main_parser.add_argument(
         "--forces",
         type=str,
         help="Property name to the forces property in the dataset which has been "
-             "used for training the model",
-        default="forces"
+        "used for training the model",
+        default="forces",
     )
 
     return main_parser
@@ -163,8 +161,12 @@ if __name__ == "__main__":
 
     # Initialize the ML ase interface
     ml_calculator = spk.interfaces.AseInterface(
-        args.molecule_path, ml_model, args.simulation_dir, args.device, args.energy,
-        args.forces
+        args.molecule_path,
+        ml_model,
+        args.simulation_dir,
+        args.device,
+        args.energy,
+        args.forces,
     )
     logging.info("Initialized ase driver")
 

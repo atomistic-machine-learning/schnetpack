@@ -531,9 +531,7 @@ class ReduceLROnPlateauHook(Hook):
 
     @property
     def state_dict(self):
-        return {
-            "scheduler": self.scheduler
-        }
+        return {"scheduler": self.scheduler}
 
     @state_dict.setter
     def state_dict(self, state_dict):

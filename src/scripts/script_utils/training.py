@@ -59,6 +59,7 @@ def simple_loss_fn(args):
         diff = diff ** 2
         err_sq = torch.mean(diff)
         return err_sq
+
     return loss
 
 
@@ -74,4 +75,5 @@ def tradeoff_loff_fn(args, derivative):
             der_diff.view(-1)
         )
         return err_sq
+
     return loss

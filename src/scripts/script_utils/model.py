@@ -7,10 +7,7 @@ from schnetpack.atomistic import AtomisticModel
 from schnetpack.nn.cutoff import HardCutoff, MollifierCutoff, CosineCutoff
 
 
-def get_representation(
-    args,
-    train_loader=None,
-):
+def get_representation(args, train_loader=None):
     # build cutoff module
     if args.cutoff_function == "hard":
         cutoff_network = HardCutoff
@@ -19,12 +16,13 @@ def get_representation(
     elif args.cutoff_function == "mollifier":
         cutoff_network = MollifierCutoff
     else:
-        raise NotImplementedError("cutoff_function {} is unknown".format(
-            args.cutoff_function))
+        raise NotImplementedError(
+            "cutoff_function {} is unknown".format(args.cutoff_function)
+        )
 
     # build representation
     if args.model == "schnet":
-         return spk.representation.SchNet(
+        return spk.representation.SchNet(
             args.features,
             args.features,
             args.interactions,
@@ -80,4 +78,3 @@ def get_model(representation, output_modules, parallelize=False):
     logging.info("The model you built has: %d parameters" % compute_params(model))
 
     return model
-

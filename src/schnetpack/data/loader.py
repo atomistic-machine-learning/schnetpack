@@ -186,14 +186,16 @@ class AtomsLoader(DataLoader):
             atomrefs = {prop: None for prop in property_names}
 
         with torch.no_grad():
-            statistics = {prop: StatisticsAccumulator(batch=True)
-                          for prop in property_names}
+            statistics = {
+                prop: StatisticsAccumulator(batch=True) for prop in property_names
+            }
             logger.info("statistics will be calculated...")
 
             for row in self:
                 for prop in property_names:
-                    self._update_statistic(per_atom[prop], atomrefs[prop], prop, row,
-                                           statistics[prop])
+                    self._update_statistic(
+                        per_atom[prop], atomrefs[prop], prop, row, statistics[prop]
+                    )
 
             means = {prop: s.get_mean() for prop, s in statistics.items()}
             stddevs = {prop: s.get_stddev() for prop, s in statistics.items()}

@@ -101,16 +101,20 @@ class SpkCalculator(Calculator):
         # Convert outputs to calculator format
         if self.model_energy is not None:
             if self.model_energy not in model_results.keys():
-                raise SpkCalculatorError("'{}' is not a property of your model. Please "
-                                         "check the model "
-                                         "properties!".format(self.model_energy))
+                raise SpkCalculatorError(
+                    "'{}' is not a property of your model. Please "
+                    "check the model "
+                    "properties!".format(self.model_energy)
+                )
             energy = model_results[self.model_energy].cpu().data.numpy()
             results[self.energy] = energy.reshape(-1)
         if self.model_forces is not None:
             if self.model_forces not in model_results.keys():
-                raise SpkCalculatorError("'{}' is not a property of your model. Please "
-                                         "check the model"
-                                         "properties!".format(self.model_forces))
+                raise SpkCalculatorError(
+                    "'{}' is not a property of your model. Please "
+                    "check the model"
+                    "properties!".format(self.model_forces)
+                )
             forces = model_results[self.model_forces].cpu().data.numpy()
             results[self.forces] = forces.reshape((len(atoms), 3))
 
@@ -208,8 +212,15 @@ class AseInterface:
         device (str): cpu or cuda
     """
 
-    def __init__(self, molecule_path, ml_model, working_dir, device="cpu",
-                 energy="energy", forces="forces"):
+    def __init__(
+        self,
+        molecule_path,
+        ml_model,
+        working_dir,
+        device="cpu",
+        energy="energy",
+        forces="forces",
+    ):
         # Setup directory
         self.working_dir = working_dir
         if not os.path.exists(self.working_dir):
@@ -220,8 +231,9 @@ class AseInterface:
         self._load_molecule(molecule_path)
 
         # Set up calculator
-        calculator = SpkCalculator(ml_model, device=device, energy=energy,
-                                   forces=forces)
+        calculator = SpkCalculator(
+            ml_model, device=device, energy=energy, forces=forces
+        )
         self.molecule.set_calculator(calculator)
 
         # Unless initialized, set dynamics to False

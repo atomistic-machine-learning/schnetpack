@@ -14,6 +14,7 @@ from scripts.script_utils.model import get_representation, get_model
 from scripts.script_utils.training import train
 from scripts.script_utils.evaluation import evaluate
 from scripts.script_utils import get_statistics, get_loaders
+
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
@@ -33,7 +34,8 @@ if __name__ == "__main__":
     add_subparsers(
         parser,
         defaults=dict(property=QM9.U0),
-        choices=dict(property=QM9.available_properties))
+        choices=dict(property=QM9.available_properties),
+    )
     args = parser.parse_args()
     train_args = setup_run(args)
 
@@ -61,27 +63,29 @@ if __name__ == "__main__":
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")
-    train_loader, val_loader, test_loader = \
-        get_loaders(logging, args, dataset=qm9, split_path=split_path)
+    train_loader, val_loader, test_loader = get_loaders(
+        logging, args, dataset=qm9, split_path=split_path
+    )
 
     if args.mode == "train":
         # get statistics
         logging.info("calculate statistics...")
-        mean, stddev = get_statistics(split_path, logging, train_loader, train_args,
-                                      atomref)
+        mean, stddev = get_statistics(
+            split_path, logging, train_loader, train_args, atomref
+        )
 
         # build representation
-        representation = get_representation(
-            args,
-            train_loader=train_loader,
-        )
+        representation = get_representation(args, train_loader=train_loader)
 
         # build output module
         if args.model == "schnet":
             if args.property == QM9.mu:
                 output_module = spk.output_modules.DipoleMoment(
-                    args.features, predict_magnitude=True, mean=mean[args.property],
-                    stddev=stddev[args.property], property=args.property
+                    args.features,
+                    predict_magnitude=True,
+                    mean=mean[args.property],
+                    stddev=stddev[args.property],
+                    property=args.property,
                 )
             else:
                 output_module = spk.output_modules.Atomwise(

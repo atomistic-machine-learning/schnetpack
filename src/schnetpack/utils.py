@@ -124,4 +124,5 @@ def loss_fn(properties):
             err_sq = torch.mean(diff)
             loss += err_sq
         return loss
+
     return loss_fn

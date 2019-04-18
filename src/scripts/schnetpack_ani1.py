@@ -10,8 +10,15 @@ from ase.data import atomic_numbers
 
 import schnetpack as spk
 from schnetpack.datasets import ANI1
-from scripts.script_utils import setup_run, get_representation, get_model, \
-    get_main_parser, add_subparsers, get_loaders, get_statistics
+from scripts.script_utils import (
+    setup_run,
+    get_representation,
+    get_model,
+    get_main_parser,
+    add_subparsers,
+    get_loaders,
+    get_statistics,
+)
 
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -23,7 +30,8 @@ if __name__ == "__main__":
     add_subparsers(
         parser,
         defaults=dict(property=ANI1.energy),
-        choices=dict(property=ANI1.available_properties))
+        choices=dict(property=ANI1.available_properties),
+    )
     args = parser.parse_args()
     train_args = setup_run(args)
 
@@ -52,20 +60,19 @@ if __name__ == "__main__":
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")
-    train_loader, val_loader, test_loader = \
-        get_loaders(logging, args, dataset=ani1, split_path=split_path)
+    train_loader, val_loader, test_loader = get_loaders(
+        logging, args, dataset=ani1, split_path=split_path
+    )
 
     if args.mode == "train":
         # get statistics
         logging.info("calculate statistics...")
-        mean, stddev = get_statistics(split_path, logging, train_loader, train_args,
-                                      atomref)
+        mean, stddev = get_statistics(
+            split_path, logging, train_loader, train_args, atomref
+        )
 
         # build representation
-        representation = get_representation(
-            train_args,
-            train_loader=train_loader,
-        )
+        representation = get_representation(train_args, train_loader=train_loader)
 
         # build output module
         if args.model == "schnet":
@@ -75,7 +82,7 @@ if __name__ == "__main__":
                 stddev=stddev[args.property],
                 atomref=atomref[args.property],
                 aggregation_mode=args.aggregation_mode,
-                property='energy'
+                property="energy",
             )
         elif args.model == "wacsf":
             elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
@@ -88,7 +95,7 @@ if __name__ == "__main__":
                 aggregation_mode=args.aggregation_mode,
                 atomref=atomref[args.property],
                 elements=elements,
-                property='energy'
+                property="energy",
             )
         else:
             raise NotImplementedError("Model {} is not known".format(args.model))
@@ -113,13 +120,7 @@ if __name__ == "__main__":
         logging.info("evaluating...")
         with torch.no_grad():
             evaluate(
-                args,
-                model,
-                train_loader,
-                val_loader,
-                test_loader,
-                device,
-                metrics,
+                args, model, train_loader, val_loader, test_loader, device, metrics
             )
         logging.info("... done!")
     else:
