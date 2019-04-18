@@ -12,7 +12,7 @@ References
 """
 
 import os
-from .utils import DeprecationHelper
+from schnetpack.utils import DeprecationHelper
 
 import numpy as np
 import torch
@@ -30,7 +30,6 @@ from ase.md.velocitydistribution import (
 from ase.optimize import QuasiNewton
 from ase.vibrations import Vibrations
 
-from schnetpack.atomistic import Properties
 from schnetpack.data import Structure
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
 
@@ -86,7 +85,7 @@ class SpkCalculator(Calculator):
         """
         Args:
             atoms (ase.Atoms): ASE atoms object.
-            properties (list of str): Properties to calculate.
+            properties (list of str): do not use this, no functionality
             system_changes (list of str): List of changes for ASE.
         """
         # First call original calculator to set atoms attribute
@@ -101,9 +100,17 @@ class SpkCalculator(Calculator):
         results = {}
         # Convert outputs to calculator format
         if self.model_energy is not None:
+            if self.model_energy not in model_results.keys():
+                raise SpkCalculatorError("'{}' is not a property of your model. Please "
+                                         "check the model "
+                                         "properties!".format(self.model_energy))
             energy = model_results[self.model_energy].cpu().data.numpy()
             results[self.energy] = energy.reshape(-1)
         if self.model_forces is not None:
+            if self.model_forces not in model_results.keys():
+                raise SpkCalculatorError("'{}' is not a property of your model. Please "
+                                         "check the model"
+                                         "properties!".format(self.model_forces))
             forces = model_results[self.model_forces].cpu().data.numpy()
             results[self.forces] = forces.reshape((len(atoms), 3))
 
@@ -196,12 +203,13 @@ class AseInterface:
 
     Args:
         molecule_path (str): Path to initial geometry
-        ml_model (object): Model class wrapper for the ML model, type and the
-            device
+        ml_model (object): Trained model
         working_dir (str): Path to directory where files should be stored
+        device (str): cpu or cuda
     """
 
-    def __init__(self, molecule_path, ml_model, working_dir):
+    def __init__(self, molecule_path, ml_model, working_dir, device="cpu",
+                 energy="energy", forces="forces"):
         # Setup directory
         self.working_dir = working_dir
         if not os.path.exists(self.working_dir):
@@ -212,7 +220,8 @@ class AseInterface:
         self._load_molecule(molecule_path)
 
         # Set up calculator
-        calculator = SpkCalculator(ml_model)
+        calculator = SpkCalculator(ml_model, device=device, energy=energy,
+                                   forces=forces)
         self.molecule.set_calculator(calculator)
 
         # Unless initialized, set dynamics to False
