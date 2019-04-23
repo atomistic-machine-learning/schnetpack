@@ -1,4 +1,3 @@
-
 import torch.nn as nn
 from schnetpack.data import Structure
 
