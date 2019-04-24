@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from torch import nn as nn
+from torch import nn
 
 
 __all__ = ["CosineCutoff", "MollifierCutoff", "HardCutoff"]

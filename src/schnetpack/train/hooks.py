@@ -41,9 +41,22 @@ class Hook:
         pass
 
     def on_epoch_begin(self, trainer):
+        """Log at the beginning of train epoch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+
+        """
         pass
 
     def on_batch_begin(self, trainer, train_batch):
+        """Log at the beginning of train batch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+            train_batch (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+
+        """
         pass
 
     def on_batch_end(self, trainer, train_batch, result, loss):
@@ -95,6 +108,13 @@ class LoggingHook(Hook):
         self.metrics = metrics
 
     def on_epoch_begin(self, trainer):
+        """Log at the beginning of train epoch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+
+        """
+        # reset train_loss and counter
         if self.log_train_loss:
             self._train_loss = 0.0
             self._counter = 0
@@ -391,10 +411,23 @@ class WarmRestartHook(Hook):
         self.init_opt_state = trainer.optimizer.state_dict()
 
     def on_batch_begin(self, trainer, train_batch):
+        """Log at the beginning of train batch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+            train_batch (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+
+        """
         if self.each_step:
             self.scheduler.step()
 
     def on_epoch_begin(self, trainer):
+        """Log at the beginning of train epoch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+
+        """
         if not self.each_step:
             self.scheduler.step()
 
@@ -422,7 +455,7 @@ class WarmRestartHook(Hook):
 
 
 class MaxEpochHook(Hook):
-    """Hook to stop training if a maximal number of epochs is reached.
+    """Hook to stop training when a maximum number of epochs is reached.
 
     Args:
        max_epochs (int): maximal number of epochs.
@@ -433,15 +466,22 @@ class MaxEpochHook(Hook):
         self.max_epochs = max_epochs
 
     def on_epoch_begin(self, trainer):
+        """Log at the beginning of train epoch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+
+        """
+        # stop training if max_epochs is reached
         if trainer.epoch > self.max_epochs:
             trainer._stop = True
 
 
 class MaxStepHook(Hook):
-    """Hook to stop training if a maximal number of steps is reached.
+    """Hook to stop training when a maximum number of steps is reached.
 
     Args:
-        max_steps (int): maximal number of steps.
+        max_steps (int): maximum number of steps.
 
     """
 
@@ -449,6 +489,14 @@ class MaxStepHook(Hook):
         self.max_steps = max_steps
 
     def on_batch_begin(self, trainer, train_batch):
+        """Log at the beginning of train batch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+            train_batch (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+
+        """
+        # stop training if max_steps is reached
         if trainer.step > self.max_steps:
             trainer._stop = True
 
@@ -481,10 +529,23 @@ class LRScheduleHook(Hook):
         self.scheduler.last_epoch = trainer.epoch - 1
 
     def on_batch_begin(self, trainer, train_batch):
+        """Log at the beginning of train batch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+            train_batch (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+
+        """
         if self.each_step:
             self.scheduler.step()
 
     def on_epoch_begin(self, trainer):
+        """Log at the beginning of train epoch.
+
+        Args:
+            trainer (Trainer): instance of schnetpack.train.trainer.Trainer class.
+
+        """
         if not self.each_step:
             self.scheduler.step()
 
