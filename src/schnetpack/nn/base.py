@@ -1,5 +1,5 @@
 import torch
-from torch import nn as nn
+from torch import nn
 from torch.nn.init import xavier_uniform_
 
 from schnetpack.nn.initializers import zeros_initializer

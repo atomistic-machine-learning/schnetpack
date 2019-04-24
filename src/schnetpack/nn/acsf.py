@@ -1,5 +1,5 @@
 import torch
-from torch import nn as nn
+from torch import nn
 
 from schnetpack.nn.cutoff import CosineCutoff
 

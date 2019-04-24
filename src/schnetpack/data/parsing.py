@@ -29,7 +29,6 @@ def xyz_to_extxyz(
                 break
             n_atoms = int(first_line.strip("\n"))
             molecular_data = xyz_file.readline().strip("/n").split()
-            print(molecular_properties, molecular_data)
             assert len(molecular_data) == len(molecular_properties), (
                 "The number of datapoints and " "properties do not match!"
             )

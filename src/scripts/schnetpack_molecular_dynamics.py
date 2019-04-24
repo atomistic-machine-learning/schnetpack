@@ -2,6 +2,7 @@
 import argparse
 import logging
 import os
+import torch
 
 import schnetpack as spk
 
@@ -49,7 +50,7 @@ def get_parser():
     main_parser.add_argument("model_path", help="Path of trained model")
     main_parser.add_argument("simulation_dir", help="Path to store MD data")
     main_parser.add_argument(
-        "--cuda", help="Set flag to use GPU(s)", action="store_true"
+        "--device", help="Choose between 'cpu' and 'cuda'", default="cpu"
     )
 
     # Optimization:
@@ -116,6 +117,20 @@ def get_parser():
         help="Perform a single point prediction on the "
         "current geometry (energies and forces).",
     )
+    main_parser.add_argument(
+        "--energy",
+        type=str,
+        help="Property name to the energy property in the dataset which has been "
+        "used for training the model",
+        default="energy",
+    )
+    main_parser.add_argument(
+        "--forces",
+        type=str,
+        help="Property name to the forces property in the dataset which has been "
+        "used for training the model",
+        default="forces",
+    )
 
     return main_parser
 
@@ -135,18 +150,23 @@ if __name__ == "__main__":
     spk.utils.to_json(jsonpath, argparse_dict)
 
     # Load the model
-    ml_model = spk.md.load_model(args.model_path, args.cuda)
+    ml_model = torch.load(args.model_path)
     logging.info("Loaded model.")
 
     logging.info(
         "The model you built has: {:d} parameters".format(
-            spk.utils.compute_params(ml_model.model)
+            spk.utils.compute_params(ml_model)
         )
     )
 
     # Initialize the ML ase interface
-    ml_calculator = spk.md.AseInterface(
-        args.molecule_path, ml_model, args.simulation_dir
+    ml_calculator = spk.interfaces.AseInterface(
+        args.molecule_path,
+        ml_model,
+        args.simulation_dir,
+        args.device,
+        args.energy,
+        args.forces,
     )
     logging.info("Initialized ase driver")
 

@@ -78,13 +78,14 @@ class Trainer:
         state_dict = {
             "epoch": self.epoch,
             "step": self.step,
-            "model": self._model.state_dict()
-            if not self._check_is_parallel()
-            else self._model.module.state_dict(),
             "best_loss": self.best_loss,
             "optimizer": self.optimizer.state_dict(),
             "hooks": [h.state_dict for h in self.hooks],
         }
+        if self._check_is_parallel():
+            state_dict["model"] = self._model.module.state_dict()
+        else:
+            state_dict["model"] = self._model.state_dict()
         return state_dict
 
     @state_dict.setter
@@ -119,33 +120,31 @@ class Trainer:
                     for f in os.listdir(self.checkpoint_path)
                 ]
             )
-        epoch = str(epoch)
 
         chkpt = os.path.join(
             self.checkpoint_path, "checkpoint-" + str(epoch) + ".pth.tar"
         )
         self.state_dict = torch.load(chkpt)
 
-    def train(self, device):
-        """Train the model on a specified device.
+    def train(self, device, n_epochs):
+        """Train the model for the given number of epochs on a specified device.
 
         Args:
             device (torch.torch.Device): device on which training takes place.
+            n_epochs (int): number of training epochs.
+
+        Note: Depending on the `hooks`, training can stop earlier than `n_epochs`.
 
         """
-        #        try:
-        #            from tqdm import tqdm
-        #            progress = True
-        #        except:
-        #            progress = False
-
+        self._model.to(device)
         self._stop = False
 
         for h in self.hooks:
             h.on_train_begin(self)
 
         try:
-            while True:
+            for _ in range(n_epochs):
+                # increase number of epochs by 1
                 self.epoch += 1
 
                 for h in self.hooks:
@@ -171,7 +170,6 @@ class Trainer:
 
                     result = self._model(train_batch)
                     loss = self.loss_fn(train_batch, result)
-
                     loss.backward()
                     self.optimizer.step()
                     self.step += 1
@@ -231,9 +229,13 @@ class Trainer:
 
                 if self._stop:
                     break
-
+            #
+            # Training Ends
+            #
+            # run hooks & store checkpoint
             for h in self.hooks:
                 h.on_train_ends(self)
+            self.store_checkpoint()
 
         except Exception as e:
             for h in self.hooks:
