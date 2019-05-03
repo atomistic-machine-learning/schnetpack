@@ -1,5 +1,5 @@
 import numpy as np
-import os
+import torch
 import schnetpack as spk
 from shutil import copyfile
 from torch.utils.data.sampler import RandomSampler
@@ -8,9 +8,8 @@ from torch.utils.data.sampler import RandomSampler
 def get_statistics(split_path, logging, train_loader, train_args, atomref):
     split_data = np.load(split_path)
     if "mean" in split_data.keys():
-        mean = split_data["mean"].item()
-        stddev = split_data["stddev"].item()
-        calc_stats = False
+        mean = {train_args.property: torch.from_numpy(split_data["mean"])}
+        stddev = {train_args.property: torch.from_numpy(split_data["stddev"])}
         logging.info("cached statistics was loaded...")
     else:
         mean, stddev = train_loader.get_statistics(train_args.property, True, atomref)
@@ -19,8 +18,8 @@ def get_statistics(split_path, logging, train_loader, train_args, atomref):
             train_idx=split_data["train_idx"],
             val_idx=split_data["val_idx"],
             test_idx=split_data["test_idx"],
-            mean=mean,
-            stddev=stddev,
+            mean=mean[train_args.property].numpy(),
+            stddev=stddev[train_args.property].numpy(),
         )
     return mean, stddev
 
