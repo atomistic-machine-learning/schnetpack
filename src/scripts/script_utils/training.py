@@ -14,6 +14,7 @@ def train(args, model, train_loader, val_loader, device, metrics, loss_fn=None):
     optimizer = Adam(trainable_params, lr=args.lr)
 
     schedule = spk.train.ReduceLROnPlateauHook(
+        optimizer=optimizer,
         patience=args.lr_patience,
         factor=args.lr_decay,
         min_lr=args.lr_min,
@@ -50,7 +51,7 @@ def train(args, model, train_loader, val_loader, device, metrics, loss_fn=None):
         checkpoint_interval=1,
         hooks=hooks,
     )
-    trainer.train(device)
+    trainer.train(device, n_epochs=args.n_epochs)
 
 
 def simple_loss_fn(args):

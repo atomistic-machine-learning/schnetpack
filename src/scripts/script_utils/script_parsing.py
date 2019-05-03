@@ -98,6 +98,11 @@ def add_subparsers(cmd_parser, defaults={}, choices={}):
         help="Log metrics every given number of epochs (default: %(default)s)",
         default=1,
     )
+    train_parser.add_argument(
+        "--n_epochs",
+        help="Maximum number of training epochs (default: %(default)s)",
+        default=1000
+    )
 
     ## evaluation
     eval_parser = argparse.ArgumentParser(add_help=False, parents=[cmd_parser])

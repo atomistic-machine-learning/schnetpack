@@ -576,16 +576,22 @@ class ReduceLROnPlateauHook(Hook):
 
     def __init__(
         self,
+        optimizer,
         patience=25,
         factor=0.2,
         min_lr=1e-6,
         window_length=1,
         stop_after_min=False,
     ):
-        self.scheduler = None
         self.patience = patience
         self.factor = factor
         self.min_lr = min_lr
+        self.scheduler = ReduceLROnPlateau(
+            optimizer,
+            patience=self.patience,
+            factor=self.factor,
+            min_lr=self.min_lr,
+        )
         self.window_length = window_length
         self.stop_after_min = stop_after_min
         self.window = []
@@ -597,14 +603,6 @@ class ReduceLROnPlateauHook(Hook):
     @state_dict.setter
     def state_dict(self, state_dict):
         self.scheduler = state_dict["scheduler"]
-
-    def on_train_begin(self, trainer):
-        self.scheduler = ReduceLROnPlateau(
-            trainer.optimizer,
-            patience=self.patience,
-            factor=self.factor,
-            min_lr=self.min_lr,
-        )
 
     def on_validation_end(self, trainer, val_loss):
         self.window.append(val_loss)
@@ -636,13 +634,8 @@ class ExponentialDecayHook(Hook):
 
     """
 
-    def __init__(self, gamma=0.96, step_size=100000):
-        self.scheduler = None
-        self.gamma = gamma
-        self.step_size = step_size
-
-    def on_train_begin(self, trainer):
-        self.scheduler = StepLR(trainer.optimizer, self.step_size, self.gamma)
+    def __init__(self, optimizer, gamma=0.96, step_size=100000):
+        self.scheduler = StepLR(optimizer, step_size, gamma)
 
     def on_batch_end(self, trainer, train_batch, result, loss):
         self.scheduler.step()
