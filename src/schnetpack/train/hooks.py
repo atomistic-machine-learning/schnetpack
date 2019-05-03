@@ -587,10 +587,7 @@ class ReduceLROnPlateauHook(Hook):
         self.factor = factor
         self.min_lr = min_lr
         self.scheduler = ReduceLROnPlateau(
-            optimizer,
-            patience=self.patience,
-            factor=self.factor,
-            min_lr=self.min_lr,
+            optimizer, patience=self.patience, factor=self.factor, min_lr=self.min_lr
         )
         self.window_length = window_length
         self.stop_after_min = stop_after_min
