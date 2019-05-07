@@ -16,7 +16,6 @@ logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 # basic settings
 db_path = "data/md17/ethanol.db"
-data_dir = os.path.dirname(db_path)
 model_dir = "ethanol_model"
 num_train, num_val = [1000, 100]
 batch_size = 64
