@@ -86,4 +86,4 @@ trainer = Trainer(
 
 # run training
 logging.info("training")
-trainer.train(device=device)
+trainer.train(device=device, n_epochs=10000)
