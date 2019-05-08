@@ -1,7 +1,7 @@
-import logging
-from torch.optim import Adam
 import os
+import logging
 from shutil import rmtree
+from torch.optim import Adam
 from schnetpack.atomistic import AtomisticModel
 from schnetpack.output_modules import Atomwise
 from schnetpack.data import AtomsData, AtomsLoader, train_test_split
