@@ -34,6 +34,14 @@ Contents
 
 .. toctree::
    :glob:
+   :caption: Tutorials
+   :maxdepth: 2
+
+   tutorials/index
+
+
+.. toctree::
+   :glob:
    :caption: API reference
    :maxdepth: 2
 
