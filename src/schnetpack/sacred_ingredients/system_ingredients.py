@@ -1,6 +1,7 @@
 from sacred import Ingredient
 from schnetpack.md.system import System
-from schnetpack.sacred.initializer_ingredient import initializer_ing, build_initializer
+from schnetpack.sacred_ingredients.initializer_ingredient import initializer_ing,\
+    build_initializer
 
 system_ingredient = Ingredient("system", ingredients=[initializer_ing])
 

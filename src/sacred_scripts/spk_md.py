@@ -8,20 +8,21 @@ except ImportError:
 
 from shutil import rmtree
 
-from schnetpack.sacred.calculator_ingredients import (
+from schnetpack.sacred_ingredients.calculator_ingredients import (
     calculator_ingradient,
     build_calculator,
 )
-from schnetpack.sacred.simulator_ingredients import (
+from schnetpack.sacred_ingredients.simulator_ingredients import (
     simulator_ingredient,
     build_simulator,
 )
-from schnetpack.sacred.integrator_ingredients import (
+from schnetpack.sacred_ingredients.integrator_ingredients import (
     integrator_ingredient,
     build_integrator,
 )
-from schnetpack.sacred.system_ingredients import system_ingredient, build_system
-from schnetpack.sacred.thermostat_ingredients import (
+from schnetpack.sacred_ingredients.system_ingredients import system_ingredient,\
+    build_system
+from schnetpack.sacred_ingredients.thermostat_ingredients import (
     thermostat_ingredient,
     build_thermostat,
 )
