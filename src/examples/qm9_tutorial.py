@@ -17,7 +17,7 @@ properties = [QM9.U0]
 
 # data preparation
 logging.info("get dataset")
-dataset = QM9("data/qm9.db")
+dataset = QM9("data/qm9.db", properties=[QM9.U0])
 train, val, test = spk.train_test_split(dataset, 1000, 100,
                                         os.path.join(model_dir, "split.npz"),)
 train_loader = spk.AtomsLoader(train, batch_size=64)

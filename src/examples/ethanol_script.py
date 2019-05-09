@@ -56,7 +56,8 @@ logging.info("build trainer")
 metrics = [MeanAbsoluteError(p, p) for p in properties]
 hooks = [
     CSVHook(log_path=model_dir, metrics=metrics),
-    ReduceLROnPlateauHook(optimizer)]
+    ReduceLROnPlateauHook(optimizer)
+]
 
 # trainer
 loss = mse_loss(properties)
@@ -72,4 +73,4 @@ trainer = Trainer(
 
 # run training
 logging.info("training")
-trainer.train(device="cpu")
+trainer.train(device="cpu", n_epochs=1000)
