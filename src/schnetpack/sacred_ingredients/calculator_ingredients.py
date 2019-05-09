@@ -5,10 +5,10 @@ import torch
 from schnetpack.md.calculators import SchnetPackCalculator
 from schnetpack.md.utils import MDUnits
 
-calculator_ingradient = Ingredient("calculator")
+calculator_ingredient = Ingredient("calculator")
 
 
-@calculator_ingradient.config
+@calculator_ingredient.config
 def config():
     """configuration for the calculator ingredient"""
     calculator = "schnet_calculator"
@@ -20,7 +20,7 @@ def config():
     model_path = "eth_ens_01.model"
 
 
-@calculator_ingradient.capture
+@calculator_ingredient.capture
 def load_model(_log, model_path, device):
     # If model is a directory, search for best_model file
     if os.path.isdir(model_path):
@@ -30,7 +30,7 @@ def load_model(_log, model_path, device):
     return model
 
 
-@calculator_ingradient.capture
+@calculator_ingredient.capture
 def build_calculator(
     _log,
     required_properties,

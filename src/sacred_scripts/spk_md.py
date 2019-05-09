@@ -9,7 +9,7 @@ except ImportError:
 from shutil import rmtree
 
 from schnetpack.sacred_ingredients.calculator_ingredients import (
-    calculator_ingradient,
+    calculator_ingredient,
     build_calculator,
 )
 from schnetpack.sacred_ingredients.simulator_ingredients import (
@@ -31,7 +31,7 @@ md = Experiment(
     "md",
     ingredients=[
         simulator_ingredient,
-        calculator_ingradient,
+        calculator_ingredient,
         integrator_ingredient,
         system_ingredient,
         thermostat_ingredient,
