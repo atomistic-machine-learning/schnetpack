@@ -16,7 +16,6 @@ logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 # basic settings
 db_path = "data/qm9.db"
-data_dir = os.path.dirname(db_path)
 model_dir = "qm9_model"
 num_train, num_val = [1000, 100]
 batch_size = 64

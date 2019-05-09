@@ -118,6 +118,7 @@ class Trainer:
                 [
                     int(f.split(".")[0].split("-")[-1])
                     for f in os.listdir(self.checkpoint_path)
+                    if f.startswith("checkpoint")
                 ]
             )
 

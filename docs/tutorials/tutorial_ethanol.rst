@@ -51,10 +51,133 @@ You will end up with a new file in your data directory.
 
 .. _tut etha train:
 
-Train a Model on the Ethanol Dataset
-------------------------------------
+Train a Model on the Ethanol Database
+-------------------------------------
 
-TODO
+This example trains Schnet model on energy and forces of ethanol conformations.
+Here we go through various sections of example script.
+
+We start by importing modules used in the example::
+
+    import os
+    import logging
+    from shutil import rmtree
+    from torch.optim import Adam
+    from schnetpack.atomistic import AtomisticModel
+    from schnetpack.output_modules import Atomwise
+    from schnetpack.data import AtomsData, AtomsLoader, train_test_split
+    from schnetpack.representation import SchNet
+    from schnetpack.train import Trainer, TensorboardHook, CSVHook, ReduceLROnPlateauHook
+    from schnetpack.metrics import MeanAbsoluteError
+    from schnetpack.utils import loss_fn
+
+and adjust the basic setting of the model as described below::
+
+    db_path = "data/md17/ethanol.db"    # relative path to the database file
+    model_dir = "ethanol_model"         # directory that will be created for storing model
+    properties = ["energy", "forces"]   # properties used for training
+    num_train, num_val = 1000, 100      # number of training and validating samples
+    batch_size = 64                     # batch size used in training
+    device = "cpu"                      # device used, choose between 'cpu' & 'gpu'
+
+this is followed by making a directory to store the model::
+
+    if os.path.exists(model_dir):
+        rmtree(model_dir)
+    os.makedirs(model_dir)
+
+
+Train, Validation & Test Sets
+.............................
+
+Then, we load the database and the required properties given as a list of strings
+(which should match the name of properties used in database file)::
+
+    dataset = AtomsData(db_path, required_properties=properties)
+
+in the next step, the database in split into train, validation and test and the
+corresponding indices are stored in split.npz file::
+
+    train, val, test = train_test_split(
+        data=dataset,
+        num_train=num_train,
+        num_val=num_val,
+        split_file=os.path.join(model_dir, "split.npz"),
+    )
+
+these indices are used to load train, validation and test data into batches::
+
+    train_loader = AtomsLoader(train, batch_size=batch_size)
+    val_loader = AtomsLoader(val, batch_size=batch_size)
+    test_loader = AtomsLoader(test, batch_size=batch_size)
+
+
+
+Model Representation
+....................
+
+The `Schnet` network is build for learning the representation by assigning the optional
+argument `n_interactions`. To further customize the network see API Documentation::
+
+    representation = SchNet(n_interactions=6)
+
+
+Model Network
+.............
+
+The `Atomiwise` network is build for accumulating atom-wise property predictions::
+
+    output_modules = [
+        Atomwise(
+            property="energy",
+            derivative="forces",
+            mean=means["energy"],
+            stddev=stddevs["energy"],
+            negative_dr=True,
+        )
+    ]
+
+The `model` is built by joining the representation network and output networks::
+
+    model = AtomisticModel(representation, output_modules)
+
+
+Monitor Train Process: Hooks
+............................
+
+The `hooks` is built for monitoring training process which is a list of 3 types
+of hooks here. To learn more about customizing hooks see API Documentation::
+
+    metrics = [MeanAbsoluteError(p, p) for p in properties]
+    logging_hooks = [
+        TensorboardHook(log_path=model_dir, metrics=metrics),
+        CSVHook(log_path=model_dir, metrics=metrics),
+    ]
+    scheduling_hooks = [ReduceLROnPlateauHook(patience=25, window_length=3, factor=0.8)]
+    hooks = logging_hooks + scheduling_hooks
+
+
+Train Model
+...........
+
+Before, we train the model, the loss function is defined for the properties we are training on.
+This loss function measures the discrepancy between batch predictions and actual results::
+
+    loss = loss_fn(properties)
+
+Now, the model can be trained for the given number of epochs on the specified device.
+This will save the best_model as well as checkpoints in the model directory specified above.
+To learn more about customizing trainer see the API Documentation::
+
+    trainer = Trainer(
+        model_dir,
+        model=model,
+        hooks=hooks,
+        loss_fn=loss,
+        optimizer=Adam(params=model.parameters(), lr=1e-4),
+        train_loader=train_loader,
+        validation_loader=val_loader,
+    )
 
 
 .. _tut etha monitoring:
