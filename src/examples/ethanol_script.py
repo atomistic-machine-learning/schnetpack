@@ -15,12 +15,12 @@ logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
 # basic settings
-db_path = "data/md17/ethanol.db"    # relative path to the database file
-model_dir = "ethanol_model"         # directory that will be created for storing model
-properties = ["energy", "forces"]   # properties used for training
-num_train, num_val = 1000, 100      # number of training and validating samples
-batch_size = 64                     # batch size used in training
-device = "cpu"                      # device used, choose between 'cpu' & 'gpu'
+db_path = "data/md17/ethanol.db"  # relative path to the database file
+model_dir = "ethanol_model"  # directory that will be created for storing model
+properties = ["energy", "forces"]  # properties used for training
+num_train, num_val = 1000, 100  # number of training and validating samples
+batch_size = 64  # batch size used in training
+device = "cpu"  # device used, choose between 'cpu' & 'gpu'
 
 # create folders
 logging.info("datapath: {}".format(db_path))
