@@ -44,7 +44,7 @@ _**Note: We recommend using a GPU for training the neural networks.**_
 
 #### Install SchNetPack
 
-`python setup.py install`
+`pip install .`
 
 `cd ..`
 
