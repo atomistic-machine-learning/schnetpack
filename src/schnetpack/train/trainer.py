@@ -1,5 +1,5 @@
 import os
-
+import sys
 import numpy as np
 import torch
 
@@ -127,7 +127,7 @@ class Trainer:
         )
         self.state_dict = torch.load(chkpt)
 
-    def train(self, device, n_epochs):
+    def train(self, device, n_epochs=sys.maxsize):
         """Train the model for the given number of epochs on a specified device.
 
         Args:
