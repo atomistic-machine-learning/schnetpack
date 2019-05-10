@@ -45,10 +45,12 @@ this is followed by making a directory to store the model::
 Train, Validation & Test Sets
 .............................
 
-Then, we load the database and the required properties given as a list of strings
-(which should match the name of properties used in database file)::
+Then, create a dataset based on the QM9 database. If the database does not exist at
+the selected location, it will be downloaded automatically.
+The ``properties`` argument defines which properties of the database will be needed
+for the training session::
 
-    dataset = QM9("data/qm9.db", properties=[QM9.U0])
+    dataset = QM9("data/qm9.db", properties=properties)
 
 in the next step, the dataset is into train, validation and test sets. The
 corresponding indices are stored in split.npz file::
@@ -63,8 +65,8 @@ corresponding indices are stored in split.npz file::
 the datasets are then used to build the dataloaders. The dataloaders provide batches
 of our dataset for the training session::
 
-    train_loader = spk.AtomsLoader(train, batch_size=batch_size)
-    val_loader = spk.AtomsLoader(val, batch_size=batch_size)
+    train_loader = spk.AtomsLoader(train, batch_size=64)
+    val_loader = spk.AtomsLoader(val, batch_size=64)
 
 
 Model Representation
@@ -92,6 +94,14 @@ The ``Atomwise`` network is build for accumulating atom-wise property prediction
 The `model` is built by joining the representation network and output networks::
 
     model = spk.AtomisticModel(representation, output_modules)
+
+
+Building the Optimizer
+......................
+
+In order to update model parameters we will need to build an optimizer::
+
+    optimizer = Adam(params=model.parameters(), lr=1e-4)
 
 
 Monitor Train Process: Hooks
@@ -126,7 +136,7 @@ To learn more about customizing trainer see the API Documentation::
         model=model,
         hooks=hooks,
         loss_fn=loss,
-        optimizer=Adam(params=model.parameters(), lr=1e-4),
+        optimizer=optimizer,
         train_loader=train_loader,
         validation_loader=val_loader,
     )
@@ -150,10 +160,11 @@ environment::
 and ``cd`` to the directory of this tutorial. Make sure that your environment is
 activated and run TensorBoard::
 
-    tensorboard --logdir=training
+    tensorboard --logdir=qm9_model
 
 Your terminal will display a message which contains a URL to your board. Copy it into
 your browser and the TensorBoard should show up:
+
 .. |TensorBoard| image:: ../pictures/tensorboard.png
   :width: 600
   :alt: Screenshot of a running TensorBoard

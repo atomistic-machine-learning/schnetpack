@@ -41,7 +41,8 @@ You will end up with a new file in your data directory.
 Train a Model on the Ethanol Database
 -------------------------------------
 
-This example trains Schnet model on energy and forces of ethanol conformations.
+This example trains a Schnet model on energy and forces of the previously
+generated database of ethanol conformations.
 Here we go through various sections of example script.
 
 We start by importing modules used in the example::
@@ -72,7 +73,7 @@ Then, we load the database and the required properties given as a list of string
 
     dataset = spk.AtomsData("data/ethanol.db", required_properties=properties)
 
-in the next step, the dataset is into train, validation and test sets. The
+in the next step, the dataset is spli into train, validation and test sets. The
 corresponding indices are stored in split.npz file::
 
     train, val, test = spk.train_test_split(
@@ -118,6 +119,14 @@ The `model` is built by joining the representation network and output networks::
     model = spk.AtomisticModel(representation, output_modules)
 
 
+Building the Optimizer
+......................
+
+In order to update model parameters we will need to build an optimizer::
+
+    optimizer = Adam(params=model.parameters(), lr=1e-4)
+
+
 Monitor Train Process: Hooks
 ............................
 
@@ -150,7 +159,7 @@ To learn more about customizing trainer see the API Documentation::
         model=model,
         hooks=hooks,
         loss_fn=loss,
-        optimizer=Adam(params=model.parameters(), lr=1e-4),
+        optimizer=optimizer,
         train_loader=train_loader,
         validation_loader=val_loader,
     )
@@ -164,7 +173,7 @@ Monitoring your Training Session
 We recommend to use TensorBoard for monitoring your training session. Therefore
 you will need to open add the ``TensorboardHook`` to the list of hooks::
 
-        TensorboardHook(log_path=model_dir, metrics=metrics)
+    TensorboardHook(log_path=model_dir, metrics=metrics)
 
 In order to use the TensorBoard you will need to install ``tensorflow`` in your
 environment::
@@ -174,7 +183,7 @@ environment::
 and ``cd`` to the directory of this tutorial. Make sure that your environment is
 activated and run TensorBoard::
 
-    tensorboard --logdir=training
+    tensorboard --logdir=ethanol_model
 
 Your terminal will display a message which contains a URL to your board. Copy it into
 your browser and the TensorBoard should show up:
