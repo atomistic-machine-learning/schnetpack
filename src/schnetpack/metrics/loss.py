@@ -1,12 +1,12 @@
 import torch
 
 
-__all__ = ["mse_loss"]
+__all__ = ["build_mse_loss"]
 
 
-def mse_loss(properties, loss_tradeoff={}):
+def build_mse_loss(properties, loss_tradeoff={}):
     """
-    Build the loss function.
+    Build the mean squared error loss function.
 
     Args:
         properties (list): mapping between the model properties and the
@@ -14,7 +14,7 @@ def mse_loss(properties, loss_tradeoff={}):
         loss_tradeoff (dict): multiply loss value of property with tradeoff factor
 
     Returns:
-        loss function
+        mean squared error loss function
 
     """
 
