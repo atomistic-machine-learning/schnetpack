@@ -52,7 +52,7 @@ for the training session::
 
     dataset = QM9("data/qm9.db", properties=properties)
 
-in the next step, the dataset is into train, validation and test sets. The
+in the next step, the dataset is split into train, validation and test sets. The
 corresponding indices are stored in split.npz file::
 
     train, val, test = spk.train_test_split(
