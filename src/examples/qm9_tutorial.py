@@ -18,8 +18,9 @@ properties = [QM9.U0]
 # data preparation
 logging.info("get dataset")
 dataset = QM9("data/qm9.db", properties=[QM9.U0])
-train, val, test = spk.train_test_split(dataset, 1000, 100,
-                                        os.path.join(model_dir, "split.npz"),)
+train, val, test = spk.train_test_split(
+    dataset, 1000, 100, os.path.join(model_dir, "split.npz")
+)
 train_loader = spk.AtomsLoader(train, batch_size=64)
 val_loader = spk.AtomsLoader(val, batch_size=64)
 
@@ -33,8 +34,12 @@ means, stddevs = train_loader.get_statistics(
 logging.info("build model")
 representation = spk.SchNet(n_interactions=6)
 output_modules = [
-    spk.Atomwise(property=QM9.U0, mean=means[QM9.U0], stddev=stddevs[QM9.U0],
-                 atomref=atomrefs[QM9.U0])
+    spk.Atomwise(
+        property=QM9.U0,
+        mean=means[QM9.U0],
+        stddev=stddevs[QM9.U0],
+        atomref=atomrefs[QM9.U0],
+    )
 ]
 model = spk.AtomisticModel(representation, output_modules)
 

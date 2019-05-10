@@ -54,10 +54,7 @@ optimizer = Adam(params=model.parameters(), lr=1e-4)
 # hooks
 logging.info("build trainer")
 metrics = [MeanAbsoluteError(p, p) for p in properties]
-hooks = [
-    CSVHook(log_path=model_dir, metrics=metrics),
-    ReduceLROnPlateauHook(optimizer)
-]
+hooks = [CSVHook(log_path=model_dir, metrics=metrics), ReduceLROnPlateauHook(optimizer)]
 
 # trainer
 loss = mse_loss(properties)
