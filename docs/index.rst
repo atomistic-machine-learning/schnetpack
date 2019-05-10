@@ -37,7 +37,8 @@ Contents
    :caption: Tutorials
    :maxdepth: 2
 
-   tutorials/index
+   tutorials/tutorial_ethanol
+   tutorials/tutorial_qm9
 
 
 .. toctree::

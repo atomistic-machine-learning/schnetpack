@@ -73,7 +73,7 @@ Then, we load the database and the required properties given as a list of string
 
     dataset = spk.AtomsData("data/ethanol.db", required_properties=properties)
 
-in the next step, the dataset is spli into train, validation and test sets. The
+in the next step, the dataset is split into train, validation and test sets. The
 corresponding indices are stored in split.npz file::
 
     train, val, test = spk.train_test_split(
