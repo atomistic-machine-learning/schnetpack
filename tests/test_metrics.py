@@ -57,13 +57,13 @@ def diff_named(batch, result_named):
     return dict(
         _forces=batch["_forces"] - result_named["_forces"],
         _energy=batch["_energy"] - result_named["_energy"],
-        _dipole_moment=batch["_dipole_moment"] - result_named["_dipole_moment"]
+        _dipole_moment=batch["_dipole_moment"] - result_named["_dipole_moment"],
     )
 
 
 @pytest.fixture
 def loss_tradeoff():
-    return [1., 1., 0.]
+    return [1.0, 1.0, 0.0]
 
 
 @pytest.fixture
@@ -73,8 +73,9 @@ def loss_value(diff_named):
 
 @pytest.fixture
 def loss_value_traded(diff_named):
-    return sum([diff_named["_energy"].pow(2).mean(),
-                diff_named["_forces"].pow(2).mean()])
+    return sum(
+        [diff_named["_energy"].pow(2).mean(), diff_named["_forces"].pow(2).mean()]
+    )
 
 
 @pytest.fixture
@@ -258,8 +259,9 @@ class TestMetrics:
         loss = loss_fn(batch, result_named)
         assert np.equal(loss, loss_value)
 
-    def test_loss_tradeoff(self, batch, result_named, properties, loss_value_traded,
-                           loss_tradeoff):
+    def test_loss_tradeoff(
+        self, batch, result_named, properties, loss_value_traded, loss_tradeoff
+    ):
         loss_fn = build_mse_loss(properties, loss_tradeoff)
         loss = loss_fn(batch, result_named)
         assert np.equal(loss, loss_value_traded)
