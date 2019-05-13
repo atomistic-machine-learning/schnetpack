@@ -5,8 +5,12 @@ from schnetpack.metrics import *
 
 
 @pytest.fixture
-def batch():
+def properties():
+    return ["_energy", "_forces", "_dipole_moment"]
 
+
+@pytest.fixture
+def batch():
     return dict(
         _atom_mask=torch.DoubleTensor([[1, 1, 1, 0], [1, 1, 0, 0]]),
         _forces=torch.DoubleTensor(
@@ -32,6 +36,45 @@ def result():
         y=torch.DoubleTensor([[2], [2]]),
         _dipole_moment=torch.DoubleTensor([[0, 2, 0], [4, 1, 1]]),
     )
+
+
+@pytest.fixture
+def result_named():
+    return dict(
+        _forces=torch.DoubleTensor(
+            [
+                [[8, 1, 1], [0, 2, 1], [1, 1, 1], [0, 0, 0]],
+                [[0, 1, 3], [0, 1, 4], [0, 0, 0], [0, 0, 0]],
+            ]
+        ),
+        _energy=torch.DoubleTensor([[2], [2]]),
+        _dipole_moment=torch.DoubleTensor([[0, 2, 0], [4, 1, 1]]),
+    )
+
+
+@pytest.fixture
+def diff_named(batch, result_named):
+    return dict(
+        _forces=batch["_forces"] - result_named["_forces"],
+        _energy=batch["_energy"] - result_named["_energy"],
+        _dipole_moment=batch["_dipole_moment"] - result_named["_dipole_moment"]
+    )
+
+
+@pytest.fixture
+def loss_tradeoff():
+    return [1., 1., 0.]
+
+
+@pytest.fixture
+def loss_value(diff_named):
+    return sum([diff.pow(2).mean() for diff in diff_named.values()])
+
+
+@pytest.fixture
+def loss_value_traded(diff_named):
+    return sum([diff_named["_energy"].pow(2).mean(),
+                diff_named["_forces"].pow(2).mean()])
 
 
 @pytest.fixture
@@ -209,3 +252,14 @@ class TestMetrics:
         assert np.equal(n_entries, 2)
         if hasattr(n_entries, "__iter__"):
             assert len(n_entries.shape) != 0
+
+    def test_loss(self, batch, result_named, properties, loss_value):
+        loss_fn = build_mse_loss(properties)
+        loss = loss_fn(batch, result_named)
+        assert np.equal(loss, loss_value)
+
+    def test_loss_tradeoff(self, batch, result_named, properties, loss_value_traded,
+                           loss_tradeoff):
+        loss_fn = build_mse_loss(properties, loss_tradeoff)
+        loss = loss_fn(batch, result_named)
+        assert np.equal(loss, loss_value_traded)
