@@ -34,6 +34,15 @@ Contents
 
 .. toctree::
    :glob:
+   :caption: Tutorials
+   :maxdepth: 2
+
+   tutorials/tutorial_ethanol
+   tutorials/tutorial_qm9
+
+
+.. toctree::
+   :glob:
    :caption: API reference
    :maxdepth: 2
 
