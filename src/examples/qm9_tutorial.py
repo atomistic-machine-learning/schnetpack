@@ -1,7 +1,8 @@
-import os
 import logging
 from torch.optim import Adam
+import os
 import schnetpack as spk
+from schnetpack.datasets import QM9
 from schnetpack.train import Trainer, CSVHook, ReduceLROnPlateauHook
 from schnetpack.metrics import MeanAbsoluteError
 from schnetpack.metrics import mse_loss
@@ -9,29 +10,24 @@ from schnetpack.metrics import mse_loss
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
-
 # basic settings
-model_dir = "ethanol_model"  # directory that will be created for storing model
+model_dir = "qm9_model"
 os.makedirs(model_dir)
-properties = ["energy", "forces"]  # properties used for training
+properties = [QM9.U0]
 
 # data preparation
 logging.info("get dataset")
-dataset = spk.AtomsData("data/ethanol.db", required_properties=properties)
+dataset = QM9("data/qm9.db", properties=[QM9.U0])
 train, val, test = spk.train_test_split(
-    data=dataset,
-    num_train=1000,
-    num_val=100,
-    split_file=os.path.join(model_dir, "split.npz"),
+    dataset, 1000, 100, os.path.join(model_dir, "split.npz")
 )
 train_loader = spk.AtomsLoader(train, batch_size=64)
 val_loader = spk.AtomsLoader(val, batch_size=64)
 
-# get statistics
+# statistics
 atomrefs = dataset.get_atomrefs(properties)
-per_atom = dict(energy=True, forces=False)
 means, stddevs = train_loader.get_statistics(
-    properties, atomrefs=atomrefs, per_atom=per_atom
+    properties, per_atom=True, atomrefs=atomrefs
 )
 
 # model build
@@ -39,17 +35,16 @@ logging.info("build model")
 representation = spk.SchNet(n_interactions=6)
 output_modules = [
     spk.Atomwise(
-        property="energy",
-        derivative="forces",
-        mean=means["energy"],
-        stddev=stddevs["energy"],
-        negative_dr=True,
+        property=QM9.U0,
+        mean=means[QM9.U0],
+        stddev=stddevs[QM9.U0],
+        atomref=atomrefs[QM9.U0],
     )
 ]
 model = spk.AtomisticModel(representation, output_modules)
 
 # build optimizer
-optimizer = Adam(params=model.parameters(), lr=1e-4)
+optimizer = Adam(model.parameters(), lr=1e-4)
 
 # hooks
 logging.info("build trainer")
@@ -70,4 +65,4 @@ trainer = Trainer(
 
 # run training
 logging.info("training")
-trainer.train(device="cpu", n_epochs=1000)
+trainer.train(device="cpu")

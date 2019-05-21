@@ -101,28 +101,3 @@ class DeprecationHelper(object):
     def __getattr__(self, attr):
         self._warn()
         return getattr(self.new_target, attr)
-
-
-def loss_fn(properties):
-    """
-    Build the loss function.
-
-    Args:
-        properties (list): mapping between the model properties and the
-            dataset properties
-
-    Returns:
-        loss function
-
-    """
-
-    def loss_fn(batch, result):
-        loss = 0.0
-        for prop in properties:
-            diff = batch[prop] - result[prop]
-            diff = diff ** 2
-            err_sq = torch.mean(diff)
-            loss += err_sq
-        return loss
-
-    return loss_fn
