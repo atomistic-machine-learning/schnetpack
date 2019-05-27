@@ -147,7 +147,7 @@ if __name__ == "__main__":
         os.makedirs(args.simulation_dir)
 
     # Store command line args
-    spk.utils.to_json(jsonpath, argparse_dict)
+    spk.spk_utils.to_json(jsonpath, argparse_dict)
 
     # Load the model
     ml_model = torch.load(args.model_path)
@@ -155,7 +155,7 @@ if __name__ == "__main__":
 
     logging.info(
         "The model you built has: {:d} parameters".format(
-            spk.utils.compute_params(ml_model)
+            spk.spk_utils.compute_params(ml_model)
         )
     )
 

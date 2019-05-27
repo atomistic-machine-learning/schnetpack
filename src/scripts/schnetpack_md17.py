@@ -6,8 +6,8 @@ from ase.data import atomic_numbers
 
 import schnetpack as spk
 from schnetpack.datasets import MD17
-from schnetpack.output_modules import Atomwise, ElementalAtomwise
-from scripts.script_utils import (
+from schnetpack.output_modules import ElementalAtomwise
+from schnetpack.utils.script_utils import (
     get_main_parser,
     add_subparsers,
     train,

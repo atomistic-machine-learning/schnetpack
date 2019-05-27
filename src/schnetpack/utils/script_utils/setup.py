@@ -18,7 +18,7 @@ def setup_run(args):
 
         to_json(jsonpath, argparse_dict)
 
-        spk.utils.set_random_seed(args.seed)
+        spk.spk_utils.set_random_seed(args.seed)
         train_args = args
     else:
         train_args = read_from_json(jsonpath)

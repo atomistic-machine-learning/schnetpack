@@ -5,7 +5,7 @@ import torch
 
 import schnetpack as spk
 from schnetpack.datasets import MaterialsProject
-from scripts.script_utils import (
+from schnetpack.utils.script_utils import (
     get_representation,
     get_model,
     setup_run,

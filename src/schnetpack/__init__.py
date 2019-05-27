@@ -19,3 +19,4 @@ from schnetpack.output_modules import (
 )
 from schnetpack.data import *
 from schnetpack.representation import SchNet
+from schnetpack.utils import spk_utils

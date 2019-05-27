@@ -6,7 +6,7 @@ import torch
 import schnetpack as spk
 import schnetpack.output_modules
 from schnetpack.datasets import OrganicMaterialsDatabase
-from scripts.script_utils import (
+from schnetpack.utils.script_utils import (
     setup_run,
     get_model,
     get_representation,
