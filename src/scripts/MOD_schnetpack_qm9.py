@@ -38,9 +38,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    for arg in args:
-        logging.info(arg)
-    train_args = setup_run(args)
+    train_args = setup_run(args, from_file = True)
+
+    print(type(train_args))
+    print(train_args)
 
 
 #    # set device
