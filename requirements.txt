@@ -9,3 +9,6 @@ tensorboardX
 h5py
 tqdm
 pytest
+
+pre-commit
+black
