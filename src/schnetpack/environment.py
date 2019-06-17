@@ -9,7 +9,7 @@ __all__ = [
     "BaseEnvironmentProvider",
     "SimpleEnvironmentProvider",
     "AseEnvironmentProvider",
-    "TorchEnvironmentProvider"
+    "TorchEnvironmentProvider",
 ]
 
 
@@ -140,7 +140,7 @@ class TorchEnvironmentProvider(BaseEnvironmentProvider):
 
         species = torch.FloatTensor(atoms.numbers).to(self.device)
         coordinates = torch.FloatTensor(atoms.positions).to(self.device)
-        pbc = torch.from_numpy(atoms.pbc.astype('uint8')).to(self.device)
+        pbc = torch.from_numpy(atoms.pbc.astype("uint8")).to(self.device)
         if not atoms.cell.any():
             cell = torch.eye(3, dtype=species.dtype).to(self.device)
         else:
@@ -148,7 +148,9 @@ class TorchEnvironmentProvider(BaseEnvironmentProvider):
 
         shifts = compute_shifts(cell=cell, pbc=pbc, cutoff=self.cutoff)
         # The returned indices are only one directional
-        idx_i, idx_j, idx_S = neighbor_pairs(species == -1, coordinates, cell, shifts, self.cutoff)
+        idx_i, idx_j, idx_S = neighbor_pairs(
+            species == -1, coordinates, cell, shifts, self.cutoff
+        )
 
         idx_i = idx_i.cpu().detach().numpy()
         idx_j = idx_j.cpu().detach().numpy()
@@ -211,21 +213,23 @@ def compute_shifts(cell, pbc, cutoff):
     r2 = torch.arange(1, num_repeats[1] + 1, device=cell.device)
     r3 = torch.arange(1, num_repeats[2] + 1, device=cell.device)
     o = torch.zeros(1, dtype=torch.long, device=cell.device)
-    return torch.cat([
-        torch.cartesian_prod(r1, r2, r3),
-        torch.cartesian_prod(r1, r2, o),
-        torch.cartesian_prod(r1, r2, -r3),
-        torch.cartesian_prod(r1, o, r3),
-        torch.cartesian_prod(r1, o, o),
-        torch.cartesian_prod(r1, o, -r3),
-        torch.cartesian_prod(r1, -r2, r3),
-        torch.cartesian_prod(r1, -r2, o),
-        torch.cartesian_prod(r1, -r2, -r3),
-        torch.cartesian_prod(o, r2, r3),
-        torch.cartesian_prod(o, r2, o),
-        torch.cartesian_prod(o, r2, -r3),
-        torch.cartesian_prod(o, o, r3),
-    ])
+    return torch.cat(
+        [
+            torch.cartesian_prod(r1, r2, r3),
+            torch.cartesian_prod(r1, r2, o),
+            torch.cartesian_prod(r1, r2, -r3),
+            torch.cartesian_prod(r1, o, r3),
+            torch.cartesian_prod(r1, o, o),
+            torch.cartesian_prod(r1, o, -r3),
+            torch.cartesian_prod(r1, -r2, r3),
+            torch.cartesian_prod(r1, -r2, o),
+            torch.cartesian_prod(r1, -r2, -r3),
+            torch.cartesian_prod(o, r2, r3),
+            torch.cartesian_prod(o, r2, o),
+            torch.cartesian_prod(o, r2, -r3),
+            torch.cartesian_prod(o, o, r3),
+        ]
+    )
 
 
 def neighbor_pairs(padding_mask, coordinates, cell, shifts, cutoff):
@@ -258,7 +262,9 @@ def neighbor_pairs(padding_mask, coordinates, cell, shifts, cutoff):
     # shape convention (shift index, molecule index, atom index, 3)
     num_shifts = shifts.shape[0]
     all_shifts = torch.arange(num_shifts, device=cell.device)
-    shift_index, p1, p2 = torch.cartesian_prod(all_shifts, all_atoms, all_atoms).unbind(-1)
+    shift_index, p1, p2 = torch.cartesian_prod(all_shifts, all_atoms, all_atoms).unbind(
+        -1
+    )
     shifts_outide = shifts.index_select(0, shift_index)
 
     # Step 4: combine results for all cells
