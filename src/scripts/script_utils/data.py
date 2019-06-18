@@ -7,8 +7,9 @@ from torch.utils.data.sampler import RandomSampler
 from scripts.script_utils.script_error import ScriptError
 
 
-def get_statistics(split_path, train_loader, args, atomref, per_atom=False,
-                   logging=None):
+def get_statistics(
+    split_path, train_loader, args, atomref, per_atom=False, logging=None
+):
     """
     Get statistics for molecular properties. Use split file if possible.
 
@@ -37,8 +38,7 @@ def get_statistics(split_path, train_loader, args, atomref, per_atom=False,
 
     # calculate statistical data
     else:
-        mean, stddev = train_loader.get_statistics(args.property, per_atom,
-                                                   atomref)
+        mean, stddev = train_loader.get_statistics(args.property, per_atom, atomref)
         np.savez(
             split_path,
             train_idx=split_data["train_idx"],
@@ -51,17 +51,17 @@ def get_statistics(split_path, train_loader, args, atomref, per_atom=False,
     return mean, stddev
 
 
-def get_loaders(logging, args, dataset, split_path):
-    if args.mode == "train":
-        if args.split_path is not None:
-            copyfile(args.split_path, split_path)
+def get_loaders(args, dataset, split_path, logging=None):
 
-    logging.info("create splits...")
+    if logging is not None:
+        logging.info("create splits...")
+
     data_train, data_val, data_test = dataset.create_splits(
         *args.split, split_file=split_path
     )
+    if logging is not None:
+        logging.info("load data...")
 
-    logging.info("load data...")
     train_loader = spk.data.AtomsLoader(
         data_train,
         batch_size=args.batch_size,

@@ -3,6 +3,7 @@ import os
 from ase import Atoms
 from ase.db import connect
 from src.schnetpack.data import AtomsData
+from src.schnetpack.datasets import QM9
 
 
 @pytest.fixture(scope="session")
@@ -40,3 +41,19 @@ def build_db(tmp_path, db_size, ats):
     with connect(tmp_path) as conn:
         for mol in [ats] * db_size:
             conn.write(mol)
+
+
+@pytest.fixture(scope="session")
+def qm9_dbpath():
+    return os.path.join("data", "test_qm9.db")
+
+
+@pytest.fixture(scope="session")
+def qm9_dataset(qm9_dbpath):
+    print(os.path.exists(qm9_dbpath))
+    return QM9(qm9_dbpath)
+
+
+@pytest.fixture(scope="session")
+def qm9_split():
+    return 10, 5

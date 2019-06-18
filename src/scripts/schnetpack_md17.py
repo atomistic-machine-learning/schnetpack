@@ -77,7 +77,7 @@ if __name__ == "__main__":
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")
     train_loader, val_loader, test_loader = get_loaders(
-        logging, args, dataset=md17, split_path=split_path
+        args, dataset=md17, split_path=split_path, logging=logging
     )
 
     if args.mode == "train":

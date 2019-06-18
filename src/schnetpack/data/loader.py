@@ -162,8 +162,9 @@ class AtomsLoader(DataLoader):
             worker_init_fn,
         )
 
-    def get_statistics(self, property_names, get_atomwise_statistics=False,
-                       single_atom_ref=None):
+    def get_statistics(
+        self, property_names, get_atomwise_statistics=False, single_atom_ref=None
+    ):
         """
         Compute mean and variance of a property. Uses the incremental Welford
         algorithm implemented in StatisticsAccumulator
@@ -184,7 +185,9 @@ class AtomsLoader(DataLoader):
         if type(property_names) is not list:
             property_names = [property_names]
         if type(get_atomwise_statistics) is not dict:
-            get_atomwise_statistics = {prop: get_atomwise_statistics for prop in property_names}
+            get_atomwise_statistics = {
+                prop: get_atomwise_statistics for prop in property_names
+            }
         if single_atom_ref is None:
             single_atom_ref = {prop: None for prop in property_names}
 
@@ -197,8 +200,11 @@ class AtomsLoader(DataLoader):
             for row in self:
                 for prop in property_names:
                     self._update_statistic(
-                        get_atomwise_statistics[prop], single_atom_ref[prop], prop, row,
-                        statistics[prop]
+                        get_atomwise_statistics[prop],
+                        single_atom_ref[prop],
+                        prop,
+                        row,
+                        statistics[prop],
                     )
 
             means = {prop: s.get_mean() for prop, s in statistics.items()}
@@ -206,8 +212,9 @@ class AtomsLoader(DataLoader):
 
         return means, stddevs
 
-    def _update_statistic(self, get_atomwise_statistics, single_atom_ref, property_name,
-                          row, statistics):
+    def _update_statistic(
+        self, get_atomwise_statistics, single_atom_ref, property_name, row, statistics
+    ):
         """
         Helper function to update iterative mean / stddev statistics
         """
