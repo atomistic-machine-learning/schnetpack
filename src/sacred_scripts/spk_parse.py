@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import os
 from sacred import Experiment
 from schnetpack.data import generate_db
