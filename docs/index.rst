@@ -21,15 +21,16 @@ Contents
 
    getstarted/getstarted
 
-.. toctree::
-   :glob:
-   :caption: User Guide
-   :maxdepth: 2
+..
+   .. toctree::
+      :glob:
+      :caption: User Guide
+      :maxdepth: 2
 
-   guide/preparedata
-   guide/asemodel
-   guide/trainmodel
-   guide/runmd
+      guide/preparedata
+      guide/asemodel
+      guide/trainmodel
+      guide/runmd
 
 
 .. toctree::
