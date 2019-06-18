@@ -71,7 +71,7 @@ if __name__ == "__main__":
         # get statistics
         logging.info("calculate statistics...")
         mean, stddev = get_statistics(
-            split_path, logging, train_loader, train_args, atomref
+            split_path, train_loader, train_args, atomref, logging=logging
         )
 
         # build representation
@@ -149,7 +149,6 @@ if __name__ == "__main__":
                 test_loader,
                 device,
                 metrics=metrics,
-                to_kcal=True,
             )
         logging.info("... done!")
     else:

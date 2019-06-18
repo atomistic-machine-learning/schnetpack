@@ -1,26 +1,53 @@
 import numpy as np
 import torch
+import os
 import schnetpack as spk
 from shutil import copyfile
 from torch.utils.data.sampler import RandomSampler
+from scripts.script_utils.script_error import ScriptError
 
 
-def get_statistics(split_path, logging, train_loader, train_args, atomref):
+def get_statistics(split_path, train_loader, args, atomref, per_atom=False,
+                   logging=None):
+    """
+    Get statistics for molecular properties. Use split file if possible.
+
+    Args:
+        split_path (str): path to the split file
+        train_loader (spk.data.AtomsLoader): dataloader for training set
+        args (argparse.Namespace): parsed script arguments
+        atomref (dict): atomic references
+        logging: logger
+
+    Returns:
+        mean (dict): mean values for the selected properties
+        stddev (dict): stddev values for the selected properties
+    """
+    # check if split file exists
+    if not os.path.exists(split_path):
+        raise ScriptError("No split file found ad {}".format(split_path))
     split_data = np.load(split_path)
+
+    # check if split file contains statistical data
     if "mean" in split_data.keys():
-        mean = {train_args.property: torch.from_numpy(split_data["mean"])}
-        stddev = {train_args.property: torch.from_numpy(split_data["stddev"])}
-        logging.info("cached statistics was loaded...")
+        mean = {args.property: torch.from_numpy(split_data["mean"])}
+        stddev = {args.property: torch.from_numpy(split_data["stddev"])}
+        if logging is not None:
+            logging.info("cached statistics was loaded...")
+
+    # calculate statistical data
     else:
-        mean, stddev = train_loader.get_statistics(train_args.property, True, atomref)
+        mean, stddev = train_loader.get_statistics(args.property, per_atom,
+                                                   atomref)
         np.savez(
             split_path,
             train_idx=split_data["train_idx"],
             val_idx=split_data["val_idx"],
             test_idx=split_data["test_idx"],
-            mean=mean[train_args.property].numpy(),
-            stddev=stddev[train_args.property].numpy(),
+            mean=mean[args.property].numpy(),
+            stddev=stddev[args.property].numpy(),
         )
+
     return mean, stddev
 
 
