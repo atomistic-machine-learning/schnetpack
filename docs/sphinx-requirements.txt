@@ -8,3 +8,5 @@ h5py
 pyyaml
 sacred
 tqdm
+ipykernel
+nbsphinx

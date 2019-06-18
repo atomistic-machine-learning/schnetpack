@@ -1,8 +1,3 @@
-.. _tut etha:
-
-Tutorial: Using SchNetPack with custom Data
-===========================================
-
 This tutorial will explain how to use SchNetPack for training a SchNet model
 on custom datasets and how the trained model can be used for further
 experiments. For this tutorial we will create a new folder. Therefore ``cd`` to your
@@ -14,8 +9,9 @@ desired location and create a new directory::
 
 .. _tut etha prep:
 
+=============================
 Prepare the Data for Training
------------------------------
+=============================
 
 This tutorial will use an ethanol dataset which can be downloaded
 `here <http://quantum-machine.org/gdml/data/xyz/ethanol_dft.zip>`_. First of all you

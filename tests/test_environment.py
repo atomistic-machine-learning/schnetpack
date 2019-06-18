@@ -48,7 +48,7 @@ def ase_env():
 @pytest.fixture
 def torch_env():
     # Select torch.device('cuda') to test on GPU
-    return env.TorchEnvironmentProvider(10.0, device=torch.device('cpu'))
+    return env.TorchEnvironmentProvider(10.0, device=torch.device("cpu"))
 
 
 def test_single_atom(single_atom, simple_env, ase_env, torch_env):
