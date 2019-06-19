@@ -61,7 +61,7 @@ def build_db(tmp_db_path, db_size, ats):
 
 @pytest.fixture(scope="module")
 def qm9_dbpath():
-    return os.path.join("data", "test_qm9.db")
+    return os.path.join("tests", "data", "test_qm9.db")
 
 
 @pytest.fixture(scope="module")
