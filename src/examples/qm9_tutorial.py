@@ -5,7 +5,7 @@ import schnetpack as spk
 from schnetpack.datasets import QM9
 from schnetpack.train import Trainer, CSVHook, ReduceLROnPlateauHook
 from schnetpack.metrics import MeanAbsoluteError
-from schnetpack.metrics import mse_loss
+from schnetpack.metrics import build_mse_loss
 
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -52,7 +52,7 @@ metrics = [MeanAbsoluteError(p, p) for p in properties]
 hooks = [CSVHook(log_path=model_dir, metrics=metrics), ReduceLROnPlateauHook(optimizer)]
 
 # trainer
-loss = mse_loss(properties)
+loss = build_mse_loss(properties)
 trainer = Trainer(
     model_dir,
     model=model,
