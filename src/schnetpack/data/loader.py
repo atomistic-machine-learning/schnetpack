@@ -86,9 +86,17 @@ def collate_aseatoms(examples):
         # (not the values), only one cutoff mask has to be generated
         if Structure.neighbor_pairs_j in properties:
             nbh_idx_j = properties[Structure.neighbor_pairs_j]
+            nbh_idx_k = properties[Structure.neighbor_pairs_k]
             shape = nbh_idx_j.size()
             s = (k,) + tuple([slice(0, d) for d in shape])
-            batch[Structure.neighbor_pairs_mask][s] = nbh_idx_j >= 0
+            mask = nbh_idx_j >= 0
+            batch[Structure.neighbor_pairs_mask][s] = mask
+            
+            # This is added so that it is treated the
+            # same way as the neighbor_idx
+            batch[Structure.neighbor_pairs_j][s] = nbh_idx_j * mask.long()
+            batch[Structure.neighbor_pairs_k][s] = nbh_idx_k * mask.long()
+            
 
     return batch
 
