@@ -128,8 +128,9 @@ if __name__ == "__main__":
         # run training
         logging.info("training...")
         loss_fn = tradeoff_loff_fn(args, "forces")
-        trainer = get_trainer(args, model, train_loader, val_loader, device, metrics,
-                              loss_fn=loss_fn)
+        trainer = get_trainer(
+            args, model, train_loader, val_loader, device, metrics, loss_fn=loss_fn
+        )
         trainer.train(device, n_epochs=args.n_epochs)
         logging.info("...training done!")
 
