@@ -10,7 +10,7 @@ from schnetpack.output_modules import Atomwise, ElementalAtomwise
 from scripts.script_utils import (
     get_main_parser,
     add_subparsers,
-    train,
+    get_trainer,
     get_representation,
     get_model,
     evaluate,
@@ -77,14 +77,14 @@ if __name__ == "__main__":
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")
     train_loader, val_loader, test_loader = get_loaders(
-        logging, args, dataset=md17, split_path=split_path
+        args, dataset=md17, split_path=split_path, logging=logging
     )
 
     if args.mode == "train":
         # get statistics
         logging.info("calculate statistics...")
         mean, stddev = get_statistics(
-            split_path, logging, train_loader, train_args, atomref
+            split_path, train_loader, train_args, atomref, logging=logging
         )
 
         # build representation
@@ -128,15 +128,10 @@ if __name__ == "__main__":
         # run training
         logging.info("training...")
         loss_fn = tradeoff_loff_fn(args, "forces")
-        train(
-            args,
-            model,
-            train_loader,
-            val_loader,
-            device,
-            metrics=metrics,
-            loss_fn=loss_fn,
+        trainer = get_trainer(
+            args, model, train_loader, val_loader, device, metrics, loss_fn=loss_fn
         )
+        trainer.train(device, n_epochs=args.n_epochs)
         logging.info("...training done!")
 
     elif args.mode == "eval":
