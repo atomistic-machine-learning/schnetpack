@@ -29,10 +29,11 @@ def add_subparsers(cmd_parser, defaults={}, choices={}):
     train_parser.add_argument(
         "--property",
         type=str,
-        help="Organic Materials Database property to be predicted"
+        help="Database property to be predicted"
         " (default: %(default)s)",
-        default=defaults["property"],
-        choices=choices["property"],
+        default="energy" if "property" not in defaults.keys() else defaults["property"],
+        choices=["energy"] if "property" not in choices.keys() else
+            defaults["property"],
     )
     train_parser.add_argument("datapath", help="Path / destination of dataset")
     train_parser.add_argument("modelpath", help="Destination for models and logs")

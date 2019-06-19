@@ -2,9 +2,12 @@ import pytest
 import torch
 import numpy as np
 from .fixtures import *
-from src.scripts.script_utils import get_loaders, get_statistics
+from src.scripts.script_utils import get_loaders, get_statistics, get_main_parser,\
+    add_subparsers, setup_run
 import schnetpack as spk
 from numpy.testing import assert_almost_equal
+from argparse import Namespace
+from shutil import rmtree
 
 
 class TestScripts:
@@ -43,3 +46,38 @@ class TestScripts:
         train, val, test = get_loaders(args, qm9_dataset, split_path)
         assert train.dataset.__len__() == args.split[0]
         assert val.dataset.__len__() == args.split[1]
+
+
+class TestParser:
+
+    def test_main_parser(self):
+        parser = get_main_parser()
+        args = parser.parse_args([])
+        assert type(args.batch_size) == int
+
+        with pytest.raises(SystemExit):
+            args = parser.parse_args(["--wrong"])
+
+    def test_subparser(self):
+        parser = get_main_parser()
+        add_subparsers(parser)
+        args = parser.parse_args(["train", "schnet", "data/qm9.db", "model",
+                                  "--split", "10000", "1000"])
+        assert args.mode == "train"
+        assert args.model == "schnet"
+
+        with pytest.raises(SystemExit):
+            args = parser.parse_args([])
+
+
+class TestSetup:
+
+    def test_setup_overwrite(self, modeldir):
+        test_folder = os.path.join(modeldir, "testing")
+        os.makedirs(test_folder)
+        args = Namespace(mode="train", modelpath=modeldir, overwrite=True, seed=20)
+        train_args = setup_run(args)
+        assert not os.path.exists(test_folder)
+        args = Namespace(mode="eval", modelpath=modeldir, seed=20)
+        assert train_args == setup_run(args)
+        rmtree(modeldir)
