@@ -10,7 +10,7 @@ from schnetpack.output_modules import Atomwise, ElementalAtomwise
 from scripts.script_utils import (
     get_main_parser,
     add_subparsers,
-    train,
+    get_trainer,
     get_representation,
     get_model,
     evaluate,
@@ -128,15 +128,9 @@ if __name__ == "__main__":
         # run training
         logging.info("training...")
         loss_fn = tradeoff_loff_fn(args, "forces")
-        train(
-            args,
-            model,
-            train_loader,
-            val_loader,
-            device,
-            metrics=metrics,
-            loss_fn=loss_fn,
-        )
+        trainer = get_trainer(args, model, train_loader, val_loader, device, metrics,
+                              loss_fn=loss_fn)
+        trainer.train(device, n_epochs=args.n_epochs)
         logging.info("...training done!")
 
     elif args.mode == "eval":

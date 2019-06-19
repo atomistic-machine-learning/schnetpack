@@ -10,7 +10,7 @@ from scripts.script_utils import (
     setup_run,
     get_model,
     get_representation,
-    train,
+    get_trainer,
     evaluate,
     get_main_parser,
     add_subparsers,
@@ -96,7 +96,8 @@ if __name__ == "__main__":
 
         # run training
         logging.info("training...")
-        train(args, model, train_loader, val_loader, device, metrics=metrics)
+        trainer = get_trainer(args, model, train_loader, val_loader, device, metrics)
+        trainer.train(device, n_epochs=args.n_epochs)
         logging.info("...training done!")
 
     elif args.mode == "eval":

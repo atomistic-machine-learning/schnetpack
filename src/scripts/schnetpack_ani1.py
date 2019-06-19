@@ -5,7 +5,7 @@ import torch
 
 import schnetpack.output_modules
 from scripts.script_utils.evaluation import evaluate
-from scripts.script_utils.training import train
+from scripts.script_utils.training import get_trainer
 from ase.data import atomic_numbers
 
 import schnetpack as spk
@@ -109,7 +109,8 @@ if __name__ == "__main__":
 
         # run training
         logging.info("training...")
-        train(args, model, train_loader, val_loader, device, metrics)
+        trainer = get_trainer(args, model, train_loader, val_loader, device, metrics)
+        trainer.train(device, n_epochs=args.n_epochs)
         logging.info("...training done!")
 
     elif args.mode == "eval":
