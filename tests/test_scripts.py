@@ -8,6 +8,12 @@ from src.scripts.script_utils import (
     get_main_parser,
     add_subparsers,
     setup_run,
+    get_trainer,
+    simple_loss_fn,
+    tradeoff_loff_fn,
+    get_representation,
+    get_model,
+    evaluate,
 )
 import schnetpack as spk
 from numpy.testing import assert_almost_equal
@@ -94,4 +100,110 @@ class TestSetup:
         assert not os.path.exists(test_folder)
         args = Namespace(mode="eval", modelpath=modeldir, seed=20)
         assert train_args == setup_run(args)
-        rmtree(modeldir)
+
+
+class TestTrainer:
+
+    def test_trainer(self, qm9_train_loader, qm9_val_loader, schnet, modeldir):
+        args = Namespace(max_epochs=1, lr=0.01, lr_patience=10, lr_decay=0.5,
+                         lr_min=1e-6, logger="csv", modelpath=modeldir,
+                         log_every_n_epochs=2)
+        trainer = get_trainer(args, schnet, qm9_train_loader, qm9_val_loader,
+                              metrics=None, loss_fn=None)
+        assert trainer._model == schnet
+        hook_types = [type(hook) for hook in trainer.hooks]
+        assert spk.train.CSVHook in hook_types
+        assert spk.train.TensorboardHook not in hook_types
+        assert spk.train.MaxEpochHook in hook_types
+        assert spk.train.ReduceLROnPlateauHook in hook_types
+
+    def test_tensorboardhook(self, qm9_train_loader, qm9_val_loader, schnet, modeldir):
+        # use TensorBoardHook
+        if os.path.exists(os.path.join(modeldir, "checkpoints")):
+            rmtree(os.path.join(modeldir, "checkpoints"))
+        args = Namespace(max_epochs=1, lr=0.01, lr_patience=10, lr_decay=0.5,
+                         lr_min=1e-6, logger="tensorboard", modelpath=modeldir,
+                         log_every_n_epochs=2)
+        trainer = get_trainer(args, schnet, qm9_train_loader, qm9_val_loader,
+                              metrics=None, loss_fn=None)
+        assert spk.train.TensorboardHook in [type(hook) for hook in trainer.hooks]
+
+    def test_simple_loss(self):
+        args = Namespace(property="prop")
+        loss_fn = simple_loss_fn(args)
+        loss = loss_fn({"prop": torch.FloatTensor([100, 100])},
+                       {"prop": torch.FloatTensor([20, 20])})
+        assert loss == 80**2
+
+    def test_tradeoff_loff(self):
+        args = Namespace(property="prop", rho=0.)
+        loss_fn = tradeoff_loff_fn(args, derivative="der")
+        loss = loss_fn({"prop": torch.FloatTensor([100, 100]),
+                        "der": torch.FloatTensor([100, 100])},
+                       {"prop": torch.FloatTensor([20, 20]),
+                        "der": torch.FloatTensor([40, 40])})
+        assert loss == 60**2
+        args = Namespace(property="prop", rho=1.)
+        loss_fn = tradeoff_loff_fn(args, derivative="der")
+        loss = loss_fn({"prop": torch.FloatTensor([100, 100]),
+                        "der": torch.FloatTensor([100, 100])},
+                       {"prop": torch.FloatTensor([20, 20]),
+                        "der": torch.FloatTensor([40, 40])})
+        assert loss == 80**2
+
+
+class TestModel:
+
+    def test_schnet(self):
+        args = Namespace(model="schnet", cutoff_function="hard", features=100,
+                         n_filters=5, interactions=2, cutoff=4., num_gaussians=30)
+        repr = get_representation(args)
+        assert type(repr) == spk.SchNet
+        assert len(repr.interactions) == 2
+        assert type(repr) != spk.representation.BehlerSFBlock
+        args = Namespace(model="schnet", cutoff_function="cosine", features=100,
+                         n_filters=5, interactions=2, cutoff=4., num_gaussians=30)
+        repr = get_representation(args)
+        assert type(repr) == spk.SchNet
+        assert len(repr.interactions) == 2
+        assert type(repr) != spk.representation.BehlerSFBlock
+        args = Namespace(model="schnet", cutoff_function="mollifier", features=100,
+                         n_filters=5, interactions=2, cutoff=4., num_gaussians=30)
+        repr = get_representation(args)
+        assert type(repr) == spk.SchNet
+        assert len(repr.interactions) == 2
+        assert type(repr) != spk.representation.BehlerSFBlock
+
+    def test_wacsf(self, qm9_train_loader):
+        args = Namespace(model="wacsf", cutoff_function="cosine", features=100,
+                         n_filters=5, interactions=3, cutoff=4., num_gaussians=30,
+                         behler=False, elements=["C"], radial=22, angular=5, zetas=[1],
+                         centered=True, crossterms=True, standardize=False, cuda=False)
+        repr = get_representation(args, qm9_train_loader)
+        assert type(repr) != spk.SchNet
+        assert type(repr) == spk.representation.BehlerSFBlock
+
+
+class TestEvaluation:
+
+    def test_eval(self, qm9_train_loader, qm9_val_loader, qm9_test_loader, modeldir):
+        args = Namespace(model="schnet", cutoff_function="hard", features=100,
+                         n_filters=5, interactions=2, cutoff=4., num_gaussians=30,
+                         modelpath=modeldir, split="test")
+        repr = get_representation(args)
+        output_module = spk.Atomwise(args.features, property="energy_U0")
+        model = get_model(repr, output_module)
+
+        evaluate(args, model, qm9_train_loader, qm9_val_loader, qm9_test_loader, "cpu",
+                 metrics=[spk.metrics.MeanAbsoluteError("energy_U0",
+                                                        model_output="energy_U0")])
+        assert os.path.exists(os.path.join(modeldir, "evaluation.txt"))
+        args.split = "train"
+        evaluate(args, model, qm9_train_loader, qm9_val_loader, qm9_test_loader, "cpu",
+                 metrics=[spk.metrics.MeanAbsoluteError("energy_U0",
+                                                        model_output="energy_U0")])
+        args.split = "val"
+        evaluate(args, model, qm9_train_loader, qm9_val_loader, qm9_test_loader, "cpu",
+                 metrics=[spk.metrics.MeanAbsoluteError("energy_U0",
+                                                        model_output="energy_U0")])
+
