@@ -3,6 +3,15 @@ from schnetpack.output_modules import Atomwise
 from schnetpack.atomistic import AtomisticModel
 
 
+__all__ = [
+    "properties",
+    "energy_module",
+    "property_output",
+    "result_shapes",
+    "atomistic_model",
+]
+
+
 @pytest.fixture(scope="session")
 def properties():
     return dict(

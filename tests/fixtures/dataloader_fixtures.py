@@ -4,6 +4,17 @@ from .dataset_fixtures import *
 import schnetpack as spk
 
 
+__all__ = [
+    "batch_size",
+    "shuffle",
+    "dataloader",
+    "qm9_loader",
+    "qm9_train_loader",
+    "qm9_val_loader",
+    "qm9_test_loader",
+]
+
+
 @pytest.fixture(scope="session")
 def batch_size():
     return 4

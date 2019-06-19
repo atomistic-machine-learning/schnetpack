@@ -3,6 +3,24 @@ from schnetpack.nn.cutoff import HardCutoff
 from schnetpack.representation import SchNet
 
 
+__all__ = [
+    "n_atom_basis",
+    "n_filters",
+    "n_interactions",
+    "cutoff",
+    "n_gaussians",
+    "normalize_filter",
+    "coupled_interactions",
+    "return_intermediate",
+    "max_z",
+    "cutoff_network",
+    "trainable_gaussians",
+    "distance_expansion",
+    "charged_systems",
+    "schnet",
+]
+
+
 @pytest.fixture(scope="session")
 def n_atom_basis():
     return 128

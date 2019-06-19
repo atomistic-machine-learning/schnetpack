@@ -3,6 +3,9 @@ import os
 from argparse import Namespace
 
 
+__all__ = ["tmp_dir", "modeldir", "split_path", "args"]
+
+
 @pytest.fixture(scope="module")
 def tmp_dir(tmpdir_factory):
     modeldir = tmpdir_factory.mktemp("modeldir")
