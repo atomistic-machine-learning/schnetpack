@@ -4,7 +4,6 @@ import numpy as np
 import torch
 from ase.neighborlist import neighbor_list
 
-
 __all__ = [
     "BaseEnvironmentProvider",
     "SimpleEnvironmentProvider",
@@ -115,7 +114,6 @@ class AseEnvironmentProvider(BaseEnvironmentProvider):
             neighborhood_idx = -np.ones((n_atoms, 1), dtype=np.float32)
             offset = np.zeros((n_atoms, 1, 3), dtype=np.float32)
 
- 
         return neighborhood_idx, offset
 
 
@@ -296,26 +294,14 @@ def collect_atom_triples(nbh_idx):
 
     Returns:
         nbh_idx_j, nbh_idx_k (numpy.ndarray): triple indices
+        offset_idx_j, offset_idx_k (numpy.ndarray): offset indices for PBC
 
     """
-
-
-    # Probably change here. The point is to add two values,
-    # the cell_offsets_idx_j and
-    # the cell_offsets_idx_k to the input dictionary.
-
     natoms, nneigh = nbh_idx.shape
-    # The offset_idx is used to keep track of the offsets
-    # for atoms in the triples
-    offset_idx = np.tile(np.arange(nneigh),(natoms,1))
-    
+
     # Construct possible permutations
     nbh_idx_j = np.tile(nbh_idx, nneigh)
     nbh_idx_k = np.repeat(nbh_idx, nneigh).reshape((natoms, -1))
-
-    # Same operations are done on the indices
-    offset_idx_j = np.tile(offset_idx,nneigh)
-    offset_idx_k = np.repeat(offset_idx,nneigh).reshape((natoms,-1))
 
     # Remove same interactions and non unique pairs
     triu_idx_row, triu_idx_col = np.triu_indices(nneigh, k=1)
@@ -323,7 +309,15 @@ def collect_atom_triples(nbh_idx):
     nbh_idx_j = nbh_idx_j[:, triu_idx_flat]
     nbh_idx_k = nbh_idx_k[:, triu_idx_flat]
 
-    offset_idx_j = offset_idx_j[:,triu_idx_flat]
-    offset_idx_k = offset_idx_k[:,triu_idx_flat]
-    
+    # Keep track of periodic images
+    offset_idx = np.tile(np.arange(nneigh), (natoms, 1))
+
+    # Construct indices for pairs of offsets
+    offset_idx_j = np.tile(offset_idx, nneigh)
+    offset_idx_k = np.repeat(offset_idx, nneigh).reshape((natoms, -1))
+
+    # Remove non-unique pairs and diagonal
+    offset_idx_j = offset_idx_j[:, triu_idx_flat]
+    offset_idx_k = offset_idx_k[:, triu_idx_flat]
+
     return nbh_idx_j, nbh_idx_k, offset_idx_j, offset_idx_k
