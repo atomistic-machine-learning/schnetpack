@@ -254,6 +254,7 @@ class ElementalAtomwise(Atomwise):
         property (str): name of the output property (default: "y")
         derivative (str or None): Name of property derivative. No derivative
             returned if None. (default: None)
+        negative_dr (bool): Multiply the derivative with -1 if True. (default: False)
         contributions (str or None): Name of property contributions in return dict.
             No contributions returned if None. (default: None)
         create_graph (bool): If False, the graph used to compute the grad will be
@@ -284,6 +285,7 @@ class ElementalAtomwise(Atomwise):
         n_layers=3,
         property="y",
         derivative=None,
+        negative_dr=False,
         contributions=None,
         create_graph=False,
         elements=frozenset((1, 6, 7, 8, 9)),
@@ -313,6 +315,7 @@ class ElementalAtomwise(Atomwise):
             property=property,
             contributions=contributions,
             derivative=derivative,
+            negative_dr=negative_dr,
             create_graph=create_graph,
             mean=mean,
             stddev=stddev,
