@@ -54,6 +54,7 @@ def atom_distances(
         offsets = cell_offsets.bmm(cell)
         offsets = offsets.view(B, A, N, D)
         dist_vec += offsets
+        
 
     # Compute vector lengths
     distances = torch.norm(dist_vec, 2, 3)
@@ -122,7 +123,7 @@ class AtomDistances(nn.Module):
         )
 
 
-def triple_distances(positions, neighbors_j, neighbors_k):
+def triple_distances(positions, neighbors_j, neighbors_k, offset_idx_j, offset_idx_k, cell, cell_offsets):
     """
     Get all distances between atoms forming a triangle with the central atoms.
     Required e.g. for angular symmetry functions.
@@ -142,16 +143,39 @@ def triple_distances(positions, neighbors_j, neighbors_k):
     idx_m = torch.arange(nbatch, device=positions.device, dtype=torch.long)[
         :, None, None
     ]
+
+    # Get the offsets into true cartesian values 
+    B, A, N, D = cell_offsets.size()
+    cell_offsets = cell_offsets.view(B, A * N, D)
+    offsets = cell_offsets.bmm(cell)
+    offsets = offsets.view(B, A, N, D)
+
+    # Get the offset values for j and k atoms
+    B, A, T = offset_idx_j.size()
+
+    offset_idx_j = offset_idx_j.view(B*A,T)
+    offset_idx_k = offset_idx_k.view(B*A,T)
+    offsets = offsets.view(B*A,-1,3)
+    Tracer = torch.arange(B*A, device=positions.device,dtype=torch.long)[:,None]
+    offset_j = offsets[Tracer,offset_idx_j[:]].view(B,A,T,3)
+    offset_k = offsets[Tracer,offset_idx_k[:]].view(B,A,T,3)
+
     # if positions.is_cuda:
     #    idx_m = idx_m.pin_memory().cuda(async=True)
-    pos_j = positions[idx_m, neighbors_j[:], :]
-    pos_k = positions[idx_m, neighbors_k[:], :]
+
+    # Get the real positions of j and k
+    pos_j = positions[idx_m, neighbors_j[:], :] + offset_j
+    pos_k = positions[idx_m, neighbors_k[:], :] + offset_k
     R_ij = pos_j - positions[:, :, None, :]
     R_ik = pos_k - positions[:, :, None, :]
     R_jk = pos_j - pos_k
-    r_ij = torch.norm(R_ij, 2, 3)
-    r_ik = torch.norm(R_ik, 2, 3)
-    r_jk = torch.norm(R_jk, 2, 3)
+
+    # + 1e-9 to avoid nan problem
+    # There could be better solutions 
+    r_ij = torch.norm(R_ij, 2, 3)+1e-9
+    r_ik = torch.norm(R_ik, 2, 3)+1e-9
+    r_jk = torch.norm(R_jk, 2, 3)+1e-9
+    
     return r_ij, r_ik, r_jk
 
 

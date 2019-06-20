@@ -100,20 +100,26 @@ class AtomsData(Dataset):
         nbh_idx, offsets = self.environment_provider.get_environment(at)
 
         properties[Structure.neighbors] = torch.LongTensor(nbh_idx.astype(np.int))
+
         properties[Structure.cell_offset] = torch.FloatTensor(
             offsets.astype(np.float32)
         )
         properties["_idx"] = torch.LongTensor(np.array([idx], dtype=np.int))
 
         if self.collect_triples:
-            nbh_idx_j, nbh_idx_k = collect_atom_triples(nbh_idx)
+            nbh_idx_j, nbh_idx_k, offset_idx_j, offset_idx_k = collect_atom_triples(nbh_idx)
             properties[Structure.neighbor_pairs_j] = torch.LongTensor(
                 nbh_idx_j.astype(np.int)
             )
             properties[Structure.neighbor_pairs_k] = torch.LongTensor(
                 nbh_idx_k.astype(np.int)
             )
-
+            properties['offset_idx_j'] = torch.LongTensor(
+                offset_idx_j.astype(np.int)
+            )
+            properties['offset_idx_k'] = torch.LongTensor(
+                offset_idx_k.astype(np.int)
+            )
         return properties
 
     def _subset_index(self, idx):
