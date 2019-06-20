@@ -74,7 +74,7 @@ class MaterialsProject(DownloadableAtomsData):
             self.cutoff,
             download=False,
             subset=subidx,
-            properties=self.required_properties,
+            properties=self.load_only,
             collect_triples=self.collect_triples,
         )
 

@@ -71,7 +71,7 @@ class ANI1(DownloadableAtomsData):
             dbpath=dbpath,
             subset=subset,
             download=download,
-            required_properties=properties,
+            load_only=properties,
             collect_triples=collect_triples,
         )
 
@@ -91,7 +91,7 @@ class ANI1(DownloadableAtomsData):
             self.dbpath,
             download=False,
             subset=subidx,
-            properties=self.required_properties,
+            properties=self.load_only,
             collect_triples=self.collect_triples,
             num_heavy_atoms=self.num_heavy_atoms,
             high_energies=self.high_energies,
@@ -167,7 +167,7 @@ class ANI1(DownloadableAtomsData):
 
     def _create_atoms_ref(self):
         atref = np.zeros((100, 6))
-        labels = self.required_properties
+        labels = self.load_only
 
         # converts units to eV (which are set to one in ase)
         atref[1, :] = self.self_energies["H"] * self.units["energy"]

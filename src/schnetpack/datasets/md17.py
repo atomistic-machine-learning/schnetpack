@@ -79,7 +79,7 @@ class MD17(DownloadableAtomsData):
         super(MD17, self).__init__(
             dbpath=dbpath,
             subset=subset,
-            required_properties=properties,
+            load_only=properties,
             collect_triples=collect_triples,
             download=download,
         )
@@ -93,7 +93,7 @@ class MD17(DownloadableAtomsData):
             subset=subidx,
             download=False,
             collect_triples=self.collect_triples,
-            properties=self.required_properties,
+            properties=self.load_only,
         )
 
     def _download(self):

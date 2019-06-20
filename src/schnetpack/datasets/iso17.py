@@ -66,7 +66,7 @@ class ISO17(DownloadableAtomsData):
         super().__init__(
             dbpath=dbpath,
             subset=subset,
-            required_properties=properties,
+            load_only=properties,
             collect_triples=collect_triples,
             download=download,
         )
@@ -86,7 +86,7 @@ class ISO17(DownloadableAtomsData):
             self.path,
             self.fold,
             download=False,
-            properties=self.required_properties,
+            properties=self.load_only,
             subset=subidx,
             collect_triples=self.collect_triples,
         )

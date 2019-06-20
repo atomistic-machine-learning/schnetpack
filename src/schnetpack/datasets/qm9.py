@@ -110,9 +110,10 @@ class QM9(DownloadableAtomsData):
         super().__init__(
             dbpath=dbpath,
             subset=subset,
-            required_properties=properties,
+            load_only=properties,
             collect_triples=collect_triples,
             download=download,
+            available_properties=QM9.available_properties
         )
 
     def create_subset(self, idx):
@@ -123,7 +124,7 @@ class QM9(DownloadableAtomsData):
             self.dbpath,
             False,
             subidx,
-            self.required_properties,
+            self.load_only,
             self.collect_triples,
             False,
         )
