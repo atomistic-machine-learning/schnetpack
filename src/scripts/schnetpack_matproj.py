@@ -39,7 +39,14 @@ if __name__ == "__main__":
             features=64,
             aggregation_mode="mean",
         ),
-        choices=dict(property=MaterialsProject.available_properties),
+        choices=dict(
+            property=[
+                MaterialsProject.EformationPerAtom,
+                MaterialsProject.EPerAtom,
+                MaterialsProject.BandGap,
+                MaterialsProject.TotalMagnetization,
+            ]
+        ),
     )
     args = parser.parse_args()
     train_args = setup_run(args)
@@ -104,7 +111,7 @@ if __name__ == "__main__":
 
         # run training
         logging.info("Training...")
-        trainer = get_trainer(args, model, train_loader, val_loader, device, metrics)
+        trainer = get_trainer(args, model, train_loader, val_loader, metrics)
         trainer.train(device, n_epochs=args.n_epochs)
         logging.info("...training done!")
 
