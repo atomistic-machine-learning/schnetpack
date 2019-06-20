@@ -220,11 +220,10 @@ class SymmetryFunctions(nn.Module):
                 cell=cell, cell_offsets=cell_offset
             )
             radial_sf = self.RDF(
-                distances, elemental_weights=Z_ij, neighbor_mask=neighbor_mask,
-                cell=cell, cell_offsets=cell_offset
-            )
+                distances, elemental_weights=Z_ij, neighbor_mask=neighbor_mask)
         else:
             radial_sf = None
+
         if self.ADF is not None:
             # Get pair indices
             try:
@@ -237,20 +236,21 @@ class SymmetryFunctions(nn.Module):
                     + "`collect_triples=True` in AtomsData."
                 )
             neighbor_pairs_mask = inputs[Structure.neighbor_pairs_mask]
-            
+
             # Get element contributions of the pairs
             Z_angular = self.angular_Z(Z)
             Z_ij = snn.neighbor_elements(Z_angular, idx_j)
             Z_ik = snn.neighbor_elements(Z_angular, idx_k)
 
             # Offset indices
-            offset_idx_j = inputs['offset_idx_j']
-            offset_idx_k = inputs['offset_idx_k']
+            offset_idx_j = inputs[Structure.neighbor_offsets_j]
+            offset_idx_k = inputs[Structure.neighbor_offsets_k]
+
             # Compute triple distances
             r_ij, r_ik, r_jk = snn.triple_distances(positions,
                                                     idx_j, idx_k,
-                                                    offset_idx_j,
-                                                    offset_idx_k,
+                                                    offset_idx_j=offset_idx_j,
+                                                    offset_idx_k=offset_idx_k,
                                                     cell=cell, cell_offsets=cell_offset)
 
             angular_sf = self.ADF(
@@ -270,7 +270,6 @@ class SymmetryFunctions(nn.Module):
             symmetry_functions = radial_sf
         else:
             symmetry_functions = torch.cat((radial_sf, angular_sf), 2)
-
 
         return symmetry_functions
 
