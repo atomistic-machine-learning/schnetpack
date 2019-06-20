@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 from .definitions import Structure
 from .stats import StatisticsAccumulator
 
-
 __all__ = ["AtomsLoader"]
 
 
@@ -89,17 +88,9 @@ def collate_aseatoms(examples):
         # (not the values), only one cutoff mask has to be generated
         if Structure.neighbor_pairs_j in properties:
             nbh_idx_j = properties[Structure.neighbor_pairs_j]
-            nbh_idx_k = properties[Structure.neighbor_pairs_k]
             shape = nbh_idx_j.size()
             s = (k,) + tuple([slice(0, d) for d in shape])
-            mask = nbh_idx_j >= 0
-            batch[Structure.neighbor_pairs_mask][s] = mask
-            
-            # This is added so that it is treated the
-            # same way as the neighbor_idx
-            batch[Structure.neighbor_pairs_j][s] = nbh_idx_j * mask.long()
-            batch[Structure.neighbor_pairs_k][s] = nbh_idx_k * mask.long()
-            
+            batch[Structure.neighbor_pairs_mask][s] = nbh_idx_j >= 0
 
     return batch
 
@@ -143,18 +134,18 @@ class AtomsLoader(DataLoader):
     """
 
     def __init__(
-        self,
-        dataset,
-        batch_size=1,
-        shuffle=False,
-        sampler=None,
-        batch_sampler=None,
-        num_workers=0,
-        collate_fn=collate_aseatoms,
-        pin_memory=False,
-        drop_last=False,
-        timeout=0,
-        worker_init_fn=None,
+            self,
+            dataset,
+            batch_size=1,
+            shuffle=False,
+            sampler=None,
+            batch_sampler=None,
+            num_workers=0,
+            collate_fn=collate_aseatoms,
+            pin_memory=False,
+            drop_last=False,
+            timeout=0,
+            worker_init_fn=None,
     ):
         super(AtomsLoader, self).__init__(
             dataset,
@@ -171,7 +162,7 @@ class AtomsLoader(DataLoader):
         )
 
     def get_statistics(
-        self, property_names, get_atomwise_statistics=False, single_atom_ref=None
+            self, property_names, get_atomwise_statistics=False, single_atom_ref=None
     ):
         """
         Compute mean and variance of a property. Uses the incremental Welford
@@ -221,7 +212,7 @@ class AtomsLoader(DataLoader):
         return means, stddevs
 
     def _update_statistic(
-        self, get_atomwise_statistics, single_atom_ref, property_name, row, statistics
+            self, get_atomwise_statistics, single_atom_ref, property_name, row, statistics
     ):
         """
         Helper function to update iterative mean / stddev statistics
