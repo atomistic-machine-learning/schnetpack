@@ -35,25 +35,25 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
 
     BandGap = "band_gap"
 
-    available_properties = [BandGap]
-
-    units = dict(zip(available_properties, [eV]))
-
     def __init__(
         self,
         path,
         cutoff,
         download=True,
         subset=None,
-        properties=[],
+        properties=None,
         collect_triples=False,
     ):
+        available_properties = [OrganicMaterialsDatabase.BandGap]
+
+        units = [eV]
+
         self.path = path
         self.cutoff = cutoff
 
-        self.dbpath = self.path.replace(".tar.gz", ".db")
+        dbpath = self.path.replace(".tar.gz", ".db")
 
-        if not os.path.exists(self.path) and not os.path.exists(self.dbpath):
+        if not os.path.exists(self.path) and not os.path.exists(dbpath):
             raise FileNotFoundError(
                 "Download OMDB dataset (e.g. OMDB-GAP1.tar.gz) from https://omdb.diracmaterials.org/dataset/ and set datapath to this file"
             )
@@ -65,7 +65,13 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
             self._convert()
 
         super(OrganicMaterialsDatabase, self).__init__(
-            self.dbpath, subset, properties, environment_provider, collect_triples
+            dbpath=dbpath,
+            subset=subset,
+            load_only=properties,
+            environment_provider=environment_provider,
+            collect_triples=collect_triples,
+            available_properties=available_properties,
+            units=units,
         )
 
     def create_subset(self, idx):
@@ -73,8 +79,8 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
 
         return OrganicMaterialsDatabase(
-            self.path,
-            self.cutoff,
+            path=self.path,
+            cutoff=self.cutoff,
             download=False,
             subset=subidx,
             properties=self.load_only,

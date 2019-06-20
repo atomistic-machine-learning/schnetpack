@@ -42,10 +42,6 @@ class ISO17(DownloadableAtomsData):
     E = "total_energy"
     F = "atomic_forces"
 
-    available_properties = [E, F]
-
-    units = dict(zip(available_properties, [1.0, 1.0]))
-
     def __init__(
         self,
         datapath,
@@ -59,16 +55,21 @@ class ISO17(DownloadableAtomsData):
         if fold not in self.existing_folds:
             raise ValueError("Fold {:s} does not exist".format(fold))
 
+        available_properties = [ISO17.E, ISO17.F]
+        units = [1.0, 1.0]
+
         self.path = datapath
         self.fold = fold
-
         dbpath = os.path.join(datapath, "iso17", fold + ".db")
+
         super().__init__(
             dbpath=dbpath,
             subset=subset,
             load_only=properties,
             collect_triples=collect_triples,
             download=download,
+            available_properties=available_properties,
+            units=units,
         )
 
     def create_subset(self, idx):

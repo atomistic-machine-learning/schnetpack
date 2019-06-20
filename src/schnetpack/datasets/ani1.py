@@ -40,11 +40,7 @@ class ANI1(DownloadableAtomsData):
     # properties:
     energy = "energy"
 
-    available_properties = [energy]
-
     reference = {energy: 0}
-
-    units = dict(zip(available_properties, [Hartree]))
 
     self_energies = {
         "H": -0.500607632585,
@@ -63,6 +59,8 @@ class ANI1(DownloadableAtomsData):
         num_heavy_atoms=8,
         high_energies=False,
     ):
+        available_properties = [ANI1.energy]
+        units = [Hartree]
 
         self.num_heavy_atoms = num_heavy_atoms
         self.high_energies = high_energies
@@ -73,6 +71,8 @@ class ANI1(DownloadableAtomsData):
             download=download,
             load_only=properties,
             collect_triples=collect_triples,
+            available_properties=available_properties,
+            units=units,
         )
 
     def create_subset(self, idx):
@@ -87,8 +87,9 @@ class ANI1(DownloadableAtomsData):
         """
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
+
         return type(self)(
-            self.dbpath,
+            dbpath=self.dbpath,
             download=False,
             subset=subidx,
             properties=self.load_only,

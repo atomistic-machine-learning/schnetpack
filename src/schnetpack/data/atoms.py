@@ -40,7 +40,8 @@ class AtomsData(Dataset):
         dbpath,
         subset=None,
         available_properties=None,
-        load_only=[],
+        load_only=None,
+        units=None,
         environment_provider=SimpleEnvironmentProvider(),
         collect_triples=False,
         center_positions=True,
@@ -52,6 +53,9 @@ class AtomsData(Dataset):
         self.available_properties = self.get_available_properties(available_properties)
         if load_only is None:
             self.load_only = self.available_properties
+        if units is None:
+            units = [1.0] * len(self.available_properties)
+        self.units = dict(zip(self.available_properties, units))
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
         self.centered = center_positions
@@ -70,8 +74,10 @@ class AtomsData(Dataset):
         # use the provided list
         if not os.path.exists(self.dbpath):
             if available_properties is None:
-                raise AtomsDataError("Please define available_properties or set "
-                                     "db_path to an existing database!")
+                raise AtomsDataError(
+                    "Please define available_properties or set "
+                    "db_path to an existing database!"
+                )
             return available_properties
         # read database properties
         with connect(self.dbpath) as conn:
@@ -79,13 +85,15 @@ class AtomsData(Dataset):
             db_properties = list(atmsrw.data.keys())
             db_properties = [prop for prop in db_properties if not prop.startswith("_")]
         # check if properties match
-        if available_properties is None or \
-                set(db_properties) == set(available_properties):
+        if available_properties is None or set(db_properties) == set(
+            available_properties
+        ):
             return db_properties
 
-        raise AtomsDataError("The available_properties {} do not match the "
-                             "properties in the database {}!".format(
-            available_properties, db_properties))
+        raise AtomsDataError(
+            "The available_properties {} do not match the "
+            "properties in the database {}!".format(available_properties, db_properties)
+        )
 
     def create_splits(self, num_train=None, num_val=None, split_file=None):
         warnings.warn(
@@ -109,13 +117,14 @@ class AtomsData(Dataset):
             idx if self.subset is None or len(idx) == 0 else np.array(self.subset)[idx]
         )
         return type(self)(
-            self.dbpath,
-            subidx,
-            self.load_only,
-            self.environment_provider,
-            self.collect_triples,
-            self.centered,
-            self.load_charge,
+            dbpath=self.dbpath,
+            subset=subidx,
+            load_only=self.load_only,
+            environment_provider=self.environment_provider,
+            collect_triples=self.collect_triples,
+            center_positions=self.centered,
+            load_charge=self.load_charge,
+            available_properties=self.available_properties,
         )
 
     def __len__(self):
@@ -186,15 +195,7 @@ class AtomsData(Dataset):
 
         data = {}
 
-        # todo: add check here
-
-        props = (
-            properties.keys()
-            if self.available_properties is None
-            else self.available_properties
-        )
-
-        for pname in props:
+        for pname in self.available_properties:
             try:
                 prop = properties[pname]
             except:
@@ -325,6 +326,7 @@ class DownloadableAtomsData(AtomsData):
         subset=None,
         load_only=None,
         available_properties=None,
+        units=None,
         environment_provider=SimpleEnvironmentProvider(),
         collect_triples=False,
         center_positions=True,
@@ -337,6 +339,7 @@ class DownloadableAtomsData(AtomsData):
             subset=subset,
             available_properties=available_properties,
             load_only=load_only,
+            units=units,
             environment_provider=environment_provider,
             collect_triples=collect_triples,
             center_positions=center_positions,
