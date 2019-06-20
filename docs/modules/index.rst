@@ -1,6 +1,3 @@
-API Documentation
-=================
-
 SchNetpack consists of the following modules:
 
 .. toctree::

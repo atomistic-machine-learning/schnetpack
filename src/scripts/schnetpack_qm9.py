@@ -11,7 +11,7 @@ from schnetpack.datasets import QM9
 from scripts.script_utils.script_parsing import get_main_parser, add_subparsers
 from scripts.script_utils.setup import setup_run
 from scripts.script_utils.model import get_representation, get_model
-from scripts.script_utils.training import train
+from scripts.script_utils.training import get_trainer
 from scripts.script_utils.evaluation import evaluate
 from scripts.script_utils import get_statistics, get_loaders
 
@@ -64,14 +64,14 @@ if __name__ == "__main__":
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")
     train_loader, val_loader, test_loader = get_loaders(
-        logging, args, dataset=qm9, split_path=split_path
+        args, dataset=qm9, split_path=split_path, logging=logging
     )
 
     if args.mode == "train":
         # get statistics
         logging.info("calculate statistics...")
         mean, stddev = get_statistics(
-            split_path, logging, train_loader, train_args, atomref
+            split_path, train_loader, train_args, atomref, logging=logging
         )
 
         # build representation
@@ -131,7 +131,8 @@ if __name__ == "__main__":
 
         # run training
         logging.info("training...")
-        train(args, model, train_loader, val_loader, device, metrics=metrics)
+        trainer = get_trainer(args, model, train_loader, val_loader, device, metrics)
+        trainer.train(device, n_epochs=args.n_epochs)
         logging.info("...training done!")
 
     elif args.mode == "eval":
@@ -149,7 +150,6 @@ if __name__ == "__main__":
                 test_loader,
                 device,
                 metrics=metrics,
-                to_kcal=True,
             )
         logging.info("... done!")
     else:

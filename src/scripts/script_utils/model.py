@@ -25,7 +25,7 @@ def get_representation(args, train_loader=None):
 
         return spk.representation.SchNet(
             args.features,
-            args.features,
+            args.n_filters,
             args.interactions,
             args.cutoff,
             args.num_gaussians,
