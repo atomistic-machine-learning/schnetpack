@@ -39,6 +39,7 @@ setup(
         "tqdm",
         "h5py",
         "pyyaml",
+        "pymongo",
     ],
     extras_require={"test": ["pytest", "sacred"]},
     license="MIT",
