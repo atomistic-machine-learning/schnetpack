@@ -46,7 +46,7 @@ if __name__ == "__main__":
     add_subparsers(
         parser,
         defaults=dict(property=MD17.energy, elements=["H", "C", "O"]),
-        choices=dict(property=MD17.available_properties),
+        choices=dict(property=[MD17.energy, MD17.forces]),
     )
     args = parser.parse_args()
     train_args = setup_run(args)
@@ -129,7 +129,7 @@ if __name__ == "__main__":
         logging.info("training...")
         loss_fn = tradeoff_loff_fn(args, "forces")
         trainer = get_trainer(
-            args, model, train_loader, val_loader, device, metrics, loss_fn=loss_fn
+            args, model, train_loader, val_loader, metrics, loss_fn=loss_fn
         )
         trainer.train(device, n_epochs=args.n_epochs)
         logging.info("...training done!")

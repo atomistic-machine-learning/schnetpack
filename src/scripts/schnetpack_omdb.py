@@ -33,7 +33,7 @@ if __name__ == "__main__":
             patience=6,
             aggregation_mode="mean",
         ),
-        choices=dict(property=OrganicMaterialsDatabase.available_properties),
+        choices=dict(property=[OrganicMaterialsDatabase.BandGap]),
     )
 
     args = parser.parse_args()
@@ -96,7 +96,7 @@ if __name__ == "__main__":
 
         # run training
         logging.info("training...")
-        trainer = get_trainer(args, model, train_loader, val_loader, device, metrics)
+        trainer = get_trainer(args, model, train_loader, val_loader, metrics)
         trainer.train(device, n_epochs=args.n_epochs)
         logging.info("...training done!")
 

@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from ase import Atoms
 
+import schnetpack as spk
 import schnetpack.data
 
 __all__ = ["max_atoms", "example_asedata", "property_spec", "example_data", "num_data"]
@@ -29,7 +30,7 @@ def property_spec():
 def empty_asedata(tmpdir, max_atoms, property_spec):
     return schnetpack.data.AtomsData(
         os.path.join(str(tmpdir), "test.db"),
-        required_properties=list(property_spec.keys()),
+        available_properties=list(property_spec.keys()),
     )
 
 
@@ -58,7 +59,7 @@ def example_data(max_atoms, num_data):
 def example_asedata(tmpdir, max_atoms, property_spec, example_data):
     data = schnetpack.data.AtomsData(
         os.path.join(str(tmpdir), "test.db"),
-        required_properties=list(property_spec.keys()),
+        available_properties=list(property_spec.keys()),
     )
     # add data
     for ats, props in example_data:
@@ -133,3 +134,30 @@ def test_loader(example_asedata, batch_size):
     mu, std = loader.get_statistics("energy")
     assert mu["energy"] == torch.FloatTensor([5.0])
     assert std["energy"] == torch.FloatTensor([0.0])
+
+
+from .fixtures import qm9_dbpath, qm9_avlailable_properties
+
+
+def test_dataset(qm9_dbpath, qm9_avlailable_properties):
+    # path exists and valid properties
+    dataset = spk.data.AtomsData(
+        qm9_dbpath, available_properties=qm9_avlailable_properties
+    )
+    assert dataset.available_properties == qm9_avlailable_properties
+    assert dataset.__len__() == 19
+
+    # test valid path exists but wrong properties
+    too_many = qm9_avlailable_properties + ["invalid"]
+    not_all = qm9_avlailable_properties[:-1]
+    wrong_prop = qm9_avlailable_properties[:-1] + ["invalid"]
+    with pytest.raises(spk.data.AtomsDataError):
+        dataset = spk.data.AtomsData(qm9_dbpath, available_properties=too_many)
+    with pytest.raises(spk.data.AtomsDataError):
+        dataset = spk.data.AtomsData(qm9_dbpath, available_properties=not_all)
+    with pytest.raises(spk.data.AtomsDataError):
+        dataset = spk.data.AtomsData(qm9_dbpath, available_properties=wrong_prop)
+
+    # test valid path, but no properties
+    dataset = spk.data.AtomsData(qm9_dbpath)
+    assert set(dataset.available_properties) == set(qm9_avlailable_properties)

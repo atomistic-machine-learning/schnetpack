@@ -35,7 +35,7 @@ setup(
         "ase>=3.16",
         "h5py",
         "tensorboardX",
-        "sacred",
+        "sacred==0.7.4",
         "tqdm",
         "h5py",
         "pyyaml",
