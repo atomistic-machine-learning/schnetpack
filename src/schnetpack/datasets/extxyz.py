@@ -16,26 +16,31 @@ class ExtXYZ(DownloadableAtomsData):
 
     E = "energy"
     F = "forces"
-    available_properties = [E, F]
 
     def __init__(
         self,
         dbpath,
         xyzpath,
         subset=None,
-        properties=[],
+        properties=None,
         environment_provider=SimpleEnvironmentProvider(),
         pair_provider=None,
         center_positions=True,
     ):
+        available_properties = [ExtXYZ.E, ExtXYZ.F]
+        units = [1.0, 1.0]
+
         if not os.path.exists(dbpath):
             os.makedirs(os.path.dirname(dbpath), exist_ok=True)
-            extxyz_to_db(dbpath, xyzpath, db_properties=self.available_properties)
+            extxyz_to_db(dbpath, xyzpath)
+
         super(ExtXYZ, self).__init__(
-            dbpath,
-            subset,
-            properties,
-            environment_provider,
-            pair_provider,
-            center_positions,
+            dbpath=dbpath,
+            subset=subset,
+            load_only=properties,
+            environment_provider=environment_provider,
+            collect_triples=pair_provider,
+            center_positions=center_positions,
+            available_properties=available_properties,
+            units=units,
         )

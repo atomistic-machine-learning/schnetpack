@@ -30,7 +30,7 @@ if __name__ == "__main__":
     add_subparsers(
         parser,
         defaults=dict(property=ANI1.energy),
-        choices=dict(property=ANI1.available_properties),
+        choices=dict(property=[ANI1.energy]),
     )
     args = parser.parse_args()
     train_args = setup_run(args)
@@ -51,8 +51,6 @@ if __name__ == "__main__":
         download=True,
         properties=[train_args.property],
         collect_triples=args.model == "wacsf",
-        # todo: remove
-        num_heavy_atoms=2,
     )
 
     # get atomrefs
@@ -109,7 +107,7 @@ if __name__ == "__main__":
 
         # run training
         logging.info("training...")
-        trainer = get_trainer(args, model, train_loader, val_loader, device, metrics)
+        trainer = get_trainer(args, model, train_loader, val_loader, metrics)
         trainer.train(device, n_epochs=args.n_epochs)
         logging.info("...training done!")
 
