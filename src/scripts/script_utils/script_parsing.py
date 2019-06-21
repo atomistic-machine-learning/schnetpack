@@ -138,6 +138,9 @@ def add_subparsers(cmd_parser, defaults={}, choices={}):
         default=256 if "features" not in defaults.keys() else defaults["features"],
     )
     schnet_parser.add_argument(
+        "--n_filters", type=int, help="Size of atom-wise representation", default=25
+    )
+    schnet_parser.add_argument(
         "--interactions", type=int, help="Number of interaction blocks", default=6
     )
     schnet_parser.add_argument(

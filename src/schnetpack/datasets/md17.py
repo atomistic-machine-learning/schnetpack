@@ -42,7 +42,6 @@ class MD17(DownloadableAtomsData):
 
     energy = "energy"
     forces = "forces"
-    available_properties = [energy, forces]
 
     datasets_dict = dict(
         aspirin="aspirin_dft.npz",
@@ -76,24 +75,28 @@ class MD17(DownloadableAtomsData):
         self.molecule = molecule
         dbpath = os.path.join(datapath, "md17", molecule + ".db")
 
+        available_properties = [MD17.energy, MD17.forces]
+
         super(MD17, self).__init__(
             dbpath=dbpath,
             subset=subset,
-            required_properties=properties,
+            load_only=properties,
             collect_triples=collect_triples,
             download=download,
+            available_properties=available_properties,
         )
 
     def create_subset(self, idx):
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
+
         return MD17(
             datapath=self.datapath,
             molecule=self.molecule,
             subset=subidx,
             download=False,
             collect_triples=self.collect_triples,
-            properties=self.required_properties,
+            properties=self.load_only,
         )
 
     def _download(self):

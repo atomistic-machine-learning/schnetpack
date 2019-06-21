@@ -19,6 +19,7 @@ __all__ = [
     "qm9_dataset",
     "qm9_split",
     "qm9_splits",
+    "qm9_avlailable_properties",
 ]
 
 
@@ -78,3 +79,24 @@ def qm9_split():
 @pytest.fixture(scope="module")
 def qm9_splits(qm9_dataset, qm9_split):
     return spk.data.train_test_split(qm9_dataset, *qm9_split)
+
+
+@pytest.fixture(scope="session")
+def qm9_avlailable_properties():
+    return [
+        "rotational_constant_A",
+        "rotational_constant_B",
+        "rotational_constant_C",
+        "dipole_moment",
+        "isotropic_polarizability",
+        "homo",
+        "lumo",
+        "gap",
+        "electronic_spatial_extent",
+        "zpve",
+        "energy_U0",
+        "energy_U",
+        "enthalpy_H",
+        "free_energy",
+        "heat_capacity",
+    ]

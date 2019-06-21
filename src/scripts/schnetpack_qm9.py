@@ -2,7 +2,6 @@
 import logging
 import os
 
-import schnetpack.output_modules
 import torch
 from ase.data import atomic_numbers
 
@@ -34,7 +33,25 @@ if __name__ == "__main__":
     add_subparsers(
         parser,
         defaults=dict(property=QM9.U0),
-        choices=dict(property=QM9.available_properties),
+        choices=dict(
+            property=[
+                QM9.A,
+                QM9.B,
+                QM9.C,
+                QM9.mu,
+                QM9.alpha,
+                QM9.homo,
+                QM9.lumo,
+                QM9.gap,
+                QM9.r2,
+                QM9.zpve,
+                QM9.U0,
+                QM9.U,
+                QM9.H,
+                QM9.G,
+                QM9.Cv,
+            ]
+        ),
     )
     args = parser.parse_args()
     train_args = setup_run(args)
@@ -131,7 +148,7 @@ if __name__ == "__main__":
 
         # run training
         logging.info("training...")
-        trainer = get_trainer(args, model, train_loader, val_loader, device, metrics)
+        trainer = get_trainer(args, model, train_loader, val_loader, metrics)
         trainer.train(device, n_epochs=args.n_epochs)
         logging.info("...training done!")
 
