@@ -3,6 +3,7 @@ import torch
 import numpy as np
 import os
 from .fixtures import *
+from .fixtures.model import *
 from src.scripts.script_utils import (
     get_loaders,
     get_statistics,

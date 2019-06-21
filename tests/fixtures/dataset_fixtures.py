@@ -1,10 +1,12 @@
 import pytest
 import os
+import torch
 from ase import Atoms
 from ase.db import connect
 from src.schnetpack.data import AtomsData
 from src.schnetpack.datasets import QM9
 import schnetpack as spk
+import numpy as np
 
 
 __all__ = [
@@ -49,15 +51,32 @@ def n_atoms():
 
 
 @pytest.fixture(scope="session")
-def ats():
-    return Atoms("N3", [(0, 0, 0), (1, 0, 0), (0, 0, 1)])
+def ats(db_size):
+    n_atoms = [3, 5]
+    n_small = np.random.randint(1, db_size - 1)
+    molecules = []
+    data = []
+    for i in range(db_size):
+        mol_type = int(i <= n_small)
+        data.append(
+            {
+                "prop": np.random.rand(1),
+                "der": np.random.rand(n_atoms[mol_type], 3),
+                "contrib": np.random.rand(n_atoms[mol_type], 1),
+            }
+        )
+        molecules.append(
+            Atoms("N{}".format(n_atoms[mol_type]), np.random.rand(n_atoms[mol_type], 3))
+        )
+    return molecules, data
 
 
 @pytest.fixture(scope="session")
-def build_db(tmp_db_path, db_size, ats):
+def build_db(tmp_db_path, ats):
+    molecules, data = ats
     with connect(tmp_db_path) as conn:
-        for mol in [ats] * db_size:
-            conn.write(mol)
+        for mol, properties in zip(molecules, data):
+            conn.write(mol, data=properties)
 
 
 @pytest.fixture(scope="module")

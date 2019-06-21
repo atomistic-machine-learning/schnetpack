@@ -7,8 +7,10 @@ __all__ = [
     "properties",
     "energy_module",
     "property_output",
+    "qm9_output",
     "result_shapes",
     "atomistic_model",
+    "qm9_model",
 ]
 
 
@@ -39,6 +41,11 @@ def property_output(n_atom_basis):
 
 
 @pytest.fixture(scope="session")
+def qm9_output(n_atom_basis):
+    return Atomwise(n_in=n_atom_basis, property="energy_U0")
+
+
+@pytest.fixture(scope="session")
 def result_shapes(batch_size, n_atoms):
     return dict(
         energy=[batch_size, 1],
@@ -52,3 +59,8 @@ def result_shapes(batch_size, n_atoms):
 @pytest.fixture(scope="session")
 def atomistic_model(schnet, energy_module, property_output):
     return AtomisticModel(schnet, output_modules=[energy_module, property_output])
+
+
+@pytest.fixture(scope="session")
+def qm9_model(schnet, qm9_output):
+    return AtomisticModel(schnet, output_modules=[property_output])
