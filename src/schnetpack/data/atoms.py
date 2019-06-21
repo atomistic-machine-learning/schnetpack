@@ -146,12 +146,23 @@ class AtomsData(Dataset):
         properties["_idx"] = torch.LongTensor(np.array([idx], dtype=np.int))
 
         if self.collect_triples:
-            nbh_idx_j, nbh_idx_k = collect_atom_triples(nbh_idx)
+            nbh_idx_j, nbh_idx_k, offset_idx_j, offset_idx_k = collect_atom_triples(
+                nbh_idx
+            )
+
             properties[Structure.neighbor_pairs_j] = torch.LongTensor(
                 nbh_idx_j.astype(np.int)
             )
             properties[Structure.neighbor_pairs_k] = torch.LongTensor(
                 nbh_idx_k.astype(np.int)
+            )
+
+            # Store offsets
+            properties[Structure.neighbor_offsets_j] = torch.LongTensor(
+                offset_idx_j.astype(np.int)
+            )
+            properties[Structure.neighbor_offsets_k] = torch.LongTensor(
+                offset_idx_k.astype(np.int)
             )
 
         return properties
