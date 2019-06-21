@@ -29,17 +29,23 @@ class Metric:
     Metrics measure the performance during the training and evaluation.
 
     Args:
+        target (str): name of target property
+        model_output (int, str): index or key, in case of multiple outputs
+            (Default: None)
         name (str): name used in logging for this metric. If set to `None`,
             `MSE_[target]` will be used (Default: None)
+        element_wise (bool): set to True if the model output is an element-wise
+            property (forces, positions, ...)
     """
 
-    def __init__(self, target, model_output=None, name=None):
+    def __init__(self, target, model_output=None, name=None, element_wise=False):
         self.target = target
         self.model_output = target if model_output is None else model_output
         if name is None:
             self.name = self.__class__.__name__
         else:
             self.name = name
+        self.element_wise = element_wise
 
     def add_batch(self, batch, result):
         """ Add a batch to calculate the metric on """
@@ -72,10 +78,12 @@ class ModelBias(Metric):
     def __init__(self, target, model_output=None, name=None, element_wise=False):
         name = "Bias_" + target if name is None else name
         super(ModelBias, self).__init__(
-            target=target, model_output=model_output, name=name
+            target=target,
+            model_output=model_output,
+            name=name,
+            element_wise=element_wise,
         )
 
-        self.element_wise = element_wise
         self.l2loss = 0.0
         self.n_entries = 0.0
 
@@ -138,12 +146,14 @@ class MeanSquaredError(Metric):
     ):
         name = "MSE_" + target if name is None else name
         super(MeanSquaredError, self).__init__(
-            target=target, model_output=model_output, name=name
+            target=target,
+            model_output=model_output,
+            name=name,
+            element_wise=element_wise,
         )
 
         self.bias_correction = bias_correction
 
-        self.element_wise = element_wise
         self.l2loss = 0.0
         self.n_entries = 0.0
 
@@ -242,11 +252,13 @@ class MeanAbsoluteError(Metric):
     ):
         name = "MAE_" + target if name is None else name
         super(MeanAbsoluteError, self).__init__(
-            target=target, model_output=model_output, name=name
+            target=target,
+            model_output=model_output,
+            name=name,
+            element_wise=element_wise,
         )
 
         self.bias_correction = bias_correction
-        self.element_wise = element_wise
 
         self.l1loss = 0.0
         self.n_entries = 0.0
