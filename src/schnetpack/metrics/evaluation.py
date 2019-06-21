@@ -33,7 +33,9 @@ class Metric:
             `MSE_[target]` will be used (Default: None)
     """
 
-    def __init__(self, name=None):
+    def __init__(self, target, model_output=None, name=None):
+        self.target = target
+        self.model_output = target if model_output is None else model_output
         if name is None:
             self.name = self.__class__.__name__
         else:
@@ -69,9 +71,10 @@ class ModelBias(Metric):
 
     def __init__(self, target, model_output=None, name=None, element_wise=False):
         name = "Bias_" + target if name is None else name
-        super(ModelBias, self).__init__(name)
-        self.target = target
-        self.model_output = model_output
+        super(ModelBias, self).__init__(
+            target=target, model_output=model_output, name=name
+        )
+
         self.element_wise = element_wise
         self.l2loss = 0.0
         self.n_entries = 0.0
@@ -134,10 +137,12 @@ class MeanSquaredError(Metric):
         element_wise=False,
     ):
         name = "MSE_" + target if name is None else name
-        super(MeanSquaredError, self).__init__(name)
-        self.target = target
+        super(MeanSquaredError, self).__init__(
+            target=target, model_output=model_output, name=name
+        )
+
         self.bias_correction = bias_correction
-        self.model_output = model_output
+
         self.element_wise = element_wise
         self.l2loss = 0.0
         self.n_entries = 0.0
@@ -236,11 +241,13 @@ class MeanAbsoluteError(Metric):
         element_wise=False,
     ):
         name = "MAE_" + target if name is None else name
-        super(MeanAbsoluteError, self).__init__(name)
-        self.target = target
+        super(MeanAbsoluteError, self).__init__(
+            target=target, model_output=model_output, name=name
+        )
+
         self.bias_correction = bias_correction
         self.element_wise = element_wise
-        self.model_output = model_output
+
         self.l1loss = 0.0
         self.n_entries = 0.0
 
