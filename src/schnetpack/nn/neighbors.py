@@ -3,13 +3,13 @@ from torch import nn
 
 
 def atom_distances(
-        positions,
-        neighbors,
-        cell=None,
-        cell_offsets=None,
-        return_vecs=False,
-        normalize_vecs=False,
-        neighbor_mask=None,
+    positions,
+    neighbors,
+    cell=None,
+    cell_offsets=None,
+    return_vecs=False,
+    normalize_vecs=False,
+    neighbor_mask=None,
 ):
     r"""Compute distance of every atom to its neighbors.
 
@@ -39,8 +39,8 @@ def atom_distances(
     # Construct auxiliary index vector
     n_batch = positions.size()[0]
     idx_m = torch.arange(n_batch, device=positions.device, dtype=torch.long)[
-            :, None, None
-            ]
+        :, None, None
+    ]
     # Get atomic positions of all neighboring indices
     pos_xyz = positions[idx_m, neighbors[:, :, :], :]
 
@@ -91,7 +91,7 @@ class AtomDistances(nn.Module):
         self.return_directions = return_directions
 
     def forward(
-            self, positions, neighbors, cell=None, cell_offsets=None, neighbor_mask=None
+        self, positions, neighbors, cell=None, cell_offsets=None, neighbor_mask=None
     ):
         r"""Compute distance of every atom to its neighbors.
 
@@ -122,8 +122,15 @@ class AtomDistances(nn.Module):
         )
 
 
-def triple_distances(positions, neighbors_j, neighbors_k, offset_idx_j=None, offset_idx_k=None, cell=None,
-                     cell_offsets=None):
+def triple_distances(
+    positions,
+    neighbors_j,
+    neighbors_k,
+    offset_idx_j=None,
+    offset_idx_k=None,
+    cell=None,
+    cell_offsets=None,
+):
     """
     Get all distances between atoms forming a triangle with the central atoms.
     Required e.g. for angular symmetry functions.
@@ -146,8 +153,8 @@ def triple_distances(positions, neighbors_j, neighbors_k, offset_idx_j=None, off
     """
     nbatch, _, _ = neighbors_k.size()
     idx_m = torch.arange(nbatch, device=positions.device, dtype=torch.long)[
-            :, None, None
-            ]
+        :, None, None
+    ]
 
     pos_j = positions[idx_m, neighbors_j[:], :]
     pos_k = positions[idx_m, neighbors_k[:], :]
@@ -169,7 +176,9 @@ def triple_distances(positions, neighbors_j, neighbors_k, offset_idx_j=None, off
         offsets = offsets.view(B * A, -1, D)
 
         # Construct auxiliary aray for advanced indexing
-        idx_offset_m = torch.arange(B * A, device=positions.device, dtype=torch.long)[:, None]
+        idx_offset_m = torch.arange(B * A, device=positions.device, dtype=torch.long)[
+            :, None
+        ]
 
         # Restore proper dmensions
         offset_j = offsets[idx_offset_m, offset_idx_j[:]].view(B, A, T, D)
@@ -238,8 +247,8 @@ def neighbor_elements(atomic_numbers, neighbors):
     n_batch = atomic_numbers.size()[0]
     # Construct auxiliary index
     idx_m = torch.arange(n_batch, device=atomic_numbers.device, dtype=torch.long)[
-            :, None, None
-            ]
+        :, None, None
+    ]
     # Get neighbors via advanced indexing
     neighbor_numbers = atomic_numbers[idx_m, neighbors[:, :, :]]
     return neighbor_numbers

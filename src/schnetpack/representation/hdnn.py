@@ -49,20 +49,20 @@ class SymmetryFunctions(nn.Module):
     """
 
     def __init__(
-            self,
-            n_radial=22,
-            n_angular=5,
-            zetas={1},
-            cutoff=snn.CosineCutoff,
-            cutoff_radius=5.0,
-            centered=False,
-            crossterms=False,
-            elements=frozenset((1, 6, 7, 8, 9)),
-            sharez=True,
-            trainz=False,
-            initz="weighted",
-            len_embedding=5,
-            pairwise_elements=False,
+        self,
+        n_radial=22,
+        n_angular=5,
+        zetas={1},
+        cutoff=snn.CosineCutoff,
+        cutoff_radius=5.0,
+        centered=False,
+        crossterms=False,
+        elements=frozenset((1, 6, 7, 8, 9)),
+        sharez=True,
+        trainz=False,
+        initz="weighted",
+        len_embedding=5,
+        pairwise_elements=False,
     ):
 
         super(SymmetryFunctions, self).__init__()
@@ -136,15 +136,15 @@ class SymmetryFunctions(nn.Module):
         # Compute total number of symmetry functions
         if not pairwise_elements:
             self.n_symfuncs = (
-                                      self.n_radial + self.n_angular * self.n_theta
-                              ) * self.n_elements
+                self.n_radial + self.n_angular * self.n_theta
+            ) * self.n_elements
         else:
             # if the outer product is used, all unique pairs of elements are considered, leading to the factor of
             # (N+1)/2
             self.n_symfuncs = (
-                                      self.n_radial
-                                      + self.n_angular * self.n_theta * (self.n_elements + 1) // 2
-                              ) * self.n_elements
+                self.n_radial
+                + self.n_angular * self.n_theta * (self.n_elements + 1) // 2
+            ) * self.n_elements
 
     def initz(self, mode, elements):
         """
@@ -216,11 +216,15 @@ class SymmetryFunctions(nn.Module):
             Z_ij = snn.neighbor_elements(Z_rad, neighbors)
             # Compute distances
             distances = snn.atom_distances(
-                positions, neighbors, neighbor_mask=neighbor_mask,
-                cell=cell, cell_offsets=cell_offset
+                positions,
+                neighbors,
+                neighbor_mask=neighbor_mask,
+                cell=cell,
+                cell_offsets=cell_offset,
             )
             radial_sf = self.RDF(
-                distances, elemental_weights=Z_ij, neighbor_mask=neighbor_mask)
+                distances, elemental_weights=Z_ij, neighbor_mask=neighbor_mask
+            )
         else:
             radial_sf = None
 
@@ -247,18 +251,22 @@ class SymmetryFunctions(nn.Module):
             offset_idx_k = inputs[Structure.neighbor_offsets_k]
 
             # Compute triple distances
-            r_ij, r_ik, r_jk = snn.triple_distances(positions,
-                                                    idx_j, idx_k,
-                                                    offset_idx_j=offset_idx_j,
-                                                    offset_idx_k=offset_idx_k,
-                                                    cell=cell, cell_offsets=cell_offset)
+            r_ij, r_ik, r_jk = snn.triple_distances(
+                positions,
+                idx_j,
+                idx_k,
+                offset_idx_j=offset_idx_j,
+                offset_idx_k=offset_idx_k,
+                cell=cell,
+                cell_offsets=cell_offset,
+            )
 
             angular_sf = self.ADF(
                 r_ij,
                 r_ik,
                 r_jk,
                 elemental_weights=(Z_ij, Z_ik),
-                triple_masks=neighbor_pairs_mask
+                triple_masks=neighbor_pairs_mask,
             )
         else:
             angular_sf = None
@@ -295,15 +303,15 @@ class BehlerSFBlock(SymmetryFunctions):
     """
 
     def __init__(
-            self,
-            n_radial=22,
-            n_angular=5,
-            zetas={1},
-            cutoff_radius=5.0,
-            elements=frozenset((1, 6, 7, 8, 9)),
-            centered=False,
-            crossterms=False,
-            mode="weighted",
+        self,
+        n_radial=22,
+        n_angular=5,
+        zetas={1},
+        cutoff_radius=5.0,
+        elements=frozenset((1, 6, 7, 8, 9)),
+        centered=False,
+        crossterms=False,
+        mode="weighted",
     ):
         # Determine mode.
         if mode == "weighted":

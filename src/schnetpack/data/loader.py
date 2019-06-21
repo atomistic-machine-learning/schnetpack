@@ -134,18 +134,18 @@ class AtomsLoader(DataLoader):
     """
 
     def __init__(
-            self,
-            dataset,
-            batch_size=1,
-            shuffle=False,
-            sampler=None,
-            batch_sampler=None,
-            num_workers=0,
-            collate_fn=collate_aseatoms,
-            pin_memory=False,
-            drop_last=False,
-            timeout=0,
-            worker_init_fn=None,
+        self,
+        dataset,
+        batch_size=1,
+        shuffle=False,
+        sampler=None,
+        batch_sampler=None,
+        num_workers=0,
+        collate_fn=collate_aseatoms,
+        pin_memory=False,
+        drop_last=False,
+        timeout=0,
+        worker_init_fn=None,
     ):
         super(AtomsLoader, self).__init__(
             dataset,
@@ -162,7 +162,7 @@ class AtomsLoader(DataLoader):
         )
 
     def get_statistics(
-            self, property_names, get_atomwise_statistics=False, single_atom_ref=None
+        self, property_names, get_atomwise_statistics=False, single_atom_ref=None
     ):
         """
         Compute mean and variance of a property. Uses the incremental Welford
@@ -212,7 +212,7 @@ class AtomsLoader(DataLoader):
         return means, stddevs
 
     def _update_statistic(
-            self, get_atomwise_statistics, single_atom_ref, property_name, row, statistics
+        self, get_atomwise_statistics, single_atom_ref, property_name, row, statistics
     ):
         """
         Helper function to update iterative mean / stddev statistics
