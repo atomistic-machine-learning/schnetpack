@@ -54,6 +54,7 @@ def n_atoms():
 def ats(db_size):
     n_atoms = [3, 5]
     n_small = np.random.randint(1, db_size - 1)
+
     molecules = []
     data = []
     for i in range(db_size):

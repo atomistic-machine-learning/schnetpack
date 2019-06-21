@@ -43,7 +43,7 @@ def metrics(properties):
 
 @pytest.fixture(scope="session")
 def hooks(metrics, modeldir):
-    return []#spk.train.CSVHook(modeldir, metrics)]
+    return []  # spk.train.CSVHook(modeldir, metrics)]
 
 
 @pytest.fixture(scope="session")
