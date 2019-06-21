@@ -397,7 +397,7 @@ class LengthMSE(MeanSquaredError):
 
     def __init__(self, target, model_output=None, name=None, element_wise=False):
         name = "LengthMSE_" + target if name is None else name
-        super(LengthRMSE, self).__init__(
+        super(LengthMSE, self).__init__(
             target, model_output, name=name, element_wise=element_wise
         )
 

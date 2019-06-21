@@ -1,5 +1,6 @@
 import pytest
 import torch
+import os
 from .data import *
 from .model import *
 import schnetpack as spk
@@ -38,12 +39,29 @@ def checkpoint_interval():
 
 @pytest.fixture(scope="session")
 def metrics(properties):
-    return [spk.metrics.MeanAbsoluteError(prop) for prop in properties]
+    metrics = []
+    metrics += [spk.metrics.MeanAbsoluteError(prop) for prop in properties]
+    metrics += [spk.metrics.AngleMAE(prop) for prop in properties]
+    metrics += [spk.metrics.AngleMSE(prop) for prop in properties]
+    metrics += [spk.metrics.AngleRMSE(prop) for prop in properties]
+    metrics += [spk.metrics.HeatmapMAE(prop) for prop in properties]
+    metrics += [spk.metrics.LengthMAE(prop) for prop in properties]
+    metrics += [spk.metrics.LengthMSE(prop) for prop in properties]
+    metrics += [spk.metrics.LengthRMSE(prop) for prop in properties]
+    metrics += [spk.metrics.MeanSquaredError(prop) for prop in properties]
+    metrics += [spk.metrics.ModelBias(prop) for prop in properties]
+    metrics += [spk.metrics.RootMeanSquaredError(prop) for prop in properties]
+    # todo: fix
+    #metrics += [spk.metrics.SumMAE(prop) for prop in properties]
+    return metrics
 
 
 @pytest.fixture(scope="session")
 def hooks(metrics, modeldir):
-    return []  # spk.train.CSVHook(modeldir, metrics)]
+    return [spk.train.CSVHook(os.path.join(modeldir, "csv_log"), metrics),]
+            # todo: continue
+            #spk.train.TensorboardHook(modeldir,
+            #                          metrics)]
 
 
 @pytest.fixture(scope="session")
