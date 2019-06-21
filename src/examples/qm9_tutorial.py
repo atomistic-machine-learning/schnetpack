@@ -5,7 +5,7 @@ import schnetpack as spk
 from schnetpack.datasets import QM9
 from schnetpack.train import Trainer, CSVHook, ReduceLROnPlateauHook
 from schnetpack.metrics import MeanAbsoluteError
-from schnetpack.metrics import mse_loss
+from schnetpack.metrics import build_mse_loss
 
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -27,7 +27,7 @@ val_loader = spk.AtomsLoader(val, batch_size=64)
 # statistics
 atomrefs = dataset.get_atomrefs(properties)
 means, stddevs = train_loader.get_statistics(
-    properties, per_atom=True, atomrefs=atomrefs
+    properties, get_atomwise_statistics=True, single_atom_ref=atomrefs
 )
 
 # model build
@@ -52,7 +52,7 @@ metrics = [MeanAbsoluteError(p, p) for p in properties]
 hooks = [CSVHook(log_path=model_dir, metrics=metrics), ReduceLROnPlateauHook(optimizer)]
 
 # trainer
-loss = mse_loss(properties)
+loss = build_mse_loss(properties)
 trainer = Trainer(
     model_dir,
     model=model,

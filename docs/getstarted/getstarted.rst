@@ -13,9 +13,9 @@ Requirements
 
 * Python_ (>=3.6)
 * NumPy_
-* Pytorch_ (>=0.4.1)
-* Ase_ (>=3.16)
-* TensorboardX_ (tensorboard logging instead of .csv)
+* Pytorch_ (>=1.1)
+* ASE_ (>=3.16)
+* TensorboardX_ (For improved training visualization)
 * h5py_
 * tqdm_
 * PyYaml_
@@ -25,7 +25,7 @@ Requirements
 .. _Pytorch: https://pytorch.org/docs/stable/index.html#
 .. _TensorboardX: https://github.com/lanpa/tensorboardX
 .. _h5py: https://www.h5py.org
-.. _Ase: https://wiki.fysik.dtu.dk/ase/index.html
+.. _ASE: https://wiki.fysik.dtu.dk/ase/index.html
 .. _tqdm: https://github.com/tqdm/tqdm
 .. _PyYaml: https://pyyaml.org/
 
@@ -57,9 +57,9 @@ then move in the new directory ``<dest_dir>``::
 install both requirements and schnetpack::
 
    $ pip install -r requirements.txt
-   $ python setup.py install
+   $ pip install .
 
-and run tests::
+and run tests to be sure everything runs as expected::
 
    $ pytest
 
@@ -68,26 +68,33 @@ Once that's done, you are ready to go!
 
 .. note::
 
-   The best place to start is training a SchNetPack model on a common benchmark dataset.
-   Scripts for common datasets are provided by SchNetPack and inserted into your PATH during installation.
-
-
-.. tip::
-
    If your OS doesn't have ``numpy``, ``pytorch``, and ``ase`` packages
    installed, and the previous command didn't work for you, you can install those requirements through::
 
         $ pip install --upgrade --user numpy torch ase
 
-================
-Provided Scripts
-================
+Visualization with Tensorboard
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+While SchNetPack is based on PyTorch, it is possible to use Tensorboard, which comes with TensorFlow,
+to visualize the learning progress.
+While this is more convenient for visualization, you need to install TensorBoard
+in order to view the event files SchNetPack produces.
+Even though there is a standalone version, the easiest way to get Tensorboard is by installing TensorFlow, e.g. using pip::
+
+   $ pip install tensorflow
+
+===============================
+Scripts for benchmark data sets
+===============================
+
+ The best place to start is training a SchNetPack model on a common benchmark dataset.
+ Scripts for common datasets are provided by SchNetPack and inserted into your PATH during installation.
 
 QM9 & ANI1
 ^^^^^^^^^^
 
 The QM9 and ANI1 example scripts allow to train and evaluate both SchNet and wACSF neural networks.
-In the following tutorial we focus on the qm9 scripts, but the same procedure applies for the
+In the following, we focus on the QM9 script, but the same procedure applies for the
 ``schnetpack_ani1.py`` script as well. The training can be started using::
 
    $ schnetpack_qm9.py train <schnet/wacsf> <dbpath> <modeldir> --split num_train num_val [--cuda]
@@ -98,7 +105,7 @@ of the dataset, which has to be a ASE DB file (``.db`` or ``.json``). It will be
 if it does not exist.
 
 .. note::
-   Please be warned that the ANI-1 dataset its huge (more than 20gb).
+   Please be warned that the ANI-1 dataset is huge (more than 20gb).
 
 
 With the ``--cuda`` flag, you can activate GPU training.
@@ -107,11 +114,8 @@ Please refer to the help at the command line::
 
    $ schnetpack_qm9.py train <schnet/wacsf> --help
 
-The training progress will be logged in ``<modeldir>/log``, either as **CSV**
-(default) or as **TensorBoard** event files. For the latter, you need to install TensorBoard in order to view the event files.
-This first comes by installing the version included in TensorFlow::
-
-   $ pip install tensorflow
+The training progress will be logged in ``<modeldir>/log``. The default is a basic logging with **CSV** files.
+Advanced logging with **TensorBoard** event files can be activated using ``--logger tensorboard`` (see `above <#visualization-with-tensorboard>`_).
 
 To evaluate the trained model that showed the best validation error during training (i.e., early stopping), call::
 
@@ -158,63 +162,68 @@ QM9
 ^^^
 The ``qm9`` dataset contains 133,885 organic molecules with up to nine heavy atoms from C, O, N and F [#qm9]_.
 
-ANI1
-^^^^
-The ``ani1`` dataset consists of more than 20 million conformations for 57454 small organic molecules from C, O and N [#ani]_.
-
 MD17
 ^^^^
 The ``md17`` dataset allows to do molecular dynamics of small molecules containing molecular forces [#qm]_.
 
-..
-    ISO17
-    ^^^^^
-    The ``iso17`` dataset contains data for molecular dynamics of C7 O2 H10 isomers.
-    It contains 129 isomers with 5000 conformational geometries and their corresponding energies and forces [#qm]_.
+ANI1
+^^^^
+The ``ani1`` dataset consists of more than 20 million conformations for 57454 small organic molecules from C, O and N [#ani]_.
 
 Materials Project
 ^^^^^^^^^^^^^^^^^
 A repository of bulk crystals containing atom types ranging across the whole periodic table up to Z = 94 [#mp]_.
+
+OMDB
+^^^^
+The ``omdb`` dataset contains data from Organic Materials Database (OMDB) of bulk organic crystals.
+This database contains DFT (PBE) band gap (OMDB-GAP1 database) for 12500 non-magnetic materials.
+The registration to the OMDB is free for academic users. [#omdb]_.
+
 
 
 ==========
 References
 ==========
 
-.. [#schnetpack] Schnetpack -  Add reference once paper is accepted
+.. [#schnetpack] K.T. Schütt, P. Kessel, M. Gastegger, K.A. Nicoli, A. Tkatchenko, K.-R. Müller.
+   `SchNetPack: A Deep Learning Toolbox For Atomistic Systems <https://doi.org/10.1021/acs.jctc.8b00908>`_.
+   Journal of Chemical Theory and Computation **15** (1), pp. 448-455. 2018.
 
 .. [#schnet1] K.T. Schütt. F. Arbabzadah. S. Chmiela, K.-R. Müller, A. Tkatchenko.
    `Quantum-chemical insights from deep tensor neural networks <https://www.nature.com/articles/ncomms13890>`_
-   Nature Communications 8. 13890 (2017)
+   Nature Communications **8** (13890). 2017.
 
 .. [#schnet2] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.
    `SchNet: A continuous-filter convolutional neural network for modeling quantum interactions
    <http://papers.nips.cc/paper/6700-schnet-a-continuous-filter-convolutional-neural-network-for-modeling-quantum-interactions>`_
-   Advances in Neural Information Processing Systems 30, pp. 992-1002 (2017)
+   Advances in Neural Information Processing Systems **30**, pp. 992-1002. 2017.
 
 .. [#schnet3] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.
    `SchNet - a deep learning architecture for molecules and materials <https://aip.scitation.org/doi/10.1063/1.5019779>`_
-   The Journal of Chemical Physics 148(24), 241722 (2018)
+   The Journal of Chemical Physics **148** (24), 241722, 2018.
 
 .. [#wacsf1] M. Gastegger, L. Schwiedrzik, M. Bittermann, F. Berzsenyi, P. Marquetand.
    `wACSF—Weighted atom-centered symmetry functions as descriptors in machine learning potentials <https://aip.scitation.org/doi/10.1063/1.5019667>`_
-   The Journal of Chemical Physics, 148(24), 241709. (2018)
+   The Journal of Chemical Physics **148** (24), 241709. 2018.
 
 .. [#wacsf2] J. Behler, M. Parrinello.
    `Generalized neural-network representation of high-dimensional potential-energy surfaces <https://link.aps.org/doi/10.1103/PhysRevLett.98.146401>`_
-   Physical Review Letters, 98(14), 146401. (2007)
+   Physical Review Letters **98** (14), 146401. 2007.
 
 .. [#qm9] R. Ramakrishnan, P.O. Dral, M. Rupp, O. A. von Lilienfeld.
    `Quantum chemistry structures and properties of 134 kilo molecules <https://doi.org/10.1038/sdata.2014.22>`_
-   Scientific data, 1, 140022. (2014)
+   Scientific Data **1** (140022). 2014.
 
 .. [#ani] J.S. Smith, O. Isayev, A.E. Roitberg.
     `ANI-1, A data set of 20 million calculated off-equilibrium conformations for organic molecules. <https://doi.org/10.1038/sdata.2017.193>`_
-    Scientific data, 4, 170193. (2017)
+    Scientific Data **4** (170193). 2017.
 
 .. [#qm] `Quantum-Machine.org <http://www.quantum-machine.org/data>`_
+
+.. [#omdb] `Organic Materials Database (OMDB) <https://omdb.mathub.io/dataset/>`_
 
 .. [#mp] A. Jain, S.P. Ong, G. Hautier, W. Chen, W.D. Richards, S. Dacek,
     S. Cholia, D. Gunter, D. Skinner, G. Ceder, K.A. Persson.
     `The Materials Project: A materials genome approach to accelerating materials innovation <https://doi.org/10.1063/1.4812323>`_
-    APL Materials 1(1), 011002 (2013)
+    APL Materials **1** (1), 011002. 2013.
