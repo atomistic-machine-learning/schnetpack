@@ -30,13 +30,13 @@ class MDCalculator:
     """
 
     def __init__(
-        self,
-        required_properties,
-        force_handle,
-        position_conversion=1.0,
-        force_conversion=1.0,
-        property_conversion={},
-        detach=True,
+            self,
+            required_properties,
+            force_handle,
+            position_conversion=1.0,
+            force_conversion=1.0,
+            property_conversion={},
+            detach=True,
     ):
         self.results = {}
         self.force_handle = force_handle
@@ -95,10 +95,10 @@ class MDCalculator:
 
                 dim = self.results[p].shape
                 system.properties[p] = (
-                    self.results[p].view(
-                        system.n_replicas, system.n_molecules, *dim[1:]
-                    )
-                    * self.property_conversion[p]
+                        self.results[p].view(
+                            system.n_replicas, system.n_molecules, *dim[1:]
+                        )
+                        * self.property_conversion[p]
                 )
 
             # Set the forces for the system (at this point, already detached)
@@ -144,7 +144,7 @@ class MDCalculator:
             torch.FloatTensor: (n_replicas*n_molecules) x n_atoms binary tensor indicating padded atom dimensions
         """
         positions = (
-            system.positions.view(-1, system.max_n_atoms, 3) * self.position_conversion
+                system.positions.view(-1, system.max_n_atoms, 3) * self.position_conversion
         )
 
         atom_types = system.atom_types.view(-1, system.max_n_atoms)
@@ -162,8 +162,8 @@ class MDCalculator:
         """
         forces = self.results[self.force_handle]
         system.forces = (
-            forces.view(system.n_replicas, system.n_molecules, system.max_n_atoms, 3)
-            * self.force_conversion
+                forces.view(system.n_replicas, system.n_molecules, system.max_n_atoms, 3)
+                * self.force_conversion
         )
 
     def _get_ase_molecules(self, system):
@@ -193,14 +193,14 @@ class SchnetPackCalculator(MDCalculator):
     """
 
     def __init__(
-        self,
-        model,
-        required_properties,
-        force_handle,
-        position_conversion=1.0 / MDUnits.angs2bohr,
-        force_conversion=1.0 / MDUnits.auforces2aseforces,
-        property_conversion={},
-        detach=True,
+            self,
+            model,
+            required_properties,
+            force_handle,
+            position_conversion=1.0 / MDUnits.angs2bohr,
+            force_conversion=1.0 / MDUnits.auforces2aseforces,
+            property_conversion={},
+            detach=True,
     ):
         super(SchnetPackCalculator, self).__init__(
             required_properties,
