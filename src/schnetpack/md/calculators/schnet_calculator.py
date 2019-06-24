@@ -1,4 +1,4 @@
-from schnetpack import Structure
+from schnetpack.data.definitions import Structure
 from schnetpack.md import MDCalculator, MDUnits
 
 
