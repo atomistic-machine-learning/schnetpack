@@ -133,11 +133,11 @@ def save_options(options, yamlpath):
 #
 #
 # @md.command
-# def simulate(simulation_dir, simulation_steps):
+# def simulation_hooks(simulation_dir, simulation_steps):
 #     create_dirs()
 #     save_system_config()
 #     simulator = setup_simulation(simulation_dir=simulation_dir)
-#     simulator.simulate(simulation_steps)
+#     simulator.simulation_hooks(simulation_steps)
 #
 #
 # @md.command
@@ -151,7 +151,7 @@ def save_options(options, yamlpath):
 # @md.automain
 # def main(_log):
 #     save_config()
-#     _log.info('To run simulation call script with "simulate with <config file>"')
+#     _log.info('To run simulation call script with "simulation_hooks with <config file>"')
 
 
 def setup_system():

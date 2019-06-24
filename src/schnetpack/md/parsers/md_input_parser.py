@@ -1,11 +1,11 @@
+import schnetpack.md.calculators.schnet_calculator
 import schnetpack.md.initial_conditions as initcond
-import schnetpack.md.calculators as calculators
+import schnetpack.md.calculators.calculators as calculators
 import schnetpack.md.integrators as integrators
 
-import schnetpack.simulate.thermostats as thermostats
-import schnetpack.simulate.logging_hooks as logging_hooks
-import schnetpack.simulate.sampling as sampling
-import schnetpack.simulate.hooks as hooks
+import schnetpack.md.simulation_hooks.thermostats as thermostats
+import schnetpack.md.simulation_hooks.logging_hooks as logging_hooks
+import schnetpack.md.simulation_hooks.sampling as sampling
 
 from collections import OrderedDict
 
@@ -184,7 +184,7 @@ class CalculatorInit(Initializer):
     Initialization instructions for the available calculators.
     """
     allowed_options = {
-        'schnet': (calculators.SchnetPackCalculator, 'schnet', None),
+        'schnet': (schnetpack.md.calculators.schnet_calculator.SchnetPackCalculator, 'schnet', None),
         'field_schnet': (calculators.FieldSchnetCalculator, 'schnet', None),
         'orca': (calculators.OrcaCalculator, 'orca', None)
     }
