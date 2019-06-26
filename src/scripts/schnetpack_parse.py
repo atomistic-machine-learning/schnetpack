@@ -19,7 +19,8 @@ if __name__ == "__main__":
     os.makedirs(os.path.dirname(args.db_path), exist_ok=True)
 
     logging.info("parsing data...")
-    generate_db(args.file_path, args.db_path, args.atomic_properties,
-                args.molecular_properties)
+    generate_db(
+        args.file_path, args.db_path, args.atomic_properties, args.molecular_properties
+    )
 
     logging.info("done...")
