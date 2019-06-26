@@ -24,7 +24,7 @@ def tmpdir():
 
 @pytest.fixture(scope="module")
 def simulation_dir(tmpdir):
-    return os.path.join(tmpdir, "simulate")
+    return os.path.join(tmpdir, "simulation_hooks")
 
 
 @pytest.fixture(scope="module")
@@ -113,7 +113,7 @@ class TestSacred:
             config_updates["thermostat.gle_file"] = gle_path
 
         md.run(
-            command_name="simulate",
+            command_name="simulation_hooks",
             named_configs=named_configs,
             config_updates=config_updates,
         )
@@ -154,7 +154,7 @@ class TestSacred:
             config_updates["thermostat.gle_file"] = gle_path
 
         md.run(
-            command_name="simulate",
+            command_name="simulation_hooks",
             named_configs=named_configs,
             config_updates=config_updates,
         )

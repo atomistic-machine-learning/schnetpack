@@ -1,5 +1,6 @@
 from schnetpack.data.definitions import Structure
-from schnetpack.md import MDCalculator, MDUnits
+from schnetpack.md.calculators import MDCalculator
+from schnetpack.md.utils import MDUnits
 
 
 class SchnetPackCalculator(MDCalculator):

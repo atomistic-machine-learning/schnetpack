@@ -42,13 +42,14 @@ class MDCalculator:
         self.results = {}
         self.force_handle = force_handle
         self.required_properties = required_properties
-        self.position_conversion = position_conversion
-        self.force_conversion = force_conversion
+
+        # Perform automatic conversion of units
+        self.position_conversion = MDUnits.parse_mdunit(position_conversion)
+        self.force_conversion = MDUnits.parse_mdunit(force_conversion)
+        self.property_conversion = {p: MDUnits.parse_mdunit(property_conversion[p]) for p in property_conversion}
+        self._init_default_conversion()
 
         self.detach = detach
-
-        self.property_conversion = property_conversion
-        self._init_default_conversion()
 
     def calculate(self, system):
         """

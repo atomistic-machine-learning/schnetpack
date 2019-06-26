@@ -1,6 +1,6 @@
 import schnetpack.md.calculators.schnet_calculator
 import schnetpack.md.initial_conditions as initcond
-import schnetpack.md.calculators.calculators as calculators
+import schnetpack.md.calculators as calculators
 import schnetpack.md.integrators as integrators
 
 import schnetpack.md.simulation_hooks.thermostats as thermostats
@@ -185,7 +185,6 @@ class CalculatorInit(Initializer):
     """
     allowed_options = {
         'schnet': (schnetpack.md.calculators.schnet_calculator.SchnetPackCalculator, 'schnet', None),
-        'field_schnet': (calculators.FieldSchnetCalculator, 'schnet', None),
         'orca': (calculators.OrcaCalculator, 'orca', None)
     }
     required_inputs = {

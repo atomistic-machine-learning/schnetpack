@@ -137,4 +137,4 @@ def save_config(_log, _config, simulation_dir):
 @md.automain
 def main(_log):
     save_config()
-    _log.info('To run simulation call script with "simulate with <config file>"')
+    _log.info('To run simulation call script with "simulation_hooks with <config file>"')

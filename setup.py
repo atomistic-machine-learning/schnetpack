@@ -23,7 +23,7 @@ setup(
         "src/scripts/schnetpack_ase.py",
         "src/scripts/schnetpack_ani1.py",
         "src/scripts/schnetpack_load.py",
-        "src/sacred_scripts/schnetpack_md.py",
+        "src/scripts/schnetpack_molecular_dynamics.py",
         "src/sacred_scripts/spk_parse.py",
         "src/scripts/schnetpack_omdb.py",
     ],

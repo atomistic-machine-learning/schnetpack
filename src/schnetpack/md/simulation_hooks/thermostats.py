@@ -10,7 +10,7 @@ from schnetpack.md.utils import (
     YSWeights,
 )
 from schnetpack.md.integrators import RingPolymer
-from schnetpack.md.simulation_hooks import SimulationHook
+from schnetpack.md.simulation_hooks.basic_hooks import SimulationHook
 
 __all__ = [
     "ThermostatHook",
