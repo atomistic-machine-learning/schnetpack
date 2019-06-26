@@ -6,6 +6,9 @@ from torch.utils.data.sampler import RandomSampler
 from schnetpack.utils.script_utils.script_error import ScriptError
 
 
+__all__ = ["get_loaders", "get_statistics"]
+
+
 def get_statistics(
     split_path, train_loader, args, atomref, per_atom=False, logging=None
 ):

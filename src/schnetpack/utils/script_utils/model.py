@@ -7,6 +7,9 @@ from schnetpack.atomistic import AtomisticModel
 from schnetpack.nn.cutoff import get_cutoff_by_string
 
 
+__all__ = ["get_representation", "get_model"]
+
+
 def get_representation(args, train_loader=None):
     # build representation
     if args.model == "schnet":

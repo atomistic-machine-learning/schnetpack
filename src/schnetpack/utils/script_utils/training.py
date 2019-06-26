@@ -5,6 +5,9 @@ import torch
 from torch.optim import Adam
 
 
+__all__ = ["get_trainer", "simple_loss_fn", "tradeoff_loff_fn"]
+
+
 def get_trainer(args, model, train_loader, val_loader, metrics, loss_fn=None):
     # setup hook and logging
     hooks = [spk.hooks.MaxEpochHook(args.max_epochs)]

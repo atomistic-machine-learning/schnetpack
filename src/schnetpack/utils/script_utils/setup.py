@@ -5,6 +5,9 @@ import schnetpack as spk
 import schnetpack.utils as utils
 
 
+__all__ = ["setup_run"]
+
+
 def setup_run(args):
     argparse_dict = vars(args)
     jsonpath = os.path.join(args.modelpath, "args.json")
