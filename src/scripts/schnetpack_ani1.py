@@ -4,13 +4,13 @@ import os
 import torch
 
 import schnetpack.output_modules
-from scripts.script_utils.evaluation import evaluate
-from scripts.script_utils.training import get_trainer
+from schnetpack.utils.script_utils import get_trainer, evaluate
+
 from ase.data import atomic_numbers
 
 import schnetpack as spk
 from schnetpack.datasets import ANI1
-from scripts.script_utils import (
+from schnetpack.utils.script_utils import (
     setup_run,
     get_representation,
     get_model,

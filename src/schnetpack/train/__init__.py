@@ -7,6 +7,4 @@ from schnetpack.train.Hooks.
 
 """
 
-
-from .hooks import *
 from .trainer import Trainer
