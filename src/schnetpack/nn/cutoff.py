@@ -15,9 +15,7 @@ def get_cutoff_by_string(key):
     elif key == "mollifier":
         cutoff_network = MollifierCutoff
     else:
-        raise NotImplementedError(
-            "cutoff_function {} is unknown".format(key)
-        )
+        raise NotImplementedError("cutoff_function {} is unknown".format(key))
     return cutoff_network
 
 

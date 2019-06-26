@@ -304,4 +304,3 @@ class UpdatePrioritiesHook(hooks.Hook):
             idx.data.cpu().squeeze(),
             self.update_fn(train_batch, result).data.cpu().squeeze(),
         )
-
