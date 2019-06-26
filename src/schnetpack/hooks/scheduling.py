@@ -231,7 +231,7 @@ class ReduceLROnPlateauHook(Hook):
         self,
         optimizer,
         patience=25,
-        factor=0.2,
+        factor=0.5,
         min_lr=1e-6,
         window_length=1,
         stop_after_min=False,
