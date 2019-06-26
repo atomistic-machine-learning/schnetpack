@@ -1,10 +1,9 @@
 import torch
 import numpy as np
-import schnetpack.hooks as hooks
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
+from schnetpack.hooks import Hook
 
-
-class EarlyStoppingHook(hooks.Hook):
+class EarlyStoppingHook(Hook):
     r"""Hook to stop training if validation loss fails to improve.
 
     Args:
@@ -40,7 +39,7 @@ class EarlyStoppingHook(hooks.Hook):
             trainer._stop = True
 
 
-class WarmRestartHook(hooks.Hook):
+class WarmRestartHook(Hook):
     def __init__(
         self, T0=10, Tmult=2, each_step=False, lr_min=1e-6, lr_factor=1.0, patience=1
     ):
@@ -107,7 +106,7 @@ class WarmRestartHook(hooks.Hook):
                 trainer._stop = True
 
 
-class MaxEpochHook(hooks.Hook):
+class MaxEpochHook(Hook):
     """Hook to stop training when a maximum number of epochs is reached.
 
     Args:
@@ -130,7 +129,7 @@ class MaxEpochHook(hooks.Hook):
             trainer._stop = True
 
 
-class MaxStepHook(hooks.Hook):
+class MaxStepHook(Hook):
     """Hook to stop training when a maximum number of steps is reached.
 
     Args:
@@ -154,7 +153,7 @@ class MaxStepHook(hooks.Hook):
             trainer._stop = True
 
 
-class LRScheduleHook(hooks.Hook):
+class LRScheduleHook(Hook):
     """Base class for learning rate scheduling hooks.
 
     This class provides a thin wrapper around torch.optim.lr_schedule._LRScheduler.
@@ -203,7 +202,7 @@ class LRScheduleHook(hooks.Hook):
             self.scheduler.step()
 
 
-class ReduceLROnPlateauHook(hooks.Hook):
+class ReduceLROnPlateauHook(Hook):
     r"""Hook for reduce plateau learning rate scheduling.
 
     This class provides a thin wrapper around
@@ -269,7 +268,7 @@ class ReduceLROnPlateauHook(hooks.Hook):
                     trainer._stop = True
 
 
-class ExponentialDecayHook(hooks.Hook):
+class ExponentialDecayHook(Hook):
     """Hook for reduce plateau learning rate scheduling.
 
     This class provides a thin wrapper around torch.optim.lr_schedule.StepLR.
@@ -291,7 +290,7 @@ class ExponentialDecayHook(hooks.Hook):
         self.scheduler.step()
 
 
-class UpdatePrioritiesHook(hooks.Hook):
+class UpdatePrioritiesHook(Hook):
     r"""Hook for updating the priority sampler"""
 
     def __init__(self, prioritized_sampler, priority_fn):

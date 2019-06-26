@@ -1,10 +1,15 @@
 import os
 import time
 import numpy as np
-import schnetpack.hooks as hooks
+from schnetpack.hooks import Hook
 
 
-class LoggingHook(hooks.Hook):
+__all__ = ["LoggingHook",
+           "CSVHook",
+           "TensorboardHook",]
+
+
+class LoggingHook(Hook):
     """Base class for logging hooks.
 
     Args:
