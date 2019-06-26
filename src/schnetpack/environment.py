@@ -4,7 +4,6 @@ import numpy as np
 import torch
 from ase.neighborlist import neighbor_list
 
-
 __all__ = [
     "BaseEnvironmentProvider",
     "SimpleEnvironmentProvider",
@@ -295,15 +294,30 @@ def collect_atom_triples(nbh_idx):
 
     Returns:
         nbh_idx_j, nbh_idx_k (numpy.ndarray): triple indices
+        offset_idx_j, offset_idx_k (numpy.ndarray): offset indices for PBC
 
     """
     natoms, nneigh = nbh_idx.shape
+
     # Construct possible permutations
     nbh_idx_j = np.tile(nbh_idx, nneigh)
     nbh_idx_k = np.repeat(nbh_idx, nneigh).reshape((natoms, -1))
+
     # Remove same interactions and non unique pairs
     triu_idx_row, triu_idx_col = np.triu_indices(nneigh, k=1)
     triu_idx_flat = triu_idx_row * nneigh + triu_idx_col
     nbh_idx_j = nbh_idx_j[:, triu_idx_flat]
     nbh_idx_k = nbh_idx_k[:, triu_idx_flat]
-    return nbh_idx_j, nbh_idx_k
+
+    # Keep track of periodic images
+    offset_idx = np.tile(np.arange(nneigh), (natoms, 1))
+
+    # Construct indices for pairs of offsets
+    offset_idx_j = np.tile(offset_idx, nneigh)
+    offset_idx_k = np.repeat(offset_idx, nneigh).reshape((natoms, -1))
+
+    # Remove non-unique pairs and diagonal
+    offset_idx_j = offset_idx_j[:, triu_idx_flat]
+    offset_idx_k = offset_idx_k[:, triu_idx_flat]
+
+    return nbh_idx_j, nbh_idx_k, offset_idx_j, offset_idx_k

@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 from .definitions import Structure
 from .stats import StatisticsAccumulator
 
-
 __all__ = ["AtomsLoader"]
 
 
