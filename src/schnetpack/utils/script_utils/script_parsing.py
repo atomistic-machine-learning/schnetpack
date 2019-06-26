@@ -1,7 +1,7 @@
 import argparse
 
 
-__all__ = ["get_main_parser", "add_subparsers"]
+__all__ = ["get_main_parser", "add_subparsers", "get_parsing_parser"]
 
 
 def get_main_parser():
@@ -269,3 +269,21 @@ def add_subparsers(cmd_parser, defaults={}, choices={}):
     eval_subparsers.add_parser(
         "wacsf", help="wACSF help", parents=[eval_parser, wacsf_parser]
     )
+
+
+def get_parsing_parser():
+    parser = argparse.ArgumentParser(add_help=False)
+
+    parser.add_argument("file_path", type=str, help="Path to xyz file")
+    parser.add_argument("db_path", type=str, help="Path to parsed database")
+    parser.add_argument("--atomic_properties", type=str,
+                        help="Definition property-columns in XYZ-file",
+                        default="Properties=species:S:1:pos:R:3")
+    parser.add_argument("--molecular_properties", type=str,
+                        help="Definition of molecular-properties in XYZ-header",
+                        nargs="+", default=["energy"])
+    parser.add_argument("--overwrite",
+                        action="store_true",
+                        help="Overwrite database dir if True")
+
+    return parser
