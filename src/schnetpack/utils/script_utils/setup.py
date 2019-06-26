@@ -1,8 +1,6 @@
 import os
 import logging
 from shutil import rmtree
-import schnetpack as spk
-import schnetpack.utils as utils
 import schnetpack.utils.spk_utils
 
 __all__ = ["setup_run"]
