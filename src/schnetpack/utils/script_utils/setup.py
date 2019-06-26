@@ -3,7 +3,7 @@ import logging
 from shutil import rmtree
 import schnetpack as spk
 import schnetpack.utils as utils
-
+import schnetpack.utils.spk_utils
 
 __all__ = ["setup_run"]
 
@@ -19,10 +19,10 @@ def setup_run(args):
         if not os.path.exists(args.modelpath):
             os.makedirs(args.modelpath)
 
-        utils.to_json(jsonpath, argparse_dict)
+        schnetpack.utils.spk_utils.to_json(jsonpath, argparse_dict)
 
-        spk.utils.set_random_seed(args.seed)
+        schnetpack.utils.spk_utils.set_random_seed(args.seed)
         train_args = args
     else:
-        train_args = utils.read_from_json(jsonpath)
+        train_args = schnetpack.utils.spk_utils.read_from_json(jsonpath)
     return train_args

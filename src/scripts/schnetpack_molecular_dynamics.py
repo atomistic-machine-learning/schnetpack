@@ -5,6 +5,7 @@ import os
 import torch
 
 import schnetpack as spk
+import schnetpack.utils.spk_utils
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
@@ -147,7 +148,7 @@ if __name__ == "__main__":
         os.makedirs(args.simulation_dir)
 
     # Store command line args
-    spk.__init__.to_json(jsonpath, argparse_dict)
+    schnetpack.utils.spk_utils.to_json(jsonpath, argparse_dict)
 
     # Load the model
     ml_model = torch.load(args.model_path)
@@ -155,7 +156,7 @@ if __name__ == "__main__":
 
     logging.info(
         "The model you built has: {:d} parameters".format(
-            spk.__init__.compute_params(ml_model)
+            schnetpack.utils.spk_utils.compute_params(ml_model)
         )
     )
 
