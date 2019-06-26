@@ -2,9 +2,11 @@ import numpy as np
 import torch
 import os
 import schnetpack as spk
-from shutil import copyfile
 from torch.utils.data.sampler import RandomSampler
-from scripts.script_utils.script_error import ScriptError
+from schnetpack.utils.script_utils.script_error import ScriptError
+
+
+__all__ = ["get_loaders", "get_statistics"]
 
 
 def get_statistics(
