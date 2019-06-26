@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import os
 from .fixtures import *
-from src.scripts.script_utils import (
+from schnetpack.utils import (
     get_loaders,
     get_statistics,
     get_main_parser,

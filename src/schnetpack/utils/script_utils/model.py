@@ -2,7 +2,7 @@ import logging
 import schnetpack as spk
 from ase.data import atomic_numbers
 import torch.nn as nn
-from schnetpack.utils import compute_params
+import schnetpack.utils as utils
 from schnetpack.atomistic import AtomisticModel
 from schnetpack.nn.cutoff import HardCutoff, MollifierCutoff, CosineCutoff
 
@@ -76,6 +76,6 @@ def get_model(representation, output_modules, parallelize=False):
     if parallelize:
         model = nn.DataParallel(model)
 
-    logging.info("The model you built has: %d parameters" % compute_params(model))
+    logging.info("The model you built has: %d parameters" % utils.compute_params(model))
 
     return model
