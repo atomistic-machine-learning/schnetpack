@@ -3,6 +3,7 @@ import numpy as np
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
 from schnetpack.hooks import Hook
 
+
 class EarlyStoppingHook(Hook):
     r"""Hook to stop training if validation loss fails to improve.
 
