@@ -7,12 +7,17 @@ from ase.data import atomic_numbers
 
 import schnetpack as spk
 from schnetpack.datasets import QM9
-from scripts.script_utils.script_parsing import get_main_parser, add_subparsers
-from scripts.script_utils.setup import setup_run
-from scripts.script_utils.model import get_representation, get_model
-from scripts.script_utils.training import get_trainer
-from scripts.script_utils.evaluation import evaluate
-from scripts.script_utils import get_statistics, get_loaders
+from schnetpack.utils.script_utils import (
+    get_main_parser,
+    add_subparsers,
+    setup_run,
+    get_representation,
+    get_model,
+    get_trainer,
+    evaluate,
+    get_statistics,
+    get_loaders,
+)
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 

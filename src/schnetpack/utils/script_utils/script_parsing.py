@@ -1,6 +1,9 @@
 import argparse
 
 
+__all__ = ["get_main_parser", "add_subparsers"]
+
+
 def get_main_parser():
     """ Setup parser for command line arguments """
     ## command-specific

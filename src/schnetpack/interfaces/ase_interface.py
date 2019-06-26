@@ -12,7 +12,7 @@ References
 """
 
 import os
-from schnetpack.utils import DeprecationHelper
+from schnetpack.utils.spk_utils import DeprecationHelper
 
 import numpy as np
 import torch
