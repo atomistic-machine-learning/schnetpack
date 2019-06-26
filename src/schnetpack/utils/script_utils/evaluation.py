@@ -12,7 +12,6 @@ def evaluate(
     device,
     metrics,
     custom_header=None,
-    to_kcal=False,
 ):
 
     header = []
@@ -30,10 +29,6 @@ def evaluate(
 
     if custom_header:
         header = custom_header
-
-    # unit conversion
-    if to_kcal:
-        results = [r * 23.06054 for r in results]
 
     eval_file = os.path.join(args.modelpath, "evaluation.txt")
     with open(eval_file, "w") as file:

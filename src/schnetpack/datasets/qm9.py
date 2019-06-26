@@ -52,48 +52,7 @@ class QM9(DownloadableAtomsData):
     G = "free_energy"
     Cv = "heat_capacity"
 
-    available_properties = [
-        A,
-        B,
-        C,
-        mu,
-        alpha,
-        homo,
-        lumo,
-        gap,
-        r2,
-        zpve,
-        U0,
-        U,
-        H,
-        G,
-        Cv,
-    ]
-
     reference = {zpve: 0, U0: 1, U: 2, H: 3, G: 4, Cv: 5}
-
-    units = dict(
-        zip(
-            available_properties,
-            [
-                1.0,
-                1.0,
-                1.0,
-                Debye,
-                Bohr ** 3,
-                Hartree,
-                Hartree,
-                Hartree,
-                Bohr ** 2,
-                Hartree,
-                Hartree,
-                Hartree,
-                Hartree,
-                Hartree,
-                1.0,
-            ],
-        )
-    )
 
     def __init__(
         self,
@@ -107,12 +66,50 @@ class QM9(DownloadableAtomsData):
 
         self.remove_uncharacterized = remove_uncharacterized
 
+        available_properties = [
+            QM9.A,
+            QM9.B,
+            QM9.C,
+            QM9.mu,
+            QM9.alpha,
+            QM9.homo,
+            QM9.lumo,
+            QM9.gap,
+            QM9.r2,
+            QM9.zpve,
+            QM9.U0,
+            QM9.U,
+            QM9.H,
+            QM9.G,
+            QM9.Cv,
+        ]
+
+        units = [
+            1.0,
+            1.0,
+            1.0,
+            Debye,
+            Bohr ** 3,
+            Hartree,
+            Hartree,
+            Hartree,
+            Bohr ** 2,
+            Hartree,
+            Hartree,
+            Hartree,
+            Hartree,
+            Hartree,
+            1.0,
+        ]
+
         super().__init__(
             dbpath=dbpath,
             subset=subset,
-            required_properties=properties,
+            load_only=properties,
             collect_triples=collect_triples,
             download=download,
+            available_properties=available_properties,
+            units=units,
         )
 
     def create_subset(self, idx):
@@ -120,12 +117,12 @@ class QM9(DownloadableAtomsData):
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
 
         return QM9(
-            self.dbpath,
-            False,
-            subidx,
-            self.required_properties,
-            self.collect_triples,
-            False,
+            dbpath=self.dbpath,
+            download=False,
+            subset=subidx,
+            properties=self.load_only,
+            collect_triples=self.collect_triples,
+            remove_uncharacterized=False,
         )
 
     def _download(self):
@@ -216,7 +213,7 @@ class QM9(DownloadableAtomsData):
             with open(xyzfile, "r") as f:
                 lines = f.readlines()
                 l = lines[1].split()[2:]
-                for pn, p in zip(QM9.available_properties, l):
+                for pn, p in zip(self.available_properties, l):
                     properties[pn] = np.array([float(p) * self.units[pn]])
                 with open(tmp, "wt") as fout:
                     for line in lines:

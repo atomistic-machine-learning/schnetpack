@@ -9,7 +9,7 @@ from schnetpack.utils.script_utils import (
     get_representation,
     get_model,
     setup_run,
-    train,
+    get_trainer,
     evaluate,
     get_main_parser,
     add_subparsers,
@@ -39,7 +39,14 @@ if __name__ == "__main__":
             features=64,
             aggregation_mode="mean",
         ),
-        choices=dict(property=MaterialsProject.available_properties),
+        choices=dict(
+            property=[
+                MaterialsProject.EformationPerAtom,
+                MaterialsProject.EPerAtom,
+                MaterialsProject.BandGap,
+                MaterialsProject.TotalMagnetization,
+            ]
+        ),
     )
     args = parser.parse_args()
     train_args = setup_run(args)
@@ -68,14 +75,14 @@ if __name__ == "__main__":
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")
     train_loader, val_loader, test_loader = get_loaders(
-        logging, args, dataset=mp, split_path=split_path
+        args, dataset=mp, split_path=split_path, logging=logging
     )
 
     if args.mode == "train":
         # get statistics
         logging.info("calculate statistics...")
         mean, stddev = get_statistics(
-            split_path, logging, train_loader, train_args, atomref
+            split_path, train_loader, train_args, atomref, logging=logging
         )
 
         # build representation
@@ -104,7 +111,8 @@ if __name__ == "__main__":
 
         # run training
         logging.info("Training...")
-        train(args, model, train_loader, val_loader, device, metrics=metrics)
+        trainer = get_trainer(args, model, train_loader, val_loader, metrics)
+        trainer.train(device, n_epochs=args.n_epochs)
         logging.info("...training done!")
 
     elif args.mode == "eval":

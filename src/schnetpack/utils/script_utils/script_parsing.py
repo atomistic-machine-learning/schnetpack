@@ -29,10 +29,11 @@ def add_subparsers(cmd_parser, defaults={}, choices={}):
     train_parser.add_argument(
         "--property",
         type=str,
-        help="Organic Materials Database property to be predicted"
-        " (default: %(default)s)",
-        default=defaults["property"],
-        choices=choices["property"],
+        help="Database property to be predicted" " (default: %(default)s)",
+        default="energy" if "property" not in defaults.keys() else defaults["property"],
+        choices=["energy"]
+        if "property" not in choices.keys()
+        else defaults["property"],
     )
     train_parser.add_argument("datapath", help="Path / destination of dataset")
     train_parser.add_argument("modelpath", help="Destination for models and logs")
@@ -135,6 +136,9 @@ def add_subparsers(cmd_parser, defaults={}, choices={}):
         type=int,
         help="Size of atom-wise representation",
         default=256 if "features" not in defaults.keys() else defaults["features"],
+    )
+    schnet_parser.add_argument(
+        "--n_filters", type=int, help="Size of atom-wise representation", default=25
     )
     schnet_parser.add_argument(
         "--interactions", type=int, help="Number of interaction blocks", default=6
