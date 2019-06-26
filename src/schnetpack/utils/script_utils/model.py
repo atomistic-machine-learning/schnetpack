@@ -2,26 +2,19 @@ import logging
 import schnetpack as spk
 from ase.data import atomic_numbers
 import torch.nn as nn
-from schnetpack.utils import compute_params
+import schnetpack.utils.spk_utils
 from schnetpack.atomistic import AtomisticModel
-from schnetpack.nn.cutoff import HardCutoff, MollifierCutoff, CosineCutoff
+from schnetpack.nn.cutoff import get_cutoff_by_string
+
+
+__all__ = ["get_representation", "get_model"]
 
 
 def get_representation(args, train_loader=None):
     # build representation
     if args.model == "schnet":
 
-        # build cutoff module
-        if args.cutoff_function == "hard":
-            cutoff_network = HardCutoff
-        elif args.cutoff_function == "cosine":
-            cutoff_network = CosineCutoff
-        elif args.cutoff_function == "mollifier":
-            cutoff_network = MollifierCutoff
-        else:
-            raise NotImplementedError(
-                "cutoff_function {} is unknown".format(args.cutoff_function)
-            )
+        cutoff_network = get_cutoff_by_string(args.cutoff_function)
 
         return spk.representation.SchNet(
             args.features,
@@ -76,6 +69,9 @@ def get_model(representation, output_modules, parallelize=False):
     if parallelize:
         model = nn.DataParallel(model)
 
-    logging.info("The model you built has: %d parameters" % compute_params(model))
+    logging.info(
+        "The model you built has: %d parameters"
+        % schnetpack.utils.spk_utils.compute_params(model)
+    )
 
     return model

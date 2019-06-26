@@ -3,7 +3,20 @@ import torch
 from torch import nn
 
 
-__all__ = ["CosineCutoff", "MollifierCutoff", "HardCutoff"]
+__all__ = ["CosineCutoff", "MollifierCutoff", "HardCutoff", "get_cutoff_by_string"]
+
+
+def get_cutoff_by_string(key):
+    # build cutoff module
+    if key == "hard":
+        cutoff_network = HardCutoff
+    elif key == "cosine":
+        cutoff_network = CosineCutoff
+    elif key == "mollifier":
+        cutoff_network = MollifierCutoff
+    else:
+        raise NotImplementedError("cutoff_function {} is unknown".format(key))
+    return cutoff_network
 
 
 class CosineCutoff(nn.Module):

@@ -3,8 +3,7 @@ import torch
 import numpy as np
 import os
 from .fixtures import *
-from .fixtures.model import *
-from src.scripts.script_utils import (
+from schnetpack.utils import (
     get_loaders,
     get_statistics,
     get_main_parser,
@@ -121,10 +120,10 @@ class TestTrainer:
         )
         assert trainer._model == schnet
         hook_types = [type(hook) for hook in trainer.hooks]
-        assert spk.train.CSVHook in hook_types
-        assert spk.train.TensorboardHook not in hook_types
-        assert spk.train.MaxEpochHook in hook_types
-        assert spk.train.ReduceLROnPlateauHook in hook_types
+        assert spk.hooks.CSVHook in hook_types
+        assert spk.hooks.TensorboardHook not in hook_types
+        assert spk.hooks.MaxEpochHook in hook_types
+        assert spk.hooks.ReduceLROnPlateauHook in hook_types
 
     def test_tensorboardhook(self, qm9_train_loader, qm9_val_loader, schnet, modeldir):
         # use TensorBoardHook
@@ -143,7 +142,7 @@ class TestTrainer:
         trainer = get_trainer(
             args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
         )
-        assert spk.train.TensorboardHook in [type(hook) for hook in trainer.hooks]
+        assert spk.hooks.TensorboardHook in [type(hook) for hook in trainer.hooks]
 
     def test_simple_loss(self):
         args = Namespace(property="prop")

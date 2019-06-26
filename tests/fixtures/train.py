@@ -58,7 +58,7 @@ def metrics(properties):
 
 @pytest.fixture(scope="session")
 def hooks(metrics, modeldir):
-    return [spk.train.CSVHook(os.path.join(modeldir, "csv_log"), metrics),]
+    return [spk.hooks.CSVHook(os.path.join(modeldir, "csv_log"), metrics),]
             # todo: continue
             #spk.train.TensorboardHook(modeldir,
             #                          metrics)]
