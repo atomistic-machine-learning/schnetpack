@@ -1,6 +1,6 @@
 from sacred import Ingredient
 
-from schnetpack.simulate.thermostats import *
+from schnetpack.md.simulation_hooks.thermostats import *
 
 thermostat_ingredient = Ingredient("thermostat")
 

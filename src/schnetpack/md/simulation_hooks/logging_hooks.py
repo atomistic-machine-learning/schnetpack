@@ -1,52 +1,20 @@
-import os
-import torch
-import numpy as np
 import json
+import os
 import h5py
+import numpy as np
+import torch
+
+from schnetpack.md.simulation_hooks import SimulationHook
 
 __all__ = [
     "Checkpoint",
-    "RemoveCOMMotion",
-    "BiasPotential",
-    "FileLogger",
-    "TensorboardLogger",
     "TemperatureLogger",
+    "FileLogger",
     "MoleculeStream",
+    "DataStream",
     "PropertyStream",
-    "SimulationHook",
+    "SimulationStream",
 ]
-
-
-class SimulationHook:
-    """
-    Basic class for simulator hooks
-    """
-
-    @property
-    def state_dict(self):
-        return {}
-
-    @state_dict.setter
-    def state_dict(self, state_dict):
-        pass
-
-    def on_step_begin(self, simulator):
-        pass
-
-    def on_step_middle(self, simulator):
-        pass
-
-    def on_step_end(self, simulator):
-        pass
-
-    def on_step_failed(self, simulator):
-        pass
-
-    def on_simulation_start(self, simulator):
-        pass
-
-    def on_simulation_end(self, simulator):
-        pass
 
 
 class Checkpoint(SimulationHook):
@@ -69,7 +37,7 @@ class Checkpoint(SimulationHook):
         Store state_dict at specified intervals.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         if simulator.step % self.every_n_steps == 0:
             torch.save(simulator.state_dict, self.checkpoint_file)
@@ -79,42 +47,9 @@ class Checkpoint(SimulationHook):
         Store state_dict at the end of the simulation.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         torch.save(simulator.state_dict, self.checkpoint_file)
-
-
-class RemoveCOMMotion(SimulationHook):
-    """
-    Periodically remove motions of the center of mass from the system.
-
-    Args:
-        every_n_steps (int): Frequency with which motions are removed.
-        remove_rotation (bool): Also remove rotations (default=False).
-    """
-
-    def __init__(self, every_n_steps=10, remove_rotation=True):
-        self.every_n_steps = every_n_steps
-        self.remove_rotation = remove_rotation
-
-    def on_step_end(self, simulator):
-        if simulator.step % self.every_n_steps == 0:
-            simulator.system.remove_com()
-            simulator.system.remove_com_translation()
-            if self.remove_rotation:
-                simulator.system.remove_com_rotation()
-
-
-class BiasPotential(SimulationHook):
-    """
-    Placeholder class for bias potentials used for adaptive/accelerated sampling.
-    """
-
-    def __init__(self):
-        raise NotImplementedError
-
-    def on_step_end(self, simulator):
-        raise NotImplementedError
 
 
 class DataStream:
@@ -146,7 +81,7 @@ class DataStream:
         are initially constructed taking the full length of the simulation into account.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
             main_dataset (h5py.File): Main h5py dataset object.
             buffer_size (int): Size of the buffer, once full, data is stored to the hdf5 dataset.
             restart (bool): If the simulation is restarted, continue logging in the previously created dataset.
@@ -169,7 +104,7 @@ class DataStream:
         Specific initialization routine. Needs to be adapted.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         raise NotImplementedError
 
@@ -179,7 +114,7 @@ class DataStream:
 
         Args:
             buffer_position (int): Current position in the buffer.
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         raise NotImplementedError
 
@@ -207,7 +142,7 @@ class DataStream:
 
         Args:
             data_shape (list(int)): Shape of the target data tensor
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         # Initialize the buffer
         self.buffer = torch.zeros(
@@ -259,7 +194,7 @@ class PropertyStream(DataStream):
         simulator.system.properties dictionary and storing them into the attributes of the hdf5 data group.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         self.n_replicas = simulator.system.n_replicas
         self.n_molecules = simulator.system.n_molecules
@@ -289,7 +224,7 @@ class PropertyStream(DataStream):
 
         Args:
             buffer_position (int): Current position in the buffer.
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         # These are already detached in the calculator by default.
         for p in self.properties_slices:
@@ -354,7 +289,7 @@ class SimulationStream(PropertyStream):
         Get the shape and positions of all monitored properties.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         self.n_replicas = simulator.system.n_replicas
         self.n_molecules = simulator.system.n_molecules
@@ -385,7 +320,7 @@ class SimulationStream(PropertyStream):
 
         Args:
             buffer_position (int): Current position in the buffer.
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         property_dictionary = {
             "temperature": simulator.system.temperature,
@@ -420,7 +355,7 @@ class MoleculeStream(DataStream):
         atoms, as well as the length of the time step in atomic units to the group attributes.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         # Get shape of array depending on whether forces should be stored.
         data_shape = (
@@ -448,7 +383,7 @@ class MoleculeStream(DataStream):
 
         Args:
             buffer_position (int): Current position in the buffer.
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         self.buffer[
             buffer_position : buffer_position + 1, ..., :3
@@ -476,7 +411,7 @@ class FileLogger(SimulationHook):
     Args:
         filename (str): Path to the hdf5 database file.
         buffer_size (int): Size of the buffer, once full, data is stored to the hdf5 dataset.
-        data_streams list(schnetpack.simulate.hooks.DataStream): List of DataStreams used to collect and log information
+        data_streams list(schnetpack.simulation_hooks.hooks.DataStream): List of DataStreams used to collect and log information
                                                                  to the main hdf5 dataset, default are properties and
                                                                  molecules.
         every_n_steps (int): Frequency with which the buffer is updated.
@@ -519,7 +454,7 @@ class FileLogger(SimulationHook):
         addition, the 'entries' attribute of each data stream is read from the existing data set upon restart.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         # Construct stream buffers and data groups
         for stream in self.data_steams:
@@ -542,7 +477,7 @@ class FileLogger(SimulationHook):
         Update the buffer of each stream after each specified interval and flush the buffer to the main file if full.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         if simulator.step % self.every_n_steps == 0:
             # If buffers are full, write to file
@@ -560,7 +495,7 @@ class FileLogger(SimulationHook):
         Perform one final flush of the buffers and close the file upon the end of the simulation.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         # Flush remaining data in buffer
         if self.buffer_position != 0:
@@ -605,7 +540,7 @@ class TensorboardLogger(SimulationHook):
         Extract the number of molecules and replicas from simulator.system upon simulation start.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         self.n_replicas = simulator.system.n_replicas
         self.n_molecules = simulator.system.n_molecules
@@ -617,7 +552,7 @@ class TensorboardLogger(SimulationHook):
         In the easiest case, information on group names, etc. is passed to the self._log_group auxiliary function.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         raise NotImplementedError
 
@@ -654,7 +589,7 @@ class TensorboardLogger(SimulationHook):
         Close the TensorBoard logger.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         self.writer.close()
 
@@ -677,7 +612,7 @@ class TemperatureLogger(TensorboardLogger):
         Log the systems temperatures at the given intervals.
 
         Args:
-            simulator (schnetpack.simulate.Simulator): Simulator class used in the molecular dynamics simulation.
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         if simulator.step % self.every_n_steps == 0:
             # Use the _log_group routine to log the systems temperatures

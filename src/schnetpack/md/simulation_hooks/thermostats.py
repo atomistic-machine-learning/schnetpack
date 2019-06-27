@@ -10,7 +10,7 @@ from schnetpack.md.utils import (
     YSWeights,
 )
 from schnetpack.md.integrators import RingPolymer
-from schnetpack.simulate.hooks import SimulationHook
+from schnetpack.md.simulation_hooks.basic_hooks import SimulationHook
 
 __all__ = [
     "ThermostatHook",
@@ -69,7 +69,7 @@ class ThermostatHook(SimulationHook):
         new thermostat.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         self.device = simulator.system.device
@@ -101,7 +101,7 @@ class ThermostatHook(SimulationHook):
         every new thermostat.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         # Apply thermostat
@@ -127,7 +127,7 @@ class ThermostatHook(SimulationHook):
         every new thermostat.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         # Apply thermostat
@@ -150,7 +150,7 @@ class ThermostatHook(SimulationHook):
         step, masses of the atoms, etc.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         pass
@@ -161,7 +161,7 @@ class ThermostatHook(SimulationHook):
         momenta of the system contained in simulator.system.momenta. Is called twice each simulation time step.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         raise NotImplementedError
@@ -194,7 +194,7 @@ class BerendsenThermostat(ThermostatHook):
         and the bath temperature.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         scaling = 1.0 + simulator.integrator.time_step / self.time_constant * (
@@ -247,7 +247,7 @@ class GLEThermostat(ThermostatHook):
         thermostat momenta and the mass factor.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         # Generate main matrices
@@ -264,7 +264,7 @@ class GLEThermostat(ThermostatHook):
         Read all GLE matrices from a file and check, whether they have the right dimensions.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         a_matrix, c_matrix = load_gle_matrices(self.gle_file)
@@ -294,7 +294,7 @@ class GLEThermostat(ThermostatHook):
         Args:
             a_matrix (np.array): Raw matrices containing friction friction acting on system (drift matrix).
             c_matrix (np.array): Raw matrices modulating the intensity of the random force (diffusion matrix).
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
 
         Returns:
@@ -346,7 +346,7 @@ class GLEThermostat(ThermostatHook):
         during the GLE dynamics.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
             free_particle_limit (bool): Initialize momenta according to free particle limit instead of a zero matrix
                                         (default=True).
@@ -372,7 +372,7 @@ class GLEThermostat(ThermostatHook):
         Perform the update of the system momenta according to the GLE thermostat.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         # Generate random noise
@@ -469,7 +469,7 @@ class PIGLETThermostat(GLEThermostat):
         freedom introduced by GLE.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
 
         Returns:
@@ -545,7 +545,7 @@ class LangevinThermostat(ThermostatHook):
         Initialize the Langevin coefficient matrices based on the system and simulator properties.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         # Initialize friction coefficients
@@ -568,7 +568,7 @@ class LangevinThermostat(ThermostatHook):
         Apply the stochastic Langevin thermostat to the systems momenta.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         # Get current momenta
@@ -657,7 +657,7 @@ class PILELocalThermostat(LangevinThermostat):
         be thermostatted, the suggested value of 1/time_constant is used.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         if type(simulator.integrator) is not RingPolymer:
@@ -758,7 +758,7 @@ class PILEGlobalThermostat(PILELocalThermostat):
         stochastic velocity rescaling equations.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         # Get current momenta
@@ -914,7 +914,7 @@ class NHCThermostat(ThermostatHook):
         seen by each chain link.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         # Determine integration step via multi step and Yoshida Suzuki weights
@@ -953,7 +953,7 @@ class NHCThermostat(ThermostatHook):
         Args:
             state_dimension (tuple): Size of the thermostat states. This is used to differentiate between the massive
                                      and the standard algorithm
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         self.masses = torch.ones(state_dimension, device=self.device)
@@ -1068,7 +1068,7 @@ class NHCThermostat(ThermostatHook):
         polymer.
 
         Args:
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         # Get current momenta
@@ -1182,7 +1182,7 @@ class NHCRingPolymerThermostat(NHCThermostat):
         Args:
             state_dimension (tuple): Size of the thermostat states. This is used to differentiate between the massive
                                      and the standard algorithm
-            simulator (schnetpack.simulate.simulator.Simulator): Main simulator class containing information on the
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
         # Multiply factor by number of replicas

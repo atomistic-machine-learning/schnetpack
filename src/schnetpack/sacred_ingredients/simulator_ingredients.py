@@ -2,9 +2,7 @@ import os
 import torch
 from sacred import Ingredient
 
-from schnetpack.simulate.simulator import Simulator
-from schnetpack.simulate.hooks import *
-from schnetpack.simulate.thermostats import *
+from schnetpack.md.simulation_hooks import *
 
 simulator_ingredient = Ingredient("simulator")
 
