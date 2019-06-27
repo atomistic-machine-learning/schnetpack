@@ -2,7 +2,7 @@ from schnetpack.md.calculators.calculators import QMCalculatorError, QMCalculato
 from schnetpack.md.utils import MDUnits
 from schnetpack.md.parsers.orca_parser import OrcaMainFileParser
 
-from schnetpack.data.definitions import Properties
+from schnetpack.atomistic import Properties
 
 import torch
 

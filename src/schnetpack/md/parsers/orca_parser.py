@@ -7,7 +7,7 @@ from ase import Atoms, units
 from tqdm import tqdm
 
 import schnetpack as spk
-from schnetpack.data import Properties
+from schnetpack.atomistic import Properties
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
