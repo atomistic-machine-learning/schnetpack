@@ -301,7 +301,6 @@ class TestEvaluation:
 
 
 class TestParsing:
-
     def test_parsing_script(self, xyz_path, db_path):
         parser = get_parsing_parser()
         args = parser.parse_args([xyz_path, db_path])
