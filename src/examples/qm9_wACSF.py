@@ -1,10 +1,9 @@
-import schnetpack.output_modules
+import schnetpack.atomistic.output_modules
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 
 import schnetpack as spk
-import schnetpack.atomistic as atm
 import schnetpack.representation as rep
 from schnetpack.datasets import *
 
@@ -18,8 +17,8 @@ val_loader = spk.data.AtomsLoader(val)
 
 # create model
 reps = rep.BehlerSFBlock()
-output = schnetpack.output_modules.ElementalAtomwise(reps.n_symfuncs)
-model = atm.AtomisticModel(reps, output)
+output = schnetpack.atomistic.output_modules.ElementalAtomwise(reps.n_symfuncs)
+model = schnetpack.atomistic.model.AtomisticModel(reps, output)
 
 # filter for trainable parameters (https://github.com/pytorch/pytorch/issues/679)
 trainable_params = filter(lambda p: p.requires_grad, model.parameters())

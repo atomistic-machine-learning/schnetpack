@@ -1,7 +1,5 @@
 import pytest
-from schnetpack.output_modules import Atomwise
-from schnetpack.atomistic import AtomisticModel
-
+from schnetpack.atomistic import AtomisticModel, Atomwise
 
 __all__ = [
     "properties",

@@ -1,10 +1,11 @@
 import numpy as np
-import schnetpack.nn
 import torch
-from schnetpack import nn as L
-from schnetpack.data import Structure
 from torch import nn as nn
 from torch.autograd import grad
+
+from schnetpack import nn as L, Structure
+
+__all__ = ["Atomwise", "ElementalAtomwise", "DipoleMoment", "ElementalDipoleMoment"]
 
 
 class Atomwise(nn.Module):

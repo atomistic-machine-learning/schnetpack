@@ -90,7 +90,7 @@ if __name__ == "__main__":
 
         # build output module
         if args.model == "schnet":
-            output_module = spk.output_modules.Atomwise(
+            output_module = schnetpack.atomistic.output_modules.Atomwise(
                 args.features,
                 aggregation_mode=args.aggregation_mode,
                 mean=mean[args.property],

@@ -1,5 +1,8 @@
-import torch.nn as nn
-from schnetpack.data import Structure
+from torch import nn as nn
+
+from schnetpack import Structure
+
+__all__ = ["AtomisticModel"]
 
 
 class ModelError(Exception):
@@ -40,19 +43,3 @@ class AtomisticModel(nn.Module):
         for output_model in self.output_modules:
             outs.update(output_model(inputs))
         return outs
-
-
-class Properties:
-    """
-    Collection of all available model properties.
-    """
-
-    energy = "energy"
-    forces = "forces"
-    dipole_moment = "dipole_moment"
-    total_dipole_moment = "total_dipole_moment"
-    polarizability = "polarizability"
-    iso_polarizability = "iso_polarizability"
-    at_polarizability = "at_polarizability"
-    charges = "charges"
-    energy_contributions = "energy_contributions"

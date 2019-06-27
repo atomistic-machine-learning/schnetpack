@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 
 import schnetpack.nn as snn
-from schnetpack.data import Structure, StatisticsAccumulator
+from schnetpack.data import StatisticsAccumulator
+from schnetpack import Structure
 
 
 class HDNNException(Exception):

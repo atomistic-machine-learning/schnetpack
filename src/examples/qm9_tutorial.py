@@ -2,6 +2,7 @@ import logging
 from torch.optim import Adam
 import os
 import schnetpack as spk
+import schnetpack.atomistic.model
 from schnetpack.datasets import QM9
 from schnetpack.train import Trainer, CSVHook, ReduceLROnPlateauHook
 from schnetpack.metrics import MeanAbsoluteError
@@ -21,7 +22,7 @@ dataset = QM9("data/qm9.db", properties=[QM9.U0])
 train, val, test = spk.train_test_split(
     dataset, 1000, 100, os.path.join(model_dir, "split.npz")
 )
-train_loader = spk.AtomsLoader(train, batch_size=64)
+train_loader = spk.AtomsLoader(train, batch_size=64, shuffle=True)
 val_loader = spk.AtomsLoader(val, batch_size=64)
 
 # statistics
@@ -41,7 +42,7 @@ output_modules = [
         atomref=atomrefs[QM9.U0],
     )
 ]
-model = spk.AtomisticModel(representation, output_modules)
+model = schnetpack.atomistic.model.AtomisticModel(representation, output_modules)
 
 # build optimizer
 optimizer = Adam(model.parameters(), lr=1e-4)

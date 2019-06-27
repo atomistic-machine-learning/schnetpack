@@ -62,6 +62,7 @@ class QM9(DownloadableAtomsData):
         properties=None,
         collect_triples=False,
         remove_uncharacterized=False,
+        **kwargs
     ):
 
         self.remove_uncharacterized = remove_uncharacterized
@@ -110,6 +111,7 @@ class QM9(DownloadableAtomsData):
             download=download,
             available_properties=available_properties,
             units=units,
+            **kwargs
         )
 
     def create_subset(self, idx):
