@@ -84,7 +84,12 @@ if __name__ == "__main__":
         # get statistics
         logging.info("calculate statistics...")
         mean, stddev = get_statistics(
-            split_path, train_loader, train_args, atomref, logging=logging
+            split_path,
+            train_loader,
+            train_args,
+            atomref,
+            logging=logging,
+            per_atom=True,
         )
 
         # build representation
@@ -92,7 +97,7 @@ if __name__ == "__main__":
 
         # build output module
         if args.model == "schnet":
-            output_module = schnetpack.atomistic.output_modules.Atomwise(
+            output_module = spk.atomistic.output_modules.Atomwise(
                 args.features,
                 aggregation_mode=args.aggregation_mode,
                 mean=mean[args.property],

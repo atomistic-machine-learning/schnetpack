@@ -2,7 +2,7 @@ from sacred import Ingredient
 import os
 import torch
 
-from schnetpack.md.calculators import SchnetPackCalculator
+from schnetpack.md.calculators.schnet_calculator import SchnetPackCalculator
 from schnetpack.md.utils import MDUnits
 
 calculator_ingredient = Ingredient("calculator")

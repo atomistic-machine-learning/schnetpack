@@ -1,214 +1,395 @@
-#!/usr/bin/env python
 import argparse
+from shutil import rmtree
+from ase import io
+import torch
 import logging
 import os
-import torch
 
-import schnetpack as spk
-import schnetpack.utils.spk_utils
+from schnetpack.md import Simulator, System
+from schnetpack.md.simulation_hooks import (
+    RemoveCOMMotion,
+    FileLogger,
+    TemperatureLogger,
+    Checkpoint,
+)
+from schnetpack.md.parsers.md_input_parser import *
 
-logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
+try:
+    import oyaml as yaml
+except ImportError:
+    import yaml
 
 
-class SpecialOption(argparse.Action):
-    """
-    Special argparse option. If option is not called, False is stored.
-    If the option is called without argument, the value in const is provided as default.
-    If the option is called with an argumeny, this argument is used as the value.
-    """
+def read_options(yamlpath):
+    with open(yamlpath, "r") as tf:
+        tradoffs = yaml.load(tf)
 
-    def __init__(
-        self,
-        option_strings,
-        const,
-        dest,
-        type=type,
-        default=False,
-        required=False,
-        help=None,
-    ):
-        super(SpecialOption, self).__init__(
-            option_strings=option_strings,
-            const=const,
-            dest=dest,
-            type=type,
-            nargs="?",
-            default=default,
-            required=required,
-            help=help,
+    logging.info("Read options from {:s}.".format(yamlpath))
+    return tradoffs
+
+
+def save_options(options, yamlpath):
+    with open(yamlpath, "w") as tf:
+        yaml.dump(options, tf, default_flow_style=False)
+
+
+class MDInitializer:
+    def __init__(self, config):
+        self.config = config
+
+        # Setup containers
+        self.device = None
+        self.simulation_dir = None
+        self.integrator = None
+        self.system = None
+        self.calculator = None
+        self.restart = False
+        self.load_system_state = False
+        self.n_steps = None
+        self.hooks = []
+
+        # Initialize device
+        SetupDevice(self)
+
+        # Setup seed
+        SetupSeed(self)
+
+        # Setup directories
+        SetupDirectories(self)
+
+        # Setup the system, including initial conditions
+        SetupSystem(self)
+
+        # Get the calculator
+        SetupCalculator(self)
+
+        # Get the integrator
+        SetupDynamics(self)
+
+        # Get bias potentials if applicable
+        SetupBiasPotential(self)
+
+        # Setup Logging
+        SetupLogging(self)
+
+        # Store options
+        save_options(self.config, os.path.join(self.simulation_dir, "config.yaml"))
+
+    def build_simulator(self):
+
+        simulation = Simulator(
+            self.system, self.integrator, self.calculator, self.hooks
         )
 
-    def __call__(self, parser, namespace, values, option_string=None):
-        setattr(namespace, self.dest, values)
+        # If requested, read restart data
+        if self.restart:
+            state_dict = torch.load(self.restart)
+            simulation.restart(state_dict, soft=False)
+            logging.info(f"Restarting simulation from {self.restart}...")
+        elif self.load_system_state:
+            state_dict = torch.load(self.load_system_state)
+            simulation.load_system_state(state_dict)
+            logging.info(f"Loaded system state from {self.load_system_state}...")
+
+        return simulation
 
 
-def get_parser():
-    """ Setup parser for command line arguments """
-    main_parser = argparse.ArgumentParser()
+class SetupBlock:
+    default_options = {}
+    target_block = None
 
-    # General commands
-    main_parser.add_argument("molecule_path", help="Initial geometry")
-    main_parser.add_argument("model_path", help="Path of trained model")
-    main_parser.add_argument("simulation_dir", help="Path to store MD data")
-    main_parser.add_argument(
-        "--device", help="Choose between 'cpu' and 'cuda'", default="cpu"
-    )
+    def __init__(self, md_initializer):
+        self.target_config_block = self._get_target_block(md_initializer)
+        self._load_defaults()
+        self._setup(md_initializer)
 
-    # Optimization:
-    main_parser.add_argument(
-        "--optimize",
-        const=1000,
-        action=SpecialOption,
-        type=int,
-        help="Optimize geometry. A default of 1000 steps is used.",
-    )
+    def _load_defaults(self):
+        for option in self.default_options:
+            if option not in self.target_config_block:
+                self.target_config_block[option] = self.default_options[option]
 
-    # Normal modes
-    main_parser.add_argument(
-        "--normal_modes", help="Compute normal modes", action="store_true"
-    )
+            elif type(self.default_options[option]) == dict:
+                for sub_option in self.default_options[option]:
+                    if sub_option not in self.target_config_block[option]:
+                        self.target_config_block[option][
+                            sub_option
+                        ] = self.default_options[option][sub_option]
 
-    # Molecular dynamics options
-    main_parser.add_argument(
-        "--equilibrate",
-        const=10000,
-        action=SpecialOption,
-        type=int,
-        help="Equilibrate molecule for molecular dynamics. A default of 10000 steps is used.",
-    )
-    main_parser.add_argument(
-        "--production",
-        const=10000,
-        action=SpecialOption,
-        type=int,
-        help="Production molecular dynamics (default: %(default)s)",
-    )
-    main_parser.add_argument(
-        "--interval",
-        type=int,
-        default=100,
-        help="Log trajectory every N steps (default: %(default)s)",
-    )
-    main_parser.add_argument(
-        "--time_step",
-        type=float,
-        default=0.5,
-        help="Timestep in fs (default: %(default)s)",
-    )
+    def _get_target_block(self, md_initializer):
+        if self.target_block is not None:
+            if self.target_block in md_initializer.config:
+                return md_initializer.config[self.target_block]
+            else:
+                return None
+        else:
+            return md_initializer.config
 
-    # Temperature and bath options
-    main_parser.add_argument(
-        "--temp_init",
-        type=float,
-        default=300.0,
-        help="Initial temperature used for molecular"
-        " dynamics in K. (default: %(default)s)",
-    )
-    main_parser.add_argument(
-        "--temp_bath",
-        type=float,
-        default=None,
-        help="Temperature of bath. If None is given, NVE"
-        " dynamics are run. (default: %(default)s)",
-    )
+    def _setup(self, md_initializer):
+        raise NotImplementedError
 
-    main_parser.add_argument(
-        "--single_point",
-        action="store_true",
-        help="Perform a single point prediction on the "
-        "current geometry (energies and forces).",
-    )
-    main_parser.add_argument(
-        "--energy",
-        type=str,
-        help="Property name to the energy property in the dataset which has been "
-        "used for training the model",
-        default="energy",
-    )
-    main_parser.add_argument(
-        "--forces",
-        type=str,
-        help="Property name to the forces property in the dataset which has been "
-        "used for training the model",
-        default="forces",
-    )
 
-    return main_parser
+class SetupDirectories(SetupBlock):
+    default_options = {"simulation_dir": "simulation_dir", "overwrite": True}
+
+    def _setup(self, md_initializer):
+
+        simulation_dir = self.target_config_block["simulation_dir"]
+        overwrite = self.target_config_block["overwrite"]
+
+        logging.info("Create model directory")
+
+        if simulation_dir is None:
+            raise ValueError("Config `simulation_dir` has to be set!")
+
+        if os.path.exists(simulation_dir) and not overwrite:
+            raise ValueError(
+                "Model directory already exists (set overwrite flag?):", simulation_dir
+            )
+
+        if os.path.exists(simulation_dir) and overwrite:
+            rmtree(simulation_dir)
+
+        if not os.path.exists(simulation_dir):
+            os.makedirs(simulation_dir)
+
+        md_initializer.simulation_dir = simulation_dir
+
+
+class SetupSeed(SetupBlock):
+    default_options = {"seed": None}
+
+    def _setup(self, md_initializer):
+        seed = self.target_config_block["seed"]
+        from schnetpack.utils import set_random_seed
+
+        set_random_seed(seed)
+
+
+class SetupDevice(SetupBlock):
+    default_options = {"device": "cpu"}
+
+    def _setup(self, md_initializer):
+        device = torch.device(md_initializer.config["device"])
+        md_initializer.device = device
+
+
+class SetupSystem(SetupBlock):
+    default_options = {
+        "n_replicas": 1,
+        "molecule_file": "dummy.xyz",
+        "initializer": {
+            InitialConditionsInit.kind: "maxwell-boltzmann",
+            "temperature": 300,
+            "remove_translation": True,
+            "remove_rotation": True,
+        },
+    }
+    target_block = "system"
+
+    def _setup(self, md_initializer):
+        molecule_file = self.target_config_block["molecule_file"]
+        n_replicas = self.target_config_block["n_replicas"]
+
+        # Read in the molecular structures
+        ase_molecules = io.read(molecule_file, index=":")
+
+        # Set up the system
+        system = System(n_replicas, device=md_initializer.device)
+        system.load_molecules(ase_molecules)
+
+        # Apply initial conditions if requested
+        if "initializer" in self.target_config_block:
+            initializer = self.target_config_block["initializer"]
+            initconds = InitialConditionsInit(initializer)
+
+            if initconds.initialized is not None:
+                initconds.initialized.initialize_system(system)
+
+        md_initializer.system = system
+
+
+class SetupCalculator(SetupBlock):
+    default_options = {
+        CalculatorInit.kind: "schnet",
+        "required_properties": ["energy", "forces"],
+        "force_handle": "forces",
+        "position_conversion": "Angstrom",
+        "force_conversion": "kcal/mol/Angstrom",
+        "property_conversion": {},
+    }
+    target_block = "calculator"
+
+    def _setup(self, md_initializer):
+        calculator = self.target_config_block
+        calculator_dict = {}
+
+        # Load model, else get options
+        for key in calculator:
+            if key == "model_file":
+                model = self._load_model(calculator["model_file"]).to(
+                    md_initializer.device
+                )
+                calculator_dict["model"] = model
+            else:
+                calculator_dict[key] = calculator[key]
+
+        calculator = CalculatorInit(calculator_dict).initialized
+
+        md_initializer.calculator = calculator
+
+    @staticmethod
+    def _load_model(model_path):
+        # If model is a directory, search for best_model file
+        if os.path.isdir(model_path):
+            model_path = os.path.join(model_path, "best_model")
+        logging.info("Loaded model from {:s}".format(model_path))
+        model = torch.load(model_path)
+        return model
+
+
+class SetupDynamics(SetupBlock):
+    default_options = {
+        "integrator": {IntegratorInit.kind: "verlet", "time_step": 0.5},
+        "n_steps": 10000,
+        "restart": False,
+        "load_system_state": False,
+    }
+    target_block = "dynamics"
+
+    def _setup(self, md_initializer):
+        # Build the integrator
+        integrator_config = self.target_config_block["integrator"]
+
+        if integrator_config[IntegratorInit.kind] == "ring_polymer":
+            integrator_config["n_beads"] = md_initializer.system.n_replicas
+
+        md_initializer.integrator = IntegratorInit(integrator_config).initialized
+
+        # Add a thermostat if requested
+        if "thermostat" in self.target_config_block:
+            thermostat_config = self.target_config_block["thermostat"]
+            thermostat = ThermostatInit(thermostat_config).initialized
+            if thermostat is not None:
+                md_initializer.hooks += [thermostat]
+
+        # Remove the motion of the center of motion
+        if "remove_com_motion" in self.target_config_block:
+            remove_com_config = self.target_config_block["remove_com_motion"]
+
+            if (
+                "every_n_steps" not in remove_com_config
+                or "remove_rotation" not in remove_com_config
+            ):
+                raise InitializerError("Missing options in remove_com_motion")
+            else:
+                md_initializer.hooks += [
+                    RemoveCOMMotion(
+                        every_n_steps=remove_com_config["every_n_steps"],
+                        remove_rotation=remove_com_config["remove_rotation"],
+                    )
+                ]
+
+        md_initializer.n_steps = self.target_config_block["n_steps"]
+        md_initializer.restart = self.target_config_block["restart"]
+        md_initializer.load_system_state = self.target_config_block["load_system_state"]
+
+
+class SetupBiasPotential(SetupBlock):
+    default_options = {}
+    target_block = "bias_potential"
+
+    def _setup(self, md_initializer):
+
+        if "bias_potential" in md_initializer.config:
+            bias_potential = self.target_config_block
+
+            if bias_potential[BiasPotentialInit.kind] == "metadyn":
+                dummy_potential = {}
+                colvars = []
+                for k, v in bias_potential.items():
+                    if k == "colvars":
+                        for cv in bias_potential[k]:
+                            cv = cv.split()
+                            cv_type = cv[0].lower()
+                            cv_inputs = [int(x) for x in cv[1:3]]
+                            cv_width = float(cv[3])
+                            colvars.append(
+                                ColVars.available[cv_type](*cv_inputs, cv_width)
+                            )
+                        dummy_potential["collective_variables"] = colvars
+                    else:
+                        dummy_potential[k] = v
+
+                md_initializer.hooks += [BiasPotentialInit(dummy_potential).initialized]
+            else:
+                md_initializer.hooks += [BiasPotentialInit(bias_potential).initialized]
+
+
+class SetupLogging(SetupBlock):
+    default_options = {
+        "file_logger": {
+            "buffer_size": 100,
+            "streams": ["molecules", "properties"],
+            "every_n_steps": 1,
+        },
+        "temperature_logger": 100,
+        "write_checkpoints": 1000,
+    }
+    target_block = "logging"
+
+    def _setup(self, md_initializer):
+
+        # Convert restart to proper boolean:
+        if md_initializer.restart is None or not md_initializer.restart:
+            restart = False
+        else:
+            restart = True
+
+        if "file_logger" in self.target_config_block:
+            logging_file = os.path.join(
+                md_initializer.simulation_dir, "simulation.hdf5"
+            )
+            file_logging_config = self.target_config_block["file_logger"]
+
+            data_streams = get_data_streams(file_logging_config["streams"])
+
+            md_initializer.hooks += [
+                FileLogger(
+                    logging_file,
+                    file_logging_config["buffer_size"],
+                    data_streams=data_streams,
+                    restart=restart,
+                    every_n_steps=file_logging_config["every_n_steps"],
+                )
+            ]
+
+        if "temperature_logger" in self.target_config_block:
+            temperature_dir = os.path.join(md_initializer.simulation_dir, "temperature")
+            md_initializer.hooks += [
+                TemperatureLogger(
+                    temperature_dir,
+                    every_n_steps=self.target_config_block["temperature_logger"],
+                )
+            ]
+
+        if "write_checkpoints" in self.target_config_block:
+            chk_file = os.path.join(md_initializer.simulation_dir, "checkpoint.chk")
+            md_initializer.hooks += [
+                Checkpoint(
+                    chk_file,
+                    every_n_steps=self.target_config_block["write_checkpoints"],
+                )
+            ]
 
 
 if __name__ == "__main__":
-
-    parser = get_parser()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("md_input")
     args = parser.parse_args()
-    argparse_dict = vars(args)
-    jsonpath = os.path.join(args.simulation_dir, "args.json")
 
-    # Set up directory
-    if not os.path.exists(args.simulation_dir):
-        os.makedirs(args.simulation_dir)
+    config = read_options(args.md_input)
 
-    # Store command line args
-    schnetpack.utils.spk_utils.to_json(jsonpath, argparse_dict)
+    mdinit = MDInitializer(config)
+    simulation = mdinit.build_simulator()
 
-    # Load the model
-    ml_model = torch.load(args.model_path)
-    logging.info("Loaded model.")
-
-    logging.info(
-        "The model you built has: {:d} parameters".format(
-            schnetpack.utils.spk_utils.compute_params(ml_model)
-        )
-    )
-
-    # Initialize the ML ase interface
-    ml_calculator = spk.interfaces.AseInterface(
-        args.molecule_path,
-        ml_model,
-        args.simulation_dir,
-        args.device,
-        args.energy,
-        args.forces,
-    )
-    logging.info("Initialized ase driver")
-
-    # Perform the requested simulations
-
-    if args.single_point:
-        logging.info("Single point prediction...")
-        ml_calculator.calculate_single_point()
-
-    if args.optimize:
-        logging.info("Optimizing geometry...")
-        ml_calculator.optimize(steps=args.optimize)
-
-    if args.normal_modes:
-        if not args.optimize:
-            logging.warning(
-                "Computing normal modes without optimizing the geometry makes me a sad schnetpack..."
-            )
-        logging.info("Computing normal modes...")
-        ml_calculator.compute_normal_modes()
-
-    if args.equilibrate:
-        logging.info("Equilibrating the system...")
-        if args.temp_bath is None:
-            raise ValueError("Please supply bath temperature for equilibration")
-        ml_calculator.init_md(
-            "equilibration",
-            time_step=args.time_step,
-            interval=args.interval,
-            temp_bath=args.temp_bath,
-            temp_init=args.temp_init,
-        )
-        ml_calculator.run_md(args.equilibrate)
-
-    if args.production:
-        logging.info("Running production dynamics...")
-        ml_calculator.init_md(
-            "production",
-            time_step=args.time_step,
-            interval=args.interval,
-            temp_bath=args.temp_bath,
-            temp_init=args.temp_init,
-        )
-        ml_calculator.run_md(args.production)
+    simulation.simulate(mdinit.n_steps)
