@@ -12,7 +12,6 @@ from schnetpack import md
 from schnetpack import metrics
 from schnetpack import nn
 from schnetpack import representation
-from schnetpack import sacred_ingredients
 from schnetpack import train
 from schnetpack import utils
 from schnetpack.representation import SchNet
