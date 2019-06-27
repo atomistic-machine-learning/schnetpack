@@ -49,7 +49,7 @@ if __name__ == "__main__":
     ani1 = spk.datasets.ANI1(
         args.datapath,
         download=True,
-        properties=[train_args.property],
+        load_only=[train_args.property],
         collect_triples=args.model == "wacsf",
     )
 

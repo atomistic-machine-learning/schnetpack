@@ -2,12 +2,14 @@ import pytest
 import torch
 import numpy as np
 import os
+from ase.db import connect
 from .fixtures import *
 from schnetpack.utils import (
     get_loaders,
     get_statistics,
     get_main_parser,
     add_subparsers,
+    get_parsing_parser,
     setup_run,
     get_trainer,
     simple_loss_fn,
@@ -20,6 +22,7 @@ import schnetpack as spk
 from numpy.testing import assert_almost_equal
 from argparse import Namespace
 from shutil import rmtree
+from scripts.schnetpack_parse import main
 
 
 class TestScripts:
@@ -295,3 +298,16 @@ class TestEvaluation:
                 spk.metrics.MeanAbsoluteError("energy_U0", model_output="energy_U0")
             ],
         )
+
+
+class TestParsing:
+    def test_parsing_script(self, xyz_path, db_path):
+        parser = get_parsing_parser()
+        args = parser.parse_args([xyz_path, db_path])
+
+        # run script
+        main(args)
+
+        # test results
+        with connect(db_path) as conn:
+            assert conn.__len__() == 3

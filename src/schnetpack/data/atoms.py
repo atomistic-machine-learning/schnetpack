@@ -35,6 +35,26 @@ class AtomsDataError(Exception):
 
 
 class AtomsData(Dataset):
+    """
+    Base class for atomistic datasets.
+    The data is stored in the referenced ase database and can be used to load data
+    with the pytorch dataloader.
+
+    Args:
+        dbpath (str): path to directory containing database.
+        subset (list, optional): indices to subset. Set to None for entire database.
+        available_properties (list, optional): complete set of physical properties
+            that are contained in the database.
+        load_only (list, optional): reduced set of properties to be loaded
+        units (list, optional): definition of units for all available properties
+        environment_provider (spk.environment.BaseEnvironmentProvider): define how
+            neighborhood is calculated
+            (default=spk.environment.SimpleEnvironmentProvider).
+        collect_triples (bool, optional): Set to True if angular features are needed.
+        center_positions (bool): subtract center of mass from all positions
+            (default=True)
+    """
+
     ENCODING = "utf-8"
 
     def __init__(
@@ -47,7 +67,6 @@ class AtomsData(Dataset):
         environment_provider=SimpleEnvironmentProvider(),
         collect_triples=False,
         center_positions=True,
-        load_charge=False,
     ):
         self.dbpath = dbpath
         self.subset = subset
@@ -61,7 +80,6 @@ class AtomsData(Dataset):
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
         self.centered = center_positions
-        self.load_charge = load_charge
 
     def get_available_properties(self, available_properties):
         """
@@ -125,7 +143,6 @@ class AtomsData(Dataset):
             environment_provider=self.environment_provider,
             collect_triples=self.collect_triples,
             center_positions=self.centered,
-            load_charge=self.load_charge,
             available_properties=self.available_properties,
         )
 
@@ -269,18 +286,6 @@ class AtomsData(Dataset):
 
             properties[pname] = torch.FloatTensor(prop)
 
-        if self.load_charge:
-            if Structure.charge in row.data.keys():
-                shape = row.data["_shape_" + Structure.charge]
-                dtype = row.data["_dtype_" + Structure.charge]
-                prop = np.frombuffer(b64decode(row.data[Structure.charge]), dtype=dtype)
-                prop = prop.reshape(shape)
-                properties[Structure.charge] = torch.FloatTensor(prop)
-            else:
-                properties[Structure.charge] = torch.FloatTensor(
-                    np.array([0.0], dtype=np.float32)
-                )
-
         # extract/calculate structure
         properties[Structure.Z] = torch.LongTensor(at.numbers.astype(np.int))
         positions = at.positions.astype(np.float32)
@@ -343,7 +348,6 @@ class DownloadableAtomsData(AtomsData):
         environment_provider=SimpleEnvironmentProvider(),
         collect_triples=False,
         center_positions=True,
-        load_charge=False,
         download=False,
     ):
 
@@ -356,7 +360,6 @@ class DownloadableAtomsData(AtomsData):
             environment_provider=environment_provider,
             collect_triples=collect_triples,
             center_positions=center_positions,
-            load_charge=load_charge,
         )
         if download:
             self.download()

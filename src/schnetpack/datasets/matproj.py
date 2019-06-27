@@ -23,7 +23,7 @@ class MaterialsProject(DownloadableAtomsData):
         apikey (str, optional): materials project key needed to download the data.
         download (bool, optional): enable downloading if database does not exists.
         subset (list, optional): indices to subset. Set to None for entire database.
-        properties (list, optional): properties in mp, e.g. formation_energy_per_atom.
+        load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
 
     """
@@ -41,7 +41,7 @@ class MaterialsProject(DownloadableAtomsData):
         apikey=None,
         download=True,
         subset=None,
-        properties=None,
+        load_only=None,
         collect_triples=False,
     ):
 
@@ -62,7 +62,7 @@ class MaterialsProject(DownloadableAtomsData):
         super(MaterialsProject, self).__init__(
             dbpath=dbpath,
             subset=subset,
-            load_only=properties,
+            load_only=load_only,
             environment_provider=environment_provider,
             collect_triples=collect_triples,
             available_properties=available_properties,
@@ -79,7 +79,7 @@ class MaterialsProject(DownloadableAtomsData):
             cutoff=self.cutoff,
             download=False,
             subset=subidx,
-            properties=self.load_only,
+            load_only=self.load_only,
             collect_triples=self.collect_triples,
         )
 

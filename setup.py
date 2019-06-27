@@ -24,7 +24,7 @@ setup(
         "src/scripts/schnetpack_ani1.py",
         "src/scripts/schnetpack_load.py",
         "src/sacred_scripts/spk_md.py",
-        "src/sacred_scripts/spk_parse.py",
+        "src/scripts/schnetpack_parse.py",
         "src/scripts/schnetpack_omdb.py",
     ],
     package_dir={"": "src"},
