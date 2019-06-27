@@ -1,5 +1,6 @@
 from schnetpack.structure import Structure
 from schnetpack.atomistic import AtomisticModel
+from schnetpack.data import *
 
 from schnetpack import atomistic
 from schnetpack import data
