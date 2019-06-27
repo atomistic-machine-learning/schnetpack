@@ -2,6 +2,14 @@ import torch
 
 from schnetpack.md.simulation_hooks import SimulationHook
 
+__all__ = [
+    'BiasPotential',
+    'AcceleratedMD',
+    'MetaDyn',
+    'CollectiveVariable',
+    'BondColvar'
+]
+
 
 class BiasPotential(SimulationHook):
     """
