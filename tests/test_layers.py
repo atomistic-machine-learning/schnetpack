@@ -8,7 +8,7 @@ from torch.nn.modules import MSELoss
 
 from schnetpack.nn.cfconv import CFConv
 from schnetpack.representation.schnet import SchNet, SchNetInteraction
-from schnetpack.data import Structure
+from schnetpack import Structure
 from schnetpack.nn.acsf import GaussianSmearing
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.nn.base import Dense, GetItem, ScaleShift, Standardize, Aggregate

@@ -1,4 +1,4 @@
-from schnetpack.data import Structure
+from schnetpack import Structure
 from schnetpack.md.utils import MDUnits
 
 

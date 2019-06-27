@@ -2,6 +2,7 @@ import os
 import logging
 from torch.optim import Adam
 import schnetpack as spk
+import schnetpack.atomistic.model
 from schnetpack.train import Trainer, CSVHook, ReduceLROnPlateauHook
 from schnetpack.metrics import MeanAbsoluteError
 from schnetpack.metrics import mse_loss
@@ -46,7 +47,7 @@ output_modules = [
         negative_dr=True,
     )
 ]
-model = spk.AtomisticModel(representation, output_modules)
+model = schnetpack.atomistic.model.AtomisticModel(representation, output_modules)
 
 # build optimizer
 optimizer = Adam(params=model.parameters(), lr=1e-4)

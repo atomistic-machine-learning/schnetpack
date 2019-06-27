@@ -6,7 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 
 logger = logging.getLogger(__name__)
 
-from .definitions import Structure
+from schnetpack import Structure
 from .stats import StatisticsAccumulator
 
 __all__ = ["AtomsLoader"]

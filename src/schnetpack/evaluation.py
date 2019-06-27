@@ -1,7 +1,7 @@
 import numpy as np
 from ase.db import connect
 from ase import Atoms
-from schnetpack.atomistic import Structure
+from schnetpack import Structure
 
 
 class Evaluator:

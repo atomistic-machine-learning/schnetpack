@@ -4,7 +4,7 @@ from ase import units
 import h5py
 import logging
 import json
-from schnetpack.data import Structure
+from schnetpack import Structure
 
 
 class MDUnits:

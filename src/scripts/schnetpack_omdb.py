@@ -4,7 +4,7 @@ import os
 import torch
 
 import schnetpack as spk
-import schnetpack.output_modules
+import schnetpack.atomistic.output_modules
 from schnetpack.datasets import OrganicMaterialsDatabase
 from schnetpack.utils.script_utils import (
     setup_run,
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     # build dataset
     logging.info("OMDB will be loaded...")
     omdb = spk.datasets.OrganicMaterialsDatabase(
-        args.datapath, args.cutoff, download=True, properties=[train_args.property]
+        args.datapath, args.cutoff, download=True, load_only=[train_args.property]
     )
 
     # get atomrefs
@@ -75,7 +75,7 @@ if __name__ == "__main__":
 
         # build output module
         if args.model == "schnet":
-            output_module = schnetpack.output_modules.Atomwise(
+            output_module = schnetpack.atomistic.output_modules.Atomwise(
                 args.features,
                 aggregation_mode=args.aggregation_mode,
                 mean=mean[args.property],

@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from schnetpack.data import Structure
+from schnetpack import Structure
 from schnetpack.nn import shifted_softplus, Dense
 
 

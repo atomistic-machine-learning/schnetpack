@@ -3,7 +3,7 @@ import warnings
 import numpy as np
 import torch
 
-from schnetpack.data import Structure
+from schnetpack import Structure
 
 __all__ = [
     "Metric",
