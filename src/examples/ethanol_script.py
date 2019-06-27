@@ -4,8 +4,8 @@ from torch.optim import Adam
 import schnetpack as spk
 import schnetpack.atomistic.model
 from schnetpack.train import Trainer, CSVHook, ReduceLROnPlateauHook
-from schnetpack.metrics import MeanAbsoluteError
-from schnetpack.metrics import mse_loss
+from schnetpack.train.metrics import MeanAbsoluteError
+from schnetpack.train.metrics import mse_loss
 
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))

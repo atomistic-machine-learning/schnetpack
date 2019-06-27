@@ -5,6 +5,7 @@ import torch
 from ase.data import atomic_numbers
 
 import schnetpack as spk
+import schnetpack.train.metrics
 from schnetpack.datasets import MD17
 from schnetpack.atomistic.output_modules import ElementalAtomwise
 from schnetpack.utils.script_utils import (
@@ -56,10 +57,14 @@ if __name__ == "__main__":
 
     # define metrics
     metrics = [
-        spk.metrics.MeanAbsoluteError(MD17.energy, MD17.energy),
-        spk.metrics.RootMeanSquaredError(MD17.energy, MD17.energy),
-        spk.metrics.MeanAbsoluteError(MD17.forces, MD17.forces, element_wise=True),
-        spk.metrics.RootMeanSquaredError(MD17.forces, MD17.forces, element_wise=True),
+        schnetpack.train.metrics.MeanAbsoluteError(MD17.energy, MD17.energy),
+        schnetpack.train.metrics.RootMeanSquaredError(MD17.energy, MD17.energy),
+        schnetpack.train.metrics.MeanAbsoluteError(
+            MD17.forces, MD17.forces, element_wise=True
+        ),
+        schnetpack.train.metrics.RootMeanSquaredError(
+            MD17.forces, MD17.forces, element_wise=True
+        ),
     ]
 
     # build dataset

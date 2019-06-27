@@ -5,7 +5,7 @@ import os
 import torch
 from ase.data import atomic_numbers
 
-import schnetpack as spk
+import schnetpack.train.metrics
 from schnetpack.datasets import QM9
 from schnetpack.utils.script_utils import (
     get_main_parser,
@@ -66,8 +66,12 @@ if __name__ == "__main__":
 
     # define metrics
     metrics = [
-        spk.metrics.MeanAbsoluteError(train_args.property, train_args.property),
-        spk.metrics.RootMeanSquaredError(train_args.property, train_args.property),
+        schnetpack.train.metrics.MeanAbsoluteError(
+            train_args.property, train_args.property
+        ),
+        schnetpack.train.metrics.RootMeanSquaredError(
+            train_args.property, train_args.property
+        ),
     ]
 
     # build dataset

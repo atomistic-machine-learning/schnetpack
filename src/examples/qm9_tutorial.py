@@ -5,8 +5,8 @@ import schnetpack as spk
 import schnetpack.atomistic.model
 from schnetpack.datasets import QM9
 from schnetpack.train import Trainer, CSVHook, ReduceLROnPlateauHook
-from schnetpack.metrics import MeanAbsoluteError
-from schnetpack.metrics import build_mse_loss
+from schnetpack.train.metrics import MeanAbsoluteError
+from schnetpack.train.metrics import build_mse_loss
 
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
