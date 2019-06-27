@@ -74,7 +74,7 @@ if __name__ == "__main__":
 
         # build output module
         if args.model == "schnet":
-            output_modules = schnetpack.atomistic.output_modules.Atomwise(
+            output_modules = schnetpack.atomistic.Atomwise(
                 args.features,
                 mean=mean[args.property],
                 stddev=stddev[args.property],
@@ -84,7 +84,7 @@ if __name__ == "__main__":
             )
         elif args.model == "wacsf":
             elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
-            output_modules = schnetpack.atomistic.output_modules.ElementalAtomwise(
+            output_modules = schnetpack.atomistic.ElementalAtomwise(
                 n_in=representation.n_symfuncs,
                 n_hidden=args.n_nodes,
                 n_layers=args.n_layers,

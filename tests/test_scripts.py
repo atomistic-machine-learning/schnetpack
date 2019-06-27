@@ -256,7 +256,7 @@ class TestEvaluation:
             split="test",
         )
         repr = get_representation(args)
-        output_module = spk.Atomwise(args.features, property="energy_U0")
+        output_module = spk.atomistic.Atomwise(args.features, property="energy_U0")
         model = get_model(repr, output_module)
 
         evaluate(

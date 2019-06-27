@@ -21,10 +21,13 @@ import torch
 from ase.db import connect
 from torch.utils.data import Dataset
 
+from schnetpack import Structure
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
 from .partitioning import train_test_split
 
 logger = logging.getLogger(__name__)
+
+__all__ = ["AtomsData", "AtomsDataError", "DownloadableAtomsData"]
 
 
 class AtomsDataError(Exception):
@@ -379,24 +382,3 @@ class DownloadableAtomsData(AtomsData):
         To be implemented in deriving classes.
         """
         raise NotImplementedError
-
-
-class Structure:
-    """
-    Keys to access structure properties in `schnetpack.data.AtomsData`
-    """
-
-    Z = "_atomic_numbers"
-    charge = "_charge"
-    atom_mask = "_atom_mask"
-    R = "_positions"
-    cell = "_cell"
-    pbc = "_pbc"
-    neighbors = "_neighbors"
-    neighbor_mask = "_neighbor_mask"
-    cell_offset = "_cell_offset"
-    neighbor_pairs_j = "_neighbor_pairs_j"
-    neighbor_pairs_k = "_neighbor_pairs_k"
-    neighbor_pairs_mask = "_neighbor_pairs_mask"
-    neighbor_offsets_j = "_neighbor_offsets_j"
-    neighbor_offsets_k = "_neighbor_offsets_k"

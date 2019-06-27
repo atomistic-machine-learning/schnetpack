@@ -3,6 +3,7 @@ import torch
 from torch import nn as nn
 from torch.autograd import grad
 
+import schnetpack
 from schnetpack import nn as L, Structure
 
 __all__ = ["Atomwise", "ElementalAtomwise", "DipoleMoment", "ElementalDipoleMoment"]

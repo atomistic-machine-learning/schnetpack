@@ -3,7 +3,7 @@ import schnetpack as spk
 from ase.data import atomic_numbers
 import torch.nn as nn
 import schnetpack.utils.spk_utils
-from schnetpack import AtomisticModel
+from schnetpack.atomistic import AtomisticModel
 from schnetpack.nn.cutoff import get_cutoff_by_string
 
 
