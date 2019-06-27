@@ -161,7 +161,7 @@ class IntegratorInit(Initializer):
         'verlet': OrderedDict({'time_step': float}),
         'ring_polymer': OrderedDict({'n_beads': int,
                                      'time_step': float,
-                                     'ring_polymer_temperature': float})
+                                     'temperature': float})
     }
 
 
@@ -229,9 +229,9 @@ class LoggerStreams:
     Auxiliary class to provide short strings identifying the different available data streams for the FileLogger hook.
     """
     available = {
-        'molecules': logging_hooks.MoleculeStream,
-        'properties': logging_hooks.PropertyStream,
-        'dynamic': logging_hooks.SimulationStream
+        'molecules': logging_hooks.MoleculeStream(),
+        'properties': logging_hooks.PropertyStream(),
+        'dynamic': logging_hooks.SimulationStream()
     }
 
 
