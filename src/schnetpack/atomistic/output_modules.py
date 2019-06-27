@@ -61,7 +61,7 @@ class Atomwise(nn.Module):
 
     def __init__(
         self,
-        n_in=128,
+        n_in,
         n_out=1,
         aggregation_mode="sum",
         n_layers=2,
@@ -72,8 +72,6 @@ class Atomwise(nn.Module):
         derivative=None,
         negative_dr=False,
         create_graph=False,
-        # todo: check
-        retain_graph=True,
         mean=None,
         stddev=None,
         atomref=None,

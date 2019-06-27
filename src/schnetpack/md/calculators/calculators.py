@@ -1,4 +1,5 @@
-from schnetpack import Structure
+import os
+import subprocess
 from schnetpack.md.utils import MDUnits
 
 
@@ -41,13 +42,16 @@ class MDCalculator:
         self.results = {}
         self.force_handle = force_handle
         self.required_properties = required_properties
-        self.position_conversion = position_conversion
-        self.force_conversion = force_conversion
+
+        # Perform automatic conversion of units
+        self.position_conversion = MDUnits.parse_mdunit(position_conversion)
+        self.force_conversion = MDUnits.parse_mdunit(force_conversion)
+        self.property_conversion = {
+            p: MDUnits.parse_mdunit(property_conversion[p]) for p in property_conversion
+        }
+        self._init_default_conversion()
 
         self.detach = detach
-
-        self.property_conversion = property_conversion
-        self._init_default_conversion()
 
     def calculate(self, system):
         """
@@ -173,80 +177,157 @@ class MDCalculator:
         pass
 
 
-class SchnetPackCalculator(MDCalculator):
-    """
-    MD calculator for schnetpack models.
+class QMCalculatorError(Exception):
+    pass
 
-    Args:
-        model (object): Loaded schnetpack model.
-        required_properties (list): List of properties to be computed by the calculator
-        force_handle (str): String indicating the entry corresponding to the molecular forces
-        position_conversion (float): Unit conversion for the length used in the model computing all properties. E.g. if
-                             the model needs Angstrom, one has to provide the conversion factor converting from the
-                             atomic units used internally (Bohr) to Angstrom: 0.529177...
-        force_conversion (float): Conversion factor converting the forces returned by the used model back to atomic
-                                  units (Hartree/Bohr).
-        property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
-                                           the model. Only changes the units used for logging the various outputs.
-        detach (bool): Detach property computation graph after every calculator call. Enabled by default. Should only
-                       be disabled if one wants to e.g. compute derivatives over short trajectory snippets.
-    """
+
+class QMCalculator(MDCalculator):
+    is_atomistic = []
 
     def __init__(
         self,
-        model,
         required_properties,
         force_handle,
+        compdir,
+        qm_executable,
         position_conversion=1.0 / MDUnits.angs2bohr,
-        force_conversion=1.0 / MDUnits.auforces2aseforces,
+        force_conversion=1.0,
         property_conversion={},
-        detach=True,
+        adaptive=False,
     ):
-        super(SchnetPackCalculator, self).__init__(
+
+        super(QMCalculator, self).__init__(
             required_properties,
             force_handle,
-            position_conversion,
-            force_conversion,
-            property_conversion,
-            detach,
+            position_conversion=position_conversion,
+            force_conversion=force_conversion,
+            property_conversion=property_conversion,
         )
 
-        self.model = model
+        self.qm_executable = qm_executable
 
-    def calculate(self, system):
-        """
-        Main routine, generates a properly formatted input for the schnetpack model from the system, performs the
-        computation and uses the results to update the system state.
+        self.compdir = compdir
+        if not os.path.exists(self.compdir):
+            os.makedirs(compdir)
 
-        Args:
-            system (schnetpack.md.System): System object containing current state of the simulation.
-        """
-        inputs = self._generate_input(system)
-        self.results = self.model(inputs)
-        self._update_system(system)
+        # Set the force handle to be an atomistic property
+        self.is_atomistic = force_handle
 
-    def _generate_input(self, system):
-        """
-        Function to extracts neighbor lists, atom_types, positions e.t.c. from the system and generate a properly
-        formatted input for the schnetpack model.
+        self.adaptive = adaptive
+        self.step = 0
 
-        Args:
-            system (schnetpack.md.System): System object containing current state of the simulation.
+    def calculate(self, system, samples=None):
+        # Use of samples only makes sense in conjunction with adaptive sampling
+        if not self.adaptive and samples is not None:
+            raise QMCalculatorError(
+                "Usage of subsamples only allowed during adaptive sampling."
+            )
 
-        Returns:
-            dict(torch.Tensor): Schnetpack inputs in dictionary format.
-        """
-        positions, atom_types, atom_masks = self._get_system_molecules(system)
-        neighbors, neighbor_mask = self._get_system_neighbors(system)
+        # Generate director for current step
+        # current_compdir = os.path.join(self.compdir, 'step_{:06d}'.format(self.step))
+        current_compdir = os.path.join(self.compdir, "step_X")
+        if not os.path.exists(current_compdir):
+            os.makedirs(current_compdir)
 
-        inputs = {
-            Structure.R: positions,
-            Structure.Z: atom_types,
-            Structure.atom_mask: atom_masks,
-            Structure.cell: None,
-            Structure.cell_offset: None,
-            Structure.neighbors: neighbors,
-            Structure.neighbor_mask: neighbor_mask,
-        }
+        # Get molecules (select samples if requested)
+        # TODO: fragmentation should be applied here
+        molecules = self._extract_molecules(system, samples=samples)
 
-        return inputs
+        # Run computation
+        outputs = self._run_computation(molecules, current_compdir)
+
+        # Increment internal step
+        self.step += 1
+
+        # Prepare output
+        # a) either parse to update system properties
+        if not self.adaptive:
+            self.results = self._format_calc(outputs, system)
+            self._update_system(system)
+        # b) or append to the database (just return everything as molecules/atoms objects)
+        else:
+            atom_buffer, property_buffer = self._format_ase(molecules, outputs)
+            return atom_buffer, property_buffer
+
+    def _extract_molecules(self, system, samples=None):
+        # import numpy as np
+        # samples = np.zeros((20, 1))
+        # samples[3, 0] = 1
+        molecules = []
+        for rep_idx in range(system.n_replicas):
+            for mol_idx in range(system.n_molecules):
+                # Check which geometries need samples in adaptive setup
+                if samples is not None:
+                    if not samples[rep_idx, mol_idx]:
+                        continue
+                atom_types = system.atom_types[
+                    rep_idx, mol_idx, : system.n_atoms[mol_idx]
+                ]
+                # Convert Bohr to Angstrom
+                positions = (
+                    system.positions[rep_idx, mol_idx, : system.n_atoms[mol_idx], ...]
+                    * self.position_conversion
+                )
+                # Store atom types and positions for ase db during sampling
+                molecules.append((atom_types, positions))
+
+        return molecules
+
+    def _run_computation(self, molecules, current_compdir):
+        raise NotImplementedError
+
+    def _format_calc(self, outputs, system):
+        raise NotImplementedError
+
+    def _format_ase(self, molecules, outputs):
+        raise NotImplementedError
+
+
+class Queuer:
+    QUEUE_FILE = """
+#!/usr/bin/env bash
+##############################
+#$ -cwd
+#$ -V
+#$ -q {queue}
+#$ -N {jobname}
+#$ -t 1-{array_range}
+#$ -tc {concurrent}
+#$ -S /bin/bash
+#$ -e /dev/null
+#$ -o /dev/null
+#$ -r n
+#$ -sync y
+##############################
+
+# Adapt here
+"""
+
+    def __init__(
+        self, queue, executable, concurrent=100, basename="input", cleanup=True
+    ):
+        self.queue = queue
+        self.executable = executable
+        self.concurrent = concurrent
+        self.basename = basename
+        self.cleanup = cleanup
+
+    def submit(self, input_files, current_compdir):
+        jobname = os.path.basename(current_compdir)
+        compdir = os.path.abspath(current_compdir)
+        n_inputs = len(input_files)
+
+        submission_command = self._create_submission_command(n_inputs, compdir, jobname)
+
+        script_name = os.path.join(current_compdir, "submit.sh")
+        with open(script_name, "w") as submission_script:
+            submission_script.write(submission_command)
+
+        computation = subprocess.Popen(["qsub", script_name], stdout=subprocess.PIPE)
+        computation.wait()
+
+        if self.cleanup:
+            os.remove(script_name)
+
+    def _create_submission_command(self, n_inputs, compdir, jobname):
+        raise NotImplementedError
