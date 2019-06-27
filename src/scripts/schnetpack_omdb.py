@@ -51,7 +51,7 @@ if __name__ == "__main__":
     # build dataset
     logging.info("OMDB will be loaded...")
     omdb = spk.datasets.OrganicMaterialsDatabase(
-        args.datapath, args.cutoff, download=True, properties=[train_args.property]
+        args.datapath, args.cutoff, download=True, load_only=[train_args.property]
     )
 
     # get atomrefs

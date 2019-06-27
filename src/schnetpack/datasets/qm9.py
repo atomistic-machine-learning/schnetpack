@@ -26,7 +26,7 @@ class QM9(DownloadableAtomsData):
         dbpath (str): path to directory containing database.
         download (bool, optional): enable downloading if database does not exists.
         subset (list, optional): indices to subset. Set to None for entire database.
-        properties (list, optional): properties in qm9, e.g. U0.
+        load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
         remove_uncharacterized (bool, optional): remove uncharacterized molecules.
 
@@ -59,7 +59,7 @@ class QM9(DownloadableAtomsData):
         dbpath,
         download=True,
         subset=None,
-        properties=None,
+        load_only=None,
         collect_triples=False,
         remove_uncharacterized=False,
     ):
@@ -105,7 +105,7 @@ class QM9(DownloadableAtomsData):
         super().__init__(
             dbpath=dbpath,
             subset=subset,
-            load_only=properties,
+            load_only=load_only,
             collect_triples=collect_triples,
             download=download,
             available_properties=available_properties,
@@ -120,7 +120,7 @@ class QM9(DownloadableAtomsData):
             dbpath=self.dbpath,
             download=False,
             subset=subidx,
-            properties=self.load_only,
+            load_only=self.load_only,
             collect_triples=self.collect_triples,
             remove_uncharacterized=False,
         )

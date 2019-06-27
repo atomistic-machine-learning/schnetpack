@@ -18,8 +18,8 @@ class MD17(DownloadableAtomsData):
     containing molecular forces.
 
     Args:
-        path (str): path to database
-        dataset (str): Name of molecule to load into database. Allowed are:
+        dbpath (str): path to database
+        molecule (str): Name of molecule to load into database. Allowed are:
                             aspirin
                             benzene
                             ethanol
@@ -32,10 +32,10 @@ class MD17(DownloadableAtomsData):
             (default: None)
         download (bool): set true if dataset should be downloaded
             (default: True)
-        calculate_triples (bool): set true if triples for angular functions
+        collect_triples (bool): set true if triples for angular functions
             should be computed (default: False)
-        parse_all (bool): set true to generate the ase dbs of all molecules in
-            the beginning (default: False)
+        load_only (list, optional): reduced set of properties to be loaded
+
 
     See: http://quantum-machine.org/datasets/
     """
@@ -64,23 +64,21 @@ class MD17(DownloadableAtomsData):
 
     def __init__(
         self,
-        datapath,
+        dbpath,
         molecule=None,
         subset=None,
         download=True,
         collect_triples=False,
-        properties=None,
+        load_only=None,
     ):
-        self.datapath = datapath
         self.molecule = molecule
-        dbpath = os.path.join(datapath, "md17", molecule + ".db")
 
         available_properties = [MD17.energy, MD17.forces]
 
         super(MD17, self).__init__(
             dbpath=dbpath,
             subset=subset,
-            load_only=properties,
+            load_only=load_only,
             collect_triples=collect_triples,
             download=download,
             available_properties=available_properties,
@@ -91,12 +89,12 @@ class MD17(DownloadableAtomsData):
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
 
         return MD17(
-            datapath=self.datapath,
+            dbpath=self.dbpath,
             molecule=self.molecule,
             subset=subidx,
             download=False,
             collect_triples=self.collect_triples,
-            properties=self.load_only,
+            load_only=self.load_only,
         )
 
     def _download(self):

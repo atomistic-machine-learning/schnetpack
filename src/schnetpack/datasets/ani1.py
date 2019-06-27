@@ -25,7 +25,7 @@ class ANI1(DownloadableAtomsData):
         dbpath (str): path to directory containing database.
         download (bool, optional): enable downloading if database does not exists.
         subset (list, optional): indices to subset. Set to None for entire database.
-        properties (list, optional): properties in ani1, e.g. energy.
+        load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
         num_heavy_atoms (int, optional): number of heavy atoms.
             (See 'Table 1' in Ref. [#ani1]_)
@@ -54,7 +54,7 @@ class ANI1(DownloadableAtomsData):
         dbpath,
         download=True,
         subset=None,
-        properties=None,
+        load_only=None,
         collect_triples=False,
         num_heavy_atoms=8,
         high_energies=False,
@@ -69,7 +69,7 @@ class ANI1(DownloadableAtomsData):
             dbpath=dbpath,
             subset=subset,
             download=download,
-            load_only=properties,
+            load_only=load_only,
             collect_triples=collect_triples,
             available_properties=available_properties,
             units=units,

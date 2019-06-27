@@ -75,7 +75,7 @@ if __name__ == "__main__":
     qm9 = QM9(
         args.datapath,
         download=True,
-        properties=[train_args.property],
+        load_only=[train_args.property],
         collect_triples=args.model == "wacsf",
         remove_uncharacterized=train_args.remove_uncharacterized,
     )
