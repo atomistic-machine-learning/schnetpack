@@ -52,16 +52,16 @@ def metrics(properties):
     metrics += [spk.metrics.ModelBias(prop) for prop in properties]
     metrics += [spk.metrics.RootMeanSquaredError(prop) for prop in properties]
     # todo: fix
-    #metrics += [spk.metrics.SumMAE(prop) for prop in properties]
+    # metrics += [spk.metrics.SumMAE(prop) for prop in properties]
     return metrics
 
 
 @pytest.fixture(scope="session")
 def hooks(metrics, modeldir):
-    return [spk.hooks.CSVHook(os.path.join(modeldir, "csv_log"), metrics),]
-            # todo: continue
-            #spk.train.TensorboardHook(modeldir,
-            #                          metrics)]
+    return [spk.hooks.CSVHook(os.path.join(modeldir, "csv_log"), metrics)]
+    # todo: continue
+    # spk.train.TensorboardHook(modeldir,
+    #                          metrics)]
 
 
 @pytest.fixture(scope="session")
@@ -79,7 +79,7 @@ def trainer(
     return spk.train.Trainer(
         model_path=modeldir,
         model=atomistic_model,
-        loss_fn=spk.metrics.build_mse_loss(properties),
+        loss_fn=spk.train.build_mse_loss(properties),
         optimizer=torch.optim.Adam(atomistic_model.parameters(), lr=lr),
         train_loader=train_loader,
         validation_loader=val_loader,
