@@ -8,10 +8,7 @@ from schnetpack.utils import get_parsing_parser
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-if __name__ == "__main__":
-    parser = get_parsing_parser()
-    args = parser.parse_args()
-
+def main(args):
     if args.overwrite and os.path.exists(args.db_path):
         logging.info("Removing old database at {}".format(args.db_path))
         os.remove(args.db_path)
@@ -24,3 +21,9 @@ if __name__ == "__main__":
     )
 
     logging.info("done...")
+
+
+if __name__ == "__main__":
+    parser = get_parsing_parser()
+    args = parser.parse_args()
+    main(args)
