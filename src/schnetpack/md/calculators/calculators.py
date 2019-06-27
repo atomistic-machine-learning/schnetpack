@@ -31,13 +31,13 @@ class MDCalculator:
     """
 
     def __init__(
-            self,
-            required_properties,
-            force_handle,
-            position_conversion=1.0,
-            force_conversion=1.0,
-            property_conversion={},
-            detach=True,
+        self,
+        required_properties,
+        force_handle,
+        position_conversion=1.0,
+        force_conversion=1.0,
+        property_conversion={},
+        detach=True,
     ):
         self.results = {}
         self.force_handle = force_handle
@@ -46,7 +46,9 @@ class MDCalculator:
         # Perform automatic conversion of units
         self.position_conversion = MDUnits.parse_mdunit(position_conversion)
         self.force_conversion = MDUnits.parse_mdunit(force_conversion)
-        self.property_conversion = {p: MDUnits.parse_mdunit(property_conversion[p]) for p in property_conversion}
+        self.property_conversion = {
+            p: MDUnits.parse_mdunit(property_conversion[p]) for p in property_conversion
+        }
         self._init_default_conversion()
 
         self.detach = detach
@@ -97,10 +99,10 @@ class MDCalculator:
 
                 dim = self.results[p].shape
                 system.properties[p] = (
-                        self.results[p].view(
-                            system.n_replicas, system.n_molecules, *dim[1:]
-                        )
-                        * self.property_conversion[p]
+                    self.results[p].view(
+                        system.n_replicas, system.n_molecules, *dim[1:]
+                    )
+                    * self.property_conversion[p]
                 )
 
             # Set the forces for the system (at this point, already detached)
@@ -146,7 +148,7 @@ class MDCalculator:
             torch.FloatTensor: (n_replicas*n_molecules) x n_atoms binary tensor indicating padded atom dimensions
         """
         positions = (
-                system.positions.view(-1, system.max_n_atoms, 3) * self.position_conversion
+            system.positions.view(-1, system.max_n_atoms, 3) * self.position_conversion
         )
 
         atom_types = system.atom_types.view(-1, system.max_n_atoms)
@@ -164,8 +166,8 @@ class MDCalculator:
         """
         forces = self.results[self.force_handle]
         system.forces = (
-                forces.view(system.n_replicas, system.n_molecules, system.max_n_atoms, 3)
-                * self.force_conversion
+            forces.view(system.n_replicas, system.n_molecules, system.max_n_atoms, 3)
+            * self.force_conversion
         )
 
     def _get_ase_molecules(self, system):
@@ -182,20 +184,25 @@ class QMCalculatorError(Exception):
 class QMCalculator(MDCalculator):
     is_atomistic = []
 
-    def __init__(self, required_properties,
-                 force_handle,
-                 compdir,
-                 qm_executable,
-                 position_conversion=1.0 / MDUnits.angs2bohr,
-                 force_conversion=1.0,
-                 property_conversion={},
-                 adaptive=False):
+    def __init__(
+        self,
+        required_properties,
+        force_handle,
+        compdir,
+        qm_executable,
+        position_conversion=1.0 / MDUnits.angs2bohr,
+        force_conversion=1.0,
+        property_conversion={},
+        adaptive=False,
+    ):
 
-        super(QMCalculator, self).__init__(required_properties,
-                                           force_handle,
-                                           position_conversion=position_conversion,
-                                           force_conversion=force_conversion,
-                                           property_conversion=property_conversion)
+        super(QMCalculator, self).__init__(
+            required_properties,
+            force_handle,
+            position_conversion=position_conversion,
+            force_conversion=force_conversion,
+            property_conversion=property_conversion,
+        )
 
         self.qm_executable = qm_executable
 
@@ -212,11 +219,13 @@ class QMCalculator(MDCalculator):
     def calculate(self, system, samples=None):
         # Use of samples only makes sense in conjunction with adaptive sampling
         if not self.adaptive and samples is not None:
-            raise QMCalculatorError('Usage of subsamples only allowed during adaptive sampling.')
+            raise QMCalculatorError(
+                "Usage of subsamples only allowed during adaptive sampling."
+            )
 
         # Generate director for current step
         # current_compdir = os.path.join(self.compdir, 'step_{:06d}'.format(self.step))
-        current_compdir = os.path.join(self.compdir, 'step_X')
+        current_compdir = os.path.join(self.compdir, "step_X")
         if not os.path.exists(current_compdir):
             os.makedirs(current_compdir)
 
@@ -251,9 +260,14 @@ class QMCalculator(MDCalculator):
                 if samples is not None:
                     if not samples[rep_idx, mol_idx]:
                         continue
-                atom_types = system.atom_types[rep_idx, mol_idx, :system.n_atoms[mol_idx]]
+                atom_types = system.atom_types[
+                    rep_idx, mol_idx, : system.n_atoms[mol_idx]
+                ]
                 # Convert Bohr to Angstrom
-                positions = system.positions[rep_idx, mol_idx, :system.n_atoms[mol_idx], ...] * self.position_conversion
+                positions = (
+                    system.positions[rep_idx, mol_idx, : system.n_atoms[mol_idx], ...]
+                    * self.position_conversion
+                )
                 # Store atom types and positions for ase db during sampling
                 molecules.append((atom_types, positions))
 
@@ -289,7 +303,9 @@ class Queuer:
 # Adapt here
 """
 
-    def __init__(self, queue, executable, concurrent=100, basename='input', cleanup=True):
+    def __init__(
+        self, queue, executable, concurrent=100, basename="input", cleanup=True
+    ):
         self.queue = queue
         self.executable = executable
         self.concurrent = concurrent
@@ -303,11 +319,11 @@ class Queuer:
 
         submission_command = self._create_submission_command(n_inputs, compdir, jobname)
 
-        script_name = os.path.join(current_compdir, 'submit.sh')
-        with open(script_name, 'w') as submission_script:
+        script_name = os.path.join(current_compdir, "submit.sh")
+        with open(script_name, "w") as submission_script:
             submission_script.write(submission_command)
 
-        computation = subprocess.Popen(['qsub', script_name], stdout=subprocess.PIPE)
+        computation = subprocess.Popen(["qsub", script_name], stdout=subprocess.PIPE)
         computation.wait()
 
         if self.cleanup:

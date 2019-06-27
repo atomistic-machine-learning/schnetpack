@@ -17,5 +17,3 @@ class Structure:
     neighbor_pairs_mask = "_neighbor_pairs_mask"
     neighbor_offsets_j = "_neighbor_offsets_j"
     neighbor_offsets_k = "_neighbor_offsets_k"
-
-

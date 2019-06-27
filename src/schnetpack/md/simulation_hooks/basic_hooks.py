@@ -1,7 +1,4 @@
-__all__ = [
-    "RemoveCOMMotion",
-    "SimulationHook",
-]
+__all__ = ["RemoveCOMMotion", "SimulationHook"]
 
 
 class SimulationHook:
@@ -55,5 +52,3 @@ class RemoveCOMMotion(SimulationHook):
             simulator.system.remove_com_translation()
             if self.remove_rotation:
                 simulator.system.remove_com_rotation()
-
-

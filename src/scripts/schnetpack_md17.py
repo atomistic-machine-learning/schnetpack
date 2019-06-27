@@ -84,7 +84,12 @@ if __name__ == "__main__":
         # get statistics
         logging.info("calculate statistics...")
         mean, stddev = get_statistics(
-            split_path, train_loader, train_args, atomref, logging=logging, per_atom=True
+            split_path,
+            train_loader,
+            train_args,
+            atomref,
+            logging=logging,
+            per_atom=True,
         )
 
         # build representation

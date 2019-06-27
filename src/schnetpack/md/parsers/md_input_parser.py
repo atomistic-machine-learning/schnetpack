@@ -26,6 +26,7 @@ class InitializerError(Exception):
     """
     Exception for SacredInit class.
     """
+
     pass
 
 
@@ -64,14 +65,10 @@ class Initializer:
     Args:
         init_dict (dict): Dictionary containing input specifications generated in run_dynamics.py
     """
-    kind = 'type'
-    allowed_options = {
-        'test': ('class_name', 'input_type', 'optional_kwargs')
-    }
-    required_inputs = {
-        'input_type': OrderedDict({'name_1': str,
-                                   'name_2': int})
-    }
+
+    kind = "type"
+    allowed_options = {"test": ("class_name", "input_type", "optional_kwargs")}
+    required_inputs = {"input_type": OrderedDict({"name_1": str, "name_2": int})}
 
     def __init__(self, init_dict):
 
@@ -84,8 +81,9 @@ class Initializer:
 
             if kind not in self.allowed_options:
                 raise InitializerError(
-                    'Unrecognized type {:s} for {:s}. Options are:\n  {:s}'.format(kind, self.__class__.__name__,
-                                                                                   ', '.join(self.allowed_options))
+                    "Unrecognized type {:s} for {:s}. Options are:\n  {:s}".format(
+                        kind, self.__class__.__name__, ", ".join(self.allowed_options)
+                    )
                 )
 
             target_class, input_type, optional_inputs = self.allowed_options[kind]
@@ -96,14 +94,19 @@ class Initializer:
             for required in required_inputs:
                 # Check if required inputs are specified
                 if required not in init_dict:
-                    raise InitializerError('Expected input {:s} for {:s}.'.format(required, kind))
+                    raise InitializerError(
+                        "Expected input {:s} for {:s}.".format(required, kind)
+                    )
                 else:
                     # Try to convert to requested type
                     try:
                         inputs.append(required_inputs[required](init_dict[required]))
                     except ValueError:
-                        raise InitializerError('Expected type {:s} for argument {:s}'.format(
-                            required_inputs[required].__name__, required))
+                        raise InitializerError(
+                            "Expected type {:s} for argument {:s}".format(
+                                required_inputs[required].__name__, required
+                            )
+                        )
 
             # Additional inputs
             extra_kwargs = {}
@@ -124,27 +127,29 @@ class ThermostatInit(Initializer):
     Nose-Hoover chain thermostats. Two input cases exist, with all GLE based thermostats requiring an input file
     containing the thermostat matrices and all other types requiring specification of a time constant.
     """
+
     allowed_options = {
-        'berendsen': (thermostats.BerendsenThermostat, 'standard', None),
-        'langevin': (thermostats.LangevinThermostat, 'standard', None),
-        'gle': (thermostats.GLEThermostat, 'gle', None),
-        'pile-l': (thermostats.PILELocalThermostat, 'standard', None),
-        'pile-g': (thermostats.PILEGlobalThermostat, 'standard', None),
-        'piglet': (thermostats.PIGLETThermostat, 'gle', None),
-        'nhc': (thermostats.NHCThermostat, 'standard', None),
-        'nhc-massive': (thermostats.NHCThermostat, 'standard', {'massive': True}),
-        'pi-nhc-l': (thermostats.NHCRingPolymerThermostat, 'standard', None),
-        'pi-nhc-g': (thermostats.NHCRingPolymerThermostat, 'standard', {'local': False}),
-        'trpmd': (thermostats.TRPMDThermostat, 'trpmd', None)
+        "berendsen": (thermostats.BerendsenThermostat, "standard", None),
+        "langevin": (thermostats.LangevinThermostat, "standard", None),
+        "gle": (thermostats.GLEThermostat, "gle", None),
+        "pile-l": (thermostats.PILELocalThermostat, "standard", None),
+        "pile-g": (thermostats.PILEGlobalThermostat, "standard", None),
+        "piglet": (thermostats.PIGLETThermostat, "gle", None),
+        "nhc": (thermostats.NHCThermostat, "standard", None),
+        "nhc-massive": (thermostats.NHCThermostat, "standard", {"massive": True}),
+        "pi-nhc-l": (thermostats.NHCRingPolymerThermostat, "standard", None),
+        "pi-nhc-g": (
+            thermostats.NHCRingPolymerThermostat,
+            "standard",
+            {"local": False},
+        ),
+        "trpmd": (thermostats.TRPMDThermostat, "trpmd", None),
     }
 
     required_inputs = {
-        'standard': OrderedDict({'temperature': float,
-                                 'time_constant': float}),
-        'gle': OrderedDict({'temperature': float,
-                            'gle_input': str}),
-        'trpmd': OrderedDict({'temperature': float,
-                              'damping': float})
+        "standard": OrderedDict({"temperature": float, "time_constant": float}),
+        "gle": OrderedDict({"temperature": float, "gle_input": str}),
+        "trpmd": OrderedDict({"temperature": float, "damping": float}),
     }
 
 
@@ -152,16 +157,17 @@ class IntegratorInit(Initializer):
     """
     Initialization instructions for the available integrators.
     """
+
     allowed_options = {
-        'verlet': (integrators.VelocityVerlet, 'verlet', None),
-        'ring_polymer': (integrators.RingPolymer, 'ring_polymer', None)
+        "verlet": (integrators.VelocityVerlet, "verlet", None),
+        "ring_polymer": (integrators.RingPolymer, "ring_polymer", None),
     }
 
     required_inputs = {
-        'verlet': OrderedDict({'time_step': float}),
-        'ring_polymer': OrderedDict({'n_beads': int,
-                                     'time_step': float,
-                                     'temperature': float})
+        "verlet": OrderedDict({"time_step": float}),
+        "ring_polymer": OrderedDict(
+            {"n_beads": int, "time_step": float, "temperature": float}
+        ),
     }
 
 
@@ -169,13 +175,12 @@ class InitialConditionsInit(Initializer):
     """
     Initialization instructions for the available thermostats.
     """
-    allowed_options = {
-        'maxwell-boltzmann': (initcond.MaxwellBoltzmannInit, 'mb', None)
-    }
+
+    allowed_options = {"maxwell-boltzmann": (initcond.MaxwellBoltzmannInit, "mb", None)}
     required_inputs = {
-        'mb': OrderedDict({'temperature': float,
-                           'remove_translation': bool,
-                           'remove_rotation': bool})
+        "mb": OrderedDict(
+            {"temperature": float, "remove_translation": bool, "remove_rotation": bool}
+        )
     }
 
 
@@ -183,19 +188,28 @@ class CalculatorInit(Initializer):
     """
     Initialization instructions for the available calculators.
     """
+
     allowed_options = {
-        'schnet': (schnetpack.md.calculators.schnet_calculator.SchnetPackCalculator, 'schnet', None),
-        'orca': (calculators.OrcaCalculator, 'orca', None)
+        "schnet": (
+            schnetpack.md.calculators.schnet_calculator.SchnetPackCalculator,
+            "schnet",
+            None,
+        ),
+        "orca": (calculators.OrcaCalculator, "orca", None),
     }
     required_inputs = {
-        'schnet': OrderedDict({'model': model,
-                               'required_properties': list,
-                               'force_handle': str}),
-        'orca': OrderedDict({'required_properties': list,
-                             'force_handle': str,
-                             'compdir': str,
-                             'qm_executable': str,
-                             'orca_template': str})
+        "schnet": OrderedDict(
+            {"model": model, "required_properties": list, "force_handle": str}
+        ),
+        "orca": OrderedDict(
+            {
+                "required_properties": list,
+                "force_handle": str,
+                "compdir": str,
+                "qm_executable": str,
+                "orca_template": str,
+            }
+        ),
     }
 
 
@@ -203,35 +217,32 @@ class BiasPotentialInit(Initializer):
     """
     Set up the available bias potentials
     """
+
     allowed_options = {
-        'accelerated_md': (sampling.AcceleratedMD, 'accelerated_md', None),
-        'metadyn': (sampling.MetaDyn, 'metadyn', None)
+        "accelerated_md": (sampling.AcceleratedMD, "accelerated_md", None),
+        "metadyn": (sampling.MetaDyn, "metadyn", None),
     }
     required_inputs = {
-        'accelerated_md': OrderedDict({
-            'energy_threshold': float,
-            'acceleration_factor': float
-        }),
-        'metadyn': OrderedDict({
-            'collective_variables': list
-        })
+        "accelerated_md": OrderedDict(
+            {"energy_threshold": float, "acceleration_factor": float}
+        ),
+        "metadyn": OrderedDict({"collective_variables": list}),
     }
 
 
 class ColVars:
-    available = {
-        'bond': sampling.BondColvar
-    }
+    available = {"bond": sampling.BondColvar}
 
 
 class LoggerStreams:
     """
     Auxiliary class to provide short strings identifying the different available data streams for the FileLogger hook.
     """
+
     available = {
-        'molecules': logging_hooks.MoleculeStream(),
-        'properties': logging_hooks.PropertyStream(),
-        'dynamic': logging_hooks.SimulationStream()
+        "molecules": logging_hooks.MoleculeStream(),
+        "properties": logging_hooks.PropertyStream(),
+        "dynamic": logging_hooks.SimulationStream(),
     }
 
 
@@ -249,7 +260,7 @@ def get_data_streams(stream_list):
     streams = []
     for stream in stream_list:
         if stream not in LoggerStreams.available:
-            raise ValueError('Stream {:s} not available for file logger'.format(stream))
+            raise ValueError("Stream {:s} not available for file logger".format(stream))
         streams.append(LoggerStreams.available[stream])
 
     return streams

@@ -7,13 +7,13 @@ import torch
 from schnetpack.md.simulation_hooks import SimulationHook
 
 __all__ = [
-    'Checkpoint',
-    'TemperatureLogger',
-    'FileLogger',
-    'MoleculeStream',
-    'DataStream',
-    'PropertyStream',
-    'SimulationStream'
+    "Checkpoint",
+    "TemperatureLogger",
+    "FileLogger",
+    "MoleculeStream",
+    "DataStream",
+    "PropertyStream",
+    "SimulationStream",
 ]
 
 
@@ -463,7 +463,7 @@ class FileLogger(SimulationHook):
                 self.file,
                 self.buffer_size,
                 restart=self.restart,
-                every_n_steps=self.every_n_steps
+                every_n_steps=self.every_n_steps,
             )
             # Upon restart, get current position in file
             if self.restart:

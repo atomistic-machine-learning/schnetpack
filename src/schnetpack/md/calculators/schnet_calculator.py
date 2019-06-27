@@ -23,14 +23,14 @@ class SchnetPackCalculator(MDCalculator):
     """
 
     def __init__(
-            self,
-            model,
-            required_properties,
-            force_handle,
-            position_conversion=1.0 / MDUnits.angs2bohr,
-            force_conversion=1.0 / MDUnits.auforces2aseforces,
-            property_conversion={},
-            detach=True,
+        self,
+        model,
+        required_properties,
+        force_handle,
+        position_conversion=1.0 / MDUnits.angs2bohr,
+        force_conversion=1.0 / MDUnits.auforces2aseforces,
+        property_conversion={},
+        detach=True,
     ):
         super(SchnetPackCalculator, self).__init__(
             required_properties,
