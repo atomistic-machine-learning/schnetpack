@@ -6,7 +6,7 @@ from ase.data import atomic_numbers
 
 import schnetpack as spk
 from schnetpack.datasets import MD17
-from schnetpack.output_modules import ElementalAtomwise
+from schnetpack.atomistic.output_modules import ElementalAtomwise
 from schnetpack.utils.script_utils import (
     get_main_parser,
     add_subparsers,
@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
         # build output module
         if args.model == "schnet":
-            output_module = spk.output_modules.Atomwise(
+            output_module = schnetpack.atomistic.output_modules.Atomwise(
                 args.features,
                 aggregation_mode=args.aggregation_mode,
                 mean=mean[args.property],

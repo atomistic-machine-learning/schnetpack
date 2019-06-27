@@ -30,7 +30,7 @@ from ase.md.velocitydistribution import (
 from ase.optimize import QuasiNewton
 from ase.vibrations import Vibrations
 
-from schnetpack.data import Structure
+from schnetpack import Structure
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
 
 
@@ -43,7 +43,7 @@ class SpkCalculator(Calculator):
     ASE calculator for schnetpack machine learning models.
 
     Args:
-        ml_model (schnetpack.atomistic.AtomisticModel): Trained model for
+        ml_model (schnetpack.AtomisticModel): Trained model for
             calculations
         device (str): select to run calculations on 'cuda' or 'cpu'
         collect_triples (bool): Set to True if angular features are needed,

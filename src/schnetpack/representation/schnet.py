@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from schnetpack.nn.base import Dense
-from schnetpack.data import Structure
+from schnetpack import Structure
 from schnetpack.nn.cfconv import CFConv
 from schnetpack.nn.cutoff import HardCutoff
 from schnetpack.nn.acsf import GaussianSmearing

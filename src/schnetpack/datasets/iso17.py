@@ -16,7 +16,7 @@ class ISO17(DownloadableAtomsData):
     containing molecular forces.
 
     Args:
-        path (str): Path to database
+        datapath (str): Path to database directory
         fold (str): Fold of data to load. Allowed are:
                         reference - 80% of steps of 80% of MD trajectories
                         reference_eq - equilibrium conformations of those
@@ -25,8 +25,9 @@ class ISO17(DownloadableAtomsData):
                         test_other - remaining 20% unseen MD trajectories
                         test_eq - equilibrium conformations of test trajectories
         subset (list): indices of subset. Set to None for entire dataset (default: None)
+        load_only (list, optional): reduced set of properties to be loaded
         download (bool): set to true if dataset should be downloaded. (default: True)
-        calculate_triples (false): set to true to compute triples for angular functions (default: true)
+        collect_triples (false): set to true to compute triples for angular functions (default: true)
 
     See: http://quantum-machine.org/datasets/
     """
@@ -47,7 +48,7 @@ class ISO17(DownloadableAtomsData):
         datapath,
         fold,
         download=True,
-        properties=None,
+        load_only=None,
         subset=None,
         collect_triples=False,
     ):
@@ -65,7 +66,7 @@ class ISO17(DownloadableAtomsData):
         super().__init__(
             dbpath=dbpath,
             subset=subset,
-            load_only=properties,
+            load_only=load_only,
             collect_triples=collect_triples,
             download=download,
             available_properties=available_properties,

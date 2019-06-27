@@ -27,6 +27,7 @@ Contents
    :maxdepth: 1
 
    tutorials/preparedata
+   tutorials/qm9
 
 
 .. toctree::

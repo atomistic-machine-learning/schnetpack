@@ -75,7 +75,7 @@ if __name__ == "__main__":
     qm9 = QM9(
         args.datapath,
         download=True,
-        properties=[train_args.property],
+        load_only=[train_args.property],
         collect_triples=args.model == "wacsf",
         remove_uncharacterized=train_args.remove_uncharacterized,
     )
@@ -102,7 +102,7 @@ if __name__ == "__main__":
         # build output module
         if args.model == "schnet":
             if args.property == QM9.mu:
-                output_module = spk.output_modules.DipoleMoment(
+                output_module = schnetpack.atomistic.output_modules.DipoleMoment(
                     args.features,
                     predict_magnitude=True,
                     mean=mean[args.property],
@@ -110,7 +110,7 @@ if __name__ == "__main__":
                     property=args.property,
                 )
             else:
-                output_module = spk.output_modules.Atomwise(
+                output_module = schnetpack.atomistic.output_modules.Atomwise(
                     args.features,
                     aggregation_mode=args.aggregation_mode,
                     mean=mean[args.property],
@@ -121,7 +121,7 @@ if __name__ == "__main__":
         elif args.model == "wacsf":
             elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
             if args.property == QM9.mu:
-                output_module = spk.output_modules.ElementalDipoleMoment(
+                output_module = schnetpack.atomistic.output_modules.ElementalDipoleMoment(
                     representation.n_symfuncs,
                     n_hidden=args.n_nodes,
                     n_layers=args.n_layers,
@@ -130,7 +130,7 @@ if __name__ == "__main__":
                     property=args.property,
                 )
             else:
-                output_module = spk.output_modules.ElementalAtomwise(
+                output_module = schnetpack.atomistic.output_modules.ElementalAtomwise(
                     representation.n_symfuncs,
                     n_hidden=args.n_nodes,
                     n_layers=args.n_layers,
