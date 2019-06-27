@@ -25,10 +25,10 @@ __all__ = [
     "val",
     "test",
     "batch_size",
-    "dataloader",
     "train_loader",
     "val_loader",
     "test_loader",
+    "shuffle"
 ]
 
 
@@ -158,11 +158,6 @@ def batch_size():
 
 
 @pytest.fixture(scope="session")
-def dataloader(dataset, batch_size):
-    return spk.data.AtomsLoader(dataset, batch_size)
-
-
-@pytest.fixture(scope="session")
 def train_loader(train, batch_size):
     return spk.data.AtomsLoader(train, batch_size)
 
@@ -175,3 +170,8 @@ def val_loader(val, batch_size):
 @pytest.fixture(scope="session")
 def test_loader(test, batch_size):
     return spk.data.AtomsLoader(test, batch_size)
+
+
+@pytest.fixture(scope="session")
+def shuffle():
+    return True
