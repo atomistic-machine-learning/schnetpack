@@ -128,7 +128,7 @@ def schnet(
 # output modules
 @pytest.fixture(scope="session")
 def output_module_1(n_atom_basis, properties1):
-    return spk.Atomwise(
+    return spk.atomistic.Atomwise(
         n_in=n_atom_basis,
         property=properties1[0],
         contributions=properties1[2],
@@ -138,7 +138,7 @@ def output_module_1(n_atom_basis, properties1):
 
 @pytest.fixture(scope="session")
 def output_module_2(n_atom_basis, properties2):
-    return spk.Atomwise(
+    return spk.atomistic.Atomwise(
         n_in=n_atom_basis, property=properties2[0], derivative=properties2[1]
     )
 
