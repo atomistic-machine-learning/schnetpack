@@ -66,7 +66,7 @@ if __name__ == "__main__":
         args.cutoff,
         apikey=args.apikey,
         download=True,
-        properties=[train_args.property],
+        load_only=[train_args.property],
     )
 
     # get atomrefs
