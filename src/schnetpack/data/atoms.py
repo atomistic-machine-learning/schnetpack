@@ -79,7 +79,7 @@ class AtomsData(Dataset):
         self.units = dict(zip(self.available_properties, units))
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
-        self.centered = center_positions
+        self.center_positions = center_positions
 
     def get_available_properties(self, available_properties):
         """
@@ -142,7 +142,7 @@ class AtomsData(Dataset):
             load_only=self.load_only,
             environment_provider=self.environment_provider,
             collect_triples=self.collect_triples,
-            center_positions=self.centered,
+            center_positions=self.center_positions,
             available_properties=self.available_properties,
         )
 
@@ -154,35 +154,7 @@ class AtomsData(Dataset):
 
     def __getitem__(self, idx):
         at, properties = self.get_properties(idx)
-
-        # get atom environment
-        nbh_idx, offsets = self.environment_provider.get_environment(at)
-
-        properties[Structure.neighbors] = torch.LongTensor(nbh_idx.astype(np.int))
-        properties[Structure.cell_offset] = torch.FloatTensor(
-            offsets.astype(np.float32)
-        )
         properties["_idx"] = torch.LongTensor(np.array([idx], dtype=np.int))
-
-        if self.collect_triples:
-            nbh_idx_j, nbh_idx_k, offset_idx_j, offset_idx_k = collect_atom_triples(
-                nbh_idx
-            )
-
-            properties[Structure.neighbor_pairs_j] = torch.LongTensor(
-                nbh_idx_j.astype(np.int)
-            )
-            properties[Structure.neighbor_pairs_k] = torch.LongTensor(
-                nbh_idx_k.astype(np.int)
-            )
-
-            # Store offsets
-            properties[Structure.neighbor_offsets_j] = torch.LongTensor(
-                offset_idx_j.astype(np.int)
-            )
-            properties[Structure.neighbor_offsets_k] = torch.LongTensor(
-                offset_idx_k.astype(np.int)
-            )
 
         return properties
 
@@ -287,12 +259,13 @@ class AtomsData(Dataset):
             properties[pname] = torch.FloatTensor(prop)
 
         # extract/calculate structure
-        properties[Structure.Z] = torch.LongTensor(at.numbers.astype(np.int))
-        positions = at.positions.astype(np.float32)
-        if self.centered:
-            positions -= at.get_center_of_mass()
-        properties[Structure.R] = torch.FloatTensor(positions)
-        properties[Structure.cell] = torch.FloatTensor(at.cell.astype(np.float32))
+        properties = _convert_atoms(
+            at,
+            environment_provider=self.environment_provider,
+            collect_triples=self.collect_triples,
+            center_positions=self.center_positions,
+            output=properties,
+        )
 
         return at, properties
 
@@ -389,10 +362,10 @@ class DownloadableAtomsData(AtomsData):
 
 def _convert_atoms(
     atoms,
-    environment_provider=None,
+    environment_provider=SimpleEnvironmentProvider(),
     collect_triples=False,
+    center_positions=False,
     output=None,
-    center_atoms=False,
 ):
     """
         Helper function to convert ASE atoms object to SchNetPack input format.
@@ -415,33 +388,33 @@ def _convert_atoms(
     # Elemental composition
     inputs[Structure.Z] = torch.LongTensor(atoms.numbers.astype(np.int))
     positions = atoms.positions.astype(np.float32)
-    if center_atoms:
+    if center_positions:
         positions -= atoms.get_center_of_mass()
     inputs[Structure.R] = torch.FloatTensor(positions)
     inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
 
-    inputs[Structure.Z] = torch.LongTensor(atoms.numbers.astype(np.int))
+    # get atom environment
+    nbh_idx, offsets = environment_provider.get_environment(atoms)
 
-    # Set positions
-    positions = atoms.positions.astype(np.float32)
-    inputs[Structure.R] = torch.FloatTensor(positions)
-
-    if environment_provider is not None:
-        # get atom environment
-        nbh_idx, offsets = environment_provider.get_environment(atoms)
-
-        # Get neighbors and neighbor mask
-        inputs[Structure.neighbors] = torch.LongTensor(nbh_idx.astype(np.int))
+    # Get neighbors and neighbor mask
+    inputs[Structure.neighbors] = torch.LongTensor(nbh_idx.astype(np.int))
 
     # Get cells
     inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
     inputs[Structure.cell_offset] = torch.FloatTensor(offsets.astype(np.float32))
 
-    # If requested get masks and neighbor lists for neighbor pairs
-    if collect_triples is not None:
-        nbh_idx_j, nbh_idx_k = collect_atom_triples(nbh_idx)
+    # If requested get neighbor lists for triples
+    if collect_triples:
+        nbh_idx_j, nbh_idx_k, offset_idx_j, offset_idx_k = collect_atom_triples(nbh_idx)
         inputs[Structure.neighbor_pairs_j] = torch.LongTensor(nbh_idx_j.astype(np.int))
         inputs[Structure.neighbor_pairs_k] = torch.LongTensor(nbh_idx_k.astype(np.int))
+
+        inputs[Structure.neighbor_offsets_j] = torch.LongTensor(
+            offset_idx_j.astype(np.int)
+        )
+        inputs[Structure.neighbor_offsets_k] = torch.LongTensor(
+            offset_idx_k.astype(np.int)
+        )
 
     return inputs
 
