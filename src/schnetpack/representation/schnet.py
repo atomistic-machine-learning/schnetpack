@@ -121,7 +121,7 @@ class SchNet(nn.Module):
         self,
         n_atom_basis=128,
         n_filters=128,
-        n_interactions=1,
+        n_interactions=3,
         cutoff=5.0,
         n_gaussians=25,
         normalize_filter=False,

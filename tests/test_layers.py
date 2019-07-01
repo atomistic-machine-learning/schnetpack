@@ -1,20 +1,21 @@
 import os
+
 import numpy as np
 import pytest
 import torch
-from torch.optim import Adam
 from torch import nn
 from torch.nn.modules import MSELoss
+from torch.optim import Adam
 
-from schnetpack.nn.cfconv import CFConv
-from schnetpack.representation.schnet import SchNet, SchNetInteraction
 from schnetpack import Structure
 from schnetpack.nn.acsf import GaussianSmearing
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.nn.base import Dense, GetItem, ScaleShift, Standardize, Aggregate
 from schnetpack.nn.blocks import MLP, TiledMultiLayerNN, ElementalGate
+from schnetpack.nn.cfconv import CFConv
 from schnetpack.nn.cutoff import CosineCutoff, MollifierCutoff, HardCutoff
 from schnetpack.nn.neighbors import NeighborElements
+from schnetpack.representation.schnet import SchNet, SchNetInteraction
 
 
 @pytest.fixture
@@ -45,6 +46,11 @@ def single_spatial_basis():
 @pytest.fixture
 def n_filters():
     return 128
+
+
+@pytest.fixture
+def n_interactions():
+    return 1
 
 
 @pytest.fixture
@@ -170,8 +176,8 @@ def assert_equal_shape(model, batch, out_shape):
     assert list(pred.shape) == out_shape, "Model does not return expected shape!"
 
 
-def test_parameter_update_schnet(schnet_batch):
-    model = SchNet()
+def test_parameter_update_schnet(schnet_batch, n_interactions):
+    model = SchNet(n_interactions=n_interactions)
     schnet_batch = [schnet_batch]
     assert_params_changed(
         model,
@@ -184,9 +190,15 @@ def test_parameter_update_schnet(schnet_batch):
     )
 
 
-def test_parameter_update_schnet_with_cutoff(schnet_batch, n_atom_basis):
-    model_cosine = SchNet(n_atom_basis, cutoff_network=CosineCutoff)
-    model_mollifier = SchNet(n_atom_basis, cutoff_network=MollifierCutoff)
+def test_parameter_update_schnet_with_cutoff(
+    schnet_batch, n_atom_basis, n_interactions
+):
+    model_cosine = SchNet(
+        n_atom_basis, n_interactions=n_interactions, cutoff_network=CosineCutoff
+    )
+    model_mollifier = SchNet(
+        n_atom_basis, n_interactions=n_interactions, cutoff_network=MollifierCutoff
+    )
     schnet_batch = [schnet_batch]
     exclude = [
         "distance_expansion",
@@ -198,8 +210,8 @@ def test_parameter_update_schnet_with_cutoff(schnet_batch, n_atom_basis):
     assert_params_changed(model_mollifier, schnet_batch, exclude=exclude)
 
 
-def test_gaussian_smearing_is_trainable(schnet_batch):
-    model = SchNet(trainable_gaussians=True)
+def test_gaussian_smearing_is_trainable(schnet_batch, n_interactions):
+    model = SchNet(n_interactions=n_interactions, trainable_gaussians=True)
     schnet_batch = [schnet_batch]
     assert_params_changed(
         model,

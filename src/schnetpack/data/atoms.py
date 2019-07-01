@@ -385,3 +385,114 @@ class DownloadableAtomsData(AtomsData):
         To be implemented in deriving classes.
         """
         raise NotImplementedError
+
+
+def _convert_atoms(
+    atoms,
+    environment_provider=None,
+    collect_triples=False,
+    output=None,
+    center_atoms=False,
+):
+    """
+        Helper function to convert ASE atoms object to SchNetPack input format.
+
+        Args:
+            atoms (ase.Atoms): Atoms object of molecule
+            environment_provider (callable): Neighbor list provider.
+            device (str): Device for computation (default='cpu')
+            output (dict): Destination for converted atoms, if not None
+
+    Returns:
+        dict of torch.Tensor: Properties including neighbor lists and masks
+            reformated into SchNetPack input format.
+    """
+    if output is None:
+        inputs = {}
+    else:
+        inputs = output
+
+    # Elemental composition
+    inputs[Structure.Z] = torch.LongTensor(atoms.numbers.astype(np.int))
+    positions = atoms.positions.astype(np.float32)
+    if center_atoms:
+        positions -= atoms.get_center_of_mass()
+    inputs[Structure.R] = torch.FloatTensor(positions)
+    inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
+
+    inputs[Structure.Z] = torch.LongTensor(atoms.numbers.astype(np.int))
+
+    # Set positions
+    positions = atoms.positions.astype(np.float32)
+    inputs[Structure.R] = torch.FloatTensor(positions)
+
+    if environment_provider is not None:
+        # get atom environment
+        nbh_idx, offsets = environment_provider.get_environment(atoms)
+
+        # Get neighbors and neighbor mask
+        inputs[Structure.neighbors] = torch.LongTensor(nbh_idx.astype(np.int))
+
+    # Get cells
+    inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
+    inputs[Structure.cell_offset] = torch.FloatTensor(offsets.astype(np.float32))
+
+    # If requested get masks and neighbor lists for neighbor pairs
+    if collect_triples is not None:
+        nbh_idx_j, nbh_idx_k = collect_atom_triples(nbh_idx)
+        inputs[Structure.neighbor_pairs_j] = torch.LongTensor(nbh_idx_j.astype(np.int))
+        inputs[Structure.neighbor_pairs_k] = torch.LongTensor(nbh_idx_k.astype(np.int))
+
+    return inputs
+
+
+class AtomsConverter:
+    """
+    Convert ASE atoms object to an input suitable for the SchNetPack
+    ML models.
+
+    Args:
+        environment_provider (callable): Neighbor list provider.
+        pair_provider (callable): Neighbor pair provider (required for angular
+            functions)
+        device (str): Device for computation (default='cpu')
+    """
+
+    def __init__(
+        self,
+        environment_provider=SimpleEnvironmentProvider(),
+        collect_triples=False,
+        device=torch.device("cpu"),
+    ):
+        self.environment_provider = environment_provider
+        self.collect_triples = collect_triples
+
+        # Get device
+        self.device = device
+
+    def __call__(self, atoms):
+        """
+        Args:
+            atoms (ase.Atoms): Atoms object of molecule
+
+        Returns:
+            dict of torch.Tensor: Properties including neighbor lists and masks
+                reformated into SchNetPack input format.
+        """
+        inputs = _convert_atoms(atoms, self.environment_provider, self.collect_triples)
+
+        # Calculate masks
+        inputs[Structure.atom_mask] = torch.ones_like(inputs[Structure.Z]).float()
+        mask = inputs[Structure.neighbors] >= 0
+        inputs[Structure.neighbor_mask] = mask.float()
+
+        if self.collect_triples:
+            inputs[Structure.neighbor_pairs_mask] = torch.ones_like(
+                inputs[Structure.neighbor_pairs_j]
+            ).float()
+
+        # Add batch dimension and move to CPU/GPU
+        for key, value in inputs.items():
+            inputs[key] = value.unsqueeze(0).to(self.device)
+
+        return inputs
