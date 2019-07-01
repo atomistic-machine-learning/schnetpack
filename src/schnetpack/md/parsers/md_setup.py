@@ -131,8 +131,8 @@ class SetupDirectories(SetupBlock):
             raise ValueError("Config `simulation_dir` has to be set!")
 
         if os.path.exists(simulation_dir) and not overwrite:
-            raise ValueError(
-                "Model directory already exists (set overwrite flag?):", simulation_dir
+            logging.warning(
+                "Simulation directory {:s} already exists (set overwrite flag?)".format(simulation_dir)
             )
 
         if os.path.exists(simulation_dir) and overwrite:
@@ -174,7 +174,8 @@ class SetupSystem(SetupBlock):
             'temperature': 300,
             'remove_translation': True,
             'remove_rotation': True,
-        }
+        },
+        'load_system_state': False
     }
     target_block = 'system'
 
@@ -197,6 +198,7 @@ class SetupSystem(SetupBlock):
             if initconds.initialized is not None:
                 initconds.initialized.initialize_system(system)
 
+        md_initializer.load_system_state = self.target_config_block['load_system_state']
         md_initializer.system = system
 
 
@@ -269,7 +271,6 @@ class SetupDynamics(SetupBlock):
         },
         'n_steps': 10000,
         'restart': False,
-        'load_system_state': False
     }
     target_block = 'dynamics'
 
@@ -305,7 +306,6 @@ class SetupDynamics(SetupBlock):
 
         md_initializer.n_steps = self.target_config_block['n_steps']
         md_initializer.restart = self.target_config_block['restart']
-        md_initializer.load_system_state = self.target_config_block['load_system_state']
 
 
 class SetupBiasPotential(SetupBlock):
