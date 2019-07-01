@@ -5,8 +5,8 @@ import schnetpack as spk
 import schnetpack.atomistic.model
 from schnetpack.datasets import QM9
 from schnetpack.train import Trainer, CSVHook, ReduceLROnPlateauHook
-from schnetpack.metrics import MeanAbsoluteError
-from schnetpack.metrics import build_mse_loss
+from schnetpack.train.metrics import MeanAbsoluteError
+from schnetpack.train import build_mse_loss
 
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -42,7 +42,7 @@ output_modules = [
         atomref=atomrefs[QM9.U0],
     )
 ]
-model = schnetpack.atomistic.model.AtomisticModel(representation, output_modules)
+model = schnetpack.AtomisticModel(representation, output_modules)
 
 # build optimizer
 optimizer = Adam(model.parameters(), lr=1e-4)

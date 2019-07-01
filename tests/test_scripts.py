@@ -3,7 +3,8 @@ import torch
 import numpy as np
 import os
 from ase.db import connect
-from .fixtures import *
+
+import schnetpack.train.metrics
 from schnetpack.utils import (
     get_loaders,
     get_statistics,
@@ -23,6 +24,8 @@ from numpy.testing import assert_almost_equal
 from argparse import Namespace
 from shutil import rmtree
 from scripts.schnetpack_parse import main
+
+from .fixtures import *
 
 
 class TestScripts:
@@ -123,10 +126,10 @@ class TestTrainer:
         )
         assert trainer._model == schnet
         hook_types = [type(hook) for hook in trainer.hooks]
-        assert spk.hooks.CSVHook in hook_types
-        assert spk.hooks.TensorboardHook not in hook_types
-        assert spk.hooks.MaxEpochHook in hook_types
-        assert spk.hooks.ReduceLROnPlateauHook in hook_types
+        assert schnetpack.train.hooks.CSVHook in hook_types
+        assert schnetpack.train.hooks.TensorboardHook not in hook_types
+        assert schnetpack.train.hooks.MaxEpochHook in hook_types
+        assert schnetpack.train.hooks.ReduceLROnPlateauHook in hook_types
 
     def test_tensorboardhook(self, qm9_train_loader, qm9_val_loader, schnet, modeldir):
         # use TensorBoardHook
@@ -145,7 +148,9 @@ class TestTrainer:
         trainer = get_trainer(
             args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
         )
-        assert spk.hooks.TensorboardHook in [type(hook) for hook in trainer.hooks]
+        assert schnetpack.train.hooks.TensorboardHook in [
+            type(hook) for hook in trainer.hooks
+        ]
 
     def test_simple_loss(self):
         args = Namespace(property="prop")
@@ -270,7 +275,9 @@ class TestEvaluation:
             qm9_test_loader,
             "cpu",
             metrics=[
-                spk.metrics.MeanAbsoluteError("energy_U0", model_output="energy_U0")
+                schnetpack.train.metrics.MeanAbsoluteError(
+                    "energy_U0", model_output="energy_U0"
+                )
             ],
         )
         assert os.path.exists(os.path.join(modeldir, "evaluation.txt"))
@@ -283,7 +290,9 @@ class TestEvaluation:
             qm9_test_loader,
             "cpu",
             metrics=[
-                spk.metrics.MeanAbsoluteError("energy_U0", model_output="energy_U0")
+                schnetpack.train.metrics.MeanAbsoluteError(
+                    "energy_U0", model_output="energy_U0"
+                )
             ],
         )
         args.split = "val"
@@ -295,7 +304,9 @@ class TestEvaluation:
             qm9_test_loader,
             "cpu",
             metrics=[
-                spk.metrics.MeanAbsoluteError("energy_U0", model_output="energy_U0")
+                schnetpack.train.metrics.MeanAbsoluteError(
+                    "energy_U0", model_output="energy_U0"
+                )
             ],
         )
 

@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
-from schnetpack.hooks import Hook
+from schnetpack.train.hooks import Hook
 
 
 class EarlyStoppingHook(Hook):

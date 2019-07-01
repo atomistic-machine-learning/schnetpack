@@ -4,7 +4,7 @@ import os
 import torch
 
 import schnetpack as spk
-import schnetpack.atomistic.output_modules
+import schnetpack.train.metrics
 from schnetpack.datasets import OrganicMaterialsDatabase
 from schnetpack.utils.script_utils import (
     setup_run,
@@ -44,8 +44,12 @@ if __name__ == "__main__":
 
     # define metrics
     metrics = [
-        spk.metrics.MeanAbsoluteError(train_args.property, train_args.property),
-        spk.metrics.RootMeanSquaredError(train_args.property, train_args.property),
+        schnetpack.train.metrics.MeanAbsoluteError(
+            train_args.property, train_args.property
+        ),
+        schnetpack.train.metrics.RootMeanSquaredError(
+            train_args.property, train_args.property
+        ),
     ]
 
     # build dataset

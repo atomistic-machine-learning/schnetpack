@@ -10,16 +10,16 @@ except ImportError:
 
 
 def read_options(yamlpath):
-    with open(yamlpath, 'r') as tf:
+    with open(yamlpath, "r") as tf:
         tradoffs = yaml.load(tf)
 
-    logging.info('Read options from {:s}.'.format(yamlpath))
+    logging.info("Read options from {:s}.".format(yamlpath))
     return tradoffs
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('md_input')
+    parser.add_argument("md_input")
     args = parser.parse_args()
 
     config = read_options(args.md_input)

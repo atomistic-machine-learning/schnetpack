@@ -1,7 +1,7 @@
 import pytest
 from schnetpack.nn.cutoff import HardCutoff
-from schnetpack.representation import SchNet
-
+import schnetpack as spk
+from .data import *
 
 __all__ = [
     "n_atom_basis",
@@ -18,9 +18,15 @@ __all__ = [
     "distance_expansion",
     "charged_systems",
     "schnet",
+    "output_module_1",
+    "output_module_2",
+    "output_modules",
+    "atomistic_model",
 ]
 
 
+# representation
+## schnet
 @pytest.fixture(scope="session")
 def n_atom_basis():
     return 128
@@ -102,7 +108,7 @@ def schnet(
     distance_expansion,
     charged_systems,
 ):
-    return SchNet(
+    return spk.SchNet(
         n_atom_basis=n_atom_basis,
         n_filters=n_filters,
         n_interactions=n_interactions,
@@ -117,3 +123,31 @@ def schnet(
         distance_expansion=distance_expansion,
         charged_systems=charged_systems,
     )
+
+
+# output modules
+@pytest.fixture(scope="session")
+def output_module_1(n_atom_basis, properties1):
+    return spk.atomistic.Atomwise(
+        n_in=n_atom_basis,
+        property=properties1[0],
+        contributions=properties1[2],
+        derivative=properties1[1],
+    )
+
+
+@pytest.fixture(scope="session")
+def output_module_2(n_atom_basis, properties2):
+    return spk.atomistic.Atomwise(
+        n_in=n_atom_basis, property=properties2[0], derivative=properties2[1]
+    )
+
+
+@pytest.fixture(scope="session")
+def output_modules(output_module_1, output_module_2):
+    return [output_module_1, output_module_2]
+
+
+@pytest.fixture(scope="session")
+def atomistic_model(schnet, output_modules):
+    return spk.AtomisticModel(schnet, output_modules)

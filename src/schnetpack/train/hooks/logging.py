@@ -1,7 +1,7 @@
 import os
 import time
 import numpy as np
-from schnetpack.hooks import Hook
+from schnetpack.train.hooks import Hook
 
 
 __all__ = ["LoggingHook", "CSVHook", "TensorboardHook"]
