@@ -207,6 +207,7 @@ class SetupCalculator(SetupBlock):
         'property_conversion': {}
     }
     target_block = 'calculator'
+    schnet_models = ['schnet']
 
     def _setup(self, md_initializer):
         calculator = self.target_config_block
@@ -215,7 +216,12 @@ class SetupCalculator(SetupBlock):
         # Load model, else get options
         for key in calculator:
             if key == 'model_file':
-                model = self._load_model(calculator['model_file']).to(md_initializer.device)
+                if calculator[CalculatorInit.kind] in self.schnet_models:
+                    model = self._load_model_schnetpack(calculator['model_file']).to(md_initializer.device)
+                elif calculator[CalculatorInit.kind] == 'sgdml':
+                    model = self._load_model_sgdml(calculator['model_file']).to(md_initializer.device)
+                else:
+                    raise ValueError(f'Unrecognized ML calculator {calculator[CalculatorInit.kind]}')
                 calculator_dict['model'] = model
             else:
                 calculator_dict[key] = calculator[key]
@@ -225,12 +231,30 @@ class SetupCalculator(SetupBlock):
         md_initializer.calculator = calculator
 
     @staticmethod
-    def _load_model(model_path):
+    def _load_model_schnetpack(model_path):
         # If model is a directory, search for best_model file
         if os.path.isdir(model_path):
             model_path = os.path.join(model_path, "best_model")
         logging.info("Loaded model from {:s}".format(model_path))
         model = torch.load(model_path)
+        return model
+
+    @staticmethod
+    def _load_model_sgdml(model_path):
+        import numpy as np
+
+        try:
+            from sgdml.torchtools import GDMLTorchPredict
+        except:
+            raise ImportError('Could not load sGDML. Please make sure the package is installed.')
+
+        try:
+            parameters = np.load(model_path)
+        except:
+            raise ValueError("Could not read sGDML model from {:s}".format(model_path))
+
+        model = GDMLTorchPredict(parameters)
+        logging.info('Loaded sGDML model from {:s}'.format(model_path))
         return model
 
 
