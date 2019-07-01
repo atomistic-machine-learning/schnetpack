@@ -10,11 +10,11 @@ except ImportError:
     import yaml
 
 from schnetpack.md import Simulator, System
-from schnetpack.md.parsers.md_input_parser import *
+from schnetpack.md.parsers.md_options import *
 from schnetpack.md.simulation_hooks import *
 
 
-class MDInitializer:
+class MDSimulation:
 
     def __init__(self, config):
         self.config = config
@@ -54,24 +54,27 @@ class MDInitializer:
         # Setup Logging
         SetupLogging(self)
 
-        # Save config
-        self.save_config()
+        # Get simulator
+        self.simulator = self._build_simulator()
 
-    def build_simulator(self):
+    def _build_simulator(self):
 
-        simulation = Simulator(self.system, self.integrator, self.calculator, self.hooks)
+        simulator = Simulator(self.system, self.integrator, self.calculator, self.hooks)
 
         # If requested, read restart data
         if self.restart:
             state_dict = torch.load(self.restart)
-            simulation.restart(state_dict, soft=False)
+            simulator.restart(state_dict, soft=False)
             logging.info(f'Restarting simulation from {self.restart}...')
         elif self.load_system_state:
             state_dict = torch.load(self.load_system_state)
-            simulation.load_system_state(state_dict)
+            simulator.load_system_state(state_dict)
             logging.info(f'Loaded system state from {self.load_system_state}...')
 
-        return simulation
+        return simulator
+
+    def run(self):
+        self.simulator.simulate(self.n_steps)
 
     def save_config(self):
         yamlpath = os.path.join(self.simulation_dir, 'config.yaml')

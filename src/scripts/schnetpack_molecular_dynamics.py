@@ -1,7 +1,7 @@
 import argparse
 import logging
 
-from schnetpack.md.parsers.md_setup import MDInitializer
+from schnetpack.md.parsers.md_setup import MDSimulation
 
 try:
     import oyaml as yaml
@@ -24,7 +24,6 @@ if __name__ == '__main__':
 
     config = read_options(args.md_input)
 
-    mdinit = MDInitializer(config)
-    simulation = mdinit.build_simulator()
-
-    simulation.simulate(mdinit.n_steps)
+    md = MDSimulation(config)
+    md.save_config()
+    md.run()
