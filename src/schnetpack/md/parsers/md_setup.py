@@ -240,8 +240,15 @@ class SetupCalculator(SetupBlock):
         # If model is a directory, search for best_model file
         if os.path.isdir(model_path):
             model_path = os.path.join(model_path, "best_model")
+
+        # Load model. If no gpu is available, load it on cpu by default
+        if not torch.cuda.is_available():
+            model = torch.load(model_path, map_location='cpu')
+        else:
+            model = torch.load(model_path)
+
         logging.info("Loaded model from {:s}".format(model_path))
-        model = torch.load(model_path)
+
         return model
 
     @staticmethod

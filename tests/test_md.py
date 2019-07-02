@@ -27,7 +27,7 @@ def molecule_path():
 @pytest.fixture
 def md_config():
     config = {
-        'device': 'cuda',
+        'device': 'cpu',
         'simulation_dir': 'SIMULATION_DIR',
         'seed': 662524648,
         'overwrite': True,
