@@ -285,6 +285,9 @@ class SetupDynamics(SetupBlock):
         # Build the integrator
         integrator_config = self.target_config_block['integrator']
 
+        # Set the device for integrator (used in normal mode transformation)
+        integrator_config['device'] = md_initializer.device
+
         if integrator_config[IntegratorInit.kind] == 'ring_polymer':
             integrator_config['n_beads'] = md_initializer.system.n_replicas
 
