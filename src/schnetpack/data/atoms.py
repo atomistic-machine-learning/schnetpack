@@ -27,7 +27,7 @@ from .partitioning import train_test_split
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["AtomsData", "AtomsDataError", "DownloadableAtomsData"]
+__all__ = ["AtomsData", "AtomsDataError", "DownloadableAtomsData", "AtomsConverter"]
 
 
 class AtomsDataError(Exception):

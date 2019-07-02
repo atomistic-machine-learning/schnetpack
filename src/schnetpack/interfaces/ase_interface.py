@@ -92,7 +92,7 @@ class SpkCalculator(Calculator):
         Calculator.calculate(self, atoms)
 
         # Convert to schnetpack input format
-        model_inputs = self.atoms_converter.convert_atoms(atoms)
+        model_inputs = self.atoms_converter(atoms)
         # Call model
         model_results = self.model(model_inputs)
 
