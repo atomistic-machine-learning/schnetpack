@@ -17,7 +17,7 @@ def read_options(yamlpath):
     return tradoffs
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("md_input")
     args = parser.parse_args()

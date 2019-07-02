@@ -38,18 +38,24 @@ class SGDMLCalculator(MDCalculator):
        Computer Physics Communications (in press). https://doi.org/10.1016/j.cpc.2019.02.007
     """
 
-    def __init__(self, model, required_properties=[Properties.energy, Properties.forces],
-                 force_handle=Properties.forces,
-                 position_conversion=1.0 / MDUnits.angs2bohr,
-                 force_conversion=1.0 / MDUnits.Ha2kcalpmol / MDUnits.angs2bohr,
-                 property_conversion={},
-                 detach=True):
-        super(SGDMLCalculator, self).__init__(required_properties,
-                                              force_handle,
-                                              position_conversion,
-                                              force_conversion,
-                                              property_conversion,
-                                              detach)
+    def __init__(
+        self,
+        model,
+        required_properties=[Properties.energy, Properties.forces],
+        force_handle=Properties.forces,
+        position_conversion=1.0 / MDUnits.angs2bohr,
+        force_conversion=1.0 / MDUnits.Ha2kcalpmol / MDUnits.angs2bohr,
+        property_conversion={},
+        detach=True,
+    ):
+        super(SGDMLCalculator, self).__init__(
+            required_properties,
+            force_handle,
+            position_conversion,
+            force_conversion,
+            property_conversion,
+            detach,
+        )
 
         self.model = model
 
@@ -64,10 +70,7 @@ class SGDMLCalculator(MDCalculator):
         inputs = self._generate_input(system)
         energy, forces = self.model(inputs)
 
-        self.results = {
-            Properties.energy: energy,
-            Properties.forces: forces
-        }
+        self.results = {Properties.energy: energy, Properties.forces: forces}
         self._update_system(system)
 
     def _generate_input(self, system):

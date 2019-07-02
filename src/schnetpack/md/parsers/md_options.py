@@ -211,9 +211,7 @@ class CalculatorInit(Initializer):
                 "orca_template": str,
             }
         ),
-        "sgdml": OrderedDict(
-            {"model": model}
-        )
+        "sgdml": OrderedDict({"model": model}),
     }
 
 

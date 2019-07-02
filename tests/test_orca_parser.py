@@ -10,32 +10,42 @@ from schnetpack.data import AtomsData
 
 @pytest.fixture(scope="module")
 def main_path():
-    orca_main = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data/test_orca.log")
+    orca_main = os.path.join(
+        os.path.dirname(os.path.realpath(__file__)), "data/test_orca.log"
+    )
     return orca_main
 
 
 @pytest.fixture(scope="module")
 def hessian_path():
-    orca_hessian = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data/test_orca.hess")
+    orca_hessian = os.path.join(
+        os.path.dirname(os.path.realpath(__file__)), "data/test_orca.hess"
+    )
     return orca_hessian
 
 
 @pytest.fixture(scope="module")
 def targets_main():
-    main_target_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data/test_orca_main_targets.npz")
+    main_target_path = os.path.join(
+        os.path.dirname(os.path.realpath(__file__)), "data/test_orca_main_targets.npz"
+    )
     return np.load(main_target_path)
 
 
 @pytest.fixture(scope="module")
 def targets_hessian():
-    hessian_target_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                       "data/test_orca_hessian_targets.npz")
+    hessian_target_path = os.path.join(
+        os.path.dirname(os.path.realpath(__file__)),
+        "data/test_orca_hessian_targets.npz",
+    )
     return np.load(hessian_target_path)
 
 
 @pytest.fixture(scope="module")
 def target_orca_db():
-    parser_db_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data/test_orca_parser.db")
+    parser_db_path = os.path.join(
+        os.path.dirname(os.path.realpath(__file__)), "data/test_orca_parser.db"
+    )
     return parser_db_path
 
 
@@ -44,9 +54,9 @@ def test_main_file_parser(main_path, targets_main):
     main_parser.parse_file(main_path)
 
     results = main_parser.get_parsed()
-    results[Structure.Z] = results['atoms'][0]
-    results[Structure.R] = results['atoms'][1]
-    results.pop('atoms', None)
+    results[Structure.Z] = results["atoms"][0]
+    results[Structure.R] = results["atoms"][1]
+    results.pop("atoms", None)
 
     for p in targets_main:
         assert p in results
@@ -69,12 +79,12 @@ def test_hessian_file_parser(hessian_path, targets_hessian):
 
 
 def test_orca_parser(tmpdir, main_path, target_orca_db):
-    db_path = os.path.join(tmpdir, 'test_orca_parser.db')
+    db_path = os.path.join(tmpdir, "test_orca_parser.db")
 
     all_properties = OrcaMainFileParser.properties + OrcaHessianFileParser.properties
 
     orca_parser = OrcaParser(db_path, properties=all_properties)
-    orca_parser.file_extensions[Properties.hessian] = '.hess'
+    orca_parser.file_extensions[Properties.hessian] = ".hess"
     orca_parser.parse_data([main_path])
 
     db_target = AtomsData(target_orca_db)
@@ -83,7 +93,9 @@ def test_orca_parser(tmpdir, main_path, target_orca_db):
     target_atoms, target_properties = db_target.get_properties(0)
     test_atoms, test_properties = db_test.get_properties(0)
 
-    assert np.allclose(target_atoms.get_atomic_numbers(), test_atoms.get_atomic_numbers())
+    assert np.allclose(
+        target_atoms.get_atomic_numbers(), test_atoms.get_atomic_numbers()
+    )
     assert np.allclose(target_atoms.positions, test_atoms.positions)
 
     for p in target_properties:
