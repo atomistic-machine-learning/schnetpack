@@ -6,6 +6,9 @@ from sacred_scripts.spk_md import md
 from schnetpack.atomistic import Properties
 from schnetpack.datasets.iso17 import ISO17
 
+from sacred import SETTINGS
+SETTINGS['CONFIG']['READ_ONLY_CONFIG'] = False
+
 
 @pytest.fixture(scope="module")
 def property_mapping():

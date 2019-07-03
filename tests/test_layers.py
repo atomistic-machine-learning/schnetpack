@@ -57,6 +57,7 @@ def add_feat(batchsize, n_atoms):
     atoms = np.random.normal(0, 1, (1, n_atoms))
     return torch.FloatTensor(np.repeat(atoms, batchsize, axis=0))
 
+
 @pytest.fixture
 def atomic_numbers(batchsize, n_atoms):
     atoms = np.random.randint(1, 9, (1, n_atoms))

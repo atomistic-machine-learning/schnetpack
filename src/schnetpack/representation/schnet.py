@@ -225,12 +225,8 @@ class SchNet(nn.Module):
         x = self.embedding(atomic_numbers)
 
         # additional features, if desired
-        if self.additional_features is not None:
-            add_x = [x] + [torch.unsqueeze(inputs[f], -1) for f in self.additional_features]
-            x = torch.cat(add_x, dim=-1)
-
-        # additional features, if desired
-        if self.additional_features is not None:
+        # TODO (wardlt): hasattr is a hack to load models created before "additional_features." Eventually remove?
+        if hasattr(self, 'additional_features') and self.additional_features is not None:
             add_x = [x] + [torch.unsqueeze(inputs[f], -1) for f in self.additional_features]
             x = torch.cat(add_x, dim=-1)
 
