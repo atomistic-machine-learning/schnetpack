@@ -135,7 +135,7 @@ class SchNet(nn.Module):
         trainable_gaussians=False,
         distance_expansion=None,
         charged_systems=False,
-        additional_features=None
+        additional_features=None,
     ):
         super(SchNet, self).__init__()
 
@@ -226,8 +226,13 @@ class SchNet(nn.Module):
 
         # additional features, if desired
         # TODO (wardlt): hasattr is a hack to load models created before "additional_features." Eventually remove?
-        if hasattr(self, 'additional_features') and self.additional_features is not None:
-            add_x = [x] + [torch.unsqueeze(inputs[f], -1) for f in self.additional_features]
+        if (
+            hasattr(self, "additional_features")
+            and self.additional_features is not None
+        ):
+            add_x = [x] + [
+                torch.unsqueeze(inputs[f], -1) for f in self.additional_features
+            ]
             x = torch.cat(add_x, dim=-1)
 
         if False and self.charged_systems and Structure.charge in inputs.keys():

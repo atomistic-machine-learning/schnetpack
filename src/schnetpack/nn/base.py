@@ -218,7 +218,7 @@ class GetRepresentationAndProperties(nn.Module):
     def forward(self, inputs):
 
         # Get the representation
-        rep = inputs['representation']
+        rep = inputs["representation"]
         n_atoms = rep.shape[1]  # Use for expanding properties
 
         # Append the additional props
@@ -260,6 +260,6 @@ class StackedOutputModel(nn.Module):
 
         # Add outputs to the inputs
         for k, v in stacked.items():
-            inputs['{}_{}'.format(self.tag, k)] = v
+            inputs["{}_{}".format(self.tag, k)] = v
 
         return inputs

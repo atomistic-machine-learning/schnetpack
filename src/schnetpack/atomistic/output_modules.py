@@ -513,10 +513,16 @@ class DeltaLearning(Atomwise):
     Keyword arguments are passed to the Atomwise superclass
     """
 
-    def __init__(self, base_property, base_atomic_contribution, return_delta_values=False, **kwargs):
+    def __init__(
+        self,
+        base_property,
+        base_atomic_contribution,
+        return_delta_values=False,
+        **kwargs
+    ):
         # If the base value is an atomic contribution, the model must return atomic contribution
         if base_atomic_contribution:
-            kwargs['return_contributions'] = True
+            kwargs["return_contributions"] = True
         super(DeltaLearning, self).__init__(**kwargs)
 
         self.base_property = base_property
@@ -534,16 +540,16 @@ class DeltaLearning(Atomwise):
         # Store the delta values, if desired
         if self.return_delta_values:
             for k, v in delta.items():
-                output['delta_' + k] = v
+                output["delta_" + k] = v
 
         # Add the base value
         if self.base_atomic_contribution:
-            output['yi'] = delta['yi'] + inputs[self.base_property]
-            output['y'] = self.atom_pool(output['yi'], atom_mask)
+            output["yi"] = delta["yi"] + inputs[self.base_property]
+            output["y"] = self.atom_pool(output["yi"], atom_mask)
         else:
-            output['y'] = delta['y'] + inputs[self.base_property]
+            output["y"] = delta["y"] + inputs[self.base_property]
             if self.return_contributions:
-                output['yi'] = delta['yi']
+                output["yi"] = delta["yi"]
 
         return output
 

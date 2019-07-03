@@ -72,7 +72,7 @@ class AtomsData(Dataset):
         collect_triples=False,
         center_positions=True,
         rattle_atoms=None,
-        conformers=False
+        conformers=False,
     ):
         """
 
@@ -161,7 +161,7 @@ class AtomsData(Dataset):
             center_positions=self.center_positions,
             available_properties=self.available_properties,
             rattle_atoms=self.rattle_atoms,
-            conformers=self.conformers
+            conformers=self.conformers,
         )
 
     def __len__(self):
@@ -255,7 +255,7 @@ class AtomsData(Dataset):
         # If desired, pick a conformer
         if self.conformers:
             # Read in the list of conformers and convert the XYZ file
-            confs = self._unpack_property(row, 'conformers')
+            confs = self._unpack_property(row, "conformers")
             conf = choice(confs)
             at = next(read_xyz(StringIO(conf)))
 
@@ -298,8 +298,8 @@ class AtomsData(Dataset):
 
     @staticmethod
     def _unpack_property(row, pname):
-        shape = row.data['_shape_' + pname]
-        dtype = row.data['_dtype_' + pname]
+        shape = row.data["_shape_" + pname]
+        dtype = row.data["_dtype_" + pname]
         prop = np.frombuffer(b64decode(row.data[pname]), dtype=dtype)
         prop = prop.reshape(shape)
         return prop

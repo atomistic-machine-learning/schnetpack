@@ -38,7 +38,7 @@ class Trainer:
         validation_interval=1,
         hooks=[],
         loss_is_normalized=True,
-        map_location=None
+        map_location=None,
     ):
 
         self.model_path = model_path
