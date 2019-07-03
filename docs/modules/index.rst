@@ -15,5 +15,7 @@ SchNetpack consists of the following modules:
    metrics
    train
    md
+   simulate
    utils
+   output_modules
 

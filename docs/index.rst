@@ -19,14 +19,33 @@ Contents
    :caption: Getting Started
    :maxdepth: 1
 
-   guide/*
+   getstarted/getstarted
 
 .. toctree::
    :glob:
-   :caption: Modules
+   :caption: User Guide
+   :maxdepth: 2
+
+   guide/preparedata
+   guide/asemodel
+   guide/trainmodel
+   guide/runmd
+
+
+.. toctree::
+   :glob:
+   :caption: Tutorials
+   :maxdepth: 2
+
+   tutorials/tutorial_ethanol
+   tutorials/tutorial_qm9
+
+
+.. toctree::
+   :glob:
+   :caption: API reference
    :maxdepth: 2
 
    modules/index
-
 
 

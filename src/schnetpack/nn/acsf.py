@@ -1,10 +1,13 @@
 import torch
-from torch import nn as nn
+from torch import nn
 
 from schnetpack.nn.cutoff import CosineCutoff
 
 __all__ = [
-    'AngularDistribution', 'BehlerAngular', 'GaussianSmearing', 'RadialDistribution'
+    "AngularDistribution",
+    "BehlerAngular",
+    "GaussianSmearing",
+    "RadialDistribution",
 ]
 
 
@@ -23,13 +26,14 @@ class AngularDistribution(nn.Module):
 
     """
 
-    def __init__(self,
-                 radial_filter,
-                 angular_filter,
-                 cutoff_functions=CosineCutoff,
-                 crossterms=False,
-                 pairwise_elements=False
-                 ):
+    def __init__(
+        self,
+        radial_filter,
+        angular_filter,
+        cutoff_functions=CosineCutoff,
+        crossterms=False,
+        pairwise_elements=False,
+    ):
         super(AngularDistribution, self).__init__()
         self.radial_filter = radial_filter
         self.angular_filter = angular_filter
@@ -64,7 +68,9 @@ class AngularDistribution(nn.Module):
             angular_distribution = angular_distribution * radial_jk
 
         # Use cosine rule to compute cos( theta_ijk )
-        cos_theta = (torch.pow(r_ij, 2) + torch.pow(r_ik, 2) - torch.pow(r_jk, 2)) / (2.0 * r_ij * r_ik)
+        cos_theta = (torch.pow(r_ij, 2) + torch.pow(r_ik, 2) - torch.pow(r_jk, 2)) / (
+            2.0 * r_ij * r_ik
+        )
 
         # Required in order to catch NaNs during backprop
         if triple_masks is not None:
@@ -87,15 +93,17 @@ class AngularDistribution(nn.Module):
             # angular_term = angular_term * triple_masks
             # is not working (nan*0 = nan)
             angular_term[triple_masks == 0] = 0.0
-            triple_masks = torch.unsqueeze(triple_masks, -1)
-            angular_distribution = angular_distribution * triple_masks
+            angular_distribution[triple_masks == 0] = 0.0
 
         # Apply weights here, since dimension is still the same
         if elemental_weights is not None:
             if not self.pairwise_elements:
                 Z_ij, Z_ik = elemental_weights
                 Z_ijk = Z_ij * Z_ik
-                angular_distribution = torch.unsqueeze(angular_distribution, -1) * torch.unsqueeze(Z_ijk, -2).float()
+                angular_distribution = (
+                    torch.unsqueeze(angular_distribution, -1)
+                    * torch.unsqueeze(Z_ijk, -2).float()
+                )
             else:
                 # Outer product to emulate vanilla SF behavior
                 Z_ij, Z_ik = elemental_weights
@@ -105,12 +113,17 @@ class AngularDistribution(nn.Module):
                 # Filter out lower triangular components
                 pair_filter = torch.triu(torch.ones(E, E)) == 1
                 pair_elements = pair_elements[:, :, :, pair_filter]
-                angular_distribution = torch.unsqueeze(angular_distribution, -1) * torch.unsqueeze(pair_elements, -2)
+                angular_distribution = torch.unsqueeze(
+                    angular_distribution, -1
+                ) * torch.unsqueeze(pair_elements, -2)
 
         # Dimension is (Nb x Nat x Nneighpair x Nrad) for angular_distribution and
         # (Nb x Nat x NNeigpair x Nang) for angular_term, where the latter dims are orthogonal
         # To multiply them:
-        angular_distribution = angular_distribution[:, :, :, :, None, :] * angular_term[:, :, :, None, :, None]
+        angular_distribution = (
+            angular_distribution[:, :, :, :, None, :]
+            * angular_term[:, :, :, None, :, None]
+        )
         # For the sum over all contributions
         angular_distribution = torch.sum(angular_distribution, 2)
         # Finally, we flatten the last two dimensions
@@ -144,81 +157,90 @@ class BehlerAngular(nn.Module):
         Returns:
             torch.Tensor: Tensor containing values of the angular filters.
         """
-        angular_pos = [2 ** (1 - zeta) * ((1.0 - cos_theta) ** zeta).unsqueeze(-1) for zeta in self.zetas]
-        angular_neg = [2 ** (1 - zeta) * ((1.0 + cos_theta) ** zeta).unsqueeze(-1) for zeta in self.zetas]
+        angular_pos = [
+            2 ** (1 - zeta) * ((1.0 - cos_theta) ** zeta).unsqueeze(-1)
+            for zeta in self.zetas
+        ]
+        angular_neg = [
+            2 ** (1 - zeta) * ((1.0 + cos_theta) ** zeta).unsqueeze(-1)
+            for zeta in self.zetas
+        ]
         angular_all = angular_pos + angular_neg
         return torch.cat(angular_all, -1)
 
 
 def gaussian_smearing(distances, offset, widths, centered=False):
-    """
-    Perform gaussian smearing on interatomic distances.
+    r"""Smear interatomic distance values using Gaussian functions.
 
     Args:
-        distances (torch.Tensor): Variable holding the interatomic distances (B x N_at x N_nbh)
-        offset (torch.Tensor): torch tensor of offsets
-        centered (bool): If this flag is chosen, Gaussians are centered at the origin and the
-                  offsets are used to provide their widths (used e.g. for angular functions).
-                  Default is False.
+        distances (torch.Tensor): interatomic distances of (N_b x N_at x N_nbh) shape.
+        offset (torch.Tensor): offsets values of Gaussian functions.
+        widths: width values of Gaussian functions.
+        centered (bool, optional): If True, Gaussians are centered at the origin and
+            the offsets are used to as their widths (used e.g. for angular functions).
 
     Returns:
-        torch.Tensor: smeared distances (B x N_at x N_nbh x N_gauss)
+        torch.Tensor: smeared distances (N_b x N_at x N_nbh x N_g).
 
     """
-    if centered == False:
-        # Compute width of Gaussians (using an overlap of 1 STDDEV)
-        # widths = offset[1] - offset[0]
+    if not centered:
+        # compute width of Gaussian functions (using an overlap of 1 STDDEV)
         coeff = -0.5 / torch.pow(widths, 2)
         # Use advanced indexing to compute the individual components
         diff = distances[:, :, :, None] - offset[None, None, None, :]
     else:
-        # If Gaussians are centered, use offsets to compute widths
+        # if Gaussian functions are centered, use offsets to compute widths
         coeff = -0.5 / torch.pow(offset, 2)
-        # If centered Gaussians are requested, don't substract anything
+        # if Gaussian functions are centered, no offset is subtracted
         diff = distances[:, :, :, None]
-    # Compute and return Gaussians
+    # compute smear distance values
     gauss = torch.exp(coeff * torch.pow(diff, 2))
     return gauss
 
 
 class GaussianSmearing(nn.Module):
-    """
-    Wrapper class of gaussian_smearing function. Places a predefined number of Gaussian functions within the
-    specified limits.
+    r"""Smear layer using a set of Gaussian functions.
 
     Args:
-        start (float): Center of first Gaussian.
-        stop (float): Center of last Gaussian.
-        n_gaussians (int): Total number of Gaussian functions.
-        centered (bool):  if this flag is chosen, Gaussians are centered at the origin and the
-              offsets are used to provide their widths (used e.g. for angular functions).
-              Default is False.
-        trainable (bool): If set to True, widths and positions of Gaussians are adjusted during training. Default
-              is False.
+        start (float, optional): center of first Gaussian function, :math:`\mu_0`.
+        stop (float, optional): center of last Gaussian function, :math:`\mu_{N_g}`
+        n_gaussians (int, optional): total number of Gaussian functions, :math:`N_g`.
+        centered (bool, optional): If True, Gaussians are centered at the origin and
+            the offsets are used to as their widths (used e.g. for angular functions).
+        trainable (bool, optional): If True, widths and offset of Gaussian functions
+            are adjusted during training process.
+
     """
 
-    def __init__(self, start=0.0, stop=5.0, n_gaussians=50, centered=False, trainable=False):
+    def __init__(
+        self, start=0.0, stop=5.0, n_gaussians=50, centered=False, trainable=False
+    ):
         super(GaussianSmearing, self).__init__()
+        # compute offset and width of Gaussian functions
         offset = torch.linspace(start, stop, n_gaussians)
         widths = torch.FloatTensor((offset[1] - offset[0]) * torch.ones_like(offset))
         if trainable:
             self.width = nn.Parameter(widths)
             self.offsets = nn.Parameter(offset)
         else:
-            self.register_buffer('width', widths)
-            self.register_buffer('offsets', offset)
+            self.register_buffer("width", widths)
+            self.register_buffer("offsets", offset)
         self.centered = centered
 
     def forward(self, distances):
-        """
+        """Compute smeared-gaussian distance values.
+
         Args:
-            distances (torch.Tensor): Tensor of interatomic distances.
+            distances (torch.Tensor): interatomic distance values of
+                (N_b x N_at x N_nbh) shape.
 
         Returns:
-            torch.Tensor: Tensor of convolved distances.
+            torch.Tensor: layer output of (N_b x N_at x N_nbh x N_g) shape.
 
         """
-        return gaussian_smearing(distances, self.offsets, self.width, centered=self.centered)
+        return gaussian_smearing(
+            distances, self.offsets, self.width, centered=self.centered
+        )
 
 
 class RadialDistribution(nn.Module):
@@ -257,11 +279,16 @@ class RadialDistribution(nn.Module):
 
         # Apply neighbor mask
         if neighbor_mask is not None:
-            radial_distribution = radial_distribution * torch.unsqueeze(neighbor_mask, -1)
+            radial_distribution = radial_distribution * torch.unsqueeze(
+                neighbor_mask, -1
+            )
 
         # Weigh elements if requested
         if elemental_weights is not None:
-            radial_distribution = radial_distribution[:, :, :, :, None] * elemental_weights[:, :, :, None, :].float()
+            radial_distribution = (
+                radial_distribution[:, :, :, :, None]
+                * elemental_weights[:, :, :, None, :].float()
+            )
 
         radial_distribution = torch.sum(radial_distribution, 2)
         radial_distribution = radial_distribution.view(nbatch, natoms, -1)

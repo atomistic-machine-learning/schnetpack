@@ -4,6 +4,11 @@ sacred
 
 torch>=0.4.1
 numpy
-ase
+ase>=3.16
 tensorboardX
 h5py
+tqdm
+pytest
+
+pre-commit
+black

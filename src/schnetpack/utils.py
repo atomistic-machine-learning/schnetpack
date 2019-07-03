@@ -15,14 +15,19 @@ def set_random_seed(seed):
     """
     import time
     import numpy as np
+
     # 1) if seed not present, generate based on time
     if seed is None:
         seed = int(time.time() * 1000.0)
         # Reshuffle current time to get more different seeds within shorter time intervals
         # Taken from https://stackoverflow.com/questions/27276135/python-random-system-time-seed
         # & Gets overlapping bits, << and >> are binary right and left shifts
-        seed = ((seed & 0xff000000) >> 24) + ((seed & 0x00ff0000) >> 8) + ((seed & 0x0000ff00) << 8) + (
-                (seed & 0x000000ff) << 24)
+        seed = (
+            ((seed & 0xFF000000) >> 24)
+            + ((seed & 0x00FF0000) >> 8)
+            + ((seed & 0x0000FF00) << 8)
+            + ((seed & 0x000000FF) << 24)
+        )
     # 2) Set seed for numpy (e.g. splitting)
     np.random.seed(seed)
     # 3) Set seed for torch (manual_seed now seeds all CUDA devices automatically)
@@ -53,7 +58,7 @@ def to_json(jsonpath, argparse_dict):
         jsonpath (str): path to the .json file
         argparse_dict (dict): dictionary containing arguments from argument parser
     """
-    with open(jsonpath, 'w') as fp:
+    with open(jsonpath, "w") as fp:
         json.dump(argparse_dict, fp, sort_keys=True, indent=4)
 
 
@@ -71,3 +76,28 @@ def read_from_json(jsonpath):
         dict = json.loads(handle.read())
         namespace_dict = Namespace(**dict)
     return namespace_dict
+
+
+class DeprecationHelper(object):
+    def __init__(self, new_target, old_name):
+        self.new_target = new_target
+        self.old_name = old_name
+
+    def _warn(self):
+        from warnings import warn
+
+        warn(
+            self.old_name
+            + "is deprecated, use "
+            + self.new_target.__class__.__name__
+            + " instead",
+            DeprecationWarning,
+        )
+
+    def __call__(self, *args, **kwargs):
+        self._warn()
+        return self.new_target(*args, **kwargs)
+
+    def __getattr__(self, attr):
+        self._warn()
+        return getattr(self.new_target, attr)

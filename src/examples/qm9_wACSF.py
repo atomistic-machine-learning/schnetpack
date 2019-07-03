@@ -1,3 +1,4 @@
+import schnetpack.output_modules
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam
@@ -17,7 +18,7 @@ val_loader = spk.data.AtomsLoader(val)
 
 # create model
 reps = rep.BehlerSFBlock()
-output = atm.ElementalAtomwise(reps.n_symfuncs)
+output = schnetpack.output_modules.ElementalAtomwise(reps.n_symfuncs)
 model = atm.AtomisticModel(reps, output)
 
 # filter for trainable parameters (https://github.com/pytorch/pytorch/issues/679)
@@ -26,8 +27,7 @@ trainable_params = filter(lambda p: p.requires_grad, model.parameters())
 # create trainer
 opt = Adam(trainable_params, lr=1e-4)
 loss = lambda b, p: F.mse_loss(p["y"], b[QM9.U0])
-trainer = spk.train.Trainer("wacsf/", model, loss,
-                      opt, loader, val_loader)
+trainer = spk.train.Trainer("wacsf/", model, loss, opt, loader, val_loader)
 
 # start training
 trainer.train(torch.device("cpu"))

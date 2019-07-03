@@ -9,5 +9,4 @@ from .matproj import *
 from .omdb import *
 from .md17 import *
 from .qm9 import *
-
-
+from .extxyz import ExtXYZ

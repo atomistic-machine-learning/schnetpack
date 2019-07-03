@@ -5,6 +5,12 @@ __pycache__/
 .idea
 *.DS_Store
 
+# test data
+src/sacred_scripts/data/*
+src/sacred_scripts/models/*
+src/sacred_scripts/experiments/*
+src/scripts/data/
+src/scripts/training/
 # C extensions
 *.so
 

@@ -7,11 +7,10 @@ import numpy as np
 from urllib import request as request
 from urllib.error import HTTPError, URLError
 
-from schnetpack.data import AtomsData, AtomsDataError
-from schnetpack.environment import SimpleEnvironmentProvider
+from schnetpack.data import DownloadableAtomsData
 
 
-class ISO17(AtomsData):
+class ISO17(DownloadableAtomsData):
     """
     ISO17 benchmark data set for molecular dynamics of C7O2H10 isomers
     containing molecular forces.
@@ -31,12 +30,13 @@ class ISO17(AtomsData):
 
     See: http://quantum-machine.org/datasets/
     """
+
     existing_folds = [
         "reference",
         "reference_eq",
         "test_within",
         "test_other",
-        "test_eq"
+        "test_eq",
     ]
 
     E = "total_energy"
@@ -46,8 +46,15 @@ class ISO17(AtomsData):
 
     units = dict(zip(available_properties, [1.0, 1.0]))
 
-    def __init__(self, datapath, fold, download=True, properties=None,
-                 subset=None, collect_triples=False):
+    def __init__(
+        self,
+        datapath,
+        fold,
+        download=True,
+        properties=None,
+        subset=None,
+        collect_triples=False,
+    ):
 
         if fold not in self.existing_folds:
             raise ValueError("Fold {:s} does not exist".format(fold))
@@ -55,11 +62,14 @@ class ISO17(AtomsData):
         self.path = datapath
         self.fold = fold
 
-        dbpath = os.path.join(datapath, 'iso17', fold + '.db')
-        super().__init__(dbpath=dbpath, subset=subset,
-                         required_properties=properties,
-                         collect_triples=collect_triples,
-                         download=download)
+        dbpath = os.path.join(datapath, "iso17", fold + ".db")
+        super().__init__(
+            dbpath=dbpath,
+            subset=subset,
+            required_properties=properties,
+            collect_triples=collect_triples,
+            download=download,
+        )
 
     def create_subset(self, idx):
         """
@@ -72,9 +82,14 @@ class ISO17(AtomsData):
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
 
-        return type(self)(self.path, self.fold, download=False,
-                          properties=self.required_properties, subset=subidx,
-                          collect_triples=self.collect_triples)
+        return type(self)(
+            self.path,
+            self.fold,
+            download=False,
+            properties=self.required_properties,
+            subset=subidx,
+            collect_triples=self.collect_triples,
+        )
 
     def _download(self):
         logging.info("Downloading ISO17 database...")

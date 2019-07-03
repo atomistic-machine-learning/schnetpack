@@ -1,0 +1,16 @@
+# Generated at http://cosmo-epfl.github.io/gle4md 
+# Please cite: 
+# M. Ceriotti, G. Bussi and M. Parrinello, J. Chem. Theory Comput. 6, 1170 (2010) 
+# M. Ceriotti, G. Bussi and M. Parrinello, Phys. Rev. Lett. 102, 020601 (2009) 
+# Optimal-sampling GLE. Enforces efficient sampling of the potential energy 
+# by an appropriate colored noise. The parameters were picked from 
+# library/optimal/kv_4-4.a, 
+# and shifted so that they span a range between 
+# ωmin=0.4 cm^-1 and ωmax=4000 cm^-1 
+# Raw matrix format. 
+# A MATRIX: (atomic time units^-1)
+   4.498098855452e-3    6.594810718477e-6    2.788030342989e-4   -8.808265165053e-4    5.605371493938e-3 
+  -6.726802271646e-6    2.079069559861e-9    1.746169548818e-5   -4.800164465960e-6    1.025830873432e-5 
+  -3.586191452340e-4   -1.746169548818e-5    3.287481976399e-5    1.245698716799e-4   -2.417657162526e-4 
+  -2.508912543565e-4    4.800164465960e-6   -1.245698716799e-4    6.449207766266e-4    2.783583234046e-4 
+   5.273493443008e-3   -1.025830873432e-5    2.417657162526e-4   -2.783583234046e-4    7.488477456790e-3 
