@@ -12,10 +12,10 @@ References
 """
 
 import os
-from schnetpack.utils import DeprecationHelper
 
-import numpy as np
-import torch
+from schnetpack.data.atoms import AtomsConverter
+from schnetpack.utils.spk_utils import DeprecationHelper
+
 from ase import units
 from ase.calculators.calculator import Calculator, all_changes
 from ase.io import read, write
@@ -30,8 +30,7 @@ from ase.md.velocitydistribution import (
 from ase.optimize import QuasiNewton
 from ase.vibrations import Vibrations
 
-from schnetpack.data import Structure
-from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
+from schnetpack.environment import SimpleEnvironmentProvider
 
 
 class SpkCalculatorError(Exception):
@@ -43,7 +42,7 @@ class SpkCalculator(Calculator):
     ASE calculator for schnetpack machine learning models.
 
     Args:
-        ml_model (schnetpack.atomistic.AtomisticModel): Trained model for
+        ml_model (schnetpack.AtomisticModel): Trained model for
             calculations
         device (str): select to run calculations on 'cuda' or 'cpu'
         collect_triples (bool): Set to True if angular features are needed,
@@ -93,7 +92,7 @@ class SpkCalculator(Calculator):
         Calculator.calculate(self, atoms)
 
         # Convert to schnetpack input format
-        model_inputs = self.atoms_converter.convert_atoms(atoms)
+        model_inputs = self.atoms_converter(atoms)
         # Call model
         model_results = self.model(model_inputs)
 
@@ -119,86 +118,6 @@ class SpkCalculator(Calculator):
             results[self.forces] = forces.reshape((len(atoms), 3))
 
         self.results = results
-
-
-class AtomsConverter:
-    """
-    Class to convert ASE atoms object to an input suitable for the SchNetPack
-    ML models.
-
-    Args:
-        environment_provider (callable): Neighbor list provider.
-        pair_provider (callable): Neighbor pair provider (required for angular
-            functions)
-        device (str): Device for computation (default='cpu')
-    """
-
-    def __init__(
-        self,
-        environment_provider=SimpleEnvironmentProvider(),
-        collect_triples=False,
-        device=torch.device("cpu"),
-    ):
-        self.environment_provider = environment_provider
-        self.collect_triples = collect_triples
-
-        # Get device
-        self.device = device
-
-    def convert_atoms(self, atoms):
-        """
-        Args:
-            atoms (ase.Atoms): Atoms object of molecule
-
-        Returns:
-            dict of torch.Tensor: Properties including neighbor lists and masks
-                reformated into SchNetPack input format.
-        """
-        inputs = {}
-
-        # Elemental composition
-        inputs[Structure.Z] = torch.LongTensor(atoms.numbers.astype(np.int))
-        inputs[Structure.atom_mask] = torch.ones_like(inputs[Structure.Z]).float()
-
-        # Set positions
-        positions = atoms.positions.astype(np.float32)
-        inputs[Structure.R] = torch.FloatTensor(positions)
-
-        # get atom environment
-        nbh_idx, offsets = self.environment_provider.get_environment(atoms)
-
-        # Get neighbors and neighbor mask
-        mask = torch.FloatTensor(nbh_idx) >= 0
-        inputs[Structure.neighbor_mask] = mask.float()
-        inputs[Structure.neighbors] = (
-            torch.LongTensor(nbh_idx.astype(np.int)) * mask.long()
-        )
-
-        # Get cells
-        inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
-        inputs[Structure.cell_offset] = torch.FloatTensor(offsets.astype(np.float32))
-
-        # Set index
-        # inputs['_idx'] = torch.LongTensor(np.array([idx], dtype=np.int))
-
-        # If requested get masks and neighbor lists for neighbor pairs
-        if self.collect_triples is not None:
-            nbh_idx_j, nbh_idx_k = collect_atom_triples(nbh_idx)
-            inputs[Structure.neighbor_pairs_j] = torch.LongTensor(
-                nbh_idx_j.astype(np.int)
-            )
-            inputs[Structure.neighbor_pairs_k] = torch.LongTensor(
-                nbh_idx_k.astype(np.int)
-            )
-            inputs[Structure.neighbor_pairs_mask] = torch.ones_like(
-                inputs[Structure.neighbor_pairs_j]
-            ).float()
-
-        # Add batch dimension and move to CPU/GPU
-        for key, value in inputs.items():
-            inputs[key] = value.unsqueeze(0).to(self.device)
-
-        return inputs
 
 
 class AseInterface:

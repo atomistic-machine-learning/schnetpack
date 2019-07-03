@@ -1,7 +1,14 @@
 import pytest
-import torch
-import numpy as np
-from schnetpack.metrics import *
+from schnetpack.train.metrics import *
+from schnetpack.train.metrics import (
+    ModelBias,
+    MeanSquaredError,
+    RootMeanSquaredError,
+    MeanAbsoluteError,
+    HeatmapMAE,
+    AngleMAE,
+)
+from schnetpack.train import build_mse_loss
 
 
 @pytest.fixture

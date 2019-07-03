@@ -23,7 +23,7 @@ class MaterialsProject(DownloadableAtomsData):
         apikey (str, optional): materials project key needed to download the data.
         download (bool, optional): enable downloading if database does not exists.
         subset (list, optional): indices to subset. Set to None for entire database.
-        properties (list, optional): properties in mp, e.g. formation_energy_per_atom.
+        load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
 
     """
@@ -34,10 +34,6 @@ class MaterialsProject(DownloadableAtomsData):
     BandGap = "band_gap"
     TotalMagnetization = "total_magnetization"
 
-    available_properties = [EformationPerAtom, EPerAtom, BandGap, TotalMagnetization]
-
-    units = dict(zip(available_properties, [eV, eV, eV, 1.0]))
-
     def __init__(
         self,
         dbpath,
@@ -45,24 +41,33 @@ class MaterialsProject(DownloadableAtomsData):
         apikey=None,
         download=True,
         subset=None,
-        properties=None,
+        load_only=None,
         collect_triples=False,
     ):
+
+        available_properties = [
+            MaterialsProject.EformationPerAtom,
+            MaterialsProject.EPerAtom,
+            MaterialsProject.BandGap,
+            MaterialsProject.TotalMagnetization,
+        ]
+
+        units = [eV, eV, eV, 1.0]
+
         self.cutoff = cutoff
         self.apikey = apikey
 
-        self.dbpath = dbpath
-
         environment_provider = AseEnvironmentProvider(cutoff)
 
-        if properties is None:
-            properties = MaterialsProject.available_properties
-
-        if download and not os.path.exists(self.dbpath):
-            self._download()
-
         super(MaterialsProject, self).__init__(
-            self.dbpath, subset, properties, environment_provider, collect_triples
+            dbpath=dbpath,
+            subset=subset,
+            load_only=load_only,
+            environment_provider=environment_provider,
+            collect_triples=collect_triples,
+            available_properties=available_properties,
+            units=units,
+            download=download,
         )
 
     def create_subset(self, idx):
@@ -70,11 +75,11 @@ class MaterialsProject(DownloadableAtomsData):
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
 
         return MaterialsProject(
-            self.dbpath,
-            self.cutoff,
+            dbpath=self.dbpath,
+            cutoff=self.cutoff,
             download=False,
             subset=subidx,
-            properties=self.required_properties,
+            load_only=self.load_only,
             collect_triples=self.collect_triples,
         )
 

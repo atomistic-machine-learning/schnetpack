@@ -4,7 +4,6 @@ from .atoms import AtomsData
 
 
 def merge_datasets(merged_dbpath, dbpaths, **mergedb_kwargs):
-    merged_data = AtomsData(merged_dbpath, **mergedb_kwargs)
 
     if type(dbpaths) is dict:
         names = dbpaths.keys()
@@ -16,7 +15,7 @@ def merge_datasets(merged_dbpath, dbpaths, **mergedb_kwargs):
     offset = 0
 
     partition_meta = {}
-    with connect(merged_data.dbpath, use_lock_file=False) as dst:
+    with connect(merged_dbpath, use_lock_file=False) as dst:
         for name, dbp in zip(names, dbpaths):
             start = offset
 
@@ -39,4 +38,5 @@ def merge_datasets(merged_dbpath, dbpaths, **mergedb_kwargs):
 
     metadata = {"partition_meta": partition_meta, "partitions": partitions}
     dst.metadata = metadata
-    return merged_data
+
+    return AtomsData(merged_dbpath, **mergedb_kwargs)

@@ -25,7 +25,7 @@ class ANI1(DownloadableAtomsData):
         dbpath (str): path to directory containing database.
         download (bool, optional): enable downloading if database does not exists.
         subset (list, optional): indices to subset. Set to None for entire database.
-        properties (list, optional): properties in ani1, e.g. energy.
+        load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
         num_heavy_atoms (int, optional): number of heavy atoms.
             (See 'Table 1' in Ref. [#ani1]_)
@@ -40,11 +40,7 @@ class ANI1(DownloadableAtomsData):
     # properties:
     energy = "energy"
 
-    available_properties = [energy]
-
     reference = {energy: 0}
-
-    units = dict(zip(available_properties, [Hartree]))
 
     self_energies = {
         "H": -0.500607632585,
@@ -58,11 +54,13 @@ class ANI1(DownloadableAtomsData):
         dbpath,
         download=True,
         subset=None,
-        properties=None,
+        load_only=None,
         collect_triples=False,
         num_heavy_atoms=8,
         high_energies=False,
     ):
+        available_properties = [ANI1.energy]
+        units = [Hartree]
 
         self.num_heavy_atoms = num_heavy_atoms
         self.high_energies = high_energies
@@ -71,8 +69,10 @@ class ANI1(DownloadableAtomsData):
             dbpath=dbpath,
             subset=subset,
             download=download,
-            required_properties=properties,
+            load_only=load_only,
             collect_triples=collect_triples,
+            available_properties=available_properties,
+            units=units,
         )
 
     def create_subset(self, idx):
@@ -87,11 +87,12 @@ class ANI1(DownloadableAtomsData):
         """
         idx = np.array(idx)
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
+
         return type(self)(
-            self.dbpath,
+            dbpath=self.dbpath,
             download=False,
             subset=subidx,
-            properties=self.required_properties,
+            properties=self.load_only,
             collect_triples=self.collect_triples,
             num_heavy_atoms=self.num_heavy_atoms,
             high_energies=self.high_energies,
@@ -167,7 +168,7 @@ class ANI1(DownloadableAtomsData):
 
     def _create_atoms_ref(self):
         atref = np.zeros((100, 6))
-        labels = self.required_properties
+        labels = self.load_only
 
         # converts units to eV (which are set to one in ase)
         atref[1, :] = self.self_energies["H"] * self.units["energy"]
