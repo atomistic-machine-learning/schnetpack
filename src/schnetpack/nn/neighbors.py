@@ -31,13 +31,13 @@ def atom_distances(
 
     Returns:
         (torch.Tensor, torch.Tensor):
-        distances:
-            distance of every atom to its neighbors with
-            (N_b x N_at x N_nbh) shape.
+            distances:
+                distance of every atom to its neighbors with
+                (N_b x N_at x N_nbh) shape.
 
-        dist_vec:
-            direction cosines of every atom to its
-            neighbors with (N_b x N_at x N_nbh x 3) shape (optional).
+            dist_vec:
+                direction cosines of every atom to its
+                neighbors with (N_b x N_at x N_nbh x 3) shape (optional).
 
     """
 
