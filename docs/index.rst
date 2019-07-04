@@ -26,8 +26,9 @@ Contents
    :caption: Tutorials
    :maxdepth: 1
 
-   tutorials/preparedata
-   tutorials/qm9
+   tutorials/tutorial_01_preparing_data
+   tutorials/tutorial_02_qm9
+   tutorials/tutorial_03_force_models
 
 
 .. toctree::
