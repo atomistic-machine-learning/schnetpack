@@ -193,6 +193,12 @@ class AtomsData(Dataset):
         with connect(self.dbpath) as conn:
             conn.metadata = metadata
 
+    def update_metadata(self, data):
+        with connect(self.dbpath) as conn:
+            metadata = conn.metadata
+        metadata.update(data)
+        self.set_metadata(metadata)
+
     def _add_system(self, conn, atoms, **properties):
 
         data = {}
