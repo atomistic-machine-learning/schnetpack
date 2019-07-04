@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 from schnetpack import Structure
 from .stats import StatisticsAccumulator
 
+
 __all__ = ["AtomsLoader"]
 
 
@@ -148,21 +149,21 @@ class AtomsLoader(DataLoader):
         worker_init_fn=None,
     ):
         super(AtomsLoader, self).__init__(
-            dataset,
-            batch_size,
-            shuffle,
-            sampler,
-            batch_sampler,
-            num_workers,
-            collate_fn,
-            pin_memory,
-            drop_last,
-            timeout,
-            worker_init_fn,
+            dataset=dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            sampler=sampler,
+            batch_sampler=batch_sampler,
+            num_workers=num_workers,
+            collate_fn=collate_fn,
+            pin_memory=pin_memory,
+            drop_last=drop_last,
+            timeout=timeout,
+            worker_init_fn=worker_init_fn,
         )
 
     def get_statistics(
-        self, property_names, get_atomwise_statistics=False, single_atom_ref=None
+        self, property_names, divide_by_atoms=False, single_atom_ref=None
     ):
         """
         Compute mean and variance of a property. Uses the incremental Welford
@@ -171,8 +172,8 @@ class AtomsLoader(DataLoader):
         Args:
             property_names (str or list): Name of the property for which the
                 mean and standard deviation should be computed
-            get_atomwise_statistics (dict or bool): calculate atom-wise statistics if
-                True; calculate molecule-wise statistics if False (default: False)
+            divide_by_atoms (dict or bool): divide mean by number of atoms if True
+                (default: False)
             single_atom_ref (dict or bool): reference values for single atoms (default:
                 None)
 
@@ -183,9 +184,9 @@ class AtomsLoader(DataLoader):
         """
         if type(property_names) is not list:
             property_names = [property_names]
-        if type(get_atomwise_statistics) is not dict:
-            get_atomwise_statistics = {
-                prop: get_atomwise_statistics for prop in property_names
+        if type(divide_by_atoms) is not dict:
+            divide_by_atoms = {
+                prop: divide_by_atoms for prop in property_names
             }
         if single_atom_ref is None:
             single_atom_ref = {prop: None for prop in property_names}
@@ -199,7 +200,7 @@ class AtomsLoader(DataLoader):
             for row in self:
                 for prop in property_names:
                     self._update_statistic(
-                        get_atomwise_statistics[prop],
+                        divide_by_atoms[prop],
                         single_atom_ref[prop],
                         prop,
                         row,
@@ -212,7 +213,7 @@ class AtomsLoader(DataLoader):
         return means, stddevs
 
     def _update_statistic(
-        self, get_atomwise_statistics, single_atom_ref, property_name, row, statistics
+        self, divide_by_atoms, single_atom_ref, property_name, row, statistics
     ):
         """
         Helper function to update iterative mean / stddev statistics
@@ -222,6 +223,6 @@ class AtomsLoader(DataLoader):
             z = row["_atomic_numbers"]
             p0 = torch.sum(torch.from_numpy(single_atom_ref[z]).float(), dim=1)
             property_value -= p0
-        if get_atomwise_statistics:
+        if divide_by_atoms:
             property_value /= torch.sum(row["_atom_mask"], dim=1, keepdim=True)
         statistics.add_sample(property_value)

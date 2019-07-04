@@ -32,7 +32,7 @@ val_loader = spk.AtomsLoader(val, batch_size=64)
 atomrefs = dataset.get_atomrefs(properties)
 per_atom = dict(energy=True, forces=False)
 means, stddevs = train_loader.get_statistics(
-    properties, single_atom_ref=atomrefs, get_atomwise_statistics=per_atom
+    properties, single_atom_ref=atomrefs, divide_by_atoms=per_atom
 )
 
 # model build

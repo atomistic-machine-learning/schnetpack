@@ -104,6 +104,18 @@ def get_mode_parsers():
         help="Maximum number of training epochs (default: %(default)s)",
         default=1000,
     )
+    train_parser.add_argument(
+        "--checkpoint_interval",
+        type=int,
+        help="Store checkpoint every n epochs (default: %(default)s)",
+        default=1,
+    )
+    train_parser.add_argument(
+        "--keep_n_checkpoints",
+        type=int,
+        help="Number of checkpoints that will be stored (default: %(default)s)",
+        default=3,
+    )
 
     eval_parser = argparse.ArgumentParser(add_help=False, parents=[mode_parser])
     eval_parser.add_argument("datapath", help="Path to dataset")
@@ -121,14 +133,6 @@ def get_mode_parsers():
 def get_model_parsers():
     # model parsers
     model_parser = argparse.ArgumentParser(add_help=False)
-    model_parser.add_argument(
-        "--aggregation_mode",
-        type=str,
-        # todo: check defaults
-        default="sum",
-        choices=["sum", "avg"],
-        help=" (default: %(default)s)",
-    )
     schnet_parser = argparse.ArgumentParser(add_help=False, parents=[model_parser])
     schnet_parser.add_argument(
         "--features",
@@ -272,9 +276,16 @@ def get_data_parsers():
     ani1_parser.add_argument(
         "--property",
         type=str,
-        help="Database property to be predicted" " (default: %(default)s)",
+        help="Database property to be predicted (default: %(default)s)",
         default=ANI1.energy,
         choices=[ANI1.energy],
+    )
+    ani1_parser.add_argument(
+        "--num_heavy_atoms",
+        type=int,
+        help="Number of heavy atoms that will be loaded into the database."
+             " (default: %(default)s)",
+        default=8,
     )
     matproj_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
     matproj_parser.add_argument(
@@ -422,7 +433,6 @@ def build_parser():
 
 if __name__ == "__main__":
     import pprint
-
     parser = build_parser()
     args = parser.parse_args()
     pprint.pprint(args.__dict__)

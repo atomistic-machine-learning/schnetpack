@@ -5,12 +5,14 @@ import torch
 from torch.optim import Adam
 
 
-__all__ = ["get_trainer", "simple_loss_fn", "tradeoff_loff_fn"]
+__all__ = ["get_trainer", "simple_loss_fn", "tradeoff_loff_fn", "get_metrics"]
 
 
 def get_trainer(args, model, train_loader, val_loader, metrics, loss_fn=None):
     # setup hook and logging
     hooks = [spk.train.MaxEpochHook(args.max_epochs)]
+    if args.max_steps:
+        hooks.append(spk.train.MaxStepHook(max_steps=args.max_steps))
 
     # filter for trainable parameters (https://github.com/pytorch/pytorch/issues/679)
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
@@ -51,7 +53,8 @@ def get_trainer(args, model, train_loader, val_loader, metrics, loss_fn=None):
         optimizer,
         train_loader,
         val_loader,
-        checkpoint_interval=1,
+        checkpoint_interval=args.checkpoint_interval,
+        keep_n_checkpoints=args.keep_n_checkpoints,
         hooks=hooks,
     )
     return trainer
@@ -81,3 +84,25 @@ def tradeoff_loff_fn(args, derivative):
         return err_sq
 
     return loss
+
+
+def get_metrics(args):
+    if args.dataset != "md17":
+        return [
+            spk.train.metrics.MeanAbsoluteError(args.property, args.property),
+            spk.train.metrics.RootMeanSquaredError(args.property, args.property),
+        ]
+    return [
+        spk.train.metrics.MeanAbsoluteError(
+            spk.datasets.MD17.energy, spk.datasets.MD17.energy
+        ),
+        spk.train.metrics.RootMeanSquaredError(
+            spk.datasets.MD17.energy, spk.datasets.MD17.energy
+        ),
+        spk.train.metrics.MeanAbsoluteError(
+            spk.datasets.MD17.forces, spk.datasets.MD17.forces, element_wise=True
+        ),
+        spk.train.metrics.RootMeanSquaredError(
+            spk.datasets.MD17.forces, spk.datasets.MD17.forces, element_wise=True
+        ),
+    ]
