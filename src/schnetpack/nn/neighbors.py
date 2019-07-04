@@ -16,29 +16,26 @@ def atom_distances(
     This function uses advanced torch indexing to compute differentiable distances
     of every central atom to its relevant neighbors.
 
-    Parameters
-    ----------
-        positions : torch.Tensor
+    Args:
+        positions (torch.Tensor):
             atomic Cartesian coordinates with (N_b x N_at x 3) shape
-        neighbors : torch.Tensor
+        neighbors (torch.Tensor):
             indices of neighboring atoms to consider with (N_b x N_at x N_nbh) shape
-        cell : torch.tensor, optional
+        cell (torch.tensor, optional):
             periodic cell of (N_b x 3 x 3) shape
-        cell_offsets : torch.Tensor, optional
+        cell_offsets (torch.Tensor, optional) :
             offset of atom in cell coordinates with (N_b x N_at x N_nbh x 3) shape
-        return_vecs : bool, optional
-            if True, also returns direction vectors
-        normalize_vecs : bool, optional
-            if True, normalize direction vectors
-        neighbor_mask : torch.Tensor, optional
-            boolean mask for neighbor positions
+        return_vecs (bool, optional): if True, also returns direction vectors.
+        normalize_vecs (bool, optional): if True, normalize direction vectors.
+        neighbor_mask (torch.Tensor, optional): boolean mask for neighbor positions.
 
-    Returns
-    -------
-        torch.Tensor
+    Returns:
+        (torch.Tensor, torch.Tensor):
+        distances:
             distance of every atom to its neighbors with
             (N_b x N_at x N_nbh) shape.
-        torch.Tensor
+
+        dist_vec:
             direction cosines of every atom to its
             neighbors with (N_b x N_at x N_nbh x 3) shape (optional).
 
@@ -228,14 +225,10 @@ class TriplesDistances(nn.Module):
             neighbors_j (torch.Tensor): Indices of first neighbor in triangle
             neighbors_k (torch.Tensor): Indices of second neighbor in triangle
 
-        Returns
-        -------
-            torch.Tensor
-                distance between central atom and neighbor j
-            torch.Tensor
-                distance between central atom and neighbor k
-            torch.Tensor
-                distance between neighbors
+        Returns:
+            torch.Tensor: Distance between central atom and neighbor j
+            torch.Tensor: Distance between central atom and neighbor k
+            torch.Tensor: Distance between neighbors
 
         """
         return triple_distances(positions, neighbors_j, neighbors_k)
@@ -247,17 +240,12 @@ def neighbor_elements(atomic_numbers, neighbors):
     be used to gather other properties by neighbors if different atom-wise
     Tensor is passed instead of atomic_numbers.
 
-    Parameter
-    ---------
-        atomic_numbers : torch.Tensor
-            atomic numbers (Nbatch x Nat x 1)
-        neighbors : torch.Tensor
-            neighbor indices (Nbatch x Nat x Nneigh)
+    Args:
+        atomic_numbers (torch.Tensor): Atomic numbers (Nbatch x Nat x 1)
+        neighbors (torch.Tensor): Neighbor indices (Nbatch x Nat x Nneigh)
 
-    Returns
-    -------
-        torch.Tensor
-            atomic numbers of neighbors (Nbatch x Nat x Nneigh)
+    Returns:
+        torch.Tensor: Atomic numbers of neighbors (Nbatch x Nat x Nneigh)
 
     """
     # Get molecules in batch
@@ -281,16 +269,11 @@ class NeighborElements(nn.Module):
 
     def forward(self, atomic_numbers, neighbors):
         """
-        Params
-        ------
-            atomic_numbers : torch.Tensor
-                atomic numbers (Nbatch x Nat x 1)
-            neighbors : torch.Tensor
-                neighbor indices (Nbatch x Nat x Nneigh)
+        Args:
+            atomic_numbers (torch.Tensor): Atomic numbers (Nbatch x Nat x 1)
+            neighbors (torch.Tensor): Neighbor indices (Nbatch x Nat x Nneigh)
 
-        Returns
-        -------
-            torch.Tensor
-                atomic numbers of neighbors (Nbatch x Nat x Nneigh)
+        Returns:
+            torch.Tensor: Atomic numbers of neighbors (Nbatch x Nat x Nneigh)
         """
         return neighbor_elements(atomic_numbers, neighbors)
