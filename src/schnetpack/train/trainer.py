@@ -236,7 +236,6 @@ class Trainer:
             # run hooks & store checkpoint
             for h in self.hooks:
                 h.on_train_ends(self)
-            self.store_checkpoint()
 
         except Exception as e:
             for h in self.hooks:
