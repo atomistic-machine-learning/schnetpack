@@ -63,6 +63,7 @@ class Trainer:
             self.epoch = 0
             self.step = 0
             self.best_loss = float("inf")
+            self.store_checkpoint()
 
     def _check_is_parallel(self):
         return True if isinstance(self._model, torch.nn.DataParallel) else False
