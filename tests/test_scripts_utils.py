@@ -24,7 +24,7 @@ from numpy.testing import assert_almost_equal
 from argparse import Namespace
 from shutil import rmtree
 
-# from ..scripts.schnetpack_parse import main
+# from scripts.schnetpack_parse import main
 
 from .fixtures import *
 
@@ -42,7 +42,7 @@ class TestScripts:
             train_loader=train_loader,
             args=args,
             atomref=None,
-            divide_by_atoms=False,
+            per_atom=False,
         )
         energies = []
         for batch in train_loader:
@@ -57,7 +57,7 @@ class TestScripts:
             train_loader=train_loader,
             args=args,
             atomref=None,
-            divide_by_atoms=False,
+            per_atom=False,
         )
         assert_almost_equal(saved_mean, mean["energy_U0"])
 
@@ -68,7 +68,7 @@ class TestScripts:
                 train_loader=train_loader,
                 args=args,
                 atomref=None,
-                divide_by_atoms=False,
+                per_atom=False,
             )
 
     def test_get_loaders(self, qm9_dataset, args, split_path):
@@ -114,7 +114,6 @@ class TestTrainer:
     def test_trainer(self, qm9_train_loader, qm9_val_loader, schnet, modeldir):
         args = Namespace(
             max_epochs=1,
-            max_steps=1000,
             lr=0.01,
             lr_patience=10,
             lr_decay=0.5,
@@ -122,8 +121,6 @@ class TestTrainer:
             logger="csv",
             modelpath=modeldir,
             log_every_n_epochs=2,
-            checkpoint_interval=1,
-            keep_n_checkpoints=1,
         )
         trainer = get_trainer(
             args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
@@ -141,7 +138,6 @@ class TestTrainer:
             rmtree(os.path.join(modeldir, "checkpoints"))
         args = Namespace(
             max_epochs=1,
-            max_steps=1000,
             lr=0.01,
             lr_patience=10,
             lr_decay=0.5,
@@ -149,8 +145,6 @@ class TestTrainer:
             logger="tensorboard",
             modelpath=modeldir,
             log_every_n_epochs=2,
-            checkpoint_interval=1,
-            keep_n_checkpoints=1,
         )
         trainer = get_trainer(
             args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
@@ -269,11 +263,10 @@ class TestEvaluation:
             num_gaussians=30,
             modelpath=modeldir,
             split="test",
-            parallel=False,
         )
         repr = get_representation(args)
         output_module = spk.atomistic.Atomwise(args.features, property="energy_U0")
-        model = get_model(args, repr, output_module)
+        model = get_model(repr, output_module)
 
         evaluate(
             args,

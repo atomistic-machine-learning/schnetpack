@@ -30,6 +30,8 @@ from ase.md.velocitydistribution import (
 from ase.optimize import QuasiNewton
 from ase.vibrations import Vibrations
 
+from schnetpack.md.utils import MDUnits
+
 from schnetpack.environment import SimpleEnvironmentProvider
 
 
@@ -65,6 +67,8 @@ class SpkCalculator(Calculator):
         environment_provider=SimpleEnvironmentProvider(),
         energy=None,
         forces=None,
+        energy_units="eV",
+        forces_units="eV/Angstrom",
         **kwargs
     ):
         Calculator.__init__(self, **kwargs)
@@ -79,6 +83,10 @@ class SpkCalculator(Calculator):
 
         self.model_energy = energy
         self.model_forces = forces
+
+        # Convert to ASE internal units
+        self.energy_units = MDUnits.parse_mdunit(energy_units) * units.Ha
+        self.forces_units = MDUnits.parse_mdunit(forces_units) * units.Ha / units.Bohr
 
     def calculate(self, atoms=None, properties=["energy"], system_changes=all_changes):
         """
@@ -106,7 +114,8 @@ class SpkCalculator(Calculator):
                     "properties!".format(self.model_energy)
                 )
             energy = model_results[self.model_energy].cpu().data.numpy()
-            results[self.energy] = energy.reshape(-1)
+            results[self.energy] = energy.reshape(-1) * self.energy_units
+
         if self.model_forces is not None:
             if self.model_forces not in model_results.keys():
                 raise SpkCalculatorError(
@@ -115,7 +124,7 @@ class SpkCalculator(Calculator):
                     "properties!".format(self.model_forces)
                 )
             forces = model_results[self.model_forces].cpu().data.numpy()
-            results[self.forces] = forces.reshape((len(atoms), 3))
+            results[self.forces] = forces.reshape((len(atoms), 3)) * self.forces_units
 
         self.results = results
 
@@ -139,6 +148,8 @@ class AseInterface:
         device="cpu",
         energy="energy",
         forces="forces",
+        energy_units="eV",
+        forces_units="eV/Angstrom",
     ):
         # Setup directory
         self.working_dir = working_dir
@@ -151,7 +162,12 @@ class AseInterface:
 
         # Set up calculator
         calculator = SpkCalculator(
-            ml_model, device=device, energy=energy, forces=forces
+            ml_model,
+            device=device,
+            energy=energy,
+            forces=forces,
+            energy_units=energy_units,
+            forces_units=forces_units,
         )
         self.molecule.set_calculator(calculator)
 
@@ -232,7 +248,7 @@ class AseInterface:
         """
 
         # If a previous dynamics run has been performed, don't reinitialize
-        # velocities unless explicitely requested via restart=True
+        # velocities unless explicitly requested via restart=True
         if not self.dynamics or reset:
             self._init_velocities(temp_init=temp_init)
 
@@ -241,7 +257,10 @@ class AseInterface:
             self.dynamics = VelocityVerlet(self.molecule, time_step * units.fs)
         else:
             self.dynamics = Langevin(
-                self.molecule, time_step * units.fs, temp_bath * units.kB, 0.01
+                self.molecule,
+                time_step * units.fs,
+                temp_bath * units.kB,
+                1.0 / (100.0 * units.fs),
             )
 
         # Create monitors for logfile and a trajectory file
