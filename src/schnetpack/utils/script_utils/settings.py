@@ -6,15 +6,12 @@ __all__ = ["divide_by_atoms", "pooling_mode"]
 
 
 divide_by_atoms = {
-    QM9.A: False,
-    QM9.B: False,
-    QM9.C: False,
     QM9.mu: True,
     QM9.alpha: True,
     QM9.homo: False,
     QM9.lumo: False,
     QM9.gap: False,
-    QM9.r2: False,
+    QM9.r2: True,
     QM9.zpve: True,
     QM9.U0: True,
     QM9.U: True,
@@ -31,15 +28,12 @@ divide_by_atoms = {
 }
 
 pooling_mode = {
-    QM9.A: "sum",
-    QM9.B: "sum",
-    QM9.C: "sum",
     QM9.mu: "sum",
     QM9.alpha: "sum",
     QM9.homo: "mean",
     QM9.lumo: "mean",
     QM9.gap: "mean",
-    QM9.r2: "mean",
+    QM9.r2: "sum",
     QM9.zpve: "sum",
     QM9.U0: "sum",
     QM9.U: "sum",

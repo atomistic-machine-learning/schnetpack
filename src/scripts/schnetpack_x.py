@@ -14,7 +14,7 @@ from schnetpack.utils import (
     evaluate,
     setup_run,
 )
-from schnetpack.utils.script_utils.parser_stuff import build_parser
+from schnetpack.utils.script_utils.parsing import build_parser
 
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))

@@ -7,8 +7,6 @@ import schnetpack.train.metrics
 from schnetpack.utils import (
     get_loaders,
     get_statistics,
-    get_main_parser,
-    add_subparsers,
     setup_run,
     get_trainer,
     simple_loss_fn,
@@ -73,28 +71,6 @@ class TestScripts:
         train, val, test = get_loaders(args, qm9_dataset, split_path)
         assert train.dataset.__len__() == args.split[0]
         assert val.dataset.__len__() == args.split[1]
-
-
-class TestParser:
-    def test_main_parser(self):
-        parser = get_main_parser()
-        args = parser.parse_args([])
-        assert type(args.batch_size) == int
-
-        with pytest.raises(SystemExit):
-            args = parser.parse_args(["--wrong"])
-
-    def test_subparser(self):
-        parser = get_main_parser()
-        add_subparsers(parser)
-        args = parser.parse_args(
-            ["train", "schnet", "data/qm9.db", "model", "--split", "10000", "1000"]
-        )
-        assert args.mode == "train"
-        assert args.model == "schnet"
-
-        with pytest.raises(SystemExit):
-            args = parser.parse_args([])
 
 
 class TestSetup:
