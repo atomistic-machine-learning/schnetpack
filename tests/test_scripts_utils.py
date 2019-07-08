@@ -2,7 +2,6 @@ import pytest
 import torch
 import numpy as np
 import os
-from ase.db import connect
 
 import schnetpack.train.metrics
 from schnetpack.utils import (
@@ -10,13 +9,12 @@ from schnetpack.utils import (
     get_statistics,
     get_main_parser,
     add_subparsers,
-    get_parsing_parser,
     setup_run,
     get_trainer,
     simple_loss_fn,
     tradeoff_loff_fn,
     get_representation,
-    get_model,
+    get_model_new,
     evaluate,
 )
 import schnetpack as spk
@@ -42,7 +40,7 @@ class TestScripts:
             train_loader=train_loader,
             args=args,
             atomref=None,
-            per_atom=False,
+            divide_by_atoms=False,
         )
         energies = []
         for batch in train_loader:
@@ -57,7 +55,7 @@ class TestScripts:
             train_loader=train_loader,
             args=args,
             atomref=None,
-            per_atom=False,
+            divide_by_atoms=False,
         )
         assert_almost_equal(saved_mean, mean["energy_U0"])
 
@@ -68,7 +66,7 @@ class TestScripts:
                 train_loader=train_loader,
                 args=args,
                 atomref=None,
-                per_atom=False,
+                divide_by_atoms=False,
             )
 
     def test_get_loaders(self, qm9_dataset, args, split_path):
@@ -121,6 +119,9 @@ class TestTrainer:
             logger="csv",
             modelpath=modeldir,
             log_every_n_epochs=2,
+            max_steps=30,
+            checkpoint_interval=1,
+            keep_n_checkpoints=1,
         )
         trainer = get_trainer(
             args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
@@ -145,6 +146,9 @@ class TestTrainer:
             logger="tensorboard",
             modelpath=modeldir,
             log_every_n_epochs=2,
+            max_steps=30,
+            checkpoint_interval=1,
+            keep_n_checkpoints=1,
         )
         trainer = get_trainer(
             args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
@@ -254,6 +258,7 @@ class TestModel:
 class TestEvaluation:
     def test_eval(self, qm9_train_loader, qm9_val_loader, qm9_test_loader, modeldir):
         args = Namespace(
+            mode="train",
             model="schnet",
             cutoff_function="hard",
             features=100,
@@ -263,11 +268,15 @@ class TestEvaluation:
             num_gaussians=30,
             modelpath=modeldir,
             split="test",
+            property="energy_U0",
+            dataset="qm9",
+            parallel=False
         )
-        repr = get_representation(args)
-        output_module = spk.atomistic.Atomwise(args.features, property="energy_U0")
-        model = get_model(repr, output_module)
+        mean = {args.property: None}
+        model = get_model_new(args, train_loader=qm9_train_loader, mean=mean,
+                             stddev=mean, atomref=mean, aggregation_mode="sum")
 
+        os.makedirs(modeldir, exist_ok=True)
         evaluate(
             args,
             model,

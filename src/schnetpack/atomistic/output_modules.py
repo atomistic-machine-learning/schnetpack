@@ -46,7 +46,6 @@ class Atomwise(nn.Module):
         outnet (callable): Network used for atomistic outputs. Takes schnetpack input
             dictionary as input. Output is not normalized. If set to None,
             a pyramidal network is generated automatically. (default: None)
-        # todo: ask Kristof: if set to True and atomref is None
         train_embeddings (bool): if set to True, atomref will be ignored and learned
             from data (default: False)
 

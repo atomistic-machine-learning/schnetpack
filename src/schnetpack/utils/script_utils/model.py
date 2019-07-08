@@ -65,7 +65,9 @@ def get_representation(args, train_loader=None):
 
 
 def get_output_module(args, representation, mean, stddev, atomref, aggregation_mode):
-    derivative = None if not args.dataset == "md17" else spk.datasets.MD17.forces
+    derivative = None
+    if args.dataset == "md17" and not args.ignore_forces:
+        derivative = spk.datasets.MD17.forces
     if args.model == "schnet":
         if args.property == spk.datasets.QM9.mu:
             return schnetpack.atomistic.output_modules.DipoleMoment(

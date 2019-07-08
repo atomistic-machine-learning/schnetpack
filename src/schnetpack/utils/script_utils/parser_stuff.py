@@ -311,7 +311,12 @@ def get_data_parsers():
         type=str,
         help="Database property to be predicted" " (default: %(default)s)",
         default=MD17.energy,
-        choices=[MD17.energy, MD17.forces],
+        choices=[MD17.energy],
+    )
+    md17_parser.add_argument(
+        "--ignore_forces",
+        action="store_true",
+        help="Ignore forces during training."
     )
     md17_parser.add_argument(
         "--molecule",

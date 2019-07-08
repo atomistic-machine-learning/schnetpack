@@ -45,7 +45,6 @@ def assert_valid_script(script_runner, tmpdir_factory, dataset, dbpath, property
         keep_n_checkpoints,
     )
     assert ret.success, ret.stderr
-    print(list(os.walk(os.path.join(modeldir, "checkpoints"))))
     assert os.path.exists(os.path.join(modeldir, "best_model"))
     ret = script_runner.run(
         "schnetpack_x.py",
@@ -66,7 +65,6 @@ def assert_valid_script(script_runner, tmpdir_factory, dataset, dbpath, property
         keep_n_checkpoints,
     )
     assert ret.success, ret.stderr
-    print(list(os.walk(os.path.join(modeldir, "checkpoints"))))
     assert os.path.exists(os.path.join(modeldir, "checkpoints",
                                        "checkpoint-{}.pth.tar".format(max_epochs)))
     ret = script_runner.run(

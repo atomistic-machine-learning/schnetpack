@@ -31,7 +31,6 @@ class AtomisticModel(nn.Module):
             output_modules = nn.ModuleList(output_modules)
         self.output_modules = output_modules
         self.requires_dr = any([om.derivative for om in self.output_modules])
-        print(self.requires_dr)
 
     def forward(self, inputs):
         """

@@ -70,7 +70,13 @@ def main(args):
 
         # run evaluation
         logging.info("evaluating...")
-        with torch.no_grad():
+        if train_args.dataset != "md17":
+            with torch.no_grad():
+                evaluate(
+                    args, model, train_loader, val_loader, test_loader, device,
+                    metrics=metrics
+                )
+        else:
             evaluate(
                 args, model, train_loader, val_loader, test_loader, device,
                 metrics=metrics
