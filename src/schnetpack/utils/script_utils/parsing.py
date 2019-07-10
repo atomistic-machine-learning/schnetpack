@@ -118,7 +118,6 @@ def get_mode_parsers():
     )
 
     eval_parser = argparse.ArgumentParser(add_help=False, parents=[mode_parser])
-    eval_parser.add_argument("datapath", help="Path to dataset")
     eval_parser.add_argument("modelpath", help="Path of stored model")
     eval_parser.add_argument(
         "--split",
@@ -138,7 +137,6 @@ def get_model_parsers():
         "--features",
         type=int,
         help="Size of atom-wise representation",
-        # todo: check defaults
         default=256,
     )
     schnet_parser.add_argument(
@@ -437,7 +435,5 @@ def build_parser():
 
 
 if __name__ == "__main__":
-    import pprint
     parser = build_parser()
     args = parser.parse_args()
-    pprint.pprint(args.__dict__)

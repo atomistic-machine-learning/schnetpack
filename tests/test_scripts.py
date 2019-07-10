@@ -70,7 +70,6 @@ def assert_valid_script(script_runner, tmpdir_factory, dataset, dbpath, property
     ret = script_runner.run(
         "schnetpack_x.py",
         "eval",
-        dbpath,
         modeldir,
         "--split",
         "test"
