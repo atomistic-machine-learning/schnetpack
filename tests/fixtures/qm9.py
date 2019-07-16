@@ -5,15 +5,16 @@ from schnetpack import AtomsLoader
 from schnetpack.datasets import QM9
 
 
-__all__ = ["qm9_dbpath",
-           "qm9_dataset",
-           "qm9_split",
-           "qm9_splits",
-           "qm9_avlailable_properties",
-           "qm9_train_loader",
-           "qm9_val_loader",
-           "qm9_test_loader",]
-
+__all__ = [
+    "qm9_dbpath",
+    "qm9_dataset",
+    "qm9_split",
+    "qm9_splits",
+    "qm9_avlailable_properties",
+    "qm9_train_loader",
+    "qm9_val_loader",
+    "qm9_test_loader",
+]
 
 
 @pytest.fixture(scope="module")

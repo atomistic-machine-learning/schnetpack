@@ -55,7 +55,8 @@ class OrcaParser:
 
         all_properties = main_properties + hessian_properties + dummy_properties
         self.all_properties = all_properties
-        self.atomsdata = spk.data.AtomsData(dbpath, required_properties=all_properties)
+
+        self.atomsdata = spk.data.AtomsData(dbpath, available_properties=all_properties)
 
         # The main file parser is always needed
         self.main_parser = OrcaMainFileParser(properties=main_properties + ["atoms"])

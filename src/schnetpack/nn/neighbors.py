@@ -17,22 +17,27 @@ def atom_distances(
     of every central atom to its relevant neighbors.
 
     Args:
-        positions (torch.Tensor): atomic Cartesian coordinates with (N_b x N_at x 3)
-            shape.
-        neighbors (torch.Tensor): indices of neighboring atoms to consider with
-            (N_b x N_at x N_nbh) shape.
-        cell (torch.tensor, optional): periodic cell of (N_b x 3 x 3) shape.
-        cell_offsets (torch.Tensor, optional): offset of atom in cell coordinates
-            with (N_b x N_at x N_nbh x 3) shape.
+        positions (torch.Tensor):
+            atomic Cartesian coordinates with (N_b x N_at x 3) shape
+        neighbors (torch.Tensor):
+            indices of neighboring atoms to consider with (N_b x N_at x N_nbh) shape
+        cell (torch.tensor, optional):
+            periodic cell of (N_b x 3 x 3) shape
+        cell_offsets (torch.Tensor, optional) :
+            offset of atom in cell coordinates with (N_b x N_at x N_nbh x 3) shape
         return_vecs (bool, optional): if True, also returns direction vectors.
         normalize_vecs (bool, optional): if True, normalize direction vectors.
         neighbor_mask (torch.Tensor, optional): boolean mask for neighbor positions.
 
     Returns:
-        torch.Tensor: distance of every atom to its neighbors with
-            (N_b x N_at x N_nbh) shape.
-        torch.Tensor: direction cosines of every atom to its neighbors with
-            (N_b x N_at x N_nbh x 3) shape.
+        (torch.Tensor, torch.Tensor):
+            distances:
+                distance of every atom to its neighbors with
+                (N_b x N_at x N_nbh) shape.
+
+            dist_vec:
+                direction cosines of every atom to its
+                neighbors with (N_b x N_at x N_nbh x 3) shape (optional).
 
     """
 

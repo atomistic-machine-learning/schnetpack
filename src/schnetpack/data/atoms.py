@@ -21,7 +21,7 @@ import torch
 from ase.db import connect
 from torch.utils.data import Dataset
 
-from schnetpack import Structure
+from ..structure import Structure
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
 from .partitioning import train_test_split
 

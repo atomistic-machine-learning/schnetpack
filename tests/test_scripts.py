@@ -24,7 +24,7 @@ from numpy.testing import assert_almost_equal
 from argparse import Namespace
 from shutil import rmtree
 
-# from ..scripts.schnetpack_parse import main
+# from scripts.schnetpack_parse import main
 
 from .fixtures import *
 

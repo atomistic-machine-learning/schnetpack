@@ -28,7 +28,7 @@ __all__ = [
     "train_loader",
     "val_loader",
     "test_loader",
-    "shuffle"
+    "shuffle",
 ]
 
 
