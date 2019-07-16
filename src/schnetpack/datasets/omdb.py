@@ -9,6 +9,7 @@ from ase.units import eV
 from schnetpack.data import DownloadableAtomsData
 from schnetpack.environment import AseEnvironmentProvider
 
+
 __all__ = ["OrganicMaterialsDatabase"]
 
 
@@ -23,7 +24,7 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
         cutoff (float): cutoff for bulk interactions.
         download (bool, optional): enable downloading if database does not exists.
         subset (list): indices to subset. Set to None for entire database.
-        properties (list, optional): properties in omdb, e.g. band_gap.
+        load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
 
     References:
@@ -35,25 +36,25 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
 
     BandGap = "band_gap"
 
-    available_properties = [BandGap]
-
-    units = dict(zip(available_properties, [eV]))
-
     def __init__(
         self,
         path,
         cutoff,
         download=True,
         subset=None,
-        properties=[],
+        load_only=None,
         collect_triples=False,
     ):
+        available_properties = [OrganicMaterialsDatabase.BandGap]
+
+        units = [eV]
+
         self.path = path
         self.cutoff = cutoff
 
-        self.dbpath = self.path.replace(".tar.gz", ".db")
+        dbpath = self.path.replace(".tar.gz", ".db")
 
-        if not os.path.exists(self.path) and not os.path.exists(self.dbpath):
+        if not os.path.exists(self.path) and not os.path.exists(dbpath):
             raise FileNotFoundError(
                 "Download OMDB dataset (e.g. OMDB-GAP1.tar.gz) from https://omdb.diracmaterials.org/dataset/ and set datapath to this file"
             )
@@ -65,7 +66,13 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
             self._convert()
 
         super(OrganicMaterialsDatabase, self).__init__(
-            self.dbpath, subset, properties, environment_provider, collect_triples
+            dbpath=dbpath,
+            subset=subset,
+            load_only=load_only,
+            environment_provider=environment_provider,
+            collect_triples=collect_triples,
+            available_properties=available_properties,
+            units=units,
         )
 
     def create_subset(self, idx):
@@ -73,11 +80,11 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
         subidx = idx if self.subset is None else np.array(self.subset)[idx]
 
         return OrganicMaterialsDatabase(
-            self.path,
-            self.cutoff,
+            path=self.path,
+            cutoff=self.cutoff,
             download=False,
             subset=subidx,
-            properties=self.required_properties,
+            load_only=self.load_only,
             collect_triples=self.collect_triples,
         )
 

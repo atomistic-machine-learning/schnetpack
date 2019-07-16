@@ -2,9 +2,10 @@ import os
 import logging
 from torch.optim import Adam
 import schnetpack as spk
+import schnetpack.atomistic.model
 from schnetpack.train import Trainer, CSVHook, ReduceLROnPlateauHook
-from schnetpack.metrics import MeanAbsoluteError
-from schnetpack.metrics import mse_loss
+from schnetpack.train.metrics import MeanAbsoluteError
+from schnetpack.train.metrics import mse_loss
 
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -17,7 +18,7 @@ properties = ["energy", "forces"]  # properties used for training
 
 # data preparation
 logging.info("get dataset")
-dataset = spk.AtomsData("data/ethanol.db", required_properties=properties)
+dataset = spk.AtomsData("data/ethanol.db", load_only=properties)
 train, val, test = spk.train_test_split(
     data=dataset,
     num_train=1000,
@@ -31,7 +32,7 @@ val_loader = spk.AtomsLoader(val, batch_size=64)
 atomrefs = dataset.get_atomrefs(properties)
 per_atom = dict(energy=True, forces=False)
 means, stddevs = train_loader.get_statistics(
-    properties, atomrefs=atomrefs, per_atom=per_atom
+    properties, single_atom_ref=atomrefs, get_atomwise_statistics=per_atom
 )
 
 # model build
@@ -46,7 +47,7 @@ output_modules = [
         negative_dr=True,
     )
 ]
-model = spk.AtomisticModel(representation, output_modules)
+model = schnetpack.atomistic.model.AtomisticModel(representation, output_modules)
 
 # build optimizer
 optimizer = Adam(params=model.parameters(), lr=1e-4)

@@ -1,7 +1,7 @@
 import os
 import pytest
 import schnetpack.md.utils as mdutils
-from schnetpack.data import Structure
+from schnetpack import Structure
 from ase import units
 
 

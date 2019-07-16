@@ -1,15 +1,14 @@
-import schnetpack.output_modules
+import schnetpack.atomistic.output_modules
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 
 import schnetpack as spk
-import schnetpack.atomistic as atm
 import schnetpack.representation as rep
 from schnetpack.datasets import *
 
 # load qm9 dataset and download if necessary
-data = QM9("qm9.db", properties=[QM9.U0])
+data = QM9("qm9.db")
 
 # split in train and val
 train, val, test = data.create_splits(100000, 10000)
@@ -18,8 +17,8 @@ val_loader = spk.data.AtomsLoader(val)
 
 # create model
 reps = rep.SchNet()
-output = schnetpack.output_modules.Atomwise()
-model = atm.AtomisticModel(reps, output)
+output = schnetpack.atomistic.Atomwise()
+model = schnetpack.atomistic.AtomisticModel(reps, output)
 
 # create trainergit add
 opt = Adam(model.parameters(), lr=1e-4)

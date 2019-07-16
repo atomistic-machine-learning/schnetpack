@@ -12,10 +12,10 @@ References
 """
 
 import os
-from schnetpack.utils import DeprecationHelper
 
-import numpy as np
-import torch
+from schnetpack.data.atoms import AtomsConverter
+from schnetpack.utils.spk_utils import DeprecationHelper
+
 from ase import units
 from ase.calculators.calculator import Calculator, all_changes
 from ase.io import read, write
@@ -30,8 +30,9 @@ from ase.md.velocitydistribution import (
 from ase.optimize import QuasiNewton
 from ase.vibrations import Vibrations
 
-from schnetpack.data import Structure
-from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
+from schnetpack.md.utils import MDUnits
+
+from schnetpack.environment import SimpleEnvironmentProvider
 
 
 class SpkCalculatorError(Exception):
@@ -43,7 +44,7 @@ class SpkCalculator(Calculator):
     ASE calculator for schnetpack machine learning models.
 
     Args:
-        ml_model (schnetpack.atomistic.AtomisticModel): Trained model for
+        ml_model (schnetpack.AtomisticModel): Trained model for
             calculations
         device (str): select to run calculations on 'cuda' or 'cpu'
         collect_triples (bool): Set to True if angular features are needed,
@@ -66,6 +67,8 @@ class SpkCalculator(Calculator):
         environment_provider=SimpleEnvironmentProvider(),
         energy=None,
         forces=None,
+        energy_units="eV",
+        forces_units="eV/Angstrom",
         **kwargs
     ):
         Calculator.__init__(self, **kwargs)
@@ -81,6 +84,10 @@ class SpkCalculator(Calculator):
         self.model_energy = energy
         self.model_forces = forces
 
+        # Convert to ASE internal units
+        self.energy_units = MDUnits.parse_mdunit(energy_units) * units.Ha
+        self.forces_units = MDUnits.parse_mdunit(forces_units) * units.Ha / units.Bohr
+
     def calculate(self, atoms=None, properties=["energy"], system_changes=all_changes):
         """
         Args:
@@ -93,7 +100,7 @@ class SpkCalculator(Calculator):
         Calculator.calculate(self, atoms)
 
         # Convert to schnetpack input format
-        model_inputs = self.atoms_converter.convert_atoms(atoms)
+        model_inputs = self.atoms_converter(atoms)
         # Call model
         model_results = self.model(model_inputs)
 
@@ -107,7 +114,8 @@ class SpkCalculator(Calculator):
                     "properties!".format(self.model_energy)
                 )
             energy = model_results[self.model_energy].cpu().data.numpy()
-            results[self.energy] = energy.reshape(-1)
+            results[self.energy] = energy.reshape(-1) * self.energy_units
+
         if self.model_forces is not None:
             if self.model_forces not in model_results.keys():
                 raise SpkCalculatorError(
@@ -116,89 +124,9 @@ class SpkCalculator(Calculator):
                     "properties!".format(self.model_forces)
                 )
             forces = model_results[self.model_forces].cpu().data.numpy()
-            results[self.forces] = forces.reshape((len(atoms), 3))
+            results[self.forces] = forces.reshape((len(atoms), 3)) * self.forces_units
 
         self.results = results
-
-
-class AtomsConverter:
-    """
-    Class to convert ASE atoms object to an input suitable for the SchNetPack
-    ML models.
-
-    Args:
-        environment_provider (callable): Neighbor list provider.
-        pair_provider (callable): Neighbor pair provider (required for angular
-            functions)
-        device (str): Device for computation (default='cpu')
-    """
-
-    def __init__(
-        self,
-        environment_provider=SimpleEnvironmentProvider(),
-        collect_triples=False,
-        device=torch.device("cpu"),
-    ):
-        self.environment_provider = environment_provider
-        self.collect_triples = collect_triples
-
-        # Get device
-        self.device = device
-
-    def convert_atoms(self, atoms):
-        """
-        Args:
-            atoms (ase.Atoms): Atoms object of molecule
-
-        Returns:
-            dict of torch.Tensor: Properties including neighbor lists and masks
-                reformated into SchNetPack input format.
-        """
-        inputs = {}
-
-        # Elemental composition
-        inputs[Structure.Z] = torch.LongTensor(atoms.numbers.astype(np.int))
-        inputs[Structure.atom_mask] = torch.ones_like(inputs[Structure.Z]).float()
-
-        # Set positions
-        positions = atoms.positions.astype(np.float32)
-        inputs[Structure.R] = torch.FloatTensor(positions)
-
-        # get atom environment
-        nbh_idx, offsets = self.environment_provider.get_environment(atoms)
-
-        # Get neighbors and neighbor mask
-        mask = torch.FloatTensor(nbh_idx) >= 0
-        inputs[Structure.neighbor_mask] = mask.float()
-        inputs[Structure.neighbors] = (
-            torch.LongTensor(nbh_idx.astype(np.int)) * mask.long()
-        )
-
-        # Get cells
-        inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
-        inputs[Structure.cell_offset] = torch.FloatTensor(offsets.astype(np.float32))
-
-        # Set index
-        # inputs['_idx'] = torch.LongTensor(np.array([idx], dtype=np.int))
-
-        # If requested get masks and neighbor lists for neighbor pairs
-        if self.collect_triples is not None:
-            nbh_idx_j, nbh_idx_k = collect_atom_triples(nbh_idx)
-            inputs[Structure.neighbor_pairs_j] = torch.LongTensor(
-                nbh_idx_j.astype(np.int)
-            )
-            inputs[Structure.neighbor_pairs_k] = torch.LongTensor(
-                nbh_idx_k.astype(np.int)
-            )
-            inputs[Structure.neighbor_pairs_mask] = torch.ones_like(
-                inputs[Structure.neighbor_pairs_j]
-            ).float()
-
-        # Add batch dimension and move to CPU/GPU
-        for key, value in inputs.items():
-            inputs[key] = value.unsqueeze(0).to(self.device)
-
-        return inputs
 
 
 class AseInterface:
@@ -220,6 +148,8 @@ class AseInterface:
         device="cpu",
         energy="energy",
         forces="forces",
+        energy_units="eV",
+        forces_units="eV/Angstrom",
     ):
         # Setup directory
         self.working_dir = working_dir
@@ -232,7 +162,12 @@ class AseInterface:
 
         # Set up calculator
         calculator = SpkCalculator(
-            ml_model, device=device, energy=energy, forces=forces
+            ml_model,
+            device=device,
+            energy=energy,
+            forces=forces,
+            energy_units=energy_units,
+            forces_units=forces_units,
         )
         self.molecule.set_calculator(calculator)
 
@@ -313,7 +248,7 @@ class AseInterface:
         """
 
         # If a previous dynamics run has been performed, don't reinitialize
-        # velocities unless explicitely requested via restart=True
+        # velocities unless explicitly requested via restart=True
         if not self.dynamics or reset:
             self._init_velocities(temp_init=temp_init)
 
@@ -322,7 +257,10 @@ class AseInterface:
             self.dynamics = VelocityVerlet(self.molecule, time_step * units.fs)
         else:
             self.dynamics = Langevin(
-                self.molecule, time_step * units.fs, temp_bath * units.kB, 0.01
+                self.molecule,
+                time_step * units.fs,
+                temp_bath * units.kB,
+                1.0 / (100.0 * units.fs),
             )
 
         # Create monitors for logfile and a trajectory file

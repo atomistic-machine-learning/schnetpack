@@ -16,7 +16,7 @@ class ISO17(DownloadableAtomsData):
     containing molecular forces.
 
     Args:
-        path (str): Path to database
+        datapath (str): Path to database directory
         fold (str): Fold of data to load. Allowed are:
                         reference - 80% of steps of 80% of MD trajectories
                         reference_eq - equilibrium conformations of those
@@ -25,8 +25,9 @@ class ISO17(DownloadableAtomsData):
                         test_other - remaining 20% unseen MD trajectories
                         test_eq - equilibrium conformations of test trajectories
         subset (list): indices of subset. Set to None for entire dataset (default: None)
+        load_only (list, optional): reduced set of properties to be loaded
         download (bool): set to true if dataset should be downloaded. (default: True)
-        calculate_triples (false): set to true to compute triples for angular functions (default: true)
+        collect_triples (false): set to true to compute triples for angular functions (default: true)
 
     See: http://quantum-machine.org/datasets/
     """
@@ -42,16 +43,12 @@ class ISO17(DownloadableAtomsData):
     E = "total_energy"
     F = "atomic_forces"
 
-    available_properties = [E, F]
-
-    units = dict(zip(available_properties, [1.0, 1.0]))
-
     def __init__(
         self,
         datapath,
         fold,
         download=True,
-        properties=None,
+        load_only=None,
         subset=None,
         collect_triples=False,
     ):
@@ -59,16 +56,21 @@ class ISO17(DownloadableAtomsData):
         if fold not in self.existing_folds:
             raise ValueError("Fold {:s} does not exist".format(fold))
 
+        available_properties = [ISO17.E, ISO17.F]
+        units = [1.0, 1.0]
+
         self.path = datapath
         self.fold = fold
-
         dbpath = os.path.join(datapath, "iso17", fold + ".db")
+
         super().__init__(
             dbpath=dbpath,
             subset=subset,
-            required_properties=properties,
+            load_only=load_only,
             collect_triples=collect_triples,
             download=download,
+            available_properties=available_properties,
+            units=units,
         )
 
     def create_subset(self, idx):
@@ -86,7 +88,7 @@ class ISO17(DownloadableAtomsData):
             self.path,
             self.fold,
             download=False,
-            properties=self.required_properties,
+            properties=self.load_only,
             subset=subidx,
             collect_triples=self.collect_triples,
         )

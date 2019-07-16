@@ -2,10 +2,11 @@ import logging
 from torch.optim import Adam
 import os
 import schnetpack as spk
+import schnetpack.atomistic.model
 from schnetpack.datasets import QM9
 from schnetpack.train import Trainer, CSVHook, ReduceLROnPlateauHook
-from schnetpack.metrics import MeanAbsoluteError
-from schnetpack.metrics import mse_loss
+from schnetpack.train.metrics import MeanAbsoluteError
+from schnetpack.train import build_mse_loss
 
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -17,17 +18,17 @@ properties = [QM9.U0]
 
 # data preparation
 logging.info("get dataset")
-dataset = QM9("data/qm9.db", properties=[QM9.U0])
+dataset = QM9("data/qm9.db", load_only=[QM9.U0])
 train, val, test = spk.train_test_split(
     dataset, 1000, 100, os.path.join(model_dir, "split.npz")
 )
-train_loader = spk.AtomsLoader(train, batch_size=64)
+train_loader = spk.AtomsLoader(train, batch_size=64, shuffle=True)
 val_loader = spk.AtomsLoader(val, batch_size=64)
 
 # statistics
 atomrefs = dataset.get_atomrefs(properties)
 means, stddevs = train_loader.get_statistics(
-    properties, per_atom=True, atomrefs=atomrefs
+    properties, get_atomwise_statistics=True, single_atom_ref=atomrefs
 )
 
 # model build
@@ -41,7 +42,7 @@ output_modules = [
         atomref=atomrefs[QM9.U0],
     )
 ]
-model = spk.AtomisticModel(representation, output_modules)
+model = schnetpack.AtomisticModel(representation, output_modules)
 
 # build optimizer
 optimizer = Adam(model.parameters(), lr=1e-4)
@@ -52,7 +53,7 @@ metrics = [MeanAbsoluteError(p, p) for p in properties]
 hooks = [CSVHook(log_path=model_dir, metrics=metrics), ReduceLROnPlateauHook(optimizer)]
 
 # trainer
-loss = mse_loss(properties)
+loss = build_mse_loss(properties)
 trainer = Trainer(
     model_dir,
     model=model,

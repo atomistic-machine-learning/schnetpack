@@ -23,28 +23,18 @@ Contents
 
 .. toctree::
    :glob:
-   :caption: User Guide
-   :maxdepth: 2
-
-   guide/preparedata
-   guide/asemodel
-   guide/trainmodel
-   guide/runmd
-
-
-.. toctree::
-   :glob:
    :caption: Tutorials
-   :maxdepth: 2
+   :maxdepth: 1
 
-   tutorials/tutorial_ethanol
-   tutorials/tutorial_qm9
+   tutorials/tutorial_01_preparing_data
+   tutorials/tutorial_02_qm9
+   tutorials/tutorial_03_force_models
 
 
 .. toctree::
    :glob:
-   :caption: API reference
-   :maxdepth: 2
+   :caption: Modules
+   :maxdepth: 1
 
    modules/index
 

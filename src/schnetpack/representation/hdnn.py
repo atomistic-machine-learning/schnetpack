@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 
 import schnetpack.nn as snn
-from schnetpack.data import Structure, StatisticsAccumulator
+from schnetpack.data import StatisticsAccumulator
+from schnetpack import Structure
 
 
 class HDNNException(Exception):
@@ -205,6 +206,9 @@ class SymmetryFunctions(nn.Module):
         neighbors = inputs[Structure.neighbors]
         neighbor_mask = inputs[Structure.neighbor_mask]
 
+        cell = inputs[Structure.cell]
+        cell_offset = inputs[Structure.cell_offset]
+
         # Compute radial functions
         if self.RDF is not None:
             # Get atom type embeddings
@@ -213,7 +217,11 @@ class SymmetryFunctions(nn.Module):
             Z_ij = snn.neighbor_elements(Z_rad, neighbors)
             # Compute distances
             distances = snn.atom_distances(
-                positions, neighbors, neighbor_mask=neighbor_mask
+                positions,
+                neighbors,
+                neighbor_mask=neighbor_mask,
+                cell=cell,
+                cell_offsets=cell_offset,
             )
             radial_sf = self.RDF(
                 distances, elemental_weights=Z_ij, neighbor_mask=neighbor_mask
@@ -226,6 +234,7 @@ class SymmetryFunctions(nn.Module):
             try:
                 idx_j = inputs[Structure.neighbor_pairs_j]
                 idx_k = inputs[Structure.neighbor_pairs_k]
+
             except KeyError as e:
                 raise HDNNException(
                     "Angular symmetry functions require "
@@ -237,8 +246,21 @@ class SymmetryFunctions(nn.Module):
             Z_angular = self.angular_Z(Z)
             Z_ij = snn.neighbor_elements(Z_angular, idx_j)
             Z_ik = snn.neighbor_elements(Z_angular, idx_k)
+
+            # Offset indices
+            offset_idx_j = inputs[Structure.neighbor_offsets_j]
+            offset_idx_k = inputs[Structure.neighbor_offsets_k]
+
             # Compute triple distances
-            r_ij, r_ik, r_jk = snn.triple_distances(positions, idx_j, idx_k)
+            r_ij, r_ik, r_jk = snn.triple_distances(
+                positions,
+                idx_j,
+                idx_k,
+                offset_idx_j=offset_idx_j,
+                offset_idx_k=offset_idx_k,
+                cell=cell,
+                cell_offsets=cell_offset,
+            )
 
             angular_sf = self.ADF(
                 r_ij,

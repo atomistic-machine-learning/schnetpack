@@ -2,18 +2,22 @@
 import logging
 import os
 
-import schnetpack.output_modules
 import torch
 from ase.data import atomic_numbers
 
-import schnetpack as spk
+import schnetpack.train.metrics
 from schnetpack.datasets import QM9
-from scripts.script_utils.script_parsing import get_main_parser, add_subparsers
-from scripts.script_utils.setup import setup_run
-from scripts.script_utils.model import get_representation, get_model
-from scripts.script_utils.training import train
-from scripts.script_utils.evaluation import evaluate
-from scripts.script_utils import get_statistics, get_loaders
+from schnetpack.utils.script_utils import (
+    get_main_parser,
+    add_subparsers,
+    setup_run,
+    get_representation,
+    get_model,
+    get_trainer,
+    evaluate,
+    get_statistics,
+    get_loaders,
+)
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
@@ -34,7 +38,25 @@ if __name__ == "__main__":
     add_subparsers(
         parser,
         defaults=dict(property=QM9.U0),
-        choices=dict(property=QM9.available_properties),
+        choices=dict(
+            property=[
+                QM9.A,
+                QM9.B,
+                QM9.C,
+                QM9.mu,
+                QM9.alpha,
+                QM9.homo,
+                QM9.lumo,
+                QM9.gap,
+                QM9.r2,
+                QM9.zpve,
+                QM9.U0,
+                QM9.U,
+                QM9.H,
+                QM9.G,
+                QM9.Cv,
+            ]
+        ),
     )
     args = parser.parse_args()
     train_args = setup_run(args)
@@ -44,8 +66,12 @@ if __name__ == "__main__":
 
     # define metrics
     metrics = [
-        spk.metrics.MeanAbsoluteError(train_args.property, train_args.property),
-        spk.metrics.RootMeanSquaredError(train_args.property, train_args.property),
+        schnetpack.train.metrics.MeanAbsoluteError(
+            train_args.property, train_args.property
+        ),
+        schnetpack.train.metrics.RootMeanSquaredError(
+            train_args.property, train_args.property
+        ),
     ]
 
     # build dataset
@@ -53,7 +79,7 @@ if __name__ == "__main__":
     qm9 = QM9(
         args.datapath,
         download=True,
-        properties=[train_args.property],
+        load_only=[train_args.property],
         collect_triples=args.model == "wacsf",
         remove_uncharacterized=train_args.remove_uncharacterized,
     )
@@ -64,14 +90,14 @@ if __name__ == "__main__":
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")
     train_loader, val_loader, test_loader = get_loaders(
-        logging, args, dataset=qm9, split_path=split_path
+        args, dataset=qm9, split_path=split_path, logging=logging
     )
 
     if args.mode == "train":
         # get statistics
         logging.info("calculate statistics...")
         mean, stddev = get_statistics(
-            split_path, logging, train_loader, train_args, atomref
+            split_path, train_loader, train_args, atomref, logging=logging
         )
 
         # build representation
@@ -80,7 +106,7 @@ if __name__ == "__main__":
         # build output module
         if args.model == "schnet":
             if args.property == QM9.mu:
-                output_module = spk.output_modules.DipoleMoment(
+                output_module = schnetpack.atomistic.output_modules.DipoleMoment(
                     args.features,
                     predict_magnitude=True,
                     mean=mean[args.property],
@@ -88,7 +114,7 @@ if __name__ == "__main__":
                     property=args.property,
                 )
             else:
-                output_module = spk.output_modules.Atomwise(
+                output_module = schnetpack.atomistic.output_modules.Atomwise(
                     args.features,
                     aggregation_mode=args.aggregation_mode,
                     mean=mean[args.property],
@@ -99,7 +125,7 @@ if __name__ == "__main__":
         elif args.model == "wacsf":
             elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
             if args.property == QM9.mu:
-                output_module = spk.output_modules.ElementalDipoleMoment(
+                output_module = schnetpack.atomistic.output_modules.ElementalDipoleMoment(
                     representation.n_symfuncs,
                     n_hidden=args.n_nodes,
                     n_layers=args.n_layers,
@@ -108,7 +134,7 @@ if __name__ == "__main__":
                     property=args.property,
                 )
             else:
-                output_module = spk.output_modules.ElementalAtomwise(
+                output_module = schnetpack.atomistic.output_modules.ElementalAtomwise(
                     representation.n_symfuncs,
                     n_hidden=args.n_nodes,
                     n_layers=args.n_layers,
@@ -131,7 +157,8 @@ if __name__ == "__main__":
 
         # run training
         logging.info("training...")
-        train(args, model, train_loader, val_loader, device, metrics=metrics)
+        trainer = get_trainer(args, model, train_loader, val_loader, metrics)
+        trainer.train(device, n_epochs=args.n_epochs)
         logging.info("...training done!")
 
     elif args.mode == "eval":
@@ -149,7 +176,6 @@ if __name__ == "__main__":
                 test_loader,
                 device,
                 metrics=metrics,
-                to_kcal=True,
             )
         logging.info("... done!")
     else:

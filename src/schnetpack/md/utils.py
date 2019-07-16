@@ -4,7 +4,7 @@ from ase import units
 import h5py
 import logging
 import json
-from schnetpack.data import Structure
+from schnetpack import Structure
 
 
 class MDUnits:
@@ -27,6 +27,7 @@ class MDUnits:
     d2amu = units._amu / units._me
     angs2bohr = units.Angstrom / units.Bohr
     auforces2aseforces = angs2bohr / eV2Ha
+    Ha2kcalpmol = units.Ha * units.mol / units.kcal
 
     # Constants
     kB = units.kB / units.Ha

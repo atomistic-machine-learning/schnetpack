@@ -21,11 +21,13 @@ import torch
 from ase.db import connect
 from torch.utils.data import Dataset
 
+from ..structure import Structure
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
-from .definitions import Structure
 from .partitioning import train_test_split
 
 logger = logging.getLogger(__name__)
+
+__all__ = ["AtomsData", "AtomsDataError", "DownloadableAtomsData", "AtomsConverter"]
 
 
 class AtomsDataError(Exception):
@@ -33,28 +35,85 @@ class AtomsDataError(Exception):
 
 
 class AtomsData(Dataset):
+    """
+    Base class for atomistic datasets.
+    The data is stored in the referenced ase database and can be used to load data
+    with the pytorch dataloader.
+
+    Args:
+        dbpath (str): path to directory containing database.
+        subset (list, optional): indices to subset. Set to None for entire database.
+        available_properties (list, optional): complete set of physical properties
+            that are contained in the database.
+        load_only (list, optional): reduced set of properties to be loaded
+        units (list, optional): definition of units for all available properties
+        environment_provider (spk.environment.BaseEnvironmentProvider): define how
+            neighborhood is calculated
+            (default=spk.environment.SimpleEnvironmentProvider).
+        collect_triples (bool, optional): Set to True if angular features are needed.
+        center_positions (bool): subtract center of mass from all positions
+            (default=True)
+    """
+
     ENCODING = "utf-8"
-    available_properties = None
 
     def __init__(
         self,
         dbpath,
         subset=None,
-        required_properties=[],
+        available_properties=None,
+        load_only=None,
+        units=None,
         environment_provider=SimpleEnvironmentProvider(),
         collect_triples=False,
         center_positions=True,
-        load_charge=False,
     ):
         self.dbpath = dbpath
         self.subset = subset
-        self.required_properties = required_properties
-        if required_properties is None:
-            self.required_properties = self.available_properties
+        self.load_only = load_only
+        self.available_properties = self.get_available_properties(available_properties)
+        if load_only is None:
+            self.load_only = self.available_properties
+        if units is None:
+            units = [1.0] * len(self.available_properties)
+        self.units = dict(zip(self.available_properties, units))
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
-        self.centered = center_positions
-        self.load_charge = load_charge
+        self.center_positions = center_positions
+
+    def get_available_properties(self, available_properties):
+        """
+        Get available properties from argument or database.
+
+        Args:
+            available_properties (list or None): all properties of the dataset
+
+        Returns:
+            (list): all properties of the dataset
+        """
+        # use the provided list
+        if not os.path.exists(self.dbpath):
+            if available_properties is None:
+                raise AtomsDataError(
+                    "Please define available_properties or set "
+                    "db_path to an existing database!"
+                )
+            return available_properties
+        # read database properties
+        with connect(self.dbpath) as conn:
+            atmsrw = conn.get(1)
+            db_properties = list(atmsrw.data.keys())
+            db_properties = [prop for prop in db_properties if not prop.startswith("_")]
+        # check if properties match
+        if available_properties is None or set(db_properties) == set(
+            available_properties
+        ):
+            return db_properties
+
+        raise AtomsDataError(
+            "The available_properties {} do not match the "
+            "properties in the database {}!".format(available_properties, db_properties)
+        )
 
     def create_splits(self, num_train=None, num_val=None, split_file=None):
         warnings.warn(
@@ -78,13 +137,13 @@ class AtomsData(Dataset):
             idx if self.subset is None or len(idx) == 0 else np.array(self.subset)[idx]
         )
         return type(self)(
-            self.dbpath,
-            subidx,
-            self.required_properties,
-            self.environment_provider,
-            self.collect_triples,
-            self.centered,
-            self.load_charge,
+            dbpath=self.dbpath,
+            subset=subidx,
+            load_only=self.load_only,
+            environment_provider=self.environment_provider,
+            collect_triples=self.collect_triples,
+            center_positions=self.center_positions,
+            available_properties=self.available_properties,
         )
 
     def __len__(self):
@@ -95,24 +154,7 @@ class AtomsData(Dataset):
 
     def __getitem__(self, idx):
         at, properties = self.get_properties(idx)
-
-        # get atom environment
-        nbh_idx, offsets = self.environment_provider.get_environment(at)
-
-        properties[Structure.neighbors] = torch.LongTensor(nbh_idx.astype(np.int))
-        properties[Structure.cell_offset] = torch.FloatTensor(
-            offsets.astype(np.float32)
-        )
         properties["_idx"] = torch.LongTensor(np.array([idx], dtype=np.int))
-
-        if self.collect_triples:
-            nbh_idx_j, nbh_idx_k = collect_atom_triples(nbh_idx)
-            properties[Structure.neighbor_pairs_j] = torch.LongTensor(
-                nbh_idx_j.astype(np.int)
-            )
-            properties[Structure.neighbor_pairs_k] = torch.LongTensor(
-                nbh_idx_k.astype(np.int)
-            )
 
         return properties
 
@@ -155,13 +197,7 @@ class AtomsData(Dataset):
 
         data = {}
 
-        props = (
-            properties.keys()
-            if self.available_properties is None
-            else self.available_properties
-        )
-
-        for pname in props:
+        for pname in self.available_properties:
             try:
                 prop = properties[pname]
             except:
@@ -200,7 +236,7 @@ class AtomsData(Dataset):
 
         # extract properties
         properties = {}
-        for pname in self.required_properties:
+        for pname in self.load_only:
             # new data format
             try:
                 shape = row.data["_shape_" + pname]
@@ -222,25 +258,14 @@ class AtomsData(Dataset):
 
             properties[pname] = torch.FloatTensor(prop)
 
-        if self.load_charge:
-            if Structure.charge in row.data.keys():
-                shape = row.data["_shape_" + Structure.charge]
-                dtype = row.data["_dtype_" + Structure.charge]
-                prop = np.frombuffer(b64decode(row.data[Structure.charge]), dtype=dtype)
-                prop = prop.reshape(shape)
-                properties[Structure.charge] = torch.FloatTensor(prop)
-            else:
-                properties[Structure.charge] = torch.FloatTensor(
-                    np.array([0.0], dtype=np.float32)
-                )
-
         # extract/calculate structure
-        properties[Structure.Z] = torch.LongTensor(at.numbers.astype(np.int))
-        positions = at.positions.astype(np.float32)
-        if self.centered:
-            positions -= at.get_center_of_mass()
-        properties[Structure.R] = torch.FloatTensor(positions)
-        properties[Structure.cell] = torch.FloatTensor(at.cell.astype(np.float32))
+        properties = _convert_atoms(
+            at,
+            environment_provider=self.environment_provider,
+            collect_triples=self.collect_triples,
+            center_positions=self.center_positions,
+            output=properties,
+        )
 
         return at, properties
 
@@ -290,22 +315,24 @@ class DownloadableAtomsData(AtomsData):
         self,
         dbpath,
         subset=None,
-        required_properties=None,
+        load_only=None,
+        available_properties=None,
+        units=None,
         environment_provider=SimpleEnvironmentProvider(),
         collect_triples=False,
         center_positions=True,
-        load_charge=False,
         download=False,
     ):
 
         super(DownloadableAtomsData, self).__init__(
-            dbpath,
-            subset,
-            required_properties,
-            environment_provider,
-            collect_triples,
-            center_positions,
-            load_charge,
+            dbpath=dbpath,
+            subset=subset,
+            available_properties=available_properties,
+            load_only=load_only,
+            units=units,
+            environment_provider=environment_provider,
+            collect_triples=collect_triples,
+            center_positions=center_positions,
         )
         if download:
             self.download()
@@ -331,3 +358,114 @@ class DownloadableAtomsData(AtomsData):
         To be implemented in deriving classes.
         """
         raise NotImplementedError
+
+
+def _convert_atoms(
+    atoms,
+    environment_provider=SimpleEnvironmentProvider(),
+    collect_triples=False,
+    center_positions=False,
+    output=None,
+):
+    """
+        Helper function to convert ASE atoms object to SchNetPack input format.
+
+        Args:
+            atoms (ase.Atoms): Atoms object of molecule
+            environment_provider (callable): Neighbor list provider.
+            device (str): Device for computation (default='cpu')
+            output (dict): Destination for converted atoms, if not None
+
+    Returns:
+        dict of torch.Tensor: Properties including neighbor lists and masks
+            reformated into SchNetPack input format.
+    """
+    if output is None:
+        inputs = {}
+    else:
+        inputs = output
+
+    # Elemental composition
+    inputs[Structure.Z] = torch.LongTensor(atoms.numbers.astype(np.int))
+    positions = atoms.positions.astype(np.float32)
+    if center_positions:
+        positions -= atoms.get_center_of_mass()
+    inputs[Structure.R] = torch.FloatTensor(positions)
+    inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
+
+    # get atom environment
+    nbh_idx, offsets = environment_provider.get_environment(atoms)
+
+    # Get neighbors and neighbor mask
+    inputs[Structure.neighbors] = torch.LongTensor(nbh_idx.astype(np.int))
+
+    # Get cells
+    inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
+    inputs[Structure.cell_offset] = torch.FloatTensor(offsets.astype(np.float32))
+
+    # If requested get neighbor lists for triples
+    if collect_triples:
+        nbh_idx_j, nbh_idx_k, offset_idx_j, offset_idx_k = collect_atom_triples(nbh_idx)
+        inputs[Structure.neighbor_pairs_j] = torch.LongTensor(nbh_idx_j.astype(np.int))
+        inputs[Structure.neighbor_pairs_k] = torch.LongTensor(nbh_idx_k.astype(np.int))
+
+        inputs[Structure.neighbor_offsets_j] = torch.LongTensor(
+            offset_idx_j.astype(np.int)
+        )
+        inputs[Structure.neighbor_offsets_k] = torch.LongTensor(
+            offset_idx_k.astype(np.int)
+        )
+
+    return inputs
+
+
+class AtomsConverter:
+    """
+    Convert ASE atoms object to an input suitable for the SchNetPack
+    ML models.
+
+    Args:
+        environment_provider (callable): Neighbor list provider.
+        pair_provider (callable): Neighbor pair provider (required for angular
+            functions)
+        device (str): Device for computation (default='cpu')
+    """
+
+    def __init__(
+        self,
+        environment_provider=SimpleEnvironmentProvider(),
+        collect_triples=False,
+        device=torch.device("cpu"),
+    ):
+        self.environment_provider = environment_provider
+        self.collect_triples = collect_triples
+
+        # Get device
+        self.device = device
+
+    def __call__(self, atoms):
+        """
+        Args:
+            atoms (ase.Atoms): Atoms object of molecule
+
+        Returns:
+            dict of torch.Tensor: Properties including neighbor lists and masks
+                reformated into SchNetPack input format.
+        """
+        inputs = _convert_atoms(atoms, self.environment_provider, self.collect_triples)
+
+        # Calculate masks
+        inputs[Structure.atom_mask] = torch.ones_like(inputs[Structure.Z]).float()
+        mask = inputs[Structure.neighbors] >= 0
+        inputs[Structure.neighbor_mask] = mask.float()
+
+        if self.collect_triples:
+            inputs[Structure.neighbor_pairs_mask] = torch.ones_like(
+                inputs[Structure.neighbor_pairs_j]
+            ).float()
+
+        # Add batch dimension and move to CPU/GPU
+        for key, value in inputs.items():
+            inputs[key] = value.unsqueeze(0).to(self.device)
+
+        return inputs
