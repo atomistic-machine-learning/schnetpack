@@ -17,11 +17,11 @@ def get_representation(args, train_loader=None):
         cutoff_network = get_cutoff_by_string(args.cutoff_function)
 
         return spk.representation.SchNet(
-            args.features,
-            args.n_filters,
-            args.interactions,
-            args.cutoff,
-            args.num_gaussians,
+            n_atom_basis=args.features,
+            n_filters=args.features,
+            n_interactions=args.interactions,
+            cutoff=args.cutoff,
+            n_gaussians=args.num_gaussians,
             cutoff_network=cutoff_network,
         )
 
