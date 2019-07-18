@@ -430,13 +430,18 @@ class FileLogger(SimulationHook):
 
         self.restart = restart
         self.every_n_steps = every_n_steps
+        self.filename = filename
+
+        # Create an empty variable to hold the HDF5 file upon initialization
+        self.file = None
 
         # Remove already existing file if not restarting simulation
-        if not self.restart:
-            if os.path.exists(filename):
-                os.remove(filename)
+        # if not self.restart:
+        #     if os.path.exists(filename):
+        #         print('I am here!!!')
+        #         os.remove(filename)
 
-        self.file = h5py.File(filename, "a", libver="latest")
+        # self.file = h5py.File(filename, "a", libver="latest")
         self.buffer_size = buffer_size
 
         # Precondition data streams
@@ -456,6 +461,16 @@ class FileLogger(SimulationHook):
         Args:
             simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
+
+        # If an old file already exists and no restart is specified, delete old file.
+        # TODO: Maybe change to error, so user has to delete it per hand
+        if not self.restart:
+            if os.path.exists(self.filename):
+                os.remove(self.filename)
+
+        # Create the HDF5 file
+        self.file = h5py.File(self.filename, "a", libver="latest")
+
         # Construct stream buffers and data groups
         for stream in self.data_steams:
             stream.init_data_stream(
