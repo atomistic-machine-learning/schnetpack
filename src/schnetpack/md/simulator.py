@@ -34,10 +34,15 @@ class Simulator:
                                         during simulations. Examples would be
                                         file loggers and thermostats.
         step (int): Index of the initial simulation step.
-
+        restart (bool): Indicates, whether the simulation is restarted. E.g. if set to True, the simulator tries to
+                        continue logging in the previously created dataset. (default=False)
+                        This is set automatically by the restart_simulation function. Enabling it without the function
+                        currently only makes sense if independent simulations should be written to the same file.
     """
 
-    def __init__(self, system, integrator, calculator, simulator_hooks=[], step=0):
+    def __init__(
+        self, system, integrator, calculator, simulator_hooks=[], step=0, restart=False
+    ):
 
         self.system = system
         self.integrator = integrator
@@ -45,6 +50,10 @@ class Simulator:
         self.simulator_hooks = simulator_hooks
         self.step = step
         self.n_steps = None
+        self.restart = restart
+
+        # Keep track of the simulation cycles performed with simulate
+        self._cycles = 0
 
     def simulate(self, n_steps=10000):
         """
@@ -98,6 +107,8 @@ class Simulator:
         for hook in self.simulator_hooks:
             hook.on_simulation_end(self)
 
+        self._cycles += 1
+
     @property
     def state_dict(self):
         """
@@ -146,7 +157,7 @@ class Simulator:
             if hook.__class__ in state_dict["simulator_hooks"]:
                 hook.state_dict = state_dict["simulator_hooks"][hook.__class__]
 
-    def restart(self, state_dict, soft=False):
+    def restart_simulation(self, state_dict, soft=False):
         """
         Routine for restarting a simulation. Reads the current step, as well
         as system state from the provided state dict. In case of the
@@ -179,10 +190,13 @@ class Simulator:
                 if hasattr(hook, "temperature_bath"):
                     if hook.__class__ not in state_dict["simulator_hooks"]:
                         raise ValueError(
-                            f"Could not find restart informationfor {hook.__class__} in state dict."
+                            f"Could not find restart information for {hook.__class__} in state dict."
                         )
                     else:
                         hook.state_dict = state_dict["simulator_hooks"][hook.__class__]
+
+        # In this case, set restart flag automatically
+        self.restart = True
 
     def load_system_state(self, state_dict):
         """

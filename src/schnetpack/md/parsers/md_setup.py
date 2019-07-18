@@ -63,7 +63,7 @@ class MDSimulation:
         # If requested, read restart data
         if self.restart:
             state_dict = torch.load(self.restart)
-            simulator.restart(state_dict, soft=False)
+            simulator.restart_simulation(state_dict, soft=False)
             logging.info(f"Restarting simulation from {self.restart}...")
         elif self.load_system_state:
             state_dict = torch.load(self.load_system_state)
@@ -320,7 +320,7 @@ class SetupDynamics(SetupBlock):
                 ]
 
         md_initializer.n_steps = self.target_config_block["n_steps"]
-        md_initializer.restart = self.target_config_block["restart"]
+        md_initializer.restart_simulation = self.target_config_block["restart"]
 
 
 class SetupBiasPotential(SetupBlock):
@@ -369,7 +369,10 @@ class SetupLogging(SetupBlock):
     def _setup(self, md_initializer):
 
         # Convert restart to proper boolean:
-        if md_initializer.restart is None or not md_initializer.restart:
+        if (
+            md_initializer.restart_simulation is None
+            or not md_initializer.restart_simulation
+        ):
             restart = False
         else:
             restart = True
