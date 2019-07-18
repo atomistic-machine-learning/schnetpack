@@ -52,8 +52,8 @@ class Simulator:
         self.n_steps = None
         self.restart = restart
 
-        # Keep track of the simulation cycles performed with simulate
-        self._cycles = 0
+        # Keep track of the actual simulation steps performed with simulate calls
+        self.effective_steps = 0
 
     def simulate(self, n_steps=10000):
         """
@@ -102,17 +102,16 @@ class Simulator:
                 hook.on_step_end(self)
 
             self.step += 1
+            self.effective_steps += 1
 
         # Call hooks at the simulation end
         for hook in self.simulator_hooks:
             hook.on_simulation_end(self)
 
-        self._cycles += 1
-
     @property
     def state_dict(self):
         """
-        State dict used to restart the simulation. Genrates a dictionary with
+        State dict used to restart the simulation. Generates a dictionary with
         the following entries:
             - step: current simulation step
             - systems: state dict of the system holding current positions,
@@ -129,6 +128,7 @@ class Simulator:
         """
         state_dict = {
             "step": self.step,
+            "effective_steps": self.effective_steps,
             "system": self.system.state_dict,
             "simulator_hooks": {
                 hook.__class__: hook.state_dict for hook in self.simulator_hooks
@@ -150,6 +150,7 @@ class Simulator:
 
         """
         self.step = state_dict["step"]
+        self.effective_steps = state_dict["effective_steps"]
         self.system.state_dict = state_dict["system"]
 
         # Set state dicts of all hooks
@@ -176,6 +177,7 @@ class Simulator:
 
         """
         self.step = state_dict["step"]
+        self.effective_steps = state_dict["effective_steps"]
         self.system.state_dict = state_dict["system"]
 
         if soft:
