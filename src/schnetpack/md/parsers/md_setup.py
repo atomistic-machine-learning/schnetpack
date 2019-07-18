@@ -61,7 +61,7 @@ class MDSimulation:
         simulator = Simulator(self.system, self.integrator, self.calculator, self.hooks)
 
         # If requested, read restart data
-        if self.restart:
+        if self.restart and (self.restart is not None):
             state_dict = torch.load(self.restart)
             simulator.restart_simulation(state_dict, soft=False)
             logging.info(f"Restarting simulation from {self.restart}...")
@@ -320,7 +320,7 @@ class SetupDynamics(SetupBlock):
                 ]
 
         md_initializer.n_steps = self.target_config_block["n_steps"]
-        md_initializer.restart_simulation = self.target_config_block["restart"]
+        md_initializer.restart = self.target_config_block["restart"]
 
 
 class SetupBiasPotential(SetupBlock):
@@ -368,15 +368,6 @@ class SetupLogging(SetupBlock):
 
     def _setup(self, md_initializer):
 
-        # Convert restart to proper boolean:
-        if (
-            md_initializer.restart_simulation is None
-            or not md_initializer.restart_simulation
-        ):
-            restart = False
-        else:
-            restart = True
-
         if "file_logger" in self.target_config_block:
             logging_file = os.path.join(
                 md_initializer.simulation_dir, "simulation.hdf5"
@@ -390,7 +381,6 @@ class SetupLogging(SetupBlock):
                     logging_file,
                     file_logging_config["buffer_size"],
                     data_streams=data_streams,
-                    restart=restart,
                     every_n_steps=file_logging_config["every_n_steps"],
                 )
             ]
