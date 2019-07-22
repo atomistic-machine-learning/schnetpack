@@ -386,7 +386,7 @@ def _convert_atoms(
         inputs = output
 
     # Elemental composition
-    cell = np.array(atoms.cell, dtype=np.float32)  # get cell array
+    cell = np.array(atoms.cell.array, dtype=np.float32)  # get cell array
 
     inputs[Structure.Z] = torch.LongTensor(atoms.numbers.astype(np.int))
     positions = atoms.positions.astype(np.float32)
