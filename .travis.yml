@@ -4,6 +4,9 @@ install:
   - pip install -r docs/sphinx-requirements.txt
   - pip install codecov
   - pip install tox
+  
+env:
+  - CODECOV_TOKEN=851df614-77fb-4ffe-aeb7-0efef19e38db
 
 matrix:
   include:
