@@ -386,12 +386,14 @@ def _convert_atoms(
         inputs = output
 
     # Elemental composition
+    cell = np.array(atoms.cell.array, dtype=np.float32)  # get cell array
+
     inputs[Structure.Z] = torch.LongTensor(atoms.numbers.astype(np.int))
     positions = atoms.positions.astype(np.float32)
     if center_positions:
         positions -= atoms.get_center_of_mass()
     inputs[Structure.R] = torch.FloatTensor(positions)
-    inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
+    inputs[Structure.cell] = torch.FloatTensor(cell)
 
     # get atom environment
     nbh_idx, offsets = environment_provider.get_environment(atoms)
@@ -400,7 +402,7 @@ def _convert_atoms(
     inputs[Structure.neighbors] = torch.LongTensor(nbh_idx.astype(np.int))
 
     # Get cells
-    inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
+    inputs[Structure.cell] = torch.FloatTensor(cell)
     inputs[Structure.cell_offset] = torch.FloatTensor(offsets.astype(np.float32))
 
     # If requested get neighbor lists for triples
