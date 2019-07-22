@@ -32,7 +32,7 @@ setup(
     install_requires=[
         "torch>=0.4.1",
         "numpy",
-        "ase>=3.16",
+        "ase>=3.18",
         "h5py",
         "tensorboardX",
         "sacred==0.7.4",
