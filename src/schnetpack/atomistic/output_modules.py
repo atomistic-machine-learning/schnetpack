@@ -9,6 +9,10 @@ from schnetpack import nn as L, Structure
 __all__ = ["Atomwise", "ElementalAtomwise", "DipoleMoment", "ElementalDipoleMoment"]
 
 
+class AtomwiseError(Exception):
+    pass
+
+
 class Atomwise(nn.Module):
     """
     Predicts atom-wise contributions and accumulates global prediction, e.g. for the
@@ -121,6 +125,9 @@ class Atomwise(nn.Module):
             self.atom_pool = schnetpack.nn.base.Aggregate(axis=1, mean=False)
         elif aggregation_mode == "avg":
             self.atom_pool = schnetpack.nn.base.Aggregate(axis=1, mean=True)
+        else:
+            raise AtomwiseError("{} is not a valid aggregation "
+                                "mode!".format(aggregation_mode))
 
     def forward(self, inputs):
         r"""
