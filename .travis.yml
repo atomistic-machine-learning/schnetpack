@@ -21,4 +21,4 @@ branches:
   - dev
 
 after_success:
-  - coveralls
+  - codecov
