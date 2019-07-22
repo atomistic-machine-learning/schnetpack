@@ -137,10 +137,7 @@ def get_model_parsers():
         "--features",
         type=int,
         help="Size of atom-wise representation",
-        default=256,
-    )
-    schnet_parser.add_argument(
-        "--n_filters", type=int, help="Size of atom-wise representation", default=25
+        default=128,
     )
     schnet_parser.add_argument(
         "--interactions", type=int, help="Number of interaction blocks", default=6
