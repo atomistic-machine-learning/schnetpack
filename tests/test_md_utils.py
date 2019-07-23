@@ -1,7 +1,11 @@
 import os
 import pytest
-import schnetpack.md.utils as mdutils
+
 from schnetpack import Properties
+
+import schnetpack.md.utils.hdf5_data
+import schnetpack.md.utils.md_units
+
 from ase import units
 
 
@@ -10,7 +14,7 @@ def hdf5_dataset():
     hdf5_path = os.path.join(
         os.path.dirname(os.path.realpath(__file__)), "data/test_simulation.hdf5"
     )
-    return mdutils.HDF5Loader(hdf5_path, load_properties=True)
+    return schnetpack.md.utils.hdf5_data.HDF5Loader(hdf5_path, load_properties=True)
 
 
 def test_properties(hdf5_dataset):
@@ -79,4 +83,6 @@ def unit_conversion():
 
 def test_unit_conversion(unit_conversion):
     for unit, factor in unit_conversion.items():
-        assert abs(mdutils.MDUnits.parse_mdunit(unit) - factor) < 1e-6
+        assert (
+            abs(schnetpack.md.utils.md_units.MDUnits.parse_mdunit(unit) - factor) < 1e-6
+        )

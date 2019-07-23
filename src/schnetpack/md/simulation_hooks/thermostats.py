@@ -83,9 +83,11 @@ class ThermostatHook(SimulationHook):
                     "be used with ring polymer dynamics."
                 )
             else:
-                self.nm_transformation = self.nm_transformation(
-                    self.n_replicas, device=self.device
-                )
+                # If simulation is not restarted from a previous point, initialize.
+                if simulator.effective_steps == 0:
+                    self.nm_transformation = self.nm_transformation(
+                        self.n_replicas, device=self.device
+                    )
 
         if not self.initialized:
             self._init_thermostat(simulator)
@@ -446,7 +448,7 @@ class PIGLETThermostat(GLEThermostat):
 
     References
     ----------
-    -- [#piglet_thermostat1] Uhl, Marx, Ceriotti:
+    .. [#piglet_thermostat1] Uhl, Marx, Ceriotti:
        Accelerated path integral methods for atomistic simulations at ultra-low temperatures.
        The Journal of chemical physics, 145(5), 054101. 2016.
     """
@@ -829,7 +831,7 @@ class TRPMDThermostat(PILELocalThermostat):
 
     References
     ----------
-    -- [#trpmd_thermostat1] Rossi, Ceriotti, Manolopoulos:
+    .. [#trpmd_thermostat1] Rossi, Ceriotti, Manolopoulos:
        How to remove the spurious resonances from ring polymer molecular dynamics.
        The Journal of Chemical Physics, 140(23), 234116. 2014.
     """
@@ -1132,7 +1134,7 @@ class NHCThermostat(ThermostatHook):
 class NHCRingPolymerThermostat(NHCThermostat):
     """
     Nose-Hoover chain thermostat for ring polymer molecular dynamics simulations as e.g. described in
-    [#stochastic_thermostats1]_. This is based on the massive setting of the standard NHC thermostat but operates in
+    [#stochastic_thermostats2]_. This is based on the massive setting of the standard NHC thermostat but operates in
     the normal mode representation and uses specially initialized thermostat masses.
 
     Args:
@@ -1149,7 +1151,7 @@ class NHCRingPolymerThermostat(NHCThermostat):
 
     References
     ----------
-    .. [#stochastic_thermostats1]_Ceriotti, Parrinello, Markland, Manolopoulos:
+    .. [#stochastic_thermostats2]_Ceriotti, Parrinello, Markland, Manolopoulos:
        Efficient stochastic thermostatting of path integral molecular dynamics.
        The Journal of Chemical Physics, 133 (12), 124104. 2010.
     """

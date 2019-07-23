@@ -34,10 +34,15 @@ class Simulator:
                                         during simulations. Examples would be
                                         file loggers and thermostats.
         step (int): Index of the initial simulation step.
-
+        restart (bool): Indicates, whether the simulation is restarted. E.g. if set to True, the simulator tries to
+                        continue logging in the previously created dataset. (default=False)
+                        This is set automatically by the restart_simulation function. Enabling it without the function
+                        currently only makes sense if independent simulations should be written to the same file.
     """
 
-    def __init__(self, system, integrator, calculator, simulator_hooks=[], step=0):
+    def __init__(
+        self, system, integrator, calculator, simulator_hooks=[], step=0, restart=False
+    ):
 
         self.system = system
         self.integrator = integrator
@@ -45,6 +50,10 @@ class Simulator:
         self.simulator_hooks = simulator_hooks
         self.step = step
         self.n_steps = None
+        self.restart = restart
+
+        # Keep track of the actual simulation steps performed with simulate calls
+        self.effective_steps = 0
 
     def simulate(self, n_steps=10000):
         """
@@ -93,6 +102,7 @@ class Simulator:
                 hook.on_step_end(self)
 
             self.step += 1
+            self.effective_steps += 1
 
         # Call hooks at the simulation end
         for hook in self.simulator_hooks:
@@ -101,7 +111,7 @@ class Simulator:
     @property
     def state_dict(self):
         """
-        State dict used to restart the simulation. Genrates a dictionary with
+        State dict used to restart the simulation. Generates a dictionary with
         the following entries:
             - step: current simulation step
             - systems: state dict of the system holding current positions,
@@ -118,6 +128,7 @@ class Simulator:
         """
         state_dict = {
             "step": self.step,
+            "effective_steps": self.effective_steps,
             "system": self.system.state_dict,
             "simulator_hooks": {
                 hook.__class__: hook.state_dict for hook in self.simulator_hooks
@@ -139,6 +150,7 @@ class Simulator:
 
         """
         self.step = state_dict["step"]
+        self.effective_steps = state_dict["effective_steps"]
         self.system.state_dict = state_dict["system"]
 
         # Set state dicts of all hooks
@@ -146,7 +158,7 @@ class Simulator:
             if hook.__class__ in state_dict["simulator_hooks"]:
                 hook.state_dict = state_dict["simulator_hooks"][hook.__class__]
 
-    def restart(self, state_dict, soft=False):
+    def restart_simulation(self, state_dict, soft=False):
         """
         Routine for restarting a simulation. Reads the current step, as well
         as system state from the provided state dict. In case of the
@@ -165,6 +177,7 @@ class Simulator:
 
         """
         self.step = state_dict["step"]
+        self.effective_steps = state_dict["effective_steps"]
         self.system.state_dict = state_dict["system"]
 
         if soft:
@@ -179,10 +192,13 @@ class Simulator:
                 if hasattr(hook, "temperature_bath"):
                     if hook.__class__ not in state_dict["simulator_hooks"]:
                         raise ValueError(
-                            f"Could not find restart informationfor {hook.__class__} in state dict."
+                            f"Could not find restart information for {hook.__class__} in state dict."
                         )
                     else:
                         hook.state_dict = state_dict["simulator_hooks"][hook.__class__]
+
+        # In this case, set restart flag automatically
+        self.restart = True
 
     def load_system_state(self, state_dict):
         """

@@ -61,9 +61,9 @@ class MDSimulation:
         simulator = Simulator(self.system, self.integrator, self.calculator, self.hooks)
 
         # If requested, read restart data
-        if self.restart:
+        if self.restart and (self.restart is not None):
             state_dict = torch.load(self.restart)
-            simulator.restart(state_dict, soft=False)
+            simulator.restart_simulation(state_dict, soft=False)
             logging.info(f"Restarting simulation from {self.restart}...")
         elif self.load_system_state:
             state_dict = torch.load(self.load_system_state)
@@ -219,9 +219,9 @@ class SetupCalculator(SetupBlock):
         for key in calculator:
             if key == "model_file":
                 if calculator[CalculatorInit.kind] in self.schnet_models:
-                    model = self._load_model_schnetpack(calculator["model_file"]).to(
-                        md_initializer.device
-                    )
+                    model = self._load_model_schnetpack(
+                        calculator["model_file"], md_initializer.device
+                    ).to(md_initializer.device)
                 elif calculator[CalculatorInit.kind] == "sgdml":
                     model = self._load_model_sgdml(calculator["model_file"]).to(
                         md_initializer.device
@@ -239,16 +239,19 @@ class SetupCalculator(SetupBlock):
         md_initializer.calculator = calculator
 
     @staticmethod
-    def _load_model_schnetpack(model_path):
+    def _load_model_schnetpack(model_path, device):
         # If model is a directory, search for best_model file
         if os.path.isdir(model_path):
             model_path = os.path.join(model_path, "best_model")
 
+        # Load model
+        model = torch.load(model_path, map_location=device)
+
         # Load model. If no gpu is available, load it on cpu by default
-        if not torch.cuda.is_available():
-            model = torch.load(model_path, map_location="cpu")
-        else:
-            model = torch.load(model_path)
+        # if not torch.cuda.is_available():
+        #     model = torch.load(model_path, map_location="cpu")
+        # else:
+        #     model = torch.load(model_path)
 
         logging.info("Loaded model from {:s}".format(model_path))
 
@@ -368,12 +371,6 @@ class SetupLogging(SetupBlock):
 
     def _setup(self, md_initializer):
 
-        # Convert restart to proper boolean:
-        if md_initializer.restart is None or not md_initializer.restart:
-            restart = False
-        else:
-            restart = True
-
         if "file_logger" in self.target_config_block:
             logging_file = os.path.join(
                 md_initializer.simulation_dir, "simulation.hdf5"
@@ -387,7 +384,6 @@ class SetupLogging(SetupBlock):
                     logging_file,
                     file_logging_config["buffer_size"],
                     data_streams=data_streams,
-                    restart=restart,
                     every_n_steps=file_logging_config["every_n_steps"],
                 )
             ]
