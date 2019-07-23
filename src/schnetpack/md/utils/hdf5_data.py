@@ -78,16 +78,17 @@ class HDF5Loader:
         self.n_replicas = structures.attrs["n_replicas"]
         self.n_molecules = structures.attrs["n_molecules"]
         self.n_atoms = structures.attrs["n_atoms"]
-        self.entries = structures.attrs["entries"]
+        self.total_entries = structures.attrs["entries"]
         self.time_step = structures.attrs["time_step"]
+        self.entries = self.total_entries - self.skip_initial
 
         # Write to main property dictionary
         self.properties[Structure.Z] = structures.attrs["atom_types"][0, ...]
         self.properties[Structure.R] = structures[
-            self.skip_initial : self.entries, ..., :3
+            self.skip_initial : self.total_entries, ..., :3
         ]
         self.properties["velocities"] = structures[
-            self.skip_initial : self.entries, ..., 3:
+            self.skip_initial : self.total_entries, ..., 3:
         ]
 
     def _load_properties(self):
@@ -104,10 +105,10 @@ class HDF5Loader:
         for prop in property_positions:
             prop_pos = slice(*property_positions[prop])
             self.properties[prop] = properties[
-                self.skip_initial : self.entries, :, :, prop_pos
+                self.skip_initial : self.total_entries, :, :, prop_pos
             ].reshape(
                 (
-                    self.entries - self.skip_initial,
+                    self.total_entries - self.skip_initial,
                     self.n_replicas,
                     self.n_molecules,
                     *property_shape[prop],
