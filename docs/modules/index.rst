@@ -7,9 +7,9 @@ SchNetpack consists of the following modules:
    data
    datasets
    environment
+   nn
    representation
    atomistic
-   nn
    train
    md
    utils
