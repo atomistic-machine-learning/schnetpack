@@ -1,9 +1,11 @@
 import os
 import pytest
 
+from schnetpack import Properties
+
 import schnetpack.md.utils.hdf5_data
 import schnetpack.md.utils.md_units
-from schnetpack import Structure
+
 from ase import units
 
 
@@ -45,8 +47,8 @@ def test_properties(hdf5_dataset):
 
 def test_molecule(hdf5_dataset):
     # Test molecule properties
-    assert Structure.R in hdf5_dataset.properties
-    assert Structure.Z in hdf5_dataset.properties
+    assert Properties.R in hdf5_dataset.properties
+    assert Properties.Z in hdf5_dataset.properties
     assert "velocities" in hdf5_dataset.properties
 
     # Check positions
@@ -54,7 +56,7 @@ def test_molecule(hdf5_dataset):
     assert positions.shape == (2, 16, 3)
 
     # Check atom_types
-    atom_types = hdf5_dataset.get_property(Structure.Z)
+    atom_types = hdf5_dataset.get_property(Properties.Z)
     assert atom_types.shape == (16,)
 
     # Check velocities

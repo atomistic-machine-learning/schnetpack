@@ -1,6 +1,6 @@
 from torch import nn as nn
 
-from schnetpack import Structure
+from schnetpack import Properties
 
 __all__ = ["AtomisticModel"]
 
@@ -37,7 +37,7 @@ class AtomisticModel(nn.Module):
         Forward representation output through output modules.
         """
         if self.requires_dr:
-            inputs[Structure.R].requires_grad_()
+            inputs[Properties.R].requires_grad_()
         inputs["representation"] = self.representation(inputs)
         outs = {}
         for output_model in self.output_modules:

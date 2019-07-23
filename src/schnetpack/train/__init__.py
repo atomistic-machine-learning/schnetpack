@@ -10,3 +10,4 @@ from schnetpack.train.Hooks.
 from .trainer import Trainer
 from .loss import *
 from .hooks import *
+from .metrics import *

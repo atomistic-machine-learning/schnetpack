@@ -7,7 +7,7 @@ from torch import nn
 from torch.nn.modules import MSELoss
 from torch.optim import Adam
 
-from schnetpack import Structure
+from schnetpack import Properties
 from schnetpack.nn.acsf import GaussianSmearing
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.nn.base import Dense, GetItem, ScaleShift, Standardize, Aggregate
@@ -108,13 +108,13 @@ def schnet_batch(
     atomic_numbers, atom_mask, positions, cell, cell_offset, neighbors, neighbor_mask
 ):
     inputs = {}
-    inputs[Structure.Z] = atomic_numbers
-    inputs[Structure.R] = positions
-    inputs[Structure.cell] = cell
-    inputs[Structure.cell_offset] = cell_offset
-    inputs[Structure.neighbors] = neighbors
-    inputs[Structure.neighbor_mask] = neighbor_mask
-    inputs[Structure.atom_mask] = atom_mask
+    inputs[Properties.Z] = atomic_numbers
+    inputs[Properties.R] = positions
+    inputs[Properties.cell] = cell
+    inputs[Properties.cell_offset] = cell_offset
+    inputs[Properties.neighbors] = neighbors
+    inputs[Properties.neighbor_mask] = neighbor_mask
+    inputs[Properties.atom_mask] = atom_mask
     return inputs
 
 
@@ -296,8 +296,8 @@ def test_shape_dense(expanded_distances):
 
 
 def test_get_item(schnet_batch):
-    model = GetItem(Structure.R)
-    assert torch.all(torch.eq(model(schnet_batch), schnet_batch[Structure.R]))
+    model = GetItem(Properties.R)
+    assert torch.all(torch.eq(model(schnet_batch), schnet_batch[Properties.R]))
 
 
 def test_shape_scale_shift():

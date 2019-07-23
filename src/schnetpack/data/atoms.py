@@ -21,13 +21,13 @@ import torch
 from ase.db import connect
 from torch.utils.data import Dataset
 
-from ..structure import Structure
+from schnetpack import Properties
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
 from .partitioning import train_test_split
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["AtomsData", "AtomsDataError", "DownloadableAtomsData", "AtomsConverter"]
+__all__ = ["AtomsData", "AtomsDataError", "AtomsConverter"]
 
 
 class AtomsDataError(Exception):
@@ -36,9 +36,14 @@ class AtomsDataError(Exception):
 
 class AtomsData(Dataset):
     """
-    Base class for atomistic datasets.
-    The data is stored in the referenced ase database and can be used to load data
-    with the pytorch dataloader.
+    PyTorch dataset for atomistic data. The raw data is stored in the specified
+    ASE database. Use together with schnetpack.data.AtomsLoader to feed data
+    to your model.
+
+    To improve the performance, the data is not stored in string format,
+    as usual in the ASE database. Instead, it is encoded as binary before being written
+    to the database. Reading work both with binary-encoded as well as
+    standard ASE files.
 
     Args:
         dbpath (str): path to directory containing database.
@@ -183,18 +188,41 @@ class AtomsData(Dataset):
         at = row.toatoms()
         return at
 
-    def get_metadata(self, key):
+    def get_metadata(self, key=None):
+        """
+        Returns an entry from the metadata dictionary of the ASE db.
+
+        Args:
+            key: Name of metadata entry. Return full dict if `None`.
+
+        Returns:
+            value: Value of metadata entry or full metadata dict, if key is `None`.
+
+        """
         with connect(self.dbpath) as conn:
+            if key is None:
+                return conn.metadata
             if key in conn.metadata.keys():
                 return conn.metadata[key]
         return None
 
-    def set_metadata(self, metadata):
+    def set_metadata(self, metadata=None, **kwargs):
+        """
+        Sets the metadata dictionary of the ASE db.
+
+        Args:
+            metadata (dict): dictionary of metadata for the ASE db
+            kwargs: further key-value pairs for convenience
+        """
+
+        # merge all metadata
+        if metadata is not None:
+            kwargs.update(metadata)
+
         with connect(self.dbpath) as conn:
-            conn.metadata = metadata
+            conn.metadata = kwargs
 
     def _add_system(self, conn, atoms, **properties):
-
         data = {}
 
         for pname in self.available_properties:
@@ -220,15 +248,43 @@ class AtomsData(Dataset):
         conn.write(atoms, data=data)
 
     def add_system(self, atoms, **properties):
+        """
+        Add atoms data to the dataset.
+
+        Args:
+            atoms (ase.Atoms): system composition and geometry
+            **properties: properties as key-value pairs. Keys have to match the
+                `available_properties` of the dataset.
+
+        """
         with connect(self.dbpath) as conn:
             self._add_system(conn, atoms, **properties)
 
-    def add_systems(self, atoms, property_list):
+    def add_systems(self, atoms_list, property_list):
+        """
+        Add atoms data to the dataset.
+
+        Args:
+            atoms_list (list of ase.Atoms): system composition and geometry
+            property_list (list): Properties as list of key-value pairs in the same
+                order as corresponding list of `atoms`.
+                Keys have to match the `available_properties` of the dataset.
+
+        """
         with connect(self.dbpath) as conn:
-            for at, prop in zip(atoms, property_list):
+            for at, prop in zip(atoms_list, property_list):
                 self._add_system(conn, at, **prop)
 
     def get_properties(self, idx):
+        """
+        Return property dictionary at given index.
+
+        Args:
+            idx (int): data index
+
+        Returns:
+
+        """
         idx = self._subset_index(idx)
         with connect(self.dbpath) as conn:
             row = conn.get(idx + 1)
@@ -269,15 +325,15 @@ class AtomsData(Dataset):
 
         return at, properties
 
-    def get_atomref(self, property):
+    def _get_atomref(self, property):
         """
-        Returns atomref for property.
+        Returns single atom reference values for specified `property`.
 
         Args:
-            property: property in the qm9 dataset
+            property (str): property name
 
         Returns:
-            list: list with atomrefs
+            list: list of atomrefs
         """
         labels = self.get_metadata("atref_labels")
         if labels is None:
@@ -294,9 +350,9 @@ class AtomsData(Dataset):
 
         return atomref
 
-    def get_atomrefs(self, properties):
+    def get_atomref(self, properties):
         """
-        Return multiple atomrefs as dict.
+        Return multiple single atom reference values as a dictionary.
 
         Args:
             properties (list or str): Desired properties for which the atomrefs are
@@ -307,57 +363,7 @@ class AtomsData(Dataset):
         """
         if type(properties) is not list:
             properties = [properties]
-        return {p: self.get_atomref(p) for p in properties}
-
-
-class DownloadableAtomsData(AtomsData):
-    def __init__(
-        self,
-        dbpath,
-        subset=None,
-        load_only=None,
-        available_properties=None,
-        units=None,
-        environment_provider=SimpleEnvironmentProvider(),
-        collect_triples=False,
-        center_positions=True,
-        download=False,
-    ):
-
-        super(DownloadableAtomsData, self).__init__(
-            dbpath=dbpath,
-            subset=subset,
-            available_properties=available_properties,
-            load_only=load_only,
-            units=units,
-            environment_provider=environment_provider,
-            collect_triples=collect_triples,
-            center_positions=center_positions,
-        )
-        if download:
-            self.download()
-
-    def download(self):
-        """
-        Wrapper function for the download method.
-        """
-        if os.path.exists(self.dbpath):
-            logger.info(
-                "The dataset has already been downloaded and stored "
-                "at {}".format(self.dbpath)
-            )
-        else:
-            logger.info("Starting download")
-            folder = os.path.dirname(os.path.abspath(self.dbpath))
-            if not os.path.exists(folder):
-                os.makedirs(folder)
-            self._download()
-
-    def _download(self):
-        """
-        To be implemented in deriving classes.
-        """
-        raise NotImplementedError
+        return {p: self._get_atomref(p) for p in properties}
 
 
 def _convert_atoms(
@@ -386,33 +392,35 @@ def _convert_atoms(
         inputs = output
 
     # Elemental composition
-    inputs[Structure.Z] = torch.LongTensor(atoms.numbers.astype(np.int))
+    cell = np.array(atoms.cell.array, dtype=np.float32)  # get cell array
+
+    inputs[Properties.Z] = torch.LongTensor(atoms.numbers.astype(np.int))
     positions = atoms.positions.astype(np.float32)
     if center_positions:
         positions -= atoms.get_center_of_mass()
-    inputs[Structure.R] = torch.FloatTensor(positions)
-    inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
+    inputs[Properties.R] = torch.FloatTensor(positions)
+    inputs[Properties.cell] = torch.FloatTensor(cell)
 
     # get atom environment
     nbh_idx, offsets = environment_provider.get_environment(atoms)
 
     # Get neighbors and neighbor mask
-    inputs[Structure.neighbors] = torch.LongTensor(nbh_idx.astype(np.int))
+    inputs[Properties.neighbors] = torch.LongTensor(nbh_idx.astype(np.int))
 
     # Get cells
-    inputs[Structure.cell] = torch.FloatTensor(atoms.cell.astype(np.float32))
-    inputs[Structure.cell_offset] = torch.FloatTensor(offsets.astype(np.float32))
+    inputs[Properties.cell] = torch.FloatTensor(cell)
+    inputs[Properties.cell_offset] = torch.FloatTensor(offsets.astype(np.float32))
 
     # If requested get neighbor lists for triples
     if collect_triples:
         nbh_idx_j, nbh_idx_k, offset_idx_j, offset_idx_k = collect_atom_triples(nbh_idx)
-        inputs[Structure.neighbor_pairs_j] = torch.LongTensor(nbh_idx_j.astype(np.int))
-        inputs[Structure.neighbor_pairs_k] = torch.LongTensor(nbh_idx_k.astype(np.int))
+        inputs[Properties.neighbor_pairs_j] = torch.LongTensor(nbh_idx_j.astype(np.int))
+        inputs[Properties.neighbor_pairs_k] = torch.LongTensor(nbh_idx_k.astype(np.int))
 
-        inputs[Structure.neighbor_offsets_j] = torch.LongTensor(
+        inputs[Properties.neighbor_offsets_j] = torch.LongTensor(
             offset_idx_j.astype(np.int)
         )
-        inputs[Structure.neighbor_offsets_k] = torch.LongTensor(
+        inputs[Properties.neighbor_offsets_k] = torch.LongTensor(
             offset_idx_k.astype(np.int)
         )
 
@@ -455,13 +463,13 @@ class AtomsConverter:
         inputs = _convert_atoms(atoms, self.environment_provider, self.collect_triples)
 
         # Calculate masks
-        inputs[Structure.atom_mask] = torch.ones_like(inputs[Structure.Z]).float()
-        mask = inputs[Structure.neighbors] >= 0
-        inputs[Structure.neighbor_mask] = mask.float()
+        inputs[Properties.atom_mask] = torch.ones_like(inputs[Properties.Z]).float()
+        mask = inputs[Properties.neighbors] >= 0
+        inputs[Properties.neighbor_mask] = mask.float()
 
         if self.collect_triples:
-            inputs[Structure.neighbor_pairs_mask] = torch.ones_like(
-                inputs[Structure.neighbor_pairs_j]
+            inputs[Properties.neighbor_pairs_mask] = torch.ones_like(
+                inputs[Properties.neighbor_pairs_j]
             ).float()
 
         # Add batch dimension and move to CPU/GPU

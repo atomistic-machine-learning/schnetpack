@@ -2,7 +2,7 @@ language: python
 
 install:
   - pip install -r docs/sphinx-requirements.txt
-  - pip install coveralls
+  - pip install codecov
   - pip install tox
 
 matrix:
@@ -21,4 +21,4 @@ branches:
   - dev
 
 after_success:
-  - coveralls
+  - codecov

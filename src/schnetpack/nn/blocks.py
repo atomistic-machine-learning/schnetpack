@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from schnetpack import Structure
+from schnetpack import Properties
 from schnetpack.nn import shifted_softplus, Dense
 
 
@@ -210,7 +210,7 @@ class GatedNetwork(nn.Module):
             torch.Tensor: Output of the gated network.
         """
         # At this point, inputs should be the general schnetpack container
-        atomic_numbers = inputs[Structure.Z]
+        atomic_numbers = inputs[Properties.Z]
         representation = inputs["representation"]
         gated_network = self.gate(atomic_numbers) * self.network(representation)
         return torch.sum(gated_network, -1, keepdim=True)

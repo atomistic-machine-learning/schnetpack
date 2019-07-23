@@ -9,7 +9,8 @@ import logging
 
 @pytest.fixture(scope="module")
 def simulation_dir():
-    return tempfile.mkdtemp()
+    tempdir = tempfile.mkdtemp()
+    return tempdir
 
 
 @pytest.fixture(scope="module")

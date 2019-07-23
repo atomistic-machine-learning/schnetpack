@@ -4,7 +4,7 @@ import h5py
 import numpy as np
 from ase import data
 
-from schnetpack import Structure
+from schnetpack import Properties
 from schnetpack.md.utils import MDUnits
 
 
@@ -83,8 +83,8 @@ class HDF5Loader:
         self.entries = self.total_entries - self.skip_initial
 
         # Write to main property dictionary
-        self.properties[Structure.Z] = structures.attrs["atom_types"][0, ...]
-        self.properties[Structure.R] = structures[
+        self.properties[Properties.Z] = structures.attrs["atom_types"][0, ...]
+        self.properties[Properties.R] = structures[
             self.skip_initial : self.total_entries, ..., :3
         ]
         self.properties["velocities"] = structures[
@@ -136,8 +136,8 @@ class HDF5Loader:
         """
 
         # Special case for atom types
-        if property_name == Structure.Z:
-            return self.properties[Structure.Z][mol_idx]
+        if property_name == Properties.Z:
+            return self.properties[Properties.Z][mol_idx]
 
         # Check whether property is present
         if property_name not in self.properties:
@@ -191,7 +191,7 @@ class HDF5Loader:
             np.array: N_steps x N_atoms x 3 array containing the atom positions of the simulation in atomic units.
         """
         return self.get_property(
-            Structure.R, mol_idx=mol_idx, replica_idx=replica_idx, atomistic=True
+            Properties.R, mol_idx=mol_idx, replica_idx=replica_idx, atomistic=True
         )
 
     def get_kinetic_energy(self, mol_idx=0, replica_idx=None):
@@ -200,7 +200,7 @@ class HDF5Loader:
 
         # Get the masses and convert to correct units
         masses = (
-            data.atomic_masses[self.properties[Structure.Z][mol_idx]] * MDUnits.d2amu
+            data.atomic_masses[self.properties[Properties.Z][mol_idx]] * MDUnits.d2amu
         )
 
         # Compute the kinetic energy as 1/2*m*v^2

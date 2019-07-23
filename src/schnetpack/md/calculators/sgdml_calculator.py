@@ -1,6 +1,6 @@
 from schnetpack.md.calculators import MDCalculator
 from schnetpack.md.utils import MDUnits
-from schnetpack.atomistic import Properties
+from schnetpack import Properties
 
 
 class SGDMLCalculator(MDCalculator):

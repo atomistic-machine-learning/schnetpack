@@ -3,7 +3,7 @@ import warnings
 import numpy as np
 import torch
 
-from schnetpack import Structure
+from schnetpack import Properties
 
 
 class Metric:
@@ -95,7 +95,7 @@ class ModelBias(Metric):
         self.l2loss += torch.sum(diff.view(-1)).detach().cpu().data.numpy()
         if self.element_wise:
             self.n_entries += (
-                torch.sum(batch[Structure.atom_mask]).detach().cpu().data.numpy()
+                torch.sum(batch[Properties.atom_mask]).detach().cpu().data.numpy()
                 * y.shape[-1]
             )
         else:
@@ -168,7 +168,7 @@ class MeanSquaredError(Metric):
         self.l2loss += torch.sum(diff.view(-1) ** 2).detach().cpu().data.numpy()
         if self.element_wise:
             self.n_entries += (
-                torch.sum(batch[Structure.atom_mask]).detach().cpu().data.numpy()
+                torch.sum(batch[Properties.atom_mask]).detach().cpu().data.numpy()
                 * y.shape[-1]
             )
         else:
@@ -280,7 +280,7 @@ class MeanAbsoluteError(Metric):
         )
         if self.element_wise:
             self.n_entries += (
-                torch.sum(batch[Structure.atom_mask]).detach().cpu().data.numpy()
+                torch.sum(batch[Properties.atom_mask]).detach().cpu().data.numpy()
                 * y.shape[-1]
             )
         else:
@@ -313,7 +313,7 @@ class HeatmapMAE(MeanAbsoluteError):
         )
 
     def add_batch(self, batch, result):
-        if self.element_wise and torch.sum(batch[Structure.atom_mask] == 0) != 0:
+        if self.element_wise and torch.sum(batch[Properties.atom_mask] == 0) != 0:
             warnings.warn(
                 "MAEHeatmap should not be used for element-wise "
                 + "properties with different sized molecules!"

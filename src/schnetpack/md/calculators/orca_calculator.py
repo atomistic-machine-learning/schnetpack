@@ -6,7 +6,7 @@ from schnetpack.md.calculators.calculators import (
 from schnetpack.md.utils import MDUnits
 from schnetpack.md.parsers.orca_parser import OrcaMainFileParser
 
-from schnetpack.atomistic import Properties
+from schnetpack import Properties
 
 import torch
 

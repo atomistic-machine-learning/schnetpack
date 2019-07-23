@@ -71,7 +71,7 @@ def get_model(representation, output_modules, parallelize=False):
 
     logging.info(
         "The model you built has: %d parameters"
-        % schnetpack.utils.spk_utils.compute_params(model)
+        % schnetpack.utils.spk_utils.count_params(model)
     )
 
     return model

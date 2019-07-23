@@ -11,8 +11,14 @@ src/sacred_scripts/models/*
 src/sacred_scripts/experiments/*
 src/scripts/data/
 src/scripts/training/
+
+docs/tutorials/*.db
+docs/tutorials/*.xyz
+docs/tutorials/qm9tut
+
 # C extensions
 *.so
+
 
 # Distribution / packaging
 .Python
