@@ -1,4 +1,4 @@
-from schnetpack import Structure
+from schnetpack import Properties
 from schnetpack.md.calculators import MDCalculator
 from schnetpack.md.utils import MDUnits
 
@@ -70,13 +70,13 @@ class SchnetPackCalculator(MDCalculator):
         neighbors, neighbor_mask = self._get_system_neighbors(system)
 
         inputs = {
-            Structure.R: positions,
-            Structure.Z: atom_types,
-            Structure.atom_mask: atom_masks,
-            Structure.cell: None,
-            Structure.cell_offset: None,
-            Structure.neighbors: neighbors,
-            Structure.neighbor_mask: neighbor_mask,
+            Properties.R: positions,
+            Properties.Z: atom_types,
+            Properties.atom_mask: atom_masks,
+            Properties.cell: None,
+            Properties.cell_offset: None,
+            Properties.neighbors: neighbors,
+            Properties.neighbor_mask: neighbor_mask,
         }
 
         return inputs

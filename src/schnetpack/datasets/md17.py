@@ -7,7 +7,7 @@ from urllib import request as request
 import numpy as np
 from ase import Atoms
 
-from schnetpack.data import DownloadableAtomsData
+from schnetpack.datasets import DownloadableAtomsData
 
 __all__ = ["MD17"]
 

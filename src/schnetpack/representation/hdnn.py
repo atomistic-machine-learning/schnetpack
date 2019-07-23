@@ -3,7 +3,7 @@ import torch.nn as nn
 
 import schnetpack.nn as snn
 from schnetpack.data import StatisticsAccumulator
-from schnetpack import Structure
+from schnetpack import Properties
 
 
 class HDNNException(Exception):
@@ -201,13 +201,13 @@ class SymmetryFunctions(nn.Module):
             torch.Tensor: Nbatch x Natoms x Nsymmetry_functions Tensor containing ACSFs or wACSFs.
 
         """
-        positions = inputs[Structure.R]
-        Z = inputs[Structure.Z]
-        neighbors = inputs[Structure.neighbors]
-        neighbor_mask = inputs[Structure.neighbor_mask]
+        positions = inputs[Properties.R]
+        Z = inputs[Properties.Z]
+        neighbors = inputs[Properties.neighbors]
+        neighbor_mask = inputs[Properties.neighbor_mask]
 
-        cell = inputs[Structure.cell]
-        cell_offset = inputs[Structure.cell_offset]
+        cell = inputs[Properties.cell]
+        cell_offset = inputs[Properties.cell_offset]
 
         # Compute radial functions
         if self.RDF is not None:
@@ -232,15 +232,15 @@ class SymmetryFunctions(nn.Module):
         if self.ADF is not None:
             # Get pair indices
             try:
-                idx_j = inputs[Structure.neighbor_pairs_j]
-                idx_k = inputs[Structure.neighbor_pairs_k]
+                idx_j = inputs[Properties.neighbor_pairs_j]
+                idx_k = inputs[Properties.neighbor_pairs_k]
 
             except KeyError as e:
                 raise HDNNException(
                     "Angular symmetry functions require "
                     + "`collect_triples=True` in AtomsData."
                 )
-            neighbor_pairs_mask = inputs[Structure.neighbor_pairs_mask]
+            neighbor_pairs_mask = inputs[Properties.neighbor_pairs_mask]
 
             # Get element contributions of the pairs
             Z_angular = self.angular_Z(Z)
@@ -248,8 +248,8 @@ class SymmetryFunctions(nn.Module):
             Z_ik = snn.neighbor_elements(Z_angular, idx_k)
 
             # Offset indices
-            offset_idx_j = inputs[Structure.neighbor_offsets_j]
-            offset_idx_k = inputs[Structure.neighbor_offsets_k]
+            offset_idx_j = inputs[Properties.neighbor_offsets_j]
+            offset_idx_k = inputs[Properties.neighbor_offsets_k]
 
             # Compute triple distances
             r_ij, r_ik, r_jk = snn.triple_distances(

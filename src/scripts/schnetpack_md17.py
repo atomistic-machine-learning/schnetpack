@@ -72,12 +72,12 @@ if __name__ == "__main__":
     md17 = MD17(
         args.datapath,
         args.molecule,
-        download=True,
         collect_triples=args.model == "wacsf",
+        download=True,
     )
 
     # get atomrefs
-    atomref = md17.get_atomrefs(train_args.property)
+    atomref = md17.get_atomref(train_args.property)
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")

@@ -3,8 +3,8 @@ import numpy as np
 import pytest
 import filecmp
 from schnetpack.md.parsers.orca_parser import *
-from schnetpack.atomistic import Properties
-from schnetpack import Structure
+from schnetpack import Properties
+from schnetpack import Properties
 from schnetpack.data import AtomsData
 
 
@@ -54,14 +54,14 @@ def test_main_file_parser(main_path, targets_main):
     main_parser.parse_file(main_path)
 
     results = main_parser.get_parsed()
-    results[Structure.Z] = results["atoms"][0]
-    results[Structure.R] = results["atoms"][1]
+    results[Properties.Z] = results["atoms"][0]
+    results[Properties.R] = results["atoms"][1]
     results.pop("atoms", None)
 
     for p in targets_main:
         assert p in results
 
-        if p == Structure.Z:
+        if p == Properties.Z:
             assert np.array_equal(results[p], targets_main[p])
         else:
             assert np.allclose(results[p], targets_main[p])

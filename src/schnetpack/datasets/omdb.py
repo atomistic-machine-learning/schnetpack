@@ -6,7 +6,7 @@ from ase.io import read
 from ase.db import connect
 from ase.units import eV
 
-from schnetpack.data import DownloadableAtomsData
+from schnetpack.datasets import DownloadableAtomsData
 from schnetpack.environment import AseEnvironmentProvider
 
 
