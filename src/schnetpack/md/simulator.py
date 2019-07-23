@@ -128,7 +128,6 @@ class Simulator:
         """
         state_dict = {
             "step": self.step,
-            "effective_steps": self.effective_steps,
             "system": self.system.state_dict,
             "simulator_hooks": {
                 hook.__class__: hook.state_dict for hook in self.simulator_hooks
@@ -150,7 +149,6 @@ class Simulator:
 
         """
         self.step = state_dict["step"]
-        self.effective_steps = state_dict["effective_steps"]
         self.system.state_dict = state_dict["system"]
 
         # Set state dicts of all hooks
@@ -177,7 +175,6 @@ class Simulator:
 
         """
         self.step = state_dict["step"]
-        self.effective_steps = state_dict["effective_steps"]
         self.system.state_dict = state_dict["system"]
 
         if soft:
