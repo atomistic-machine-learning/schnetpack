@@ -219,9 +219,9 @@ class SetupCalculator(SetupBlock):
         for key in calculator:
             if key == "model_file":
                 if calculator[CalculatorInit.kind] in self.schnet_models:
-                    model = self._load_model_schnetpack(calculator["model_file"]).to(
-                        md_initializer.device
-                    )
+                    model = self._load_model_schnetpack(
+                        calculator["model_file"], md_initializer.device
+                    ).to(md_initializer.device)
                 elif calculator[CalculatorInit.kind] == "sgdml":
                     model = self._load_model_sgdml(calculator["model_file"]).to(
                         md_initializer.device
@@ -239,16 +239,19 @@ class SetupCalculator(SetupBlock):
         md_initializer.calculator = calculator
 
     @staticmethod
-    def _load_model_schnetpack(model_path):
+    def _load_model_schnetpack(model_path, device):
         # If model is a directory, search for best_model file
         if os.path.isdir(model_path):
             model_path = os.path.join(model_path, "best_model")
 
+        # Load model
+        model = torch.load(model_path, map_location=device)
+
         # Load model. If no gpu is available, load it on cpu by default
-        if not torch.cuda.is_available():
-            model = torch.load(model_path, map_location="cpu")
-        else:
-            model = torch.load(model_path)
+        # if not torch.cuda.is_available():
+        #     model = torch.load(model_path, map_location="cpu")
+        # else:
+        #     model = torch.load(model_path)
 
         logging.info("Loaded model from {:s}".format(model_path))
 
