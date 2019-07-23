@@ -168,7 +168,6 @@ class TestSacred:
         md.run()
 
         # Test loading of system state
-        md_config["overwrite"] = False
         md_config["dynamics"]["load_system_state"] = os.path.join(
             simulation_dir, "checkpoint.chk"
         )
@@ -177,6 +176,7 @@ class TestSacred:
         md.run()
 
         # Test restart
+        md_config["overwrite"] = False
         md_config["dynamics"]["restart"] = os.path.join(
             simulation_dir, "checkpoint.chk"
         )
@@ -203,7 +203,6 @@ class TestSacred:
         md.run()
 
         # Test loading of system state
-        md_config["overwrite"] = False
         md_config["dynamics"]["load_system_state"] = os.path.join(
             simulation_dir, "checkpoint.chk"
         )
@@ -212,6 +211,7 @@ class TestSacred:
         md.run()
 
         # Test restart
+        md_config["overwrite"] = False
         md_config["dynamics"]["restart"] = os.path.join(
             simulation_dir, "checkpoint.chk"
         )
