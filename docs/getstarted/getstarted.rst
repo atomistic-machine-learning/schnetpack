@@ -90,15 +90,12 @@ Scripts for benchmark data sets
  The best place to start is training a SchNetPack model on a common benchmark dataset.
  Scripts for common datasets are provided by SchNetPack and inserted into your PATH during installation.
 
-QM9 & ANI1
-^^^^^^^^^^
-
 The example script allows to train and evaluate both SchNet and wACSF neural networks.
 In the following, we focus on using the script for the QM9 dataset, but the same
 procedure applies for the other benchmark datasets as well. The training can be
 started using::
 
-   $ schnetpack.py train <schnet/wacsf> qm9 <dbpath> <modeldir> --split num_train num_val [--cuda]
+   $ schnetpack.py train <schnet/wacsf> <qm9/ani1/...> <dbpath> <modeldir> --split num_train num_val [--cuda]
 
 where num_train and num_val need to be replaced by the number of training and validation datapoints respectively.
 You can choose between SchNet and wACSF networks and have to provide a directory to store the model and the location
