@@ -35,6 +35,7 @@ setup(
         "tqdm",
         "h5py",
         "pyyaml",
+        "pytest-console-scripts",
     ],
     extras_require={"test": ["pytest", "sacred", "pytest-console-scripts"]},
     license="MIT",
