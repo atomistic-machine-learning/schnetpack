@@ -45,15 +45,19 @@ def main(args):
         atomref = dataset.get_atomrefs(args.property)
         divide_by_atoms = settings.divide_by_atoms[args.property]
         mean, stddev = get_statistics(
-            args=args, split_path=split_path, train_loader=train_loader,
+            args=args,
+            split_path=split_path,
+            train_loader=train_loader,
             atomref=atomref,
-            divide_by_atoms=divide_by_atoms, logging=logging
+            divide_by_atoms=divide_by_atoms,
+            logging=logging,
         )
         aggregation_mode = settings.pooling_mode[args.property]
 
         # build model
-        model = get_model_new(args, train_loader, mean, stddev, atomref,
-                              aggregation_mode, logging=logging)
+        model = get_model_new(
+            args, train_loader, mean, stddev, atomref, aggregation_mode, logging=logging
+        )
 
         # build trainer
         logging.info("training...")
@@ -73,13 +77,23 @@ def main(args):
         if train_args.dataset != "md17":
             with torch.no_grad():
                 evaluate(
-                    args, model, train_loader, val_loader, test_loader, device,
-                    metrics=metrics
+                    args,
+                    model,
+                    train_loader,
+                    val_loader,
+                    test_loader,
+                    device,
+                    metrics=metrics,
                 )
         else:
             evaluate(
-                args, model, train_loader, val_loader, test_loader, device,
-                metrics=metrics
+                args,
+                model,
+                train_loader,
+                val_loader,
+                test_loader,
+                device,
+                metrics=metrics,
             )
         logging.info("... evaluation done!")
 

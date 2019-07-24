@@ -40,8 +40,9 @@ def get_statistics(
 
     # calculate statistical data
     else:
-        mean, stddev = train_loader.get_statistics(args.property, divide_by_atoms,
-                                                   atomref)
+        mean, stddev = train_loader.get_statistics(
+            args.property, divide_by_atoms, atomref
+        )
         np.savez(
             split_path,
             train_idx=split_data["train_idx"],
@@ -71,8 +72,9 @@ def get_loaders(args, dataset, split_path, logging=None):
     if logging is not None:
         logging.info("create splits...")
 
-    data_train, data_val, data_test = spk.data.train_test_split(dataset, *args.split,
-                                                                split_file=split_path)
+    data_train, data_val, data_test = spk.data.train_test_split(
+        dataset, *args.split, split_file=split_path
+    )
     if logging is not None:
         logging.info("load data...")
 

@@ -91,8 +91,10 @@ class MaterialsProject(DownloadableAtomsData):
             works (bool): true if download succeeded or file already exists
         """
         if self.apikey is None:
-            raise AtomsDataError("Provide a valid API key in order to download the "
-                                 "Materials Project data!")
+            raise AtomsDataError(
+                "Provide a valid API key in order to download the "
+                "Materials Project data!"
+            )
         try:
             from pymatgen.ext.matproj import MPRester
             from pymatgen.core import Structure

@@ -1,5 +1,10 @@
-from schnetpack.datasets import QM9, ANI1, MD17, MaterialsProject,\
-    OrganicMaterialsDatabase
+from schnetpack.datasets import (
+    QM9,
+    ANI1,
+    MD17,
+    MaterialsProject,
+    OrganicMaterialsDatabase,
+)
 
 
 __all__ = ["divide_by_atoms", "pooling_mode"]

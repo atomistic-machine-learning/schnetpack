@@ -246,11 +246,17 @@ class TestEvaluation:
             split="test",
             property="energy_U0",
             dataset="qm9",
-            parallel=False
+            parallel=False,
         )
         mean = {args.property: None}
-        model = get_model_new(args, train_loader=qm9_train_loader, mean=mean,
-                             stddev=mean, atomref=mean, aggregation_mode="sum")
+        model = get_model_new(
+            args,
+            train_loader=qm9_train_loader,
+            mean=mean,
+            stddev=mean,
+            atomref=mean,
+            aggregation_mode="sum",
+        )
 
         os.makedirs(modeldir, exist_ok=True)
         evaluate(

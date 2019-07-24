@@ -185,9 +185,7 @@ class AtomsLoader(DataLoader):
         if type(property_names) is not list:
             property_names = [property_names]
         if type(divide_by_atoms) is not dict:
-            divide_by_atoms = {
-                prop: divide_by_atoms for prop in property_names
-            }
+            divide_by_atoms = {prop: divide_by_atoms for prop in property_names}
         if single_atom_ref is None:
             single_atom_ref = {prop: None for prop in property_names}
 

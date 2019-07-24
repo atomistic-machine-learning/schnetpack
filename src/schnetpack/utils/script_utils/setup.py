@@ -26,8 +26,9 @@ def setup_run(args):
     else:
         # check if modelpath is valid
         if not os.path.exists(args.modelpath):
-            raise schnetpack.utils.ScriptError("The selected modeldir does not exist "
-                                               "at {}!".format(args.modelpath))
+            raise schnetpack.utils.ScriptError(
+                "The selected modeldir does not exist " "at {}!".format(args.modelpath)
+            )
 
         # load training arguments
         train_args = schnetpack.utils.spk_utils.read_from_json(jsonpath)

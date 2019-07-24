@@ -134,10 +134,7 @@ def get_model_parsers():
     model_parser = argparse.ArgumentParser(add_help=False)
     schnet_parser = argparse.ArgumentParser(add_help=False, parents=[model_parser])
     schnet_parser.add_argument(
-        "--features",
-        type=int,
-        help="Size of atom-wise representation",
-        default=128,
+        "--features", type=int, help="Size of atom-wise representation", default=128
     )
     schnet_parser.add_argument(
         "--interactions", type=int, help="Number of interaction blocks", default=6
@@ -279,7 +276,7 @@ def get_data_parsers():
         "--num_heavy_atoms",
         type=int,
         help="Number of heavy atoms that will be loaded into the database."
-             " (default: %(default)s)",
+        " (default: %(default)s)",
         default=8,
     )
     matproj_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
@@ -309,9 +306,7 @@ def get_data_parsers():
         choices=[MD17.energy],
     )
     md17_parser.add_argument(
-        "--ignore_forces",
-        action="store_true",
-        help="Ignore forces during training."
+        "--ignore_forces", action="store_true", help="Ignore forces during training."
     )
     md17_parser.add_argument(
         "--molecule",

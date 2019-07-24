@@ -129,8 +129,9 @@ def get_model(args, representation, output_modules):
     return model
 
 
-def get_model_new(args, train_loader, mean, stddev, atomref,
-                  aggregation_mode, logging=None):
+def get_model_new(
+    args, train_loader, mean, stddev, atomref, aggregation_mode, logging=None
+):
     """
     Build a model from selected parameters or load trained model for evaluation.
 
@@ -150,8 +151,12 @@ def get_model_new(args, train_loader, mean, stddev, atomref,
             logging.info("building model...")
         representation = get_representation(args, train_loader)
         output_module = get_output_module(
-            args, representation=representation, mean=mean, stddev=stddev,
-            atomref=atomref, aggregation_mode=aggregation_mode,
+            args,
+            representation=representation,
+            mean=mean,
+            stddev=stddev,
+            atomref=atomref,
+            aggregation_mode=aggregation_mode,
         )
         model = AtomisticModel(representation, [output_module])
 
