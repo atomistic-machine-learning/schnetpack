@@ -36,7 +36,7 @@ def assert_valid_script(
     # train model
     modeldir = tmpdir_factory.mktemp("{}_script_test".format(dataset)).strpath
     ret = script_runner.run(
-        "schnetpack.py",
+        "spk_run.py",
         "train",
         "schnet",
         dataset,
@@ -56,7 +56,7 @@ def assert_valid_script(
     assert ret.success, ret.stderr
     assert os.path.exists(os.path.join(modeldir, "best_model"))
     ret = script_runner.run(
-        "schnetpack.py",
+        "spk_run.py",
         "train",
         "schnet",
         dataset,
@@ -79,7 +79,7 @@ def assert_valid_script(
             modeldir, "checkpoints", "checkpoint-{}.pth.tar".format(max_epochs)
         )
     )
-    ret = script_runner.run("schnetpack.py", "eval", modeldir, "--split", "test")
+    ret = script_runner.run("spk_run.py", "eval", modeldir, "--split", "test")
     assert ret.success, ret.stderr
     assert os.path.exists(os.path.join(modeldir, "evaluation.txt"))
 
