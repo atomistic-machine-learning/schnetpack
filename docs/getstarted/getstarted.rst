@@ -93,11 +93,12 @@ Scripts for benchmark data sets
 QM9 & ANI1
 ^^^^^^^^^^
 
-The QM9 and ANI1 example scripts allow to train and evaluate both SchNet and wACSF neural networks.
-In the following, we focus on the QM9 script, but the same procedure applies for the
-``schnetpack_ani1.py`` script as well. The training can be started using::
+The example script allows to train and evaluate both SchNet and wACSF neural networks.
+In the following, we focus on using the script for the QM9 dataset, but the same
+procedure applies for the other benchmark datasets as well. The training can be
+started using::
 
-   $ schnetpack_qm9.py train <schnet/wacsf> <dbpath> <modeldir> --split num_train num_val [--cuda]
+   $ schnetpack.py train <schnet/wacsf> qm9 <dbpath> <modeldir> --split num_train num_val [--cuda]
 
 where num_train and num_val need to be replaced by the number of training and validation datapoints respectively.
 You can choose between SchNet and wACSF networks and have to provide a directory to store the model and the location
@@ -112,14 +113,14 @@ With the ``--cuda`` flag, you can activate GPU training.
 The default hyper-parameters should work fine, however, you can change them through command-line arguments.
 Please refer to the help at the command line::
 
-   $ schnetpack_qm9.py train <schnet/wacsf> --help
+   $ schnetpack.py train <schnet/wacsf> --help
 
 The training progress will be logged in ``<modeldir>/log``. The default is a basic logging with **CSV** files.
 Advanced logging with **TensorBoard** event files can be activated using ``--logger tensorboard`` (see `above <#visualization-with-tensorboard>`_).
 
 To evaluate the trained model that showed the best validation error during training (i.e., early stopping), call::
 
-   $ schnetpack_qm9.py eval <schnet/wacsf> <dbpath> <modeldir> [--split train val test] [--cuda]
+   $ schnetpack.py eval <modeldir> [--split train val test] [--cuda]
 
 which will write a result file ``evaluation.txt`` into the model directory.
 
