@@ -21,7 +21,7 @@ setup(
         "src/scripts/schnetpack_load.py",
         "src/scripts/schnetpack_molecular_dynamics.py",
         "src/scripts/schnetpack_parse.py",
-        "src/scripts/schnetpack_x.py",
+        "src/scripts/schnetpack.py",
     ],
     package_dir={"": "src"},
     python_requires=">=3.6",
