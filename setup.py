@@ -36,7 +36,7 @@ setup(
         "h5py",
         "pyyaml",
     ],
-    extras_require={"test": ["pytest", "sacred"]},
+    extras_require={"test": ["pytest", "sacred", "pytest-console-scripts"]},
     license="MIT",
     description="SchNetPack - Deep Neural Networks for Atomistic Systems",
     long_description=read("README.md"),
