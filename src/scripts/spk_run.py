@@ -8,7 +8,7 @@ from schnetpack.utils import (
     get_metrics,
     get_loaders,
     get_statistics,
-    get_model_new,
+    get_model,
     get_trainer,
     ScriptError,
     evaluate,
@@ -42,7 +42,7 @@ def main(args):
     if args.mode == "train":
 
         # get statistics
-        atomref = dataset.get_atomrefs(args.property)
+        atomref = dataset.get_atomref(args.property)
         divide_by_atoms = settings.divide_by_atoms[args.property]
         mean, stddev = get_statistics(
             args=args,
@@ -55,7 +55,7 @@ def main(args):
         aggregation_mode = settings.pooling_mode[args.property]
 
         # build model
-        model = get_model_new(
+        model = get_model(
             args, train_loader, mean, stddev, atomref, aggregation_mode, logging=logging
         )
 

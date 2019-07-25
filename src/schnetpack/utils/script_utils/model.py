@@ -9,7 +9,7 @@ from schnetpack.atomistic import AtomisticModel
 from schnetpack.nn.cutoff import get_cutoff_by_string
 
 
-__all__ = ["get_representation", "get_output_module", "get_model", "get_model_new"]
+__all__ = ["get_representation", "get_output_module", "get_model"]
 
 
 def get_representation(args, train_loader=None):
@@ -115,21 +115,7 @@ def get_output_module(args, representation, mean, stddev, atomref, aggregation_m
         raise NotImplementedError
 
 
-def get_model(args, representation, output_modules):
-    model = AtomisticModel(representation, output_modules)
-
-    if args.parallel:
-        model = nn.DataParallel(model)
-
-    logging.info(
-        "The model you built has: %d parameters"
-        % schnetpack.utils.spk_utils.count_params(model)
-    )
-
-    return model
-
-
-def get_model_new(
+def get_model(
     args, train_loader, mean, stddev, atomref, aggregation_mode, logging=None
 ):
     """
@@ -165,7 +151,7 @@ def get_model_new(
         if logging:
             logging.info(
                 "The model you built has: %d parameters"
-                % schnetpack.utils.spk_utils.compute_params(model)
+                % schnetpack.utils.spk_utils.count_params(model)
             )
         return model
     else:

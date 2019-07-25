@@ -12,7 +12,7 @@ from schnetpack.utils import (
     simple_loss_fn,
     tradeoff_loff_fn,
     get_representation,
-    get_model_new,
+    get_model,
     evaluate,
 )
 import schnetpack as spk
@@ -249,7 +249,7 @@ class TestEvaluation:
             parallel=False,
         )
         mean = {args.property: None}
-        model = get_model_new(
+        model = get_model(
             args,
             train_loader=qm9_train_loader,
             mean=mean,
