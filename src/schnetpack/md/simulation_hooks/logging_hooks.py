@@ -1,3 +1,12 @@
+"""
+All logging operations in SchNetPack molecular dynamics simulations are performed via
+simulation hooks. This includes the generation of checkpoint files. The main tool to
+store simulation data is the :obj:`schnetpack.md.simulation_hooks.FileLogger`, which uses
+data streams to collect information (positions, velocities, properties, ...) during a
+simulation and store it to specially formatted HDF5 files. These files can then be read
+using the :obj:`schnetpack.md.utils.HDF5Loader`.
+"""
+
 import json
 import os
 import h5py

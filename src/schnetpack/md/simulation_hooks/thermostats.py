@@ -1,3 +1,8 @@
+"""
+This module contains various thermostats for regulating the temperature of the system during
+molecular dynamics simulations. Apart from standard thermostats for convetional simulations,
+a series of special thermostats developed for ring polymer molecular dynamics is also provided.
+"""
 import torch
 import numpy as np
 import scipy.linalg as linalg
@@ -619,7 +624,7 @@ class LangevinThermostat(ThermostatHook):
 
 class PILELocalThermostat(LangevinThermostat):
     """
-    Langevin thermostat for ring polymer molecular dynamics as introduced in [#stochastic_thermostats1]]_.
+    Langevin thermostat for ring polymer molecular dynamics as introduced in [#stochastic_thermostats2]_.
     Applies specially initialized Langevin thermostats to the beads of the ring polymer in normal mode representation.
 
     Args:
@@ -634,7 +639,7 @@ class PILELocalThermostat(LangevinThermostat):
 
     References
     ----------
-    .. [#stochastic_thermostats1]_Ceriotti, Parrinello, Markland, Manolopoulos:
+    .. [#stochastic_thermostats2] Ceriotti, Parrinello, Markland, Manolopoulos:
        Efficient stochastic thermostatting of path integral molecular dynamics.
        The Journal of Chemical Physics, 133 (12), 124104. 2010.
     """
@@ -725,8 +730,8 @@ class PILELocalThermostat(LangevinThermostat):
 
 class PILEGlobalThermostat(PILELocalThermostat):
     """
-    Global variant of the ring polymer Langevin thermostat as suggested in [#stochastic_thermostats1]]_. This thermostat
-    applies a stochastic velocity rescaling thermostat ([#stochastic_velocity_rescaling1]_) to the ring polymer centroid
+    Global variant of the ring polymer Langevin thermostat as suggested in [#stochastic_thermostats3]_. This thermostat
+    applies a stochastic velocity rescaling thermostat [#stochastic_velocity_rescaling1]_ to the ring polymer centroid
     in normal mode representation.
 
     Args:
@@ -737,10 +742,10 @@ class PILEGlobalThermostat(PILELocalThermostat):
 
     References
     ----------
-    .. [#stochastic_thermostats1]_Ceriotti, Parrinello, Markland, Manolopoulos:
+    .. [#stochastic_thermostats3] Ceriotti, Parrinello, Markland, Manolopoulos:
        Efficient stochastic thermostatting of path integral molecular dynamics.
        The Journal of Chemical Physics, 133 (12), 124104. 2010.
-    .. [#stochastic_velocity_rescaling1]_Bussi, Donadio, Parrinello:
+    .. [#stochastic_velocity_rescaling1] Bussi, Donadio, Parrinello:
        Canonical sampling through velocity rescaling.
        The Journal of chemical physics, 126(1), 014101. 2007.
     """
@@ -1134,7 +1139,7 @@ class NHCThermostat(ThermostatHook):
 class NHCRingPolymerThermostat(NHCThermostat):
     """
     Nose-Hoover chain thermostat for ring polymer molecular dynamics simulations as e.g. described in
-    [#stochastic_thermostats2]_. This is based on the massive setting of the standard NHC thermostat but operates in
+    [#stochastic_thermostats4]_. This is based on the massive setting of the standard NHC thermostat but operates in
     the normal mode representation and uses specially initialized thermostat masses.
 
     Args:
@@ -1151,7 +1156,7 @@ class NHCRingPolymerThermostat(NHCThermostat):
 
     References
     ----------
-    .. [#stochastic_thermostats2]_Ceriotti, Parrinello, Markland, Manolopoulos:
+    .. [#stochastic_thermostats4] Ceriotti, Parrinello, Markland, Manolopoulos:
        Efficient stochastic thermostatting of path integral molecular dynamics.
        The Journal of Chemical Physics, 133 (12), 124104. 2010.
     """

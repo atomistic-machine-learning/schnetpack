@@ -1,3 +1,9 @@
+"""
+Class for extracting information from the HDF5 files generated during simulation by the
+:obj:`schnetpack.md.simulation_hooks.logging_hooks.FileLogger`.
+In addition to loading structures, velocities, etc., various postprocessing functions are available.
+"""
+
 import json
 import logging
 import h5py
@@ -131,8 +137,7 @@ class HDF5Loader:
                                (default=False)
 
         Returns:
-            np.array: N_steps x [ property dimensions... ] array containing the requested property collected during the
-                      simulation.
+            np.array: N_steps x property dimensions array containing the requested property collected during the simulation.
         """
 
         # Special case for atom types
@@ -195,6 +200,18 @@ class HDF5Loader:
         )
 
     def get_kinetic_energy(self, mol_idx=0, replica_idx=None):
+        """
+        Auxiliary routine for computing the kinetic energy of every configuration based on it's velocities.
+
+        Args:
+            mol_idx (int): Index of the molecule to extract, by default uses the first molecule (mol_idx=0)
+            replica_idx (int): Replica of the molecule to extract (e.g. for ring polymer molecular dynamics). If
+                               replica_idx is set to None (default), the centroid is returned if multiple replicas are
+                               present.
+
+        Returns:
+            np.array: N_steps array containing the kinetic eenrgy of every configuration in atomic units.
+        """
         # Get the velocities
         velocities = self.get_velocities(mol_idx=mol_idx, replica_idx=replica_idx)
 
@@ -210,6 +227,19 @@ class HDF5Loader:
         return kinetic_energy
 
     def get_temperature(self, mol_idx=0, replica_idx=None):
+        """
+        Auxiliary routine for computing the instantaneous temperature of every configuration.
+
+        Args:
+            mol_idx (int): Index of the molecule to extract, by default uses the first molecule (mol_idx=0)
+            replica_idx (int): Replica of the molecule to extract (e.g. for ring polymer molecular dynamics). If
+                               replica_idx is set to None (default), the centroid is returned if multiple replicas are
+                               present.
+
+        Returns:
+            np.array: N_steps array containing the temperature of every configuration in Kelvin.
+        """
+        # Get the velocities
         # Get the kinetic energy
         kinetic_energy = self.get_kinetic_energy(
             mol_idx=mol_idx, replica_idx=replica_idx

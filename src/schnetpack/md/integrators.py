@@ -1,3 +1,10 @@
+"""
+Integrators are used to propagate the simulated system in time. SchNetPack
+provides two basic types of integrators. The Velocity Verlet integrator is a standard
+integrator for a purely classical simulations of the nuclei. The ring polymer molecular dynamics
+integrator simulates multiple replicas of the system coupled by harmonic springs and recovers
+a certain extent of nuclear quantum effects (e.g. tunneling).
+"""
 import torch
 import numpy as np
 

@@ -1,3 +1,10 @@
+"""
+Neighbor lists are used to obtain the indices of neighbors surrounding an atom
+for the :obj:`schnetpack.md.calculators.SchnetPackCalculator`.
+Currently only a primitive version of a neighbor list is implemented, which cannot deal
+with periodic boundary conditions and does not possess optimal scaling for large systems.
+"""
+
 import torch
 
 

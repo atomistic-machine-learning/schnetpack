@@ -1,3 +1,9 @@
+"""
+All molecular dynamics in SchNetPack is performed using the :obj:`schnetpack.md.Simulator` class.
+This class collects the atomistic system (:obj:`schnetpack.md.System`), calculators (:obj:`schnetpack.md.calculators`),
+integrators (:obj:`schnetpack.md.integrators`) and various simulation hooks (:obj:`schnetpack.md.simulation_hooks`)
+and performs the time integration.
+"""
 from tqdm import tqdm
 
 
@@ -9,12 +15,12 @@ class Simulator:
 
     In addition, hooks can be applied at five different stages of each
     simulation step:
-    -) Start of the simulation (e.g. for initializing thermostats)
-    -) Before first integrator half step (e.g. thermostats)
-    -) After computation of the forces and before main integrator step (e.g.
-       for accelerated MD)
-    -) After second integrator half step (e.g. thermostats, output routines)
-    -) At the end of the simulation (e.g. general wrap up of file writes, etc.)
+     - Start of the simulation (e.g. for initializing thermostats)
+     - Before first integrator half step (e.g. thermostats)
+     - After computation of the forces and before main integrator step (e.g.
+      for accelerated MD)
+     - After second integrator half step (e.g. thermostats, output routines)
+     - At the end of the simulation (e.g. general wrap up of file writes, etc.)
 
     This routine has a state dict which can be used to restart a previous
     simulation.
