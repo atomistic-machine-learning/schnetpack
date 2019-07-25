@@ -1,7 +1,7 @@
 import numpy as np
 from ase.db import connect
 from ase import Atoms
-from schnetpack import Structure
+from schnetpack import Properties
 
 
 class Evaluator:
@@ -39,7 +39,7 @@ class Evaluator:
                 else:
                     predicted[p] = [value]
             # store positions, numbers and mask to dict
-            for p in [Structure.R, Structure.Z, Structure.atom_mask]:
+            for p in [Properties.R, Properties.Z, Properties.atom_mask]:
                 value = batch[p].cpu().detach().numpy()
                 if p in predicted.keys():
                     predicted[p].append(value)
@@ -90,9 +90,9 @@ class DBEvaluator(Evaluator):
 
     def evaluate(self, device):
         predicted = self._get_predicted(device)
-        positions = predicted.pop(Structure.R)
-        atomic_numbers = predicted.pop(Structure.Z)
-        atom_masks = predicted.pop(Structure.atom_mask).astype(bool)
+        positions = predicted.pop(Properties.R)
+        atomic_numbers = predicted.pop(Properties.Z)
+        atom_masks = predicted.pop(Properties.atom_mask).astype(bool)
         with connect(self.out_file) as conn:
             for i, mask in enumerate(atom_masks):
                 z = atomic_numbers[i, mask]

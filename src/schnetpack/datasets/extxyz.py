@@ -1,6 +1,6 @@
 import os
 
-from schnetpack.data import DownloadableAtomsData
+from schnetpack.datasets import DownloadableAtomsData
 from schnetpack.data.parsing import extxyz_to_db
 from schnetpack.environment import SimpleEnvironmentProvider
 

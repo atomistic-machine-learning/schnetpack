@@ -28,7 +28,7 @@ if __name__ == "__main__":
     args = main_parser.parse_args()
 
     if args.dataset == "qm9":
-        dset.QM9(args.dbpath, True, remove_uncharacterized=args.remove_uncharacterized)
+        dset.QM9(args.dbpath, True)
     if args.dataset == "md17":
         dset.MD17(args.dbpath, args.molecule)
     else:

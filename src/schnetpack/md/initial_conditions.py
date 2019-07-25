@@ -1,3 +1,7 @@
+"""
+Module for setting up the initial conditions of the molecules in :obj:`schnetpack.md.System`.
+This entails sampling the momenta from random distributions corresponding to certain temperatures.
+"""
 import torch
 
 

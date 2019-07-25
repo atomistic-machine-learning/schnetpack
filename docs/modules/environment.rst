@@ -15,6 +15,9 @@ Environment providers
 .. autoclass:: schnetpack.environment.AseEnvironmentProvider
    :members:
 
+.. autoclass:: schnetpack.environment.TorchEnvironmentProvider
+   :members:
+
 
 Functions
 ---------

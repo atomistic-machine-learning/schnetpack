@@ -47,3 +47,47 @@ Hooks
 .. autoclass:: schnetpack.train.ExponentialDecayHook
    :members:
 
+
+Metrics
+-------
+
+
+.. autoclass:: schnetpack.train.Metric
+   :members:
+
+.. autoclass:: schnetpack.train.ModelBias
+   :members:
+
+.. autoclass:: schnetpack.train.MeanSquaredError
+   :members:
+
+.. autoclass:: schnetpack.train.RootMeanSquaredError
+   :members:
+
+.. autoclass:: schnetpack.train.MeanAbsoluteError
+   :members:
+
+.. autoclass:: schnetpack.train.HeatmapMAE
+   :members:
+
+.. autoclass:: schnetpack.train.SumMAE
+   :members:
+
+.. autoclass:: schnetpack.train.LengthMSE
+   :members:
+
+.. autoclass:: schnetpack.train.LengthMAE
+   :members:
+
+.. autoclass:: schnetpack.train.LengthRMSE
+   :members:
+
+.. autoclass:: schnetpack.train.AngleMSE
+   :members:
+
+.. autoclass:: schnetpack.train.AngleMAE
+   :members:
+
+.. autoclass:: schnetpack.train.AngleRMSE
+   :members:
+

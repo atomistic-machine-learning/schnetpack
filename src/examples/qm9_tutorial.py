@@ -26,7 +26,7 @@ train_loader = spk.AtomsLoader(train, batch_size=64, shuffle=True)
 val_loader = spk.AtomsLoader(val, batch_size=64)
 
 # statistics
-atomrefs = dataset.get_atomrefs(properties)
+atomrefs = dataset.get_atomref(properties)
 means, stddevs = train_loader.get_statistics(
     properties, divide_by_atoms=True, single_atom_ref=atomrefs
 )

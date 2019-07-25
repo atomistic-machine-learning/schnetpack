@@ -4,9 +4,15 @@ from torch import nn as nn
 from torch.autograd import grad
 
 import schnetpack
-from schnetpack import nn as L, Structure
+from schnetpack import nn as L, Properties
 
-__all__ = ["Atomwise", "ElementalAtomwise", "DipoleMoment", "ElementalDipoleMoment"]
+__all__ = [
+    "Atomwise",
+    "ElementalAtomwise",
+    "DipoleMoment",
+    "ElementalDipoleMoment",
+    "Polarizability",
+]
 
 
 class AtomwiseError(Exception):
@@ -50,8 +56,6 @@ class Atomwise(nn.Module):
         outnet (callable): Network used for atomistic outputs. Takes schnetpack input
             dictionary as input. Output is not normalized. If set to None,
             a pyramidal network is generated automatically. (default: None)
-        train_embeddings (bool): if set to True, atomref will be ignored and learned
-            from data (default: False)
 
     Returns:
         tuple: prediction for property
@@ -78,9 +82,7 @@ class Atomwise(nn.Module):
         mean=None,
         stddev=None,
         atomref=None,
-        max_z=100,
         outnet=None,
-        train_embeddings=False,
     ):
         super(Atomwise, self).__init__()
 
@@ -94,16 +96,10 @@ class Atomwise(nn.Module):
         mean = torch.FloatTensor([0.0]) if mean is None else mean
         stddev = torch.FloatTensor([1.0]) if stddev is None else stddev
 
-        # build embedding
+        # initialize single atom energies
         if atomref is not None:
             self.atomref = nn.Embedding.from_pretrained(
-                torch.from_numpy(atomref.astype(np.float32)),
-                freeze=not train_embeddings,
-            )
-        elif train_embeddings:
-            self.atomref = nn.Embedding.from_pretrained(
-                torch.from_numpy(np.zeros((max_z, 1), dtype=np.float32)),
-                freeze=not train_embeddings,
+                torch.from_numpy(atomref.astype(np.float32))
             )
         else:
             self.atomref = None
@@ -134,8 +130,8 @@ class Atomwise(nn.Module):
         r"""
         predicts atomwise property
         """
-        atomic_numbers = inputs[Structure.Z]
-        atom_mask = inputs[Structure.atom_mask]
+        atomic_numbers = inputs[Properties.Z]
+        atom_mask = inputs[Properties.atom_mask]
 
         # run prediction
         yi = self.out_net(inputs)
@@ -157,7 +153,7 @@ class Atomwise(nn.Module):
             sign = -1.0 if self.negative_dr else 1.0
             dy = grad(
                 result[self.property],
-                inputs[Structure.R],
+                inputs[Properties.R],
                 grad_outputs=torch.ones_like(result[self.property]),
                 create_graph=self.create_graph,
                 retain_graph=True,
@@ -227,8 +223,8 @@ class DipoleMoment(Atomwise):
         """
         predicts dipole moment
         """
-        positions = inputs[Structure.R]
-        atom_mask = inputs[Structure.atom_mask][:, :, None]
+        positions = inputs[Properties.R]
+        atom_mask = inputs[Properties.atom_mask][:, :, None]
 
         # run prediction
         charges = self.out_net(inputs) * atom_mask
@@ -450,10 +446,10 @@ class Polarizability(Atomwise):
         self.cutoff_network = cutoff_network
 
     def forward(self, inputs):
-        positions = inputs[Structure.R]
-        neighbors = inputs[Structure.neighbors]
-        nbh_mask = inputs[Structure.neighbor_mask]
-        atom_mask = inputs[Structure.atom_mask]
+        positions = inputs[Properties.R]
+        neighbors = inputs[Properties.neighbors]
+        nbh_mask = inputs[Properties.neighbor_mask]
+        atom_mask = inputs[Properties.atom_mask]
 
         # Get environment distances and positions
         distances, dist_vecs = L.atom_distances(positions, neighbors, return_vecs=True)

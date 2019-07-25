@@ -10,7 +10,7 @@ import numpy as np
 from ase.io.extxyz import read_xyz
 from ase.units import Debye, Bohr, Hartree, eV
 
-from schnetpack.data import DownloadableAtomsData
+from schnetpack.datasets import DownloadableAtomsData
 
 __all__ = ["QM9"]
 

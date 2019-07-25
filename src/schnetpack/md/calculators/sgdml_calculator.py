@@ -1,11 +1,11 @@
 from schnetpack.md.calculators import MDCalculator
 from schnetpack.md.utils import MDUnits
-from schnetpack.atomistic import Properties
+from schnetpack import Properties
 
 
 class SGDMLCalculator(MDCalculator):
     """
-    Calculator for the sGDML model published in [#sgdml1]_and [#sgdml2]_. This model predicts energies and forces and
+    Calculator for the sGDML model published in [#sgdml1]_ and [#sgdml2]_ . This model predicts energies and forces and
     currently only is available for molecules of the same size. In order to use the calculator, the sgdml code package
     available online at https://github.com/stefanch/sGDML and described in [#sgdml3]_ is required.
 

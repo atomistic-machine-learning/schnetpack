@@ -4,12 +4,32 @@
 .. automodule:: schnetpack.atomistic
 
 
-General modules
----------------
-
-.. autoclass:: schnetpack.atomistic.Properties
-   :members:
-   :undoc-members:
+Atomistic Models
+----------------
 
 .. autoclass:: schnetpack.atomistic.AtomisticModel
    :members:
+
+
+General output modules
+----------------------
+
+.. autoclass:: schnetpack.atomistic.Atomwise
+   :members:
+
+.. autoclass:: schnetpack.atomistic.ElementalAtomwise
+   :members:
+
+
+Property-specific output modules
+--------------------------------
+
+.. autoclass:: schnetpack.atomistic.DipoleMoment
+   :members:
+
+.. autoclass:: schnetpack.atomistic.ElementalDipoleMoment
+   :members:
+
+.. autoclass:: schnetpack.atomistic.Polarizability
+   :members:
+

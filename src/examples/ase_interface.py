@@ -1,6 +1,6 @@
 import torch
 from ase.db import connect
-from schnetpack.ase_interface import SpkCalculator
+from schnetpack.interfaces import SpkCalculator
 
 
 # path definitions

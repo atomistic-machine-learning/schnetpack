@@ -1,3 +1,7 @@
+"""
+Instructions for interpreting molecular dynamics input files used in
+``spk_md.py`` and initializing the associated classes.
+"""
 import schnetpack.md.calculators.schnet_calculator
 import schnetpack.md.initial_conditions as initcond
 import schnetpack.md.calculators as calculators
@@ -34,10 +38,10 @@ class Initializer:
     """
     Auxiliary class for setting up a molecular dynamics simulation with sacred in the run_dynamics.py script.
     Takes a dictionary of the form:
-        init_dict = { 'type' : string identifying target class,
+        ``init_dict = { 'type' : string identifying target class,
                       'name input1' : value,
                       'name_input2' : value,
-                      ... }
+                      ... }``
 
     It first checks the predefined allowed_options for the class associated with the short string given in type. Then
     it uses the associated input_type (another string) to check for the expected input pattern in another predefined
@@ -119,6 +123,21 @@ class Initializer:
                 extra_kwargs.update(optional_inputs)
 
             self.initialized = target_class(*inputs, **extra_kwargs)
+
+    @classmethod
+    def print_options(cls):
+        """
+        Print all options available for the initializer.
+        """
+        print("Available basic options:\n")
+        for option in cls.allowed_options:
+            input_type = cls.allowed_options[option][1]
+            input_structure = cls.required_inputs[input_type]
+            print("{:s}".format(option))
+            print("-" * len(option))
+            for k, v in input_structure.items():
+                print(f"    {k} ({v.__name__})")
+            print()
 
 
 class ThermostatInit(Initializer):

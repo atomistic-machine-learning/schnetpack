@@ -11,7 +11,7 @@ from ase import Atoms
 from ase.db import connect
 from ase.units import Hartree
 
-from schnetpack.data import DownloadableAtomsData
+from schnetpack.datasets import DownloadableAtomsData
 
 
 class ANI1(DownloadableAtomsData):

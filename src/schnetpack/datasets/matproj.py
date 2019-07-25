@@ -5,7 +5,8 @@ from ase import Atoms
 from ase.db import connect
 from ase.units import eV
 
-from schnetpack.data import DownloadableAtomsData, AtomsDataError
+from schnetpack.data import AtomsDataError
+from schnetpack.datasets import DownloadableAtomsData
 from schnetpack.environment import AseEnvironmentProvider
 
 __all__ = ["MaterialsProject"]
@@ -97,7 +98,7 @@ class MaterialsProject(DownloadableAtomsData):
             )
         try:
             from pymatgen.ext.matproj import MPRester
-            from pymatgen.core import Structure
+            from pymatgen.core import Properties
             import pymatgen as pmg
         except:
             raise ImportError(
@@ -128,7 +129,7 @@ class MaterialsProject(DownloadableAtomsData):
 
                         for k, q in enumerate(query):
                             s = q["structure"]
-                            if type(s) is Structure:
+                            if type(s) is Properties:
                                 at = Atoms(
                                     numbers=s.atomic_numbers,
                                     positions=s.cart_coords,
