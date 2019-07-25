@@ -71,14 +71,13 @@ def get_mode_parsers():
         type=int,
         help="Epochs without improvement before reducing the learning rate "
         "(default: %(default)s)",
-        # todo: check defaults
         default=25,
     )
     train_parser.add_argument(
         "--lr_decay",
         type=float,
         help="Learning rate decay (default: %(default)s)",
-        default=0.5,
+        default=0.8,
     )
     train_parser.add_argument(
         "--lr_min",
@@ -150,7 +149,7 @@ def get_model_parsers():
         "--cutoff_function",
         help="Functional form of the cutoff",
         choices=["hard", "cosine", "mollifier"],
-        default="hard",
+        default="cosine",
     )
     schnet_parser.add_argument(
         "--num_gaussians",
@@ -351,7 +350,7 @@ def build_parser():
     # subparser structure
     # mode
     mode_subparsers = mode_parser.add_subparsers(
-        dest="mode", help="main arguments", required=True
+        dest="mode", help="main arguments"
     )
     train_subparser = mode_subparsers.add_parser("train", help="training help")
     eval_subparser = mode_subparsers.add_parser(
@@ -360,7 +359,7 @@ def build_parser():
 
     # train mode
     train_subparsers = train_subparser.add_subparsers(
-        dest="model", help="Model-specific arguments", required=True
+        dest="model", help="Model-specific arguments"
     )
     # model
     schnet_subparser = train_subparsers.add_parser("schnet", help="SchNet help")
@@ -368,7 +367,7 @@ def build_parser():
 
     # schnet
     schnet_subparsers = schnet_subparser.add_subparsers(
-        dest="dataset", help="Dataset specific arguments", required=True
+        dest="dataset", help="Dataset specific arguments"
     )
     schnet_subparsers.add_parser(
         "ani1",
@@ -398,7 +397,7 @@ def build_parser():
 
     # wacsf
     wacsf_subparsers = wacsf_subparser.add_subparsers(
-        dest="dataset", help="Dataset specific arguments", required=True
+        dest="dataset", help="Dataset specific arguments"
     )
     wacsf_subparsers.add_parser(
         "ani1",
