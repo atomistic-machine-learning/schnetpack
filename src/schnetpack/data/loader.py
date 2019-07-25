@@ -6,13 +6,13 @@ from torch.utils.data import Dataset, DataLoader
 
 logger = logging.getLogger(__name__)
 
-from schnetpack import Structure
+from schnetpack import Properties
 from .stats import StatisticsAccumulator
 
 __all__ = ["AtomsLoader"]
 
 
-def collate_aseatoms(examples):
+def _collate_aseatoms(examples):
     """
     Build batch from systems and properties & apply padding
 
@@ -43,22 +43,22 @@ def collate_aseatoms(examples):
         )
         for p, size in max_size.items()
     }
-    has_atom_mask = Structure.atom_mask in batch.keys()
-    has_neighbor_mask = Structure.neighbor_mask in batch.keys()
+    has_atom_mask = Properties.atom_mask in batch.keys()
+    has_neighbor_mask = Properties.neighbor_mask in batch.keys()
 
     if not has_neighbor_mask:
-        batch[Structure.neighbor_mask] = torch.zeros_like(
-            batch[Structure.neighbors]
+        batch[Properties.neighbor_mask] = torch.zeros_like(
+            batch[Properties.neighbors]
         ).float()
     if not has_atom_mask:
-        batch[Structure.atom_mask] = torch.zeros_like(batch[Structure.Z]).float()
+        batch[Properties.atom_mask] = torch.zeros_like(batch[Properties.Z]).float()
 
     # If neighbor pairs are requested, construct mask placeholders
     # Since the structure of both idx_j and idx_k is identical
     # (not the values), only one cutoff mask has to be generated
-    if Structure.neighbor_pairs_j in properties:
-        batch[Structure.neighbor_pairs_mask] = torch.zeros_like(
-            batch[Structure.neighbor_pairs_j]
+    if Properties.neighbor_pairs_j in properties:
+        batch[Properties.neighbor_pairs_mask] = torch.zeros_like(
+            batch[Properties.neighbor_pairs_j]
         ).float()
 
     # build batch and pad
@@ -70,34 +70,34 @@ def collate_aseatoms(examples):
 
         # add mask
         if not has_neighbor_mask:
-            nbh = properties[Structure.neighbors]
+            nbh = properties[Properties.neighbors]
             shape = nbh.size()
             s = (k,) + tuple([slice(0, d) for d in shape])
             mask = nbh >= 0
-            batch[Structure.neighbor_mask][s] = mask
-            batch[Structure.neighbors][s] = nbh * mask.long()
+            batch[Properties.neighbor_mask][s] = mask
+            batch[Properties.neighbors][s] = nbh * mask.long()
 
         if not has_atom_mask:
-            z = properties[Structure.Z]
+            z = properties[Properties.Z]
             shape = z.size()
             s = (k,) + tuple([slice(0, d) for d in shape])
-            batch[Structure.atom_mask][s] = z > 0
+            batch[Properties.atom_mask][s] = z > 0
 
         # Check if neighbor pair indices are present
         # Since the structure of both idx_j and idx_k is identical
         # (not the values), only one cutoff mask has to be generated
-        if Structure.neighbor_pairs_j in properties:
-            nbh_idx_j = properties[Structure.neighbor_pairs_j]
+        if Properties.neighbor_pairs_j in properties:
+            nbh_idx_j = properties[Properties.neighbor_pairs_j]
             shape = nbh_idx_j.size()
             s = (k,) + tuple([slice(0, d) for d in shape])
-            batch[Structure.neighbor_pairs_mask][s] = nbh_idx_j >= 0
+            batch[Properties.neighbor_pairs_mask][s] = nbh_idx_j >= 0
 
     return batch
 
 
 class AtomsLoader(DataLoader):
     r"""
-    Convenience for ``torch.data.DataLoader`` which already uses the correct
+    Specialized ``torch.data.DataLoader`` which uses the correct
     collate_fn for AtomsData and provides functionality for calculating mean
     and stddev.
 
@@ -141,24 +141,24 @@ class AtomsLoader(DataLoader):
         sampler=None,
         batch_sampler=None,
         num_workers=0,
-        collate_fn=collate_aseatoms,
+        collate_fn=_collate_aseatoms,
         pin_memory=False,
         drop_last=False,
         timeout=0,
         worker_init_fn=None,
     ):
         super(AtomsLoader, self).__init__(
-            dataset,
-            batch_size,
-            shuffle,
-            sampler,
-            batch_sampler,
-            num_workers,
-            collate_fn,
-            pin_memory,
-            drop_last,
-            timeout,
-            worker_init_fn,
+            dataset=dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            sampler=sampler,
+            batch_sampler=batch_sampler,
+            num_workers=num_workers,
+            collate_fn=collate_fn,
+            pin_memory=pin_memory,
+            drop_last=drop_last,
+            timeout=timeout,
+            worker_init_fn=worker_init_fn,
         )
 
     def get_statistics(

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from schnetpack.nn.base import Dense
-from schnetpack import Structure
+from schnetpack import Properties
 from schnetpack.nn.cfconv import CFConv
 from schnetpack.nn.cutoff import HardCutoff
 from schnetpack.nn.acsf import GaussianSmearing
@@ -202,20 +202,20 @@ class SchNet(nn.Module):
 
         """
         # get tensors from input dictionary
-        atomic_numbers = inputs[Structure.Z]
-        positions = inputs[Structure.R]
-        cell = inputs[Structure.cell]
-        cell_offset = inputs[Structure.cell_offset]
-        neighbors = inputs[Structure.neighbors]
-        neighbor_mask = inputs[Structure.neighbor_mask]
-        atom_mask = inputs[Structure.atom_mask]
+        atomic_numbers = inputs[Properties.Z]
+        positions = inputs[Properties.R]
+        cell = inputs[Properties.cell]
+        cell_offset = inputs[Properties.cell_offset]
+        neighbors = inputs[Properties.neighbors]
+        neighbor_mask = inputs[Properties.neighbor_mask]
+        atom_mask = inputs[Properties.atom_mask]
 
         # get atom embeddings for the input atomic numbers
         x = self.embedding(atomic_numbers)
 
-        if False and self.charged_systems and Structure.charge in inputs.keys():
+        if False and self.charged_systems and Properties.charge in inputs.keys():
             n_atoms = torch.sum(atom_mask, dim=1, keepdim=True)
-            charge = inputs[Structure.charge] / n_atoms  # B
+            charge = inputs[Properties.charge] / n_atoms  # B
             charge = charge[:, None] * self.charge  # B x F
             x = x + charge
 

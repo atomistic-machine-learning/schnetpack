@@ -8,7 +8,7 @@ import torch
 
 __all__ = [
     "set_random_seed",
-    "compute_params",
+    "count_params",
     "to_json",
     "read_from_json",
     "DeprecationHelper",
@@ -44,12 +44,14 @@ def set_random_seed(seed):
     logging.info("Random state initialized with seed {:<10d}".format(seed))
 
 
-def compute_params(model):
+def count_params(model):
     """
-    This function gets a model as an input and computes its trainable parameters
+    This function takes a model as an input and returns the number of
+    trainable parameters.
 
-    Args:
-        model (AtomisticModel): model for which you want to compute the trainable parameters
+    Args:collect
+        model (AtomisticModel): model for which you want to count
+                                the trainable parameters
 
     Returns:
         params (int): number of trainable parameters for the model

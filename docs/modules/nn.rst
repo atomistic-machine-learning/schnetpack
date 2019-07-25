@@ -84,8 +84,8 @@ Neighbors
    :members:
 
 
-Atom-centered symmetry functions
---------------------------------
+ACSF
+----
 
 .. automodule:: schnetpack.nn.acsf
 

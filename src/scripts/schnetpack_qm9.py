@@ -78,14 +78,13 @@ if __name__ == "__main__":
     logging.info("QM9 will be loaded...")
     qm9 = QM9(
         args.datapath,
-        download=True,
         load_only=[train_args.property],
         collect_triples=args.model == "wacsf",
-        remove_uncharacterized=train_args.remove_uncharacterized,
+        download=True,
     )
 
     # get atomrefs
-    atomref = qm9.get_atomrefs(train_args.property)
+    atomref = qm9.get_atomref(train_args.property)
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")

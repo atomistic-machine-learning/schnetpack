@@ -59,7 +59,7 @@ if __name__ == "__main__":
     )
 
     # get atomrefs
-    atomref = omdb.get_atomrefs(train_args.property)
+    atomref = omdb.get_atomref(train_args.property)
 
     # splits the dataset in test, val, train sets
     split_path = os.path.join(args.modelpath, "split.npz")

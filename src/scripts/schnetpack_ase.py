@@ -155,7 +155,7 @@ if __name__ == "__main__":
 
     logging.info(
         "The model you built has: {:d} parameters".format(
-            spk.utils.compute_params(ml_model)
+            spk.utils.count_params(ml_model)
         )
     )
 

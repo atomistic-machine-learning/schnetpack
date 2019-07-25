@@ -178,10 +178,40 @@ class MDCalculator:
 
 
 class QMCalculatorError(Exception):
+    """
+    Exception for the QM calculator base class
+    """
+
     pass
 
 
 class QMCalculator(MDCalculator):
+    """
+    Basic calculator for interfacing quantum chemistry codes with SchNetPack molecular dynamics.
+
+
+
+    Calculator for interfacing the ORCA code package with SchNetPack molecular dynamics.
+    Requires ORCA to be installed and an input file template.
+    This template is a standard ORCA input file, with everything past the specification of coordinate
+    format, charge and multiplicity removed (coordinates and final *).
+    If desired, a Queuer can be give, which will attempt to send all jobs to a grid engine queue.
+
+    In general, the calculator will take the current System to generate inputs, perform the calculation
+    with ORCA, extract data from the ouput file (useing the OrcaParser class) and update the System.
+
+    Args:
+        required_properties (list): List of properties which should be extracted from output.
+        force_handle (str): Indicator for molecular forces.
+        compdir (str): Directory in which computations are performed.
+        qm_executable (str): Path to the ORCA executable.
+        position_conversion (str/float, optional): Conversion of positions from atomic units.
+        force_conversion (str/float, optional): Conversion of forces to atomic units.
+        property_conversion (dict, optional): Convert properties to requested units. If left empty, no conversion
+                                              is performed.
+        adaptive (bool, optional): Specify, whether the calculator should be used for adaptive sampling.
+    """
+
     is_atomistic = []
 
     def __init__(
@@ -217,6 +247,26 @@ class QMCalculator(MDCalculator):
         self.step = 0
 
     def calculate(self, system, samples=None):
+        """
+        Perform the calculation with a quantum chemistry code.
+        If samples is given, only a subset of molecules is selected.
+
+        Args:
+            system (schnetpack.md.System): System from the molecular dynamics simulation.
+            samples (np.array, optional): Integer array specifying whether only particular
+                                          replicas and molecules in the system should be used for
+                                          computations. Only works with adaptive sampling.
+
+        Returns:
+            (list,list):
+                atom_buffer:
+                    List of ASE atoms objects of every computed molecule.
+                    Only returned if adaptive sampling is activated.
+
+                property_buffer:
+                    List of property dictionaries for every computation.
+                    Only returned if adaptive sampling is activated.
+        """
         # Use of samples only makes sense in conjunction with adaptive sampling
         if not self.adaptive and samples is not None:
             raise QMCalculatorError(
@@ -230,7 +280,6 @@ class QMCalculator(MDCalculator):
             os.makedirs(current_compdir)
 
         # Get molecules (select samples if requested)
-        # TODO: fragmentation should be applied here
         molecules = self._extract_molecules(system, samples=samples)
 
         # Run computation
@@ -250,9 +299,20 @@ class QMCalculator(MDCalculator):
             return atom_buffer, property_buffer
 
     def _extract_molecules(self, system, samples=None):
-        # import numpy as np
-        # samples = np.zeros((20, 1))
-        # samples[3, 0] = 1
+        """
+        Extract atom types and molecular structures from the system. and convert to
+        appropriate units.
+
+        Args:
+            system (schnetpack.md.System): System from the molecular dynamics simulation.
+            samples (np.array, optional): Integer array specifying whether only particular
+                                          replicas and molecules in the system should be used for
+                                          computations. Only works with adaptive sampling.
+
+        Returns:
+            list: List of tuples containing the atom types (integer numpy.array) and positions
+                  (float numpy.array).
+        """
         molecules = []
         for rep_idx in range(system.n_replicas):
             for mol_idx in range(system.n_molecules):
@@ -274,16 +334,54 @@ class QMCalculator(MDCalculator):
         return molecules
 
     def _run_computation(self, molecules, current_compdir):
+        """
+        Placeholder performing the computation.
+
+        Args:
+            molecules (list): List of tuples containing the atom types (integer numpy.array)
+                      and positions (float numpy.array).
+            current_compdir (str): Path to the current computation directory.
+        """
         raise NotImplementedError
 
     def _format_calc(self, outputs, system):
+        """
+        Placeholder to format the computation output if no adaptive sampling is used.
+
+        Args:
+            outputs (list): Paths to output files.
+            system (schnetpack.md.System): System from the molecular dynamics simulation.
+        """
         raise NotImplementedError
 
     def _format_ase(self, molecules, outputs):
+        """
+        Placeholder to format the ouput for storage in an ASE database (for adaptive sampling).
+
+        Args:
+            molecules (list): List of tuples containing the atom types (integer numpy.array)
+                      and positions (float numpy.array).
+            outputs (list): Paths to output files.
+        """
         raise NotImplementedError
 
 
 class Queuer:
+    """
+    Base class for interfacing a calculator with a grid engine queue.
+    Will create the directory structure and a submission command, which it will pass to the
+    given queue. Jobs will be submitted as array jobs, where the number of concurrently running
+    jobs can be changed. In order to the script to work, the QUEUE_FILE string needs to be updated
+    and the _create_submission_command function has to be implemented.
+
+    Args:
+        queue (str): Indentifier for the queue the job should be sent to.
+        executable (str): Path to the executable to be called.
+        concurrent (str): How many concurrent jobs should be run in each array. (default=100)
+        basename (str): Basic identifier used for job (default='input')
+        cleanup (bool): Whether directories should be deleted (default=True)
+    """
+
     QUEUE_FILE = """
 #!/usr/bin/env bash
 ##############################
@@ -313,6 +411,13 @@ class Queuer:
         self.cleanup = cleanup
 
     def submit(self, input_files, current_compdir):
+        """
+        Submit an array of jobs to a grid engine and wait for their completion.
+
+        Args:
+            input_files (list): List of all inputs.
+            current_compdir (str): Path to the directory used for computations.
+        """
         jobname = os.path.basename(current_compdir)
         compdir = os.path.abspath(current_compdir)
         n_inputs = len(input_files)
@@ -330,4 +435,15 @@ class Queuer:
             os.remove(script_name)
 
     def _create_submission_command(self, n_inputs, compdir, jobname):
+        """
+        Creates the submission command and needs to be implemeneted for specific tasks.
+
+        Args:
+            n_inputs (int): Number of input files to be submitted
+            compdir (str): Current working directory
+            jobname (str): Name of each job
+
+        Returns:
+            str: Submission command.
+        """
         raise NotImplementedError

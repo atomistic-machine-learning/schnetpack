@@ -58,8 +58,8 @@ def get_loaders(args, dataset, split_path, logging=None):
     if logging is not None:
         logging.info("create splits...")
 
-    data_train, data_val, data_test = dataset.create_splits(
-        *args.split, split_file=split_path
+    data_train, data_val, data_test = spk.data.train_test_split(
+        dataset, *args.split, split_file=split_path
     )
     if logging is not None:
         logging.info("load data...")
