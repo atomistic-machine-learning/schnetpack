@@ -349,9 +349,7 @@ def build_parser():
 
     # subparser structure
     # mode
-    mode_subparsers = mode_parser.add_subparsers(
-        dest="mode", help="main arguments"
-    )
+    mode_subparsers = mode_parser.add_subparsers(dest="mode", help="main arguments")
     train_subparser = mode_subparsers.add_parser("train", help="training help")
     eval_subparser = mode_subparsers.add_parser(
         "eval", help="evaluation help", parents=[eval_parser]
