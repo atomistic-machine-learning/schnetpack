@@ -5,6 +5,7 @@ from ase import Atoms
 from ase.db import connect
 from ase.units import eV
 
+from schnetpack.data import AtomsDataError
 from schnetpack.datasets import DownloadableAtomsData
 from schnetpack.environment import AseEnvironmentProvider
 
@@ -90,6 +91,11 @@ class MaterialsProject(DownloadableAtomsData):
         Returns:
             works (bool): true if download succeeded or file already exists
         """
+        if self.apikey is None:
+            raise AtomsDataError(
+                "Provide a valid API key in order to download the "
+                "Materials Project data!"
+            )
         try:
             from pymatgen.ext.matproj import MPRester
             from pymatgen.core import Properties

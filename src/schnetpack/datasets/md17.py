@@ -7,6 +7,7 @@ from urllib import request as request
 import numpy as np
 from ase import Atoms
 
+from schnetpack.data import AtomsDataError
 from schnetpack.datasets import DownloadableAtomsData
 
 __all__ = ["MD17"]
@@ -71,6 +72,12 @@ class MD17(DownloadableAtomsData):
         collect_triples=False,
         load_only=None,
     ):
+        if not os.path.exists(dbpath) and molecule is None:
+            raise AtomsDataError("Provide a valid dbpath or select desired molecule!")
+
+        if molecule is not None and molecule not in MD17.datasets_dict.keys():
+            raise AtomsDataError("Molecule {} is not supported!".format(molecule))
+
         self.molecule = molecule
 
         available_properties = [MD17.energy, MD17.forces]
@@ -121,6 +128,7 @@ class MD17(DownloadableAtomsData):
             atoms_list.append(Atoms(positions=positions, numbers=numbers))
 
         self.add_systems(atoms_list, properties_list)
+        self.update_metadata(dict(data_source=self.datasets_dict[self.molecule]))
 
         logging.info("Cleanining up the mess...")
         logging.info("{} molecule done".format(self.molecule))

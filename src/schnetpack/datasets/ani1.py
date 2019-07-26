@@ -92,7 +92,7 @@ class ANI1(DownloadableAtomsData):
             dbpath=self.dbpath,
             download=False,
             subset=subidx,
-            properties=self.load_only,
+            load_only=self.load_only,
             collect_triples=self.collect_triples,
             num_heavy_atoms=self.num_heavy_atoms,
             high_energies=self.high_energies,

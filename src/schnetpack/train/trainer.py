@@ -153,6 +153,8 @@ class Trainer:
                     h.on_epoch_begin(self)
 
                 if self._stop:
+                    # decrease self.epoch if training is aborted on epoch begin
+                    self.epoch -= 1
                     break
 
                 # perform training epoch

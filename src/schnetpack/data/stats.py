@@ -1,5 +1,5 @@
 import logging
-import numpy as np
+import torch
 
 
 logger = logging.getLogger(__name__)
@@ -76,7 +76,7 @@ class StatisticsAccumulator:
         """
         # Compute standard deviation from M2
         mean = self.mean
-        stddev = np.sqrt(self.M2 / self.count)
+        stddev = torch.sqrt(self.M2 / self.count)
 
         return mean, stddev
 
@@ -84,4 +84,4 @@ class StatisticsAccumulator:
         return self.mean
 
     def get_stddev(self):
-        return np.sqrt(self.M2 / self.count)
+        return torch.sqrt(self.M2 / self.count)

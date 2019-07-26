@@ -1,3 +1,5 @@
+import os
+import torch
 import logging
 import schnetpack as spk
 from ase.data import atomic_numbers
@@ -7,7 +9,7 @@ from schnetpack.atomistic import AtomisticModel
 from schnetpack.nn.cutoff import get_cutoff_by_string
 
 
-__all__ = ["get_representation", "get_model"]
+__all__ = ["get_representation", "get_output_module", "get_model"]
 
 
 def get_representation(args, train_loader=None):
@@ -62,16 +64,95 @@ def get_representation(args, train_loader=None):
         raise NotImplementedError("Unknown model class:", args.model)
 
 
-def get_model(representation, output_modules, parallelize=False):
+def get_output_module(args, representation, mean, stddev, atomref, aggregation_mode):
+    derivative = None
+    if args.dataset == "md17" and not args.ignore_forces:
+        derivative = spk.datasets.MD17.forces
+    if args.model == "schnet":
+        if args.property == spk.datasets.QM9.mu:
+            return schnetpack.atomistic.output_modules.DipoleMoment(
+                args.features,
+                predict_magnitude=True,
+                mean=mean[args.property],
+                stddev=stddev[args.property],
+                property=args.property,
+            )
+        else:
+            return schnetpack.atomistic.output_modules.Atomwise(
+                args.features,
+                aggregation_mode=aggregation_mode,
+                mean=mean[args.property],
+                stddev=stddev[args.property],
+                atomref=atomref[args.property],
+                property=args.property,
+                derivative=derivative,
+                negative_dr=True,
+            )
+    elif args.model == "wacsf":
+        elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
+        if args.property == spk.datasets.QM9.mu:
+            return schnetpack.atomistic.output_modules.ElementalDipoleMoment(
+                representation.n_symfuncs,
+                n_hidden=args.n_nodes,
+                n_layers=args.n_layers,
+                predict_magnitude=True,
+                elements=elements,
+                property=args.property,
+            )
+        else:
+            return schnetpack.atomistic.output_modules.ElementalAtomwise(
+                representation.n_symfuncs,
+                n_hidden=args.n_nodes,
+                n_layers=args.n_layers,
+                aggregation_mode=aggregation_mode,
+                mean=mean[args.property],
+                stddev=stddev[args.property],
+                atomref=atomref[args.property],
+                elements=elements,
+                property=args.property,
+            )
+    else:
+        raise NotImplementedError
 
-    model = AtomisticModel(representation, output_modules)
 
-    if parallelize:
-        model = nn.DataParallel(model)
+def get_model(
+    args, train_loader, mean, stddev, atomref, aggregation_mode, logging=None
+):
+    """
+    Build a model from selected parameters or load trained model for evaluation.
 
-    logging.info(
-        "The model you built has: %d parameters"
-        % schnetpack.utils.spk_utils.count_params(model)
-    )
+    Args:
+        args (argsparse.Namespace): Script arguments
+        train_loader (spk.AtomsLoader): loader for training data
+        mean (torch.Tensor): mean of training data
+        stddev (torch.Tensor): stddev of training data
+        atomref (dict): atomic references
+        logging: logger
 
-    return model
+    Returns:
+        spk.AtomisticModel: model for training or evaluation
+    """
+    if args.mode == "train":
+        if logging:
+            logging.info("building model...")
+        representation = get_representation(args, train_loader)
+        output_module = get_output_module(
+            args,
+            representation=representation,
+            mean=mean,
+            stddev=stddev,
+            atomref=atomref,
+            aggregation_mode=aggregation_mode,
+        )
+        model = AtomisticModel(representation, [output_module])
+
+        if args.parallel:
+            model = nn.DataParallel(model)
+        if logging:
+            logging.info(
+                "The model you built has: %d parameters"
+                % schnetpack.utils.spk_utils.count_params(model)
+            )
+        return model
+    else:
+        raise spk.utils.ScriptError("Invalid mode selected: {}".format(args.mode))

@@ -6,19 +6,19 @@ from torch.utils.data.sampler import RandomSampler
 from schnetpack.utils.script_utils.script_error import ScriptError
 
 
-__all__ = ["get_loaders", "get_statistics"]
+__all__ = ["get_loaders", "get_statistics", "get_dataset"]
 
 
 def get_statistics(
-    split_path, train_loader, args, atomref, per_atom=False, logging=None
+    args, split_path, train_loader, atomref, divide_by_atoms=False, logging=None
 ):
     """
     Get statistics for molecular properties. Use split file if possible.
 
     Args:
+        args (argparse.Namespace): parsed script arguments
         split_path (str): path to the split file
         train_loader (spk.data.AtomsLoader): dataloader for training set
-        args (argparse.Namespace): parsed script arguments
         atomref (dict): atomic references
         logging: logger
 
@@ -40,7 +40,9 @@ def get_statistics(
 
     # calculate statistical data
     else:
-        mean, stddev = train_loader.get_statistics(args.property, per_atom, atomref)
+        mean, stddev = train_loader.get_statistics(
+            args.property, divide_by_atoms, atomref
+        )
         np.savez(
             split_path,
             train_idx=split_data["train_idx"],
@@ -54,7 +56,19 @@ def get_statistics(
 
 
 def get_loaders(args, dataset, split_path, logging=None):
+    """
+    Create train-val-test splits for dataset and return the corresponding dataloaders.
 
+    Args:
+        args (argparse.Namespace): parsed script arguments
+        dataset (spk.AtomsData): total dataset
+        split_path (str): path to split file
+        logging: logger
+
+    Returns:
+        (spk.AtomsLoader, spk.AtomsLoader, spk.AtomsLoader): dataloaders for train,
+            val and test
+    """
     if logging is not None:
         logging.info("create splits...")
 
@@ -78,3 +92,69 @@ def get_loaders(args, dataset, split_path, logging=None):
         data_test, batch_size=args.batch_size, num_workers=2, pin_memory=True
     )
     return train_loader, val_loader, test_loader
+
+
+def get_dataset(args, logging=None):
+    """
+    Get dataset from arguments.
+
+    Args:
+        args (argparse.Namespace): parsed arguments
+        logging: logger
+
+    Returns:
+        spk.data.AtomsData: dataset
+
+    """
+    if args.dataset == "qm9":
+        if logging:
+            logging.info("QM9 will be loaded...")
+        qm9 = spk.datasets.QM9(
+            args.datapath,
+            download=True,
+            load_only=[args.property],
+            collect_triples=args.model == "wacsf",
+            remove_uncharacterized=args.remove_uncharacterized,
+        )
+        return qm9
+    elif args.dataset == "ani1":
+        if logging:
+            logging.info("ANI1 will be loaded...")
+        ani1 = spk.datasets.ANI1(
+            args.datapath,
+            download=True,
+            load_only=[args.property],
+            collect_triples=args.model == "wacsf",
+            num_heavy_atoms=args.num_heavy_atoms,
+        )
+        return ani1
+    elif args.dataset == "md17":
+        if logging:
+            logging.info("MD17 will be loaded...")
+        md17 = spk.datasets.MD17(
+            args.datapath,
+            args.molecule,
+            download=True,
+            collect_triples=args.model == "wacsf",
+        )
+        return md17
+    elif args.dataset == "matproj":
+        if logging:
+            logging.info("Materials project will be loaded...")
+        mp = spk.datasets.MaterialsProject(
+            args.datapath,
+            args.cutoff,
+            apikey=args.apikey,
+            download=True,
+            load_only=[args.property],
+        )
+        return mp
+    elif args.dataset == "omdb":
+        if logging:
+            logging.info("Organic Materials Database will be loaded...")
+        omdb = spk.datasets.OrganicMaterialsDatabase(
+            args.datapath, args.cutoff, download=True, load_only=[args.property]
+        )
+        return omdb
+    else:
+        raise spk.utils.ScriptError("Invalid dataset selected!")
