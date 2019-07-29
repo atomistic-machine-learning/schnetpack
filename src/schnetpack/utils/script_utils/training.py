@@ -43,8 +43,10 @@ def get_trainer(args, model, train_loader, val_loader, metrics, loss_fn=None):
         )
         hooks.append(logger)
 
-    if loss_fn is None:
+    if args.dataset != "md17":
         loss_fn = simple_loss_fn(args)
+    else:
+        loss_fn = tradeoff_loff_fn(args, derivative="forces")
 
     trainer = spk.train.Trainer(
         args.modelpath,
