@@ -230,7 +230,6 @@ def get_model_parsers():
 def get_data_parsers():
     # data parsers
     data_parser = argparse.ArgumentParser(add_help=False)
-    data_parser.add_argument("--dbpath", default="db_path", type=str, help="path to db")
 
     # qm9
     qm9_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
