@@ -142,7 +142,7 @@ def get_model_parsers():
     schnet_parser.add_argument(
         "--cutoff",
         type=float,
-        default=5.0,
+        default=10.0,
         help="Cutoff radius of local environment (default: %(default)s)",
     )
 
