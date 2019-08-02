@@ -135,6 +135,7 @@ class SchNet(nn.Module):
     ):
         super(SchNet, self).__init__()
 
+        self.n_atom_basis = n_atom_basis
         # make a lookup table to store embeddings for each element (up to atomic
         # number max_z) each of which is a vector of size n_atom_basis
         self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
