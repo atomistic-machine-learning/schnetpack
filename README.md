@@ -68,7 +68,7 @@ The QM9 example scripts allows to train and evaluate both SchNet and wACSF neura
 The training can be started using:
 
 ```
-spk_run.py train <schnet/wacsf> <datadir> <modeldir> --split num_train num_val [--cuda]
+spk_run.py train <schnet/wacsf> qm9 <datadir> <modeldir> --split num_train num_val [--cuda]
 ```
 
 where num_train and num_val need to be replaced by the number of training and validation datapoints respectively.
