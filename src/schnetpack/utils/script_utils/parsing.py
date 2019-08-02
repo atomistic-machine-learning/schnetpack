@@ -326,7 +326,7 @@ def get_data_parsers():
         "--property",
         type=str,
         help="Database property to be predicted" " (default: %(default)s)",
-        default=[OrganicMaterialsDatabase.BandGap],
+        default=OrganicMaterialsDatabase.BandGap,
         choices=[OrganicMaterialsDatabase.BandGap],
     )
     return (
