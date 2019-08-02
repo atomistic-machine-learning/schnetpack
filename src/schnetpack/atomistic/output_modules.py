@@ -511,3 +511,79 @@ def symmetric_product(tensor):
     idx = list(range(len(shape)))
     idx[-1], idx[-2] = idx[-2], idx[-1]
     return 0.5 * (tensor + tensor.permute(*idx))
+
+
+class ElectronicSpatialExtent(Atomwise):
+    """
+    Predicts latent partial charges and calculates dipole moment.
+
+    Args:
+        n_in (int): input dimension of representation
+        n_layers (int): number of layers in output network (default: 2)
+        n_neurons (list of int or None): number of neurons in each layer of the output
+            network. If `None`, divide neurons by 2 in each layer. (default: None)
+        activation (torch.Function): activation function for hidden nn
+            (default: schnetpack.nn.activations.shifted_softplus)
+        property (str): name of the output property (default: "y")
+        contributions (str or None): Name of property contributions in return dict.
+            No contributions returned if None. (default: None)
+        predict_magnitude (bool): if True, predict the magnitude of the dipole moment
+            instead of the vector (default: False)
+        mean (torch.FloatTensor or None): mean of dipole (default: None)
+        stddev (torch.FloatTensor or None): stddev of dipole (default: None)
+
+    Returns:
+        dict: vector for the dipole moment
+
+        If predict_magnitude is True returns the magnitude of the dipole moment
+        instead of the vector.
+
+        If contributions is not None latent atomic charges are added to the output
+        dictionary.
+    """
+
+    def __init__(
+        self,
+        n_in,
+        n_layers=2,
+        n_neurons=None,
+        activation=schnetpack.nn.activations.shifted_softplus,
+        property="y",
+        contributions=None,
+        mean=None,
+        stddev=None,
+        outnet=None,
+    ):
+        super(ElectronicSpatialExtent, self).__init__(
+            n_in,
+            1,
+            "sum",
+            n_layers,
+            n_neurons,
+            activation=activation,
+            mean=mean,
+            stddev=stddev,
+            outnet=outnet,
+            property=property,
+            contributions=contributions,
+        )
+
+    def forward(self, inputs):
+        """
+        predicts dipole moment
+        """
+        positions = inputs[Properties.R]
+        atom_mask = inputs[Properties.atom_mask][:, :, None]
+
+        # run prediction
+        charges = self.out_net(inputs) * atom_mask
+        yi = torch.norm(positions, 2, 2, keepdim=True) ** 2 * charges
+        y = self.atom_pool(yi)
+
+        # collect results
+        result = {self.property: y}
+
+        if self.contributions:
+            result[self.contributions] = charges
+
+        return result
