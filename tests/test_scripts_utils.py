@@ -98,7 +98,7 @@ class TestTrainer:
             max_steps=30,
             checkpoint_interval=1,
             keep_n_checkpoints=1,
-            dataset="qm9"
+            dataset="qm9",
         )
         trainer = get_trainer(
             args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
@@ -126,7 +126,7 @@ class TestTrainer:
             max_steps=30,
             checkpoint_interval=1,
             keep_n_checkpoints=1,
-            dataset="qm9"
+            dataset="qm9",
         )
         trainer = get_trainer(
             args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
