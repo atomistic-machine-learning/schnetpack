@@ -100,6 +100,7 @@ def get_mode_parsers():
     )
     train_parser.add_argument(
         "--n_epochs",
+        type=int,
         help="Maximum number of training epochs (default: %(default)s)",
         default=1000,
     )
@@ -141,7 +142,7 @@ def get_model_parsers():
     schnet_parser.add_argument(
         "--cutoff",
         type=float,
-        default=5.0,
+        default=10.0,
         help="Cutoff radius of local environment (default: %(default)s)",
     )
 
@@ -154,7 +155,7 @@ def get_model_parsers():
     schnet_parser.add_argument(
         "--num_gaussians",
         type=int,
-        default=25,
+        default=50,
         help="Number of Gaussians to expand distances (default: %(default)s)",
     )
 
@@ -186,7 +187,7 @@ def get_model_parsers():
     wacsf_parser.add_argument(
         "--cutoff",
         type=float,
-        default=5.0,
+        default=10.0,
         help="Cutoff radius of local environment (default: %(default)s)",
     )
     # Atomistic network parameters
@@ -229,7 +230,6 @@ def get_model_parsers():
 def get_data_parsers():
     # data parsers
     data_parser = argparse.ArgumentParser(add_help=False)
-    data_parser.add_argument("--dbpath", default="db_path", type=str, help="path to db")
 
     # qm9
     qm9_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
@@ -260,7 +260,7 @@ def get_data_parsers():
         "--remove_uncharacterized",
         type=bool,
         help="Remove uncharacterized molecules from QM9 (default: %(default)s)",
-        default=False,
+        default=True,
     )
 
     ani1_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
