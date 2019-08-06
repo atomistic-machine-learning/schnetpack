@@ -11,7 +11,7 @@ def read(fname):
 
 setup(
     name="schnetpack",
-    version="0.2.1",
+    version="0.3",
     author="Kristof T. Schuett, Michael Gastegger, Pan Kessel, Kim Nicoli",
     email="kristof.schuett@tu-berlin.de",
     url="https://github.com/atomistic-machine-learning/schnetpack",
@@ -31,9 +31,7 @@ setup(
         "ase>=3.18",
         "h5py",
         "tensorboardX",
-        "sacred==0.7.4",
         "tqdm",
-        "h5py",
         "pyyaml",
         "pytest-console-scripts",
     ],
