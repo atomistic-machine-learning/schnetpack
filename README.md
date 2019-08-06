@@ -30,25 +30,30 @@ _**Note: We recommend using a GPU for training the neural networks.**_
 
 ### Install with pip
 
-`pip install schnetpack`
+```
+pip install schnetpack
+```
 
 ### Install from source
 
 #### Clone the repository
 
-`git clone https://github.com/atomistic-machine-learning/schnetpack.git`
-
-`cd schnetpack`
+```
+git clone https://github.com/atomistic-machine-learning/schnetpack.git
+cd schnetpack
+```
 
 #### Install requirements
 
-`pip install -r requirements.txt`
+```
+pip install -r requirements.txt
+```
 
 #### Install SchNetPack
 
-`pip install .`
-
-`cd ..`
+```
+pip install .
+```
 
 You're ready to go!
 
@@ -62,30 +67,34 @@ The example scripts provided by SchNetPack are inserted into your PATH during in
 The QM9 example scripts allows to train and evaluate both SchNet and wACSF neural networks.
 The training can be started using:
 
-`schnetpack_qm9.py train <schnet/wacsf> <datadir> <modeldir> --split num_train num_val [--cuda]`
+```
+spk_run.py train <schnet/wacsf> qm9 <datadir> <modeldir> --split num_train num_val [--cuda]
+```
 
 where num_train and num_val need to be replaced by the number of training and validation datapoints respectively.
 
 You can choose between SchNet and wACSF networks and have to provide directories to store the model and the QM9 dataset 
 (will be downloaded if not in `<datadir>`). With the `--cuda` flag, you can activate GPU training.
 The default hyper-parameters should work fine, however, you can change them through command-line arguments. 
-Please refer to the help at 
-
-`schnetpack_qm9.py train <schnet/wacsf> --help`. 
+Please refer to the help at `spk_run.py train <schnet/wacsf> --help`. 
 
 The training progress will be logged in `<modeldir>/log`, either as CSV 
 (default) or as TensorBoard event files. For the latter, TensorBoard needs to be installed to view the event files.
 This can be done by installing the version included in TensorFlow 
 
-`pip install tensorflow` 
+```
+pip install tensorflow
+```
 
 or the [standalone version](https://github.com/dmlc/tensorboard).
 
 To evaluate the trained model with the best validation error, call
 
-`schnetpack_qm9.py eval <schnet/wacsf> <datadir> <modeldir> [--split train val test] [--cuda]`
+```
+spk_run.py eval <modeldir> --split test [--cuda]
+```
 
-which will write a result file `evaluation.txt` into the model directory.
+which will run on the specified `--split` and write a result file `evaluation.txt` into the model directory.
 
 ## Documentation
 

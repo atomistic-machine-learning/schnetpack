@@ -74,6 +74,20 @@ class Trainer:
         else:
             self._model.load_state_dict(state_dict)
 
+    def _optimizer_to(self, device):
+        """
+        Move the optimizer tensors to device before training.
+
+        Solves restore issue:
+        https://github.com/atomistic-machine-learning/schnetpack/issues/126
+        https://github.com/pytorch/pytorch/issues/2830
+
+        """
+        for state in self.optimizer.state.values():
+            for k, v in state.items():
+                if torch.is_tensor(v):
+                    state[k] = v.to(device)
+
     @property
     def state_dict(self):
         state_dict = {
@@ -139,6 +153,7 @@ class Trainer:
 
         """
         self._model.to(device)
+        self._optimizer_to(device)
         self._stop = False
 
         for h in self.hooks:
