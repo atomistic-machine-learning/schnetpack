@@ -85,7 +85,7 @@ class WarmRestartHook(Hook):
             self.scheduler.step()
 
     def on_validation_end(self, trainer, val_loss):
-        if self.best_current < val_loss:
+        if self.best_current > val_loss:
             self.best_current = val_loss
 
         if self.scheduler.last_epoch >= self.Tmax:
@@ -97,7 +97,7 @@ class WarmRestartHook(Hook):
             ]
             trainer.optimizer.load_state_dict(self.init_opt_state)
 
-            if self.best_current > self.best_previous:
+            if self.best_current >= self.best_previous:
                 self.waiting += 1
             else:
                 self.waiting = 0

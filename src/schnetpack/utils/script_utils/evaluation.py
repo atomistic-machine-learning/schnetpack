@@ -21,7 +21,7 @@ def evaluate(
     if "train" in args.split:
         header += ["Train MAE", "Train RMSE"]
         results += evaluate_dataset(metrics, model, train_loader, device)
-    if "val" in args.split:
+    if "validation" in args.split:
         header += ["Val MAE", "Val RMSE"]
         results += evaluate_dataset(metrics, model, val_loader, device)
 
