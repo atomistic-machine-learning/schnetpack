@@ -24,7 +24,9 @@ def split_path(modeldir):
 
 @pytest.fixture(scope="module")
 def args(batch_size, qm9_split):
-    return Namespace(property="energy_U0", batch_size=batch_size, split=qm9_split)
+    return Namespace(
+        property="energy_U0", batch_size=batch_size, split=qm9_split, mode="train"
+    )
 
 
 @pytest.fixture(scope="module")

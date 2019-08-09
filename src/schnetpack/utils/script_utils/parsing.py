@@ -126,6 +126,9 @@ def get_mode_parsers():
         default=["test"],
         nargs="+",
     )
+    eval_parser.add_argument(
+        "--overwrite", help="Remove previous evaluation files", action="store_true"
+    )
     return mode_parser, train_parser, eval_parser
 
 
