@@ -34,7 +34,7 @@ def batch_inverse(tensor):
     eye = (
         tensor.new_ones(tensor.size(-1), device=tensor.device).diag().expand_as(tensor)
     )
-    tensor_inv, _ = torch.gesv(eye, tensor)
+    tensor_inv, _ = torch.solve(eye, tensor)
     return tensor_inv
 
 
