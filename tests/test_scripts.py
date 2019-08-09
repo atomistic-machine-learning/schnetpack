@@ -85,8 +85,16 @@ def assert_valid_script(
     assert os.path.exists(os.path.join(modeldir, "evaluation.txt"))
 
     # test on all sets
-    ret = script_runner.run("spk_run.py", "eval", modeldir, "--split", "test",
-                            "train", "validation", "--overwrite")
+    ret = script_runner.run(
+        "spk_run.py",
+        "eval",
+        modeldir,
+        "--split",
+        "test",
+        "train",
+        "validation",
+        "--overwrite",
+    )
     assert ret.success, ret.stderr
     assert os.path.exists(os.path.join(modeldir, "evaluation.txt"))
     with open(os.path.join(modeldir, "evaluation.txt")) as f:

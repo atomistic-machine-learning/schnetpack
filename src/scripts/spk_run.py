@@ -77,7 +77,8 @@ def main(args):
             else:
                 raise ScriptError(
                     "The evaluation file does already exist at {}! Add overwrite flag"
-                    " to remove.".format(evaluation_fp))
+                    " to remove.".format(evaluation_fp)
+                )
 
         # load model
         logging.info("loading trained model...")

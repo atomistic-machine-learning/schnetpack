@@ -24,8 +24,10 @@ def evaluate(
         header += ["{} MAE".format(datasplit), "{} RMSE".format(datasplit)]
         derivative = model.output_modules[0].derivative
         if derivative is not None:
-            header += ["{} MAE ({})".format(datasplit, derivative),
-                       "{} RMSE ({})".format(datasplit, derivative)]
+            header += [
+                "{} MAE ({})".format(datasplit, derivative),
+                "{} RMSE ({})".format(datasplit, derivative),
+            ]
         results += evaluate_dataset(metrics, model, loaders[datasplit], device)
 
     if custom_header:
