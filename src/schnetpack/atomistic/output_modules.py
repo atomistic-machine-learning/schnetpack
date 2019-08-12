@@ -515,7 +515,11 @@ def symmetric_product(tensor):
 
 class ElectronicSpatialExtent(Atomwise):
     """
-    Predicts latent partial charges and calculates dipole moment.
+    Predicts the electronic spatial extent using a formalism close to the dipole moment layer.
+    The electronic spatial extent is discretized as a sum of atomic latent contributions
+    weighted by the squared distance of the atom from the center of mass (SchNetPack default).
+
+    .. math:: ESE = \sum_i^N | R_{i0} |^2 q(R)
 
     Args:
         n_in (int): input dimension of representation
@@ -527,16 +531,11 @@ class ElectronicSpatialExtent(Atomwise):
         property (str): name of the output property (default: "y")
         contributions (str or None): Name of property contributions in return dict.
             No contributions returned if None. (default: None)
-        predict_magnitude (bool): if True, predict the magnitude of the dipole moment
-            instead of the vector (default: False)
         mean (torch.FloatTensor or None): mean of dipole (default: None)
         stddev (torch.FloatTensor or None): stddev of dipole (default: None)
 
     Returns:
-        dict: vector for the dipole moment
-
-        If predict_magnitude is True returns the magnitude of the dipole moment
-        instead of the vector.
+        dict: the electronic spatial extent
 
         If contributions is not None latent atomic charges are added to the output
         dictionary.
@@ -570,7 +569,7 @@ class ElectronicSpatialExtent(Atomwise):
 
     def forward(self, inputs):
         """
-        predicts dipole moment
+        Predicts the electronic spatial extent.
         """
         positions = inputs[Properties.R]
         atom_mask = inputs[Properties.atom_mask][:, :, None]
