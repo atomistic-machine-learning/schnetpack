@@ -511,3 +511,78 @@ def symmetric_product(tensor):
     idx = list(range(len(shape)))
     idx[-1], idx[-2] = idx[-2], idx[-1]
     return 0.5 * (tensor + tensor.permute(*idx))
+
+
+class ElectronicSpatialExtent(Atomwise):
+    """
+    Predicts the electronic spatial extent using a formalism close to the dipole moment layer.
+    The electronic spatial extent is discretized as a sum of atomic latent contributions
+    weighted by the squared distance of the atom from the center of mass (SchNetPack default).
+
+    .. math:: ESE = \sum_i^N | R_{i0} |^2 q(R)
+
+    Args:
+        n_in (int): input dimension of representation
+        n_layers (int): number of layers in output network (default: 2)
+        n_neurons (list of int or None): number of neurons in each layer of the output
+            network. If `None`, divide neurons by 2 in each layer. (default: None)
+        activation (torch.Function): activation function for hidden nn
+            (default: schnetpack.nn.activations.shifted_softplus)
+        property (str): name of the output property (default: "y")
+        contributions (str or None): Name of property contributions in return dict.
+            No contributions returned if None. (default: None)
+        mean (torch.FloatTensor or None): mean of dipole (default: None)
+        stddev (torch.FloatTensor or None): stddev of dipole (default: None)
+
+    Returns:
+        dict: the electronic spatial extent
+
+        If contributions is not None latent atomic charges are added to the output
+        dictionary.
+    """
+
+    def __init__(
+        self,
+        n_in,
+        n_layers=2,
+        n_neurons=None,
+        activation=schnetpack.nn.activations.shifted_softplus,
+        property="y",
+        contributions=None,
+        mean=None,
+        stddev=None,
+        outnet=None,
+    ):
+        super(ElectronicSpatialExtent, self).__init__(
+            n_in,
+            1,
+            "sum",
+            n_layers,
+            n_neurons,
+            activation=activation,
+            mean=mean,
+            stddev=stddev,
+            outnet=outnet,
+            property=property,
+            contributions=contributions,
+        )
+
+    def forward(self, inputs):
+        """
+        Predicts the electronic spatial extent.
+        """
+        positions = inputs[Properties.R]
+        atom_mask = inputs[Properties.atom_mask][:, :, None]
+
+        # run prediction
+        charges = self.out_net(inputs) * atom_mask
+        yi = torch.norm(positions, 2, 2, keepdim=True) ** 2 * charges
+        y = self.atom_pool(yi)
+
+        # collect results
+        result = {self.property: y}
+
+        if self.contributions:
+            result[self.contributions] = charges
+
+        return result
