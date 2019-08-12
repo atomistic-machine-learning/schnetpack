@@ -25,7 +25,7 @@ class Atomwise(nn.Module):
     energy.
 
     Args:
-        n_in (int): input dimension of representation (default: 128)
+        n_in (int): input dimension of representation
         n_out (int): output dimension of target property (default: 1)
         aggregation_mode (str): one of {sum, avg} (default: sum)
         n_layers (int): number of nn in output network (default: 2)

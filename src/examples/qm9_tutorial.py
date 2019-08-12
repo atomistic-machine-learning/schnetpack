@@ -35,7 +35,8 @@ means, stddevs = train_loader.get_statistics(
 logging.info("build model")
 representation = spk.SchNet(n_interactions=6)
 output_modules = [
-    spk.Atomwise(
+    spk.atomistic.Atomwise(
+        n_in=representation.n_atom_basis,
         property=QM9.U0,
         mean=means[QM9.U0],
         stddev=stddevs[QM9.U0],

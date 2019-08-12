@@ -18,16 +18,17 @@ def evaluate(
 
     header = []
     results = []
-    if "train" in args.split:
-        header += ["Train MAE", "Train RMSE"]
-        results += evaluate_dataset(metrics, model, train_loader, device)
-    if "val" in args.split:
-        header += ["Val MAE", "Val RMSE"]
-        results += evaluate_dataset(metrics, model, val_loader, device)
 
-    if "test" in args.split:
-        header += ["Test MAE", "Test RMSE"]
-        results += evaluate_dataset(metrics, model, test_loader, device)
+    loaders = dict(train=train_loader, validation=val_loader, test=test_loader)
+    for datasplit in args.split:
+        header += ["{} MAE".format(datasplit), "{} RMSE".format(datasplit)]
+        derivative = model.output_modules[0].derivative
+        if derivative is not None:
+            header += [
+                "{} MAE ({})".format(datasplit, derivative),
+                "{} RMSE ({})".format(datasplit, derivative),
+            ]
+        results += evaluate_dataset(metrics, model, loaders[datasplit], device)
 
     if custom_header:
         header = custom_header

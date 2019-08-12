@@ -98,6 +98,7 @@ class TestTrainer:
             max_steps=30,
             checkpoint_interval=1,
             keep_n_checkpoints=1,
+            dataset="qm9",
         )
         trainer = get_trainer(
             args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
@@ -125,6 +126,7 @@ class TestTrainer:
             max_steps=30,
             checkpoint_interval=1,
             keep_n_checkpoints=1,
+            dataset="qm9",
         )
         trainer = get_trainer(
             args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
@@ -243,7 +245,7 @@ class TestEvaluation:
             cutoff=4.0,
             num_gaussians=30,
             modelpath=modeldir,
-            split="test",
+            split=["test"],
             property="energy_U0",
             dataset="qm9",
             parallel=False,
@@ -273,7 +275,7 @@ class TestEvaluation:
             ],
         )
         assert os.path.exists(os.path.join(modeldir, "evaluation.txt"))
-        args.split = "train"
+        args.split = ["train"]
         evaluate(
             args,
             model,
@@ -287,7 +289,7 @@ class TestEvaluation:
                 )
             ],
         )
-        args.split = "val"
+        args.split = ["validation"]
         evaluate(
             args,
             model,
