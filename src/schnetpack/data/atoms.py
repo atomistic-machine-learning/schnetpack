@@ -474,9 +474,10 @@ class AtomsConverter:
         inputs[Properties.neighbor_mask] = mask.float()
 
         if self.collect_triples:
-            inputs[Properties.neighbor_pairs_mask] = torch.ones_like(
-                inputs[Properties.neighbor_pairs_j]
-            ).float()
+            mask_triples = torch.ones_like(inputs[Properties.neighbor_pairs_j])
+            mask_triples[inputs[Properties.neighbor_pairs_j] < 0] = 0
+            mask_triples[inputs[Properties.neighbor_pairs_k] < 0] = 0
+            inputs[Properties.neighbor_pairs_mask] = mask_triples.float()
 
         # Add batch dimension and move to CPU/GPU
         for key, value in inputs.items():
