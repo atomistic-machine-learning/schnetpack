@@ -1,9 +1,9 @@
 .. _benchmark:
 
 
-==========
-Benchmarks
-==========
+=============================
+Benchmarks and Trained Models
+=============================
 
 QM9
 ---
@@ -49,3 +49,9 @@ Property      MAE  Unit
 ==========  =====  ======
 energy      0.069  eV
 ==========  =====  ======
+
+
+Trained Models
+--------------
+The trained benchmark-models can be downloaded
+`here <http:www.quantum-machine.org/datasets/trained_schnet_models.zip>`_.
