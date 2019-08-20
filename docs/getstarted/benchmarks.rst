@@ -24,7 +24,7 @@ gap                        0.074  eV
 energy_U0                  0.012  eV
 enthalpy_H                 0.012  eV
 homo                       0.047  eV
-electronic_spatial_extent  0.158  Bohr^2
+electronic_spatial_extent  0.158  Bohr**2
 energy_U                   0.012  eV
 free_energy                0.013  eV
 isotropic_polarizability   0.124  Bohr**3
