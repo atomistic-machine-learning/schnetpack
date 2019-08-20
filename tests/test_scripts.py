@@ -80,7 +80,7 @@ def assert_valid_script(
             modeldir, "checkpoints", "checkpoint-{}.pth.tar".format(max_epochs)
         )
     )
-    ret = script_runner.run("spk_run.py", "eval", modeldir, "--overwrite")
+    ret = script_runner.run("spk_run.py", "eval", dbpath, modeldir, "--overwrite")
     assert ret.success, ret.stderr
     assert os.path.exists(os.path.join(modeldir, "evaluation.txt"))
 
@@ -88,6 +88,7 @@ def assert_valid_script(
     ret = script_runner.run(
         "spk_run.py",
         "eval",
+        dbpath,
         modeldir,
         "--split",
         "test",
