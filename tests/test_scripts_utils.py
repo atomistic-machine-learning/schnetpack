@@ -245,7 +245,7 @@ class TestEvaluation:
             cutoff=4.0,
             num_gaussians=30,
             modelpath=modeldir,
-            split="test",
+            split=["test"],
             property="energy_U0",
             dataset="qm9",
             parallel=False,
@@ -275,7 +275,7 @@ class TestEvaluation:
             ],
         )
         assert os.path.exists(os.path.join(modeldir, "evaluation.txt"))
-        args.split = "train"
+        args.split = ["train"]
         evaluate(
             args,
             model,
@@ -289,7 +289,7 @@ class TestEvaluation:
                 )
             ],
         )
-        args.split = "val"
+        args.split = ["validation"]
         evaluate(
             args,
             model,

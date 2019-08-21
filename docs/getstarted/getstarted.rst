@@ -117,7 +117,7 @@ Advanced logging with **TensorBoard** event files can be activated using ``--log
 
 To evaluate the trained model that showed the best validation error during training (i.e., early stopping), call::
 
-   $ spk_run.py eval <modeldir> [--split train val test] [--cuda]
+   $ spk_run.py eval <datapath> <modeldir> [--split train val test] [--cuda]
 
 which will write a result file ``evaluation.txt`` into the model directory.
 

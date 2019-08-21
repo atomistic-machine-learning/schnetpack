@@ -68,6 +68,18 @@ def main(args):
         logging.info("...training done!")
 
     elif args.mode == "eval":
+
+        # remove old evaluation files
+        evaluation_fp = os.path.join(args.modelpath, "evaluation.txt")
+        if os.path.exists(evaluation_fp):
+            if args.overwrite:
+                os.remove(evaluation_fp)
+            else:
+                raise ScriptError(
+                    "The evaluation file does already exist at {}! Add overwrite flag"
+                    " to remove.".format(evaluation_fp)
+                )
+
         # load model
         logging.info("loading trained model...")
         model = torch.load(os.path.join(args.modelpath, "best_model"))

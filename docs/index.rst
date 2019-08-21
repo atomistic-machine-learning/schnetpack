@@ -20,6 +20,7 @@ Contents
    :maxdepth: 1
 
    getstarted/getstarted
+   getstarted/benchmarks
 
 .. toctree::
    :glob:

@@ -77,6 +77,13 @@ def get_output_module(args, representation, mean, stddev, atomref, aggregation_m
                 stddev=stddev[args.property],
                 property=args.property,
             )
+        elif args.property == spk.datasets.QM9.r2:
+            return schnetpack.atomistic.output_modules.ElectronicSpatialExtent(
+                args.features,
+                mean=mean[args.property],
+                stddev=stddev[args.property],
+                property=args.property,
+            )
         else:
             return schnetpack.atomistic.output_modules.Atomwise(
                 args.features,

@@ -72,12 +72,20 @@ def get_loaders(args, dataset, split_path, logging=None):
     if logging is not None:
         logging.info("create splits...")
 
-    data_train, data_val, data_test = spk.data.train_test_split(
-        dataset, *args.split, split_file=split_path
-    )
+    # create or load dataset splits depending on args.mode
+    if args.mode == "train":
+        data_train, data_val, data_test = spk.data.train_test_split(
+            dataset, *args.split, split_file=split_path
+        )
+    else:
+        data_train, data_val, data_test = spk.data.train_test_split(
+            dataset, split_file=split_path
+        )
+
     if logging is not None:
         logging.info("load data...")
 
+    # build dataloaders
     train_loader = spk.data.AtomsLoader(
         data_train,
         batch_size=args.batch_size,
@@ -91,6 +99,7 @@ def get_loaders(args, dataset, split_path, logging=None):
     test_loader = spk.data.AtomsLoader(
         data_test, batch_size=args.batch_size, num_workers=2, pin_memory=True
     )
+
     return train_loader, val_loader, test_loader
 
 

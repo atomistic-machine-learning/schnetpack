@@ -118,6 +118,7 @@ def get_mode_parsers():
     )
 
     eval_parser = argparse.ArgumentParser(add_help=False, parents=[mode_parser])
+    eval_parser.add_argument("datapath", help="Path to dataset")
     eval_parser.add_argument("modelpath", help="Path of stored model")
     eval_parser.add_argument(
         "--split",
@@ -125,6 +126,9 @@ def get_mode_parsers():
         choices=["train", "validation", "test"],
         default=["test"],
         nargs="+",
+    )
+    eval_parser.add_argument(
+        "--overwrite", help="Remove previous evaluation files", action="store_true"
     )
     return mode_parser, train_parser, eval_parser
 
@@ -217,7 +221,6 @@ def get_model_parsers():
     )
     wacsf_parser.add_argument(
         "--elements",
-        # todo: check defaults
         default=["H", "C", "N", "O", "F"],
         nargs="+",
         help="List of elements to be used for symmetry functions "

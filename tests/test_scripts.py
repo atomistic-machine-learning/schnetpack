@@ -32,6 +32,7 @@ def assert_valid_script(
     keep_n_checkpoints,
     split,
     max_epochs,
+    is_md17=False,
 ):
     # train model
     modeldir = tmpdir_factory.mktemp("{}_script_test".format(dataset)).strpath
@@ -79,9 +80,30 @@ def assert_valid_script(
             modeldir, "checkpoints", "checkpoint-{}.pth.tar".format(max_epochs)
         )
     )
-    ret = script_runner.run("spk_run.py", "eval", modeldir, "--split", "test")
+    ret = script_runner.run("spk_run.py", "eval", dbpath, modeldir, "--overwrite")
     assert ret.success, ret.stderr
     assert os.path.exists(os.path.join(modeldir, "evaluation.txt"))
+
+    # test on all sets
+    ret = script_runner.run(
+        "spk_run.py",
+        "eval",
+        dbpath,
+        modeldir,
+        "--split",
+        "test",
+        "train",
+        "validation",
+        "--overwrite",
+    )
+    assert ret.success, ret.stderr
+    assert os.path.exists(os.path.join(modeldir, "evaluation.txt"))
+    with open(os.path.join(modeldir, "evaluation.txt")) as f:
+        lines = f.readlines()
+        print(lines)
+        n_evals = 6 if not is_md17 else 12
+        assert len(lines[0].split(",")) == len(lines[1].split(",")) == n_evals
+        assert len(lines) == 2
 
 
 def test_qm9(
@@ -164,4 +186,5 @@ def test_md17(
         keep_n_checkpoints,
         split,
         max_epochs,
+        is_md17=True,
     )
