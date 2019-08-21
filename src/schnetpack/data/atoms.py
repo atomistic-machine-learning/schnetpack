@@ -472,6 +472,8 @@ class AtomsConverter:
         inputs[Properties.atom_mask] = torch.ones_like(inputs[Properties.Z]).float()
         mask = inputs[Properties.neighbors] >= 0
         inputs[Properties.neighbor_mask] = mask.float()
+        # JPD bugfix
+        inputs[Properties.neighbors] = inputs[Properties.neighbors]*inputs[Properties.neighbor_mask].long()
 
         if self.collect_triples:
             inputs[Properties.neighbor_pairs_mask] = torch.ones_like(

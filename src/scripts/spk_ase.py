@@ -5,6 +5,7 @@ import os
 import torch
 
 import schnetpack as spk
+from schnetpack.environment import SimpleEnvironmentProvider, AseEnvironmentProvider
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
@@ -51,6 +52,21 @@ def get_parser():
     main_parser.add_argument("simulation_dir", help="Path to store MD data")
     main_parser.add_argument(
         "--device", help="Choose between 'cpu' and 'cuda'", default="cpu"
+    )
+
+    # PBCs
+    main_parser.add_argument(
+        "--enable_pbc",
+        action="store_true",
+        help="Toggle PBCs on",
+    )
+
+    # cutoff definition for AseEnvironmentProvider
+    main_parser.add_argument(
+        "--cutoff",
+        type=float,
+        default=5.0,
+        help="Cutoff used for PBC calculations. A default of 5.0A is used.",
     )
 
     # Optimization:
@@ -158,6 +174,10 @@ if __name__ == "__main__":
             spk.utils.count_params(ml_model)
         )
     )
+    if args.enable_pbc:
+        environment = AseEnvironmentProvider(cutoff=args.cutoff)
+    else:
+        environment = SimpleEnvironmentProvider()
 
     # Initialize the ML ase interface
     ml_calculator = spk.interfaces.AseInterface(
@@ -167,6 +187,7 @@ if __name__ == "__main__":
         args.device,
         args.energy,
         args.forces,
+        environment_provider = environment,
     )
     logging.info("Initialized ase driver")
 
