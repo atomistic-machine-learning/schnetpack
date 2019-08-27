@@ -2,7 +2,7 @@ language: python
 
 install:
   - pip install -r docs/sphinx-requirements.txt
-  - pip install -e . [test]
+  - pip install -e .[test]
   - pip install codecov
   - pip install tox
 
