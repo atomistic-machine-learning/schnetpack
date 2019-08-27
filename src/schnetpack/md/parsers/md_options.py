@@ -215,7 +215,7 @@ class CalculatorInit(Initializer):
             None,
         ),
         "orca": (calculators.OrcaCalculator, "orca", None),
-        "sgdml": (calculators.OrcaCalculator, "sgdml", None),
+        "sgdml": (calculators.SGDMLCalculator, "sgdml", None),
     }
     required_inputs = {
         "schnet": OrderedDict(
