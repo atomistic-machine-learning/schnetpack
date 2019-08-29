@@ -101,7 +101,7 @@ class TestTrainer:
             dataset="qm9",
         )
         trainer = get_trainer(
-            args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
+            args, schnet, qm9_train_loader, qm9_val_loader, metrics=None
         )
         assert trainer._model == schnet
         hook_types = [type(hook) for hook in trainer.hooks]
@@ -129,7 +129,7 @@ class TestTrainer:
             dataset="qm9",
         )
         trainer = get_trainer(
-            args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
+            args, schnet, qm9_train_loader, qm9_val_loader, metrics=None
         )
         assert schnetpack.train.hooks.TensorboardHook in [
             type(hook) for hook in trainer.hooks
@@ -257,7 +257,6 @@ class TestEvaluation:
             mean=mean,
             stddev=mean,
             atomref=mean,
-            aggregation_mode="sum",
         )
 
         os.makedirs(modeldir, exist_ok=True)
