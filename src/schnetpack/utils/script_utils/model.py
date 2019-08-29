@@ -117,9 +117,7 @@ def get_output_module(args, representation, mean, stddev, atomref):
         raise NotImplementedError
 
 
-def get_model(
-    args, train_loader, mean, stddev, atomref, logging=None
-):
+def get_model(args, train_loader, mean, stddev, atomref, logging=None):
     """
     Build a model from selected parameters or load trained model for evaluation.
 
@@ -151,8 +149,7 @@ def get_model(
             model = nn.DataParallel(model)
         if logging:
             logging.info(
-                "The model you built has: %d parameters"
-                % spk.utils.count_params(model)
+                "The model you built has: %d parameters" % spk.utils.count_params(model)
             )
         return model
     else:

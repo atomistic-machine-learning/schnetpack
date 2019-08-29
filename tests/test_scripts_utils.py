@@ -252,11 +252,7 @@ class TestEvaluation:
         )
         mean = {args.property: None}
         model = get_model(
-            args,
-            train_loader=qm9_train_loader,
-            mean=mean,
-            stddev=mean,
-            atomref=mean,
+            args, train_loader=qm9_train_loader, mean=mean, stddev=mean, atomref=mean
         )
 
         os.makedirs(modeldir, exist_ok=True)

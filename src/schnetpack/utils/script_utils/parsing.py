@@ -383,8 +383,9 @@ def build_parser():
     # get parsers
     mode_parser, train_parser, eval_parser = get_mode_parsers()
     model_parser, schnet_parser, wacsf_parser = get_model_parsers()
-    data_parser, qm9_parser, ani1_parser, matproj_parser, md17_parser, omdb_parser, \
-        custom_data_parser = (get_data_parsers())
+    data_parser, qm9_parser, ani1_parser, matproj_parser, md17_parser, omdb_parser, custom_data_parser = (
+        get_data_parsers()
+    )
 
     # subparser structure
     # mode
@@ -467,7 +468,7 @@ def build_parser():
     wacsf_subparsers.add_parser(
         "custom",
         help="Custom dataset help",
-        parents=[train_parser, wacsf_parser, custom_data_parser]
+        parents=[train_parser, wacsf_parser, custom_data_parser],
     )
     return mode_parser
 
