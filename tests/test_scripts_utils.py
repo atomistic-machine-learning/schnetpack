@@ -10,7 +10,7 @@ from schnetpack.utils import (
     setup_run,
     get_trainer,
     simple_loss_fn,
-    tradeoff_loff_fn,
+    tradeoff_loss_fn,
     get_representation,
     get_model,
     evaluate,
@@ -146,7 +146,7 @@ class TestTrainer:
 
     def test_tradeoff_loff(self):
         args = Namespace(property="prop", rho=0.0)
-        loss_fn = tradeoff_loff_fn(args, derivative="der")
+        loss_fn = tradeoff_loss_fn(args, derivative="der")
         loss = loss_fn(
             {
                 "prop": torch.FloatTensor([100, 100]),
@@ -156,7 +156,7 @@ class TestTrainer:
         )
         assert loss == 60 ** 2
         args = Namespace(property="prop", rho=1.0)
-        loss_fn = tradeoff_loff_fn(args, derivative="der")
+        loss_fn = tradeoff_loss_fn(args, derivative="der")
         loss = loss_fn(
             {
                 "prop": torch.FloatTensor([100, 100]),

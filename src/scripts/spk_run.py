@@ -2,7 +2,7 @@
 import os
 import torch
 import logging
-from schnetpack.utils.script_utils import settings
+import schnetpack as spk
 from schnetpack.utils import (
     get_dataset,
     get_metrics,
@@ -13,6 +13,7 @@ from schnetpack.utils import (
     ScriptError,
     evaluate,
     setup_run,
+    get_divide_by_atoms,
 )
 from schnetpack.utils.script_utils.parsing import build_parser
 
@@ -43,20 +44,18 @@ def main(args):
 
         # get statistics
         atomref = dataset.get_atomref(args.property)
-        divide_by_atoms = settings.divide_by_atoms[args.property]
         mean, stddev = get_statistics(
             args=args,
             split_path=split_path,
             train_loader=train_loader,
             atomref=atomref,
-            divide_by_atoms=divide_by_atoms,
+            divide_by_atoms=get_divide_by_atoms(args),
             logging=logging,
         )
-        aggregation_mode = settings.pooling_mode[args.property]
 
         # build model
         model = get_model(
-            args, train_loader, mean, stddev, atomref, aggregation_mode, logging=logging
+            args, train_loader, mean, stddev, atomref, logging=logging
         )
 
         # build trainer
@@ -86,7 +85,7 @@ def main(args):
 
         # run evaluation
         logging.info("evaluating...")
-        if train_args.dataset != "md17":
+        if spk.utils.get_derivative(train_args) is None:
             with torch.no_grad():
                 evaluate(
                     args,
@@ -116,5 +115,4 @@ def main(args):
 if __name__ == "__main__":
     parser = build_parser()
     args = parser.parse_args()
-    print("*", args)
     main(args)

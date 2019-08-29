@@ -328,9 +328,45 @@ def get_data_parsers():
     omdb_parser.add_argument(
         "--property",
         type=str,
-        help="Database property to be predicted" " (default: %(default)s)",
+        help="Database property to be predicted (default: %(default)s)",
         default=OrganicMaterialsDatabase.BandGap,
         choices=[OrganicMaterialsDatabase.BandGap],
+    )
+    custom_data_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
+    custom_data_parser.add_argument(
+        "--property",
+        type=str,
+        help="Database property to be predicted (default: %(default)s)",
+        default="energy",
+    )
+    custom_data_parser.add_argument(
+        "--derivative",
+        type=str,
+        help="Derivative of dataset property to be predicted (default: %(default)s)",
+        default=None,
+    )
+    custom_data_parser.add_argument(
+        "--negative_dr",
+        action="store_true",
+        help="Multiply derivatives with -1 for training. (default: %(default)s)",
+    )
+    custom_data_parser.add_argument(
+        "--aggregation_mode",
+        type=str,
+        help="Select mode for aggregating atomic properties. (default: %(default)s)",
+        default="sum",
+    )
+    custom_data_parser.add_argument(
+        "--divide_by_atoms",
+        action="store_true",
+        help="Divide property statistics by number of atoms. (default: %(default)s)",
+    )
+    custom_data_parser.add_argument(
+        "--rho",
+        type=float,
+        help="Energy-force trade-off. For rho=0, use forces only. "
+        "(default: %(default)s)",
+        default=0.1,
     )
     return (
         data_parser,
@@ -339,6 +375,7 @@ def get_data_parsers():
         matproj_parser,
         md17_parser,
         omdb_parser,
+        custom_data_parser,
     )
 
 
@@ -346,9 +383,8 @@ def build_parser():
     # get parsers
     mode_parser, train_parser, eval_parser = get_mode_parsers()
     model_parser, schnet_parser, wacsf_parser = get_model_parsers()
-    data_parser, qm9_parser, ani1_parser, matproj_parser, md17_parser, omdb_parser = (
-        get_data_parsers()
-    )
+    data_parser, qm9_parser, ani1_parser, matproj_parser, md17_parser, omdb_parser, \
+        custom_data_parser = (get_data_parsers())
 
     # subparser structure
     # mode
@@ -392,8 +428,13 @@ def build_parser():
     )
     schnet_subparsers.add_parser(
         "qm9",
-        help="qm9 dataset help",
+        help="QM9 dataset help",
         parents=[train_parser, schnet_parser, qm9_parser],
+    )
+    schnet_subparsers.add_parser(
+        "custom",
+        help="Custom dataset help",
+        parents=[train_parser, schnet_parser, custom_data_parser],
     )
 
     # wacsf
@@ -422,6 +463,11 @@ def build_parser():
     )
     wacsf_subparsers.add_parser(
         "qm9", help="QM9 dataset help", parents=[train_parser, wacsf_parser, qm9_parser]
+    )
+    wacsf_subparsers.add_parser(
+        "custom",
+        help="Custom dataset help",
+        parents=[train_parser, wacsf_parser, custom_data_parser]
     )
     return mode_parser
 
