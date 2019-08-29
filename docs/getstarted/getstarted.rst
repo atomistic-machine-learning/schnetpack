@@ -150,7 +150,7 @@ settings. Other properties like *energy_per_atom* would use a mean aggregation m
 and the statistics will also not be divided by the number of atoms. The final command
 for the md17 example would be::
 
-   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property energy --derivative forces --aggregation_mode sum --divide_by_atoms [--cuda]
+   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property energy --derivative forces --negative_dr --aggregation_mode sum --divide_by_atoms [--cuda]
 
 The evaluation of the trained model uses the same commands as for any pre-implemented
 datasets.
