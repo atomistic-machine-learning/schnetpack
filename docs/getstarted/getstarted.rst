@@ -126,6 +126,35 @@ which will write a result file ``evaluation.txt`` into the model directory.
    ``<modeldir>`` should point to a directory in which a pre-trained model is stored. As an argument for the --split
    flag for evaluation you should choose among one of training, validation or test subsets.
 
+==================================
+Using Scripts with custom Datasets
+==================================
+
+The script for benchmark data can also train a model on custom data sets, by using::
+
+   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property your_property [--cuda]
+
+Depending on your data property you will need to define some settings that have
+already been pre-selected for the benchmark data. In order to show how to use the script
+on arbitrary data sets, we will use the MD17 data set and treat it as a custom data
+set. First of all we will need to define the property that we will use for training. In
+this case it is called *energy*. If we want to use the *forces* during training, we
+will add the ``--derivative`` argument and also set ``--negative_dr``, because the
+gradient of the energy predictions corresponds to the negative forces. Since energy
+is a property that depends on the total number of atoms we select
+``--aggregation_mode sum``. Other properties (e.g. homo, lumo, ...) do not depend on
+the total number of atoms and will therefore use the mean aggregation mode. At last
+we need to select if the property statistics will be divided by the number of atoms.
+This is the case when we use a sum aggregation. We add ``--divide_by_atoms`` to our
+settings. Other properties like *energy_per_atom* would use a mean aggregation mode
+and the statistics will also not be divided by the number of atoms. The final command
+for the md17 example would be::
+
+   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property energy --derivative forces --aggregation_mode sum --divide_by_atoms [--cuda]
+
+The evaluation of the trained model uses the same commands as for any pre-implemented
+datasets.
+
 ================
 Supported Models
 ================
