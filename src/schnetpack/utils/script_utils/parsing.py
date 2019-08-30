@@ -357,11 +357,6 @@ def get_data_parsers():
         default="sum",
     )
     custom_data_parser.add_argument(
-        "--divide_by_atoms",
-        action="store_true",
-        help="Divide property statistics by number of atoms. (default: %(default)s)",
-    )
-    custom_data_parser.add_argument(
         "--rho",
         type=float,
         help="Energy-force trade-off. For rho=0, use forces only. "

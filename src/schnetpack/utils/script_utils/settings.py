@@ -68,7 +68,7 @@ def get_divide_by_atoms(args):
     Get 'divide_by_atoms'-parameter depending on run arguments.
     """
     if args.dataset == "custom":
-        return args.divide_by_atoms
+        return args.aggregation_mode == "sum"
     return divide_by_atoms[args.property]
 
 
