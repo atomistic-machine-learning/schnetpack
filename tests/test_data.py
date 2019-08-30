@@ -136,6 +136,9 @@ def test_loader(example_asedata, batch_size):
     assert std["energy"] == torch.FloatTensor([0.0])
 
 
+from tests.fixtures.qm9 import qm9_dbpath, qm9_avlailable_properties
+
+
 def test_dataset(qm9_dbpath, qm9_avlailable_properties):
     # path exists and valid properties
     dataset = spk.data.AtomsData(
