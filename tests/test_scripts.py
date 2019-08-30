@@ -223,7 +223,7 @@ def test_custom(
         split,
         max_epochs,
         with_derivative=False,
-        representation="wacsf"
+        representation="wacsf",
     )
 
 
