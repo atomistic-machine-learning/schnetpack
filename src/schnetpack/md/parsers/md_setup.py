@@ -407,7 +407,7 @@ class SetupCalculator(SetupBlock):
             )
 
         try:
-            parameters = np.load(model_path)
+            parameters = np.load(model_path, allow_pickle=True)
         except:
             raise ValueError("Could not read sGDML model from {:s}".format(model_path))
 
