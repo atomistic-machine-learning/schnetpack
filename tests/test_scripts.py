@@ -1,5 +1,6 @@
 import os
 import pytest
+from ase.db import connect
 
 
 @pytest.fixture
@@ -206,3 +207,33 @@ def test_custom(
         max_epochs,
         with_derivative=True,
     )
+
+
+def test_parsing_script(script_runner, tmpdir_factory):
+
+    # define settings
+    file_path = "tests/data/ethanol_snip.xyz"
+    dbpath = os.path.join(tmpdir_factory.mktemp("test_parsing").strpath, "database.db")
+    atomic_properties = "Properties=species:S:1:pos:R:3:forces:R:3"
+    molecular_properties = ["energy"]
+
+    # run script
+    ret = script_runner.run(
+        "spk_parse.py",
+        file_path,
+        dbpath,
+        "--atomic_properties",
+        atomic_properties,
+        "--molecular_properties",
+        molecular_properties
+    )
+
+    # check validity
+    assert ret.success, ret.stderr
+    assert os.path.exists(os.path.join(dbpath))
+
+    with connect(dbpath) as conn:
+        assert len(conn) == 3
+        atmsrow = conn.get(1)
+        assert set(["energy", "forces"]) == set(list(atmsrow.data.keys()))
+
