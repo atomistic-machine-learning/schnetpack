@@ -34,13 +34,14 @@ def assert_valid_script(
     split,
     max_epochs,
     with_derivative=False,
+    representation="schnet",
 ):
     # train model
     modeldir = tmpdir_factory.mktemp("{}_script_test".format(dataset)).strpath
     run_args = [
         "spk_run.py",
         "train",
-        "schnet",
+        representation,
         dataset,
         dbpath,
         modeldir,
@@ -56,7 +57,7 @@ def assert_valid_script(
         keep_n_checkpoints,
     ]
 
-    if dataset == "custom":
+    if dataset == "custom" and with_derivative:
         run_args += ["--derivative", "forces"]
 
     # run training
@@ -195,6 +196,8 @@ def test_custom(
     dataset = "custom"
     dbpath = "tests/data/test_ethanol.db"
     property = "energy"
+
+    # test schnet
     assert_valid_script(
         script_runner,
         tmpdir_factory,
@@ -206,6 +209,21 @@ def test_custom(
         split,
         max_epochs,
         with_derivative=True,
+    )
+
+    # test wacsf
+    assert_valid_script(
+        script_runner,
+        tmpdir_factory,
+        dataset,
+        dbpath,
+        property,
+        checkpoint_interval,
+        keep_n_checkpoints,
+        split,
+        max_epochs,
+        with_derivative=False,
+        representation="wacsf"
     )
 
 
@@ -235,4 +253,4 @@ def test_parsing_script(script_runner, tmpdir_factory):
     with connect(dbpath) as conn:
         assert len(conn) == 3
         atmsrow = conn.get(1)
-        assert set(["energy", "forces"]) == set(list(atmsrow.data.keys()))
+        assert {"energy", "forces"} == set(list(atmsrow.data.keys()))

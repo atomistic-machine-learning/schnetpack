@@ -174,7 +174,8 @@ def get_dataset(args, logging=None):
         if args.derivative is not None:
             load_only.append(args.derivative)
 
-        dataset = spk.AtomsData(args.datapath, load_only=load_only)
+        dataset = spk.AtomsData(args.datapath, load_only=load_only,
+                                collect_triples=args.model == "wacsf")
         return dataset
     else:
         raise spk.utils.ScriptError("Invalid dataset selected!")
