@@ -271,7 +271,7 @@ class CalculatorInit(Initializer):
             None,
         ),
         "orca": (calculators.OrcaCalculator, "orca", None),
-        "sgdml": (calculators.OrcaCalculator, "sgdml", None),
+        "sgdml": (calculators.SGDMLCalculator, "sgdml", None),
         "custom": (load_custom_calculator, "custom", None),
     }
     required_inputs = {
