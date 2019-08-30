@@ -61,6 +61,7 @@ def get_representation(args, train_loader=None):
 
 def get_output_module(args, representation, mean, stddev, atomref):
     derivative = spk.utils.get_derivative(args)
+    negative_dr = spk.utils.get_negative_dr(args)
     if args.dataset == "md17" and not args.ignore_forces:
         derivative = spk.datasets.MD17.forces
     if args.model == "schnet":
@@ -88,7 +89,7 @@ def get_output_module(args, representation, mean, stddev, atomref):
                 atomref=atomref[args.property],
                 property=args.property,
                 derivative=derivative,
-                negative_dr=spk.utils.get_negative_dr(args),
+                negative_dr=negative_dr,
             )
     elif args.model == "wacsf":
         elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
@@ -112,6 +113,8 @@ def get_output_module(args, representation, mean, stddev, atomref):
                 atomref=atomref[args.property],
                 elements=elements,
                 property=args.property,
+                derivative=derivative,
+                negative_dr=negative_dr,
             )
     else:
         raise NotImplementedError

@@ -57,7 +57,7 @@ def assert_valid_script(
         keep_n_checkpoints,
     ]
 
-    if dataset == "custom" and with_derivative:
+    if dataset == "custom":
         run_args += ["--derivative", "forces"]
 
     # run training
@@ -222,8 +222,8 @@ def test_custom(
         keep_n_checkpoints,
         split,
         max_epochs,
-        with_derivative=False,
         representation="wacsf",
+        with_derivative=True,
     )
 
 
