@@ -15,30 +15,24 @@ def get_parser():
         type=str,
         help="Path to xyz-file or extxyz-file with molecular data.",
     )
-    parser.add_argument(
-        "db_path",
-        type=str,
-        help="Path to output database.",
-    )
+    parser.add_argument("db_path", type=str, help="Path to output database.")
     parser.add_argument(
         "--atomic_properties",
         type=str,
         help="String with definition of atomic properties (e.g. forces) contained in "
-             "input file. Only needed for .xyz-files. (default: %(default)s)",
+        "input file. Only needed for .xyz-files. (default: %(default)s)",
         default="Properties=species:S:1:pos:R:3",
     )
     parser.add_argument(
         "--molecular_properties",
         type=str,
         help="Molecular properties (e.g. energy, homo/lumo, ...) contained in data "
-             "file. Only needed for xyz-files. (default: %(default)s)",
+        "file. Only needed for xyz-files. (default: %(default)s)",
         nargs="+",
         default=[],
     )
     parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Overwrite existing database file.",
+        "--overwrite", action="store_true", help="Overwrite existing database file."
     )
 
     return parser

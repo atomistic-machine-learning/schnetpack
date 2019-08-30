@@ -225,7 +225,7 @@ def test_parsing_script(script_runner, tmpdir_factory):
         "--atomic_properties",
         atomic_properties,
         "--molecular_properties",
-        molecular_properties
+        molecular_properties,
     )
 
     # check validity
@@ -236,4 +236,3 @@ def test_parsing_script(script_runner, tmpdir_factory):
         assert len(conn) == 3
         atmsrow = conn.get(1)
         assert set(["energy", "forces"]) == set(list(atmsrow.data.keys()))
-
