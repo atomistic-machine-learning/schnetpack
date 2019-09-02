@@ -10,7 +10,7 @@ from schnetpack.utils import (
     setup_run,
     get_trainer,
     simple_loss_fn,
-    tradeoff_loff_fn,
+    tradeoff_loss_fn,
     get_representation,
     get_model,
     evaluate,
@@ -101,7 +101,7 @@ class TestTrainer:
             dataset="qm9",
         )
         trainer = get_trainer(
-            args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
+            args, schnet, qm9_train_loader, qm9_val_loader, metrics=None
         )
         assert trainer._model == schnet
         hook_types = [type(hook) for hook in trainer.hooks]
@@ -129,7 +129,7 @@ class TestTrainer:
             dataset="qm9",
         )
         trainer = get_trainer(
-            args, schnet, qm9_train_loader, qm9_val_loader, metrics=None, loss_fn=None
+            args, schnet, qm9_train_loader, qm9_val_loader, metrics=None
         )
         assert schnetpack.train.hooks.TensorboardHook in [
             type(hook) for hook in trainer.hooks
@@ -146,7 +146,7 @@ class TestTrainer:
 
     def test_tradeoff_loff(self):
         args = Namespace(property="prop", rho=0.0)
-        loss_fn = tradeoff_loff_fn(args, derivative="der")
+        loss_fn = tradeoff_loss_fn(args, derivative="der")
         loss = loss_fn(
             {
                 "prop": torch.FloatTensor([100, 100]),
@@ -156,7 +156,7 @@ class TestTrainer:
         )
         assert loss == 60 ** 2
         args = Namespace(property="prop", rho=1.0)
-        loss_fn = tradeoff_loff_fn(args, derivative="der")
+        loss_fn = tradeoff_loss_fn(args, derivative="der")
         loss = loss_fn(
             {
                 "prop": torch.FloatTensor([100, 100]),
@@ -252,12 +252,7 @@ class TestEvaluation:
         )
         mean = {args.property: None}
         model = get_model(
-            args,
-            train_loader=qm9_train_loader,
-            mean=mean,
-            stddev=mean,
-            atomref=mean,
-            aggregation_mode="sum",
+            args, train_loader=qm9_train_loader, mean=mean, stddev=mean, atomref=mean
         )
 
         os.makedirs(modeldir, exist_ok=True)
