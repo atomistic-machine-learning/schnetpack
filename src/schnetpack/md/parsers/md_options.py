@@ -26,6 +26,62 @@ def model(x):
     return x
 
 
+def load_custom_calculator(calculator_module, class_name, **kwargs):
+    """
+    Function for loading custom calculators via the MD input file.
+
+    This functionality can be accessed by specifying `custom` as the calculator type in the
+    calculator block of the input file. It requires two inputs, the `calculator_module` and
+    `class_name`. Both are used to specify how the custom calculator class (which should be based on the
+    `schnetpack.md.calculators.MDCalculator`) is loaded. `calculator_module` can either be a path to the python
+    file containing the calculator class or the name of a package/module if accessible via python. The `class_name`
+    contains the name of the class which is loaded from the module. All additional inputs in the calculator block
+    will be passed to the loaded custom calculator during initialization.
+
+    Args:
+        calculator_module (str): Can be either the path to the file containing the calculator module or the name
+                                 of the module if it is installed.
+        class_name (str): Name of the custom calculator class.
+        **kwargs (optional): Additional arguments used during initialization. These can either be specific to the
+                             custom calculator or be part of the `MDCalculator`.
+
+    Returns:
+        `schnetpack.md.calculators.MDCalculator`: Loaded calculator.
+    """
+    import os
+    import importlib.util
+    import importlib
+
+    if os.path.exists(calculator_module):
+        # First, check if a file is present and try to load the module
+        module_spec = importlib.util.spec_from_file_location(
+            "custom_calc", calculator_module
+        )
+        try:
+            module_calc = importlib.util.module_from_spec(module_spec)
+        except AttributeError:
+            raise InitializerError(
+                "Could not load module {:s}".format(calculator_module)
+            )
+
+        module_spec.loader.exec_module(module_calc)
+    else:
+        # Otherwise, try to import the module directly
+        try:
+            module_calc = importlib.import_module(calculator_module)
+        except ModuleNotFoundError:
+            raise InitializerError(
+                "Could not find module {:s}".format(calculator_module)
+            )
+
+    # Get the calculator class from the module
+    calculator = getattr(module_calc, class_name)
+    # Initialize the calculator
+    calculator = calculator(**kwargs)
+
+    return calculator
+
+
 class InitializerError(Exception):
     """
     Exception for SacredInit class.
@@ -215,7 +271,8 @@ class CalculatorInit(Initializer):
             None,
         ),
         "orca": (calculators.OrcaCalculator, "orca", None),
-        "sgdml": (calculators.OrcaCalculator, "sgdml", None),
+        "sgdml": (calculators.SGDMLCalculator, "sgdml", None),
+        "custom": (load_custom_calculator, "custom", None),
     }
     required_inputs = {
         "schnet": OrderedDict(
@@ -231,6 +288,7 @@ class CalculatorInit(Initializer):
             }
         ),
         "sgdml": OrderedDict({"model": model}),
+        "custom": OrderedDict({"calculator_module": str, "class_name": str}),
     }
 
 

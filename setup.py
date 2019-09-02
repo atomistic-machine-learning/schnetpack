@@ -33,7 +33,6 @@ setup(
         "tensorboardX",
         "tqdm",
         "pyyaml",
-        "pytest-console-scripts",
     ],
     extras_require={"test": ["pytest", "sacred", "pytest-console-scripts"]},
     license="MIT",

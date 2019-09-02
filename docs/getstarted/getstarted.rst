@@ -126,6 +126,35 @@ which will write a result file ``evaluation.txt`` into the model directory.
    ``<modeldir>`` should point to a directory in which a pre-trained model is stored. As an argument for the --split
    flag for evaluation you should choose among one of training, validation or test subsets.
 
+==================================
+Using Scripts with custom Datasets
+==================================
+
+The script for benchmark data can also train a model on custom data sets, by using::
+
+   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property your_property [--cuda]
+
+Depending on your data you will need to define some settings that have already been
+pre-selected for the benchmark data. In order to show how to use the script
+on arbitrary data sets, we will use the MD17 data set and treat it as a custom data
+set. First of all we need to define the property that we want to use for training.
+In this example we will train the model on the *energy* labels. If we want to use the
+*forces* during training, we need to add the ``--derivative`` argument and also set
+``--negative_dr``, because the gradient of the energy predictions corresponds to the
+negative forces. Since energy is a property that depends on the total number of atoms
+we select ``--aggregation_mode sum``. Other properties (e.g. homo, lumo, ...) do not
+depend on the total number of atoms and will therefore use the mean aggregation mode.
+The final command for the md17 example would be::
+
+   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property energy --derivative forces --negative_dr --aggregation_mode sum [--cuda]
+
+The command for training a QM9-like data set on energy values would be::
+
+   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property energy_U0 --aggregation_mode sum [--cuda]
+
+The evaluation of the trained model uses the same commands as any pre-implemented
+data set.
+
 ================
 Supported Models
 ================
