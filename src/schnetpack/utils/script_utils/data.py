@@ -165,5 +165,18 @@ def get_dataset(args, logging=None):
             args.datapath, args.cutoff, download=True, load_only=[args.property]
         )
         return omdb
+    elif args.dataset == "custom":
+        if logging:
+            logging.info("Custom dataset will be loaded...")
+
+        # define properties to be loaded
+        load_only = [args.property]
+        if args.derivative is not None:
+            load_only.append(args.derivative)
+
+        dataset = spk.AtomsData(
+            args.datapath, load_only=load_only, collect_triples=args.model == "wacsf"
+        )
+        return dataset
     else:
         raise spk.utils.ScriptError("Invalid dataset selected!")
