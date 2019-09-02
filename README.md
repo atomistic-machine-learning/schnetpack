@@ -68,13 +68,13 @@ The QM9 example scripts allows to train and evaluate both SchNet and wACSF neura
 The training can be started using:
 
 ```
-spk_run.py train <schnet/wacsf> qm9 <datadir> <modeldir> --split num_train num_val [--cuda]
+spk_run.py train <schnet/wacsf> qm9 <dbpath> <modeldir> --split num_train num_val [--cuda]
 ```
 
 where num_train and num_val need to be replaced by the number of training and validation datapoints respectively.
 
-You can choose between SchNet and wACSF networks and have to provide directories to store the model and the QM9 dataset 
-(will be downloaded if not in `<datadir>`). With the `--cuda` flag, you can activate GPU training.
+You can choose between SchNet and wACSF networks and have to provide a path to the database file and a path to a directory which will be used to store the model. If the database path does not exist, the data is downloaded and stored there. Please note that the database path must include the file extension .db.
+With the `--cuda` flag, you can activate GPU training.
 The default hyper-parameters should work fine, however, you can change them through command-line arguments. 
 Please refer to the help at `spk_run.py train <schnet/wacsf> --help`. 
 

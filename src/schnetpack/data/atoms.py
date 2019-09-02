@@ -73,6 +73,12 @@ class AtomsData(Dataset):
         collect_triples=False,
         center_positions=True,
     ):
+        if not dbpath.endswith(".db"):
+            raise AtomsDataError(
+                "Invalid dbpath! Please make sure to add the file extension '.db' to "
+                "your dbpath."
+            )
+
         self.dbpath = dbpath
         self.subset = subset
         self.load_only = load_only
