@@ -11,6 +11,7 @@ from ase import Atoms
 from ase.db import connect
 from ase.units import Hartree
 
+import schnetpack as spk
 from schnetpack.datasets import DownloadableAtomsData
 
 
@@ -31,6 +32,9 @@ class ANI1(DownloadableAtomsData):
             (See 'Table 1' in Ref. [#ani1]_)
         high_energies (bool, optional): add high energy conformations.
             (See 'Technical Validation' of Ref. [#ani1]_)
+        environment_provider (spk.environment.BaseEnvironmentProvider): define how
+            neighborhood is calculated
+            (default=spk.environment.SimpleEnvironmentProvider).
 
     References:
         .. [#ani1] https://arxiv.org/abs/1708.04987
@@ -58,6 +62,7 @@ class ANI1(DownloadableAtomsData):
         collect_triples=False,
         num_heavy_atoms=8,
         high_energies=False,
+        environment_provider=spk.environment.SimpleEnvironmentProvider(),
     ):
         available_properties = [ANI1.energy]
         units = [Hartree]
@@ -73,6 +78,7 @@ class ANI1(DownloadableAtomsData):
             collect_triples=collect_triples,
             available_properties=available_properties,
             units=units,
+            environment_provider=environment_provider,
         )
 
     def create_subset(self, idx):
@@ -96,6 +102,7 @@ class ANI1(DownloadableAtomsData):
             collect_triples=self.collect_triples,
             num_heavy_atoms=self.num_heavy_atoms,
             high_energies=self.high_energies,
+            environment_provider=self.environment_provider,
         )
 
     def _download(self):

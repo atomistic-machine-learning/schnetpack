@@ -254,13 +254,20 @@ def get_model_parsers():
 def get_data_parsers():
     # data parsers
     data_parser = argparse.ArgumentParser(add_help=False)
+    data_parser.add_argument(
+        "--environment_provider",
+        type=str,
+        default="simple",
+        choices=["simple", "ase", "torch"],
+        help="Environment provider for dataset. (default: %(default)s)",
+    )
 
     # qm9
     qm9_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
     qm9_parser.add_argument(
         "--property",
         type=str,
-        help="Database property to be predicted" " (default: %(default)s)",
+        help="Database property to be predicted (default: %(default)s)",
         default=QM9.U0,
         choices=[
             QM9.A,

@@ -5,6 +5,7 @@ import os
 import torch
 
 import schnetpack as spk
+import schnetpack.utils.script_utils.settings
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
@@ -45,7 +46,7 @@ def get_parser():
     """ Setup parser for command line arguments """
     main_parser = argparse.ArgumentParser()
 
-    # General commands
+    # general commands
     main_parser.add_argument("molecule_path", help="Initial geometry")
     main_parser.add_argument("model_path", help="Path of trained model")
     main_parser.add_argument("simulation_dir", help="Path to store MD data")
@@ -53,7 +54,22 @@ def get_parser():
         "--device", help="Choose between 'cpu' and 'cuda'", default="cpu"
     )
 
-    # Optimization:
+    # environment settings
+    main_parser.add_argument(
+        "--environment_provider",
+        type=str,
+        default="simple",
+        help="Environment provider (default: %(default)s)",
+        choices=["simple", "ase", "torch"],
+    )
+    main_parser.add_argument(
+        "--cutoff",
+        type=float,
+        default=5.0,
+        help="Cutoff radius of local environment (default: %(default)s)",
+    )
+
+    # optimization
     main_parser.add_argument(
         "--optimize",
         const=1000,
@@ -62,18 +78,19 @@ def get_parser():
         help="Optimize geometry. A default of 1000 steps is used.",
     )
 
-    # Normal modes
+    # normal modes
     main_parser.add_argument(
         "--normal_modes", help="Compute normal modes", action="store_true"
     )
 
-    # Molecular dynamics options
+    # molecular dynamics options
     main_parser.add_argument(
         "--equilibrate",
         const=10000,
         action=SpecialOption,
         type=int,
-        help="Equilibrate molecule for molecular dynamics. A default of 10000 steps is used.",
+        help="Equilibrate molecule for molecular dynamics. A default of 10000 steps is"
+        "used.",
     )
     main_parser.add_argument(
         "--production",
@@ -95,7 +112,7 @@ def get_parser():
         help="Timestep in fs (default: %(default)s)",
     )
 
-    # Temperature and bath options
+    # temperature and bath options
     main_parser.add_argument(
         "--temp_init",
         type=float,
@@ -142,6 +159,8 @@ if __name__ == "__main__":
     argparse_dict = vars(args)
     jsonpath = os.path.join(args.simulation_dir, "args.json")
 
+    device = torch.device(args.device)
+
     # Set up directory
     if not os.path.exists(args.simulation_dir):
         os.makedirs(args.simulation_dir)
@@ -167,6 +186,7 @@ if __name__ == "__main__":
         args.device,
         args.energy,
         args.forces,
+        environment_provider=spk.utils.get_environment_provider(args, device),
     )
     logging.info("Initialized ase driver")
 
@@ -183,7 +203,8 @@ if __name__ == "__main__":
     if args.normal_modes:
         if not args.optimize:
             logging.warning(
-                "Computing normal modes without optimizing the geometry makes me a sad schnetpack..."
+                "Computing normal modes without optimizing the geometry makes me a sad "
+                "schnetpack..."
             )
         logging.info("Computing normal modes...")
         ml_calculator.compute_normal_modes()

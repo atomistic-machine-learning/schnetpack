@@ -7,6 +7,7 @@ import numpy as np
 from urllib import request as request
 from urllib.error import HTTPError, URLError
 
+import schnetpack as spk
 from schnetpack.datasets import DownloadableAtomsData
 
 
@@ -27,7 +28,11 @@ class ISO17(DownloadableAtomsData):
         subset (list): indices of subset. Set to None for entire dataset (default: None)
         load_only (list, optional): reduced set of properties to be loaded
         download (bool): set to true if dataset should be downloaded. (default: True)
-        collect_triples (false): set to true to compute triples for angular functions (default: true)
+        collect_triples (false): set to true to compute triples for angular functions
+            (default: true)
+        environment_provider (spk.environment.BaseEnvironmentProvider): define how
+            neighborhood is calculated
+            (default=spk.environment.SimpleEnvironmentProvider).
 
     See: http://quantum-machine.org/datasets/
     """
@@ -51,6 +56,7 @@ class ISO17(DownloadableAtomsData):
         load_only=None,
         subset=None,
         collect_triples=False,
+        environment_provider=spk.environment.SimpleEnvironmentProvider(),
     ):
 
         if fold not in self.existing_folds:
@@ -71,6 +77,7 @@ class ISO17(DownloadableAtomsData):
             download=download,
             available_properties=available_properties,
             units=units,
+            environment_provider=environment_provider,
         )
 
     def create_subset(self, idx):
@@ -91,6 +98,7 @@ class ISO17(DownloadableAtomsData):
             properties=self.load_only,
             subset=subidx,
             collect_triples=self.collect_triples,
+            environment_provider=self.environment_provider,
         )
 
     def _download(self):

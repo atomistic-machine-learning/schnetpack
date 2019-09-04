@@ -7,6 +7,7 @@ from urllib import request as request
 import numpy as np
 from ase import Atoms
 
+import schnetpack as spk
 from schnetpack.data import AtomsDataError
 from schnetpack.datasets import DownloadableAtomsData
 
@@ -36,6 +37,9 @@ class MD17(DownloadableAtomsData):
         collect_triples (bool): set true if triples for angular functions
             should be computed (default: False)
         load_only (list, optional): reduced set of properties to be loaded
+        environment_provider (spk.environment.BaseEnvironmentProvider): define how
+            neighborhood is calculated
+            (default=spk.environment.SimpleEnvironmentProvider).
 
 
     See: http://quantum-machine.org/datasets/
@@ -71,6 +75,7 @@ class MD17(DownloadableAtomsData):
         download=True,
         collect_triples=False,
         load_only=None,
+        environment_provider=spk.environment.SimpleEnvironmentProvider(),
     ):
         if not os.path.exists(dbpath) and molecule is None:
             raise AtomsDataError("Provide a valid dbpath or select desired molecule!")
@@ -89,6 +94,7 @@ class MD17(DownloadableAtomsData):
             collect_triples=collect_triples,
             download=download,
             available_properties=available_properties,
+            environment_provider=environment_provider,
         )
 
     def create_subset(self, idx):
@@ -102,6 +108,7 @@ class MD17(DownloadableAtomsData):
             download=False,
             collect_triples=self.collect_triples,
             load_only=self.load_only,
+            environment_provider=self.environment_provider,
         )
 
     def _download(self):

@@ -6,6 +6,7 @@ from ase.io import read
 from ase.db import connect
 from ase.units import eV
 
+import schnetpack as spk
 from schnetpack.datasets import DownloadableAtomsData
 from schnetpack.environment import AseEnvironmentProvider
 
@@ -26,6 +27,9 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
         subset (list): indices to subset. Set to None for entire database.
         load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
+        environment_provider (spk.environment.BaseEnvironmentProvider): define how
+            neighborhood is calculated
+            (default=spk.environment.SimpleEnvironmentProvider).
 
     References:
         arXiv: https://arxiv.org/abs/1810.12814 "Band gap prediction for large organic
@@ -39,28 +43,26 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
     def __init__(
         self,
         path,
-        cutoff,
         download=True,
         subset=None,
         load_only=None,
         collect_triples=False,
+        environment_provider=spk.environment.SimpleEnvironmentProvider(),
     ):
         available_properties = [OrganicMaterialsDatabase.BandGap]
 
         units = [eV]
 
         self.path = path
-        self.cutoff = cutoff
 
         dbpath = self.path.replace(".tar.gz", ".db")
         self.dbpath = dbpath
 
         if not os.path.exists(path) and not os.path.exists(dbpath):
             raise FileNotFoundError(
-                "Download OMDB dataset (e.g. OMDB-GAP1.tar.gz) from https://omdb.diracmaterials.org/dataset/ and set datapath to this file"
+                "Download OMDB dataset (e.g. OMDB-GAP1.tar.gz) from "
+                "https://omdb.diracmaterials.org/dataset/ and set datapath to this file"
             )
-
-        environment_provider = AseEnvironmentProvider(cutoff)
 
         if download and not os.path.exists(dbpath):
             # Convert OMDB .tar.gz into a .db file
@@ -70,10 +72,10 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
             dbpath=dbpath,
             subset=subset,
             load_only=load_only,
-            environment_provider=environment_provider,
             collect_triples=collect_triples,
             available_properties=available_properties,
             units=units,
+            environment_provider=environment_provider,
         )
 
     def create_subset(self, idx):
@@ -82,11 +84,11 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
 
         return OrganicMaterialsDatabase(
             path=self.path,
-            cutoff=self.cutoff,
             download=False,
             subset=subidx,
             load_only=self.load_only,
             collect_triples=self.collect_triples,
+            environment_provider=self.environment_provider,
         )
 
     def _convert(self):
