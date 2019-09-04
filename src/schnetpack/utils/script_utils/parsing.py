@@ -136,6 +136,12 @@ def get_mode_parsers():
 def get_model_parsers():
     # model parsers
     model_parser = argparse.ArgumentParser(add_help=False)
+    model_parser.add_argument(
+        "--cutoff",
+        type=float,
+        default=10.0,
+        help="Cutoff radius of local environment (default: %(default)s)",
+    )
     schnet_parser = argparse.ArgumentParser(add_help=False, parents=[model_parser])
     schnet_parser.add_argument(
         "--features", type=int, help="Size of atom-wise representation", default=128
@@ -143,13 +149,6 @@ def get_model_parsers():
     schnet_parser.add_argument(
         "--interactions", type=int, help="Number of interaction blocks", default=6
     )
-    schnet_parser.add_argument(
-        "--cutoff",
-        type=float,
-        default=10.0,
-        help="Cutoff radius of local environment (default: %(default)s)",
-    )
-
     schnet_parser.add_argument(
         "--cutoff_function",
         help="Functional form of the cutoff",
@@ -187,12 +186,6 @@ def get_model_parsers():
         "--standardize",
         action="store_true",
         help="Standardize wACSF before atomistic network.",
-    )
-    wacsf_parser.add_argument(
-        "--cutoff",
-        type=float,
-        default=10.0,
-        help="Cutoff radius of local environment (default: %(default)s)",
     )
     # Atomistic network parameters
     wacsf_parser.add_argument(
@@ -346,6 +339,12 @@ def get_data_parsers():
         default=None,
     )
     custom_data_parser.add_argument(
+        "--contributions",
+        type=str,
+        help="Contributions of dataset property to be predicted (default: %(default)s)",
+        default=None,
+    )
+    custom_data_parser.add_argument(
         "--negative_dr",
         action="store_true",
         help="Multiply derivatives with -1 for training. (default: %(default)s)",
@@ -355,6 +354,16 @@ def get_data_parsers():
         type=str,
         help="Select mode for aggregating atomic properties. (default: %(default)s)",
         default="sum",
+    )
+    custom_data_parser.add_argument(
+        "--output_module",
+        type=str,
+        help="Select matching output module for selected property. (default: %("
+             "defualt)s)",
+        default="atomwise",
+        choices=["atomwise", "elemental_atomwise", "dipole_moment",
+                 "elemental_dipole_moment", "polarizability",
+                 "electronic_spatial_extent"],
     )
     custom_data_parser.add_argument(
         "--rho",
