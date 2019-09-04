@@ -1,5 +1,6 @@
 import os
 import pytest
+import json
 from ase.db import connect
 
 
@@ -96,6 +97,23 @@ def assert_valid_script(
     assert os.path.exists(
         os.path.join(
             modeldir, "checkpoints", "checkpoint-{}.pth.tar".format(max_epochs)
+        )
+    )
+
+    # train from json args
+    # modify json
+    json_path = os.path.join(modeldir, "args.json")
+    with open(json_path, 'r+') as f:
+        data = json.load(f)
+        data['max_epochs'] = 5
+        f.seek(0)
+        json.dump(data, f, indent=4)
+        f.truncate()
+    ret = script_runner.run("spk_run.py", "from_json", json_path)
+    assert ret.success, ret.stderr
+    assert os.path.exists(
+        os.path.join(
+            modeldir, "checkpoints", "checkpoint-{}.pth.tar".format(5)
         )
     )
 

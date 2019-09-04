@@ -10,26 +10,37 @@ from schnetpack.datasets import (
 
 def get_mode_parsers():
     mode_parser = argparse.ArgumentParser(add_help=False)
-    mode_parser.add_argument(
-        "--cuda", help="Set flag to use GPU(s)", action="store_true"
+
+    # mode parsers
+
+    # json parser
+    json_parser = argparse.ArgumentParser(add_help=False, parents=[mode_parser])
+    json_parser.add_argument(
+        "json_path",
+        type=str,
+        help="Path to argument file. (default: %(default)s)",
+        default=None
     )
-    mode_parser.add_argument(
+
+    # train parser
+    train_parser = argparse.ArgumentParser(add_help=False, parents=[mode_parser])
+    train_parser.add_argument("datapath", help="Path to dataset")
+    train_parser.add_argument("modelpath", help="Path of stored model")
+    train_parser.add_argument(
+        "--cuda", help="Set flag to use GPU(s) for training", action="store_true"
+    )
+    train_parser.add_argument(
         "--parallel",
         help="Run data-parallel on all available GPUs (specify with environment"
         " variable CUDA_VISIBLE_DEVICES)",
         action="store_true",
     )
-    mode_parser.add_argument(
+    train_parser.add_argument(
         "--batch_size",
         type=int,
-        help="Mini-batch size for training and prediction (default: %(default)s)",
+        help="Mini-batch size for training (default: %(default)s)",
         default=100,
     )
-
-    # mode parsers
-    train_parser = argparse.ArgumentParser(add_help=False, parents=[mode_parser])
-    train_parser.add_argument("datapath", help="Path to dataset")
-    train_parser.add_argument("modelpath", help="Path of stored model")
     train_parser.add_argument(
         "--seed", type=int, default=None, help="Set random seed for torch and numpy."
     )
@@ -117,9 +128,25 @@ def get_mode_parsers():
         default=3,
     )
 
+    # evaluation parser
     eval_parser = argparse.ArgumentParser(add_help=False, parents=[mode_parser])
     eval_parser.add_argument("datapath", help="Path to dataset")
     eval_parser.add_argument("modelpath", help="Path of stored model")
+    eval_parser.add_argument(
+        "--cuda", help="Set flag to use GPU(s) for evaluation", action="store_true"
+    )
+    eval_parser.add_argument(
+        "--parallel",
+        help="Run data-parallel on all available GPUs (specify with environment"
+        " variable CUDA_VISIBLE_DEVICES)",
+        action="store_true",
+    )
+    eval_parser.add_argument(
+        "--batch_size",
+        type=int,
+        help="Mini-batch size for evaluation (default: %(default)s)",
+        default=100,
+    )
     eval_parser.add_argument(
         "--split",
         help="Evaluate trained model on given split",
@@ -130,7 +157,8 @@ def get_mode_parsers():
     eval_parser.add_argument(
         "--overwrite", help="Remove previous evaluation files", action="store_true"
     )
-    return mode_parser, train_parser, eval_parser
+
+    return mode_parser, json_parser, train_parser, eval_parser
 
 
 def get_model_parsers():
@@ -385,7 +413,7 @@ def get_data_parsers():
 
 def build_parser():
     # get parsers
-    mode_parser, train_parser, eval_parser = get_mode_parsers()
+    mode_parser, json_parser, train_parser, eval_parser = get_mode_parsers()
     model_parser, schnet_parser, wacsf_parser = get_model_parsers()
     data_parser, qm9_parser, ani1_parser, matproj_parser, md17_parser, omdb_parser, custom_data_parser = (
         get_data_parsers()
@@ -397,6 +425,9 @@ def build_parser():
     train_subparser = mode_subparsers.add_parser("train", help="training help")
     eval_subparser = mode_subparsers.add_parser(
         "eval", help="evaluation help", parents=[eval_parser]
+    )
+    json_subparser = mode_subparsers.add_parser(
+        "from_json", help="load from json help", parents=[json_parser]
     )
 
     # train mode

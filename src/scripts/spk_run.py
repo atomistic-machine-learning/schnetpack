@@ -113,4 +113,9 @@ def main(args):
 if __name__ == "__main__":
     parser = build_parser()
     args = parser.parse_args()
+
+    if args.mode == "from_json":
+        args = spk.utils.read_from_json(args.json_path)
+
+    import argparse
     main(args)
