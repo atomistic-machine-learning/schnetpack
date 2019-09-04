@@ -150,6 +150,7 @@ class AseInterface:
         forces="forces",
         energy_units="eV",
         forces_units="eV/Angstrom",
+        environment_provider=SimpleEnvironmentProvider(),
     ):
         # Setup directory
         self.working_dir = working_dir
@@ -168,6 +169,7 @@ class AseInterface:
             forces=forces,
             energy_units=energy_units,
             forces_units=forces_units,
+            environment_provider=environment_provider,
         )
         self.molecule.set_calculator(calculator)
 

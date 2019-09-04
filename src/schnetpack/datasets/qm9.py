@@ -10,6 +10,7 @@ import numpy as np
 from ase.io.extxyz import read_xyz
 from ase.units import Debye, Bohr, Hartree, eV
 
+import schnetpack as spk
 from schnetpack.datasets import DownloadableAtomsData
 
 __all__ = ["QM9"]
@@ -29,6 +30,9 @@ class QM9(DownloadableAtomsData):
         load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
         remove_uncharacterized (bool, optional): remove uncharacterized molecules.
+        environment_provider (spk.environment.BaseEnvironmentProvider): define how
+            neighborhood is calculated
+            (default=spk.environment.SimpleEnvironmentProvider).
 
     References:
         .. [#qm9_1] https://ndownloader.figshare.com/files/3195404
@@ -62,6 +66,7 @@ class QM9(DownloadableAtomsData):
         load_only=None,
         collect_triples=False,
         remove_uncharacterized=False,
+        environment_provider=spk.environment.SimpleEnvironmentProvider(),
         **kwargs
     ):
 
@@ -111,6 +116,7 @@ class QM9(DownloadableAtomsData):
             download=download,
             available_properties=available_properties,
             units=units,
+            environment_provider=environment_provider,
             **kwargs
         )
 
@@ -125,6 +131,7 @@ class QM9(DownloadableAtomsData):
             load_only=self.load_only,
             collect_triples=self.collect_triples,
             remove_uncharacterized=False,
+            environment_provider=self.environment_provider,
         )
 
     def _download(self):
