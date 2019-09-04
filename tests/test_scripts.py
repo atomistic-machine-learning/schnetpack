@@ -268,13 +268,27 @@ def test_spk_ase(script_runner, tmpdir_factory):
 
     # train a model on md17
     ret = script_runner.run(
-        "spk_run.py",  "train", "schnet", "md17", "tests/data/test_ethanol.db",
-        modeldir, "--split", "10", "5", "--max_epochs", "2")
+        "spk_run.py",
+        "train",
+        "schnet",
+        "md17",
+        "tests/data/test_ethanol.db",
+        modeldir,
+        "--split",
+        "10",
+        "5",
+        "--max_epochs",
+        "2",
+    )
     assert ret.success, ret.stderr
 
     # test md simulation on model
     ret = script_runner.run(
-        "spk_ase.py", molecule_path, os.path.join(modeldir, "best_model"), simdir,
-        "--optimize", "2"
+        "spk_ase.py",
+        molecule_path,
+        os.path.join(modeldir, "best_model"),
+        simdir,
+        "--optimize",
+        "2",
     )
     assert ret.success, ret.stderr

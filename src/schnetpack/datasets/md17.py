@@ -94,7 +94,7 @@ class MD17(DownloadableAtomsData):
             collect_triples=collect_triples,
             download=download,
             available_properties=available_properties,
-            environment_provider=environment_provider
+            environment_provider=environment_provider,
         )
 
     def create_subset(self, idx):

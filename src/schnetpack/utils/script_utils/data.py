@@ -167,7 +167,9 @@ def get_dataset(args, environment_provider, logging=None):
         if logging:
             logging.info("Organic Materials Database will be loaded...")
         omdb = spk.datasets.OrganicMaterialsDatabase(
-            args.datapath, download=True, load_only=[args.property],
+            args.datapath,
+            download=True,
+            load_only=[args.property],
             environment_provider=environment_provider,
         )
         return omdb
@@ -181,7 +183,9 @@ def get_dataset(args, environment_provider, logging=None):
             load_only.append(args.derivative)
 
         dataset = spk.AtomsData(
-            args.datapath, load_only=load_only, collect_triples=args.model == "wacsf",
+            args.datapath,
+            load_only=load_only,
+            collect_triples=args.model == "wacsf",
             environment_provider=environment_provider,
         )
         return dataset

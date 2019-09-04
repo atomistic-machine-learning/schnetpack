@@ -478,7 +478,9 @@ class AtomsConverter:
         inputs[Properties.atom_mask] = torch.ones_like(inputs[Properties.Z]).float()
         mask = inputs[Properties.neighbors] >= 0
         inputs[Properties.neighbor_mask] = mask.float()
-        inputs[Properties.neighbors] = inputs[Properties.neighbors]*inputs[Properties.neighbor_mask].long()
+        inputs[Properties.neighbors] = (
+            inputs[Properties.neighbors] * inputs[Properties.neighbor_mask].long()
+        )
 
         if self.collect_triples:
             mask_triples = torch.ones_like(inputs[Properties.neighbor_pairs_j])

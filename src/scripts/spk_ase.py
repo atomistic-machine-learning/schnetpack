@@ -90,7 +90,7 @@ def get_parser():
         action=SpecialOption,
         type=int,
         help="Equilibrate molecule for molecular dynamics. A default of 10000 steps is"
-             "used.",
+        "used.",
     )
     main_parser.add_argument(
         "--production",
