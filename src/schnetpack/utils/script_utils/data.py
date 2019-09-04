@@ -103,12 +103,14 @@ def get_loaders(args, dataset, split_path, logging=None):
     return train_loader, val_loader, test_loader
 
 
-def get_dataset(args, logging=None):
+def get_dataset(args, environment_provider, logging=None):
     """
     Get dataset from arguments.
 
     Args:
         args (argparse.Namespace): parsed arguments
+        environment_provider (spk.environment.BaseEnvironmentProvider): environment-
+            provider of dataset
         logging: logger
 
     Returns:
@@ -124,6 +126,7 @@ def get_dataset(args, logging=None):
             load_only=[args.property],
             collect_triples=args.model == "wacsf",
             remove_uncharacterized=args.remove_uncharacterized,
+            environment_provider=environment_provider,
         )
         return qm9
     elif args.dataset == "ani1":
@@ -135,6 +138,7 @@ def get_dataset(args, logging=None):
             load_only=[args.property],
             collect_triples=args.model == "wacsf",
             num_heavy_atoms=args.num_heavy_atoms,
+            environment_provider=environment_provider,
         )
         return ani1
     elif args.dataset == "md17":
@@ -145,6 +149,7 @@ def get_dataset(args, logging=None):
             args.molecule,
             download=True,
             collect_triples=args.model == "wacsf",
+            environment_provider=environment_provider,
         )
         return md17
     elif args.dataset == "matproj":
@@ -152,17 +157,18 @@ def get_dataset(args, logging=None):
             logging.info("Materials project will be loaded...")
         mp = spk.datasets.MaterialsProject(
             args.datapath,
-            args.cutoff,
             apikey=args.apikey,
             download=True,
             load_only=[args.property],
+            environment_provider=environment_provider,
         )
         return mp
     elif args.dataset == "omdb":
         if logging:
             logging.info("Organic Materials Database will be loaded...")
         omdb = spk.datasets.OrganicMaterialsDatabase(
-            args.datapath, args.cutoff, download=True, load_only=[args.property]
+            args.datapath, download=True, load_only=[args.property],
+            environment_provider=environment_provider,
         )
         return omdb
     elif args.dataset == "custom":
@@ -175,7 +181,8 @@ def get_dataset(args, logging=None):
             load_only.append(args.derivative)
 
         dataset = spk.AtomsData(
-            args.datapath, load_only=load_only, collect_triples=args.model == "wacsf"
+            args.datapath, load_only=load_only, collect_triples=args.model == "wacsf",
+            environment_provider=environment_provider,
         )
         return dataset
     else:

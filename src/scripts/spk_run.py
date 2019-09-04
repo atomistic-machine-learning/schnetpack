@@ -15,6 +15,7 @@ from schnetpack.utils import (
     setup_run,
     get_divide_by_atoms,
 )
+from schnetpack.utils.script_utils.settings import get_environment_provider
 from schnetpack.utils.script_utils.parsing import build_parser
 
 
@@ -28,7 +29,8 @@ def main(args):
     device = torch.device("cuda" if args.cuda else "cpu")
 
     # get dataset
-    dataset = get_dataset(train_args)
+    environment_provider = get_environment_provider(train_args, device=device)
+    dataset = get_dataset(train_args, environment_provider=environment_provider)
 
     # get dataloaders
     split_path = os.path.join(args.modelpath, "split.npz")

@@ -5,6 +5,7 @@ import os
 import torch
 
 import schnetpack as spk
+import schnetpack.utils.script_utils.settings
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
@@ -55,7 +56,7 @@ def get_parser():
 
     # environment settings
     main_parser.add_argument(
-        "--environment",
+        "--environment_provider",
         type=str,
         default="simple",
         help="Environment provider (default: %(default)s)",
@@ -158,6 +159,8 @@ if __name__ == "__main__":
     argparse_dict = vars(args)
     jsonpath = os.path.join(args.simulation_dir, "args.json")
 
+    device = torch.device(args.device)
+
     # Set up directory
     if not os.path.exists(args.simulation_dir):
         os.makedirs(args.simulation_dir)
@@ -183,7 +186,7 @@ if __name__ == "__main__":
         args.device,
         args.energy,
         args.forces,
-        environment_provider=spk.utils.get_environment_provider(args),
+        environment_provider=spk.utils.get_environment_provider(args, device),
     )
     logging.info("Initialized ase driver")
 

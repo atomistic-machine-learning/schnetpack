@@ -121,12 +121,13 @@ def get_module_str(args):
         return "elemental_atomwise"
 
 
-def get_environment_provider(args):
-    if args.environment == "simple":
+def get_environment_provider(args, device):
+    if args.environment_provider == "simple":
         return spk.environment.SimpleEnvironmentProvider()
-    elif args.environment == "ase":
+    elif args.environment_provider == "ase":
         return spk.environment.AseEnvironmentProvider(cutoff=args.cutoff)
-    elif args.environment == "torch":
-        return spk.environment.TorchEnvironmentProvider
+    elif args.environment_provider == "torch":
+        return spk.environment.TorchEnvironmentProvider(cutoff=args.cutoff,
+                                                        device=device)
     else:
         raise NotImplementedError

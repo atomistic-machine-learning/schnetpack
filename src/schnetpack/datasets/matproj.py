@@ -5,9 +5,9 @@ from ase import Atoms
 from ase.db import connect
 from ase.units import eV
 
+import schnetpack as spk
 from schnetpack.data import AtomsDataError
 from schnetpack.datasets import DownloadableAtomsData
-from schnetpack.environment import AseEnvironmentProvider
 
 __all__ = ["MaterialsProject"]
 
@@ -26,6 +26,9 @@ class MaterialsProject(DownloadableAtomsData):
         subset (list, optional): indices to subset. Set to None for entire database.
         load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
+        environment_provider (spk.environment.BaseEnvironmentProvider): define how
+            neighborhood is calculated
+            (default=spk.environment.SimpleEnvironmentProvider).
 
     """
 
@@ -38,12 +41,12 @@ class MaterialsProject(DownloadableAtomsData):
     def __init__(
         self,
         dbpath,
-        cutoff,
         apikey=None,
         download=True,
         subset=None,
         load_only=None,
         collect_triples=False,
+        environment_provider=spk.environment.SimpleEnvironmentProvider(),
     ):
 
         available_properties = [
@@ -55,10 +58,7 @@ class MaterialsProject(DownloadableAtomsData):
 
         units = [eV, eV, eV, 1.0]
 
-        self.cutoff = cutoff
         self.apikey = apikey
-
-        environment_provider = AseEnvironmentProvider(cutoff)
 
         super(MaterialsProject, self).__init__(
             dbpath=dbpath,
@@ -77,11 +77,11 @@ class MaterialsProject(DownloadableAtomsData):
 
         return MaterialsProject(
             dbpath=self.dbpath,
-            cutoff=self.cutoff,
             download=False,
             subset=subidx,
             load_only=self.load_only,
             collect_triples=self.collect_triples,
+            environment_provider=self.environment_provider
         )
 
     def _download(self):
@@ -102,7 +102,8 @@ class MaterialsProject(DownloadableAtomsData):
             import pymatgen as pmg
         except:
             raise ImportError(
-                "In order to download Materials Project data, you have to install pymatgen"
+                "In order to download Materials Project data, you have to install "
+                "pymatgen"
             )
 
         with connect(self.dbpath) as con:
