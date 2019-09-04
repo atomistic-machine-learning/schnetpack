@@ -150,7 +150,7 @@ class AseInterface:
         forces="forces",
         energy_units="eV",
         forces_units="eV/Angstrom",
-        environment_provider = SimpleEnvironmentProvider()
+        environment_provider=SimpleEnvironmentProvider()
     ):
         # Setup directory
         self.working_dir = working_dir

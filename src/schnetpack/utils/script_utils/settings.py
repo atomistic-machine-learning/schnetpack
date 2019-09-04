@@ -17,6 +17,7 @@ __all__ = [
     "get_derivative",
     "get_contributions",
     "get_module_str",
+    "get_environment_provider",
 ]
 
 
@@ -118,3 +119,14 @@ def get_module_str(args):
         if args.property == spk.datasets.QM9.mu:
             return "elemental_dipole_moment"
         return "elemental_atomwise"
+
+
+def get_environment_provider(args):
+    if args.environment == "simple":
+        return spk.environment.SimpleEnvironmentProvider()
+    elif args.environment == "ase":
+        return spk.environment.AseEnvironmentProvider(cutoff=args.cutoff)
+    elif args.environment == "torch":
+        return spk.environment.TorchEnvironmentProvider
+    else:
+        raise NotImplementedError
