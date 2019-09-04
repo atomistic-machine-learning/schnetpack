@@ -1,13 +1,8 @@
-import os
 import torch
 import logging
 import schnetpack as spk
 from ase.data import atomic_numbers
 import torch.nn as nn
-import schnetpack.utils.spk_utils
-from schnetpack.atomistic import AtomisticModel
-from schnetpack.nn.cutoff import get_cutoff_by_string
-
 
 __all__ = ["get_representation", "get_output_module", "get_model"]
 
@@ -16,7 +11,7 @@ def get_representation(args, train_loader=None):
     # build representation
     if args.model == "schnet":
 
-        cutoff_network = get_cutoff_by_string(args.cutoff_function)
+        cutoff_network = spk.nn.cutoff.get_cutoff_by_string(args.cutoff_function)
 
         return spk.representation.SchNet(
             n_atom_basis=args.features,
@@ -64,67 +59,92 @@ def get_representation(args, train_loader=None):
         raise NotImplementedError("Unknown model class:", args.model)
 
 
-def get_output_module(args, representation, mean, stddev, atomref, aggregation_mode):
-    derivative = None
+def get_output_module_by_str(module_str):
+    if module_str == "atomwise":
+        return spk.atomistic.Atomwise
+    elif module_str == "elemental_atomwise":
+        return spk.atomistic.ElementalAtomwise
+    elif module_str == "dipole_moment":
+        return spk.atomistic.DipoleMoment
+    elif module_str == "elemental_dipole_moment":
+        return spk.atomistic.ElementalDipoleMoment
+    elif module_str == "polarizability":
+        return spk.atomistic.Polarizability
+    elif module_str == "electronic_spatial_sxtent":
+        return spk.atomistic.ElectronicSpatialExtent
+    else:
+        raise spk.utils.ScriptError(
+            "{} is not a valid output " "module!".format(module_str)
+        )
+
+
+def get_output_module(args, representation, mean, stddev, atomref):
+    derivative = spk.utils.get_derivative(args)
+    negative_dr = spk.utils.get_negative_dr(args)
+    contributions = spk.utils.get_contributions(args)
     if args.dataset == "md17" and not args.ignore_forces:
         derivative = spk.datasets.MD17.forces
-    if args.model == "schnet":
-        if args.property == spk.datasets.QM9.mu:
-            return schnetpack.atomistic.output_modules.DipoleMoment(
-                args.features,
-                predict_magnitude=True,
-                mean=mean[args.property],
-                stddev=stddev[args.property],
-                property=args.property,
-            )
-        elif args.property == spk.datasets.QM9.r2:
-            return schnetpack.atomistic.output_modules.ElectronicSpatialExtent(
-                args.features,
-                mean=mean[args.property],
-                stddev=stddev[args.property],
-                property=args.property,
-            )
-        else:
-            return schnetpack.atomistic.output_modules.Atomwise(
-                args.features,
-                aggregation_mode=aggregation_mode,
-                mean=mean[args.property],
-                stddev=stddev[args.property],
-                atomref=atomref[args.property],
-                property=args.property,
-                derivative=derivative,
-                negative_dr=True,
-            )
-    elif args.model == "wacsf":
+    output_module_str = spk.utils.get_module_str(args)
+    if output_module_str == "dipole_moment":
+        return spk.atomistic.output_modules.DipoleMoment(
+            args.features,
+            predict_magnitude=True,
+            mean=mean[args.property],
+            stddev=stddev[args.property],
+            property=args.property,
+            contributions=contributions,
+        )
+    elif output_module_str == "electronic_spatial_extent":
+        return spk.atomistic.output_modules.ElectronicSpatialExtent(
+            args.features,
+            mean=mean[args.property],
+            stddev=stddev[args.property],
+            property=args.property,
+            contributions=contributions,
+        )
+    elif output_module_str == "atomwise":
+        return spk.atomistic.output_modules.Atomwise(
+            args.features,
+            aggregation_mode=spk.utils.get_pooling_mode(args),
+            mean=mean[args.property],
+            stddev=stddev[args.property],
+            atomref=atomref[args.property],
+            property=args.property,
+            derivative=derivative,
+            negative_dr=negative_dr,
+            contributions=contributions,
+        )
+    # wacsf modules
+    elif output_module_str == "elemental_dipole_moment":
         elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
-        if args.property == spk.datasets.QM9.mu:
-            return schnetpack.atomistic.output_modules.ElementalDipoleMoment(
-                representation.n_symfuncs,
-                n_hidden=args.n_nodes,
-                n_layers=args.n_layers,
-                predict_magnitude=True,
-                elements=elements,
-                property=args.property,
-            )
-        else:
-            return schnetpack.atomistic.output_modules.ElementalAtomwise(
-                representation.n_symfuncs,
-                n_hidden=args.n_nodes,
-                n_layers=args.n_layers,
-                aggregation_mode=aggregation_mode,
-                mean=mean[args.property],
-                stddev=stddev[args.property],
-                atomref=atomref[args.property],
-                elements=elements,
-                property=args.property,
-            )
+        return spk.atomistic.output_modules.ElementalDipoleMoment(
+            representation.n_symfuncs,
+            n_hidden=args.n_nodes,
+            n_layers=args.n_layers,
+            predict_magnitude=True,
+            elements=elements,
+            property=args.property,
+        )
+    elif output_module_str == "elemental_atomwise":
+        elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
+        return spk.atomistic.output_modules.ElementalAtomwise(
+            representation.n_symfuncs,
+            n_hidden=args.n_nodes,
+            n_layers=args.n_layers,
+            aggregation_mode=spk.utils.get_pooling_mode(args),
+            mean=mean[args.property],
+            stddev=stddev[args.property],
+            atomref=atomref[args.property],
+            elements=elements,
+            property=args.property,
+            derivative=derivative,
+            negative_dr=negative_dr,
+        )
     else:
         raise NotImplementedError
 
 
-def get_model(
-    args, train_loader, mean, stddev, atomref, aggregation_mode, logging=None
-):
+def get_model(args, train_loader, mean, stddev, atomref, logging=None):
     """
     Build a model from selected parameters or load trained model for evaluation.
 
@@ -149,16 +169,14 @@ def get_model(
             mean=mean,
             stddev=stddev,
             atomref=atomref,
-            aggregation_mode=aggregation_mode,
         )
-        model = AtomisticModel(representation, [output_module])
+        model = spk.AtomisticModel(representation, [output_module])
 
         if args.parallel:
             model = nn.DataParallel(model)
         if logging:
             logging.info(
-                "The model you built has: %d parameters"
-                % schnetpack.utils.spk_utils.count_params(model)
+                "The model you built has: %d parameters" % spk.utils.count_params(model)
             )
         return model
     else:

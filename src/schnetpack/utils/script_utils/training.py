@@ -5,18 +5,19 @@ import torch
 from torch.optim import Adam
 
 
-__all__ = ["get_trainer", "simple_loss_fn", "tradeoff_loff_fn", "get_metrics"]
+__all__ = ["get_trainer", "simple_loss_fn", "tradeoff_loss_fn", "get_metrics"]
 
 
-def get_trainer(args, model, train_loader, val_loader, metrics, loss_fn=None):
+def get_trainer(args, model, train_loader, val_loader, metrics):
+    # setup optimizer
+    # filter for trainable parameters (https://github.com/pytorch/pytorch/issues/679)
+    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
+    optimizer = Adam(trainable_params, lr=args.lr)
+
     # setup hook and logging
     hooks = [spk.train.MaxEpochHook(args.max_epochs)]
     if args.max_steps:
         hooks.append(spk.train.MaxStepHook(max_steps=args.max_steps))
-
-    # filter for trainable parameters (https://github.com/pytorch/pytorch/issues/679)
-    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
-    optimizer = Adam(trainable_params, lr=args.lr)
 
     schedule = spk.train.ReduceLROnPlateauHook(
         optimizer=optimizer,
@@ -43,11 +44,10 @@ def get_trainer(args, model, train_loader, val_loader, metrics, loss_fn=None):
         )
         hooks.append(logger)
 
-    if args.dataset != "md17":
-        loss_fn = simple_loss_fn(args)
-    else:
-        loss_fn = tradeoff_loff_fn(args, derivative="forces")
+    # setup loss function
+    loss_fn = get_loss_fn(args)
 
+    # setup trainer
     trainer = spk.train.Trainer(
         args.modelpath,
         model,
@@ -62,6 +62,13 @@ def get_trainer(args, model, train_loader, val_loader, metrics, loss_fn=None):
     return trainer
 
 
+def get_loss_fn(args):
+    derivative = spk.utils.get_derivative(args)
+    if derivative is None:
+        return simple_loss_fn(args)
+    return tradeoff_loss_fn(args, derivative)
+
+
 def simple_loss_fn(args):
     def loss(batch, result):
         diff = batch[args.property] - result[args.property]
@@ -72,7 +79,7 @@ def simple_loss_fn(args):
     return loss
 
 
-def tradeoff_loff_fn(args, derivative):
+def tradeoff_loss_fn(args, derivative):
     def loss(batch, result):
         diff = batch[args.property] - result[args.property]
         diff = diff ** 2
@@ -89,22 +96,22 @@ def tradeoff_loff_fn(args, derivative):
 
 
 def get_metrics(args):
-    if args.dataset != "md17":
-        return [
-            spk.train.metrics.MeanAbsoluteError(args.property, args.property),
-            spk.train.metrics.RootMeanSquaredError(args.property, args.property),
-        ]
-    return [
-        spk.train.metrics.MeanAbsoluteError(
-            spk.datasets.MD17.energy, spk.datasets.MD17.energy
-        ),
-        spk.train.metrics.RootMeanSquaredError(
-            spk.datasets.MD17.energy, spk.datasets.MD17.energy
-        ),
-        spk.train.metrics.MeanAbsoluteError(
-            spk.datasets.MD17.forces, spk.datasets.MD17.forces, element_wise=True
-        ),
-        spk.train.metrics.RootMeanSquaredError(
-            spk.datasets.MD17.forces, spk.datasets.MD17.forces, element_wise=True
-        ),
+    # setup property metrics
+    metrics = [
+        spk.train.metrics.MeanAbsoluteError(args.property, args.property),
+        spk.train.metrics.RootMeanSquaredError(args.property, args.property),
     ]
+
+    # add metrics for derivative
+    derivative = spk.utils.get_derivative(args)
+    if derivative is not None:
+        metrics += [
+            spk.train.metrics.MeanAbsoluteError(
+                derivative, derivative, element_wise=True
+            ),
+            spk.train.metrics.RootMeanSquaredError(
+                derivative, derivative, element_wise=True
+            ),
+        ]
+
+    return metrics

@@ -12,6 +12,7 @@ __all__ = [
     "DipoleMoment",
     "ElementalDipoleMoment",
     "Polarizability",
+    "ElectronicSpatialExtent",
 ]
 
 
@@ -43,16 +44,12 @@ class Atomwise(nn.Module):
             freed. Note that in nearly all cases setting this option to True is not nee
             ded and often can be worked around in a much more efficient way. Defaults to
             the value of create_graph. (default: False)
-        retain_graph (bool): If True, graph of the derivative will be constructed,
-            allowing to compute higher order derivative products. (default: True)
         mean (torch.Tensor or None): mean of property
         stddev (torch.Tensor or None): standard deviation of property (default: None)
         atomref (torch.Tensor or None): reference single-atom properties. Expects
             an (max_z + 1) x 1 array where atomref[Z] corresponds to the reference
             property of element Z. The value of atomref[0] must be zero, as this
             corresponds to the reference property for for "mask" atoms. (default: None)
-        max_z (int): only relevant only if train_embeddings is true. Specifies
-            maximal nuclear charge of atoms. (default: 100)
         outnet (callable): Network used for atomistic outputs. Takes schnetpack input
             dictionary as input. Output is not normalized. If set to None,
             a pyramidal network is generated automatically. (default: None)
@@ -276,8 +273,6 @@ class ElementalAtomwise(Atomwise):
             an (max_z + 1) x 1 array where atomref[Z] corresponds to the reference
             property of element Z. The value of atomref[0] must be zero, as this
             corresponds to the reference property for for "mask" atoms. (default: None)
-        max_z (int): only relevant only if train_embeddings is true. Specifies
-            maximal nuclear charge of atoms. (default: 100)
     """
 
     def __init__(
@@ -297,7 +292,6 @@ class ElementalAtomwise(Atomwise):
         mean=None,
         stddev=None,
         atomref=None,
-        max_z=100,
     ):
         outnet = schnetpack.nn.blocks.GatedNetwork(
             n_in,
@@ -323,7 +317,6 @@ class ElementalAtomwise(Atomwise):
             mean=mean,
             stddev=stddev,
             atomref=atomref,
-            max_z=max_z,
             outnet=outnet,
         )
 
@@ -337,8 +330,6 @@ class ElementalDipoleMoment(DipoleMoment):
         n_in (int): input dimension of representation
         n_out (int): output dimension of representation (default: 1)
         n_layers (int): number of layers in output network (default: 3)
-        return_charges (bool): If True, latent atomic charges are returned as well (default: False)
-        requires_dr (bool): Set True, if derivative w.r.t. atom positions is required (default: False)
         predict_magnitude (bool): if True, predict the magnitude of the dipole moment instead of the vector (default: False)
         elements (set of int): List of atomic numbers present in the training set {1,6,7,8,9} for QM9. (default: frozenset(1,6,7,8,9))
         n_hidden (int): number of neurons in each layer of the output network. (default: 50)
