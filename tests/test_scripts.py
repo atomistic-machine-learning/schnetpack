@@ -258,3 +258,23 @@ def test_parsing_script(script_runner, tmpdir_factory):
         assert len(conn) == 3
         atmsrow = conn.get(1)
         assert {"energy", "forces"} == set(list(atmsrow.data.keys()))
+
+
+def test_spk_ase(script_runner, tmpdir_factory):
+    # define dirs
+    molecule_path = "tests/data/test_molecule.xyz"
+    modeldir = tmpdir_factory.mktemp("modeldir").strpath
+    simdir = tmpdir_factory.mktemp("simdir").strpath
+
+    # train a model on md17
+    ret = script_runner.run(
+        "spk_run.py",  "train", "schnet", "md17", "tests/data/test_ethanol.db",
+        modeldir, "--split", "10", "5", "--max_epochs", "2")
+    assert ret.success, ret.stderr
+
+    # test md simulation on model
+    ret = script_runner.run(
+        "spk_ase.py", molecule_path, os.path.join(modeldir, "best_model"), simdir,
+        "--optimize", "2"
+    )
+    assert ret.success, ret.stderr
