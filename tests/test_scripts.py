@@ -3,69 +3,94 @@ import pytest
 from ase.db import connect
 
 
-@pytest.fixture
-def max_epochs():
-    return "4"
+def run_args_from_settings(settings):
+    """
+    Build valid list of run arguments for spk_run.py based on a settings dict.
+    """
+    # basic settings
+    run_args = [
+        settings["script"],
+        settings["mode"],
+        settings["representation"],
+        settings["dataset"],
+        settings["dbpath"],
+        settings["modeldir"],
+        "--split",
+        *settings["split"],
+        "--property",
+        settings["property"],
+        "--max_epochs",
+        settings["max_epochs"],
+        "--checkpoint_interval",
+        settings["checkpoint_interval"],
+        "--keep_n_checkpoints",
+        settings["keep_n_checkpoints"],
+    ]
+    # optional settings
+    if settings["derivative"] is not None:
+        run_args += ["--derivative", settings["derivative"]]
+        if settings["negative_dr"]:
+            run_args += ["--negative_dr"]
+    if settings["contributions"] is not None:
+        run_args += ["--contributions", settings["contributions"]]
+    if settings["output_module"] is not None:
+        run_args += ["--output_module", settings["output_module"]]
+    # string cast
+    run_args = [str(arg) for arg in run_args]
 
-
-@pytest.fixture
-def split():
-    return "10", "5"
-
-
-@pytest.fixture
-def keep_n_checkpoints():
-    return "2"
-
-
-@pytest.fixture
-def checkpoint_interval():
-    return "1"
+    return run_args
 
 
 def assert_valid_script(
     script_runner,
     tmpdir_factory,
+    representation,
     dataset,
     dbpath,
     property,
-    checkpoint_interval,
-    keep_n_checkpoints,
-    split,
-    max_epochs,
-    with_derivative=False,
-    representation="schnet",
+    split=[10, 5],
+    derivative=None,
+    contributions=None,
+    negative_dr=False,
+    output_module=None,
+    max_epochs=2,
+    checkpoint_interval=1,
+    keep_n_checkpoints=4,
 ):
-    # train model
-    modeldir = tmpdir_factory.mktemp("{}_script_test".format(dataset)).strpath
-    run_args = [
-        "spk_run.py",
-        "train",
-        representation,
-        dataset,
-        dbpath,
-        modeldir,
-        "--max_epochs",
-        max_epochs,
-        "--split",
-        *split,
-        "--property",
-        property,
-        "--checkpoint_interval",
-        checkpoint_interval,
-        "--keep_n_checkpoints",
-        keep_n_checkpoints,
-    ]
+    """
+    Test spk_run.py with different settings.
+    """
 
-    if dataset == "custom":
-        run_args += ["--derivative", "forces"]
+    # define settings
+    modeldir = tmpdir_factory.mktemp("{}_script_test".format(dataset)).strpath
+    settings = dict(
+        script="spk_run.py",
+        mode="train",
+        representation=representation,
+        dataset=dataset,
+        dbpath=dbpath,
+        modeldir=modeldir,
+        max_epochs=max_epochs,
+        split=split,
+        property=property,
+        checkpoint_interval=checkpoint_interval,
+        keep_n_checkpoints=keep_n_checkpoints,
+        derivative=derivative,
+        negative_dr=negative_dr,
+        contributions=contributions,
+        output_module=output_module,
+    )
+
+    # get run arguments from settings dict
+    run_args = run_args_from_settings(settings)
 
     # run training
     ret = script_runner.run(*run_args)
     assert ret.success, ret.stderr
     assert os.path.exists(os.path.join(modeldir, "best_model"))
 
-    # restore training
+    # continue training for one more epoch
+    settings["max_epochs"] += 1
     ret = script_runner.run(*run_args)
     assert ret.success, ret.stderr
     assert os.path.exists(
@@ -95,135 +120,110 @@ def assert_valid_script(
     assert os.path.exists(os.path.join(modeldir, "evaluation.txt"))
     with open(os.path.join(modeldir, "evaluation.txt")) as f:
         lines = f.readlines()
-        print(lines)
-        n_evals = 6 if not with_derivative else 12
-        assert len(lines[0].split(",")) == len(lines[1].split(",")) == n_evals
+        has_forces = True if derivative is not None or dataset == "md17" else False
+        expected_eval_dim = 6 + int(has_forces) * 6
+        assert len(lines[0].split(",")) == len(lines[1].split(",")) == expected_eval_dim
         assert len(lines) == 2
 
 
 def test_qm9(
     script_runner,
     tmpdir_factory,
-    checkpoint_interval,
-    keep_n_checkpoints,
-    split,
-    max_epochs,
 ):
-    dataset = "qm9"
-    dbpath = "tests/data/test_qm9.db"
-    property = "energy_U0"
+    # schnet test
     assert_valid_script(
         script_runner,
         tmpdir_factory,
-        dataset,
-        dbpath,
-        property,
-        checkpoint_interval,
-        keep_n_checkpoints,
-        split,
-        max_epochs,
+        representation="schnet",
+        dataset="qm9",
+        dbpath="tests/data/test_qm9.db",
+        property="energy_U0"
+    )
+    # wacsf test
+    assert_valid_script(
+        script_runner,
+        tmpdir_factory,
+        representation="wacsf",
+        dataset="qm9",
+        dbpath="tests/data/test_qm9.db",
+        property="energy_U0"
     )
 
 
 def test_ani1(
     script_runner,
     tmpdir_factory,
-    checkpoint_interval,
-    keep_n_checkpoints,
-    split,
-    max_epochs,
 ):
-    dataset = "ani1"
-    dbpath = "tests/data/test_ani1.db"
-    property = "energy"
+    # test schnet
     assert_valid_script(
         script_runner,
         tmpdir_factory,
-        dataset,
-        dbpath,
-        property,
-        checkpoint_interval,
-        keep_n_checkpoints,
-        split,
-        max_epochs,
+        representation="schnet",
+        dataset="ani1",
+        dbpath="tests/data/test_ani1.db",
+        property="energy",
     )
-
-
-# def test_matproj(script_runner, tmpdir_factory, checkpoint_interval,
-# keep_n_checkpoints,
-#             split, max_epochs):
-#    dataset = "matproj"
-#    dbpath = "tests/data/test_matproj.db"
-#    property = "formation_energy_per_atom"
-#    assert_valid_script(script_runner, tmpdir_factory, dataset, dbpath, property,
-#                        checkpoint_interval, keep_n_checkpoints, split, max_epochs)
-#
+    # test wacsf
+    assert_valid_script(
+        script_runner,
+        tmpdir_factory,
+        representation="wacsf",
+        dataset="ani1",
+        dbpath="tests/data/test_ani1.db",
+        property="energy",
+    )
 
 
 def test_md17(
     script_runner,
     tmpdir_factory,
-    checkpoint_interval,
-    keep_n_checkpoints,
-    split,
-    max_epochs,
 ):
-    dataset = "md17"
-    dbpath = "tests/data/test_ethanol.db"
-    property = "energy"
+    # test schnet
     assert_valid_script(
         script_runner,
         tmpdir_factory,
-        dataset,
-        dbpath,
-        property,
-        checkpoint_interval,
-        keep_n_checkpoints,
-        split,
-        max_epochs,
-        with_derivative=True,
+        representation="schnet",
+        dataset="md17",
+        dbpath="tests/data/test_ethanol.db",
+        property="energy",
+    )
+    # test wacsf
+    assert_valid_script(
+        script_runner,
+        tmpdir_factory,
+        representation="wacsf",
+        dataset="md17",
+        dbpath="tests/data/test_ethanol.db",
+        property="energy",
     )
 
 
 def test_custom(
     script_runner,
     tmpdir_factory,
-    checkpoint_interval,
-    keep_n_checkpoints,
-    split,
-    max_epochs,
 ):
-    dataset = "custom"
-    dbpath = "tests/data/test_ethanol.db"
-    property = "energy"
-
     # test schnet
     assert_valid_script(
         script_runner,
         tmpdir_factory,
-        dataset,
-        dbpath,
-        property,
-        checkpoint_interval,
-        keep_n_checkpoints,
-        split,
-        max_epochs,
-        with_derivative=True,
+        representation="schnet",
+        dataset="custom",
+        dbpath="tests/data/test_ethanol.db",
+        property="energy",
+        derivative="forces",
+        negative_dr=True,
     )
-
     # test wacsf
     assert_valid_script(
         script_runner,
         tmpdir_factory,
-        dataset,
-        dbpath,
-        property,
-        checkpoint_interval,
-        keep_n_checkpoints,
-        split,
-        max_epochs,
         representation="wacsf",
-        with_derivative=True,
+        dataset="custom",
+        dbpath="tests/data/test_ethanol.db",
+        property="energy",
+        derivative="forces",
+        negative_dr=True,
+        output_module="elemental_atomwise"
     )
 
 
