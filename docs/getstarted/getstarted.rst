@@ -162,6 +162,23 @@ The command for training a QM9-like data set on dipole moments would be::
 The evaluation of the trained model uses the same commands as any pre-implemented
 data set.
 
+=================================
+Using Argument Files for Training
+=================================
+
+An argument file with all training arguments is created at the beginning of every
+training session and can be found at *<modeldir>/args.json*. These argument
+files can be modified and used for new training sessions. In order to build a file
+with default settings run::
+
+   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir>
+
+This will create the <modeldir> which contains the argument file, while the training
+session will fail because ``--split`` is not selected. You can now modify the
+arguments and use them for training::
+
+   $ spk_run.py from_json <modeldir>/args.json
+
 ================
 Supported Models
 ================
