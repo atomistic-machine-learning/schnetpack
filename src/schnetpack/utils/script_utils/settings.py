@@ -16,7 +16,7 @@ __all__ = [
     "get_negative_dr",
     "get_derivative",
     "get_contributions",
-    "get_module_str"
+    "get_module_str",
 ]
 
 

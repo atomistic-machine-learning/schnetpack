@@ -65,7 +65,7 @@ def get_output_module_by_str(module_str):
     elif module_str == "elemental_atomwise":
         return spk.atomistic.ElementalAtomwise
     elif module_str == "dipole_moment":
-        return  spk.atomistic.DipoleMoment
+        return spk.atomistic.DipoleMoment
     elif module_str == "elemental_dipole_moment":
         return spk.atomistic.ElementalDipoleMoment
     elif module_str == "polarizability":
@@ -73,8 +73,9 @@ def get_output_module_by_str(module_str):
     elif module_str == "electronic_spatial_sxtent":
         return spk.atomistic.ElectronicSpatialExtent
     else:
-        raise spk.utils.ScriptError("{} is not a valid output "
-                                    "module!".format(module_str))
+        raise spk.utils.ScriptError(
+            "{} is not a valid output " "module!".format(module_str)
+        )
 
 
 def get_output_module(args, representation, mean, stddev, atomref):

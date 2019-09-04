@@ -12,7 +12,7 @@ __all__ = [
     "DipoleMoment",
     "ElementalDipoleMoment",
     "Polarizability",
-    "ElectronicSpatialExtent"
+    "ElectronicSpatialExtent",
 ]
 
 

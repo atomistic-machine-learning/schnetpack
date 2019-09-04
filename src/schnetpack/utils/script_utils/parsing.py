@@ -19,7 +19,7 @@ def get_mode_parsers():
         "json_path",
         type=str,
         help="Path to argument file. (default: %(default)s)",
-        default=None
+        default=None,
     )
 
     # train parser
@@ -387,11 +387,16 @@ def get_data_parsers():
         "--output_module",
         type=str,
         help="Select matching output module for selected property. (default: %("
-             "defualt)s)",
+        "defualt)s)",
         default="atomwise",
-        choices=["atomwise", "elemental_atomwise", "dipole_moment",
-                 "elemental_dipole_moment", "polarizability",
-                 "electronic_spatial_extent"],
+        choices=[
+            "atomwise",
+            "elemental_atomwise",
+            "dipole_moment",
+            "elemental_dipole_moment",
+            "polarizability",
+            "electronic_spatial_extent",
+        ],
     )
     custom_data_parser.add_argument(
         "--rho",

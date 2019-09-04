@@ -103,18 +103,16 @@ def assert_valid_script(
     # train from json args
     # modify json
     json_path = os.path.join(modeldir, "args.json")
-    with open(json_path, 'r+') as f:
+    with open(json_path, "r+") as f:
         data = json.load(f)
-        data['max_epochs'] = 5
+        data["max_epochs"] = 5
         f.seek(0)
         json.dump(data, f, indent=4)
         f.truncate()
     ret = script_runner.run("spk_run.py", "from_json", json_path)
     assert ret.success, ret.stderr
     assert os.path.exists(
-        os.path.join(
-            modeldir, "checkpoints", "checkpoint-{}.pth.tar".format(5)
-        )
+        os.path.join(modeldir, "checkpoints", "checkpoint-{}.pth.tar".format(5))
     )
 
     # run evaluation
@@ -144,10 +142,7 @@ def assert_valid_script(
         assert len(lines) == 2
 
 
-def test_qm9(
-    script_runner,
-    tmpdir_factory,
-):
+def test_qm9(script_runner, tmpdir_factory):
     # schnet test
     assert_valid_script(
         script_runner,
@@ -155,7 +150,7 @@ def test_qm9(
         representation="schnet",
         dataset="qm9",
         dbpath="tests/data/test_qm9.db",
-        property="energy_U0"
+        property="energy_U0",
     )
     # wacsf test
     assert_valid_script(
@@ -164,14 +159,11 @@ def test_qm9(
         representation="wacsf",
         dataset="qm9",
         dbpath="tests/data/test_qm9.db",
-        property="energy_U0"
+        property="energy_U0",
     )
 
 
-def test_ani1(
-    script_runner,
-    tmpdir_factory,
-):
+def test_ani1(script_runner, tmpdir_factory):
     # test schnet
     assert_valid_script(
         script_runner,
@@ -192,10 +184,7 @@ def test_ani1(
     )
 
 
-def test_md17(
-    script_runner,
-    tmpdir_factory,
-):
+def test_md17(script_runner, tmpdir_factory):
     # test schnet
     assert_valid_script(
         script_runner,
@@ -216,10 +205,7 @@ def test_md17(
     )
 
 
-def test_custom(
-    script_runner,
-    tmpdir_factory,
-):
+def test_custom(script_runner, tmpdir_factory):
     # test schnet
     assert_valid_script(
         script_runner,
@@ -241,7 +227,7 @@ def test_custom(
         property="energy",
         derivative="forces",
         negative_dr=True,
-        output_module="elemental_atomwise"
+        output_module="elemental_atomwise",
     )
 
 
