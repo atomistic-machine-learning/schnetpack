@@ -144,13 +144,20 @@ In this example we will train the model on the *energy* labels. If we want to us
 negative forces. Since energy is a property that depends on the total number of atoms
 we select ``--aggregation_mode sum``. Other properties (e.g. homo, lumo, ...) do not
 depend on the total number of atoms and will therefore use the mean aggregation mode.
-The final command for the md17 example would be::
+While most properties should be trained with the ``spk.nn.Atomwise`` output module
+which is selected by default, some properties require special output modules.
+Models using the ``spk.SchNet`` representation support ``dipole_moment`` and
+``electronic_spatial_extent``. Note that if your model is based on the
+``spk.BehlerSFBlock`` representation you need to select between
+``elemental_atomwise`` and ``elemental_dipole_moment``. The output module selection
+is defined with ``--output_module <atomwise/elemental/atomwise/dipole_moment/...>``.
+The final command for the MD17 example would be::
 
    $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property energy --derivative forces --negative_dr --aggregation_mode sum [--cuda]
 
-The command for training a QM9-like data set on energy values would be::
+The command for training a QM9-like data set on dipole moments would be::
 
-   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property energy_U0 --aggregation_mode sum [--cuda]
+   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property dipole_moment --output_module dipole_moment --aggregation_mode sum [--cuda]
 
 The evaluation of the trained model uses the same commands as any pre-implemented
 data set.
