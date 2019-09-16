@@ -289,9 +289,8 @@ def get_data_parsers():
     )
     qm9_parser.add_argument(
         "--remove_uncharacterized",
-        type=bool,
         help="Remove uncharacterized molecules from QM9 (default: %(default)s)",
-        default=True,
+        action="store_true",
     )
 
     ani1_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
