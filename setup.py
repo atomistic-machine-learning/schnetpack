@@ -26,7 +26,7 @@ setup(
     package_dir={"": "src"},
     python_requires=">=3.6",
     install_requires=[
-        "torch>=0.4.1",
+        "torch>=1.1",
         "numpy",
         "ase>=3.18",
         "h5py",
