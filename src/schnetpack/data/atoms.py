@@ -27,7 +27,35 @@ from .partitioning import train_test_split
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["AtomsData", "AtomsDataError", "AtomsConverter"]
+__all__ = ["AtomsData", "AtomsDataError", "AtomsConverter", "get_center_of_mass",
+           "get_center_of_geometry"]
+
+
+def get_center_of_mass(atoms):
+    """
+    Computes center of mass.
+
+    Args:
+        atoms (ase.Atoms): atoms object of molecule
+
+    Returns:
+        center of mass
+    """
+    masses = atoms.get_masses()
+    return np.dot(masses, atoms.arrays['positions']) / masses.sum()
+
+
+def get_center_of_geometry(atoms):
+    """
+    Computes center of geometry.
+
+    Args:
+        atoms (ase.Atoms): atoms object of molecule
+
+    Returns:
+        center of geometry
+    """
+    return atoms.arrays['positions'].mean(0)
 
 
 class AtomsDataError(Exception):
@@ -71,7 +99,7 @@ class AtomsData(Dataset):
         units=None,
         environment_provider=SimpleEnvironmentProvider(),
         collect_triples=False,
-        center_positions=True,
+        centering_function=get_center_of_mass,
     ):
         if not dbpath.endswith(".db"):
             raise AtomsDataError(
@@ -90,7 +118,7 @@ class AtomsData(Dataset):
         self.units = dict(zip(self.available_properties, units))
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
-        self.center_positions = center_positions
+        self.centering_function = centering_function
 
     def get_available_properties(self, available_properties):
         """
@@ -153,7 +181,7 @@ class AtomsData(Dataset):
             load_only=self.load_only,
             environment_provider=self.environment_provider,
             collect_triples=self.collect_triples,
-            center_positions=self.center_positions,
+            centering_function=self.centering_function,
             available_properties=self.available_properties,
         )
 
@@ -331,7 +359,7 @@ class AtomsData(Dataset):
             at,
             environment_provider=self.environment_provider,
             collect_triples=self.collect_triples,
-            center_positions=self.center_positions,
+            centering_function=self.centering_function,
             output=properties,
         )
 
@@ -382,7 +410,7 @@ def _convert_atoms(
     atoms,
     environment_provider=SimpleEnvironmentProvider(),
     collect_triples=False,
-    center_positions=False,
+    centering_function=None,
     output=None,
 ):
     """
@@ -408,8 +436,8 @@ def _convert_atoms(
 
     inputs[Properties.Z] = torch.LongTensor(atoms.numbers.astype(np.int))
     positions = atoms.positions.astype(np.float32)
-    if center_positions:
-        positions -= atoms.get_center_of_mass()
+    if centering_function:
+        positions -= centering_function(atoms)
     inputs[Properties.R] = torch.FloatTensor(positions)
     inputs[Properties.cell] = torch.FloatTensor(cell)
 

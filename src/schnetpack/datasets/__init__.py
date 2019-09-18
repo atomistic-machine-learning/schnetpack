@@ -2,7 +2,7 @@ r"""
 Classes wrapping various standard benchmark datasets.
 """
 
-from schnetpack import AtomsData
+from schnetpack import AtomsData, get_center_of_mass
 from schnetpack.data.atoms import logger
 from schnetpack.environment import SimpleEnvironmentProvider
 
@@ -38,7 +38,7 @@ class DownloadableAtomsData(AtomsData):
         units=None,
         environment_provider=SimpleEnvironmentProvider(),
         collect_triples=False,
-        center_positions=True,
+        centering_function=get_center_of_mass,
         download=False,
     ):
 
@@ -50,7 +50,7 @@ class DownloadableAtomsData(AtomsData):
             units=units,
             environment_provider=environment_provider,
             collect_triples=collect_triples,
-            center_positions=center_positions,
+            centering_function=centering_function,
         )
         if download:
             self.download()
