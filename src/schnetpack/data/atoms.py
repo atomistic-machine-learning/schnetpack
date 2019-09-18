@@ -27,8 +27,13 @@ from .partitioning import train_test_split
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["AtomsData", "AtomsDataError", "AtomsConverter", "get_center_of_mass",
-           "get_center_of_geometry"]
+__all__ = [
+    "AtomsData",
+    "AtomsDataError",
+    "AtomsConverter",
+    "get_center_of_mass",
+    "get_center_of_geometry",
+]
 
 
 def get_center_of_mass(atoms):
@@ -42,7 +47,7 @@ def get_center_of_mass(atoms):
         center of mass
     """
     masses = atoms.get_masses()
-    return np.dot(masses, atoms.arrays['positions']) / masses.sum()
+    return np.dot(masses, atoms.arrays["positions"]) / masses.sum()
 
 
 def get_center_of_geometry(atoms):
@@ -55,7 +60,7 @@ def get_center_of_geometry(atoms):
     Returns:
         center of geometry
     """
-    return atoms.arrays['positions'].mean(0)
+    return atoms.arrays["positions"].mean(0)
 
 
 class AtomsDataError(Exception):
