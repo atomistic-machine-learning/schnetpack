@@ -21,7 +21,8 @@ class DownloadableAtomsData(AtomsData):
             environment_provider (spk.environment.BaseEnvironmentProvider): define how
                 neighborhood is calculated
                 (default=spk.environment.SimpleEnvironmentProvider).
-            collect_triples (bool, optional): Set to True if angular features are needed.
+            collect_triples (bool, optional): Set to True if angular features are
+            needed.
             centering_function (callable or None): Function for calculating center of
                 molecule (center of mass/geometry/...). Center will be subtracted from
                 positions.
