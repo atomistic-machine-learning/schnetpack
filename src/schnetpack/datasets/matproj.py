@@ -98,7 +98,7 @@ class MaterialsProject(DownloadableAtomsData):
             )
         try:
             from pymatgen.ext.matproj import MPRester
-            from pymatgen.core import Properties
+            from pymatgen.core import Structure
             import pymatgen as pmg
         except:
             raise ImportError(
@@ -130,7 +130,7 @@ class MaterialsProject(DownloadableAtomsData):
 
                         for k, q in enumerate(query):
                             s = q["structure"]
-                            if type(s) is Properties:
+                            if type(s) is Structure:
                                 at = Atoms(
                                     numbers=s.atomic_numbers,
                                     positions=s.cart_coords,
