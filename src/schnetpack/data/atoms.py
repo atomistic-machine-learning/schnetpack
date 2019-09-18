@@ -84,8 +84,9 @@ class AtomsData(Dataset):
             neighborhood is calculated
             (default=spk.environment.SimpleEnvironmentProvider).
         collect_triples (bool, optional): Set to True if angular features are needed.
-        center_positions (bool): subtract center of mass from all positions
-            (default=True)
+        centering_function (callable or None): Function for calculating center of
+            molecule (center of mass/geometry/...). Center will be subtracted from
+            positions.
     """
 
     ENCODING = "utf-8"
@@ -419,7 +420,10 @@ def _convert_atoms(
         Args:
             atoms (ase.Atoms): Atoms object of molecule
             environment_provider (callable): Neighbor list provider.
-            device (str): Device for computation (default='cpu')
+            collect_triples (bool, optional): Set to True if angular features are needed.
+            centering_function (callable or None): Function for calculating center of
+                molecule (center of mass/geometry/...). Center will be subtracted from
+                positions.
             output (dict): Destination for converted atoms, if not None
 
     Returns:
@@ -474,8 +478,7 @@ class AtomsConverter:
 
     Args:
         environment_provider (callable): Neighbor list provider.
-        pair_provider (callable): Neighbor pair provider (required for angular
-            functions)
+        collect_triples (bool, optional): Set to True if angular features are needed.
         device (str): Device for computation (default='cpu')
     """
 
