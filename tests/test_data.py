@@ -166,3 +166,29 @@ def test_dataset(qm9_dbpath, qm9_avlailable_properties):
 def test_extension_check():
     with pytest.raises(spk.data.AtomsDataError):
         dataset = spk.data.atoms.AtomsData("test/path")
+
+
+@pytest.fixture(scope="session")
+def h20():
+    return Atoms(positions=np.random.rand(3, 3), numbers=[1, 1, 8])
+
+
+@pytest.fixture(scope="session")
+def o2():
+    return Atoms(positions=np.random.rand(2, 3), numbers=[8, 8])
+
+
+def test_get_center(h20, o2):
+    # test if centers are equal for symmetric molecule
+    com = spk.data.get_center_of_mass(o2)
+    cog = spk.data.get_center_of_geometry(o2)
+
+    assert list(com.shape) == [3]
+    assert list(cog.shape) == [3]
+    np.testing.assert_array_almost_equal(com, cog)
+
+    # test if centers are different for asymmetric molecule
+    com = spk.data.get_center_of_mass(o2)
+    cog = spk.data.get_center_of_geometry(o2)
+
+    np.testing.assert_raises(AssertionError, np.testing.assert_array_equal, com, cog)
