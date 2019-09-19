@@ -25,7 +25,7 @@ class ExtXYZ(DownloadableAtomsData):
         properties=None,
         environment_provider=SimpleEnvironmentProvider(),
         pair_provider=None,
-        center_positions=True,
+        centering_function=True,
     ):
         available_properties = [ExtXYZ.E, ExtXYZ.F]
         units = [1.0, 1.0]
@@ -40,7 +40,7 @@ class ExtXYZ(DownloadableAtomsData):
             load_only=properties,
             environment_provider=environment_provider,
             collect_triples=pair_provider,
-            center_positions=center_positions,
+            centering_function=centering_function,
             available_properties=available_properties,
             units=units,
         )
