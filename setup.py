@@ -37,5 +37,8 @@ setup(
     extras_require={"test": ["pytest", "sacred", "pytest-console-scripts"]},
     license="MIT",
     description="SchNetPack - Deep Neural Networks for Atomistic Systems",
-    long_description=read("README.md"),
+    long_description="""
+        SchNetPack aims to provide accessible atomistic neural networks that can be
+        trained and applied out-of-the-box, while still being extensible to custom 
+        atomistic architectures""",
 )
