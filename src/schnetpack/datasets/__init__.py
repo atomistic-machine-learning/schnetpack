@@ -2,7 +2,7 @@ r"""
 Classes wrapping various standard benchmark datasets.
 """
 
-from schnetpack import AtomsData
+from schnetpack import AtomsData, get_center_of_mass
 from schnetpack.data.atoms import logger
 from schnetpack.environment import SimpleEnvironmentProvider
 
@@ -21,9 +21,11 @@ class DownloadableAtomsData(AtomsData):
             environment_provider (spk.environment.BaseEnvironmentProvider): define how
                 neighborhood is calculated
                 (default=spk.environment.SimpleEnvironmentProvider).
-            collect_triples (bool, optional): Set to True if angular features are needed.
-            center_positions (bool): subtract center of mass from all positions
-                (default=True)
+            collect_triples (bool, optional): Set to True if angular features are
+            needed.
+            centering_function (callable or None): Function for calculating center of
+                molecule (center of mass/geometry/...). Center will be subtracted from
+                positions.
             download (bool): If true, automatically download dataset
                 if it does not exist.
 
@@ -38,7 +40,7 @@ class DownloadableAtomsData(AtomsData):
         units=None,
         environment_provider=SimpleEnvironmentProvider(),
         collect_triples=False,
-        center_positions=True,
+        centering_function=get_center_of_mass,
         download=False,
     ):
 
@@ -50,7 +52,7 @@ class DownloadableAtomsData(AtomsData):
             units=units,
             environment_provider=environment_provider,
             collect_triples=collect_triples,
-            center_positions=center_positions,
+            centering_function=centering_function,
         )
         if download:
             self.download()
