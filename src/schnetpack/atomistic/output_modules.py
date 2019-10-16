@@ -389,8 +389,7 @@ class Polarizability(Atomwise):
         activation (function): activation function for hidden nn
             (default: spk.nn.activations.shifted_softplus)
         property (str): name of the output property (default: "y")
-        isotropic (str or None): Name of isotropic polarizability property in output
-            dict. Only calculated if not None. (default: None)
+        isotropic (bool): return isotropic polarizability if True. (default: False)
         create_graph (bool): If False, the graph used to compute the grad will be
             freed. Note that in nearly all cases setting this option to True is not nee
             ded and often can be worked around in a much more efficient way. Defaults to
@@ -414,13 +413,14 @@ class Polarizability(Atomwise):
         n_neurons=None,
         activation=L.shifted_softplus,
         property="y",
-        isotropic=None,
+        isotropic=False,
         create_graph=True,
         outnet=None,
         cutoff_network=None,
     ):
         super(Polarizability, self).__init__(
             n_in=n_in,
+            n_out=2,
             n_layers=n_layers,
             aggregation_mode=aggregation_mode,
             n_neurons=n_neurons,
@@ -488,7 +488,7 @@ class Polarizability(Atomwise):
         }
 
         if self.isotropic:
-            result[self.isotropic] = torch.mean(
+            result[self.property] = torch.mean(
                 torch.diagonal(global_polar, dim1=-2, dim2=-1), dim=-1, keepdim=True
             )
         return result

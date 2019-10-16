@@ -114,6 +114,19 @@ def get_output_module(args, representation, mean, stddev, atomref):
             negative_dr=negative_dr,
             contributions=contributions,
         )
+    elif output_module_str == "polarizability":
+        return spk.atomistic.output_modules.Polarizability(
+            args.features,
+            aggregation_mode=spk.utils.get_pooling_mode(args),
+            property=args.property,
+        )
+    elif output_module_str == "isotropic_polarizability":
+        return spk.atomistic.output_modules.Polarizability(
+            args.features,
+            aggregation_mode=spk.utils.get_pooling_mode(args),
+            property=args.property,
+            isotropic=True,
+        )
     # wacsf modules
     elif output_module_str == "elemental_dipole_moment":
         elements = frozenset((atomic_numbers[i] for i in sorted(args.elements)))
