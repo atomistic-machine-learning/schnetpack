@@ -401,6 +401,7 @@ def get_data_parsers():
             "dipole_moment",
             "elemental_dipole_moment",
             "polarizability",
+            "isotropic_polarizability",
             "electronic_spatial_extent",
         ],
     )
