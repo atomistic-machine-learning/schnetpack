@@ -1,5 +1,4 @@
 PyYAML
-sacred
 --index-url https://pypi.python.org/simple/
 
 torch>=0.4.1
