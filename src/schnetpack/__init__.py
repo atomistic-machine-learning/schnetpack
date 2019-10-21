@@ -23,6 +23,7 @@ class Properties:
     # chemical properties
     energy = "energy"
     forces = "forces"
+    stress = "stress"
     dipole_moment = "dipole_moment"
     total_dipole_moment = "total_dipole_moment"
     polarizability = "polarizability"
@@ -42,6 +43,7 @@ class Properties:
     properties = [
         energy,
         forces,
+        stress,
         dipole_moment,
         polarizability,
         shielding,
@@ -66,6 +68,7 @@ class Properties:
     required_grad = {
         energy: [],
         forces: [position],
+        stress: [cell],
         hessian: [position],
         dipole_moment: [electric_field],
         polarizability: [electric_field],
