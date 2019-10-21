@@ -30,7 +30,10 @@ class AtomisticModel(nn.Module):
         if type(output_modules) == list:
             output_modules = nn.ModuleList(output_modules)
         self.output_modules = output_modules
+        # For gradients
         self.requires_dr = any([om.derivative for om in self.output_modules])
+        # For stress tensor
+        self.requires_stress = any([om.cell_dr for om in self.output_modules])
 
     def forward(self, inputs):
         """
@@ -38,6 +41,9 @@ class AtomisticModel(nn.Module):
         """
         if self.requires_dr:
             inputs[Properties.R].requires_grad_()
+        if self.requires_stress:
+            inputs[Properties.cell].requires_grad_()
+
         inputs["representation"] = self.representation(inputs)
         outs = {}
         for output_model in self.output_modules:

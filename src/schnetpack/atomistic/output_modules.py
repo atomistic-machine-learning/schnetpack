@@ -40,6 +40,7 @@ class Atomwise(nn.Module):
         derivative (str or None): Name of property derivative. No derivative
             returned if None. (default: None)
         negative_dr (bool): Multiply the derivative with -1 if True. (default: False)
+        cell_dr (bool): Compute the derivative with respect to the cell (default: False)
         create_graph (bool): If False, the graph used to compute the grad will be
             freed. Note that in nearly all cases setting this option to True is not nee
             ded and often can be worked around in a much more efficient way. Defaults to
@@ -75,6 +76,7 @@ class Atomwise(nn.Module):
         contributions=None,
         derivative=None,
         negative_dr=False,
+        cell_dr=True,
         create_graph=True,
         mean=None,
         stddev=None,
@@ -89,6 +91,7 @@ class Atomwise(nn.Module):
         self.contributions = contributions
         self.derivative = derivative
         self.negative_dr = negative_dr
+        self.cell_dr = cell_dr
 
         mean = torch.FloatTensor([0.0]) if mean is None else mean
         stddev = torch.FloatTensor([1.0]) if stddev is None else stddev
@@ -156,6 +159,17 @@ class Atomwise(nn.Module):
                 retain_graph=True,
             )[0]
             result[self.derivative] = sign * dy
+
+        if self.cell_dr:
+            dcell = grad(
+                result[self.property],
+                inputs[Properties.cell],
+                grad_outputs=torch.ones_like(result[self.property]),
+                create_graph=self.create_graph,
+                retain_graph=True,
+            )[0]
+            result["X"] = dcell
+
         return result
 
 
