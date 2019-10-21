@@ -40,7 +40,7 @@ class Atomwise(nn.Module):
         derivative (str or None): Name of property derivative. No derivative
             returned if None. (default: None)
         negative_dr (bool): Multiply the derivative with -1 if True. (default: False)
-        cell_dr (bool): Compute the derivative with respect to the cell (default: False)
+        stress (bool): Compute the derivative with respect to the cell parameters (default: False)
         create_graph (bool): If False, the graph used to compute the grad will be
             freed. Note that in nearly all cases setting this option to True is not nee
             ded and often can be worked around in a much more efficient way. Defaults to
@@ -76,7 +76,7 @@ class Atomwise(nn.Module):
         contributions=None,
         derivative=None,
         negative_dr=False,
-        cell_dr=True,
+        stress=False,
         create_graph=True,
         mean=None,
         stddev=None,
@@ -91,7 +91,7 @@ class Atomwise(nn.Module):
         self.contributions = contributions
         self.derivative = derivative
         self.negative_dr = negative_dr
-        self.cell_dr = cell_dr
+        self.stress = stress
 
         mean = torch.FloatTensor([0.0]) if mean is None else mean
         stddev = torch.FloatTensor([1.0]) if stddev is None else stddev
@@ -160,15 +160,22 @@ class Atomwise(nn.Module):
             )[0]
             result[self.derivative] = sign * dy
 
-        if self.cell_dr:
-            dcell = grad(
+        if self.stress:
+            cell = inputs[Properties.cell]
+            # Compute derivative with respect to cell displacements
+            stress = grad(
                 result[self.property],
-                inputs[Properties.cell],
+                inputs["displacement"],
                 grad_outputs=torch.ones_like(result[self.property]),
                 create_graph=self.create_graph,
                 retain_graph=True,
             )[0]
-            result["X"] = dcell
+            # Compute cell volume
+            volume = torch.sum(
+                cell[:, 0] * torch.cross(cell[:, 1], cell[:, 2]), dim=1, keepdim=True
+            )[..., None]
+            # Finalize stress tensor
+            result[Properties.stress] = stress / volume
 
         return result
 
