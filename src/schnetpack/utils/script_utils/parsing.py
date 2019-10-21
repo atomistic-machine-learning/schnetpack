@@ -8,6 +8,23 @@ from schnetpack.datasets import (
 )
 
 
+class StoreDictKeyPair(argparse.Action):
+    """
+    From https://stackoverflow.com/a/42355279
+    """
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        self._nargs = nargs
+        super(StoreDictKeyPair, self).__init__(option_strings, dest, nargs=nargs,
+                                               **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        my_dict = {}
+        for kv in values:
+            k, v = kv.split("=")
+            my_dict[k] = v
+        setattr(namespace, self.dest, my_dict)
+
+
 def get_mode_parsers():
     mode_parser = argparse.ArgumentParser(add_help=False)
 
@@ -379,6 +396,12 @@ def get_data_parsers():
         default=None,
     )
     custom_data_parser.add_argument(
+        "--stress",
+        type=str,
+        help="Train on stress tensor if not None (default: %(default)s)",
+        default=None,
+    )
+    custom_data_parser.add_argument(
         "--negative_dr",
         action="store_true",
         help="Multiply derivatives with -1 for training. (default: %(default)s)",
@@ -407,11 +430,13 @@ def get_data_parsers():
     )
     custom_data_parser.add_argument(
         "--rho",
-        type=float,
-        help="Energy-force trade-off. For rho=0, use forces only. "
-        "(default: %(default)s)",
-        default=0.1,
+        action=StoreDictKeyPair,
+        nargs="+",
+        metavar="KEY=VAL",
+        help="Weights for loss tradeoff (default: %(default)s)",
+        default=dict(),
     )
+
     return (
         data_parser,
         qm9_parser,

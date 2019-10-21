@@ -64,9 +64,34 @@ def get_trainer(args, model, train_loader, val_loader, metrics):
 
 def get_loss_fn(args):
     derivative = spk.utils.get_derivative(args)
-    if derivative is None:
+    contributions = spk.utils.get_contributions(args)
+    stress = spk.utils.get_stress(args)
+
+    # simple loss function for training on property only
+    if derivative is None and contributions is None and stress is None:
         return simple_loss_fn(args)
-    return tradeoff_loss_fn(args, derivative)
+
+    # loss function with tradeoff weights
+    if type(args.rho) == float:
+        rho = dict(property=args.rho, derivative=1-args.rho)
+    else:
+        rho = dict()
+        if derivative is not None:
+            rho["derivative"] = 1. if "derivative" not in args.rho.keys() \
+                else args.rho["derivative"]
+        if contributions is not None:
+            rho["contributions"] = 1. if "contributions" not in args.rho.keys() \
+                else args.rho["contributions"]
+        if stress is not None:
+            rho["stress"] = 1. if "stress" not in args.rho.keys() \
+                else args.rho["stress"]
+        # norm rho values
+        for val in rho.values():
+            val /= sum(rho.values())
+    property_names = dict(
+        derivative=derivative, contributions=contributions, stress=stress
+    )
+    return tradeoff_loss_fn(args, rho, property_names)
 
 
 def simple_loss_fn(args):
@@ -79,18 +104,15 @@ def simple_loss_fn(args):
     return loss
 
 
-def tradeoff_loss_fn(args, derivative):
+def tradeoff_loss_fn(args, rho, property_names):
     def loss(batch, result):
-        diff = batch[args.property] - result[args.property]
-        diff = diff ** 2
+        err = 0.
+        for prop, tradeoff_weight in rho.items():
+            diff = batch[property_names[prop]] - result[property_names[prop]]
+            diff = diff ** 2
+            err += tradeoff_weight * diff.view(-1)
 
-        der_diff = batch[derivative] - result[derivative]
-        der_diff = der_diff ** 2
-
-        err_sq = args.rho * torch.mean(diff.view(-1)) + (1 - args.rho) * torch.mean(
-            der_diff.view(-1)
-        )
-        return err_sq
+        return err
 
     return loss
 

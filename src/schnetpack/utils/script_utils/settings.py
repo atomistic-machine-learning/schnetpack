@@ -16,6 +16,7 @@ __all__ = [
     "get_negative_dr",
     "get_derivative",
     "get_contributions",
+    "get_stress",
     "get_module_str",
     "get_environment_provider",
 ]
@@ -95,6 +96,12 @@ def get_derivative(args):
 def get_contributions(args):
     if args.dataset == "custom":
         return args.contributions
+    return None
+
+
+def get_stress(args):
+    if args.dataset == "custom":
+        return args.stress
     return None
 
 
