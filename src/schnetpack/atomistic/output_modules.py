@@ -40,7 +40,8 @@ class Atomwise(nn.Module):
         derivative (str or None): Name of property derivative. No derivative
             returned if None. (default: None)
         negative_dr (bool): Multiply the derivative with -1 if True. (default: False)
-        stress (bool): Compute the derivative with respect to the cell parameters (default: False)
+        stress (str or None): Name of stress property. Compute the derivative with
+            respect to the cell parameters if not None. (default: None)
         create_graph (bool): If False, the graph used to compute the grad will be
             freed. Note that in nearly all cases setting this option to True is not nee
             ded and often can be worked around in a much more efficient way. Defaults to
@@ -76,7 +77,7 @@ class Atomwise(nn.Module):
         contributions=None,
         derivative=None,
         negative_dr=False,
-        stress=False,
+        stress=None,
         create_graph=True,
         mean=None,
         stddev=None,
@@ -146,10 +147,10 @@ class Atomwise(nn.Module):
         # collect results
         result = {self.property: y}
 
-        if self.contributions:
+        if self.contributions is not None:
             result[self.contributions] = yi
 
-        if self.derivative:
+        if self.derivative is not None:
             sign = -1.0 if self.negative_dr else 1.0
             dy = grad(
                 result[self.property],
@@ -160,7 +161,7 @@ class Atomwise(nn.Module):
             )[0]
             result[self.derivative] = sign * dy
 
-        if self.stress:
+        if self.stress is not None:
             cell = inputs[Properties.cell]
             # Compute derivative with respect to cell displacements
             stress = grad(
@@ -175,7 +176,7 @@ class Atomwise(nn.Module):
                 cell[:, 0] * torch.cross(cell[:, 1], cell[:, 2]), dim=1, keepdim=True
             )[..., None]
             # Finalize stress tensor
-            result[Properties.stress] = stress / volume
+            result[self.stress] = stress / volume
 
         return result
 
