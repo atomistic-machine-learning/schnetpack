@@ -91,7 +91,7 @@ def get_loss_fn(args):
     property_names = dict(
         derivative=derivative, contributions=contributions, stress=stress
     )
-    return tradeoff_loss_fn(args, rho, property_names)
+    return tradeoff_loss_fn(rho, property_names)
 
 
 def simple_loss_fn(args):
@@ -104,13 +104,13 @@ def simple_loss_fn(args):
     return loss
 
 
-def tradeoff_loss_fn(args, rho, property_names):
+def tradeoff_loss_fn(rho, property_names):
     def loss(batch, result):
         err = 0.
         for prop, tradeoff_weight in rho.items():
             diff = batch[property_names[prop]] - result[property_names[prop]]
             diff = diff ** 2
-            err += tradeoff_weight * diff.view(-1)
+            err += tradeoff_weight * torch.mean(diff)
 
         return err
 
