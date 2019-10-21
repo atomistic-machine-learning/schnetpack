@@ -1,4 +1,5 @@
 from torch import nn as nn
+import torch
 
 from schnetpack import Properties
 
@@ -33,7 +34,7 @@ class AtomisticModel(nn.Module):
         # For gradients
         self.requires_dr = any([om.derivative for om in self.output_modules])
         # For stress tensor
-        self.requires_stress = any([om.cell_dr for om in self.output_modules])
+        self.requires_stress = any([om.stress for om in self.output_modules])
 
     def forward(self, inputs):
         """
@@ -42,7 +43,20 @@ class AtomisticModel(nn.Module):
         if self.requires_dr:
             inputs[Properties.R].requires_grad_()
         if self.requires_stress:
-            inputs[Properties.cell].requires_grad_()
+            # Generate Cartesian displacement tensor
+            displacement = torch.zeros_like(inputs[Properties.cell]).to(
+                inputs[Properties.R].device
+            )
+            displacement.requires_grad = True
+            inputs["displacement"] = displacement
+
+            # Apply to coordinates and cell
+            inputs[Properties.R] = inputs[Properties.R] + torch.matmul(
+                inputs[Properties.R], displacement
+            )
+            inputs[Properties.cell] = inputs[Properties.cell] + torch.matmul(
+                inputs[Properties.cell], displacement
+            )
 
         inputs["representation"] = self.representation(inputs)
         outs = {}
