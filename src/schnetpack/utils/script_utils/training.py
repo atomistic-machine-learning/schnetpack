@@ -93,9 +93,13 @@ def get_loss_fn(args):
             rho["stress"] = (
                 1.0 if "stress" not in args.rho.keys() else args.rho["stress"]
             )
+        # type cast of rho values
+        for key in rho.keys():
+            rho[key] = float(rho[key])
         # norm rho values
-        for val in rho.values():
-            val /= sum(rho.values())
+        norm = sum(rho.values())
+        for key in rho.keys():
+            rho[key] = rho[key] / norm
     property_names = dict(
         property=args.property,
         derivative=derivative,
