@@ -146,7 +146,9 @@ class TestTrainer:
 
     def test_tradeoff_loff(self):
         args = Namespace(property="prop", rho=0.0)
-        loss_fn = tradeoff_loss_fn(args, derivative="der")
+        property_names = dict(property=args.property, derivative="der")
+        rho = dict(property=0.0, derivative=1.0)
+        loss_fn = tradeoff_loss_fn(rho, property_names)
         loss = loss_fn(
             {
                 "prop": torch.FloatTensor([100, 100]),
@@ -155,8 +157,8 @@ class TestTrainer:
             {"prop": torch.FloatTensor([20, 20]), "der": torch.FloatTensor([40, 40])},
         )
         assert loss == 60 ** 2
-        args = Namespace(property="prop", rho=1.0)
-        loss_fn = tradeoff_loss_fn(args, derivative="der")
+        rho = dict(property=1.0, derivative=0.0)
+        loss_fn = tradeoff_loss_fn(rho, property_names)
         loss = loss_fn(
             {
                 "prop": torch.FloatTensor([100, 100]),

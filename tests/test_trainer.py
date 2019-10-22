@@ -48,8 +48,12 @@ class TestTrainer:
 
 def test_loss_fn():
     rho = dict(stress=0.1, derivative=1, property=0.9, contributions=0.2)
-    property_names = dict(stress="stress_tensor", derivative="forces",
-                          property="energy", contributions="atomic_energy")
+    property_names = dict(
+        stress="stress_tensor",
+        derivative="forces",
+        property="energy",
+        contributions="atomic_energy",
+    )
     loss_fn = spk.utils.tradeoff_loss_fn(rho, property_names)
     target = {
         property_names["property"]: torch.rand(10, 1),
@@ -61,7 +65,7 @@ def test_loss_fn():
 
     loss = loss_fn(target, pred)
 
-    val_loss = 0.
+    val_loss = 0.0
     for key, val in rho.items():
         val_loss += torch.mean(target[property_names[key]] ** 2) * val
 

@@ -73,23 +73,34 @@ def get_loss_fn(args):
 
     # loss function with tradeoff weights
     if type(args.rho) == float:
-        rho = dict(property=args.rho, derivative=1-args.rho)
+        rho = dict(property=args.rho, derivative=1 - args.rho)
     else:
         rho = dict()
+        rho["property"] = (
+            1.0 if "property" not in args.rho.keys() else args.rho["property"]
+        )
         if derivative is not None:
-            rho["derivative"] = 1. if "derivative" not in args.rho.keys() \
-                else args.rho["derivative"]
+            rho["derivative"] = (
+                1.0 if "derivative" not in args.rho.keys() else args.rho["derivative"]
+            )
         if contributions is not None:
-            rho["contributions"] = 1. if "contributions" not in args.rho.keys() \
+            rho["contributions"] = (
+                1.0
+                if "contributions" not in args.rho.keys()
                 else args.rho["contributions"]
+            )
         if stress is not None:
-            rho["stress"] = 1. if "stress" not in args.rho.keys() \
-                else args.rho["stress"]
+            rho["stress"] = (
+                1.0 if "stress" not in args.rho.keys() else args.rho["stress"]
+            )
         # norm rho values
         for val in rho.values():
             val /= sum(rho.values())
     property_names = dict(
-        derivative=derivative, contributions=contributions, stress=stress
+        property=args.property,
+        derivative=derivative,
+        contributions=contributions,
+        stress=stress,
     )
     return tradeoff_loss_fn(rho, property_names)
 
@@ -106,7 +117,7 @@ def simple_loss_fn(args):
 
 def tradeoff_loss_fn(rho, property_names):
     def loss(batch, result):
-        err = 0.
+        err = 0.0
         for prop, tradeoff_weight in rho.items():
             diff = batch[property_names[prop]] - result[property_names[prop]]
             diff = diff ** 2
