@@ -26,6 +26,7 @@ def main(args):
 
     # setup
     train_args = setup_run(args)
+
     device = torch.device("cuda" if args.cuda else "cpu")
 
     # get dataset

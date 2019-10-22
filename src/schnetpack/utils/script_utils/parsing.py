@@ -392,6 +392,18 @@ def get_data_parsers():
         default=None,
     )
     custom_data_parser.add_argument(
+        "--negative_dr",
+        action="store_true",
+        help="Multiply derivatives with -1 for training. (default: %(default)s)",
+    )
+    custom_data_parser.add_argument(
+        "--force",
+        type=str,
+        help="Name of force property in database. Alias for‚ derivative + setting "
+             "negative_dr. (default: %(default)s)",
+        default=None,
+    )
+    custom_data_parser.add_argument(
         "--contributions",
         type=str,
         help="Contributions of dataset property to be predicted (default: %(default)s)",
@@ -402,11 +414,6 @@ def get_data_parsers():
         type=str,
         help="Train on stress tensor if not None (default: %(default)s)",
         default=None,
-    )
-    custom_data_parser.add_argument(
-        "--negative_dr",
-        action="store_true",
-        help="Multiply derivatives with -1 for training. (default: %(default)s)",
     )
     custom_data_parser.add_argument(
         "--aggregation_mode",
@@ -435,7 +442,7 @@ def get_data_parsers():
         action=StoreDictKeyPair,
         nargs="+",
         metavar="KEY=VAL",
-        help="Weights for loss tradeoff (default: %(default)s)",
+        help="Define loss tradeoff weights with prop=weight. (default: %(default)s)",
         default=dict(),
     )
 
