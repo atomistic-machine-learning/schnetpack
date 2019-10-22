@@ -141,19 +141,41 @@ set. First of all we need to define the property that we want to use for trainin
 In this example we will train the model on the *energy* labels. If we want to use the
 *forces* during training, we need to add the ``--derivative`` argument and also set
 ``--negative_dr``, because the gradient of the energy predictions corresponds to the
-negative forces. Since energy is a property that depends on the total number of atoms
+negative forces.
+
+Defining Output Modules
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Since energy is a property that depends on the total number of atoms
 we select ``--aggregation_mode sum``. Other properties (e.g. homo, lumo, ...) do not
 depend on the total number of atoms and will therefore use the mean aggregation mode.
 While most properties should be trained with the ``spk.nn.Atomwise`` output module
 which is selected by default, some properties require special output modules.
-Models using the ``spk.SchNet`` representation support ``dipole_moment`` and
-``electronic_spatial_extent``. Note that if your model is based on the
-``spk.BehlerSFBlock`` representation you need to select between
-``elemental_atomwise`` and ``elemental_dipole_moment``. The output module selection
-is defined with ``--output_module <atomwise/elemental/atomwise/dipole_moment/...>``.
+Models using the ``spk.SchNet`` representation support ``dipole_moment``,
+``electronic_spatial_extent``, ``ploarizability`` and ``isotropic_polarizability``.
+Note that if your model is based on the ``spk.BehlerSFBlock`` representation you need
+to select between ``elemental_atomwise`` and ``elemental_dipole_moment``. The output
+module selection is defined with ``--output_module
+<atomwise/elemental_atomwise/dipole_moment/...>``.
+
+Loss Tradeoff
+^^^^^^^^^^^^^
+
+It can be useful to define a tradeoff between multiple properties of an output
+module. For a training on *energies* and *forces*, we recommend to put a stronger
+weight on the loss of the force prediction during training. Therefore one can add the
+tradeoff parameter ``--rho`` with its arguments as ``key=value``. If no weight is
+selected for a key, it gets the weight 1. Afterwards all weights are divided by the
+total weight. For including 90% of the force loss and 10% of the energy loss, the
+command is ``--rho property=0.1 derivative=0.9``. You can also use the *stress* and
+the *contributions* properties during training.
+
+Summary
+^^^^^^^
+
 The final command for the MD17 example would be::
 
-   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property energy --derivative forces --negative_dr --aggregation_mode sum [--cuda]
+   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property energy --derivative forces --negative_dr --rho property=0.1 derivative=0.9 --aggregation_mode sum [--cuda]
 
 The command for training a QM9-like data set on dipole moments would be::
 
