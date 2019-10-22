@@ -400,7 +400,7 @@ def get_data_parsers():
         "--force",
         type=str,
         help="Name of force property in database. Alias for‚ derivative + setting "
-             "negative_dr. (default: %(default)s)",
+        "negative_dr. (default: %(default)s)",
         default=None,
     )
     custom_data_parser.add_argument(

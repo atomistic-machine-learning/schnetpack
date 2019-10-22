@@ -77,7 +77,9 @@ class TestSetup:
     def test_setup_overwrite(self, modeldir):
         test_folder = os.path.join(modeldir, "testing")
         os.makedirs(test_folder)
-        args = Namespace(mode="train", modelpath=modeldir, overwrite=True, seed=20)
+        args = Namespace(
+            mode="train", modelpath=modeldir, overwrite=True, seed=20, dataset="qm9"
+        )
         train_args = setup_run(args)
         assert not os.path.exists(test_folder)
         args = Namespace(mode="eval", modelpath=modeldir, seed=20)
