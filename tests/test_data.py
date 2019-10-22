@@ -169,7 +169,7 @@ def test_extension_check():
 
 
 @pytest.fixture(scope="session")
-def h20():
+def h2o():
     return Atoms(positions=np.random.rand(3, 3), numbers=[1, 1, 8])
 
 
@@ -178,7 +178,7 @@ def o2():
     return Atoms(positions=np.random.rand(2, 3), numbers=[8, 8])
 
 
-def test_get_center(h20, o2):
+def test_get_center(h2o, o2):
     # test if centers are equal for symmetric molecule
     com = spk.data.get_center_of_mass(o2)
     cog = spk.data.get_center_of_geometry(o2)
@@ -188,7 +188,7 @@ def test_get_center(h20, o2):
     np.testing.assert_array_almost_equal(com, cog)
 
     # test if centers are different for asymmetric molecule
-    com = spk.data.get_center_of_mass(o2)
-    cog = spk.data.get_center_of_geometry(o2)
+    com = spk.data.get_center_of_mass(h2o)
+    cog = spk.data.get_center_of_geometry(h2o)
 
     np.testing.assert_raises(AssertionError, np.testing.assert_array_equal, com, cog)
