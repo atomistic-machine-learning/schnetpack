@@ -425,7 +425,7 @@ def get_data_parsers():
         "--output_module",
         type=str,
         help="Select matching output module for selected property. (default: %("
-        "defualt)s)",
+        "default)s)",
         default="atomwise",
         choices=[
             "atomwise",
