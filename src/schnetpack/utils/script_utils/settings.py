@@ -16,6 +16,7 @@ __all__ = [
     "get_negative_dr",
     "get_derivative",
     "get_contributions",
+    "get_stress",
     "get_module_str",
     "get_environment_provider",
 ]
@@ -98,6 +99,12 @@ def get_contributions(args):
     return None
 
 
+def get_stress(args):
+    if args.dataset == "custom":
+        return args.stress
+    return None
+
+
 def get_negative_dr(args):
     if args.dataset == "custom":
         return args.negative_dr
@@ -128,7 +135,7 @@ def get_environment_provider(args, device):
         return spk.environment.AseEnvironmentProvider(cutoff=args.cutoff)
     elif args.environment_provider == "torch":
         return spk.environment.TorchEnvironmentProvider(
-            cutoff=args.cutoff, device=device
+            cutoff=args.cutoff, device="cpu"
         )
     else:
         raise NotImplementedError

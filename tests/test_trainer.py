@@ -3,6 +3,9 @@ import pytest
 from .fixtures.data import *
 from .fixtures.train import *
 from .fixtures.model import *
+import schnetpack as spk
+import torch
+from numpy.testing import assert_array_almost_equal
 
 
 class TestTrainer:
@@ -41,3 +44,29 @@ class TestTrainer:
 
         trainer.restore_checkpoint(5)
         assert trainer.epoch == 5
+
+
+def test_loss_fn():
+    rho = dict(stress=0.1, derivative=1, property=0.9, contributions=0.2)
+    property_names = dict(
+        stress="stress_tensor",
+        derivative="forces",
+        property="energy",
+        contributions="atomic_energy",
+    )
+    loss_fn = spk.utils.tradeoff_loss_fn(rho, property_names)
+    target = {
+        property_names["property"]: torch.rand(10, 1),
+        property_names["derivative"]: torch.rand(10, 8, 3),
+        property_names["contributions"]: torch.rand(10, 8, 1),
+        property_names["stress"]: torch.rand(10, 3, 3),
+    }
+    pred = {key: torch.zeros_like(val) for key, val in target.items()}
+
+    loss = loss_fn(target, pred)
+
+    val_loss = 0.0
+    for key, val in rho.items():
+        val_loss += torch.mean(target[property_names[key]] ** 2) * val
+
+    assert_array_almost_equal(loss, val_loss)
