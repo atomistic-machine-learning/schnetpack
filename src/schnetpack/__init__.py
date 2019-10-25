@@ -68,7 +68,6 @@ class Properties:
     required_grad = {
         energy: [],
         forces: [position],
-        stress: [cell],
         hessian: [position],
         dipole_moment: [electric_field],
         polarizability: [electric_field],
