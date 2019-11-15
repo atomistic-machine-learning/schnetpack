@@ -261,13 +261,6 @@ def get_model_parsers():
 def get_data_parsers():
     # data parsers
     data_parser = argparse.ArgumentParser(add_help=False)
-    data_parser.add_argument(
-        "--environment_provider",
-        type=str,
-        default="simple",
-        choices=["simple", "ase", "torch"],
-        help="Environment provider for dataset. (default: %(default)s)",
-    )
 
     # qm9
     qm9_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
@@ -307,6 +300,13 @@ def get_data_parsers():
         default=100,
     )
     qm9_parser.add_argument(
+        "--environment_provider",
+        type=str,
+        default="simple",
+        choices=["simple", "ase", "torch"],
+        help="Environment provider for dataset. (default: %(default)s)",
+    )
+    qm9_parser.add_argument(
         "--remove_uncharacterized",
         help="Remove uncharacterized molecules from QM9 (default: %(default)s)",
         action="store_true",
@@ -331,6 +331,13 @@ def get_data_parsers():
         type=int,
         help="Mini-batch size for training (default: %(default)s)",
         default=100,
+    )
+    ani1_parser.add_argument(
+        "--environment_provider",
+        type=str,
+        default="simple",
+        choices=["simple", "ase", "torch"],
+        help="Environment provider for dataset. (default: %(default)s)",
     )
     ani1_parser.add_argument(
         "--num_heavy_atoms",
@@ -365,6 +372,13 @@ def get_data_parsers():
         default=32,
     )
     matproj_parser.add_argument(
+        "--environment_provider",
+        type=str,
+        default="ase",
+        choices=["simple", "ase", "torch"],
+        help="Environment provider for dataset. (default: %(default)s)",
+    )
+    matproj_parser.add_argument(
         "--apikey",
         help="API key for Materials Project (see https://materialsproject.org/open)",
         default=None,
@@ -388,6 +402,13 @@ def get_data_parsers():
         type=int,
         help="Mini-batch size for training (default: %(default)s)",
         default=100,
+    )
+    md17_parser.add_argument(
+        "--environment_provider",
+        type=str,
+        default="simple",
+        choices=["simple", "ase", "torch"],
+        help="Environment provider for dataset. (default: %(default)s)",
     )
     md17_parser.add_argument(
         "--ignore_forces", action="store_true", help="Ignore forces during training."
@@ -426,6 +447,13 @@ def get_data_parsers():
         help="Mini-batch size for training (default: %(default)s)",
         default=32,
     )
+    omdb_parser.add_argument(
+        "--environment_provider",
+        type=str,
+        default="ase",
+        choices=["simple", "ase", "torch"],
+        help="Environment provider for dataset. (default: %(default)s)",
+    )
     custom_data_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
     custom_data_parser.add_argument(
         "--property",
@@ -444,6 +472,13 @@ def get_data_parsers():
         type=int,
         help="Mini-batch size for training (default: %(default)s)",
         default=100,
+    )
+    custom_data_parser.add_argument(
+        "--environment_provider",
+        type=str,
+        default="simple",
+        choices=["simple", "ase", "torch"],
+        help="Environment provider for dataset. (default: %(default)s)",
     )
     custom_data_parser.add_argument(
         "--derivative",
