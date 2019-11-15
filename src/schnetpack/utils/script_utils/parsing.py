@@ -55,12 +55,6 @@ def get_mode_parsers():
         action="store_true",
     )
     train_parser.add_argument(
-        "--batch_size",
-        type=int,
-        help="Mini-batch size for training (default: %(default)s)",
-        default=100,
-    )
-    train_parser.add_argument(
         "--seed", type=int, default=None, help="Set random seed for torch and numpy."
     )
     train_parser.add_argument(
@@ -183,12 +177,6 @@ def get_mode_parsers():
 def get_model_parsers():
     # model parsers
     model_parser = argparse.ArgumentParser(add_help=False)
-    model_parser.add_argument(
-        "--cutoff",
-        type=float,
-        default=10.0,
-        help="Cutoff radius of local environment (default: %(default)s)",
-    )
     schnet_parser = argparse.ArgumentParser(add_help=False, parents=[model_parser])
     schnet_parser.add_argument(
         "--features", type=int, help="Size of atom-wise representation", default=128
@@ -307,6 +295,18 @@ def get_data_parsers():
         ],
     )
     qm9_parser.add_argument(
+        "--cutoff",
+        type=float,
+        default=10.0,
+        help="Cutoff radius of local environment (default: %(default)s)",
+    )
+    qm9_parser.add_argument(
+        "--batch_size",
+        type=int,
+        help="Mini-batch size for training (default: %(default)s)",
+        default=100,
+    )
+    qm9_parser.add_argument(
         "--remove_uncharacterized",
         help="Remove uncharacterized molecules from QM9 (default: %(default)s)",
         action="store_true",
@@ -319,6 +319,18 @@ def get_data_parsers():
         help="Database property to be predicted (default: %(default)s)",
         default=ANI1.energy,
         choices=[ANI1.energy],
+    )
+    ani1_parser.add_argument(
+        "--cutoff",
+        type=float,
+        default=10.0,
+        help="Cutoff radius of local environment (default: %(default)s)",
+    )
+    ani1_parser.add_argument(
+        "--batch_size",
+        type=int,
+        help="Mini-batch size for training (default: %(default)s)",
+        default=100,
     )
     ani1_parser.add_argument(
         "--num_heavy_atoms",
@@ -341,6 +353,18 @@ def get_data_parsers():
         ],
     )
     matproj_parser.add_argument(
+        "--cutoff",
+        type=float,
+        default=5.0,
+        help="Cutoff radius of local environment (default: %(default)s)",
+    )
+    matproj_parser.add_argument(
+        "--batch_size",
+        type=int,
+        help="Mini-batch size for training (default: %(default)s)",
+        default=32,
+    )
+    matproj_parser.add_argument(
         "--apikey",
         help="API key for Materials Project (see https://materialsproject.org/open)",
         default=None,
@@ -352,6 +376,18 @@ def get_data_parsers():
         help="Database property to be predicted" " (default: %(default)s)",
         default=MD17.energy,
         choices=[MD17.energy],
+    )
+    md17_parser.add_argument(
+        "--cutoff",
+        type=float,
+        default=5.0,
+        help="Cutoff radius of local environment (default: %(default)s)",
+    )
+    md17_parser.add_argument(
+        "--batch_size",
+        type=int,
+        help="Mini-batch size for training (default: %(default)s)",
+        default=100,
     )
     md17_parser.add_argument(
         "--ignore_forces", action="store_true", help="Ignore forces during training."
@@ -378,12 +414,36 @@ def get_data_parsers():
         default=OrganicMaterialsDatabase.BandGap,
         choices=[OrganicMaterialsDatabase.BandGap],
     )
+    omdb_parser.add_argument(
+        "--cutoff",
+        type=float,
+        default=5.0,
+        help="Cutoff radius of local environment (default: %(default)s)",
+    )
+    omdb_parser.add_argument(
+        "--batch_size",
+        type=int,
+        help="Mini-batch size for training (default: %(default)s)",
+        default=32,
+    )
     custom_data_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
     custom_data_parser.add_argument(
         "--property",
         type=str,
         help="Database property to be predicted (default: %(default)s)",
         default="energy",
+    )
+    custom_data_parser.add_argument(
+        "--cutoff",
+        type=float,
+        default=10.0,
+        help="Cutoff radius of local environment (default: %(default)s)",
+    )
+    custom_data_parser.add_argument(
+        "--batch_size",
+        type=int,
+        help="Mini-batch size for training (default: %(default)s)",
+        default=100,
     )
     custom_data_parser.add_argument(
         "--derivative",
@@ -445,7 +505,6 @@ def get_data_parsers():
         help="Define loss tradeoff weights with prop=weight. (default: %(default)s)",
         default=dict(),
     )
-
     return (
         data_parser,
         qm9_parser,
