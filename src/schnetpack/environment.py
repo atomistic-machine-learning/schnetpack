@@ -179,8 +179,6 @@ class TorchEnvironmentProvider(BaseEnvironmentProvider):
             for idx in range(n_atoms):
                 neighborhood_idx[idx, mask[idx]] = bi_idx_j[bi_idx_i == idx]
 
-            neighborhood_idx[mask] = bi_idx_j
-
             offset = np.zeros((n_atoms, np.max(n_max_nbh), 3), dtype=np.float32)
             offset[mask] = bi_idx_S
         else:
@@ -285,7 +283,7 @@ def neighbor_pairs(padding_mask, coordinates, cell, shifts, cutoff):
 
     padding_mask = (padding_mask[p1_all]) | (padding_mask[p2_all])
     distances.masked_fill_(padding_mask, math.inf)
-    in_cutoff = (distances <= cutoff).nonzero()
+    in_cutoff = (distances < cutoff).nonzero()
     pair_index = in_cutoff.squeeze()
     atom_index1 = p1_all[pair_index]
     atom_index2 = p2_all[pair_index]
