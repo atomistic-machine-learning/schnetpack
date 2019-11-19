@@ -307,7 +307,7 @@ class MetaDyn(SimulationHook):
 
         # Compute the Gaussians for the potential
         gaussians = torch.exp(
-            -(colvars[:, :, None, :] - self.gaussian_centers[None, None, :, :]) ** 2
+            -((colvars[:, :, None, :] - self.gaussian_centers[None, None, :, :]) ** 2)
             / self.collective_variable_widths[None, None, None, :]
         )
         # Compute the bias potential and apply mask for centers not yet stored
