@@ -96,7 +96,7 @@ def test_single_site_crystal_small_cutoff(crystal, simple_env, ase_env, torch_en
 
 
 def test_single_site_crystal_large_cutoff(crystal, ase_env, torch_env):
-    cutoff = 0.7
+    cutoff = 2.0
     ase_env.cutoff = cutoff
     torch_env.cutoff = cutoff
 
@@ -120,6 +120,15 @@ def test_single_site_crystal_large_cutoff(crystal, ase_env, torch_env):
     n_nbh_ase_env = np.sum(nbh_ase >= 0, 1)
     n_nbh_torch_env = np.sum(nbh_torch >= 0, 1)
 
+    # Compare the returned indices
+    nbh_ref = idx_j.reshape(crystal.get_number_of_atoms(), -1)
+    sorted_nbh_ref = np.sort(nbh_ref, axis=-1)
+    sorted_nbh_ase = np.sort(nbh_ase, axis=-1)
+    sorted_nbh_torch = np.sort(nbh_torch, axis=-1)
+
     assert n_nbh.shape == n_nbh_ase_env.shape == n_nbh_torch_env.shape
     assert np.allclose(n_nbh, n_nbh_ase_env)
     assert np.allclose(n_nbh, n_nbh_torch_env)
+    assert np.allclose(sorted_nbh_ref, sorted_nbh_ase)
+    assert np.allclose(sorted_nbh_ref, sorted_nbh_torch)
+    assert np.allclose(sorted_nbh_ase, sorted_nbh_torch)

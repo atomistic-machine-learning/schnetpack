@@ -158,7 +158,7 @@ class TorchEnvironmentProvider(BaseEnvironmentProvider):
         # Create bidirectional id arrays, similar to what the ASE neighbor_list returns
         bi_idx_i = np.hstack((idx_i, idx_j))
         bi_idx_j = np.hstack((idx_j, idx_i))
-        bi_idx_S = np.vstack((idx_S, -idx_S[::-1]))
+        bi_idx_S = np.vstack((-idx_S, idx_S))
 
         n_atoms = atoms.get_number_of_atoms()
         if bi_idx_i.shape[0] > 0:
@@ -173,7 +173,11 @@ class TorchEnvironmentProvider(BaseEnvironmentProvider):
             mask = np.zeros((n_atoms, np.max(n_max_nbh)), dtype=np.bool)
             mask[uidx, :] = nbh_range < n_nbh
             neighborhood_idx = -np.ones((n_atoms, np.max(n_max_nbh)), dtype=np.float32)
-            neighborhood_idx[mask] = bi_idx_j
+
+            # Asssign neighbors according to the indices in bi_idx_i, since in contrast
+            # to the ASE provider the bidirectional arrays are no longer sorted.
+            for idx in range(n_atoms):
+                neighborhood_idx[idx, mask[idx]] = bi_idx_j[bi_idx_i == idx]
 
             offset = np.zeros((n_atoms, np.max(n_max_nbh), 3), dtype=np.float32)
             offset[mask] = bi_idx_S
@@ -208,6 +212,7 @@ def compute_shifts(cell, pbc, cutoff):
     inv_distances = reciprocal_cell.norm(2, -1)
     num_repeats = torch.ceil(cutoff * inv_distances).to(torch.long)
     num_repeats = torch.where(pbc, num_repeats, torch.zeros_like(num_repeats))
+
     r1 = torch.arange(1, num_repeats[0] + 1, device=cell.device)
     r2 = torch.arange(1, num_repeats[1] + 1, device=cell.device)
     r3 = torch.arange(1, num_repeats[2] + 1, device=cell.device)
@@ -264,19 +269,21 @@ def neighbor_pairs(padding_mask, coordinates, cell, shifts, cutoff):
     shift_index, p1, p2 = torch.cartesian_prod(all_shifts, all_atoms, all_atoms).unbind(
         -1
     )
-    shifts_outide = shifts.index_select(0, shift_index)
+    shifts_outside = shifts.index_select(0, shift_index)
 
     # Step 4: combine results for all cells
-    shifts_all = torch.cat([shifts_center, shifts_outide])
+    shifts_all = torch.cat([shifts_center, shifts_outside])
     p1_all = torch.cat([p1_center, p1])
     p2_all = torch.cat([p2_center, p2])
+
     shift_values = torch.mm(shifts_all.to(cell.dtype), cell)
 
     # step 5, compute distances, and find all pairs within cutoff
     distances = (coordinates[p1_all] - coordinates[p2_all] + shift_values).norm(2, -1)
+
     padding_mask = (padding_mask[p1_all]) | (padding_mask[p2_all])
     distances.masked_fill_(padding_mask, math.inf)
-    in_cutoff = (distances <= cutoff).nonzero()
+    in_cutoff = (distances < cutoff).nonzero()
     pair_index = in_cutoff.squeeze()
     atom_index1 = p1_all[pair_index]
     atom_index2 = p2_all[pair_index]
