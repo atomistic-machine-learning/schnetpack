@@ -29,7 +29,7 @@ def get_parser():
         help="Molecular properties (e.g. energy, homo/lumo, ...) contained in data "
         "file. Only needed for xyz-files. (default: %(default)s)",
         nargs="+",
-        default=[],
+        default=["energy"],
     )
     parser.add_argument(
         "--overwrite", action="store_true", help="Overwrite existing database file."
