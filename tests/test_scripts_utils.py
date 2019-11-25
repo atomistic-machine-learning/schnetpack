@@ -308,5 +308,7 @@ def test_property_str():
     prop_str = "Properties=species:S:1"
     assert prop_str == spk.data.parse_property_string(prop_str)
     prop_str = "test:R:2"
-    assert spk.data.parse_property_string(prop_str) == \
-           "Properties=species:S:1:pos:R:3:test:R:2"
+    assert (
+        spk.data.parse_property_string(prop_str)
+        == "Properties=species:S:1:pos:R:3:test:R:2"
+    )

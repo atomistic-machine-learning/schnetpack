@@ -109,8 +109,9 @@ def generate_db(
     # check if file extension is valid
     filename, file_extension = os.path.splitext(file_path)
     if file_extension not in [".xyz", ".extxyz"]:
-        raise NotImplementedError("{} is not a supported file "
-                                  "extension!".format(file_extension))
+        raise NotImplementedError(
+            "{} is not a supported file " "extension!".format(file_extension)
+        )
     # check if file has property string
     with open(file_path, "r") as file:
         _ = file.readline()
