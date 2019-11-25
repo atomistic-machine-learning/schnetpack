@@ -304,14 +304,9 @@ class TestEvaluation:
         )
 
 
-# class TestParsing:
-#     def test_parsing_script(self, xyz_path, db_path):
-#         parser = get_parsing_parser()
-#         args = parser.parse_args([xyz_path, db_path])
-#
-#         # run script
-#         main(args)
-#
-#         # test results
-#         with connect(db_path) as conn:
-#             assert conn.__len__() == 3
+def test_property_str():
+    prop_str = "Properties=species:S:1"
+    assert prop_str == spk.data.parse_property_string(prop_str)
+    prop_str = "test:R:2"
+    assert spk.data.parse_property_string(prop_str) == \
+           "Properties=species:S:1:pos:R:3:test:R:2"
