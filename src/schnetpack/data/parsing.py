@@ -21,6 +21,8 @@ def xyz_to_extxyz(
         molecular_properties (list): molecular properties contained in the
             comment line
     """
+    # ensure valid property string
+    atomic_properties = parse_property_string(atomic_properties)
     new_file = open(extxyz_path, "w")
     with open(xyz_path, "r") as xyz_file:
         while True:
@@ -80,8 +82,10 @@ def xyz_to_db(
         molecular_properties (list): molecular properties contained in the
             comment line
     """
+    # build temp file in extended xyz format
     extxyz_path = os.path.join(tempfile.mkdtemp(), "temp.extxyz")
     xyz_to_extxyz(xyz_path, extxyz_path, atomic_properties, molecular_properties)
+    # build database from extended xyz
     extxyz_to_db(extxyz_path, db_path)
 
 
@@ -102,10 +106,33 @@ def generate_db(
         molecular_properties (list): molecular properties contained in the
             comment line
     """
+    # check if file extension is valid
     filename, file_extension = os.path.splitext(file_path)
-    if file_extension == ".xyz":
-        xyz_to_db(file_path, db_path, atomic_properties, molecular_properties)
-    elif file_extension == ".extxyz":
+    if file_extension not in [".xyz", ".extxyz"]:
+        raise NotImplementedError(
+            "{} is not a supported file " "extension!".format(file_extension)
+        )
+    # check if file has property string
+    with open(file_path, "r") as file:
+        _ = file.readline()
+        comment_line = file.readline()
+    # build database file
+    if "Properties=" in comment_line:
         extxyz_to_db(file_path, db_path)
-    else:
-        raise NotImplementedError
+    xyz_to_db(file_path, db_path, atomic_properties, molecular_properties)
+
+
+def parse_property_string(prop_str):
+    """
+    Generate valid property string for extended xyz files.
+    (ref. https://libatoms.github.io/QUIP/io.html#extendedxyz)
+
+    Args:
+        prop_str (str): Valid property string, or appendix of property string
+
+    Returns:
+        valid property string
+    """
+    if prop_str.startswith("Properties="):
+        return prop_str
+    return "Properties=species:S:1:pos:R:3:" + prop_str
