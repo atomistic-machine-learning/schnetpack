@@ -132,12 +132,16 @@ def load_model(model_path, map_location=None):
 
     # Check for data parallel models
     if hasattr(model, "module"):
-        # Set stress tensor attribute if not present
-        if not hasattr(model.module, "requires_stress"):
-            model.module.requires_stress = False
+        model_module = model.module
+        output_modules = model.module.output_modules
     else:
-        # Set stress tensor attribute if not present
-        if not hasattr(model, "requires_stress"):
-            model.requires_stress = False
+        model_module = model
+        output_modules = model.output_modules
+
+    # Set stress tensor attribute if not present
+    if not hasattr(model_module, "requires_stress"):
+        model_module.requires_stress = False
+        for module in output_modules:
+            module.stress = None
 
     return model
