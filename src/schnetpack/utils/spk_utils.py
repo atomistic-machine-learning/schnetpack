@@ -12,6 +12,7 @@ __all__ = [
     "to_json",
     "read_from_json",
     "DeprecationHelper",
+    "load_model",
 ]
 
 
@@ -112,3 +113,31 @@ class DeprecationHelper(object):
     def __getattr__(self, attr):
         self._warn()
         return getattr(self.new_target, attr)
+
+
+def load_model(model_path, map_location=None):
+    """
+    Wrapper function for `for safely loading models where certain new attributes of the model class are not present.
+    E.g. "requires_stress" for computing the stress tensor.
+
+    Args:
+        model_path (str): Path to the model file.
+        map_location (torch.device): Device where the model should be loaded to.
+
+    Returns:
+        :class:`schnetpack.atomistic.AtomisticModel`: Loaded SchNetPack model.
+
+    """
+    model = torch.load(model_path, map_location=map_location)
+
+    # Check for data parallel models
+    if hasattr(model, "module"):
+        # Set stress tensor attribute if not present
+        if not hasattr(model.module, "requires_stress"):
+            model.module.requires_stress = False
+    else:
+        # Set stress tensor attribute if not present
+        if not hasattr(model, "requires_stress"):
+            model.requires_stress = False
+
+    return model
