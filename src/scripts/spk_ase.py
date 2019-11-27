@@ -169,7 +169,7 @@ if __name__ == "__main__":
     spk.utils.to_json(jsonpath, argparse_dict)
 
     # Load the model
-    ml_model = spk.utils.load_model(args.model_path)
+    ml_model = spk.utils.load_model(args.model_path, map_location=device)
     logging.info("Loaded model.")
 
     logging.info(
