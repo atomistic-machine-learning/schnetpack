@@ -178,7 +178,7 @@ class CSVHook(LoggingHook):
                 if i < len(self.metrics) - 1:
                     log += ","
 
-            with open(self.log_path, "a") as f:
+            with open(self.log_path, "a", newline="") as f:
                 f.write(log + os.linesep)
 
 
