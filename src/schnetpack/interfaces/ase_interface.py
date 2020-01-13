@@ -115,7 +115,7 @@ class SpkCalculator(Calculator):
                     "properties!".format(self.model_energy)
                 )
             energy = model_results[self.model_energy].cpu().data.numpy()
-            results[self.energy] = energy.item() * self.energy_units  # ase calculator should return scalar energy
+            results[self.energy] = energy.reshape(-1) * self.energy_units
 
         if self.model_forces is not None:
             if self.model_forces not in model_results.keys():
