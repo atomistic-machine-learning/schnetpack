@@ -74,6 +74,7 @@ class SpkCalculator(Calculator):
         Calculator.__init__(self, **kwargs)
 
         self.model = model
+        self.model.to(device)
 
         self.atoms_converter = AtomsConverter(
             environment_provider=environment_provider,
