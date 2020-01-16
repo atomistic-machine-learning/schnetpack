@@ -140,11 +140,18 @@ class SpkCalculator(Calculator):
             results[self.forces] = forces.reshape((len(atoms), 3)) * self.forces_units
 
         if self.model_stress is not None:
+            if atoms.cell.volume <= 0.0:
+                raise SpkCalculatorError(
+                    "Cell with 0 volume encountered for stress computation"
+                )
+
             if self.model_stress not in model_results.keys():
                 raise SpkCalculatorError(
                     "'{}' is not a property of your model. Please "
                     "check the model"
-                    "properties!".format(self.model_forces)
+                    "properties! If desired, stress tensor computation can be "
+                    "activated via schnetpack.utils.activate_stress_computation "
+                    "at ones own risk.".format(self.model_stress)
                 )
             stress = model_results[self.model_stress].cpu().data.numpy()
             results[self.stress] = stress.reshape((3, 3)) * self.stress_units
