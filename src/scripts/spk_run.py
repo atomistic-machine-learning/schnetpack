@@ -18,12 +18,10 @@ from schnetpack.utils import (
 from schnetpack.utils.script_utils.settings import get_environment_provider
 from schnetpack.utils.script_utils.parsing import build_parser
 
-
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
 def main(args):
-
     # setup
     train_args = setup_run(args)
 
@@ -82,7 +80,9 @@ def main(args):
 
         # load model
         logging.info("loading trained model...")
-        model = torch.load(os.path.join(args.modelpath, "best_model"))
+        model = spk.utils.load_model(
+            os.path.join(args.modelpath, "best_model"), map_location=device
+        )
 
         # run evaluation
         logging.info("evaluating...")

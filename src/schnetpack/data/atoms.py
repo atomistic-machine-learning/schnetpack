@@ -137,7 +137,7 @@ class AtomsData(Dataset):
             (list): all properties of the dataset
         """
         # use the provided list
-        if not os.path.exists(self.dbpath):
+        if not os.path.exists(self.dbpath) or len(self) == 0:
             if available_properties is None:
                 raise AtomsDataError(
                     "Please define available_properties or set "

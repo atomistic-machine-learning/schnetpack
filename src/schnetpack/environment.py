@@ -140,12 +140,14 @@ class TorchEnvironmentProvider(BaseEnvironmentProvider):
         species = torch.FloatTensor(atoms.numbers).to(self.device)
         coordinates = torch.FloatTensor(atoms.positions).to(self.device)
         pbc = torch.from_numpy(atoms.pbc.astype("uint8")).to(self.device)
+
         if not atoms.cell.any():
             cell = torch.eye(3, dtype=species.dtype).to(self.device)
         else:
             cell = torch.Tensor(atoms.cell).to(self.device)
 
         shifts = compute_shifts(cell=cell, pbc=pbc, cutoff=self.cutoff)
+
         # The returned indices are only one directional
         idx_i, idx_j, idx_S = neighbor_pairs(
             species == -1, coordinates, cell, shifts, self.cutoff
@@ -173,14 +175,15 @@ class TorchEnvironmentProvider(BaseEnvironmentProvider):
             mask = np.zeros((n_atoms, np.max(n_max_nbh)), dtype=np.bool)
             mask[uidx, :] = nbh_range < n_nbh
             neighborhood_idx = -np.ones((n_atoms, np.max(n_max_nbh)), dtype=np.float32)
+            offset = np.zeros((n_atoms, np.max(n_max_nbh), 3), dtype=np.float32)
 
-            # Asssign neighbors according to the indices in bi_idx_i, since in contrast
+            # Assign neighbors and offsets according to the indices in bi_idx_i, since in contrast
             # to the ASE provider the bidirectional arrays are no longer sorted.
+            # TODO: There might be a more efficient way of doing this than a loop
             for idx in range(n_atoms):
                 neighborhood_idx[idx, mask[idx]] = bi_idx_j[bi_idx_i == idx]
+                offset[idx, mask[idx]] = bi_idx_S[bi_idx_i == idx]
 
-            offset = np.zeros((n_atoms, np.max(n_max_nbh), 3), dtype=np.float32)
-            offset[mask] = bi_idx_S
         else:
             neighborhood_idx = -np.ones((n_atoms, 1), dtype=np.float32)
             offset = np.zeros((n_atoms, 1, 3), dtype=np.float32)
@@ -217,6 +220,7 @@ def compute_shifts(cell, pbc, cutoff):
     r2 = torch.arange(1, num_repeats[1] + 1, device=cell.device)
     r3 = torch.arange(1, num_repeats[2] + 1, device=cell.device)
     o = torch.zeros(1, dtype=torch.long, device=cell.device)
+
     return torch.cat(
         [
             torch.cartesian_prod(r1, r2, r3),

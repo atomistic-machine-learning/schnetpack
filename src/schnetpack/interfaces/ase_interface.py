@@ -78,6 +78,7 @@ class SpkCalculator(Calculator):
         Calculator.__init__(self, **kwargs)
 
         self.model = model
+        self.model.to(device)
 
         self.atoms_converter = AtomsConverter(
             environment_provider=environment_provider,
@@ -124,7 +125,9 @@ class SpkCalculator(Calculator):
                     "properties!".format(self.model_energy)
                 )
             energy = model_results[self.model_energy].cpu().data.numpy()
-            results[self.energy] = energy.reshape(-1) * self.energy_units
+            results[self.energy] = (
+                energy.item() * self.energy_units
+            )  # ase calculator should return scalar energy
 
         if self.model_forces is not None:
             if self.model_forces not in model_results.keys():

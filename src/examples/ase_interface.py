@@ -1,13 +1,14 @@
 import torch
 from ase.db import connect
 from schnetpack.interfaces import SpkCalculator
+from schnetpack.utils import load_model
 
 
 # path definitions
 path_to_model = "tutorials/training/best_model"
 path_to_db = "tutorials/data/snippet.db"
 # load model
-model = torch.load(path_to_model)
+model = load_model(path_to_model)
 # get example atom
 conn = connect(path_to_db)
 ats = conn.get_atoms(1)
