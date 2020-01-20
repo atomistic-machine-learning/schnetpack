@@ -5,7 +5,6 @@ from argparse import Namespace
 import numpy as np
 import torch
 
-
 __all__ = [
     "set_random_seed",
     "count_params",
@@ -13,6 +12,7 @@ __all__ = [
     "read_from_json",
     "DeprecationHelper",
     "load_model",
+    "activate_stress_computation",
 ]
 
 
@@ -145,3 +145,30 @@ def load_model(model_path, map_location=None):
             module.stress = None
 
     return model
+
+
+def activate_stress_computation(model, stress="stress"):
+    """
+    Utility function to activate the computation of the stress tensor for a model not trained explicitly on
+    this property. It is recommended to at least have used forces during training when switching on the stress.
+    Moreover, now proper crystal cell (volume > 0) needs to be specified for the molecules.
+
+    Args:
+        model (schnetpack.atomistic.AtomisticModel): SchNetPack model for which computation of the stress tensor
+                                                    should be activated.
+        stress (str): Designated name of the stress tensor property used in the model output.
+    """
+    # Check for data parallel models
+    if hasattr(model, "module"):
+        model_module = model.module
+        output_modules = model.module.output_modules
+    else:
+        model_module = model
+        output_modules = model.output_modules
+
+    # Set stress tensor attribute if not present
+    if hasattr(model_module, "requires_stress"):
+        model_module.requires_stress = True
+        for module in output_modules:
+            if hasattr(module, "stress"):
+                module.stress = stress
