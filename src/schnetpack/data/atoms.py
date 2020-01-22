@@ -14,16 +14,19 @@ References
 import logging
 import os
 import warnings
-from base64 import b64encode, b64decode
 
 import numpy as np
 import torch
 from ase.db import connect
 from torch.utils.data import Dataset
+from base64 import b64decode
 
+import schnetpack as spk
 from schnetpack import Properties
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
+#from schnetpack.utils.spk_utils import read_deprecated_database
 from .partitioning import train_test_split
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +117,11 @@ class AtomsData(Dataset):
             )
 
         self.dbpath = dbpath
+
+        # check if database is deprecated:
+        if self._is_deprecated():
+            self._deprecation_update()
+
         self.subset = subset
         self.load_only = load_only
         self.available_properties = self.get_available_properties(available_properties)
@@ -148,7 +156,6 @@ class AtomsData(Dataset):
         with connect(self.dbpath) as conn:
             atmsrw = conn.get(1)
             db_properties = list(atmsrw.data.keys())
-            db_properties = [prop for prop in db_properties if not prop.startswith("_")]
         # check if properties match
         if available_properties is None or set(db_properties) == set(
             available_properties
@@ -271,25 +278,12 @@ class AtomsData(Dataset):
     def _add_system(self, conn, atoms, **properties):
         data = {}
 
+        # add available properties to database
         for pname in self.available_properties:
             try:
-                prop = properties[pname]
+                data[pname] = properties[pname]
             except:
                 raise AtomsDataError("Required property missing:" + pname)
-
-            try:
-                pshape = prop.shape
-                ptype = prop.dtype
-            except:
-                raise AtomsDataError(
-                    "Required property `" + pname + "` has to be `numpy.ndarray`."
-                )
-
-            base64_bytes = b64encode(prop.tobytes())
-            base64_string = base64_bytes.decode(AtomsData.ENCODING)
-            data[pname] = base64_string
-            data["_shape_" + pname] = pshape
-            data["_dtype_" + pname] = str(ptype)
 
         conn.write(atoms, data=data)
 
@@ -339,26 +333,7 @@ class AtomsData(Dataset):
         # extract properties
         properties = {}
         for pname in self.load_only:
-            # new data format
-            try:
-                shape = row.data["_shape_" + pname]
-                dtype = row.data["_dtype_" + pname]
-                prop = np.frombuffer(b64decode(row.data[pname]), dtype=dtype)
-                prop = prop.reshape(shape)
-            except:
-                # fallback for properties stored directly
-                # in the row
-                if pname in row:
-                    prop = row[pname]
-                else:
-                    prop = row.data[pname]
-
-                try:
-                    prop.shape
-                except AttributeError as e:
-                    prop = np.array([prop], dtype=np.float32)
-
-            properties[pname] = torch.FloatTensor(prop)
+            properties[pname] = torch.FloatTensor(row.data[pname])
 
         # extract/calculate structure
         properties = _convert_atoms(
@@ -410,6 +385,46 @@ class AtomsData(Dataset):
         if type(properties) is not list:
             properties = [properties]
         return {p: self._get_atomref(p) for p in properties}
+
+    def _is_deprecated(self):
+        """
+        Check if database is deprecated.
+
+        Returns:
+            (bool): True if ase db is deprecated.
+        """
+        if not os.path.exists(self.dbpath):
+            return False
+
+        with connect(self.dbpath) as conn:
+            row = conn.get(1)
+
+        if True in [pname.startswith("_dtype_") for pname in row.data.keys()]:
+            return True
+
+        return False
+
+    def _deprecation_update(self):
+        """
+        Update deprecated database to a valid ase database.
+        """
+        warnings.warn("The database is deprecated and will be updated automatically. "
+                      "The old database is moved to {}.deprecated!".format(self.dbpath))
+
+        # read old database
+        atoms_list, properties_list = spk.utils.read_deprecated_database(self.dbpath)
+        metadata = self.get_metadata()
+
+        # move old database
+        os.rename(self.dbpath, self.dbpath + ".deprecated")
+
+        # write updated database
+        self.set_metadata(metadata=metadata)
+        with connect(self.dbpath) as conn:
+            for atoms, properties in tqdm(zip(atoms_list, properties_list),
+                                          "Updating new database",
+                                          total=len(atoms_list)):
+                conn.write(atoms, data=properties)
 
 
 def _convert_atoms(
