@@ -24,7 +24,8 @@ from base64 import b64decode
 import schnetpack as spk
 from schnetpack import Properties
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
-#from schnetpack.utils.spk_utils import read_deprecated_database
+
+# from schnetpack.utils.spk_utils import read_deprecated_database
 from .partitioning import train_test_split
 from tqdm import tqdm
 
@@ -408,8 +409,10 @@ class AtomsData(Dataset):
         """
         Update deprecated database to a valid ase database.
         """
-        warnings.warn("The database is deprecated and will be updated automatically. "
-                      "The old database is moved to {}.deprecated!".format(self.dbpath))
+        warnings.warn(
+            "The database is deprecated and will be updated automatically. "
+            "The old database is moved to {}.deprecated!".format(self.dbpath)
+        )
 
         # read old database
         atoms_list, properties_list = spk.utils.read_deprecated_database(self.dbpath)
@@ -421,9 +424,11 @@ class AtomsData(Dataset):
         # write updated database
         self.set_metadata(metadata=metadata)
         with connect(self.dbpath) as conn:
-            for atoms, properties in tqdm(zip(atoms_list, properties_list),
-                                          "Updating new database",
-                                          total=len(atoms_list)):
+            for atoms, properties in tqdm(
+                zip(atoms_list, properties_list),
+                "Updating new database",
+                total=len(atoms_list),
+            ):
                 conn.write(atoms, data=properties)
 
 

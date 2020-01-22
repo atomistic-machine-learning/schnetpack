@@ -16,7 +16,7 @@ __all__ = [
     "read_from_json",
     "DeprecationHelper",
     "load_model",
-    "read_deprecated_database"
+    "read_deprecated_database",
 ]
 
 
