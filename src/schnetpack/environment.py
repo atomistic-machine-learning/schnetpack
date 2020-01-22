@@ -47,7 +47,7 @@ class SimpleEnvironmentProvider(BaseEnvironmentProvider):
     """
 
     def get_environment(self, atoms, grid=None):
-        n_atoms = atoms.get_number_of_atoms()
+        n_atoms = atoms.get_global_number_of_atoms()
 
         if n_atoms == 1:
             neighborhood_idx = -np.ones((1, 1), dtype=np.float32)
