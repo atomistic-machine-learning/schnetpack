@@ -176,11 +176,25 @@ def read_deprecated_database(db_path):
         pnames = [pname for pname in row.data.keys() if not pname.startswith("_")]
         props = {}
         for pname in pnames:
-            shape = row.data["_shape_" + pname]
-            dtype = row.data["_dtype_" + pname]
-            prop = np.frombuffer(b64decode(row.data[pname]), dtype=dtype)
-            prop = prop.reshape(shape)
+            try:
+                shape = row.data["_shape_" + pname]
+                dtype = row.data["_dtype_" + pname]
+                prop = np.frombuffer(b64decode(row.data[pname]), dtype=dtype)
+                prop = prop.reshape(shape)
+            except:
+                # fallback for properties stored directly
+                # in the row
+                if pname in row:
+                    prop = row[pname]
+                else:
+                    prop = row.data[pname]
+
+                try:
+                    prop.shape
+                except AttributeError as e:
+                    prop = np.array([prop], dtype=np.float32)
             props[pname] = prop
+
         atoms.append(at)
         properties.append(props)
 

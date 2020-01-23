@@ -19,13 +19,11 @@ import numpy as np
 import torch
 from ase.db import connect
 from torch.utils.data import Dataset
-from base64 import b64decode
 
 import schnetpack as spk
 from schnetpack import Properties
 from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
 
-# from schnetpack.utils.spk_utils import read_deprecated_database
 from .partitioning import train_test_split
 from tqdm import tqdm
 
@@ -394,13 +392,19 @@ class AtomsData(Dataset):
         Returns:
             (bool): True if ase db is deprecated.
         """
+        # check if db exists
         if not os.path.exists(self.dbpath):
             return False
 
+        # get properties of first atom
         with connect(self.dbpath) as conn:
-            row = conn.get(1)
+            data = conn.get(1).data
 
-        if True in [pname.startswith("_dtype_") for pname in row.data.keys()]:
+        # check byte style deprecation
+        if True in [pname.startswith("_dtype_") for pname in data.keys()]:
+            return True
+        # fallback for properties stored directly in the row
+        if True in [type(val) != np.ndarray for val in data.values()]:
             return True
 
         return False
