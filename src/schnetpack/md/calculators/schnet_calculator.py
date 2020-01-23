@@ -66,15 +66,15 @@ class SchnetPackCalculator(MDCalculator):
         Returns:
             dict(torch.Tensor): Schnetpack inputs in dictionary format.
         """
-        positions, atom_types, atom_masks = self._get_system_molecules(system)
-        neighbors, neighbor_mask = self._get_system_neighbors(system)
+        positions, atom_types, atom_masks, cells = self._get_system_molecules(system)
+        neighbors, neighbor_mask, offsets = self._get_system_neighbors(system)
 
         inputs = {
             Properties.R: positions,
             Properties.Z: atom_types,
             Properties.atom_mask: atom_masks,
-            Properties.cell: None,
-            Properties.cell_offset: None,
+            Properties.cell: cells,
+            Properties.cell_offset: offsets,
             Properties.neighbors: neighbors,
             Properties.neighbor_mask: neighbor_mask,
         }

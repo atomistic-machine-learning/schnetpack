@@ -6,6 +6,7 @@ with periodic boundary conditions and does not possess optimal scaling for large
 """
 
 import torch
+import schnetpack
 
 
 class MDNeighborList:
@@ -15,17 +16,25 @@ class MDNeighborList:
     The neighbor mask is zero for interactions which should not be counted and one otherwise.
 
     Args:
-        system (object): System class containing all molecules and their replicas.
         cutoff (float): Cutoff radius used for neighbor list construction.
     """
 
-    def __init__(self, system, cutoff):
+    def __init__(self, system, cutoff, shell=None):
+
         self.system = system
+
         self.cutoff = cutoff
+        self.shell = shell
+
+        if shell is not None:
+            self.cutoff_shell = cutoff + shell
+        else:
+            self.cutoff_shell = cutoff
 
         self.neighbor_list = None
         self.neighbor_mask = None
-        self._construct_neighbor_list()
+        self.offsets = None
+        self.max_neighbors = None
 
     def _construct_neighbor_list(self):
         """
@@ -37,9 +46,14 @@ class MDNeighborList:
         """
         raise NotImplementedError
 
-    def update_neighbors(self):
+    def _update_required(self):
         """
-        Recompute the neighbor list (e.g. during MD simulations).
+        Function to determine whether the neighbor list should be recomputed for the system. This could e.g. be
+        based on the maximum distance all atoms moved, etc. The return value should be True if it needs to be
+        recomputed and False otherwise.
+
+        Returns:
+            bool: Indicator whether it is necessary to compute a new neighbor list or not.
         """
         raise NotImplementedError
 
@@ -50,7 +64,10 @@ class MDNeighborList:
         Returns:
             tuple: Contains the neighbor list and neighbor mask tensors.
         """
-        return self.neighbor_list, self.neighbor_mask
+        if self._update_required() or self.neighbor_list is None:
+            self._construct_neighbor_list()
+
+        return self.neighbor_list, self.neighbor_mask, self.offsets
 
 
 class SimpleNeighborList(MDNeighborList):
@@ -66,6 +83,8 @@ class SimpleNeighborList(MDNeighborList):
 
     def __init__(self, system, cutoff=None):
         super(SimpleNeighborList, self).__init__(system, cutoff)
+        # Set the maximum neighbors to include all interactions
+        self.max_neighbors = self.system.max_n_atoms - 1
 
     def _construct_neighbor_list(self):
         """
@@ -97,8 +116,155 @@ class SimpleNeighborList(MDNeighborList):
         # Multiply neighbor list by mask to remove superfluous entries
         self.neighbor_list = neighbors_list * self.neighbor_mask.long()
 
-    def update_neighbors(self):
+    def _update_required(self):
         """
-        Simply rebuilds the neighbor list in this naive implementation.
+        Since all interatomic distances are computed by default, the neighbor list never has to be updated.
+
+        Returns:
+            bool: Indicator whether it is necessary to compute a new neighbor list or not.
         """
-        self._construct_neighbor_list()
+        return False
+
+
+class EnvironmentProviderNeighborList(MDNeighborList):
+    """
+
+    Args:
+        system (schnetpack.md.System):
+        cutoff (float):
+        shell (float):
+    """
+
+    def __init__(self, system, cutoff=5.0, shell=1.0):
+        super(EnvironmentProviderNeighborList, self).__init__(system, cutoff + shell)
+        self.shell = shell
+
+        # Store last positions and cells for determining whether the neighbor list needs to be recomputed
+        self.last_positions = None
+        self.last_cells = None
+
+        # Setup the environment provider
+        self._environment_provider = None
+        self._set_environment_provider()
+
+    def _set_environment_provider(self):
+        """
+
+        Returns:
+
+        """
+        raise NotImplementedError
+
+    def _construct_neighbor_list(self):
+        """
+
+        Returns:
+
+        """
+        atoms = self.system.get_ase_atoms()
+
+        neighbor_idx = []
+        offsets = []
+        max_neighbors = 0
+
+        for mol in atoms:
+            nbh_idx, offset = self._environment_provider.get_environment(mol)
+            neighbor_idx.append(nbh_idx)
+            offsets.append(offset)
+            print(offset.shape, "SH")
+            max_neighbors = max(max_neighbors, nbh_idx.shape[1])
+
+        print(max_neighbors)
+
+        self.neighbor_list = -torch.ones(
+            self.system.n_replicas,
+            self.system.n_molecules,
+            self.system.max_n_atoms,
+            max_neighbors,
+            device=self.system.device,
+        ).long()
+        self.offsets = torch.zeros(
+            self.system.n_replicas,
+            self.system.n_molecules,
+            self.system.max_n_atoms,
+            max_neighbors,
+            3,
+            device=self.system.device,
+        )
+
+        count = 0
+        for r_idx in range(self.system.n_replicas):
+            for m_idx in range(self.system.n_molecules):
+                n_atoms = self.system.n_atoms[m_idx]
+                n_nbh = neighbor_idx[count].shape[1]
+                # TODO: DEBUG HERE!!! WHAT IS WITH NEIGHBOR DIMENSION IN OFFSETS?
+                self.neighbor_list[r_idx, m_idx, :n_atoms, :n_nbh] = torch.from_numpy(
+                    neighbor_idx[count]
+                )
+                self.offsets[r_idx, m_idx, :n_atoms, :n_nbh, :] = torch.from_numpy(
+                    offsets[count]
+                )
+                count += 1
+                # print(count)
+
+        print("ME HERE")
+
+        self.max_neighbors = max_neighbors
+        self.neighbor_mask = torch.zeros_like(self.neighbor_list)
+        self.neighbor_mask[self.neighbor_list >= 0] = 1.0
+
+        # Mask away -1 indices for invalid atoms, since they do not work with torch.gather
+        self.neighbor_list = self.neighbor_list * self.neighbor_mask.long()
+
+        # Since the list was recomputed, update old cells and positions
+        self.last_positions = self.system.positions.clone().detach()
+        self.last_cells = self.system.cells.clone().detach()
+
+        print(self.offsets.shape, "NL OFF")
+        print(self.neighbor_list.shape, "NL NL")
+        print(self.neighbor_mask.shape, "NL NBM")
+        # exit()
+
+    def _update_required(self):
+        """
+
+        Returns:
+
+        """
+        # TODO: In theory this is not needed.
+        # Compute the neighbor list if these two are not set
+        if self.last_positions is None or self.last_cells is None:
+            return True
+
+        # Check if cell has changed
+        if not torch.allclose(self.last_cells, self.system.cells):
+            return True
+
+        # Check if atoms have moved out of the boundary
+        max_displacement = torch.max(
+            torch.norm(self.system.positions - self.last_positions, 2, 3)
+        ).detach()
+        if max_displacement >= self.shell:
+            return True
+
+        return False
+
+
+class ASENeighborList(EnvironmentProviderNeighborList):
+    def __init__(self, system, cutoff=5.0, shell=1.0):
+        super(ASENeighborList, self).__init__(system, cutoff=cutoff, shell=shell)
+
+    def _set_environment_provider(self):
+        self._environment_provider = schnetpack.environment.AseEnvironmentProvider(
+            self.cutoff
+        )
+
+
+class TorchNeighborList(EnvironmentProviderNeighborList):
+    def __init__(self, system, cutoff=5.0, shell=1.0):
+        super(TorchNeighborList, self).__init__(system, cutoff=cutoff, shell=shell)
+
+    def _set_environment_provider(self):
+        self._environment_provider = schnetpack.environment.TorchEnvironmentProvider(
+            self.cutoff
+        )

@@ -7,7 +7,8 @@ import torch
 from ase.io import read
 
 from schnetpack.md.utils import MDUnits, compute_centroid, batch_inverse
-from schnetpack.md.neighbor_lists import SimpleNeighborList
+from schnetpack.md.neighbor_lists import SimpleNeighborList, ASENeighborList
+from ase import Atoms
 
 
 class SystemException(Exception):
@@ -66,7 +67,8 @@ class System:
         self,
         n_replicas,
         device="cuda",
-        neighborlist=SimpleNeighborList,
+        # neighborlist=SimpleNeighborList(),
+        neighborlist=ASENeighborList,
         initializer=None,
     ):
 
@@ -90,11 +92,16 @@ class System:
         self.momenta = None
         self.forces = None
 
+        # Properties for periodic boundary conditions and crystal cells
+        self.cells = None
+        self.pbc = None
+
         # Property dictionary, updated during simulation
         self.properties = {}
 
         # Initialize neighbor list for the calculator
         self.neighbor_list = neighborlist
+        print(self.neighbor_list, "A")
 
         # Initialize initial conditions
         self.initializer = initializer
@@ -155,6 +162,12 @@ class System:
             self.n_replicas, self.n_molecules, self.max_n_atoms, 3, device=self.device
         )
 
+        # Relevant for periodic boundary conditions and simulation cells
+        self.cells = torch.zeros(
+            self.n_replicas, self.n_molecules, 3, 3, device=self.device
+        )
+        self.pbc = torch.zeros(self.n_molecules, 3, device=self.device)
+
         # 5) Populate arrays according to the data provided in molecules
         for i in range(self.n_molecules):
             # Static properties
@@ -170,6 +183,13 @@ class System:
             self.positions[:, i, : self.n_atoms[i], :] = torch.from_numpy(
                 molecules[i].positions * MDUnits.angs2bohr
             )
+
+            # TODO What about default pbc values?
+            # Properties for cell simulations
+            self.cells[:, i, :, :] = torch.from_numpy(
+                molecules[i].cell * MDUnits.angs2bohr
+            )
+            self.pbc[i, :] = torch.from_numpy(molecules[i].pbc)
 
         # 6) Do proper broadcasting here for easier use in e.g. integrators and
         #    thermostats afterwards
@@ -255,6 +275,44 @@ class System:
 
         # Subtract rotation from overall motion (apply atom mask)
         self.momenta -= rotational_velocities * self.masses * self.atom_masks
+
+    def wrap_positions(self):
+
+        raise NotImplementedError
+
+    def get_ase_atoms(self):
+        """
+        Convert the stored molecular configurations into ASE Atoms objects. This is e.g. used for the
+        neighbor lists based on environment providers.
+
+        Returns:
+            list(ase.Atoms): List of ASE Atoms objects, with the replica and molecule dimension flattened.
+        """
+        atoms = []
+        for idx_r in range(self.n_replicas):
+            for idx_m in range(self.n_molecules):
+                positions = (
+                    self.positions[idx_r, idx_m, : self.n_atoms[idx_m]]
+                    .cpu()
+                    .detach()
+                    .numpy()
+                    / MDUnits.angs2bohr
+                )
+                atom_types = (
+                    self.atom_types[idx_r, idx_m, : self.n_atoms[idx_m]]
+                    .cpu()
+                    .detach()
+                    .numpy()
+                )
+                cell = (
+                    self.cells[idx_r, idx_m].cpu().detach().numpy() / MDUnits.angs2bohr
+                )
+                pbc = self.pbc[idx_m].cpu().detach().numpy()
+
+                mol = Atoms(atom_types, positions, cell=cell, pbc=pbc)
+                atoms.append(mol)
+
+        return atoms
 
     @property
     def velocities(self):
@@ -377,6 +435,11 @@ class System:
         return temperature
 
     @property
+    def virial(self):
+        # TODO: implement computation of the viral required for NPT simulations
+        raise NotImplementedError
+
+    @property
     def state_dict(self):
         """
         State dict for storing the system state.
@@ -393,6 +456,8 @@ class System:
             "n_atoms": self.n_atoms,
             "atom_types": self.atom_types,
             "masses": self.masses,
+            "cells": self.cells,
+            "pbc": self.pbc,
         }
         return state_dict
 
@@ -412,6 +477,8 @@ class System:
         self.n_atoms = state_dict["n_atoms"]
         self.atom_types = state_dict["atom_types"]
         self.masses = state_dict["masses"]
+        self.cells = state_dict["cells"]
+        self.pbc = state_dict["pbc"]
 
         self.n_replicas = self.positions.shape[0]
         self.n_molecules = self.positions.shape[1]

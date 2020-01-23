@@ -125,15 +125,22 @@ class MDCalculator:
         """
         if system.neighbor_list is None:
             raise ValueError("System does not have neighbor list.")
-        neighbor_list, neighbor_mask = system.neighbor_list.get_neighbors()
+
+        neighbor_list, neighbor_mask, offsets = system.neighbor_list.get_neighbors()
 
         neighbor_list = neighbor_list.view(
-            -1, system.max_n_atoms, system.max_n_atoms - 1
+            -1, system.max_n_atoms, system.neighbor_list.max_neighbors
         )
         neighbor_mask = neighbor_mask.view(
-            -1, system.max_n_atoms, system.max_n_atoms - 1
+            -1, system.max_n_atoms, system.neighbor_list.max_neighbors
         )
-        return neighbor_list, neighbor_mask
+
+        if offsets is not None:
+            offsets = offsets.view(
+                -1, system.max_n_atoms, system.neighbor_list.max_neighbors, 3
+            )
+
+        return neighbor_list, neighbor_mask, offsets
 
     def _get_system_molecules(self, system):
         """
@@ -152,9 +159,15 @@ class MDCalculator:
             system.positions.view(-1, system.max_n_atoms, 3) * self.position_conversion
         )
 
+        cells = system.cells
+        # TODO: here could be a check for zero volume
+        if system.cells is not None:
+            cells = cells.view(-1, 3, 3) * self.position_conversion
+
         atom_types = system.atom_types.view(-1, system.max_n_atoms)
         atom_masks = system.atom_masks.view(-1, system.max_n_atoms)
-        return positions, atom_types, atom_masks
+
+        return positions, atom_types, atom_masks, cells
 
     def _set_system_forces(self, system):
         """
