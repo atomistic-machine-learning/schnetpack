@@ -199,8 +199,8 @@ def read_deprecated_database(db_path):
         properties.append(props)
 
     return atoms, properties
-  
-  
+
+
 def activate_stress_computation(model, stress="stress"):
     """
     Utility function to activate the computation of the stress tensor for a model not trained explicitly on
