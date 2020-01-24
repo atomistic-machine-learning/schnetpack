@@ -75,11 +75,6 @@ class AtomsData(Dataset):
     ASE database. Use together with schnetpack.data.AtomsLoader to feed data
     to your model.
 
-    To improve the performance, the data is not stored in string format,
-    as usual in the ASE database. Instead, it is encoded as binary before being written
-    to the database. Reading work both with binary-encoded as well as
-    standard ASE files.
-
     Args:
         dbpath (str): path to directory containing database.
         subset (list, optional): indices to subset. Set to None for entire database.
