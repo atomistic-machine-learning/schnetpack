@@ -4,6 +4,9 @@ from argparse import Namespace
 
 import numpy as np
 import torch
+from ase.db import connect
+from base64 import b64decode
+from tqdm import tqdm
 
 __all__ = [
     "set_random_seed",
@@ -12,6 +15,7 @@ __all__ = [
     "read_from_json",
     "DeprecationHelper",
     "load_model",
+    "read_deprecated_database",
     "activate_stress_computation",
 ]
 
@@ -145,6 +149,56 @@ def load_model(model_path, map_location=None):
             module.stress = None
 
     return model
+
+
+def read_deprecated_database(db_path):
+    """
+    Read all atoms and properties from deprecated ase databases.
+
+    Args:
+        db_path (str): Path to deprecated database
+
+    Returns:
+        atoms (list): All atoms objects of the database.
+        properties (list): All property dictionaries of the database.
+
+    """
+    with connect(db_path) as conn:
+        db_size = conn.count()
+    atoms = []
+    properties = []
+
+    for idx in tqdm(range(1, db_size + 1), "Reading deprecated database"):
+        with connect(db_path) as conn:
+            row = conn.get(idx)
+
+        at = row.toatoms()
+        pnames = [pname for pname in row.data.keys() if not pname.startswith("_")]
+        props = {}
+        for pname in pnames:
+            try:
+                shape = row.data["_shape_" + pname]
+                dtype = row.data["_dtype_" + pname]
+                prop = np.frombuffer(b64decode(row.data[pname]), dtype=dtype)
+                prop = prop.reshape(shape)
+            except:
+                # fallback for properties stored directly
+                # in the row
+                if pname in row:
+                    prop = row[pname]
+                else:
+                    prop = row.data[pname]
+
+                try:
+                    prop.shape
+                except AttributeError as e:
+                    prop = np.array([prop], dtype=np.float32)
+            props[pname] = prop
+
+        atoms.append(at)
+        properties.append(props)
+
+    return atoms, properties
 
 
 def activate_stress_computation(model, stress="stress"):
