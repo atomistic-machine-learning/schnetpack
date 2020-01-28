@@ -16,6 +16,7 @@ except ImportError:
 from schnetpack.md import Simulator, System
 from schnetpack.md.parsers.md_options import *
 from schnetpack.md.simulation_hooks import *
+from schnetpack.md.neighbor_lists import *
 
 
 class MDSimulation:
@@ -318,9 +319,17 @@ class SetupCalculator(SetupBlock):
         "position_conversion": "Angstrom",
         "force_conversion": "kcal/mol/Angstrom",
         "property_conversion": {},
+        "neighbor_list": "simple",
+        "cutoff": -1.0,
+        "cutoff_shell": 1.0,
     }
     target_block = "calculator"
     schnet_models = ["schnet"]
+    neighbor_list = {
+        "simple": SimpleNeighborList,
+        "ase": ASENeighborList,
+        "torch": TorchNeighborList,
+    }
 
     def _setup(self, md_initializer):
         """
@@ -349,6 +358,9 @@ class SetupCalculator(SetupBlock):
                         f"Unrecognized ML calculator {calculator[CalculatorInit.kind]}"
                     )
                 calculator_dict["model"] = model
+            elif key == "neighbor_list":
+                # Check for neighbor list
+                calculator_dict[key] = self.neighbor_list[calculator[key]]
             else:
                 calculator_dict[key] = calculator[key]
 
