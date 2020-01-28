@@ -119,7 +119,8 @@ def generate_db(
     # build database file
     if "Properties=" in comment_line:
         extxyz_to_db(file_path, db_path)
-    xyz_to_db(file_path, db_path, atomic_properties, molecular_properties)
+    else:
+        xyz_to_db(file_path, db_path, atomic_properties, molecular_properties)
 
 
 def parse_property_string(prop_str):
