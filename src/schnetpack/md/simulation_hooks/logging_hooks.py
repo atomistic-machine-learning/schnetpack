@@ -371,20 +371,30 @@ class MoleculeStream(DataStream):
             simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         # Get shape of array depending on whether forces should be stored.
-        data_shape = (
-            simulator.system.n_replicas,
-            simulator.system.n_molecules,
-            simulator.system.max_n_atoms,
-            6,
-        )
+
+        if simulator.system.cells is not None:
+            data_shape = (
+                simulator.system.n_replicas,
+                simulator.system.n_molecules,
+                simulator.system.max_n_atoms * 6 + 9,
+            )
+        else:
+            data_shape = (
+                simulator.system.n_replicas,
+                simulator.system.n_molecules,
+                simulator.system.max_n_atoms * 6,
+            )
 
         self._setup_data_groups(data_shape, simulator)
 
         if not self.restart:
             self.data_group.attrs["n_replicas"] = simulator.system.n_replicas
             self.data_group.attrs["n_molecules"] = simulator.system.n_molecules
+            self.data_group.attrs["max_n_atoms"] = simulator.system.max_n_atoms
             self.data_group.attrs["n_atoms"] = simulator.system.n_atoms.cpu()
             self.data_group.attrs["atom_types"] = simulator.system.atom_types.cpu()
+            self.data_group.attrs["pbc"] = simulator.system.pbc.cpu()
+
             self.data_group.attrs["time_step"] = (
                 simulator.integrator.time_step * self.every_n_steps
             )
@@ -398,12 +408,25 @@ class MoleculeStream(DataStream):
             buffer_position (int): Current position in the buffer.
             simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
+        n_entries = simulator.system.max_n_atoms * 3
+
         self.buffer[
-            buffer_position : buffer_position + 1, ..., :3
-        ] = simulator.system.positions
+            buffer_position : buffer_position + 1, ..., :n_entries
+        ] = simulator.system.positions.view(
+            simulator.system.n_replicas, simulator.system.n_molecules, -1
+        )
         self.buffer[
-            buffer_position : buffer_position + 1, ..., 3:
-        ] = simulator.system.velocities
+            buffer_position : buffer_position + 1, ..., n_entries : 2 * n_entries
+        ] = simulator.system.velocities.view(
+            simulator.system.n_replicas, simulator.system.n_molecules, -1
+        )
+
+        if simulator.system.cells is not None:
+            self.buffer[
+                buffer_position : buffer_position + 1, ..., 2 * n_entries :
+            ] = simulator.system.cells.view(
+                simulator.system.n_replicas, simulator.system.n_molecules, -1
+            )
 
 
 class FileLoggerError(Exception):
