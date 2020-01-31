@@ -7,7 +7,6 @@ import torch
 from ase.io import read
 
 from schnetpack.md.utils import MDUnits, compute_centroid, batch_inverse
-from schnetpack.md.neighbor_lists import SimpleNeighborList, ASENeighborList
 from ase import Atoms
 
 
@@ -56,21 +55,9 @@ class System:
     Args:
         n_replicas (int): Number of replicas generated for each molecule.
         device (str): Computation device (default='cuda').
-        neighborlist (object): Routine for generating the neighbor list used
-                               in the calculator (default is
-                               SimpleNeighborList).
     """
 
-    # TODO: Introduce periodic boundary conditions
-
-    def __init__(
-        self,
-        n_replicas,
-        device="cuda",
-        # neighborlist=SimpleNeighborList(),
-        neighborlist=ASENeighborList,
-        initializer=None,
-    ):
+    def __init__(self, n_replicas, device="cuda", initializer=None):
 
         # Specify device
         self.device = device
@@ -98,10 +85,6 @@ class System:
 
         # Property dictionary, updated during simulation
         self.properties = {}
-
-        # Initialize neighbor list for the calculator
-        self.neighbor_list = neighborlist
-        print(self.neighbor_list, "A")
 
         # Initialize initial conditions
         self.initializer = initializer
@@ -184,23 +167,25 @@ class System:
                 molecules[i].positions * MDUnits.angs2bohr
             )
 
-            # TODO What about default pbc values?
             # Properties for cell simulations
             self.cells[:, i, :, :] = torch.from_numpy(
                 molecules[i].cell * MDUnits.angs2bohr
             )
             self.pbc[i, :] = torch.from_numpy(molecules[i].pbc)
 
+        # Check for cell/pbc stuff:
+        if torch.sum(torch.abs(self.cells)) == 0.0:
+            if torch.sum(self.pbc) > 0.0:
+                raise SystemException("Found periodic boundary conditions but no cell.")
+            else:
+                self.cells = None
+
         # 6) Do proper broadcasting here for easier use in e.g. integrators and
         #    thermostats afterwards
         self.masses = self.masses[None, :, :, None]
         self.atom_masks = self.atom_masks[..., None]
 
-        # 7) Build neighbor lists
-        if self.neighbor_list is not None:
-            self.neighbor_list = self.neighbor_list(self)
-
-        # 8) Initialize Momenta
+        # 7) Initialize Momenta
         if self.initializer:
             self.initializer.initialize_system(self)
 
@@ -280,10 +265,14 @@ class System:
 
         raise NotImplementedError
 
-    def get_ase_atoms(self):
+    def get_ase_atoms(self, atomic_units=True):
         """
         Convert the stored molecular configurations into ASE Atoms objects. This is e.g. used for the
-        neighbor lists based on environment providers.
+        neighbor lists based on environment providers. All units are atomic units by default, as used in the calculator
+
+        Args:
+            atomic_units (bool): Whether atomic units or Angstrom should be returned (default=True). This should
+                                 always be True when used with an EnvironmentProviderNeighborList.
 
         Returns:
             list(ase.Atoms): List of ASE Atoms objects, with the replica and molecule dimension flattened.
@@ -296,7 +285,6 @@ class System:
                     .cpu()
                     .detach()
                     .numpy()
-                    / MDUnits.angs2bohr
                 )
                 atom_types = (
                     self.atom_types[idx_r, idx_m, : self.n_atoms[idx_m]]
@@ -304,10 +292,17 @@ class System:
                     .detach()
                     .numpy()
                 )
-                cell = (
-                    self.cells[idx_r, idx_m].cpu().detach().numpy() / MDUnits.angs2bohr
-                )
-                pbc = self.pbc[idx_m].cpu().detach().numpy()
+                if self.cells is not None:
+                    cell = self.cells[idx_r, idx_m].cpu().detach().numpy()
+                    pbc = self.pbc[idx_m].cpu().detach().numpy()
+                else:
+                    cell = None
+                    pbc = None
+
+                # If requested, convert units of space to Angstrom
+                if not atomic_units:
+                    positions /= MDUnits.angs2bohr
+                    cell /= MDUnits.angs2bohr
 
                 mol = Atoms(atom_types, positions, cell=cell, pbc=pbc)
                 atoms.append(mol)
@@ -437,6 +432,7 @@ class System:
     @property
     def virial(self):
         # TODO: implement computation of the viral required for NPT simulations
+        #   Check where to put this.
         raise NotImplementedError
 
     @property
@@ -487,7 +483,3 @@ class System:
         # Build atom masks according to the present number of atoms
         for i in range(self.n_molecules):
             self.atom_masks[:, i, : self.n_atoms[i], :] = 1.0
-
-        # Rebuild neighbor lists with new system specifications
-        if self.neighbor_list is not None:
-            self.neighbor_list.__init__(self)
