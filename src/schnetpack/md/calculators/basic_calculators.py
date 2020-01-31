@@ -54,6 +54,14 @@ class MDCalculator:
 
         self.detach = detach
 
+    def check_calculator(self, system):
+        # TODO:
+        #   1) check cell
+        #   2) check cutoff region
+        #   3) Reset all known NBLS
+        #   4) check PBC
+        raise NotImplementedError
+
     def calculate(self, system):
         """
         Main calculator routine, which needs to be implemented individually.
@@ -109,39 +117,6 @@ class MDCalculator:
             # Set the forces for the system (at this point, already detached)
             self._set_system_forces(system)
 
-    def _get_system_neighbors(self, system):
-        """
-        Auxiliary function, which extracts neighbor lists formatted for schnetpack models from the system class.
-        This is done by collapsing the replica and molecule dimension into one batch dimension.
-
-        Args:
-            system (schnetpack.md.System): System object containing current state of the simulation.
-
-        Returns:
-            torch.LongTensor: (n_replicas*n_molecules) x n_atoms x (n_atoms-1) tensor holding the indices of all
-                              neighbor atoms.
-            torch.LongTensor: (n_replicas*n_molecules) x n_atoms x (n_atoms-1) binary tensor indicating padded
-                              dimensions.
-        """
-        if system.neighbor_list is None:
-            raise ValueError("System does not have neighbor list.")
-
-        neighbor_list, neighbor_mask, offsets = system.neighbor_list.get_neighbors()
-
-        neighbor_list = neighbor_list.view(
-            -1, system.max_n_atoms, system.neighbor_list.max_neighbors
-        )
-        neighbor_mask = neighbor_mask.view(
-            -1, system.max_n_atoms, system.neighbor_list.max_neighbors
-        )
-
-        if offsets is not None:
-            offsets = offsets.view(
-                -1, system.max_n_atoms, system.neighbor_list.max_neighbors, 3
-            )
-
-        return neighbor_list, neighbor_mask, offsets
-
     def _get_system_molecules(self, system):
         """
         Routine to extract positions, atom_types and atom_masks formatted in a manner suitable for schnetpack models
@@ -160,7 +135,6 @@ class MDCalculator:
         )
 
         cells = system.cells
-        # TODO: here could be a check for zero volume
         if system.cells is not None:
             cells = cells.view(-1, 3, 3) * self.position_conversion
 
@@ -183,12 +157,6 @@ class MDCalculator:
             forces.view(system.n_replicas, system.n_molecules, system.max_n_atoms, 3)
             * self.force_conversion
         )
-
-    def _get_ase_molecules(self, system):
-        """
-        Dummy function to get molecules in ASE format.
-        """
-        pass
 
 
 class QMCalculatorError(Exception):
