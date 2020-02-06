@@ -182,6 +182,9 @@ def get_dataset(args, environment_provider, logging=None):
         if args.derivative is not None:
             load_only.append(args.derivative)
 
+        if args.stress is not None:
+            load_only.append(args.stress)
+
         dataset = spk.AtomsData(
             args.datapath,
             load_only=load_only,
