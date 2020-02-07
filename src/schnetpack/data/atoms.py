@@ -298,9 +298,10 @@ class AtomsData(Dataset):
         warnings.warn(
             "create_subset is deprecated! Please use "
             "spk.data.partitioning.create_subset.",
-            DeprecationWarning
+            DeprecationWarning,
         )
         from .partitioning import create_subset
+
         return create_subset(self, subset)
 
     # __functions__
@@ -519,7 +520,7 @@ class ConcatAtomsDataset(ConcatDataset):
         self._load_only = load_only
 
     def __getitem__(self, idx):
-        _, properties =  self.get_properties(idx, self.load_only)
+        _, properties = self.get_properties(idx, self.load_only)
         properties["_idx"] = np.array([idx], dtype=np.int)
 
         return torchify_dict(properties)
@@ -571,13 +572,14 @@ class AtomsDataSubset(Subset):
         warnings.warn(
             "create_subset is deprecated! Please use "
             "spk.data.partitioning.create_subset.",
-            DeprecationWarning
+            DeprecationWarning,
         )
         from .partitioning import create_subset
+
         return create_subset(self, subset)
 
     def __getitem__(self, idx):
-        _, properties =  self.get_properties(self.indices[idx], self.load_only)
+        _, properties = self.get_properties(self.indices[idx], self.load_only)
         properties["_idx"] = np.array([idx], dtype=np.int)
 
         return torchify_dict(properties)
