@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "AtomsData",
     "AtomsDataSubset",
-    "ConcatAtomsDataset",
+    "ConcatAtomsData",
     "AtomsDataError",
     "AtomsConverter",
     "get_center_of_mass",
@@ -318,6 +318,9 @@ class AtomsData(Dataset):
 
         return torchify_dict(properties)
 
+    def __add__(self, other):
+        return ConcatAtomsData([self, other])
+
     # private methods
     def _add_system(self, conn, atoms, **properties):
         data = {}
@@ -443,7 +446,7 @@ class AtomsData(Dataset):
                 conn.write(atoms, data=properties)
 
 
-class ConcatAtomsDataset(ConcatDataset):
+class ConcatAtomsData(ConcatDataset):
     r"""
     Dataset as a concatenation of multiple atomistic datasets.
     Args:
@@ -451,20 +454,34 @@ class ConcatAtomsDataset(ConcatDataset):
     """
 
     def __init__(self, datasets):
-        super(ConcatAtomsDataset, self).__init__(datasets)
-        load_onlys = [set(dataset.load_only) for dataset in self.datasets]
-        self._load_only = load_onlys[0].intersection(*load_onlys[1:])
+        # checks
+        for dataset in datasets:
+            if not any([isinstance(dataset, dataset_class) for dataset_class in [
+                AtomsData, AtomsDataSubset, ConcatDataset
+            ]]):
+                raise AtomsDataError(
+                    "{} is not an instance of AtomsData, AtomsDataSubset or "
+                    "ConcatAtomsData!".format(dataset)
+                )
+        super(ConcatAtomsData, self).__init__(datasets)
+        self._load_only = None
 
     @property
     def load_only(self):
-        return self._load_only
+        if self._load_only:
+            return self._load_only
+        load_onlys = [set(dataset.load_only) for dataset in self.datasets]
+        return list(load_onlys[0].intersection(*load_onlys[1:]))
+
 
     @property
     def available_properties(self):
         all_available_properties = [
             set(dataset.available_properties) for dataset in self.datasets
         ]
-        return all_available_properties[0].intersection(*all_available_properties[1:])
+        return list(
+            all_available_properties[0].intersection(*all_available_properties[1:])
+        )
 
     @property
     def atomref(self):
@@ -519,7 +536,7 @@ class ConcatAtomsDataset(ConcatDataset):
                 )
 
         # update load_only parameter
-        self._load_only = load_only
+        self._load_only = list(load_only)
 
     def __getitem__(self, idx):
         _, properties = self.get_properties(idx, self.load_only)
@@ -567,7 +584,7 @@ class AtomsDataSubset(Subset):
                 )
 
         # update load_only parameter
-        self._load_only = load_only
+        self._load_only = list(load_only)
 
     # deprecated
     def create_subset(self, subset):
