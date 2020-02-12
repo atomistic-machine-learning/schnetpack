@@ -80,27 +80,6 @@ class ISO17(DownloadableAtomsData):
             environment_provider=environment_provider,
         )
 
-    def create_subset(self, idx):
-        """
-        Returns a new dataset that only consists of provided indices.
-        Args:
-            idx (numpy.ndarray): subset indices
-        Returns:
-            schnetpack.data.AtomsData: dataset with subset of original data
-        """
-        idx = np.array(idx)
-        subidx = idx if self.subset is None else np.array(self.subset)[idx]
-
-        return type(self)(
-            self.path,
-            self.fold,
-            download=False,
-            properties=self.load_only,
-            subset=subidx,
-            collect_triples=self.collect_triples,
-            environment_provider=self.environment_provider,
-        )
-
     def _download(self):
         logging.info("Downloading ISO17 database...")
         tmpdir = tempfile.mkdtemp("iso17")

@@ -120,20 +120,6 @@ class QM9(DownloadableAtomsData):
             **kwargs
         )
 
-    def create_subset(self, idx):
-        idx = np.array(idx)
-        subidx = idx if self.subset is None else np.array(self.subset)[idx]
-
-        return QM9(
-            dbpath=self.dbpath,
-            download=False,
-            subset=subidx,
-            load_only=self.load_only,
-            collect_triples=self.collect_triples,
-            remove_uncharacterized=False,
-            environment_provider=self.environment_provider,
-        )
-
     def _download(self):
         if self.remove_uncharacterized:
             evilmols = self._load_evilmols()
