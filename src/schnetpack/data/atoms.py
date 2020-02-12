@@ -123,7 +123,8 @@ class AtomsData(Dataset):
             self._deprecation_update()
 
         self._load_only = load_only
-        self._available_properties = available_properties
+        self._available_properties = \
+            self._get_available_properties(available_properties)
 
         if units is None:
             units = [1.0] * len(self.available_properties)
@@ -141,7 +142,7 @@ class AtomsData(Dataset):
 
     @property
     def available_properties(self):
-        return self._get_available_properties()
+        return self._available_properties
 
     @property
     def load_only(self):
@@ -290,8 +291,10 @@ class AtomsData(Dataset):
 
         """
         with connect(self.dbpath) as conn:
-            for at, prop in zip(atoms_list, property_list):
+
+            for i, (at, prop) in enumerate(zip(atoms_list, property_list)):
                 self._add_system(conn, at, **prop)
+                print(i)
 
     # deprecated
     def create_subset(self, subset):
@@ -353,7 +356,7 @@ class AtomsData(Dataset):
 
         return atomref
 
-    def _get_available_properties(self):
+    def _get_available_properties(self, properties):
         """
         Get available properties from argument or database.
 
@@ -369,11 +372,10 @@ class AtomsData(Dataset):
             db_properties = None
 
         # use the provided list
-        if self._available_properties is not None:
-            if db_properties is None or set(db_properties) == set(
-                self._available_properties
-            ):
-                return self._available_properties
+        if properties is not None:
+            if db_properties is None or set(db_properties) == set(properties):
+                return properties
+
             # raise error if available properties do not match database
             raise AtomsDataError(
                 "The available_properties {} do not match the "
