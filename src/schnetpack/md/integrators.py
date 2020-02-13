@@ -45,7 +45,7 @@ class Integrator:
         propagation of the system.
 
         Args:
-            system (object): System class containing all molecules and their
+            system (schnetpack.md.System): System class containing all molecules and their
                              replicas.
         """
         self._main_step(system)
@@ -73,7 +73,7 @@ class Integrator:
         Main integration step to be implemented in derived routines.
 
         Args:
-            system (object): System class containing all molecules and their
+            system (schnetpack.md.System): System class containing all molecules and their
                              replicas.
         """
         raise NotImplementedError
@@ -98,7 +98,7 @@ class VelocityVerlet(Integrator):
             q = q + \frac{p}{m} \delta t
 
         Args:
-            system (object): System class containing all molecules and their
+            system (schnetpack.md.System): System class containing all molecules and their
                              replicas.
         """
         system.positions = (
