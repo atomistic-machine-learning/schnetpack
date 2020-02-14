@@ -123,8 +123,9 @@ class AtomsData(Dataset):
             self._deprecation_update()
 
         self._load_only = load_only
-        self._available_properties = \
-            self._get_available_properties(available_properties)
+        self._available_properties = self._get_available_properties(
+            available_properties
+        )
 
         if units is None:
             units = [1.0] * len(self.available_properties)
@@ -455,9 +456,12 @@ class ConcatAtomsData(ConcatDataset):
     def __init__(self, datasets):
         # checks
         for dataset in datasets:
-            if not any([isinstance(dataset, dataset_class) for dataset_class in [
-                AtomsData, AtomsDataSubset, ConcatDataset
-            ]]):
+            if not any(
+                [
+                    isinstance(dataset, dataset_class)
+                    for dataset_class in [AtomsData, AtomsDataSubset, ConcatDataset]
+                ]
+            ):
                 raise AtomsDataError(
                     "{} is not an instance of AtomsData, AtomsDataSubset or "
                     "ConcatAtomsData!".format(dataset)
@@ -471,7 +475,6 @@ class ConcatAtomsData(ConcatDataset):
             return self._load_only
         load_onlys = [set(dataset.load_only) for dataset in self.datasets]
         return list(load_onlys[0].intersection(*load_onlys[1:]))
-
 
     @property
     def available_properties(self):
