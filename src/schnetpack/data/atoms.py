@@ -292,9 +292,8 @@ class AtomsData(Dataset):
         """
         with connect(self.dbpath) as conn:
 
-            for i, (at, prop) in enumerate(zip(atoms_list, property_list)):
+            for at, prop in zip(atoms_list, property_list):
                 self._add_system(conn, at, **prop)
-                print(i)
 
     # deprecated
     def create_subset(self, subset):
@@ -544,6 +543,9 @@ class ConcatAtomsData(ConcatDataset):
 
         return torchify_dict(properties)
 
+    def __add__(self, other):
+        return ConcatAtomsData([self, other])
+
 
 class AtomsDataSubset(Subset):
     r"""
@@ -602,6 +604,9 @@ class AtomsDataSubset(Subset):
         properties["_idx"] = np.array([idx], dtype=np.int)
 
         return torchify_dict(properties)
+
+    def __add__(self, other):
+        return ConcatAtomsData([self, other])
 
 
 def _convert_atoms(
