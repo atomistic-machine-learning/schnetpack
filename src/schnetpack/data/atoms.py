@@ -383,7 +383,7 @@ class AtomsData(Dataset):
             raise AtomsDataError(
                 "The available_properties {} do not match the "
                 "properties in the database {}!".format(
-                    self._available_properties, db_properties
+                    properties, db_properties
                 )
             )
 
