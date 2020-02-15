@@ -82,6 +82,7 @@ class System:
         # Properties for periodic boundary conditions and crystal cells
         self.cells = None
         self.pbc = None
+        self.stress = None  # Used for the computation of the pressure
 
         # Property dictionary, updated during simulation
         self.properties = {}
@@ -262,8 +263,23 @@ class System:
         self.momenta -= rotational_velocities * self.masses * self.atom_masks
 
     def wrap_positions(self):
-
         raise NotImplementedError
+
+    def compute_pressure(self, tensor=True):
+        if self.stress is None:
+            raise SystemError(
+                "Stress required for computation of the instantaneous pressure."
+            )
+
+        if tensor:
+            pressure = self.kinetic_energy_tensor / self.volume[..., None] - self.stress
+        else:
+            pressure = (
+                self.kinetic_energy / self.volume
+                - torch.einsum("abii->ab", self.stress)[:, :, None]
+            ) / 3.0
+
+        return pressure
 
     def get_ase_atoms(self, atomic_units=True):
         """
@@ -377,6 +393,28 @@ class System:
         return kinetic_energy.detach()
 
     @property
+    def volume(self):
+        if self.cells is None:
+            return None
+        else:
+            volume = torch.sum(
+                self.cells[:, :, 0]
+                * torch.cross(self.cells[:, :, 1], self.cells[:, :, 2]),
+                dim=2,
+                keepdim=True,
+            )
+            return volume
+
+    @property
+    def kinetic_energy_tensor(self):
+        # Apply atom mask
+        momenta = self.momenta * self.atom_masks
+        kinetic_energy_tensor = 0.5 * torch.sum(
+            momenta[..., None] * momenta[:, :, :, None, :] / self.masses[..., None], 2
+        )
+        return kinetic_energy_tensor.detach()
+
+    @property
     def temperature(self):
         """
         Convenience property for accessing the instantaneous temperatures of
@@ -428,12 +466,6 @@ class System:
             * self.centroid_kinetic_energy
         )
         return temperature
-
-    @property
-    def virial(self):
-        # TODO: implement computation of the viral required for NPT simulations
-        #   Check where to put this.
-        raise NotImplementedError
 
     @property
     def state_dict(self):
