@@ -12,7 +12,7 @@ class SchnetPackCalculator(MDCalculator):
     MD calculator for schnetpack models.
 
     Args:
-        model (object): Loaded schnetpack model.
+        model (schnetpack.atomistic.AtomisticModel): Loaded schnetpack model.
         required_properties (list): List of properties to be computed by the calculator
         force_handle (str): String indicating the entry corresponding to the molecular forces
         position_conversion (float): Unit conversion for the length used in the model computing all properties. E.g. if
@@ -41,6 +41,8 @@ class SchnetPackCalculator(MDCalculator):
         position_conversion=1.0 / MDUnits.angs2bohr,
         force_conversion=1.0 / MDUnits.auforces2aseforces,
         property_conversion={},
+        stress_handle=None,
+        stress_conversion=1.0,
         detach=True,
         neighbor_list=SimpleNeighborList,
         cutoff=-1.0,
@@ -51,10 +53,19 @@ class SchnetPackCalculator(MDCalculator):
             force_handle,
             position_conversion=position_conversion,
             force_conversion=force_conversion,
+            stress_handle=stress_handle,
+            stress_conversion=stress_conversion,
             property_conversion=property_conversion,
             detach=detach,
         )
         self.model = model
+
+        # If stress is required, activate stress computation in model
+        if stress_handle is not None:
+            schnetpack.utils.activate_stress_computation(
+                self.model, stress=stress_handle
+            )
+
         self.neighbor_list = self._init_neighbor_list(
             neighbor_list, cutoff, cutoff_shell
         )
