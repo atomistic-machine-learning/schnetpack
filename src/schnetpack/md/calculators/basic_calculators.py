@@ -38,15 +38,19 @@ class MDCalculator:
         position_conversion=1.0,
         force_conversion=1.0,
         property_conversion={},
+        stress_handle=None,
+        stress_conversion=1.0,
         detach=True,
     ):
         self.results = {}
         self.force_handle = force_handle
+        self.stress_handle = stress_handle
         self.required_properties = required_properties
 
         # Perform automatic conversion of units
         self.position_conversion = MDUnits.parse_mdunit(position_conversion)
         self.force_conversion = MDUnits.parse_mdunit(force_conversion)
+        self.stress_conversion = MDUnits.parse_mdunit(stress_conversion)
         self.property_conversion = {
             p: MDUnits.parse_mdunit(property_conversion[p]) for p in property_conversion
         }
@@ -117,6 +121,10 @@ class MDCalculator:
             # Set the forces for the system (at this point, already detached)
             self._set_system_forces(system)
 
+            # Set stress of the system if requested:
+            if self.stress_handle is not None:
+                self._set_system_stress(system)
+
     def _get_system_molecules(self, system):
         """
         Routine to extract positions, atom_types and atom_masks formatted in a manner suitable for schnetpack models
@@ -156,6 +164,13 @@ class MDCalculator:
         system.forces = (
             forces.view(system.n_replicas, system.n_molecules, system.max_n_atoms, 3)
             * self.force_conversion
+        )
+
+    def _set_system_stress(self, system):
+        stress = self.results[self.stress_handle]
+        system.stress = (
+            stress.view(system.n_replicas, system.n_molecules, 3, 3)
+            * self.stress_conversion
         )
 
 
