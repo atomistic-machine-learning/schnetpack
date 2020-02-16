@@ -104,7 +104,9 @@ class Simulator:
             self.integrator.half_step(self.system)
 
             # Call hooks after second half step
-            for hook in self.simulator_hooks:
+            # Hooks are called in reverse order to guarantee symmetry of
+            # the propagator when using thermostats and barostats
+            for hook in self.simulator_hooks[::-1]:
                 hook.on_step_end(self)
 
             self.step += 1
