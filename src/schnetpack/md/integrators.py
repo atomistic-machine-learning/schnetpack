@@ -8,11 +8,9 @@ a certain extent of nuclear quantum effects (e.g. tunneling).
 import torch
 import numpy as np
 
-
 from schnetpack.md.utils import NormalModeTransformer, MDUnits
 
-
-__all__ = ["VelocityVerlet", "RingPolymer"]
+__all__ = ["VelocityVerlet", "RingPolymer", "NPTVelocityVerlet"]
 
 
 class Integrator:
@@ -65,6 +63,7 @@ class Integrator:
                              replicas.
         """
         system.momenta = system.momenta + 0.5 * system.forces * self.time_step
+
         if self.detach:
             system.momenta = system.momenta.detach()
 
@@ -104,7 +103,9 @@ class VelocityVerlet(Integrator):
         system.positions = (
             system.positions + self.time_step * system.momenta / system.masses
         )
-        system.positions = system.positions.detach()
+
+        if self.detach:
+            system.positions = system.positions.detach()
 
 
 class RingPolymer(Integrator):
@@ -235,3 +236,83 @@ class RingPolymer(Integrator):
         # Transform back to bead representation
         system.positions = self.transformation.normal2beads(positions_normal)
         system.momenta = self.transformation.normal2beads(momenta_normal)
+
+        if self.detach:
+            system.positions = system.positions.detach()
+            system.momenta = system.momenta.detach()
+
+
+class NPTVelocityVerlet(VelocityVerlet):
+    def __init__(self, time_step, barostat, device="cuda"):
+        """
+
+        Args:
+            time_step:
+            barostat (schnetpack.md.simulation_hooks.BarostatHook):
+            device:
+        """
+        super(NPTVelocityVerlet, self).__init__(time_step, device=device)
+        self.barostat = barostat
+
+    def _main_step(self, system):
+        """
+        """
+        self.barostat.propagate_system(system)
+
+
+class NPTRingPolymer(RingPolymer):
+    """
+
+    Args:
+        n_beads:
+        time_step:
+        temperature:
+        barostat (schnetpack.md.simulation_hooks.BarostatHook):
+        transformation:
+        device:
+    """
+
+    def __init__(
+        self,
+        n_beads,
+        time_step,
+        temperature,
+        barostat,
+        transformation=NormalModeTransformer,
+        device="cuda",
+    ):
+        super(NPTRingPolymer, self).__init__(
+            n_beads,
+            time_step,
+            temperature,
+            transformation=transformation,
+            device=device,
+        )
+        self.barostat = barostat
+
+    def half_step(self, system):
+        """
+        Half steps propagating the system momenta according to:
+
+        ..math::
+            p = p + \frac{1}{2} F \delta t
+
+        Args:
+            system (object): System class containing all molecules and their
+                             replicas.
+        """
+        self.barostat.propagate_barostat(system)
+
+        system.momenta = system.momenta + 0.5 * system.forces * self.time_step
+
+        if self.detach:
+            system.momenta = system.momenta.detach()
+
+    def _main_step(self, system):
+        """
+        """
+        self.barostat.propagate_system(system)
+
+        if self.detach:
+            system.positions = system.positions.detach()
+            system.momenta = system.momenta.detach()
