@@ -8,17 +8,21 @@ import numpy as np
 import scipy.linalg as linalg
 import logging
 
-from schnetpack.md.utils import MDUnits, YSWeights
+from schnetpack.md.utils import MDUnits, YSWeights, StableSinhDiv
 from schnetpack.md.simulation_hooks import ThermostatHook, SimulationHook
 
 __all__ = ["BarostatHook"]
 
 
+# TODO:
+#   -) state dicts
+#   -) documentation
+#   -) check dimensions
+
+
 class BarostatHook(SimulationHook):
     """
     """
-
-    # TODO: Could be made a torch nn.Module
 
     def __init__(self, target_pressure, temperature_bath, detach=True):
         self.target_pressure = target_pressure
@@ -175,8 +179,8 @@ class MTKBarostat(BarostatHook):
         # TODO: perform checks here?
 
         # Get scaling factors based on the number of atoms
-        n_atoms = simulator.system.n_atoms[None, :, None, None]
-        self.inv_sqrt_dof = 1.0 / torch.sqrt(3 * n_atoms + 1.0)
+        n_atoms = simulator.system.n_atoms[None, :, None, None].float()
+        self.inv_sqrt_dof = 1.0 / torch.sqrt(3.0 * n_atoms + 1.0)
         self.inv_dof = 1.0 / n_atoms
         self.weight = self.frequency * self.inv_sqrt_dof
 
@@ -263,6 +267,7 @@ class RPMDBarostat(BarostatHook):
         self.transformation = None
         self.propagator = None
         self.momenta = None
+        self.sinhdx = StableSinhDiv()
 
     def _init_barostat(self, simulator):
         # Get normal mode transformer and propagator for position and cell update
@@ -291,13 +296,6 @@ class RPMDBarostat(BarostatHook):
         self.cell_momenta = self.cell_momenta.detach()
 
     def propagate_system(self, system):
-        # Get pressure difference
-        pressure_difference = (
-            3.0
-            * system.volume
-            * (system.compute_pressure(kinetic_component=True) - self.target_pressure)
-        )
-
         # Transform to normal mode representation
         positions_normal = self.transformation.beads2normal(system.positions)
         momenta_normal = self.transformation.beads2normal(system.momenta)
@@ -310,10 +308,9 @@ class RPMDBarostat(BarostatHook):
         # TODO: Check for stability of sinh
         positions_normal[0] = (
             positions_normal[0] / scaling
-            + torch.sinh(self.time_step * reduced_momenta)
-            / reduced_momenta
-            * momenta_normal[0]
-            / system.masses[0]
+            + self.sinhdx.f(self.time_step * reduced_momenta)
+            * (momenta_normal[0] / system.masses[0])
+            * self.time_step
         )
 
         # Update cells
@@ -371,7 +368,7 @@ class RPMDBarostat(BarostatHook):
 # TODO Masterclass
 
 
-class NHCBarostatIsotropic(ThermostatHook):
+class NHCBarostatIsotropic(BarostatHook):
     """
     Nose Hoover chain thermostat/barostat for isotropic cell fluctuations.
 
@@ -398,40 +395,58 @@ class NHCBarostatIsotropic(ThermostatHook):
 
     def __init__(
         self,
+        target_pressure,
         temperature_bath,
         time_constant,
+        time_constant_barostat=None,
         chain_length=3,
-        massive=False,
         multi_step=2,
         integration_order=3,
+        detach=True,
     ):
         super(NHCBarostatIsotropic, self).__init__(
-            temperature_bath, nm_transformation=None
+            target_pressure=target_pressure,
+            temperature_bath=temperature_bath,
+            detach=detach,
         )
-        # TODO: Get rid of massive
-        # TODO: separate chains for cell and particles
-
         self.chain_length = chain_length
-        self.massive = massive
         self.frequency = 1 / (time_constant * MDUnits.fs2atu)
 
-        # Cpmpute kBT, since it will be used a lot
+        if time_constant_barostat is None:
+            self.barostat_frequency = self.frequency
+        else:
+            self.barostat_frequency = 1 / (time_constant_barostat * MDUnits.fs2atu)
+
+        # Compute kBT, since it will be used a lot
         self.kb_temperature = self.temperature_bath * MDUnits.kB
+
+        # Stable sinh(x)/x approximation
+        self.sinhdx = StableSinhDiv()
 
         # Propagation parameters
         self.multi_step = multi_step
         self.integration_order = integration_order
-        self.time_step = None
+        self.ys_time_step = None
 
-        # Find out number of particles (depends on whether massive or not)
+        # Find out number of particles
         self.degrees_of_freedom = None
-        self.masses = None
 
-        self.velocities = None
-        self.positions = None
-        self.forces = None
+        # Thermostat variables for particles
+        self.t_velocities = None
+        self.t_forces = None
+        self.t_masses = None
 
-    def _init_thermostat(self, simulator):
+        # Thermostat variables for cell
+        self.t_velocities_cell = None
+        self.t_forces_cell = None
+        self.t_masses_cell = None
+
+        # Barostat variables
+        self.b_velocities_cell = None
+        self.b_forces_cell = None
+        self.b_masses_cell = None
+
+    def _init_barostat(self, simulator):
         """
         Initialize the thermostat positions, forces, velocities and masses, as well as the number of degrees of freedom
         seen by each chain link.
@@ -442,173 +457,222 @@ class NHCBarostatIsotropic(ThermostatHook):
         """
         # Determine integration step via multi step and Yoshida Suzuki weights
         integration_weights = YSWeights(self.device).get_weights(self.integration_order)
-        self.time_step = (
+        self.ys_time_step = (
             simulator.integrator.time_step * integration_weights / self.multi_step
         )
 
-        # Determine shape of tensors and internal degrees of freedom
-        n_replicas, n_molecules, n_atoms, xyz = simulator.system.momenta.shape
-
-        if self.massive:
-            state_dimension = (n_replicas, n_molecules, n_atoms, xyz, self.chain_length)
-            # Since momenta will be masked later, no need to set non-atoms to 0
-            self.degrees_of_freedom = torch.ones(
-                (n_replicas, n_molecules, n_atoms, xyz), device=self.device
-            )
-        else:
-            state_dimension = (n_replicas, n_molecules, 1, 1, self.chain_length)
-            self.degrees_of_freedom = (
-                3 * simulator.system.n_atoms.float()[None, :, None, None]
-            )
-
-        # Set up masses
-        self._init_masses(state_dimension, simulator)
+        # Determine internal degrees of freedom
+        self.degrees_of_freedom = 3 * simulator.system.n_atoms.float()[None, :]
 
         # Set up internal variables
-        self.positions = torch.zeros(state_dimension, device=self.device)
-        self.forces = torch.zeros(state_dimension, device=self.device)
-        self.velocities = torch.zeros(state_dimension, device=self.device)
+        self._init_thermostat_variables()
+        self._init_barostat_variables()
 
-    def _init_masses(self, state_dimension, simulator):
-        """
-        Auxiliary routine for initializing the thermostat masses.
+    def _init_thermostat_variables(self):
 
-        Args:
-            state_dimension (tuple): Size of the thermostat states. This is used to differentiate between the massive
-                                     and the standard algorithm
-            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
-                                                                 time step, system, etc.
-        """
-        self.masses = torch.ones(state_dimension, device=self.device)
+        # Set up thermostat masses
+        self.t_masses = torch.zeros(
+            self.n_replicas, self.n_molecules, self.chain_length, device=self.device
+        )
+        self.t_masses_cell = torch.zeros_like(self.t_masses)
+
         # Get masses of innermost thermostat
-        self.masses[..., 0] = (
+        self.t_masses[..., 0] = (
             self.degrees_of_freedom * self.kb_temperature / self.frequency ** 2
         )
+        self.t_masses_cell[..., 0] = 9.0 * self.kb_temperature / self.frequency ** 2
         # Set masses of remaining thermostats
-        self.masses[..., 1:] = self.kb_temperature / self.frequency ** 2
+        self.t_masses[..., 1:] = self.kb_temperature / self.frequency ** 2
+        self.t_masses_cell[..., 1:] = self.kb_temperature / self.frequency ** 2
 
-    def _propagate_thermostat(self, kinetic_energy):
-        """
-        Propagation step of the NHC thermostat. Please refer to [#nhc_thermostat2]_ for more detail on the algorithm.
+        # Thermostat variables for particles
+        self.t_velocities = torch.zeros_like(self.t_masses)
+        self.t_forces = torch.zeros_like(self.t_masses)
 
-        Args:
-            kinetic_energy (torch.Tensor): Kinetic energy associated with the innermost NH thermostats.
+        # Thermostat variables for cell
+        self.t_velocities_cell = torch.zeros_like(self.t_masses_cell)
+        self.t_forces_cell = torch.zeros_like(self.t_masses_cell)
 
-        Returns:
-            torch.Tensor: Scaling factor applied to the system momenta.
+    def _init_barostat_variables(self):
+        # Set barostat masses
+        self.b_masses_cell = torch.ones(
+            self.n_replicas, self.n_molecules, device=self.device
+        )
+        self.b_masses_cell[:, :] = (
+            (self.degrees_of_freedom + 3)
+            * self.kb_temperature
+            / self.barostat_frequency ** 2
+        )
 
-        References
-        ----------
-        .. [#nhc_thermostat2] Martyna, Tuckerman, Tobias, Klein:
-           Explicit reversible integrators for extended systems dynamics.
-           Molecular Physics, 87(5), 1117-1157. 1996.
-        """
-        # Compute forces on first thermostat
-        self.forces[..., 0] = (
-            kinetic_energy - self.degrees_of_freedom * self.kb_temperature
-        ) / self.masses[..., 0]
+        # Remaining barostat variables
+        self.b_velocities_cell = torch.zeros_like(self.b_masses_cell)
+        self.b_forces_cell = torch.zeros_like(self.b_masses_cell)
 
-        scaling_factor = 1.0
+    def _apply_barostat(self, simulator):
+
+        self._init_kinetic_energy(simulator.system)
+        kinetic_energy = self._compute_kinetic_energy(simulator.system)
+        pressure, volume = self._compute_pressure(simulator.system)
+
+        self._update_forces_barostat(kinetic_energy, pressure, volume)
+        self._update_forces_thermostat(kinetic_energy)
+
         for _ in range(self.multi_step):
             for idx_ys in range(self.integration_order):
-                time_step = self.time_step[idx_ys]
+                time_step = self.ys_time_step[idx_ys]
 
-                # Update velocities of outermost bath
-                self.velocities[..., -1] += 0.25 * self.forces[..., -1] * time_step
+                self._chain_forward(time_step)
+                self._update_box_velocities(time_step)
 
-                # Update the velocities moving through the beads of the chain
-                for chain in range(self.chain_length - 2, -1, -1):
-                    coeff = torch.exp(
-                        -0.125 * time_step * self.velocities[..., chain + 1]
-                    )
-                    self.velocities[..., chain] = (
-                        self.velocities[..., chain] * coeff ** 2
-                        + 0.25 * self.forces[..., chain] * coeff * time_step
-                    )
+                # Update the momenta of the particles (accumulate scaling)
+                self._update_particle_momenta(time_step, simulator.system)
 
-                # Accumulate velocity scaling
-                scaling_factor *= torch.exp(-0.5 * time_step * self.velocities[..., 0])
-                # Update forces of innermost thermostat
-                self.forces[..., 0] = (
-                    scaling_factor * scaling_factor * kinetic_energy
-                    - self.degrees_of_freedom * self.kb_temperature
-                ) / self.masses[..., 0]
+                # Recompute kinetic energy
+                kinetic_energy = self._compute_kinetic_energy(simulator.system)
 
-                # Update thermostat positions
-                # TODO: Only required if one is interested in the conserved
-                #  quanity of the NHC.
-                self.positions += 0.5 * self.velocities * time_step
+                # Update the box velocities
+                self._update_forces_barostat(kinetic_energy, pressure, volume)
+                self._update_box_velocities(time_step)
 
-                # Update the thermostat velocities
-                for chain in range(self.chain_length - 1):
-                    coeff = torch.exp(
-                        -0.125 * time_step * self.velocities[..., chain + 1]
-                    )
-                    self.velocities[..., chain] = (
-                        self.velocities[..., chain] * coeff ** 2
-                        + 0.25 * self.forces[..., chain] * coeff * time_step
-                    )
-                    self.forces[..., chain + 1] = (
-                        self.masses[..., chain] * self.velocities[..., chain] ** 2
-                        - self.kb_temperature
-                    ) / self.masses[..., chain + 1]
+                # Update the thermostat force
+                self._update_forces_thermostat(kinetic_energy)
 
-                # Update velocities of outermost thermostat
-                self.velocities[..., -1] += 0.25 * self.forces[..., -1] * time_step
+                # Update velocities and forces of remaining thermostats
+                self._chain_backward(time_step)
 
-        return scaling_factor
+    def _init_kinetic_energy(self, system):
+        self.scaling = 1.0
+        # R x M
+        self.kinetic_energy = 2.0 * system.kinetic_energy
 
-    def _propagate_positions(self):
-        raise NotImplementedError
+    def _compute_kinetic_energy(self, system):
+        return self.kinetic_energy
 
-    def _compute_kinetic_energy(self, momenta, masses):
-        """
-        Routine for computing the kinetic energy of the innermost NH thermostats based on the momenta and masses of the
-        simulated systems.
+    def _compute_kinetic_energy_cell(self):
+        return self.b_masses_cell * self.b_velocities_cell ** 2
 
-        Args:
-            momenta (torch.Tensor): Momenta of the simulated system.
-            masses (torch.Tensor): Masses of the simulated system.
+    def _compute_pressure(self, system):
+        # Get the pressure (R x M)
+        pressure = system.compute_pressure(kinetic_component=False, tensor=False)[
+            ..., 0
+        ]
+        # Get the volume (R x M)
+        volume = system.volume[..., 0]
+        return pressure, volume
 
-        Returns:
-            torch.Tensor: Kinetic energy associated with the innermost NH thermostats. These are summed over the
-                          corresponding degrees of freedom, depending on whether a massive NHC is used.
+    def _chain_forward(self, time_step):
+        # Update velocities of outermost bath
+        self.t_velocities[..., -1] += 0.25 * self.t_forces[..., -1] * time_step
+        self.t_velocities_cell[..., -1] += (
+            0.25 * self.t_forces_cell[..., -1] * time_step
+        )
 
-        """
-        # Compute the kinetic energy (factor of 1/2 can be removed, as it
-        # cancels with a times 2)
-        # TODO: Is no problem, as NM transformation never mixes atom dimension
-        #  which carries the masses.
-        kinetic_energy = momenta ** 2 / masses
-        if self.massive:
-            return kinetic_energy
-        else:
-            return torch.sum(
-                torch.sum(kinetic_energy, 3, keepdim=True), 2, keepdim=True
+        # Update the velocities moving through the beads of the chain
+        for chain in range(self.chain_length - 2, -1, -1):
+            t_coeff = torch.exp(-0.125 * time_step * self.t_velocities[..., chain + 1])
+            b_coeff = torch.exp(
+                -0.125 * time_step * self.t_velocities_cell[..., chain + 1]
             )
 
-    def _apply_thermostat(self, simulator):
-        """
-        Propagate the NHC thermostat, compute the corresponding scaling factor and apply it to the momenta of the
-        system. If a normal mode transformer is provided, this is done in the normal model representation of the ring
-        polymer.
+            self.t_velocities[..., chain] = (
+                self.velocities[..., chain] * t_coeff ** 2
+                + 0.25 * self.t_forces[..., chain] * t_coeff * time_step
+            )
+            self.t_velocities_cell[..., chain] = (
+                self.velocities[..., chain] * b_coeff ** 2
+                + 0.25 * self.t_forces_cell[..., chain] * b_coeff * time_step
+            )
 
-        Args:
-            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
-                                                                 time step, system, etc.
-        """
-        # Get current momenta
-        momenta = simulator.system.momenta
+    def _update_box_velocities(self, time_step):
+        b_factor = torch.exp(-0.125 * time_step * self.t_velocities_cell)
+        # TODO: Check where symmetrisation is necessary
+        self.b_velocities_cell = (
+            b_factor ** 2 * self.b_velocities_cell
+            + 0.25 * time_step * self.t_forces_cell * b_factor
+        )
 
-        kinetic_energy = self._compute_kinetic_energy(momenta, simulator.system.masses)
+    def _update_particle_momenta(self, time_step, system):
+        scaling = torch.exp(
+            -0.5
+            * time_step
+            * (
+                self.t_velocities[..., 0]
+                + self.b_velocities_cell * (1 + 1 / self.degrees_of_freedom)
+            )
+        )
+        # TODO: Accumulate instead of doing it here?
+        system.momenta *= scaling[:, :, None, None]
+        self.kinetic_energy *= scaling ** 2
 
-        scaling_factor = self._propagate_thermostat(kinetic_energy)
-        momenta = momenta * scaling_factor
+    def _chain_backward(self, time_step):
+        # Update the thermostat velocities
+        for chain in range(self.chain_length - 1):
+            t_coeff = torch.exp(-0.125 * time_step * self.t_velocities[..., chain + 1])
+            b_coeff = torch.exp(
+                -0.125 * time_step * self.t_velocities_cell[..., chain + 1]
+            )
 
-        simulator.system.momenta = momenta
+            self.t_velocities[..., chain] = (
+                self.velocities[..., chain] * t_coeff ** 2
+                + 0.25 * self.t_forces[..., chain] * t_coeff * time_step
+            )
+            self.t_velocities_cell[..., chain] = (
+                self.velocities[..., chain] * b_coeff ** 2
+                + 0.25 * self.t_forces_cell[..., chain] * b_coeff * time_step
+            )
+
+            # Update forces through chain
+            self.t_forces[..., chain + 1] = (
+                self.t_masses[..., chain] * self.t_velocities[..., chain] ** 2
+                - self.kb_temperature
+            ) / self.t_masses[..., chain + 1]
+            self.t_forces_cell[..., chain + 1] = (
+                self.t_masses_cell[..., chain] * self.t_velocities_cell[..., chain] ** 2
+                - self.kb_temperature
+            ) / self.t_masses_cell[..., chain + 1]
+
+        # Update velocities of outermost thermostat
+        self.t_velocities[..., -1] += 0.25 * self.t_forces[..., -1] * time_step
+        self.t_velocities_cell[..., -1] += (
+            0.25 * self.t_forces_cell[..., -1] * time_step
+        )
+
+    def _update_forces_thermostat(self, kinetic_energy):
+        # Compute forces on thermostat (R x M)
+        self.t_forces[..., 0] = (
+            kinetic_energy - self.degrees_of_freedom * self.kb_temperature
+        ) / self.t_masses[..., 0]
+
+        # Get kinetic energy of barostat (R x M)
+        kinetic_energy_cell = self._compute_kinetic_energy_cell()
+        # Compute forces on cell thermostat
+        self.t_forces_cell[..., 0] = (
+            kinetic_energy_cell - self.kb_temperature
+        ) / self.t_masses_cell[..., 0]
+
+    def _update_forces_barostat(self, kinetic_energy, pressure, volume):
+        self.b_forces_cell = (
+            (1.0 + 3.0 / self.degrees_of_freedom) * kinetic_energy
+            + 3.0 * volume * (pressure - self.target_pressure) / self.b_masses_cell
+        )
+
+    def propagate_system(self, system):
+        # Update the particle positions
+        scaled_velocity = self.time_step * self.b_velocities_cell
+        a_coeff = torch.exp(0.5 * scaled_velocity)[:, :, None, None]
+        b_coeff = a_coeff * self.sinhdx.f(0.5 * scaled_velocity)[:, :, None, None]
+        system.positions = (
+            system.positions * a_coeff ** 2
+            + system.momenta / system.masses * b_coeff * self.time_step
+        )
+
+        # Scale the cells
+        cell_coeff = torch.exp(scaled_velocity)[:, :, None, None]
+        system.cells = system.cells * cell_coeff
 
     @property
     def state_dict(self):
+        # TODO: update this properly
         state_dict = {
             "chain_length": self.chain_length,
             "massive": self.massive,
@@ -619,7 +683,7 @@ class NHCBarostatIsotropic(ThermostatHook):
             "velocities": self.velocities,
             "forces": self.forces,
             "positions": self.positions,
-            "time_step": self.time_step,
+            "time_step": self.ys_time_step,
             "temperature_bath": self.temperature_bath,
             "n_replicas": self.n_replicas,
             "multi_step": self.multi_step,
@@ -638,10 +702,198 @@ class NHCBarostatIsotropic(ThermostatHook):
         self.velocities = state_dict["velocities"]
         self.forces = state_dict["forces"]
         self.positions = state_dict["positions"]
-        self.time_step = state_dict["time_step"]
+        self.ys_time_step = state_dict["time_step"]
         self.temperature_bath = state_dict["temperature_bath"]
         self.n_replicas = state_dict["n_replicas"]
         self.multi_step = state_dict["multi_step"]
         self.integration_order = state_dict["integration_order"]
 
         self.initialized = True
+
+
+class NHCBarostatAnisotropic(NHCBarostatIsotropic):
+    """
+    Nose Hoover chain thermostat/barostat for isotropic cell fluctuations.
+
+    Args:
+        temperature_bath (float): Temperature of the external heat bath in Kelvin.
+        time_constant (float): Thermostat time constant in fs
+        chain_length (int): Number of Nose-Hoover thermostats applied in the chain.
+        massive (bool): If set to true, an individual thermostat is applied to each degree of freedom in the system.
+                        Can e.g. be used for thermostatting (default=False).
+        nm_transformation (schnetpack.md.utils.NormalModeTransformer): Module used to transform between beads and normal
+                                                                   model representation in ring polymer dynamics.
+        multi_step (int): Number of steps used for integrating the NH equations of motion (default=2)
+        integration_order (int): Order of the Yoshida-Suzuki integrator used for propagating the thermostat (default=3).
+
+    References
+    ----------
+    .. [#nhc_thermostat1] Tobias, Martyna, Klein:
+       Molecular dynamics simulations of a protein in the canonical ensemble.
+       The Journal of Physical Chemistry, 97(49), 12959-12966. 1993.
+    .. [#nhc_thermostat2] Martyna, Tuckerman, Tobias, Klein:
+       Explicit reversible integrators for extended systems dynamics.
+       Molecular Physics, 87(5), 1117-1157. 1996.
+    """
+
+    def __init__(
+        self,
+        target_pressure,
+        temperature_bath,
+        time_constant,
+        time_constant_barostat=None,
+        chain_length=3,
+        multi_step=2,
+        integration_order=3,
+        detach=True,
+    ):
+        super(NHCBarostatAnisotropic, self).__init__(
+            target_pressure=target_pressure,
+            temperature_bath=temperature_bath,
+            time_constant=time_constant,
+            time_constant_barostat=time_constant_barostat,
+            chain_length=chain_length,
+            multi_step=multi_step,
+            integration_order=integration_order,
+            detach=detach,
+        )
+
+    def _init_barostat_variables(self):
+        # Set barostat masses
+        self.b_masses_cell = torch.ones(
+            self.n_replicas, self.n_molecules, 1, 1, device=self.device
+        )
+        self.b_masses_cell[..., 0, 0] = (
+            (self.degrees_of_freedom + 3)
+            * self.kb_temperature
+            / self.barostat_frequency ** 2
+        ) / 3.0
+
+        # Remaining barostat variables
+        self.b_velocities_cell = torch.zeros(self.n_replicas, self.n_molecules, 3, 3)
+        self.b_forces_cell = torch.zeros_like(self.b_velocities_cell)
+
+        # Auxiliary identity matrix for broadcasting
+        self.aux_eye = torch.eye(3, device=self.device)[None, None, :, :]
+
+    def _init_kinetic_energy(self, system):
+        pass
+
+    def _compute_kinetic_energy(self, system):
+        # Here we need the full tensor (R x M x 3 x 3)
+        # Kinetic energy can be computed as 1/3 Tr[Etens]
+        kinetic_energy_tensor = 2.0 * system.kinetic_energy_tensor
+        return kinetic_energy_tensor
+
+    def _compute_kinetic_energy_cell(self):
+        b_cell_sq = torch.matmul(
+            self.b_velocities_cell.transpose(2, 3), self.b_velocities_cell
+        )
+        # Einsum computes the trace
+        return (
+            self.b_masses_cell * torch.einsum("abii->ab", b_cell_sq)[:, :, None, None]
+        )
+
+    def _compute_pressure(self, system):
+        # Get the pressure (R x M x 3 x 3)
+        pressure = system.compute_pressure(kinetic_component=False, tensor=True)
+        # Get the volume (R x M x 1 x 1)
+        volume = system.volume[..., None]
+        return pressure, volume
+
+    def _compute_vtemp(self):
+        vtemp = (
+            self.b_velocities_cell
+            + (
+                torch.einsum("abii->ab", self.b_velocities_cell)
+                / self.degrees_of_freedom
+                + self.t_velocities[..., 0]
+                + self.t_velocities_cell[..., 0]
+            )[:, :, None, None]
+            * self.aux_eye
+        )
+        return vtemp
+
+    def _update_particle_momenta(self, time_step, system):
+        # Compute auxiliary velocity tensor for propagation
+        vtemp = self._compute_vtemp()
+
+        # Compute eigenvectors and values for matrix exponential operator
+        # eigval -> (R x M x 3)
+        # eigvec -> (R x M x 3 x 3)
+        eigval, eigvec = torch.symeig(vtemp, eigenvectors=True)
+        operator = torch.exp(-0.5 * eigval * self.time_step)[:, :, None, :]
+
+        # The following procedure computes the matrix exponential of vtemp and applies it to
+        # the momenta.
+        # p' = p * c
+        momenta_tmp = torch.matmul(system.momenta, eigvec)
+        # Multiply by operator
+        momenta_tmp = momenta_tmp * operator
+        # Transform back
+        # p = p' * c.T
+        system.momenta = torch.matmul(momenta_tmp, eigvec.transpose(2, 3))
+
+    def _update_forces_thermostat(self, kinetic_energy):
+        # Compute Ekin from tensor
+        kinetic_energy = torch.einsum("abii->ab", kinetic_energy) / 3.0
+
+        # Compute forces on thermostat (R x M)
+        self.t_forces[..., 0] = (
+            kinetic_energy - self.degrees_of_freedom * self.kb_temperature
+        ) / self.t_masses[..., 0]
+
+        # Get kinetic energy of barostat (R x M)
+        kinetic_energy_cell = self._compute_kinetic_energy_cell()
+        # Compute forces on cell thermostat
+        self.t_forces_cell[..., 0] = (
+            kinetic_energy_cell - 9 * self.kb_temperature
+        ) / self.t_masses_cell[..., 0]
+
+    def _update_forces_barostat(self, kinetic_energy, pressure, volume):
+        kinetic_energy_scalar = (
+            torch.einsum("abii->ab", kinetic_energy)[:, :, None, None] / 3.0
+        )
+
+        self.b_forces_cell = (
+            1.0
+            / self.degrees_of_freedom[:, :, None, None]
+            * kinetic_energy_scalar
+            * self.aux_eye
+            + kinetic_energy
+            + volume
+            * (pressure - self.aux_eye * self.target_pressure)
+            / self.b_masses_cell
+        )
+
+    def propagate_system(self, system):
+        # Compute auxiliary velocity tensor for propagation
+        vtemp = self._compute_vtemp()
+
+        # Compute eigenvectors and values for matrix exponential operator
+        # eigval -> (R x M x 3)
+        # eigvec -> (R x M x 3 x 3)
+        eigval, eigvec = torch.symeig(vtemp, eigenvectors=True)
+
+        evaldt2 = 0.5 * eigval[:, :, None, :] * self.time_step
+
+        # Compute exponential operator and sinh(x)/x operator (approximated)
+        a_coeff = torch.exp(evaldt2)
+        b_coeff = a_coeff * self.sinhdx.f(evaldt2)
+
+        # Transform positons, velocities and cells via the eigenvectors
+        positions_tmp = torch.matmul(system.positions, eigvec)
+        velocities_tmp = torch.matmul(system.momenta / system.masses, eigvec)
+        cells_tmp = torch.matmul(system.cells, eigvec)
+
+        # Apply the propagator to the positions
+        positions_tmp = (
+            positions_tmp * a_coeff ** 2 + velocities_tmp * b_coeff * self.time_step
+        )
+
+        # Apply the propagator to the cells
+        cells_tmp = cells_tmp * a_coeff ** 2
+
+        # Transform everything back and update the system
+        system.positions = torch.matmul(positions_tmp, eigvec.transpose(2, 3))
+        system.cells = torch.matmul(cells_tmp, eigvec.transpose(2, 3))
