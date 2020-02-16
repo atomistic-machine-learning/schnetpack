@@ -265,19 +265,26 @@ class System:
     def wrap_positions(self):
         raise NotImplementedError
 
-    def compute_pressure(self, tensor=True):
+    def compute_pressure(self, tensor=False, kinetic_component=False):
         if self.stress is None:
             raise SystemError(
                 "Stress required for computation of the instantaneous pressure."
             )
 
         if tensor:
-            pressure = self.kinetic_energy_tensor / self.volume[..., None] - self.stress
+            pressure = -self.stress
+            if kinetic_component:
+                pressure = (
+                    pressure + 2.0 * self.kinetic_energy_tensor / self.volume[..., None]
+                )
+
         else:
-            pressure = (
-                self.kinetic_energy / self.volume
-                - torch.einsum("abii->ab", self.stress)[:, :, None]
-            ) / 3.0
+            # Einsum computes the trace
+            pressure = -torch.einsum("abii->ab", self.stress)[:, :, None]
+            if kinetic_component:
+                pressure = pressure + 2.0 * self.kinetic_energy / self.volume
+
+            pressure = pressure / 3.0
 
         return pressure
 
@@ -486,6 +493,7 @@ class System:
             "masses": self.masses,
             "cells": self.cells,
             "pbc": self.pbc,
+            "stress": self.stress,
         }
         return state_dict
 
@@ -507,6 +515,7 @@ class System:
         self.masses = state_dict["masses"]
         self.cells = state_dict["cells"]
         self.pbc = state_dict["pbc"]
+        self.stress = state_dict["stress"]
 
         self.n_replicas = self.positions.shape[0]
         self.n_molecules = self.positions.shape[1]
