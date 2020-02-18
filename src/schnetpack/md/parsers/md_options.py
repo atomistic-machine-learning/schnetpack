@@ -8,6 +8,7 @@ import schnetpack.md.calculators as calculators
 import schnetpack.md.integrators as integrators
 
 import schnetpack.md.simulation_hooks.thermostats as thermostats
+import schnetpack.md.simulation_hooks.barostats as barostats
 import schnetpack.md.simulation_hooks.logging_hooks as logging_hooks
 import schnetpack.md.simulation_hooks.sampling as sampling
 
@@ -228,6 +229,30 @@ class ThermostatInit(Initializer):
     }
 
 
+class BarostatInit(Initializer):
+    """
+    Initialization instructions for barostats. Optional instructions are used to define the
+    Nose-Hoover chain thermostats.
+    """
+
+    allowed_options = {
+        "mtk": (barostats.MTKBarostat, "standard", None),
+        "nhc_iso": (barostats.NHCBarostatIsotropic, "standard", None),
+        "nhc_aniso": (barostats.NHCBarostatIsotropic, "standard", None),
+        "pile": (barostats.NHCBarostatIsotropic, "standard", None),
+    }
+
+    required_inputs = {
+        "standard": OrderedDict(
+            {
+                "target_pressure": float,
+                "time_constant": float,
+                "temperature_bath": float,
+            }
+        )
+    }
+
+
 class IntegratorInit(Initializer):
     """
     Initialization instructions for the available integrators.
@@ -236,12 +261,23 @@ class IntegratorInit(Initializer):
     allowed_options = {
         "verlet": (integrators.VelocityVerlet, "verlet", None),
         "ring_polymer": (integrators.RingPolymer, "ring_polymer", None),
+        "npt_verlet": (integrators.NPTVelocityVerlet, "npt_verlet", None),
+        "npt_ring_polymer": (integrators.NPTRingPolymer, "npt_ring_polymer", None),
     }
 
     required_inputs = {
         "verlet": OrderedDict({"time_step": float}),
         "ring_polymer": OrderedDict(
             {"n_beads": int, "time_step": float, "temperature": float}
+        ),
+        "npt_verlet": OrderedDict({"time_step": float}),
+        "npt_ring_polymer": OrderedDict(
+            {
+                "n_beads": int,
+                "time_step": float,
+                "temperature": float,
+                "barostat": barostats.BarostatHook,
+            }
         ),
     }
 
