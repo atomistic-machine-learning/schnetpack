@@ -4,14 +4,17 @@ molecular dynamics simulations. Apart from standard thermostats for convetional 
 a series of special thermostats developed for ring polymer molecular dynamics is also provided.
 """
 import torch
-import numpy as np
-import scipy.linalg as linalg
-import logging
 
 from schnetpack.md.utils import MDUnits, YSWeights, StableSinhDiv
-from schnetpack.md.simulation_hooks import ThermostatHook, SimulationHook
+from schnetpack.md.simulation_hooks import SimulationHook
 
-__all__ = ["BarostatHook"]
+__all__ = [
+    "BarostatHook",
+    "NHCBarostatIsotropic",
+    "NHCBarostatAnisotropic",
+    "RPMDBarostat",
+    "MTKBarostat",
+]
 
 
 # TODO:
