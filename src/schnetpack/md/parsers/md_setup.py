@@ -445,7 +445,7 @@ class SetupDynamics(SetupBlock):
         Args:
             md_initializer (schnetpack.md.parser.MDSimulation): Parent MDSimulation class.
         """
-        # Build the integrator
+        # Get the integrator config
         integrator_config = self.target_config_block["integrator"]
 
         # Set the device for integrator (used in normal mode transformation)
@@ -454,14 +454,59 @@ class SetupDynamics(SetupBlock):
         if integrator_config[IntegratorInit.kind] == "ring_polymer":
             integrator_config["n_beads"] = md_initializer.system.n_replicas
 
-        md_initializer.integrator = IntegratorInit(integrator_config).initialized
-
-        # Add a thermostat if requested
+        # Add a thermostat if requested (certain baristats have thermostats built in,
+        # in this case all options here are ignored)
         if "thermostat" in self.target_config_block:
             thermostat_config = self.target_config_block["thermostat"]
             thermostat = ThermostatInit(thermostat_config).initialized
             if thermostat is not None:
                 md_initializer.hooks += [thermostat]
+        else:
+            thermostat = None
+
+        if "barostat" in self.target_config_block:
+            barostat_config = self.target_config_block["barostat"]
+
+            # Issue message in case a barostat with included thermostat is used
+            # -> NHC type barostats
+            if barostat_config[BarostatInit.kind] in [
+                "nhc_barostat_iso",
+                "nhc_barostat_aniso",
+            ]:
+                logging.info(
+                    "The chosen barostat {:s} already includes a thermostat."
+                    "All thermostat options will be ignored".format(BarostatInit.kind)
+                )
+                thermostat = None
+
+            # Automatically set barostat temperature to thermostat temperature if feasible
+            if thermostat is not None:
+                logging.info(
+                    f"Thermostat detected, setting barostat temperature to {thermostat.temperature_bath}K"
+                )
+                barostat_config["temperature_bath"] = thermostat.temperature_bath
+
+            barostat = BarostatInit(barostat_config).initialized
+
+            # If a barostat of the NHC and BLA kind is used, switch to the corresponding NPT integrator
+            if barostat_config is not None:
+                if integrator_config[IntegratorInit.kind] == "ring_polymer":
+                    integrator_config[IntegratorInit.kind] = "npt_ring_polymer"
+                    integrator_config["barostat"] = barostat
+                if integrator_config[IntegratorInit.kind] == "verlet":
+                    integrator_config[IntegratorInit.kind] = "npt_verlet"
+                    integrator_config["barostat"] = barostat
+        else:
+            barostat = None
+
+        # Finally add barostat and thermostats to hooks
+        if barostat is not None:
+            md_initializer.hooks.append(barostat)
+        if thermostat is not None:
+            md_initializer.hooks.append(thermostat)
+
+        # Iniotialize the integrator based on the above modifications
+        md_initializer.integrator = IntegratorInit(integrator_config).initialized
 
         # Remove the motion of the center of motion
         if "remove_com_motion" in self.target_config_block:
