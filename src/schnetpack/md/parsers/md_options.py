@@ -238,17 +238,13 @@ class BarostatInit(Initializer):
     allowed_options = {
         "mtk": (barostats.MTKBarostat, "standard", None),
         "nhc_iso": (barostats.NHCBarostatIsotropic, "standard", None),
-        "nhc_aniso": (barostats.NHCBarostatIsotropic, "standard", None),
-        "pile": (barostats.NHCBarostatIsotropic, "standard", None),
+        "nhc_aniso": (barostats.NHCBarostatAnisotropic, "standard", None),
+        "pile": (barostats.RPMDBarostat, "standard", None),
     }
 
     required_inputs = {
         "standard": OrderedDict(
-            {
-                "target_pressure": float,
-                "time_constant": float,
-                "temperature_bath": float,
-            }
+            {"target_pressure": float, "temperature": float, "time_constant": float}
         )
     }
 
@@ -276,7 +272,7 @@ class IntegratorInit(Initializer):
                 "n_beads": int,
                 "time_step": float,
                 "temperature": float,
-                "barostat": barostats.BarostatHook,
+                # "barostat": barostats.BarostatHook,
             }
         ),
     }

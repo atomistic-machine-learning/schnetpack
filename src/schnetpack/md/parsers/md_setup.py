@@ -459,8 +459,6 @@ class SetupDynamics(SetupBlock):
         if "thermostat" in self.target_config_block:
             thermostat_config = self.target_config_block["thermostat"]
             thermostat = ThermostatInit(thermostat_config).initialized
-            if thermostat is not None:
-                md_initializer.hooks += [thermostat]
         else:
             thermostat = None
 
@@ -484,7 +482,7 @@ class SetupDynamics(SetupBlock):
                 logging.info(
                     f"Thermostat detected, setting barostat temperature to {thermostat.temperature_bath}K"
                 )
-                barostat_config["temperature_bath"] = thermostat.temperature_bath
+                barostat_config["temperature"] = thermostat.temperature_bath
 
             barostat = BarostatInit(barostat_config).initialized
 
