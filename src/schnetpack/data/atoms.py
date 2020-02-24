@@ -113,7 +113,11 @@ class AtomsData(Dataset):
                 "your dbpath."
             )
         if subset is not None:
-            warnings.warn("subset argument is deprecated and will be ignored!!!")
+            raise AtomsDataError(
+                "The subset argument is deprecated and can not be used anymore! "
+                "Please use spk.data.partitioning.create_subset or "
+                "spk.data.AtomsDataSubset to build subsets."
+            )
 
         # database
         self.dbpath = dbpath
@@ -382,9 +386,7 @@ class AtomsData(Dataset):
             # raise error if available properties do not match database
             raise AtomsDataError(
                 "The available_properties {} do not match the "
-                "properties in the database {}!".format(
-                    properties, db_properties
-                )
+                "properties in the database {}!".format(properties, db_properties)
             )
 
         # return database properties

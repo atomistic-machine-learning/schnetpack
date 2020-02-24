@@ -7,7 +7,7 @@ from ase import Atoms
 import schnetpack as spk
 import schnetpack.data
 
-__all__ = ["max_atoms", "example_asedata", "property_spec", "example_data", "num_data"]
+__all__ = ["max_atoms", "example_dataset", "property_spec", "example_data", "num_data"]
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def property_spec():
 
 
 @pytest.fixture
-def empty_asedata(tmpdir, max_atoms, property_spec):
+def empty_dataset(tmpdir, max_atoms, property_spec):
     return schnetpack.data.AtomsData(
         os.path.join(str(tmpdir), "test.db"),
         available_properties=list(property_spec.keys()),
@@ -56,7 +56,7 @@ def example_data(max_atoms, num_data):
 
 
 @pytest.fixture
-def example_asedata(tmpdir, max_atoms, property_spec, example_data):
+def example_dataset(tmpdir, max_atoms, property_spec, example_data):
     data = schnetpack.data.AtomsData(
         os.path.join(str(tmpdir), "test.db"),
         available_properties=list(property_spec.keys()),
@@ -67,21 +67,21 @@ def example_asedata(tmpdir, max_atoms, property_spec, example_data):
     return data
 
 
-def test_add_and_read(empty_asedata, example_data):
+def test_add_and_read(empty_dataset, example_data):
     # add data
     for ats, props in example_data:
-        empty_asedata.add_system(ats, **props)
+        empty_dataset.add_system(ats, **props)
 
-    assert len(empty_asedata) == len(example_data)
-    assert os.path.exists(empty_asedata.dbpath)
+    assert len(empty_dataset) == len(example_data)
+    assert os.path.exists(empty_dataset.dbpath)
 
     for i in range(len(example_data)):
-        d = empty_asedata[i]
-    return empty_asedata
+        d = empty_dataset[i]
+    return empty_dataset
 
 
-def test_empty_subset_of_subset(empty_asedata, example_data):
-    data = test_add_and_read(empty_asedata, example_data)
+def test_empty_subset_of_subset(empty_dataset, example_data):
+    data = test_add_and_read(empty_dataset, example_data)
     subset = data.create_subset([0, 1])
     subsubset = subset.create_subset([])
     assert len(subset) == 2
@@ -93,18 +93,18 @@ def partition_names(request):
     return request.param
 
 
-def test_merging(tmpdir, example_asedata, partition_names):
+def test_merging(tmpdir, example_dataset, partition_names):
     # create merged dataset by repeating original three times
     merged_dbpath = os.path.join(str(tmpdir), "merged.db")
 
-    parts = [example_asedata.dbpath, example_asedata.dbpath, example_asedata.dbpath]
+    parts = [example_dataset.dbpath, example_dataset.dbpath, example_dataset.dbpath]
     if partition_names is not None:
         parts = {k: v for k, v in zip(partition_names, parts)}
 
     merged_data = schnetpack.data.merge_datasets(merged_dbpath, parts)
 
     # check merged
-    assert len(merged_data) == 3 * len(example_asedata)
+    assert len(merged_data) == 3 * len(example_dataset)
 
     partitions = merged_data.get_metadata("partitions")
     partition_meta = merged_data.get_metadata("partition_meta")
@@ -125,8 +125,8 @@ def batch_size(request):
     return request.param
 
 
-def test_loader(example_asedata, batch_size):
-    loader = schnetpack.data.AtomsLoader(example_asedata, batch_size)
+def test_loader(example_dataset, batch_size):
+    loader = schnetpack.data.AtomsLoader(example_dataset, batch_size)
     for batch in loader:
         for entry in batch.values():
             assert entry.shape[0] == min(batch_size, len(loader.dataset))
@@ -192,3 +192,34 @@ def test_get_center(h2o, o2):
     cog = spk.data.get_center_of_geometry(h2o)
 
     np.testing.assert_raises(AssertionError, np.testing.assert_array_equal, com, cog)
+
+
+def test_concatenation(example_dataset):
+    len_e = len(example_dataset)
+    # create subset
+    subset = spk.data.create_subset(example_dataset, [0, 1])
+
+    # create concat dataset
+    concat = example_dataset + subset
+    concat2 = concat + subset
+
+    # test lengths
+    assert len(concat) == len(subset) + len(example_dataset)
+    assert len(subset) == 2
+    assert len(concat2) == len(concat) + len(subset)
+
+    for i in range(len_e):
+        c, e = concat[i], example_dataset[i]
+        for key in c.keys():
+            if key == "_idx":
+                continue
+            cv, ev = c[key], e[key]
+            assert torch.equal(cv, ev)
+
+    for i in range(2):
+        c, e = concat[len_e + i], subset[i]
+        for key in c.keys():
+            if key == "_idx":
+                continue
+            cv, ev = c[key], e[key]
+            assert torch.equal(cv, ev), "key {} does not match!".format(key)
