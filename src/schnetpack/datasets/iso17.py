@@ -25,7 +25,8 @@ class ISO17(DownloadableAtomsData):
                         test_within - remaining 20% unseen steps of reference trajectories
                         test_other - remaining 20% unseen MD trajectories
                         test_eq - equilibrium conformations of test trajectories
-        subset (list): indices of subset. Set to None for entire dataset (default: None)
+        subset (list, optional): Deprecated! Do not use! Subsets are created with
+            AtomsDataSubset class.
         load_only (list, optional): reduced set of properties to be loaded
         download (bool): set to true if dataset should be downloaded. (default: True)
         collect_triples (false): set to true to compute triples for angular functions

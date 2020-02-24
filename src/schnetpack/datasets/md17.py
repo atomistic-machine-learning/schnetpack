@@ -30,8 +30,8 @@ class MD17(DownloadableAtomsData):
                             salicylic_acid
                             toluene
                             uracil
-        subset (list): indices of subset. Set to None for entire dataset
-            (default: None)
+        subset (list, optional): Deprecated! Do not use! Subsets are created with
+            AtomsDataSubset class.
         download (bool): set true if dataset should be downloaded
             (default: True)
         collect_triples (bool): set true if triples for angular functions

@@ -23,7 +23,8 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
         path (str): path to directory containing database.
         cutoff (float): cutoff for bulk interactions.
         download (bool, optional): enable downloading if database does not exists.
-        subset (list): indices to subset. Set to None for entire database.
+        subset (list, optional): Deprecated! Do not use! Subsets are created with
+            AtomsDataSubset class.
         load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
         environment_provider (spk.environment.BaseEnvironmentProvider): define how

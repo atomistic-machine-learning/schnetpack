@@ -13,7 +13,8 @@ class DownloadableAtomsData(AtomsData):
 
         Args:
             dbpath (str): path to directory containing database.
-            subset (list, optional): indices to subset. Set to None for entire database.
+            subset (list, optional): Deprecated! Do not use! Subsets are created with
+                AtomsDataSubset class.
             available_properties (list, optional): complete set of physical properties
                 that are contained in the database.
             load_only (list, optional): reduced set of properties to be loaded

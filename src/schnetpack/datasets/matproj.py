@@ -23,7 +23,8 @@ class MaterialsProject(DownloadableAtomsData):
         cutoff (float): cutoff for bulk interactions.
         apikey (str, optional): materials project key needed to download the data.
         download (bool, optional): enable downloading if database does not exists.
-        subset (list, optional): indices to subset. Set to None for entire database.
+        subset (list, optional): Deprecated! Do not use! Subsets are created with
+            AtomsDataSubset class.
         load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
         environment_provider (spk.environment.BaseEnvironmentProvider): define how

@@ -26,7 +26,8 @@ class QM9(DownloadableAtomsData):
     Args:
         dbpath (str): path to directory containing database.
         download (bool, optional): enable downloading if database does not exists.
-        subset (list, optional): indices to subset. Set to None for entire database.
+        subset (list, optional): Deprecated! Do not use! Subsets are created with
+            AtomsDataSubset class.
         load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
         remove_uncharacterized (bool, optional): remove uncharacterized molecules.
