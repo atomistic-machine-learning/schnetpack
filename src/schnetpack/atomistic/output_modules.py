@@ -173,7 +173,9 @@ class Atomwise(nn.Module):
             )[0]
             # Compute cell volume
             volume = torch.sum(
-                cell[:, 0] * torch.cross(cell[:, 1], cell[:, 2]), dim=1, keepdim=True
+                cell[:, 0, :] * torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
+                dim=1,
+                keepdim=True,
             )[..., None]
             # Finalize stress tensor
             result[self.stress] = stress / volume
