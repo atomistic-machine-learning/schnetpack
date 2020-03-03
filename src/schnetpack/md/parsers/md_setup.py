@@ -467,10 +467,7 @@ class SetupDynamics(SetupBlock):
 
             # Issue message in case a barostat with included thermostat is used
             # -> NHC type barostats
-            if barostat_config[BarostatInit.kind] in [
-                "nhc_barostat_iso",
-                "nhc_barostat_aniso",
-            ]:
+            if barostat_config[BarostatInit.kind] in ["nhc_iso", "nhc_aniso"]:
                 logging.info(
                     "The chosen barostat {:s} already includes a thermostat."
                     "All thermostat options will be ignored".format(BarostatInit.kind)

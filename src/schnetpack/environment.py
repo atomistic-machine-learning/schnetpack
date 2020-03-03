@@ -47,7 +47,7 @@ class SimpleEnvironmentProvider(BaseEnvironmentProvider):
     """
 
     def get_environment(self, atoms, grid=None):
-        n_atoms = atoms.get_number_of_atoms()
+        n_atoms = atoms.get_global_number_of_atoms()
 
         if n_atoms == 1:
             neighborhood_idx = -np.ones((1, 1), dtype=np.float32)
@@ -90,7 +90,7 @@ class AseEnvironmentProvider(BaseEnvironmentProvider):
         if grid is not None:
             raise NotImplementedError
 
-        n_atoms = atoms.get_number_of_atoms()
+        n_atoms = atoms.get_global_number_of_atoms()
         idx_i, idx_j, idx_S = neighbor_list(
             "ijS", atoms, self.cutoff, self_interaction=False
         )
@@ -162,7 +162,7 @@ class TorchEnvironmentProvider(BaseEnvironmentProvider):
         bi_idx_j = np.hstack((idx_j, idx_i))
         bi_idx_S = np.vstack((-idx_S, idx_S))
 
-        n_atoms = atoms.get_number_of_atoms()
+        n_atoms = atoms.get_global_number_of_atoms()
         if bi_idx_i.shape[0] > 0:
             uidx, n_nbh = np.unique(bi_idx_i, return_counts=True)
             n_max_nbh = np.max(n_nbh)
