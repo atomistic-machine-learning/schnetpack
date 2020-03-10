@@ -686,8 +686,8 @@ class TemperatureLogger(TensorboardLogger):
 
 class PressureLogger(TensorboardLogger):
     """
-    TensorBoard logging hook for the temperatures of the replicas, as well as of the corresponding centroids for each
-    molecule in the system container.
+    TensorBoard logging hook for the pressure of the replicas, as well as of the corresponding centroids for each
+    molecule in the system container. This requires the stress tensor to be computed in the model.
 
     Args:
         log_file (str): Path to the TensorBoard file.
@@ -700,7 +700,7 @@ class PressureLogger(TensorboardLogger):
 
     def on_step_end(self, simulator):
         """
-        Log the systems temperatures at the given intervals.
+        Log the systems pressures at the given intervals.
 
         Args:
             simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
