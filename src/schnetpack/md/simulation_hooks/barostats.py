@@ -21,11 +21,24 @@ __all__ = [
 
 
 class BarostatError(Exception):
+    """
+    Exception for barostat hooks.
+    """
+
     pass
 
 
 class BarostatHook(SimulationHook):
     """
+    Basic barostat hook for simulator class. This class is initialized based on the simulator and system
+    specifications during the first MD step. Barostats are applied before and after each MD step. In addition,
+    they modify the update of positions and cells, which is why they have to be used with modified integrators.
+
+    Args:
+        target_pressure (float): Target pressure of the system (in bar).
+        temperature_bath (float): Target temperature applied to the cell fluctuations.
+        detach (bool): Whether the computational graph should be detached after each simulation step. Default is true,
+                       should be changed if differentiable MD is desired.
     """
 
     def __init__(self, target_pressure, temperature_bath, detach=True):
@@ -40,17 +53,16 @@ class BarostatHook(SimulationHook):
 
     def on_simulation_start(self, simulator):
         """
-        Routine to initialize the thermostat based on the current state of the simulator. Reads the device to be uses,
-        as well as the number of molecular replicas present in simulator.system. Furthermore, the normal mode
-        transformer is initialized during ring polymer simulations. In addition, a flag is set so that the thermostat
+        Routine to initialize the barostat based on the current state of the simulator. Reads the device to be uses,
+        as well as the number of molecular replicas present in simulator.system. A flag is set so that the barostat
         is not reinitialized upon continuation of the MD.
 
-        Main function is the _init_thermostat routine, which takes the simulator as input and must be provided for every
-        new thermostat.
+        Main function is the _init_barostat routine, which takes the simulator as input and must be provided for every
+        new barostat.
 
         Args:
-            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
-                                                                 time step, system, etc.
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on
+                                                                the time step, system, etc.
         """
         self.device = simulator.system.device
         self.n_replicas = simulator.system.n_replicas
@@ -63,16 +75,16 @@ class BarostatHook(SimulationHook):
 
     def on_step_begin(self, simulator):
         """
-        First application of the thermostat befor the first half step of the dynamics. Regulates temperature and applies
-        a mask to the system momenta in order to avoid problems of e.g. thermal noise added to the zero padded tensors.
-        The detach is carried out here.
+        First application of the barostat before the first half step of the dynamics. Applies a mask to the system
+        momenta in order to avoid problems of e.g. noise added to the zero padded tensors. The detach is carried out
+        here.
 
-        Main function is the _apply_thermostat routine, which takes the simulator as input and must be provided for
-        every new thermostat.
+        Main function is the _apply_barostat routine, which takes the simulator as input and must be provided for
+        every new barostat.
 
         Args:
-            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
-                                                                 time step, system, etc.
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on
+                                                the time step, system, etc.
         """
         # Apply thermostat
         self._apply_barostat(simulator)
@@ -89,16 +101,16 @@ class BarostatHook(SimulationHook):
 
     def on_step_end(self, simulator):
         """
-        First application of the thermostat befor the first half step of the dynamics. Regulates temperature and applies
-        a mask to the system momenta in order to avoid problems of e.g. thermal noise added to the zero padded tensors.
-        The detach is carried out here.
+        Second application of the barostat after the second half step of the dynamics. Applies a mask to the system
+        momenta in order to avoid problems of e.g. noise added to the zero padded tensors. The detach is carried out
+        here.
 
-        Main function is the _apply_thermostat routine, which takes the simulator as input and must be provided for
-        every new thermostat.
+        Main function is the _apply_barostat routine, which takes the simulator as input and must be provided for
+        every new barostat.
 
         Args:
-            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
-                                                                 time step, system, etc.
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on
+                                                the time step, system, etc.
         """
         # Apply thermostat
         self._apply_barostat(simulator)
@@ -115,33 +127,31 @@ class BarostatHook(SimulationHook):
 
     def _init_barostat(self, simulator):
         """
-        Dummy routine for initializing a thermostat based on the current simulator. Should be implemented for every
-        new thermostat. Has access to the information contained in the simulator class, e.g. number of replicas, time
+        Dummy routine for initializing a barpstat based on the current simulator. Should be implemented for every
+        new barostat. Has access to the information contained in the simulator class, e.g. number of replicas, time
         step, masses of the atoms, etc.
 
         Args:
-            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
-                                                                 time step, system, etc.
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on
+                                                the time step, system, etc.
         """
         raise NotImplementedError
 
     def _apply_barostat(self, simulator):
         """
-        Dummy routine for applying the thermostat to the system. Should use the implemented thermostat to update the
-        momenta of the system contained in simulator.system.momenta. Is called twice each simulation time step.
+        Dummy routine for applying the barostat to the system and propagating the barostat. Is called twice each
+        simulation time step.
 
         Args:
-            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
-                                                                 time step, system, etc.
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on
+                                                the time step, system, etc.
         """
         raise NotImplementedError
 
     def propagate_system(self, system):
         """
-        Propagate the positions and cell of the system. Defaults to classic Verlet.
-
-        ..math::
-            q = q + \frac{p}{m} \delta t
+        Propagate the system under the conditions imposed by the barostat. This has to be adapted to the specific
+        barostat algorithm and should propagate the positons, cells and momenta (for RPMD). Defaults to classic Verlet.
 
         Args:
             system (schnetpack.md.System): System class containing all molecules and their
@@ -150,183 +160,40 @@ class BarostatHook(SimulationHook):
         system.positions = (
             system.positions + self.time_step * system.momenta / system.masses
         )
-        system.positions = system.positions.detach()
 
     def propagate_barostat_half_step(self, system):
         """
-        Used for RPMD
+        Routine only required for RPMD which propagates the barostat attached to the centroid cell. Is called during
+        each half-step before system momenta are propagated.
 
         Args:
-            system:
+            system (schnetpack.md.System): System class containing all molecules and their
+                             replicas.
         """
         pass
 
 
-class RPMDBarostat(BarostatHook):
-    def __init__(self, target_pressure, temperature_bath, time_constant, detach=True):
-        super(RPMDBarostat, self).__init__(
-            target_pressure=target_pressure,
-            temperature_bath=temperature_bath,
-            detach=detach,
-        )
-        self.frequency = 1.0 / (time_constant * MDUnits.fs2atu)
-        self.kb_temperature = temperature_bath * MDUnits.kB
-        self.transformation = None
-        self.propagator = None
-        self.cell_momenta = None
-        self.sinhdx = StableSinhDiv()
-
-    def _init_barostat(self, simulator):
-        # Get normal mode transformer and propagator for position and cell update
-        self.transformation = simulator.integrator.transformation
-        self.propagator = simulator.integrator.propagator
-
-        # Set up centroid momenta of cell (one for every molecule)
-        self.cell_momenta = torch.zeros(
-            self.n_molecules, device=simulator.system.device
-        )
-        self.mass = (
-            3.0 * simulator.system.n_atoms / self.frequency ** 2 * self.kb_temperature
-        )
-
-        # Set up cell thermostat coefficients
-        self.c1 = torch.exp(
-            -0.5 * torch.ones(1, device=self.device) * self.frequency * self.time_step
-        )
-        self.c2 = torch.sqrt(
-            self.n_replicas * self.mass * self.kb_temperature * (1.0 - self.c1 ** 2)
-        )
-
-    def _apply_barostat(self, simulator):
-        # Propagate cell momenta during half-step
-        self.cell_momenta = self.c1 * self.cell_momenta + self.c2 * torch.randn_like(
-            self.cell_momenta
-        )
-        self.cell_momenta = self.cell_momenta.detach()
-
-    def propagate_system(self, system):
-        # Transform to normal mode representation
-        positions_normal = self.transformation.beads2normal(system.positions)
-        momenta_normal = self.transformation.beads2normal(system.momenta)
-
-        # Propagate centroid mode of the ring polymer
-        reduced_momenta = (self.cell_momenta / self.mass)[:, None, None]
-        scaling = torch.exp(-self.time_step * reduced_momenta)
-
-        momenta_normal[0] = momenta_normal[0] * scaling
-        positions_normal[0] = (
-            positions_normal[0] / scaling
-            + self.sinhdx.f(self.time_step * reduced_momenta)
-            * (momenta_normal[0] / system.masses[0])
-            * self.time_step
-        )
-
-        # Update cells
-        system.cells = system.cells / scaling[None, ...]
-
-        # Propagate the remaining modes of the ring polymer
-        momenta_normal[1:] = (
-            self.propagator[1:, 0, 0] * momenta_normal[1:]
-            + self.propagator[1:, 0, 1] * positions_normal[1:] * system.masses
-        )
-        positions_normal[1:] = (
-            self.propagator[1:, 1, 0] * momenta_normal[1:] / system.masses
-            + self.propagator[1:, 1, 1] * positions_normal[1:]
-        )
-
-        # Transform back to bead representation
-        system.positions = self.transformation.normal2beads(positions_normal)
-        system.momenta = self.transformation.normal2beads(momenta_normal)
-
-    def propagate_barostat_half_step(self, system):
-        centroid_momenta = self.transformation.beads2normal(system.momenta)[0]
-        centroid_forces = self.transformation.beads2normal(system.forces)[0]
-
-        # Compute pressure component
-        component_1 = (
-            3.0
-            * self.n_replicas
-            * (
-                system.volume[0]
-                * (
-                    torch.mean(system.compute_pressure(kinetic_component=True), dim=0)
-                    - self.target_pressure
-                )
-                + self.kb_temperature
-            )
-        )
-
-        # Compute components based on forces and momenta
-        force_by_mass = centroid_forces / system.masses[0]
-
-        component_2 = torch.sum(force_by_mass * centroid_momenta, dim=[1, 2])
-        component_3 = torch.sum(force_by_mass * centroid_forces / 3, dim=[1, 2])
-
-        # Update cell momenta
-        self.cell_momenta = (
-            self.cell_momenta
-            + (0.5 * self.time_step) * component_1
-            + (0.5 * self.time_step) ** 2 * component_2
-            + (0.5 * self.time_step) ** 3 * component_3
-        )
-
-        self.cell_momenta = self.cell_momenta.detach()
-
-    @property
-    def state_dict(self):
-        state_dict = {
-            "frequency": self.frequency,
-            "kb_temperature": self.kb_temperature,
-            "transformation": self.transformation,
-            "propagator": self.propagator,
-            "cell_momenta": self.cell_momenta,
-            "mass": self.mass,
-            "c1": self.c1,
-            "c2": self.c2,
-            "temperature_bath": self.temperature_bath,
-            "target_pressure": self.target_pressure,
-            "n_replicas": self.n_replicas,
-        }
-        return state_dict
-
-    @state_dict.setter
-    def state_dict(self, state_dict):
-        self.frequency = state_dict["frequency"]
-        self.kb_temperature = state_dict["kb_temperature"]
-        self.transformation = state_dict["transformation"]
-        self.propagator = state_dict["propagator"]
-        self.cell_momenta = state_dict["cell_momenta"]
-        self.mass = state_dict["mass"]
-        self.c1 = state_dict["c1"]
-        self.c2 = state_dict["c2"]
-        self.temperature_bath = state_dict["temperature_bath"]
-        self.target_pressure = state_dict["target_pressure"]
-        self.n_replicas = state_dict["n_replicas"]
-
-        self.initialized = True
-
-
 class NHCBarostatIsotropic(BarostatHook):
     """
-    Nose Hoover chain thermostat/barostat for isotropic cell fluctuations.
+    Nose Hoover chain thermostat/barostat for isotropic cell fluctuations. This barostat already contains a built in
+    thermostat, so no further temperature control is necessary. As suggested in [#nhc_barostat1]_, two separate chains
+    are used to thermostat particle and cell momenta.
 
     Args:
+        target_pressure (float): Target pressure in bar.
         temperature_bath (float): Temperature of the external heat bath in Kelvin.
         time_constant (float): Thermostat time constant in fs
+        time_constant_barostat (float): Barostat time constant in fs. If None is given (default), the same time constant
+                                        as for the thermostat component is used.
         chain_length (int): Number of Nose-Hoover thermostats applied in the chain.
-        massive (bool): If set to true, an individual thermostat is applied to each degree of freedom in the system.
-                        Can e.g. be used for thermostatting (default=False).
-        nm_transformation (schnetpack.md.utils.NormalModeTransformer): Module used to transform between beads and normal
-                                                                   model representation in ring polymer dynamics.
         multi_step (int): Number of steps used for integrating the NH equations of motion (default=2)
         integration_order (int): Order of the Yoshida-Suzuki integrator used for propagating the thermostat (default=3).
+        detach (bool): Whether the computational graph should be detached after each simulation step. Default is true,
+                       should be changed if differentiable MD is desired.
 
     References
     ----------
-    .. [#nhc_thermostat1] Tobias, Martyna, Klein:
-       Molecular dynamics simulations of a protein in the canonical ensemble.
-       The Journal of Physical Chemistry, 97(49), 12959-12966. 1993.
-    .. [#nhc_thermostat2] Martyna, Tuckerman, Tobias, Klein:
+    .. [#nhc_barostat1] Martyna, Tuckerman, Tobias, Klein:
        Explicit reversible integrators for extended systems dynamics.
        Molecular Physics, 87(5), 1117-1157. 1996.
     """
@@ -387,11 +254,11 @@ class NHCBarostatIsotropic(BarostatHook):
     def _init_barostat(self, simulator):
         """
         Initialize the thermostat positions, forces, velocities and masses, as well as the number of degrees of freedom
-        seen by each chain link.
+        seen by each chain link. In the same manner, all quantities required for the barostat are initialized.
 
         Args:
-            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
-                                                                 time step, system, etc.
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on
+                                                    the time step, system, etc.
         """
         # Determine integration step via multi step and Yoshida Suzuki weights
         integration_weights = YSWeights(self.device).get_weights(self.integration_order)
@@ -407,7 +274,9 @@ class NHCBarostatIsotropic(BarostatHook):
         self._init_barostat_variables()
 
     def _init_thermostat_variables(self):
-
+        """
+        Initialize all quantities required for the two thermostat chains on the particles and cells.
+        """
         # Set up thermostat masses
         self.t_masses = torch.zeros(
             self.n_replicas, self.n_molecules, self.chain_length, device=self.device
@@ -434,10 +303,13 @@ class NHCBarostatIsotropic(BarostatHook):
         self.t_forces_cell = torch.zeros_like(self.t_masses_cell, device=self.device)
 
         # Positions for conservation
-        self.t_positions = torch.zeros_like(self.t_masses, device=self.device)
-        self.t_positions_cell = torch.zeros_like(self.t_masses_cell, device=self.device)
+        # self.t_positions = torch.zeros_like(self.t_masses, device=self.device)
+        # self.t_positions_cell = torch.zeros_like(self.t_masses_cell, device=self.device)
 
     def _init_barostat_variables(self):
+        """
+        Initialize all quantities required for the barostat component.
+        """
         # Set barostat masses
         self.b_masses_cell = torch.ones(
             self.n_replicas, self.n_molecules, device=self.device
@@ -454,7 +326,16 @@ class NHCBarostatIsotropic(BarostatHook):
         self.b_forces_cell = torch.zeros_like(self.b_masses_cell, device=self.device)
 
     def _apply_barostat(self, simulator):
+        """
+        Apply the thermostat chains to the system and cell momenta. This is done by computing forces of the innermost
+        thermostats, propagating the chain forward, updating the box velocities, particle momenta and associated
+        energies. Based on this, the kinetic energies and forces can be updated, which are the propagated backward
+        through the chain.
 
+        Args:
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on
+                                                                the time step, system, etc.
+        """
         self._init_kinetic_energy(simulator.system)
         kinetic_energy = self._compute_kinetic_energy(simulator.system)
         pressure, volume = self._compute_pressure(simulator.system)
@@ -489,27 +370,71 @@ class NHCBarostatIsotropic(BarostatHook):
                 # Update velocities and forces of remaining thermostats
                 self._chain_backward(time_step)
 
+        if self.detach:
+            self.t_positions = self.t_positions.detach()
+            self.t_positions_cell = self.t_positions_cell.detach()
+            self.t_velocities = self.t_velocities.detach()
+            self.t_velocities_cell = self.t_velocities_cell.detach()
+            self.b_velocities_cell = self.b_velocities_cell.detach()
+
     def _init_kinetic_energy(self, system):
+        """
+        Auxiliary routine for initializing the kinetic energy and accumulating the scaling factor.
+
+        Args:
+            system (schnetpack.md.System): System class containing all molecules and their
+                             replicas.
+        """
         self.scaling = 1.0
         # R x M
         self.kinetic_energy = 2.0 * system.kinetic_energy
 
     def _compute_kinetic_energy(self, system):
+        """
+        Compute the current kinetic energy. Here an internal surrogate is used, which is scaled continuously.
+
+        Args:
+            system (schnetpack.md.System): System class containing all molecules and their
+                             replicas.
+        Returns:
+            torch.tensor: Current kinetic energy of the particles.
+        """
         return self.kinetic_energy
 
     def _compute_kinetic_energy_cell(self):
+        """
+        Compute the kinetic energy of the cells.
+
+        Returns:
+            torch.tensor: Kinetic energy associated with the cells.
+        """
         return self.b_masses_cell * self.b_velocities_cell ** 2
 
     def _compute_pressure(self, system):
+        """
+        Routine for computing the current pressure and volume associated with the simulated systems. The stress tensor
+        is used for pressure computation.
+
+        Args:
+            system (schnetpack.md.System): System class containing all molecules and their
+                             replicas.
+
+        Returns:
+            (torch.Tensor, torch.Tensor): Duple containing the pressures and volumes.
+        """
         # Get the pressure (R x M)
-        pressure = system.compute_pressure(kinetic_component=False, tensor=False)[
-            ..., 0
-        ]
+        pressure = system.compute_pressure(kinetic_component=False, tensor=False)
         # Get the volume (R x M)
-        volume = system.volume[..., 0]
+        volume = system.volume
         return pressure, volume
 
     def _chain_forward(self, time_step):
+        """
+        Forward propagation of the two Nose-Hoover chains attached to particles and cells.
+
+        Args:
+            time_step (float): Current timestep considering YS and multi-timestep integration.
+        """
         # Update velocities of outermost bath
         self.t_velocities[..., -1] += 0.25 * self.t_forces[..., -1] * time_step
         self.t_velocities_cell[..., -1] += (
@@ -533,6 +458,12 @@ class NHCBarostatIsotropic(BarostatHook):
             )
 
     def _update_box_velocities(self, time_step):
+        """
+        Update the velocities of the additional degree of freedom associated with the simulation cells.
+
+        Args:
+            time_step (float): Current timestep considering YS and multi-timestep integration.
+        """
         b_factor = torch.exp(-0.125 * time_step * self.t_velocities_cell[..., 0])
         self.b_velocities_cell = (
             b_factor ** 2 * self.b_velocities_cell
@@ -540,6 +471,14 @@ class NHCBarostatIsotropic(BarostatHook):
         )
 
     def _update_particle_momenta(self, time_step, system):
+        """
+        Update the momenta of the particles, as well as the internal kinetic energy surrogate.
+
+        Args:
+            time_step (float): Current timestep considering YS and multi-timestep integration.
+            system (schnetpack.md.System): System class containing all molecules and their
+                             replicas.
+        """
         scaling = torch.exp(
             -0.5
             * time_step
@@ -552,6 +491,13 @@ class NHCBarostatIsotropic(BarostatHook):
         self.kinetic_energy *= scaling ** 2
 
     def _chain_backward(self, time_step):
+        """
+        Backward propagation of the two Nose-Hoover chains attached to particles and cells. In addition, the repsective
+        thermostat forces are updated.
+
+        Args:
+            time_step (float): Current timestep considering YS and multi-timestep integration.
+        """
         # Update the thermostat velocities
         for chain in range(self.chain_length - 1):
             t_coeff = torch.exp(-0.125 * time_step * self.t_velocities[..., chain + 1])
@@ -585,6 +531,12 @@ class NHCBarostatIsotropic(BarostatHook):
         )
 
     def _update_forces_thermostat(self, kinetic_energy):
+        """
+        Update the forces acting on the two innermost thermostats coupled to the particle and cell momenta.
+
+        Args:
+            kinetic_energy (torch.Tensor): Tensor containing the current kinetic energies of the systems.
+        """
         # Compute forces on thermostat (R x M)
         self.t_forces[..., 0] = (
             kinetic_energy - self.degrees_of_freedom * self.kb_temperature
@@ -598,12 +550,28 @@ class NHCBarostatIsotropic(BarostatHook):
         ) / self.t_masses_cell[..., 0]
 
     def _update_forces_barostat(self, kinetic_energy, pressure, volume):
+        """
+        Update the forces acting on the barostat coupled to the cell.
+
+        Args:
+            kinetic_energy (torch.Tensor): Tensor containing the current kinetic energies of the systems.
+            pressure (torch.Tensor): Current pressure of each system.
+            volume (torch.Tensor): Current volume of each system.
+        """
         self.b_forces_cell = (
             (1.0 + 3.0 / self.degrees_of_freedom) * kinetic_energy
             + 3.0 * volume * (pressure - self.target_pressure)
         ) / self.b_masses_cell
 
     def propagate_system(self, system):
+        """
+        Main routine for propagating the system positions and cells. Since this is modifed, no conventional velocity
+        verlet integrator can be used.
+
+        Args:
+            system (schnetpack.md.System): System class containing all molecules and their
+                             replicas.
+        """
         # Update the particle positions
         scaled_velocity = self.time_step * self.b_velocities_cell
         a_coeff = torch.exp(0.5 * scaled_velocity)[:, :, None, None]
@@ -617,20 +585,23 @@ class NHCBarostatIsotropic(BarostatHook):
         cell_coeff = torch.exp(scaled_velocity)[:, :, None, None]
         system.cells = system.cells * cell_coeff
 
-    def compute_conserved(self, system):
-        conserved = (
-            system.kinetic_energy[..., None, None]
-            + system.energies[..., None, None]
-            + 0.5 * torch.sum(self.t_velocities ** 2 * self.t_masses, 2)
-            + 0.5 * torch.sum(self.t_velocities_cell ** 2 * self.t_masses_cell, 2)
-            + 0.5 * self.b_velocities_cell ** 2 * self.b_masses_cell
-            + self.degrees_of_freedom * self.kb_temperature * self.t_positions[..., 0]
-            + self.kb_temperature * self.t_positions_cell[..., 0]
-            + self.kb_temperature * torch.sum(self.t_positions[..., 1:], 2)
-            + self.kb_temperature * torch.sum(self.t_positions_cell[..., 1:], 2)
-            + self.target_pressure * system.volume
-        )
-        return conserved
+    # def compute_conserved(self, system):
+    #    """
+    #    Computed the conserved quantity. For debug purposes only.
+    #    """
+    #    conserved = (
+    #            system.kinetic_energy[..., None, None]
+    #            + system.energies[..., None, None]
+    #            + 0.5 * torch.sum(self.t_velocities ** 2 * self.t_masses, 2)
+    #            + 0.5 * torch.sum(self.t_velocities_cell ** 2 * self.t_masses_cell, 2)
+    #            + 0.5 * self.b_velocities_cell ** 2 * self.b_masses_cell
+    #            + self.degrees_of_freedom * self.kb_temperature * self.t_positions[..., 0]
+    #            + self.kb_temperature * self.t_positions_cell[..., 0]
+    #            + self.kb_temperature * torch.sum(self.t_positions[..., 1:], 2)
+    #            + self.kb_temperature * torch.sum(self.t_positions_cell[..., 1:], 2)
+    #            + self.target_pressure * system.volume
+    #    )
+    #    return conserved
 
     @property
     def state_dict(self):
@@ -686,25 +657,29 @@ class NHCBarostatIsotropic(BarostatHook):
 
 class NHCBarostatAnisotropic(NHCBarostatIsotropic):
     """
-    Nose Hoover chain thermostat/barostat for isotropic cell fluctuations.
+    Parrinello--Rahman thermostat/barostat based on Nose-Hoover chains for fully anisotropic cell fluctuations. For a
+    in-depth description of the algorithm, see[#nhc_barostat2]_. This barostat already contains a built in thermostat,
+    so no further temperature control is necessary. As suggested in [#nhc_barostat2]_, two separate chains are used to
+    thermostat particle and cell momenta. In order to propagate the system, operators in the form of matrix exponentials
+    need to be applied, which requires several eigendecompositions of 3x3 matrices, making the barostat computationally
+    intensive. In addition, accurate predictors of the stress tensor are required, since deformations of the cells are
+    now possible.
 
     Args:
+        target_pressure (float): Target pressure in bar.
         temperature_bath (float): Temperature of the external heat bath in Kelvin.
         time_constant (float): Thermostat time constant in fs
+        time_constant_barostat (float): Barostat time constant in fs. If None is given (default), the same time constant
+                                        as for the thermostat component is used.
         chain_length (int): Number of Nose-Hoover thermostats applied in the chain.
-        massive (bool): If set to true, an individual thermostat is applied to each degree of freedom in the system.
-                        Can e.g. be used for thermostatting (default=False).
-        nm_transformation (schnetpack.md.utils.NormalModeTransformer): Module used to transform between beads and normal
-                                                                   model representation in ring polymer dynamics.
         multi_step (int): Number of steps used for integrating the NH equations of motion (default=2)
         integration_order (int): Order of the Yoshida-Suzuki integrator used for propagating the thermostat (default=3).
+        detach (bool): Whether the computational graph should be detached after each simulation step. Default is true,
+                       should be changed if differentiable MD is desired.
 
     References
     ----------
-    .. [#nhc_thermostat1] Tobias, Martyna, Klein:
-       Molecular dynamics simulations of a protein in the canonical ensemble.
-       The Journal of Physical Chemistry, 97(49), 12959-12966. 1993.
-    .. [#nhc_thermostat2] Martyna, Tuckerman, Tobias, Klein:
+    .. [#nhc_barostat2] Martyna, Tuckerman, Tobias, Klein:
        Explicit reversible integrators for extended systems dynamics.
        Molecular Physics, 87(5), 1117-1157. 1996.
     """
@@ -732,6 +707,9 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         )
 
     def _init_barostat_variables(self):
+        """
+        Initialize all quantities required for the barostat component.
+        """
         # Set barostat masses
         self.b_masses_cell = torch.ones(
             self.n_replicas, self.n_molecules, 1, 1, device=self.device
@@ -754,9 +732,26 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         self.aux_eye = torch.eye(3, device=self.device)[None, None, :, :]
 
     def _init_kinetic_energy(self, system):
+        """
+        This routine is no longer required, since it is no longer possible to accumulate the barostat
+        action.
+
+        Args:
+           system (schnetpack.md.System): System class containing all molecules and their
+                             replicas.
+        """
         pass
 
     def _compute_kinetic_energy(self, system):
+        """
+        Compute the current kinetic energy tensor.
+
+        Args:
+            system (schnetpack.md.System): System class containing all molecules and their
+                             replicas.
+        Returns:
+            torch.tensor: Current kinetic energy tensor of the particles.
+        """
         # Here we need the full tensor (R x M x 3 x 3)
         # Kinetic energy can be computed as Tr[Etens]
         kinetic_energy_tensor = 2.0 * system.kinetic_energy_tensor
@@ -764,6 +759,12 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         return kinetic_energy_tensor
 
     def _compute_kinetic_energy_cell(self):
+        """
+        Compute the kinetic energy of the cells.
+
+        Returns:
+            torch.tensor: Kinetic energy associated with the cells.
+        """
         b_cell_sq = torch.matmul(
             self.b_velocities_cell.transpose(2, 3), self.b_velocities_cell
         )
@@ -773,13 +774,34 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         )
 
     def _compute_pressure(self, system):
+        """
+        Routine for computing the current pressure tensor and volume associated with the simulated systems.
+        The pressure tensor is equivalent to the negative stress tensor.
+
+        Args:
+            system (schnetpack.md.System): System class containing all molecules and their
+                             replicas.
+
+        Returns:
+            (torch.Tensor, torch.Tensor): Duple containing the pressure tensors and volumes.
+        """
         # Get the pressure (R x M x 3 x 3)
         pressure = system.compute_pressure(kinetic_component=False, tensor=True)
         # Get the volume (R x M x 1 x 1)
         volume = system.volume[..., None]
         return pressure, volume
 
-    def _compute_vtemp(self):
+    def _update_particle_momenta(self, time_step, system):
+        """
+        Update the momenta of the particles. In contrast to the isotropic case, an eigenvalue problem needs to be
+        solved.
+
+        Args:
+            time_step (float): Current timestep considering YS and multi-timestep integration.
+            system (schnetpack.md.System): System class containing all molecules and their
+                             replicas.
+        """
+        # Compute auxiliary velocity tensor for propagation
         vtemp = (
             self.b_velocities_cell
             + (
@@ -789,11 +811,6 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
             )[:, :, None, None]
             * self.aux_eye
         )
-        return vtemp
-
-    def _update_particle_momenta(self, time_step, system):
-        # Compute auxiliary velocity tensor for propagation
-        vtemp = self._compute_vtemp()  # part=True)
 
         # Compute eigenvectors and values for matrix exponential operator
         # eigval -> (R x M x 3)
@@ -812,9 +829,15 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         system.momenta = torch.matmul(
             momenta_tmp * system.masses, eigvec.transpose(2, 3)
         )
-        # exit()
 
     def _update_forces_thermostat(self, kinetic_energy):
+        """
+        Update the forces acting on the two innermost thermostats coupled to the particle and cell momenta.
+        The standard kinetic energy is computed as the trace of the kinetic energy tensor.
+
+        Args:
+            kinetic_energy (torch.Tensor): Tensor containing the current kinetic energies of the systems.
+        """
         # Compute Ekin from tensor
         kinetic_energy = torch.einsum("abii->ab", kinetic_energy)
 
@@ -831,6 +854,15 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         ) / self.t_masses_cell[..., 0]
 
     def _update_forces_barostat(self, kinetic_energy, pressure, volume):
+        """
+        Update the forces acting on the barostat coupled to the cell.
+        The standard kinetic energy is computed as the trace of the kinetic energy tensor.
+
+        Args:
+            kinetic_energy (torch.Tensor): Tensor containing the current kinetic energies of the systems.
+            pressure (torch.Tensor): Current pressure of each system.
+            volume (torch.Tensor): Current volume of each system.
+        """
         kinetic_energy_scalar = torch.einsum("abii->ab", kinetic_energy)[
             :, :, None, None
         ]
@@ -844,6 +876,15 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         ) / self.b_masses_cell
 
     def propagate_system(self, system):
+        """
+        Main routine for propagating the system positions and cells. Compared to the standard velocity verlet, this
+        routine is heavily modified and makes use of eigendecomposition.
+        verlet integrator can be used.
+
+        Args:
+            system (schnetpack.md.System): System class containing all molecules and their
+                             replicas.
+        """
         # Compute eigenvectors and values for matrix exponential operator
         # eigval -> (R x M x 3)
         # eigvec -> (R x M x 3 x 3)
@@ -872,20 +913,23 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         system.positions = torch.matmul(positions_tmp, eigvec.transpose(2, 3))
         system.cells = torch.matmul(cells_tmp, eigvec.transpose(2, 3))
 
-    def compute_conserved(self, system):
-        conserved = (
-            system.kinetic_energy[..., None, None]
-            + system.energies[..., None, None]
-            + 0.5 * torch.sum(self.t_velocities ** 2 * self.t_masses, 2)
-            + 0.5 * torch.sum(self.t_velocities_cell ** 2 * self.t_masses_cell, 2)
-            + 0.5 * self._compute_kinetic_energy_cell()
-            + self.degrees_of_freedom * self.kb_temperature * self.t_positions[..., 0]
-            + 9.0 * self.kb_temperature * self.t_positions_cell[..., 0]
-            + self.kb_temperature * torch.sum(self.t_positions[..., 1:], 2)
-            + self.kb_temperature * torch.sum(self.t_positions_cell[..., 1:], 2)
-            + self.target_pressure * system.volume
-        )
-        return conserved
+    # def compute_conserved(self, system):
+    #    """
+    #    Computed the conserved quantity. For debug purposes only.
+    #    """
+    #    conserved = (
+    #            system.kinetic_energy[..., None, None]
+    #            + system.energies[..., None, None]
+    #            + 0.5 * torch.sum(self.t_velocities ** 2 * self.t_masses, 2)
+    #            + 0.5 * torch.sum(self.t_velocities_cell ** 2 * self.t_masses_cell, 2)
+    #            + 0.5 * self._compute_kinetic_energy_cell()
+    #            + self.degrees_of_freedom * self.kb_temperature * self.t_positions[..., 0]
+    #            + 9.0 * self.kb_temperature * self.t_positions_cell[..., 0]
+    #            + self.kb_temperature * torch.sum(self.t_positions[..., 1:], 2)
+    #            + self.kb_temperature * torch.sum(self.t_positions_cell[..., 1:], 2)
+    #            + self.target_pressure * system.volume
+    #    )
+    #    return conserved
 
     @property
     def state_dict(self):
@@ -937,5 +981,199 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         self.multi_step = state_dict["multi_step"]
         self.integration_order = state_dict["integration_order"]
         self.aux_eye = state_dict["aux_eye"]
+
+        self.initialized = True
+
+
+class RPMDBarostat(BarostatHook):
+    """
+    Barostat for ring polymer molecular dynamics simulations. This barostat is based on the algorithm introduced in
+    [#rpmd_barostat1]_ and uses a PILE thermostat for the cell. It can be combined with any RPMD thermostat for
+    temperature control. The barostat only acts on the centroid mode of the ring polymer and is designed for isotropic
+    cell fluctuations.
+
+    Args:
+        target_pressure (float): Target pressure of the system (in bar).
+        temperature_bath (float): Target temperature applied to the cell fluctuations.
+        detach (bool): Whether the computational graph should be detached after each simulation step. Default is true,
+                       should be changed if differentiable MD is desired.
+
+    References
+    ----------
+    .. [#rpmd_barostat1] Kapil, et al.
+                         i-PI 2.0: A universal force engine for advanced molecular simulations.
+                         Computer Physics Communications, 236, 214-223. 2019.
+    """
+
+    def __init__(self, target_pressure, temperature_bath, time_constant, detach=True):
+        super(RPMDBarostat, self).__init__(
+            target_pressure=target_pressure,
+            temperature_bath=temperature_bath,
+            detach=detach,
+        )
+        self.frequency = 1.0 / (time_constant * MDUnits.fs2atu)
+        self.kb_temperature = temperature_bath * MDUnits.kB
+        self.transformation = None
+        self.propagator = None
+        self.cell_momenta = None
+        self.sinhdx = StableSinhDiv()
+
+    def _init_barostat(self, simulator):
+        """
+        Initialize the thermostat coefficients and barostat quantities.
+
+        Args:
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on
+                                                    the time step, system, etc.
+        """
+        # Get normal mode transformer and propagator for position and cell update
+        self.transformation = simulator.integrator.transformation
+        self.propagator = simulator.integrator.propagator
+
+        # Set up centroid momenta of cell (one for every molecule)
+        self.cell_momenta = torch.zeros(
+            self.n_molecules, device=simulator.system.device
+        )
+        self.mass = (
+            3.0 * simulator.system.n_atoms / self.frequency ** 2 * self.kb_temperature
+        )
+
+        # Set up cell thermostat coefficients
+        self.c1 = torch.exp(
+            -0.5 * torch.ones(1, device=self.device) * self.frequency * self.time_step
+        )
+        self.c2 = torch.sqrt(
+            self.n_replicas * self.mass * self.kb_temperature * (1.0 - self.c1 ** 2)
+        )
+
+    def _apply_barostat(self, simulator):
+        """
+        Apply the thermostat. This simply propagates the cell momenta under the influence of a PILE thermostat.
+
+        Args:
+            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on
+                                                                the time step, system, etc.
+        """
+        # Propagate cell momenta during half-step
+        self.cell_momenta = self.c1 * self.cell_momenta + self.c2 * torch.randn_like(
+            self.cell_momenta
+        )
+        if self.detach:
+            self.cell_momenta = self.cell_momenta.detach()
+
+    def propagate_system(self, system):
+        """
+        Main routine for propagating the ring polymer and the cells. The barostat acts only on the centroid, while the
+        remaining replicas are propagated in the conventional way.
+
+        Args:
+            system (schnetpack.md.System): System class containing all molecules and their
+                             replicas.
+        """
+        # Transform to normal mode representation
+        positions_normal = self.transformation.beads2normal(system.positions)
+        momenta_normal = self.transformation.beads2normal(system.momenta)
+
+        # Propagate centroid mode of the ring polymer
+        reduced_momenta = (self.cell_momenta / self.mass)[:, None, None]
+        scaling = torch.exp(-self.time_step * reduced_momenta)
+
+        momenta_normal[0] = momenta_normal[0] * scaling
+        positions_normal[0] = (
+            positions_normal[0] / scaling
+            + self.sinhdx.f(self.time_step * reduced_momenta)
+            * (momenta_normal[0] / system.masses[0])
+            * self.time_step
+        )
+
+        # Update cells
+        system.cells = system.cells / scaling[None, ...]
+
+        # Propagate the remaining modes of the ring polymer
+        momenta_normal[1:] = (
+            self.propagator[1:, 0, 0] * momenta_normal[1:]
+            + self.propagator[1:, 0, 1] * positions_normal[1:] * system.masses
+        )
+        positions_normal[1:] = (
+            self.propagator[1:, 1, 0] * momenta_normal[1:] / system.masses
+            + self.propagator[1:, 1, 1] * positions_normal[1:]
+        )
+
+        # Transform back to bead representation
+        system.positions = self.transformation.normal2beads(positions_normal)
+        system.momenta = self.transformation.normal2beads(momenta_normal)
+
+    def propagate_barostat_half_step(self, system):
+        """
+        Propagate the momenta of the thermostat attached to the barostat during each half-step.
+
+        Args:
+            system (schnetpack.md.System): System class containing all molecules and their
+                             replicas.
+        """
+        centroid_momenta = self.transformation.beads2normal(system.momenta)[0]
+        centroid_forces = self.transformation.beads2normal(system.forces)[0]
+
+        # Compute pressure component (volume[0] can be used, since the volume is scaled equally for all replicas)
+        component_1 = (
+            3.0
+            * self.n_replicas
+            * (
+                system.volume[0]
+                * (
+                    torch.mean(system.compute_pressure(kinetic_component=True), dim=0)
+                    - self.target_pressure
+                )
+                + self.kb_temperature
+            )
+        )
+
+        # Compute components based on forces and momenta
+        force_by_mass = centroid_forces / system.masses[0]
+
+        component_2 = torch.sum(force_by_mass * centroid_momenta, dim=[1, 2])
+        component_3 = torch.sum(force_by_mass * centroid_forces / 3, dim=[1, 2])
+
+        # Update cell momenta
+        self.cell_momenta = (
+            self.cell_momenta
+            + (0.5 * self.time_step) * component_1
+            + (0.5 * self.time_step) ** 2 * component_2
+            + (0.5 * self.time_step) ** 3 * component_3
+        )
+
+        if self.detach:
+            self.cell_momenta = self.cell_momenta.detach()
+
+    @property
+    def state_dict(self):
+        state_dict = {
+            "frequency": self.frequency,
+            "kb_temperature": self.kb_temperature,
+            "transformation": self.transformation,
+            "propagator": self.propagator,
+            "cell_momenta": self.cell_momenta,
+            "mass": self.mass,
+            "c1": self.c1,
+            "c2": self.c2,
+            "temperature_bath": self.temperature_bath,
+            "target_pressure": self.target_pressure,
+            "n_replicas": self.n_replicas,
+        }
+        return state_dict
+
+    @state_dict.setter
+    def state_dict(self, state_dict):
+        self.frequency = state_dict["frequency"]
+        self.kb_temperature = state_dict["kb_temperature"]
+        self.transformation = state_dict["transformation"]
+        self.propagator = state_dict["propagator"]
+        self.cell_momenta = state_dict["cell_momenta"]
+        self.mass = state_dict["mass"]
+        self.c1 = state_dict["c1"]
+        self.c2 = state_dict["c2"]
+        self.temperature_bath = state_dict["temperature_bath"]
+        self.target_pressure = state_dict["target_pressure"]
+        self.n_replicas = state_dict["n_replicas"]
 
         self.initialized = True
