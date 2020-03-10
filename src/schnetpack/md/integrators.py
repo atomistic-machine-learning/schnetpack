@@ -10,7 +10,7 @@ import numpy as np
 
 from schnetpack.md.utils import NormalModeTransformer, MDUnits
 
-__all__ = ["VelocityVerlet", "RingPolymer", "NPTVelocityVerlet"]
+__all__ = ["VelocityVerlet", "RingPolymer", "NPTVelocityVerlet", "NPTRingPolymer"]
 
 
 class Integrator:
@@ -125,7 +125,7 @@ class RingPolymer(Integrator):
         n_beads (int): Number of beads in the ring polymer.
         time_step (float): Time step in femto seconds.
         temperature (float): Ring polymer temperature in Kelvin.
-        transformation (object): Normal mode transformer class.
+        transformation (schnetpack.md.utils.NormalModeTransformer): Normal mode transformer class.
         device (str): Device used for computations, default is GPU ('cuda')
 
     References
@@ -243,33 +243,42 @@ class RingPolymer(Integrator):
 
 
 class NPTVelocityVerlet(VelocityVerlet):
-    def __init__(self, time_step, barostat, device="cuda"):
-        """
+    """
+    Verlet integrator for constant pressure dynamics (NPT). Since barostats modify the position update,
+    a routine defined in the respectve barostat class is called every main step.
 
-        Args:
-            time_step:
-            barostat (schnetpack.md.simulation_hooks.BarostatHook):
-            device:
-        """
+    Args:
+        time_step (float): Integration time step in femto seconds.
+        barostat (schnetpack.md.simulation_hooks.BarostatHook): Barostat used for constant pressure dynamics.
+    """
+
+    def __init__(self, time_step, barostat, device="cuda"):
         super(NPTVelocityVerlet, self).__init__(time_step, device=device)
         self.barostat = barostat
 
     def _main_step(self, system):
         """
+        Main integrator step, where the barostat routine is used to propagate the system positions and cells.
         """
         self.barostat.propagate_system(system)
+
+        if self.detach:
+            system.positions = system.positions.detach()
+            system.cells = system.cells.detach()
 
 
 class NPTRingPolymer(RingPolymer):
     """
+    Ring polymer integrator for constant pressure dynamics (NPT). Here, the barostat modifies the main and the
+    half steps.
 
     Args:
-        n_beads:
-        time_step:
-        temperature:
-        barostat (schnetpack.md.simulation_hooks.BarostatHook):
-        transformation:
-        device:
+        n_beads (int): Number of beads in the ring polymer.
+        time_step (float): Time step in femto seconds.
+        temperature (float): Ring polymer temperature in Kelvin.
+        barostat (schnetpack.md.simulation_hooks.BarostatHook): Barostat used for constant pressure dynamics.
+        transformation (schnetpack.md.utils.NormalModeTransformer): Normal mode transformer class.
+        device (str): Device used for computations, default is GPU ('cuda')
     """
 
     def __init__(
@@ -292,16 +301,13 @@ class NPTRingPolymer(RingPolymer):
 
     def half_step(self, system):
         """
-        Half steps propagating the system momenta according to:
-
-        ..math::
-            p = p + \frac{1}{2} F \delta t
+        Half steps propagating the system and barostat momenta.
 
         Args:
             system (object): System class containing all molecules and their
                              replicas.
         """
-        self.barostat.propagate_barostat(system)
+        self.barostat.propagate_barostat_half_step(system)
 
         system.momenta = system.momenta + 0.5 * system.forces * self.time_step
 
@@ -310,9 +316,15 @@ class NPTRingPolymer(RingPolymer):
 
     def _main_step(self, system):
         """
+        Perform the main update using the barostat routine.
+
+        Args:
+            system (object): System class containing all molecules and their
+                             replicas.
         """
         self.barostat.propagate_system(system)
 
         if self.detach:
             system.positions = system.positions.detach()
             system.momenta = system.momenta.detach()
+            system.cells = system.cells.detach()
