@@ -78,6 +78,7 @@ class System:
         self.positions = None
         self.momenta = None
         self.forces = None
+        self.energies = None
 
         # Properties for periodic boundary conditions and crystal cells
         self.cells = None
@@ -112,6 +113,9 @@ class System:
             molecules list(ase.Atoms): List of ASE atoms objects containing
             molecular structures and chemical elements.
         """
+        # 0) Check if molecules is a single ase.Atoms object and wrap it in list.
+        if isinstance(molecules, Atoms):
+            molecules = [molecules]
 
         # 1) Get maximum number of molecules, number of replicas and number of
         #    overall systems
@@ -167,12 +171,14 @@ class System:
             self.positions[:, i, : self.n_atoms[i], :] = torch.from_numpy(
                 molecules[i].positions * MDUnits.angs2bohr
             )
-
             # Properties for cell simulations
             self.cells[:, i, :, :] = torch.from_numpy(
                 molecules[i].cell * MDUnits.angs2bohr
             )
             self.pbc[i, :] = torch.from_numpy(molecules[i].pbc)
+
+        # Convert periodic boundary conditions to Boolean tensor
+        self.pbc = self.pbc.bool()
 
         # Check for cell/pbc stuff:
         if torch.sum(torch.abs(self.cells)) == 0.0:
@@ -262,10 +268,48 @@ class System:
         # Subtract rotation from overall motion (apply atom mask)
         self.momenta -= rotational_velocities * self.masses * self.atom_masks
 
-    def wrap_positions(self):
-        raise NotImplementedError
+    def wrap_positions(self, eps=1e-6):
+        """
+        Move atoms outside the box back into the box for all dimensions with periodic boundary
+        conditions.
+
+        Args:
+            eps (float): Small offset for numerical stability
+        """
+        # Compute fractional coordinates
+        tmp_positions = self.positions.transpose(2, 3)
+        tmp_cells = self.cells.transpose(2, 3)
+        inv_positions, _ = torch.solve(tmp_positions, tmp_cells)
+        inv_positions = inv_positions.transpose(2, 3)
+
+        # Get periodic coordinates
+        periodic = torch.masked_select(inv_positions, self.pbc[None, :, None, :])
+
+        # Apply periodic boundary conditions (with small buffer)
+        periodic = periodic + eps
+        periodic = periodic % 1.0
+        periodic = periodic - eps
+
+        # Update fractional coordinates
+        inv_positions.masked_scatter_(self.pbc[None, :, None, :], periodic)
+
+        # Convert to positions
+        self.positions = torch.matmul(inv_positions, self.cells)
 
     def compute_pressure(self, tensor=False, kinetic_component=False):
+        """
+        Compute the pressure (tensor) based on the stress tensor of the systems.
+
+        Args:
+            tensor (bool): Instead of a scalar pressure, return the full pressure tensor. (Required for
+                           anisotropic cell deformation.)
+            kinetic_component (bool): Include the kinetic energy component during the computation of the
+                                      pressure (default=False).
+
+        Returns:
+            torch.Tensor: Depending on the tensor-flag, returns a tensor containing the pressure with dimensions
+                          n_replicas x n_molecules (False) or n_replicas x n_molecules x 3 x 3 (True).
+       """
         if self.stress is None:
             raise SystemError(
                 "Stress required for computation of the instantaneous pressure."
@@ -280,13 +324,12 @@ class System:
 
         else:
             # Einsum computes the trace
-            pressure = -torch.einsum("abii->ab", self.stress)[:, :, None]
+            pressure = -torch.einsum("abii->ab", self.stress) / 3.0
+
             if kinetic_component:
-                pressure = pressure + 2.0 * self.kinetic_energy / self.volume
+                pressure = pressure + 2.0 * self.kinetic_energy / self.volume / 3.0
 
-            pressure = pressure / 3.0
-
-        return pressure
+        return pressure.detach()
 
     def get_ase_atoms(self, atomic_units=True):
         """
@@ -394,26 +437,22 @@ class System:
         """
         # Apply atom mask
         momenta = self.momenta * self.atom_masks
+
         kinetic_energy = 0.5 * torch.sum(
             torch.sum(momenta ** 2, 3) / self.masses[..., 0], 2
         )
         return kinetic_energy.detach()
 
     @property
-    def volume(self):
-        if self.cells is None:
-            return None
-        else:
-            volume = torch.sum(
-                self.cells[:, :, 0]
-                * torch.cross(self.cells[:, :, 1], self.cells[:, :, 2]),
-                dim=2,
-                keepdim=True,
-            )
-            return volume
-
-    @property
     def kinetic_energy_tensor(self):
+        """
+        Compute the kinetic energy tensor (outer product of momenta divided by masses) for pressure computation.
+        The standard kinetic energy is the trace of this tensor.
+
+        Returns:
+            torch.tensor: n_replicas x n_molecules x 3 x 3 tensor containg kinetic energy components.
+
+        """
         # Apply atom mask
         momenta = self.momenta * self.atom_masks
         kinetic_energy_tensor = 0.5 * torch.sum(
@@ -473,6 +512,25 @@ class System:
             * self.centroid_kinetic_energy
         )
         return temperature
+
+    @property
+    def volume(self):
+        """
+        Compute the cell volumes if cells are present.
+
+        Returns:
+            torch.tensor: n_replicas x n_molecules containing the volumes.
+        """
+        if self.cells is None:
+            return None
+        else:
+            volume = torch.sum(
+                self.cells[:, :, 0]
+                * torch.cross(self.cells[:, :, 1], self.cells[:, :, 2], dim=2),
+                dim=2,
+                keepdim=False,
+            )
+            return volume.detach()
 
     @property
     def state_dict(self):
