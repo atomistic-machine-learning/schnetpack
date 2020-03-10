@@ -14,10 +14,12 @@ import numpy as np
 import torch
 
 from schnetpack.md.simulation_hooks import SimulationHook
+import schnetpack as spk
 
 __all__ = [
     "Checkpoint",
     "TemperatureLogger",
+    "PressureLogger",
     "FileLogger",
     "MoleculeStream",
     "DataStream",
@@ -663,6 +665,7 @@ class TemperatureLogger(TensorboardLogger):
 
     def __init__(self, log_file, every_n_steps=100):
         super(TemperatureLogger, self).__init__(log_file, every_n_steps=every_n_steps)
+        self.initial_value = None
 
     def on_step_end(self, simulator):
         """
@@ -678,4 +681,43 @@ class TemperatureLogger(TensorboardLogger):
                 simulator.step,
                 simulator.system.temperature,
                 property_centroid=simulator.system.centroid_temperature,
+            )
+
+
+class PressureLogger(TensorboardLogger):
+    """
+    TensorBoard logging hook for the temperatures of the replicas, as well as of the corresponding centroids for each
+    molecule in the system container.
+
+    Args:
+        log_file (str): Path to the TensorBoard file.
+        every_n_steps (int): Frequency with which data is logged to TensorBoard.
+    """
+
+    def __init__(self, log_file, every_n_steps=100):
+        super(PressureLogger, self).__init__(log_file, every_n_steps=every_n_steps)
+        self.initial_value = None
+
+    def on_step_end(self, simulator):
+        """
+        Log the systems temperatures at the given intervals.
+
+        Args:
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
+        """
+
+        if simulator.step % self.every_n_steps == 0:
+
+            pressure = (
+                simulator.system.compute_pressure(kinetic_component=True)
+                / spk.md.MDUnits.pressure2internal
+            )
+            centroid_pressure = torch.mean(pressure, 0, keepdim=True)
+
+            # Use the _log_group routine to log the systems temperatures
+            self._log_group(
+                "pressure",
+                simulator.step,
+                pressure,
+                property_centroid=centroid_pressure,
             )

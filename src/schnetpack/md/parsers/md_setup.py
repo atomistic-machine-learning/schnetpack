@@ -616,12 +616,24 @@ class SetupLogging(SetupBlock):
                 )
             ]
 
+        tensorboard_logdir = os.path.join(md_initializer.simulation_dir, "logging")
+
         if "temperature_logger" in self.target_config_block:
-            temperature_dir = os.path.join(md_initializer.simulation_dir, "temperature")
+            # temperature_dir = os.path.join(md_initializer.simulation_dir, "temperature")
+            temperature_dir = tensorboard_logdir
             md_initializer.hooks += [
                 TemperatureLogger(
                     temperature_dir,
                     every_n_steps=self.target_config_block["temperature_logger"],
+                )
+            ]
+
+        if "pressure_logger" in self.target_config_block:
+            pressure_dir = tensorboard_logdir
+            md_initializer.hooks += [
+                PressureLogger(
+                    pressure_dir,
+                    every_n_steps=self.target_config_block["pressure_logger"],
                 )
             ]
 
