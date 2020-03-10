@@ -236,7 +236,6 @@ class BarostatInit(Initializer):
     """
 
     allowed_options = {
-        "mtk": (barostats.MTKBarostat, "standard", None),
         "nhc_iso": (barostats.NHCBarostatIsotropic, "standard", None),
         "nhc_aniso": (barostats.NHCBarostatAnisotropic, "standard", None),
         "pile": (barostats.RPMDBarostat, "standard", None),
