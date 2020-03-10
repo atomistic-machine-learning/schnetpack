@@ -26,14 +26,14 @@ class Simulator:
     simulation.
 
     Args:
-        system (object): Instance of the system class defined in
+        system (schnetpack.md.System): Instance of the system class defined in
                          molecular_dynamics.system holding the structures,
                          masses, atom type, momenta, forces and properties of
                          all molecules and their replicas
-        integrator (object): Integrator for propagating the molecular
+        integrator (schnetpack.md.Integrator): Integrator for propagating the molecular
                              dynamics simulation, defined in
                              schnetpack.md.integrators
-        calculator (object): Calculator class used to compute molecular
+        calculator (schnetpack.md.calculator): Calculator class used to compute molecular
                              forces for propagation and (if requested)
                              various other properties.
         simulator_hooks (list(object)): List of different hooks to be applied
