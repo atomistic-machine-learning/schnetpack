@@ -50,7 +50,6 @@ class ThermostatHook(SimulationHook):
                                                                        model representation in ring polymer dynamics.
         detach (bool): Whether the computational graph should be detached after each simulation step. Default is true,
                        should be changed if differentiable MD is desired.
-                       TODO: Make detach frequency instead
     """
 
     # TODO: Could be made a torch nn.Module
