@@ -18,7 +18,7 @@ properties = ["energy", "forces"]  # properties used for training
 
 # data preparation
 logging.info("get dataset")
-dataset = spk.AtomsData("data/ethanol.db", load_only=properties)
+dataset = spk.datasets.MD17("data/ethanol.db", load_only=properties, molecule="ethanol")
 train, val, test = spk.train_test_split(
     data=dataset,
     num_train=1000,
