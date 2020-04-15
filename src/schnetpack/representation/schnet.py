@@ -128,7 +128,7 @@ class SchNet(nn.Module):
         coupled_interactions=False,
         return_intermediate=False,
         max_z=100,
-        cutoff_network=HardCutoff,
+        cutoff_network=CosineCutoff,
         trainable_gaussians=False,
         distance_expansion=None,
         charged_systems=False,
