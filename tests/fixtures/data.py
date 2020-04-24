@@ -1,177 +1,245 @@
 import os
 import pytest
 import numpy as np
-import schnetpack as spk
 from ase import Atoms
-from ase.db import connect
+import schnetpack as spk
 
 
 __all__ = [
-    "tmp_db_path",
-    "db_size",
-    "n_small_molecules",
-    "small_size",
-    "big_size",
+    # general
+    "tmp_data_dir",
+    "tmp_dbpath",
+    "partition_names",
+    "min_atoms",
+    "max_atoms",
+    "num_data",
+    "n_train_set",
+    "n_validation_set",
+    "n_test_set",
+    "empty_dataset",
     "property_shapes",
-    "properties",
-    "properties1",
-    "properties2",
-    "ats",
-    "build_db",
-    "dataset",
-    "split",
-    "splits",
-    "train",
-    "val",
-    "test",
-    "batch_size",
+    "example_data",
+    "example_dataset",
+    "available_properties",
+    "example_subset",
+    "example_concat_dataset",
+    "example_concat_dataset2",
+    "train_val_test_datasets",
+    "example_loader",
     "train_loader",
     "val_loader",
     "test_loader",
-    "shuffle",
+    "batch_size",
+    # data dir
+    "simulation_hdf5_path",
+    "qm9_path",
+    "ani1_path",
+    "ethanol_path",
+    "iso17_path",
+    "xyz_path",
+    "molecule_path",
+    "hdf5_dataset",
+    "qm9_dataset",
 ]
 
 
-# define settings
+# temporary paths
 @pytest.fixture(scope="session")
-def tmp_db_path(tmpdir_factory):
-    return os.path.join(tmpdir_factory.mktemp("data"), "test2.db")
+def tmp_data_dir(tmpdir_factory):
+    return tmpdir_factory.mktemp("data")
 
 
 @pytest.fixture(scope="session")
-def db_size():
+def tmp_dbpath(example_dataset):
+    return example_dataset.dbpath
+
+
+# example datasets
+@pytest.fixture(scope="session")
+def max_atoms():
+    return 10
+
+
+@pytest.fixture(scope="session")
+def min_atoms():
+    return 2
+
+
+@pytest.fixture(scope="session")
+def num_data():
     return 20
 
 
 @pytest.fixture(scope="session")
-def n_small_molecules(db_size):
-    n_small = np.random.randint(1, db_size - 1)
-    return n_small
+def n_train_set(num_data):
+    return num_data // 2
 
 
 @pytest.fixture(scope="session")
-def small_size():
-    return 3
+def n_validation_set(num_data):
+    return num_data // 4
 
 
 @pytest.fixture(scope="session")
-def big_size():
-    return 5
+def n_test_set(num_data, n_train_set, n_validation_set):
+    return num_data - n_train_set - n_validation_set
 
 
 @pytest.fixture(scope="session")
-def property_shapes(small_size, big_size):
-    return {
-        "N{}".format(small_size): dict(
-            prop1=[1],
-            der1=[small_size, 3],
-            contrib1=[small_size, 1],
-            prop2=[1],
-            der2=[small_size, 3],
-        ),
-        "N{}".format(big_size): dict(
-            prop1=[1],
-            der1=[big_size, 3],
-            contrib1=[big_size, 1],
-            prop2=[1],
-            der2=[big_size, 3],
-        ),
-    }
+def empty_dataset(tmp_data_dir, available_properties):
+    return spk.data.AtomsData(
+        os.path.join(str(tmp_data_dir), "empty_database4tests.db"),
+        available_properties=available_properties,
+    )
 
 
 @pytest.fixture(scope="session")
-def properties(property_shapes):
-    return list(list(property_shapes.values())[0].keys())
+def property_shapes():
+    return dict(
+        property1=[1],
+        derivative1=[-1, 3],
+        contributions1=[-1, 1],
+        property2=[1],
+    )
 
 
 @pytest.fixture(scope="session")
-def properties1(properties):
-    return [prop for prop in properties if prop.endswith("1")]
-
-
-@pytest.fixture(scope="session")
-def properties2(properties):
-    return [prop for prop in properties if prop.endswith("2")]
-
-
-# generate random data
-@pytest.fixture(scope="session")
-def ats(db_size, n_small_molecules, small_size, big_size, property_shapes):
-    mol_size = small_size
-    molecules = []
+def example_data(min_atoms, max_atoms, num_data, property_shapes):
+    """
+    List of (ase.Atoms, data) tuples with different sized atomic systems. Created
+    randomly.
+    """
     data = []
-    for i in range(db_size):
-        if i <= n_small_molecules:
-            mol_size = big_size
-        shapes = property_shapes["N{}".format(mol_size)]
+    for i in range(1, num_data + 1):
+        n_atoms = np.random.randint(min_atoms, max_atoms)
+        z = np.random.randint(1, 100, size=(n_atoms,))
+        r = np.random.randn(n_atoms, 3)
+        c = np.random.randn(3, 3)
+        pbc = np.random.randint(0, 2, size=(3,)) > 0
+        ats = Atoms(numbers=z, positions=r, cell=c, pbc=pbc)
 
-        data.append({key: np.random.rand(*shape) for key, shape in shapes.items()})
-        molecules.append(Atoms("N{}".format(mol_size), np.random.rand(mol_size, 3)))
+        props = dict()
+        for pname, p_shape in property_shapes.items():
+            appl_shape = [dim if dim != -1 else n_atoms for dim in p_shape]
+            props[pname] = np.random.rand(*appl_shape)
 
-    return molecules, data
+        data.append((ats, props))
 
-
-# write data to db
-@pytest.fixture(scope="session")
-def build_db(tmp_db_path, ats):
-    molecules, data = ats
-    with connect(tmp_db_path) as conn:
-        for mol, properties in zip(molecules, data):
-            conn.write(mol, data=properties)
-
-
-# dataset
-@pytest.fixture(scope="session")
-def dataset(build_db, tmp_db_path):
-    return spk.data.AtomsData(dbpath=tmp_db_path)
+    return data
 
 
 @pytest.fixture(scope="session")
-def split():
-    return 10, 7
+def available_properties(property_shapes):
+    return list(property_shapes.keys())
 
 
 @pytest.fixture(scope="session")
-def splits(dataset, split):
-    return spk.data.train_test_split(dataset, *split)
+def example_dataset(tmp_data_dir, example_data, available_properties):
+    data = spk.data.AtomsData(
+        os.path.join(str(tmp_data_dir), "database4tests.db"),
+        available_properties=available_properties,
+    )
+    # add data
+    for ats, props in example_data:
+        data.add_system(ats, **props)
+    return data
+
+
+@pytest.fixture
+def example_subset(example_dataset):
+    return spk.data.create_subset(example_dataset, [0, 1])
+
+
+@pytest.fixture
+def example_concat_dataset(example_dataset, example_subset):
+    return example_dataset + example_subset
+
+
+@pytest.fixture
+def example_concat_dataset2(example_concat_dataset, example_subset):
+    return example_concat_dataset + example_subset
 
 
 @pytest.fixture(scope="session")
-def train(splits):
-    return splits[0]
+def train_val_test_datasets(example_dataset, n_train_set, n_validation_set):
+    return spk.data.train_test_split(example_dataset, n_train_set, n_validation_set)
 
 
-@pytest.fixture(scope="session")
-def val(splits):
-    return splits[1]
+# example dataloader
+@pytest.fixture(params=[1, 10], ids=["small_batch", "big_batch"])
+def batch_size(request):
+    return request.param
 
 
-@pytest.fixture(scope="session")
-def test(splits):
-    return splits[2]
+@pytest.fixture
+def example_loader(example_dataset, batch_size):
+    return spk.data.AtomsLoader(example_dataset, batch_size)
 
 
-# dataloader
-@pytest.fixture(scope="session")
-def batch_size():
-    return 4
+@pytest.fixture
+def train_loader(train_val_test_datasets, batch_size):
+    return spk.data.AtomsLoader(train_val_test_datasets[0], batch_size)
 
 
-@pytest.fixture(scope="session")
-def train_loader(train, batch_size):
-    return spk.data.AtomsLoader(train, batch_size)
+@pytest.fixture
+def val_loader(train_val_test_datasets, batch_size):
+    return spk.data.AtomsLoader(train_val_test_datasets[1], batch_size)
 
 
-@pytest.fixture(scope="session")
-def val_loader(val, batch_size):
-    return spk.data.AtomsLoader(val, batch_size)
+@pytest.fixture
+def test_loader(train_val_test_datasets, batch_size):
+    return spk.data.AtomsLoader(train_val_test_datasets[2], batch_size)
 
 
-@pytest.fixture(scope="session")
-def test_loader(test, batch_size):
-    return spk.data.AtomsLoader(test, batch_size)
+# deprecated
+@pytest.fixture(params=[None, ["example1", "example2", "ex3"]])
+def partition_names(request):
+    return request.param
 
 
-@pytest.fixture(scope="session")
-def shuffle():
-    return True
+# data folder
+# path declarations
+@pytest.fixture
+def simulation_hdf5_path(shared_datadir):
+    return os.path.join(shared_datadir, "test_simulation.hdf5")
+
+
+@pytest.fixture
+def qm9_path(shared_datadir):
+    return os.path.join(shared_datadir, "test_qm9.db")
+
+
+@pytest.fixture
+def ani1_path(shared_datadir):
+    return os.path.join(shared_datadir, "test_ani1.db")
+
+
+@pytest.fixture
+def ethanol_path(shared_datadir):
+    return os.path.join(shared_datadir, "test_ethanol.db")
+
+
+@pytest.fixture
+def iso17_path(shared_datadir):
+    return os.path.join(shared_datadir, "test_iso.db")
+
+
+@pytest.fixture
+def xyz_path(shared_datadir):
+    return os.path.join(shared_datadir, "ethanol_snip.xyz")
+
+
+@pytest.fixture
+def molecule_path(shared_datadir):
+    return os.path.join(shared_datadir, "test_molecule.xyz")
+
+
+# example datasets
+@pytest.fixture
+def hdf5_dataset(simulation_hdf5_path):
+    return spk.md.utils.hdf5_data.HDF5Loader(simulation_hdf5_path, load_properties=True)
+
+
+@pytest.fixture
+def qm9_dataset(qm9_dbpath):
+    return spk.datasets.QM9(qm9_dbpath)

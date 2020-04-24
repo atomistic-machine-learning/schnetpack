@@ -1,8 +1,8 @@
 import pytest
-
 import schnetpack.data
 import schnetpack.representation.hdnn as rep
-from .test_data import batch_size
+
+from tests.fixtures import *
 
 
 @pytest.mark.usefixtures("example_dataset", "batch_size")

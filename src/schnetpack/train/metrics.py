@@ -295,6 +295,7 @@ class HeatmapMAE(MeanAbsoluteError):
     r"""
     Metric for heatmap of component-wise mean square error of non-scalar
     quantities.
+    Do not use for datasets with different atomistic configurations!
 
     Args:
         target (str): name of target property

@@ -500,7 +500,7 @@ class ConcatAtomsData(ConcatDataset):
         # get atomref values
         atomrefs = {}
         for pname in self.load_only:
-            atomref_all = [dataset.atomref(pname) for dataset in self.datasets]
+            atomref_all = [dataset.atomref[pname] for dataset in self.datasets]
 
             # warn if not all atomrefs are equal
             equal_atomref = False in [
