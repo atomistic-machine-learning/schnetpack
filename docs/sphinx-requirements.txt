@@ -10,3 +10,4 @@ sacred
 tqdm
 ipykernel
 nbsphinx
+pytest-datadir
