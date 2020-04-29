@@ -8,6 +8,7 @@ tensorboardX
 h5py
 tqdm
 pytest
+pytest-datadir
 
 pre-commit
 black
