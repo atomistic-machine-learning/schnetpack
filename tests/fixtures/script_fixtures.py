@@ -56,9 +56,9 @@ def logger(request):
 @pytest.fixture
 def train_schnet_args(modeldir, ethanol_path, logger):
     return Namespace(
-        mode='train',
-        model='schnet',
-        dataset='custom',
+        mode="train",
+        model="schnet",
+        dataset="custom",
         datapath=ethanol_path,
         modelpath=modeldir,
         cuda=False,
@@ -80,20 +80,20 @@ def train_schnet_args(modeldir, ethanol_path, logger):
         keep_n_checkpoints=3,
         features=128,
         interactions=6,
-        cutoff_function='cosine',
+        cutoff_function="cosine",
         num_gaussians=50,
-        property='property1',
+        property="property1",
         cutoff=10.0,
         batch_size=100,
-        environment_provider='simple',
+        environment_provider="simple",
         derivative=None,
         negative_dr=False,
         force=None,
         contributions=None,
         stress=None,
-        aggregation_mode='sum',
-        output_module='atomwise',
-        rho={}
+        aggregation_mode="sum",
+        output_module="atomwise",
+        rho={},
     )
 
 

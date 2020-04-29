@@ -6,10 +6,7 @@ from tests.fixtures import *
 
 
 def test_train(
-    trainer,
-    test_loader,
-    keep_n_checkpoints,
-    checkpoint_interval,
+    trainer, test_loader, keep_n_checkpoints, checkpoint_interval,
 ):
     # forward pass before training
     for batch in test_loader:

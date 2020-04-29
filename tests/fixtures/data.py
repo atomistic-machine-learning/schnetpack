@@ -21,10 +21,12 @@ __all__ = [
     "example_data",
     "example_dataset",
     "available_properties",
+    "main_properties",
     "example_subset",
     "example_concat_dataset",
     "example_concat_dataset2",
     "train_val_test_datasets",
+    "dataset_stats",
     "example_loader",
     "train_loader",
     "val_loader",
@@ -96,10 +98,7 @@ def empty_dataset(tmp_data_dir, available_properties):
 @pytest.fixture(scope="session")
 def property_shapes():
     return dict(
-        property1=[1],
-        derivative1=[-1, 3],
-        contributions1=[-1, 1],
-        property2=[1],
+        property1=[1], derivative1=[-1, 3], contributions1=[-1, 1], property2=[1],
     )
 
 
@@ -134,6 +133,11 @@ def available_properties(property_shapes):
 
 
 @pytest.fixture(scope="session")
+def main_properties(available_properties):
+    return [pname for pname in available_properties if pname.startswith("property")]
+
+
+@pytest.fixture(scope="session")
 def example_dataset(tmp_data_dir, example_data, available_properties):
     data = spk.data.AtomsData(
         os.path.join(str(tmp_data_dir), "database4tests.db"),
@@ -163,6 +167,24 @@ def example_concat_dataset2(example_concat_dataset, example_subset):
 @pytest.fixture(scope="session")
 def train_val_test_datasets(example_dataset, n_train_set, n_validation_set):
     return spk.data.train_test_split(example_dataset, n_train_set, n_validation_set)
+
+
+@pytest.fixture(scope="session")
+def dataset_stats(example_dataset, main_properties):
+    # empty dicts
+    means = {pname: None for pname in main_properties}
+    stds = {pname: None for pname in main_properties}
+
+    # read database and calculate statistics
+    for pname in main_properties:
+        data = [
+            example_dataset.get_properties(i)[1][pname]
+            for i in range(len(example_dataset))
+        ]
+        means[pname] = np.mean(data, axis=0)
+        stds[pname] = np.std(data, axis=0)
+
+    return means, stds
 
 
 # example dataloader

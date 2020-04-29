@@ -6,6 +6,8 @@ import pytest
 import schnetpack as spk
 import schnetpack.data
 from tests.assertions import assert_dataset_equal
+from numpy.testing import assert_array_almost_equal
+
 from tests.fixtures import *
 
 
@@ -66,13 +68,14 @@ def test_loader(example_loader, batch_size):
             assert entry.shape[0] == min(batch_size, len(example_loader.dataset))
 
 
-def test_statistics_calculation(example_loader):
+def test_statistics_calculation(example_loader, dataset_stats, main_properties):
     """
     Test statistics calculation of dataloader.
     """
-    mu, std = example_loader.get_statistics("property1")
-    assert mu["property1"] == torch.FloatTensor([5.0])
-    assert std["property1"] == torch.FloatTensor([0.0])
+    means, stds = example_loader.get_statistics(main_properties)
+    for pname in main_properties:
+        assert_array_almost_equal(means[pname].numpy(), dataset_stats[0][pname])
+        assert_array_almost_equal(stds[pname].numpy(), dataset_stats[1][pname])
 
 
 def test_dataset(example_dataset, tmp_dbpath, available_properties, num_data):

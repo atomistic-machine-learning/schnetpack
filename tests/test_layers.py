@@ -50,13 +50,13 @@ def test_shape_schnet(schnet, schnet_batch, schnet_output_shape):
 
 
 def test_shape_schnetinteraction(
-        schnet_interaction,
-        random_atomic_env,
-        r_ij,
-        neighbors,
-        neighbor_mask,
-        f_ij,
-        interaction_output_shape,
+    schnet_interaction,
+    random_atomic_env,
+    r_ij,
+    neighbors,
+    neighbor_mask,
+    f_ij,
+    interaction_output_shape,
 ):
     inputs = [random_atomic_env, r_ij, neighbors, neighbor_mask, f_ij]
     assert_output_shape_valid(schnet_interaction, inputs, interaction_output_shape)
@@ -64,20 +64,20 @@ def test_shape_schnetinteraction(
 
 # test shapes of spk.nn
 def test_shape_cfconv(
-        cfconv_layer,
-        random_atomic_env,
-        r_ij,
-        neighbors,
-        neighbor_mask,
-        f_ij,
-        cfconv_output_shape,
+    cfconv_layer,
+    random_atomic_env,
+    r_ij,
+    neighbors,
+    neighbor_mask,
+    f_ij,
+    cfconv_output_shape,
 ):
     inputs = [random_atomic_env, r_ij, neighbors, neighbor_mask, f_ij]
     assert_output_shape_valid(cfconv_layer, inputs, cfconv_output_shape)
 
 
 def test_gaussian_smearing(
-        gaussion_smearing_layer, random_interatomic_distances, gaussian_smearing_shape
+    gaussion_smearing_layer, random_interatomic_distances, gaussian_smearing_shape
 ):
     assert_output_shape_valid(
         gaussion_smearing_layer, [random_interatomic_distances], gaussian_smearing_shape
@@ -125,18 +125,14 @@ def test_shape_mlp(mlp_layer, random_float_input, random_shape, random_output_di
 
 
 def test_shape_tiled_multilayer_network(
-        tiled_mlp_layer, n_mlp_tiles, random_float_input, random_shape,
-        random_output_dim
+    tiled_mlp_layer, n_mlp_tiles, random_float_input, random_shape, random_output_dim
 ):
-    out_shape = random_shape[:-1] + [random_output_dim*n_mlp_tiles]
+    out_shape = random_shape[:-1] + [random_output_dim * n_mlp_tiles]
     assert_output_shape_valid(tiled_mlp_layer, [random_float_input], out_shape)
 
 
 def test_shape_elemental_gate(
-        elemental_gate_layer,
-        elements,
-        random_int_input,
-        random_shape,
+    elemental_gate_layer, elements, random_int_input, random_shape,
 ):
     out_shape = random_shape + [len(elements)]
     assert_output_shape_valid(elemental_gate_layer, [random_int_input], out_shape)
@@ -158,7 +154,7 @@ def test_functionality_cutoff(cutoff_layer, cutoff, random_interatomic_distances
     mask = random_interatomic_distances > cutoff
     cutoff_layer_mask = cutoff_layer(random_interatomic_distances)
 
-    assert ((cutoff_layer_mask == 0.) == mask).all()
+    assert ((cutoff_layer_mask == 0.0) == mask).all()
 
 
 def x_test_shape_neighbor_elements(atomic_numbers, neighbors):

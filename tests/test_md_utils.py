@@ -5,6 +5,7 @@ from ase import units
 import schnetpack as spk
 from tests.fixtures import *
 
+
 def test_properties(hdf5_dataset):
     # Test general properties
     assert "energy" in hdf5_dataset.properties
@@ -71,6 +72,4 @@ def unit_conversion():
 
 def test_unit_conversion(unit_conversion):
     for unit, factor in unit_conversion.items():
-        assert (
-            abs(spk.md.utils.md_units.MDUnits.parse_mdunit(unit) - factor) < 1e-6
-        )
+        assert abs(spk.md.utils.md_units.MDUnits.parse_mdunit(unit) - factor) < 1e-6

@@ -83,8 +83,11 @@ def random_atomic_env(batch_size, max_atoms_in_batch, n_filters):
 
 @pytest.fixture
 def random_interatomic_distances(batch_size, max_atoms_in_batch, cutoff):
-    return (1 - torch.rand((batch_size, max_atoms_in_batch, max_atoms_in_batch - 1)))\
-           * 2 * cutoff
+    return (
+        (1 - torch.rand((batch_size, max_atoms_in_batch, max_atoms_in_batch - 1)))
+        * 2
+        * cutoff
+    )
 
 
 @pytest.fixture
@@ -132,6 +135,4 @@ def cfconv_output_shape(batch_size, max_atoms_in_batch, n_atom_basis):
 # spk.nn
 @pytest.fixture
 def gaussian_smearing_shape(batch_size, max_atoms_in_batch, n_gaussians):
-    return [batch_size, max_atoms_in_batch, max_atoms_in_batch-1, n_gaussians]
-
-
+    return [batch_size, max_atoms_in_batch, max_atoms_in_batch - 1, n_gaussians]

@@ -36,7 +36,7 @@ def metrics(available_properties):
     metrics += [spk.metrics.AngleMAE(prop) for prop in available_properties]
     metrics += [spk.metrics.AngleMSE(prop) for prop in available_properties]
     metrics += [spk.metrics.AngleRMSE(prop) for prop in available_properties]
-    #metrics += [spk.metrics.HeatmapMAE(prop) for prop in available_properties]
+    # metrics += [spk.metrics.HeatmapMAE(prop) for prop in available_properties]
     metrics += [spk.metrics.LengthMAE(prop) for prop in available_properties]
     metrics += [spk.metrics.LengthMSE(prop) for prop in available_properties]
     metrics += [spk.metrics.LengthRMSE(prop) for prop in available_properties]
