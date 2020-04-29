@@ -1,52 +1,36 @@
 import os
 import numpy as np
 import pytest
-import filecmp
 from schnetpack.md.parsers.orca_parser import *
-from schnetpack import Properties
 from schnetpack import Properties
 from schnetpack.data import AtomsData
 
-
-@pytest.fixture(scope="module")
-def main_path():
-    orca_main = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "data/test_orca.log"
-    )
-    return orca_main
+from tests.fixtures import *
 
 
-@pytest.fixture(scope="module")
-def hessian_path():
-    orca_hessian = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "data/test_orca.hess"
-    )
-    return orca_hessian
+@pytest.fixture
+def main_path(shared_datadir):
+    return os.path.join(shared_datadir, "test_orca.log")
 
 
-@pytest.fixture(scope="module")
-def targets_main():
-    main_target_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "data/test_orca_main_targets.npz"
-    )
-    return np.load(main_target_path)
+@pytest.fixture
+def hessian_path(shared_datadir):
+    return os.path.join(shared_datadir, "test_orca.hess")
 
 
-@pytest.fixture(scope="module")
-def targets_hessian():
-    hessian_target_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)),
-        "data/test_orca_hessian_targets.npz",
-    )
-    return np.load(hessian_target_path)
+@pytest.fixture
+def targets_main(shared_datadir):
+    return np.load(os.path.join(shared_datadir, "test_orca_main_targets.npz"))
 
 
-@pytest.fixture(scope="module")
-def target_orca_db():
-    parser_db_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "data/test_orca_parser.db"
-    )
-    return parser_db_path
+@pytest.fixture
+def targets_hessian(shared_datadir):
+    return np.load(os.path.join(shared_datadir, "test_orca_hessian_targets.npz"))
+
+
+@pytest.fixture
+def target_orca_db(shared_datadir):
+    return os.path.join(shared_datadir, "test_orca_parser.db")
 
 
 def test_main_file_parser(main_path, targets_main):
