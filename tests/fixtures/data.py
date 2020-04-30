@@ -32,16 +32,21 @@ __all__ = [
     "val_loader",
     "test_loader",
     "batch_size",
-    # data dir
+    # shared_datadir
     "simulation_hdf5_path",
     "qm9_path",
     "ani1_path",
     "ethanol_path",
     "iso17_path",
     "xyz_path",
+    "orca_log_path",
+    "hessian_path",
+    "target_orca_db_path",
     "molecule_path",
     "hdf5_dataset",
     "qm9_dataset",
+    "orca_hessian_targets",
+    "orca_main_targets"
 ]
 
 
@@ -256,6 +261,21 @@ def molecule_path(shared_datadir):
     return os.path.join(shared_datadir, "test_molecule.xyz")
 
 
+@pytest.fixture
+def orca_log_path(shared_datadir):
+    return os.path.join(shared_datadir, "test_orca.log")
+
+
+@pytest.fixture
+def hessian_path(shared_datadir):
+    return os.path.join(shared_datadir, "test_orca.hess")
+
+
+@pytest.fixture
+def target_orca_db_path(shared_datadir):
+    return os.path.join(shared_datadir, "test_orca_parser.db")
+
+
 # example datasets
 @pytest.fixture
 def hdf5_dataset(simulation_hdf5_path):
@@ -265,3 +285,13 @@ def hdf5_dataset(simulation_hdf5_path):
 @pytest.fixture
 def qm9_dataset(qm9_dbpath):
     return spk.datasets.QM9(qm9_dbpath)
+
+
+@pytest.fixture
+def orca_main_targets(shared_datadir):
+    return np.load(os.path.join(shared_datadir, "test_orca_main_targets.npz"))
+
+
+@pytest.fixture
+def orca_hessian_targets(shared_datadir):
+    return np.load(os.path.join(shared_datadir, "test_orca_hessian_targets.npz"))
