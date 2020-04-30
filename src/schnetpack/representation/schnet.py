@@ -4,7 +4,7 @@ import torch.nn as nn
 from schnetpack.nn.base import Dense
 from schnetpack import Properties
 from schnetpack.nn.cfconv import CFConv
-from schnetpack.nn.cutoff import HardCutoff
+from schnetpack.nn.cutoff import CosineCutoff
 from schnetpack.nn.acsf import GaussianSmearing
 from schnetpack.nn.neighbors import AtomDistances
 from schnetpack.nn.activations import shifted_softplus
@@ -30,7 +30,7 @@ class SchNetInteraction(nn.Module):
         n_spatial_basis,
         n_filters,
         cutoff,
-        cutoff_network=HardCutoff,
+        cutoff_network=CosineCutoff,
         normalize_filter=False,
     ):
         super(SchNetInteraction, self).__init__()
@@ -128,7 +128,7 @@ class SchNet(nn.Module):
         coupled_interactions=False,
         return_intermediate=False,
         max_z=100,
-        cutoff_network=HardCutoff,
+        cutoff_network=CosineCutoff,
         trainable_gaussians=False,
         distance_expansion=None,
         charged_systems=False,
