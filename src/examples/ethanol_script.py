@@ -5,7 +5,7 @@ import schnetpack as spk
 import schnetpack.atomistic.model
 from schnetpack.train import Trainer, CSVHook, ReduceLROnPlateauHook
 from schnetpack.train.metrics import MeanAbsoluteError
-from schnetpack.train.metrics import mse_loss
+from schnetpack.train import build_mse_loss
 
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -18,7 +18,7 @@ properties = ["energy", "forces"]  # properties used for training
 
 # data preparation
 logging.info("get dataset")
-dataset = spk.AtomsData("data/ethanol.db", load_only=properties)
+dataset = spk.datasets.MD17("data/ethanol.db", load_only=properties, molecule="ethanol")
 train, val, test = spk.train_test_split(
     data=dataset,
     num_train=1000,
@@ -59,7 +59,7 @@ metrics = [MeanAbsoluteError(p, p) for p in properties]
 hooks = [CSVHook(log_path=model_dir, metrics=metrics), ReduceLROnPlateauHook(optimizer)]
 
 # trainer
-loss = mse_loss(properties)
+loss = build_mse_loss(properties, loss_tradeoff=[0.01, 0.99])
 trainer = Trainer(
     model_dir,
     model=model,
