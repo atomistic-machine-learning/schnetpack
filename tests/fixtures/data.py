@@ -43,10 +43,13 @@ __all__ = [
     "hessian_path",
     "target_orca_db_path",
     "molecule_path",
+    "md_model_path",
     "hdf5_dataset",
     "qm9_dataset",
+    "ani1_dataset",
+    "md17_dataset",
     "orca_hessian_targets",
-    "orca_main_targets"
+    "orca_main_targets",
 ]
 
 
@@ -276,6 +279,11 @@ def target_orca_db_path(shared_datadir):
     return os.path.join(shared_datadir, "test_orca_parser.db")
 
 
+@pytest.fixture
+def md_model_path(shared_datadir):
+    return os.path.join(shared_datadir, "test_md_model.model")
+
+
 # example datasets
 @pytest.fixture
 def hdf5_dataset(simulation_hdf5_path):
@@ -283,8 +291,18 @@ def hdf5_dataset(simulation_hdf5_path):
 
 
 @pytest.fixture
-def qm9_dataset(qm9_dbpath):
-    return spk.datasets.QM9(qm9_dbpath)
+def qm9_dataset(qm9_path):
+    return spk.datasets.QM9(qm9_path)
+
+
+@pytest.fixture
+def ani1_dataset(ani1_path):
+    return spk.datasets.ANI1(ani1_path)
+
+
+@pytest.fixture
+def md17_dataset(ethanol_path):
+    return spk.datasets.MD17(ethanol_path, molecule="ethanol")
 
 
 @pytest.fixture

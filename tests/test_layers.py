@@ -84,12 +84,6 @@ def test_gaussian_smearing(
     )
 
 
-def test_shape_ssp():
-    in_data = torch.rand(10)
-    out_data = spk.nn.shifted_softplus(in_data)
-    assert in_data.shape == out_data.shape
-
-
 def test_shape_dense(dense_layer, random_float_input, random_shape, random_output_dim):
     out_shape = random_shape[:-1] + [random_output_dim]
     assert_output_shape_valid(dense_layer, [random_float_input], out_shape)

@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 
 import schnetpack as spk
-import schnetpack.data
 from tests.assertions import assert_dataset_equal
 from numpy.testing import assert_array_almost_equal
 
@@ -40,7 +39,7 @@ def test_merging(tmpdir, example_dataset, partition_names):
     if partition_names is not None:
         parts = {k: v for k, v in zip(partition_names, parts)}
 
-    merged_data = schnetpack.data.merge_datasets(merged_dbpath, parts)
+    merged_data = spk.data.merge_datasets(merged_dbpath, parts)
 
     # check merged
     assert len(merged_data) == 3 * len(example_dataset)
@@ -160,12 +159,6 @@ def test_save_concatenated(tmp_data_dir, example_concat_dataset):
     """
     Test if a concatenated dataset can be saved.
 
-    Args:
-        tmp_data_dir:
-        example_concat_dataset:
-
-    Returns:
-
     """
     # save dataset two times
     tmp_dbpath1 = os.path.join(tmp_data_dir, "concat.db")
@@ -182,3 +175,29 @@ def test_save_concatenated(tmp_data_dir, example_concat_dataset):
     dataset2 = spk.data.AtomsData(tmp_dbpath2)
 
     assert_dataset_equal(dataset1, dataset2)
+
+
+def test_qm9(qm9_path, qm9_dataset):
+    """
+    Test if QM9 dataset object has same behaviour as AtomsData.
+
+    """
+    atoms_data = spk.AtomsData(qm9_path)
+    assert_dataset_equal(atoms_data, qm9_dataset)
+
+
+def test_md17(ethanol_path, md17_dataset):
+    """
+    Test if MD17 dataset object has same behaviour as AtomsData.
+    """
+    atoms_data = spk.AtomsData(ethanol_path)
+    assert_dataset_equal(atoms_data, md17_dataset)
+
+
+def test_ani1(ani1_path, ani1_dataset):
+    """
+    Test if MD17 dataset object has same behaviour as AtomsData.
+    """
+    atoms_data = spk.AtomsData(ani1_path)
+    assert_dataset_equal(atoms_data, ani1_dataset)
+

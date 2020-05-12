@@ -1,8 +1,5 @@
-import os
-import pytest
-from ase import units
-
 import schnetpack as spk
+
 from tests.fixtures import *
 
 
@@ -51,23 +48,6 @@ def test_molecule(hdf5_dataset):
     # Check velocities
     velocities = hdf5_dataset.get_velocities()
     assert velocities.shape == (2, 16, 3)
-
-
-@pytest.fixture
-def unit_conversion():
-    conversions = {
-        "kcal / mol": units.kcal / units.Hartree / units.mol,
-        "kcal/mol": units.kcal / units.Hartree / units.mol,
-        "kcal / mol / Angstrom": units.kcal / units.Hartree / units.mol * units.Bohr,
-        "kcal / mol / Angs": units.kcal / units.Hartree / units.mol * units.Bohr,
-        "kcal / mol / A": units.kcal / units.Hartree / units.mol * units.Bohr,
-        "kcal / mol / Bohr": units.kcal / units.Hartree / units.mol * units.Angstrom,
-        "eV": units.eV / units.Ha,
-        "Ha": 1.0,
-        "Hartree": 1.0,
-        0.57667: 0.57667,
-    }
-    return conversions
 
 
 def test_unit_conversion(unit_conversion):

@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 import schnetpack as spk
 from argparse import Namespace
-from shutil import rmtree
 from numpy.testing import assert_almost_equal
 
 from tests.fixtures import *
