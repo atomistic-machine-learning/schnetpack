@@ -4,6 +4,7 @@ from ase import units
 
 from schnetpack.md.utils import MDUnits
 
+
 # __all__ = [
 #     "load_gle_matrices",
 #     "GLEMatrixParser",
@@ -182,3 +183,24 @@ class YSWeights:
                 torch.from_numpy(self.YS_weights[order]).float().to(self.device)
             )
         return ys_weights
+
+
+class StableSinhDiv:
+    """
+    McLaurin series of sinh(x)/x around zero to avoid numerical instabilities
+    """
+
+    def __init__(self, eps=1e-4):
+        self.e0 = 1.0
+        self.e2 = self.e0 / 6.0
+        self.e4 = self.e2 / 20.0
+        self.e6 = self.e4 / 42.0
+        self.e8 = self.e6 / 72.0
+        self.eps = eps
+
+    def f(self, x):
+        if torch.min(torch.abs(x)) < self.eps:
+            x = x ** 2
+            return (((self.e8 * x + self.e6) * x + self.e4) * x + self.e2) * x + self.e0
+        else:
+            return torch.sinh(x) / x

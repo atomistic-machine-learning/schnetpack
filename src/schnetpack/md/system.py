@@ -7,7 +7,7 @@ import torch
 from ase.io import read
 
 from schnetpack.md.utils import MDUnits, compute_centroid, batch_inverse
-from schnetpack.md.neighbor_lists import SimpleNeighborList
+from ase import Atoms
 
 
 class SystemException(Exception):
@@ -55,20 +55,9 @@ class System:
     Args:
         n_replicas (int): Number of replicas generated for each molecule.
         device (str): Computation device (default='cuda').
-        neighborlist (object): Routine for generating the neighbor list used
-                               in the calculator (default is
-                               SimpleNeighborList).
     """
 
-    # TODO: Introduce periodic boundary conditions
-
-    def __init__(
-        self,
-        n_replicas,
-        device="cuda",
-        neighborlist=SimpleNeighborList,
-        initializer=None,
-    ):
+    def __init__(self, n_replicas, device="cuda", initializer=None):
 
         # Specify device
         self.device = device
@@ -89,12 +78,15 @@ class System:
         self.positions = None
         self.momenta = None
         self.forces = None
+        self.energies = None
+
+        # Properties for periodic boundary conditions and crystal cells
+        self.cells = None
+        self.pbc = None
+        self.stress = None  # Used for the computation of the pressure
 
         # Property dictionary, updated during simulation
         self.properties = {}
-
-        # Initialize neighbor list for the calculator
-        self.neighbor_list = neighborlist
 
         # Initialize initial conditions
         self.initializer = initializer
@@ -121,6 +113,9 @@ class System:
             molecules list(ase.Atoms): List of ASE atoms objects containing
             molecular structures and chemical elements.
         """
+        # 0) Check if molecules is a single ase.Atoms object and wrap it in list.
+        if isinstance(molecules, Atoms):
+            molecules = [molecules]
 
         # 1) Get maximum number of molecules, number of replicas and number of
         #    overall systems
@@ -155,6 +150,12 @@ class System:
             self.n_replicas, self.n_molecules, self.max_n_atoms, 3, device=self.device
         )
 
+        # Relevant for periodic boundary conditions and simulation cells
+        self.cells = torch.zeros(
+            self.n_replicas, self.n_molecules, 3, 3, device=self.device
+        )
+        self.pbc = torch.zeros(self.n_molecules, 3, device=self.device)
+
         # 5) Populate arrays according to the data provided in molecules
         for i in range(self.n_molecules):
             # Static properties
@@ -170,17 +171,28 @@ class System:
             self.positions[:, i, : self.n_atoms[i], :] = torch.from_numpy(
                 molecules[i].positions * MDUnits.angs2bohr
             )
+            # Properties for cell simulations
+            self.cells[:, i, :, :] = torch.from_numpy(
+                molecules[i].cell * MDUnits.angs2bohr
+            )
+            self.pbc[i, :] = torch.from_numpy(molecules[i].pbc)
+
+        # Convert periodic boundary conditions to Boolean tensor
+        self.pbc = self.pbc.bool()
+
+        # Check for cell/pbc stuff:
+        if torch.sum(torch.abs(self.cells)) == 0.0:
+            if torch.sum(self.pbc) > 0.0:
+                raise SystemException("Found periodic boundary conditions but no cell.")
+            else:
+                self.cells = None
 
         # 6) Do proper broadcasting here for easier use in e.g. integrators and
         #    thermostats afterwards
         self.masses = self.masses[None, :, :, None]
         self.atom_masks = self.atom_masks[..., None]
 
-        # 7) Build neighbor lists
-        if self.neighbor_list is not None:
-            self.neighbor_list = self.neighbor_list(self)
-
-        # 8) Initialize Momenta
+        # 7) Initialize Momenta
         if self.initializer:
             self.initializer.initialize_system(self)
 
@@ -256,6 +268,113 @@ class System:
         # Subtract rotation from overall motion (apply atom mask)
         self.momenta -= rotational_velocities * self.masses * self.atom_masks
 
+    def wrap_positions(self, eps=1e-6):
+        """
+        Move atoms outside the box back into the box for all dimensions with periodic boundary
+        conditions.
+
+        Args:
+            eps (float): Small offset for numerical stability
+        """
+        # Compute fractional coordinates
+        tmp_positions = self.positions.transpose(2, 3)
+        tmp_cells = self.cells.transpose(2, 3)
+        inv_positions, _ = torch.solve(tmp_positions, tmp_cells)
+        inv_positions = inv_positions.transpose(2, 3)
+
+        # Get periodic coordinates
+        periodic = torch.masked_select(inv_positions, self.pbc[None, :, None, :])
+
+        # Apply periodic boundary conditions (with small buffer)
+        periodic = periodic + eps
+        periodic = periodic % 1.0
+        periodic = periodic - eps
+
+        # Update fractional coordinates
+        inv_positions.masked_scatter_(self.pbc[None, :, None, :], periodic)
+
+        # Convert to positions
+        self.positions = torch.matmul(inv_positions, self.cells)
+
+    def compute_pressure(self, tensor=False, kinetic_component=False):
+        """
+        Compute the pressure (tensor) based on the stress tensor of the systems.
+
+        Args:
+            tensor (bool): Instead of a scalar pressure, return the full pressure tensor. (Required for
+                           anisotropic cell deformation.)
+            kinetic_component (bool): Include the kinetic energy component during the computation of the
+                                      pressure (default=False).
+
+        Returns:
+            torch.Tensor: Depending on the tensor-flag, returns a tensor containing the pressure with dimensions
+                          n_replicas x n_molecules (False) or n_replicas x n_molecules x 3 x 3 (True).
+       """
+        if self.stress is None:
+            raise SystemError(
+                "Stress required for computation of the instantaneous pressure."
+            )
+
+        if tensor:
+            pressure = -self.stress
+            if kinetic_component:
+                pressure = (
+                    pressure + 2.0 * self.kinetic_energy_tensor / self.volume[..., None]
+                )
+
+        else:
+            # Einsum computes the trace
+            pressure = -torch.einsum("abii->ab", self.stress) / 3.0
+
+            if kinetic_component:
+                pressure = pressure + 2.0 * self.kinetic_energy / self.volume / 3.0
+
+        return pressure.detach()
+
+    def get_ase_atoms(self, atomic_units=True):
+        """
+        Convert the stored molecular configurations into ASE Atoms objects. This is e.g. used for the
+        neighbor lists based on environment providers. All units are atomic units by default, as used in the calculator
+
+        Args:
+            atomic_units (bool): Whether atomic units or Angstrom should be returned (default=True). This should
+                                 always be True when used with an EnvironmentProviderNeighborList.
+
+        Returns:
+            list(ase.Atoms): List of ASE Atoms objects, with the replica and molecule dimension flattened.
+        """
+        atoms = []
+        for idx_r in range(self.n_replicas):
+            for idx_m in range(self.n_molecules):
+                positions = (
+                    self.positions[idx_r, idx_m, : self.n_atoms[idx_m]]
+                    .cpu()
+                    .detach()
+                    .numpy()
+                )
+                atom_types = (
+                    self.atom_types[idx_r, idx_m, : self.n_atoms[idx_m]]
+                    .cpu()
+                    .detach()
+                    .numpy()
+                )
+                if self.cells is not None:
+                    cell = self.cells[idx_r, idx_m].cpu().detach().numpy()
+                    pbc = self.pbc[idx_m].cpu().detach().numpy()
+                else:
+                    cell = None
+                    pbc = None
+
+                # If requested, convert units of space to Angstrom
+                if not atomic_units:
+                    positions /= MDUnits.angs2bohr
+                    cell /= MDUnits.angs2bohr
+
+                mol = Atoms(atom_types, positions, cell=cell, pbc=pbc)
+                atoms.append(mol)
+
+        return atoms
+
     @property
     def velocities(self):
         """
@@ -318,10 +437,28 @@ class System:
         """
         # Apply atom mask
         momenta = self.momenta * self.atom_masks
+
         kinetic_energy = 0.5 * torch.sum(
             torch.sum(momenta ** 2, 3) / self.masses[..., 0], 2
         )
         return kinetic_energy.detach()
+
+    @property
+    def kinetic_energy_tensor(self):
+        """
+        Compute the kinetic energy tensor (outer product of momenta divided by masses) for pressure computation.
+        The standard kinetic energy is the trace of this tensor.
+
+        Returns:
+            torch.tensor: n_replicas x n_molecules x 3 x 3 tensor containg kinetic energy components.
+
+        """
+        # Apply atom mask
+        momenta = self.momenta * self.atom_masks
+        kinetic_energy_tensor = 0.5 * torch.sum(
+            momenta[..., None] * momenta[:, :, :, None, :] / self.masses[..., None], 2
+        )
+        return kinetic_energy_tensor.detach()
 
     @property
     def temperature(self):
@@ -377,6 +514,25 @@ class System:
         return temperature
 
     @property
+    def volume(self):
+        """
+        Compute the cell volumes if cells are present.
+
+        Returns:
+            torch.tensor: n_replicas x n_molecules containing the volumes.
+        """
+        if self.cells is None:
+            return None
+        else:
+            volume = torch.sum(
+                self.cells[:, :, 0]
+                * torch.cross(self.cells[:, :, 1], self.cells[:, :, 2], dim=2),
+                dim=2,
+                keepdim=False,
+            )
+            return volume.detach()
+
+    @property
     def state_dict(self):
         """
         State dict for storing the system state.
@@ -393,6 +549,9 @@ class System:
             "n_atoms": self.n_atoms,
             "atom_types": self.atom_types,
             "masses": self.masses,
+            "cells": self.cells,
+            "pbc": self.pbc,
+            "stress": self.stress,
         }
         return state_dict
 
@@ -412,6 +571,9 @@ class System:
         self.n_atoms = state_dict["n_atoms"]
         self.atom_types = state_dict["atom_types"]
         self.masses = state_dict["masses"]
+        self.cells = state_dict["cells"]
+        self.pbc = state_dict["pbc"]
+        self.stress = state_dict["stress"]
 
         self.n_replicas = self.positions.shape[0]
         self.n_molecules = self.positions.shape[1]
@@ -420,7 +582,3 @@ class System:
         # Build atom masks according to the present number of atoms
         for i in range(self.n_molecules):
             self.atom_masks[:, i, : self.n_atoms[i], :] = 1.0
-
-        # Rebuild neighbor lists with new system specifications
-        if self.neighbor_list is not None:
-            self.neighbor_list.__init__(self)

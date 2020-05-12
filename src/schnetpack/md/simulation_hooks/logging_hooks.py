@@ -14,10 +14,12 @@ import numpy as np
 import torch
 
 from schnetpack.md.simulation_hooks import SimulationHook
+import schnetpack as spk
 
 __all__ = [
     "Checkpoint",
     "TemperatureLogger",
+    "PressureLogger",
     "FileLogger",
     "MoleculeStream",
     "DataStream",
@@ -371,20 +373,30 @@ class MoleculeStream(DataStream):
             simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         # Get shape of array depending on whether forces should be stored.
-        data_shape = (
-            simulator.system.n_replicas,
-            simulator.system.n_molecules,
-            simulator.system.max_n_atoms,
-            6,
-        )
+
+        if simulator.system.cells is not None:
+            data_shape = (
+                simulator.system.n_replicas,
+                simulator.system.n_molecules,
+                simulator.system.max_n_atoms * 6 + 9,
+            )
+        else:
+            data_shape = (
+                simulator.system.n_replicas,
+                simulator.system.n_molecules,
+                simulator.system.max_n_atoms * 6,
+            )
 
         self._setup_data_groups(data_shape, simulator)
 
         if not self.restart:
             self.data_group.attrs["n_replicas"] = simulator.system.n_replicas
             self.data_group.attrs["n_molecules"] = simulator.system.n_molecules
+            self.data_group.attrs["max_n_atoms"] = simulator.system.max_n_atoms
             self.data_group.attrs["n_atoms"] = simulator.system.n_atoms.cpu()
             self.data_group.attrs["atom_types"] = simulator.system.atom_types.cpu()
+            self.data_group.attrs["pbc"] = simulator.system.pbc.cpu()
+
             self.data_group.attrs["time_step"] = (
                 simulator.integrator.time_step * self.every_n_steps
             )
@@ -398,12 +410,25 @@ class MoleculeStream(DataStream):
             buffer_position (int): Current position in the buffer.
             simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
+        n_entries = simulator.system.max_n_atoms * 3
+
         self.buffer[
-            buffer_position : buffer_position + 1, ..., :3
-        ] = simulator.system.positions
+            buffer_position : buffer_position + 1, ..., :n_entries
+        ] = simulator.system.positions.view(
+            simulator.system.n_replicas, simulator.system.n_molecules, -1
+        )
         self.buffer[
-            buffer_position : buffer_position + 1, ..., 3:
-        ] = simulator.system.velocities
+            buffer_position : buffer_position + 1, ..., n_entries : 2 * n_entries
+        ] = simulator.system.velocities.view(
+            simulator.system.n_replicas, simulator.system.n_molecules, -1
+        )
+
+        if simulator.system.cells is not None:
+            self.buffer[
+                buffer_position : buffer_position + 1, ..., 2 * n_entries :
+            ] = simulator.system.cells.view(
+                simulator.system.n_replicas, simulator.system.n_molecules, -1
+            )
 
 
 class FileLoggerError(Exception):
@@ -640,6 +665,7 @@ class TemperatureLogger(TensorboardLogger):
 
     def __init__(self, log_file, every_n_steps=100):
         super(TemperatureLogger, self).__init__(log_file, every_n_steps=every_n_steps)
+        self.initial_value = None
 
     def on_step_end(self, simulator):
         """
@@ -655,4 +681,43 @@ class TemperatureLogger(TensorboardLogger):
                 simulator.step,
                 simulator.system.temperature,
                 property_centroid=simulator.system.centroid_temperature,
+            )
+
+
+class PressureLogger(TensorboardLogger):
+    """
+    TensorBoard logging hook for the pressure of the replicas, as well as of the corresponding centroids for each
+    molecule in the system container. This requires the stress tensor to be computed in the model.
+
+    Args:
+        log_file (str): Path to the TensorBoard file.
+        every_n_steps (int): Frequency with which data is logged to TensorBoard.
+    """
+
+    def __init__(self, log_file, every_n_steps=100):
+        super(PressureLogger, self).__init__(log_file, every_n_steps=every_n_steps)
+        self.initial_value = None
+
+    def on_step_end(self, simulator):
+        """
+        Log the systems pressures at the given intervals.
+
+        Args:
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
+        """
+
+        if simulator.step % self.every_n_steps == 0:
+
+            pressure = (
+                simulator.system.compute_pressure(kinetic_component=True)
+                / spk.md.MDUnits.pressure2internal
+            )
+            centroid_pressure = torch.mean(pressure, 0, keepdim=True)
+
+            # Use the _log_group routine to log the systems temperatures
+            self._log_group(
+                "pressure",
+                simulator.step,
+                pressure,
+                property_centroid=centroid_pressure,
             )

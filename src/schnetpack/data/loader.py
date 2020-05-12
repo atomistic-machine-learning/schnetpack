@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 from schnetpack import Properties
 from .stats import StatisticsAccumulator
 
-
 __all__ = ["AtomsLoader"]
 
 
@@ -222,5 +221,8 @@ class AtomsLoader(DataLoader):
             p0 = torch.sum(torch.from_numpy(single_atom_ref[z]).float(), dim=1)
             property_value -= p0
         if divide_by_atoms:
-            property_value /= torch.sum(row["_atom_mask"], dim=1, keepdim=True)
+            mask = torch.sum(row["_atom_mask"], dim=1, keepdim=True).view(
+                [-1, 1] + [1] * (property_value.dim() - 2)
+            )
+            property_value /= mask
         statistics.add_sample(property_value)

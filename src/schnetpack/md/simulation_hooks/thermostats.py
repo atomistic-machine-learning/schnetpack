@@ -14,7 +14,7 @@ from schnetpack.md.utils import (
     NormalModeTransformer,
     YSWeights,
 )
-from schnetpack.md.integrators import RingPolymer
+from schnetpack.md.integrators import RingPolymer, NPTRingPolymer
 from schnetpack.md.simulation_hooks.basic_hooks import SimulationHook
 
 __all__ = [
@@ -50,7 +50,6 @@ class ThermostatHook(SimulationHook):
                                                                        model representation in ring polymer dynamics.
         detach (bool): Whether the computational graph should be detached after each simulation step. Default is true,
                        should be changed if differentiable MD is desired.
-                       TODO: Make detach frequency instead
     """
 
     # TODO: Could be made a torch nn.Module
@@ -82,7 +81,7 @@ class ThermostatHook(SimulationHook):
 
         # Check if using normal modes is feasible and initialize
         if self.nm_transformation is not None:
-            if type(simulator.integrator) is not RingPolymer:
+            if not isinstance(simulator.integrator, RingPolymer):
                 raise ThermostatError(
                     "Normal mode transformation should only"
                     "be used with ring polymer dynamics."
@@ -317,7 +316,7 @@ class GLEThermostat(ThermostatHook):
         if c_matrix is None:
             c_matrix = np.eye(a_matrix.shape[-1]) * self.temperature_bath * MDUnits.kB
             # Check if normal GLE or GLE for ring polymers is needed:
-            if type(simulator.integrator) is RingPolymer:
+            if isinstance(simulator.integrator, RingPolymer):
                 logging.info(
                     "RingPolymer integrator detected, initializing " "C accordingly."
                 )
@@ -495,7 +494,7 @@ class PIGLETThermostat(GLEThermostat):
                 "found {:d}.".format(self.n_replicas, a_matrix.shape[0])
             )
 
-        if not type(simulator.integrator) is RingPolymer:
+        if not isinstance(simulator.integrator, RingPolymer):
             raise ThermostatError("PIGLET thermostat should only be used with " "RPMD.")
 
         all_c1 = []
@@ -667,7 +666,7 @@ class PILELocalThermostat(LangevinThermostat):
             simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
                                                                  time step, system, etc.
         """
-        if type(simulator.integrator) is not RingPolymer:
+        if not isinstance(simulator.integrator, RingPolymer):
             raise ThermostatError("PILE thermostats can only be used in RPMD")
 
         # Initialize friction coefficients
@@ -888,7 +887,7 @@ class NHCThermostat(ThermostatHook):
         chain_length=3,
         massive=False,
         nm_transformation=None,
-        multi_step=2,
+        multi_step=1,
         integration_order=3,
     ):
         super(NHCThermostat, self).__init__(
@@ -1090,11 +1089,23 @@ class NHCThermostat(ThermostatHook):
         scaling_factor = self._propagate_thermostat(kinetic_energy)
         momenta = momenta * scaling_factor
 
+        self.compute_conserved(simulator.system)
+
         # Apply transformation if requested
         if self.nm_transformation is not None:
             momenta = self.nm_transformation.normal2beads(momenta)
 
         simulator.system.momenta = momenta
+
+    def compute_conserved(self, system):
+        conserved = (
+            system.kinetic_energy[..., None, None]
+            + 0.5 * torch.sum(self.velocities ** 2 * self.masses, 4)
+            + system.energies[..., None, None]
+            + self.degrees_of_freedom * self.kb_temperature * self.positions[..., 0]
+            + self.kb_temperature * torch.sum(self.positions[..., 1:], 4)
+        )
+        print(conserved)
 
     @property
     def state_dict(self):

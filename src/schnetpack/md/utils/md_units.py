@@ -18,29 +18,40 @@ class MDUnits:
     """
 
     # Unit conversions
-    fs2atu = 1e-15 / units._aut
-    eV2Ha = units.eV / units.Ha
-    d2amu = units._amu / units._me
-    angs2bohr = units.Angstrom / units.Bohr
+    # fs2atu = 1e-15 / units._aut
+    # eV2Ha = units.eV / units.Ha
+    # d2amu = units._amu / units._me
+    # angs2bohr = units.Angstrom / units.Bohr
+    # auforces2aseforces = angs2bohr / eV2Ha
+    # Ha2kcalpmol = units.Ha * units.mol / units.kcal
+
+    energy_unit = units.kJ / units.mol
+
+    fs2atu = 1.0 / 100.0
+    eV2Ha = units.eV / energy_unit
+    d2amu = 1.0
+    angs2bohr = 0.1
     auforces2aseforces = angs2bohr / eV2Ha
     Ha2kcalpmol = units.Ha * units.mol / units.kcal
+    pressure2internal = 0.06022140000000001
 
     # Constants
-    kB = units.kB / units.Ha
-    hbar = 1.0
+    kB = units.kB / energy_unit
+    # hbar = 1.0
+    hbar = 0.6350778306118481
 
     # For spectra
     h_bar2icm = hbar * 100 * units._c * units._aut
 
     # Conversion units use when reading in MD inputs
     conversions = {
-        "kcal": units.kcal / units.Hartree,
+        "kcal": units.kcal / energy_unit,
         "mol": 1 / units.mol,
-        "ev": units.eV / units.Hartree,
+        "ev": units.eV / energy_unit,
         "bohr": 1.0,
-        "angstrom": units.Bohr,
-        "a": units.Bohr,
-        "angs": units.Bohr,
+        "angstrom": 10.0,
+        "a": 10.0,
+        "angs": 10.0,
         "hartree": 1.0,
         "ha": 1.0,
     }

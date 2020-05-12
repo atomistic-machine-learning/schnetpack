@@ -9,6 +9,7 @@ import logging
 import h5py
 import numpy as np
 from ase import data
+import warnings
 
 from schnetpack import Properties
 from schnetpack.md.utils import MDUnits
@@ -89,13 +90,52 @@ class HDF5Loader:
         self.entries = self.total_entries - self.skip_initial
 
         # Write to main property dictionary
-        self.properties[Properties.Z] = structures.attrs["atom_types"][0, ...]
+        if structures.ndim == 4:
+            self._load_structures(structures)
+        else:
+            # Check for deprecated format
+            warnings.warn(
+                "Old format of hdf5 detected, periodic systems not supported.",
+                DeprecationWarning,
+            )
+            self._load_structures_deprectated(structures)
+
+    def _load_structures_deprectated(self, structures):
+        self.properties[Properties.Z] = structures.attrs["atom_types"][0]
+
+        # Get positions
         self.properties[Properties.R] = structures[
             self.skip_initial : self.total_entries, ..., :3
         ]
+        # Get velocities
         self.properties["velocities"] = structures[
             self.skip_initial : self.total_entries, ..., 3:
         ]
+
+    def _load_structures(self, structures):
+        self.properties[Properties.Z] = structures.attrs["atom_types"][0]
+
+        # Get length of position and velocity blocks
+        max_n_atoms = structures.attrs["max_n_atoms"]
+        block_length = 3 * max_n_atoms
+        self.pbc = structures.attrs["pbc"]
+
+        # Get positions
+        self.properties[Properties.R] = structures[
+            self.skip_initial : self.total_entries, ..., :block_length
+        ].reshape((self.entries, self.n_replicas, self.n_molecules, max_n_atoms, 3))
+        # Get velocities
+        self.properties["velocities"] = structures[
+            self.skip_initial : self.total_entries, ..., block_length : 2 * block_length
+        ].reshape((self.entries, self.n_replicas, self.n_molecules, max_n_atoms, 3))
+
+        # Get cells if present
+        if structures.shape[-1] > 2 * block_length:
+            self.properties[Properties.cell] = structures[
+                self.skip_initial : self.total_entries, ..., 2 * block_length :
+            ].reshape((self.entries, self.n_replicas, self.n_molecules, 3, 3))
+        else:
+            self.properties[Properties.cell] = None
 
     def _load_properties(self):
         """
