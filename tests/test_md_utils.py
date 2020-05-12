@@ -1,20 +1,6 @@
-import os
-import pytest
+import schnetpack as spk
 
-from schnetpack import Properties
-
-import schnetpack.md.utils.hdf5_data
-import schnetpack.md.utils.md_units
-
-from ase import units
-
-
-@pytest.fixture
-def hdf5_dataset():
-    hdf5_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "data/test_simulation.hdf5"
-    )
-    return schnetpack.md.utils.hdf5_data.HDF5Loader(hdf5_path, load_properties=True)
+from tests.fixtures import *
 
 
 def test_properties(hdf5_dataset):
@@ -47,8 +33,8 @@ def test_properties(hdf5_dataset):
 
 def test_molecule(hdf5_dataset):
     # Test molecule properties
-    assert Properties.R in hdf5_dataset.properties
-    assert Properties.Z in hdf5_dataset.properties
+    assert spk.Properties.R in hdf5_dataset.properties
+    assert spk.Properties.Z in hdf5_dataset.properties
     assert "velocities" in hdf5_dataset.properties
 
     # Check positions
@@ -56,7 +42,7 @@ def test_molecule(hdf5_dataset):
     assert positions.shape == (2, 16, 3)
 
     # Check atom_types
-    atom_types = hdf5_dataset.get_property(Properties.Z)
+    atom_types = hdf5_dataset.get_property(spk.Properties.Z)
     assert atom_types.shape == (16,)
 
     # Check velocities
@@ -64,25 +50,6 @@ def test_molecule(hdf5_dataset):
     assert velocities.shape == (2, 16, 3)
 
 
-@pytest.fixture
-def unit_conversion():
-    conversions = {
-        "kcal / mol": units.kcal / units.Hartree / units.mol,
-        "kcal/mol": units.kcal / units.Hartree / units.mol,
-        "kcal / mol / Angstrom": units.kcal / units.Hartree / units.mol * units.Bohr,
-        "kcal / mol / Angs": units.kcal / units.Hartree / units.mol * units.Bohr,
-        "kcal / mol / A": units.kcal / units.Hartree / units.mol * units.Bohr,
-        "kcal / mol / Bohr": units.kcal / units.Hartree / units.mol * units.Angstrom,
-        "eV": units.eV / units.Ha,
-        "Ha": 1.0,
-        "Hartree": 1.0,
-        0.57667: 0.57667,
-    }
-    return conversions
-
-
 def test_unit_conversion(unit_conversion):
     for unit, factor in unit_conversion.items():
-        assert (
-            abs(schnetpack.md.utils.md_units.MDUnits.parse_mdunit(unit) - factor) < 1e-6
-        )
+        assert abs(spk.md.utils.md_units.MDUnits.parse_mdunit(unit) - factor) < 1e-6

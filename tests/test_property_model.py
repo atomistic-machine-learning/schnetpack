@@ -1,4 +1,4 @@
-from .fixtures import *
+from tests.fixtures import *
 import torch.nn as nn
 from numpy.testing import assert_array_equal
 

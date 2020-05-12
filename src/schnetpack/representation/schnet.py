@@ -10,6 +10,9 @@ from schnetpack.nn.neighbors import AtomDistances
 from schnetpack.nn.activations import shifted_softplus
 
 
+__all__ = ["SchNetInteraction", "SchNet"]
+
+
 class SchNetInteraction(nn.Module):
     r"""SchNet interaction block for modeling interactions of atomistic systems.
 
