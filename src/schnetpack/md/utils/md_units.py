@@ -1,6 +1,7 @@
 from ase import units
 import numpy as np
 import re
+import warnings
 
 __all__ = ["MDUnits"]
 
@@ -60,6 +61,37 @@ class MDUnits:
         "s": units.s / time_unit,
         "aut": units._aut * units.s / time_unit,  # _aut is given in s
     }
+
+    @staticmethod
+    def parse_mdunit(unit):
+        """
+        Auxiliary functions, used to determine the conversion factor of position and force units between MD propagation
+        and the provided ML Calculator. Allowed units are:
+            mol, kcal, eV, Bohr, Angstrom, Hartree and all combinations using '/' thereof (e.g. kcal/mol/Angstrom).
+
+        Args:
+            unit (str/float): Unit to be used to convert forces from Calculator units to atomic units used in the MD.
+                              Can be a str, which is converted to the corresponding numerical value or a float, which
+                              is returned.
+
+        Returns:
+            float: Factor used for conversion in the Calculator.
+
+        """
+        warnings.warn(
+            "Routine is deprecated, please use unit2internal, internal2unit or unit2unit instead.",
+            DeprecationWarning,
+        )
+        if type(unit) == str:
+            parts = unit.lower().replace(" ", "").split("/")
+            scaling = 1.0
+            for part in parts:
+                if part not in MDUnits.conversions:
+                    raise KeyError("Unrecognized unit {:s}".format(part))
+                scaling *= MDUnits.conversions[part]
+            return scaling
+        else:
+            return unit
 
     @staticmethod
     def _parse_unit(unit):
