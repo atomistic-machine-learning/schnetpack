@@ -90,14 +90,10 @@ class SpkCalculator(Calculator):
         self.model_forces = forces
         self.model_stress = stress
 
-        # Convert to ASE internal units
-        # MDUnits parses the given energy units and converts them to atomic units as the common denominator.
-        # These are then converted to ASE units
-        self.energy_units = MDUnits.parse_mdunit(energy_units) * units.Ha
-        self.forces_units = MDUnits.parse_mdunit(forces_units) * units.Ha / units.Bohr
-        self.stress_units = (
-            MDUnits.parse_mdunit(stress_units) * units.Ha / units.Bohr ** 3
-        )
+        # Convert to ASE internal units (energy=eV, length=A)
+        self.energy_units = MDUnits.unit2unit(energy_units, "eV")
+        self.forces_units = MDUnits.unit2unit(forces_units, "eV/Angstrom")
+        self.stress_units = MDUnits.unit2unit(stress_units, "eV/A/A/A")
 
     def calculate(self, atoms=None, properties=["energy"], system_changes=all_changes):
         """

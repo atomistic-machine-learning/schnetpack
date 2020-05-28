@@ -43,8 +43,8 @@ class SGDMLCalculator(MDCalculator):
         model,
         required_properties=[Properties.energy, Properties.forces],
         force_handle=Properties.forces,
-        position_conversion=1.0 / MDUnits.angs2bohr,
-        force_conversion=1.0 / MDUnits.Ha2kcalpmol / MDUnits.angs2bohr,
+        position_conversion="Angstrom",
+        force_conversion="kcal/mol/Angstrom",
         property_conversion={},
         detach=True,
     ):

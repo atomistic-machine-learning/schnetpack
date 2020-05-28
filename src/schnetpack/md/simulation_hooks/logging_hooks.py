@@ -708,9 +708,10 @@ class PressureLogger(TensorboardLogger):
 
         if simulator.step % self.every_n_steps == 0:
 
+            # Log the pressure in bar
             pressure = (
                 simulator.system.compute_pressure(kinetic_component=True)
-                / spk.md.MDUnits.pressure2internal
+                / spk.md.MDUnits.bar2internal
             )
             centroid_pressure = torch.mean(pressure, 0, keepdim=True)
 

@@ -64,25 +64,73 @@ def test_molecule(hdf5_dataset):
     assert velocities.shape == (2, 16, 3)
 
 
+# TODO: Think about good scheme.
+
+
 @pytest.fixture
 def unit_conversion():
     conversions = {
-        "kcal / mol": units.kcal / units.Hartree / units.mol,
-        "kcal/mol": units.kcal / units.Hartree / units.mol,
-        "kcal / mol / Angstrom": units.kcal / units.Hartree / units.mol * units.Bohr,
-        "kcal / mol / Angs": units.kcal / units.Hartree / units.mol * units.Bohr,
-        "kcal / mol / A": units.kcal / units.Hartree / units.mol * units.Bohr,
-        "kcal / mol / Bohr": units.kcal / units.Hartree / units.mol * units.Angstrom,
-        "eV": units.eV / units.Ha,
-        "Ha": 1.0,
-        "Hartree": 1.0,
+        "kcal / mol": units.kcal / units.mol / schnetpack.md.utils.MDUnits.energy_unit,
+        "kcal/mol": units.kcal / units.mol / schnetpack.md.utils.MDUnits.energy_unit,
+        "kJ /mol": 1.0,
+        "A": 1.0 / schnetpack.md.utils.MDUnits.length_unit,
+        "kcal / mol / Bohr": units.kcal
+        / units.mol
+        / units.Bohr
+        / (
+            schnetpack.md.utils.MDUnits.energy_unit
+            / schnetpack.md.utils.MDUnits.length_unit
+        ),
+        "kcal / mol / A": units.kcal
+        / units.mol
+        / units.Angstrom
+        / (
+            schnetpack.md.utils.MDUnits.energy_unit
+            / schnetpack.md.utils.MDUnits.length_unit
+        ),
+        "kcal / mol / Angs": units.kcal
+        / units.mol
+        / units.Angstrom
+        / (
+            schnetpack.md.utils.MDUnits.energy_unit
+            / schnetpack.md.utils.MDUnits.length_unit
+        ),
+        "kcal / mol / Angstrom": units.kcal
+        / units.mol
+        / units.Angstrom
+        / (
+            schnetpack.md.utils.MDUnits.energy_unit
+            / schnetpack.md.utils.MDUnits.length_unit
+        ),
         0.57667: 0.57667,
     }
     return conversions
 
 
-def test_unit_conversion(unit_conversion):
+@pytest.fixture
+def unit_conversion_dual():
+    conversions = {
+        ("kcal / mol", "kJ / mol"): units.kcal / units.kJ,
+        ("kcal/mol", "kcal/mol"): 1.0,
+        (2.0, 2.0): 1.0,
+    }
+    return conversions
+
+
+def test_unit_conversion(unit_conversion, unit_conversion_dual):
     for unit, factor in unit_conversion.items():
         assert (
-            abs(schnetpack.md.utils.md_units.MDUnits.parse_mdunit(unit) - factor) < 1e-6
+            abs(schnetpack.md.utils.md_units.MDUnits.unit2internal(unit) - factor)
+            < 1e-6
+        )
+        assert (
+            abs(schnetpack.md.utils.md_units.MDUnits.internal2unit(unit) - 1.0 / factor)
+            < 1e-6
+        )
+
+    for unit_duple, factor in unit_conversion_dual.items():
+        unit1, unit2 = unit_duple
+        assert (
+            abs(schnetpack.md.utils.md_units.MDUnits.unit2unit(unit1, unit2) - factor)
+            < 1e-6
         )

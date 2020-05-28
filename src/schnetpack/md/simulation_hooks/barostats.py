@@ -42,7 +42,7 @@ class BarostatHook(SimulationHook):
     """
 
     def __init__(self, target_pressure, temperature_bath, detach=True):
-        self.target_pressure = target_pressure * MDUnits.pressure2internal
+        self.target_pressure = target_pressure * MDUnits.bar2internal
         self.temperature_bath = temperature_bath
         self.initialized = False
         self.device = None
@@ -215,12 +215,12 @@ class NHCBarostatIsotropic(BarostatHook):
             detach=detach,
         )
         self.chain_length = chain_length
-        self.frequency = 1 / (time_constant * MDUnits.fs2atu)
+        self.frequency = 1 / (time_constant * MDUnits.fs2internal)
 
         if time_constant_barostat is None:
             self.barostat_frequency = self.frequency
         else:
-            self.barostat_frequency = 1 / (time_constant_barostat * MDUnits.fs2atu)
+            self.barostat_frequency = 1 / (time_constant_barostat * MDUnits.fs2internal)
 
         # Compute kBT, since it will be used a lot
         self.kb_temperature = self.temperature_bath * MDUnits.kB
@@ -1011,7 +1011,7 @@ class RPMDBarostat(BarostatHook):
             temperature_bath=temperature_bath,
             detach=detach,
         )
-        self.frequency = 1.0 / (time_constant * MDUnits.fs2atu)
+        self.frequency = 1.0 / (time_constant * MDUnits.fs2internal)
         self.kb_temperature = temperature_bath * MDUnits.kB
         self.transformation = None
         self.propagator = None

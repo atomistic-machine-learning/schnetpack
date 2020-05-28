@@ -164,16 +164,16 @@ class System:
             )
             self.atom_masks[:, i, : self.n_atoms[i]] = 1.0
             self.masses[i, : self.n_atoms[i]] = torch.from_numpy(
-                molecules[i].get_masses() * MDUnits.d2amu
+                molecules[i].get_masses() * MDUnits.da2internal
             )
 
             # Dynamic properties
             self.positions[:, i, : self.n_atoms[i], :] = torch.from_numpy(
-                molecules[i].positions * MDUnits.angs2bohr
+                molecules[i].positions * MDUnits.angs2internal
             )
             # Properties for cell simulations
             self.cells[:, i, :, :] = torch.from_numpy(
-                molecules[i].cell * MDUnits.angs2bohr
+                molecules[i].cell * MDUnits.angs2internal
             )
             self.pbc[i, :] = torch.from_numpy(molecules[i].pbc)
 
@@ -367,8 +367,8 @@ class System:
 
                 # If requested, convert units of space to Angstrom
                 if not atomic_units:
-                    positions /= MDUnits.angs2bohr
-                    cell /= MDUnits.angs2bohr
+                    positions /= MDUnits.angs2internal
+                    cell /= MDUnits.angs2internal
 
                 mol = Atoms(atom_types, positions, cell=cell, pbc=pbc)
                 atoms.append(mol)
