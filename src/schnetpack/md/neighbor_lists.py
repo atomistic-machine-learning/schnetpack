@@ -198,7 +198,7 @@ class EnvironmentProviderNeighborList(MDNeighborList):
         reconverted into the format required for the calculators. In addition, the old cells and positons are
         stored to check if updates of the neighbor list are necessary.
         """
-        atoms = system.get_ase_atoms(atomic_units=True)
+        atoms = system.get_ase_atoms(internal_units=True)
 
         neighbor_idx = []
         offsets = []
