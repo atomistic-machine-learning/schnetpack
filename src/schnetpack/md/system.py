@@ -331,13 +331,13 @@ class System:
 
         return pressure.detach()
 
-    def get_ase_atoms(self, atomic_units=True):
+    def get_ase_atoms(self, internal_units=True):
         """
         Convert the stored molecular configurations into ASE Atoms objects. This is e.g. used for the
         neighbor lists based on environment providers. All units are atomic units by default, as used in the calculator
 
         Args:
-            atomic_units (bool): Whether atomic units or Angstrom should be returned (default=True). This should
+            internal_units (bool): Whether atomic units or Angstrom should be returned (default=True). This should
                                  always be True when used with an EnvironmentProviderNeighborList.
 
         Returns:
@@ -366,7 +366,7 @@ class System:
                     pbc = None
 
                 # If requested, convert units of space to Angstrom
-                if not atomic_units:
+                if not internal_units:
                     positions /= MDUnits.angs2internal
                     cell /= MDUnits.angs2internal
 
