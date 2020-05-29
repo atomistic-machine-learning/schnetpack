@@ -319,12 +319,12 @@ class SetupCalculator(SetupBlock):
         "position_conversion": "Angstrom",
         "force_conversion": "kcal/mol/Angstrom",
         "property_conversion": {},
-        "neighbor_list": "simple",
-        "cutoff": -1.0,
-        "cutoff_shell": 1.0,
+        # "neighbor_list": "simple",
+        # "cutoff": -1.0,
+        # "cutoff_shell": 1.0,
     }
     target_block = "calculator"
-    schnet_models = ["schnet"]
+    schnet_models = ["schnet", "custom"]
     neighbor_list = {
         "simple": SimpleNeighborList,
         "ase": ASENeighborList,
