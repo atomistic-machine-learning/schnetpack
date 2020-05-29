@@ -26,7 +26,7 @@ class MDUnits:
     mass_unit = 1.0  # 1 Dalton in ASE reference frame
 
     # Derived units (MD internal -> ASE internal)
-    time_unit = length_unit * np.sqrt(mass_unit / length_unit)
+    time_unit = length_unit * np.sqrt(mass_unit / energy_unit)
 
     # General utility units for conversion
     fs2internal = units.fs / time_unit
