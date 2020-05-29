@@ -243,8 +243,10 @@ class PropertyStream(DataStream):
         for p in self.properties_slices:
             self.buffer[
                 buffer_position : buffer_position + 1, ..., self.properties_slices[p]
-            ] = simulator.system.properties[p].view(
-                self.n_replicas, self.n_molecules, -1
+            ] = (
+                simulator.system.properties[p]
+                .contiguous()
+                .view(self.n_replicas, self.n_molecules, -1)
             )
             # self.buffer[buffer_position:buffer_position + 1, ..., self.properties_slices[p]] = \
             #     simulator.system.properties[p].view(self.n_replicas, self.n_molecules, -1).detach()
