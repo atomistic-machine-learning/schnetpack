@@ -149,13 +149,15 @@ class MDCalculator:
         )
 
         cells = system.cells
+        pbc = system.pbc
         if system.cells is not None:
             cells = cells.view(-1, 3, 3) * self.position_conversion
+            pbc = pbc.view(-1, 3)
 
         atom_types = system.atom_types.view(-1, system.max_n_atoms)
         atom_masks = system.atom_masks.view(-1, system.max_n_atoms)
 
-        return positions, atom_types, atom_masks, cells
+        return positions, atom_types, atom_masks, cells, pbc
 
     def _set_system_forces(self, system):
         """

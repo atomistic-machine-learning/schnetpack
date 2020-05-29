@@ -84,6 +84,8 @@ class SGDMLCalculator(MDCalculator):
         Returns:
             torch.Tensor: sGDML inputs, which are the positions in the format N_replicas*N_molecules x N_atoms x 3.
         """
-        positions, atom_types, atom_masks, cells = self._get_system_molecules(system)
+        positions, atom_types, atom_masks, cells, pbc = self._get_system_molecules(
+            system
+        )
 
         return positions
