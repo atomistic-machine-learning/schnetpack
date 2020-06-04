@@ -57,7 +57,7 @@ class OrcaCalculator(QMCalculator):
         qm_executable,
         orca_template,
         orca_parser=OrcaMainFileParser,
-        position_conversion=1.0 / MDUnits.angs2bohr,
+        position_conversion="Angstrom",
         force_conversion=1.0,
         property_conversion={},
         queuer=None,

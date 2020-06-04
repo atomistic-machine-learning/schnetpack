@@ -32,7 +32,7 @@ class Integrator:
     """
 
     def __init__(self, time_step, detach=True, device="cuda"):
-        self.time_step = time_step * MDUnits.fs2atu
+        self.time_step = time_step * MDUnits.fs2internal
         self.detach = detach
         self.device = device
 

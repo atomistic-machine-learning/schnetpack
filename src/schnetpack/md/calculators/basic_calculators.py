@@ -48,12 +48,18 @@ class MDCalculator:
         self.required_properties = required_properties
 
         # Perform automatic conversion of units
-        self.position_conversion = MDUnits.parse_mdunit(position_conversion)
-        self.force_conversion = MDUnits.parse_mdunit(force_conversion)
-        self.stress_conversion = MDUnits.parse_mdunit(stress_conversion)
+        # internal -> calculator
+        self.position_conversion = MDUnits.internal2unit(position_conversion)
+
+        # calculator -> internal
+        self.force_conversion = MDUnits.unit2internal(force_conversion)
+        self.stress_conversion = MDUnits.unit2internal(stress_conversion)
         self.property_conversion = {
-            p: MDUnits.parse_mdunit(property_conversion[p]) for p in property_conversion
+            p: MDUnits.unit2internal(property_conversion[p])
+            for p in property_conversion
         }
+
+        # Default conversion (1.0) for all units not set above
         self._init_default_conversion()
 
         self.detach = detach
@@ -143,13 +149,15 @@ class MDCalculator:
         )
 
         cells = system.cells
+        pbc = system.pbc
         if system.cells is not None:
             cells = cells.view(-1, 3, 3) * self.position_conversion
+            pbc = pbc.view(-1, 3)
 
         atom_types = system.atom_types.view(-1, system.max_n_atoms)
         atom_masks = system.atom_masks.view(-1, system.max_n_atoms)
 
-        return positions, atom_types, atom_masks, cells
+        return positions, atom_types, atom_masks, cells, pbc
 
     def _set_system_forces(self, system):
         """
@@ -217,7 +225,7 @@ class QMCalculator(MDCalculator):
         force_handle,
         compdir,
         qm_executable,
-        position_conversion=1.0 / MDUnits.angs2bohr,
+        position_conversion="Angstrom",
         force_conversion=1.0,
         property_conversion={},
         adaptive=False,

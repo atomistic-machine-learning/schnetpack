@@ -257,7 +257,8 @@ class HDF5Loader:
 
         # Get the masses and convert to correct units
         masses = (
-            data.atomic_masses[self.properties[Properties.Z][mol_idx]] * MDUnits.d2amu
+            data.atomic_masses[self.properties[Properties.Z][mol_idx]]
+            * MDUnits.da2internal
         )
 
         # Compute the kinetic energy as 1/2*m*v^2

@@ -243,8 +243,10 @@ class PropertyStream(DataStream):
         for p in self.properties_slices:
             self.buffer[
                 buffer_position : buffer_position + 1, ..., self.properties_slices[p]
-            ] = simulator.system.properties[p].view(
-                self.n_replicas, self.n_molecules, -1
+            ] = (
+                simulator.system.properties[p]
+                .contiguous()
+                .view(self.n_replicas, self.n_molecules, -1)
             )
             # self.buffer[buffer_position:buffer_position + 1, ..., self.properties_slices[p]] = \
             #     simulator.system.properties[p].view(self.n_replicas, self.n_molecules, -1).detach()
@@ -708,9 +710,10 @@ class PressureLogger(TensorboardLogger):
 
         if simulator.step % self.every_n_steps == 0:
 
+            # Log the pressure in bar
             pressure = (
                 simulator.system.compute_pressure(kinetic_component=True)
-                / spk.md.MDUnits.pressure2internal
+                / spk.md.MDUnits.bar2internal
             )
             centroid_pressure = torch.mean(pressure, 0, keepdim=True)
 

@@ -66,7 +66,7 @@ class VibrationalSpectrum:
 
     def __init__(self, data, resolution=4096, window=cosine_sq_window):
         self.data = data
-        self.timestep = data.time_step / MDUnits.fs2atu  # Convert to fs
+        self.timestep = data.time_step / MDUnits.fs2internal  # Convert to fs
         self.resolution = resolution
         self.window = window
 

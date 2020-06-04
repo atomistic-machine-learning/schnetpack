@@ -14,7 +14,7 @@ from schnetpack.md.utils import (
     NormalModeTransformer,
     YSWeights,
 )
-from schnetpack.md.integrators import RingPolymer, NPTRingPolymer
+from schnetpack.md.integrators import RingPolymer
 from schnetpack.md.simulation_hooks.basic_hooks import SimulationHook
 
 __all__ = [
@@ -192,7 +192,7 @@ class BerendsenThermostat(ThermostatHook):
     def __init__(self, temperature_bath, time_constant):
         super(BerendsenThermostat, self).__init__(temperature_bath)
 
-        self.time_constant = time_constant * MDUnits.fs2atu
+        self.time_constant = time_constant * MDUnits.fs2internal
 
     def _apply_thermostat(self, simulator):
         """
@@ -540,7 +540,7 @@ class LangevinThermostat(ThermostatHook):
             temperature_bath, nm_transformation=nm_transformation
         )
 
-        self.time_constant = time_constant * MDUnits.fs2atu
+        self.time_constant = time_constant * MDUnits.fs2internal
 
         self.thermostat_factor = None
         self.c1 = None
@@ -896,7 +896,7 @@ class NHCThermostat(ThermostatHook):
 
         self.chain_length = chain_length
         self.massive = massive
-        self.frequency = 1 / (time_constant * MDUnits.fs2atu)
+        self.frequency = 1 / (time_constant * MDUnits.fs2internal)
 
         # Cpmpute kBT, since it will be used a lot
         self.kb_temperature = self.temperature_bath * MDUnits.kB
@@ -1089,7 +1089,7 @@ class NHCThermostat(ThermostatHook):
         scaling_factor = self._propagate_thermostat(kinetic_energy)
         momenta = momenta * scaling_factor
 
-        self.compute_conserved(simulator.system)
+        # self.compute_conserved(simulator.system)
 
         # Apply transformation if requested
         if self.nm_transformation is not None:

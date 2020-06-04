@@ -42,8 +42,8 @@ class AcceleratedMD(SimulationHook):
     Hook for performing accelerated molecular dynamics [#accmd1]_ . This method distorts the potential
     energy surface in order to make deep valleys smoother. This smoothing is applied to everything
     below an energy threshold and its strength is regulated via a acceleration factor.
-    Care should be taken on choosing the right conventions for the energy conversion.
-    Currently, it is assumed that everything uses atomic units.
+    The energy conversion can be used to specify the energy threshold in arbitrary units of energy, which are then
+    converted to the internal units.
 
     Args:
         energy_threshold (float): Energy threshold in units of energy used by the calculator.
@@ -68,14 +68,14 @@ class AcceleratedMD(SimulationHook):
         self.energy_threshold = energy_threshold
         self.acceleration_factor = acceleration_factor
         self.energy_handle = energy_handle
-        # TODO: Implement sensible default behavior for energy conversion
-        self.energy_conversion = MDUnits.parse_mdunit(energy_conversion)
+        # Convert from calculator -> internal
+        self.energy_conversion = MDUnits.unit2internal(energy_conversion)
 
     def on_step_middle(self, simulator):
         """
         Compute the bias potential and derivatives and use them to update the
         current state of :obj:`schnetpack.md.System` in the simulator.
-        While the forces are updated, the bias potential itsself is stored in the
+        While the forces are updated, the bias potential itself is stored in the
         properties dictionary of the system.
 
         Args:

@@ -43,8 +43,8 @@ class SGDMLCalculator(MDCalculator):
         model,
         required_properties=[Properties.energy, Properties.forces],
         force_handle=Properties.forces,
-        position_conversion=1.0 / MDUnits.angs2bohr,
-        force_conversion=1.0 / MDUnits.Ha2kcalpmol / MDUnits.angs2bohr,
+        position_conversion="Angstrom",
+        force_conversion="kcal/mol/Angstrom",
         property_conversion={},
         detach=True,
     ):
@@ -84,6 +84,8 @@ class SGDMLCalculator(MDCalculator):
         Returns:
             torch.Tensor: sGDML inputs, which are the positions in the format N_replicas*N_molecules x N_atoms x 3.
         """
-        positions, atom_types, atom_masks, cells = self._get_system_molecules(system)
+        positions, atom_types, atom_masks, cells, pbc = self._get_system_molecules(
+            system
+        )
 
         return positions

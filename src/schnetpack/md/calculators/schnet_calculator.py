@@ -38,11 +38,11 @@ class SchnetPackCalculator(MDCalculator):
         model,
         required_properties,
         force_handle,
-        position_conversion=1.0 / MDUnits.angs2bohr,
-        force_conversion=1.0 / MDUnits.auforces2aseforces,
+        position_conversion="Angstrom",
+        force_conversion="eV / Angstrom",
         property_conversion={},
         stress_handle=None,
-        stress_conversion=1.0,
+        stress_conversion="eV / Angstrom / Angstrom / Angstrom",
         detach=True,
         neighbor_list=SimpleNeighborList,
         cutoff=-1.0,
@@ -104,11 +104,14 @@ class SchnetPackCalculator(MDCalculator):
             if cutoff < 0.0:
                 # Get cutoff automatically if given one is negative
                 cutoff = self._get_model_cutoff()
+                # cutoff *= self.position_conversion
             else:
                 # Check whether set cutoff is reasonable
-                if cutoff < self._get_model_cutoff():
+                model_cutoff = self._get_model_cutoff()
+                # cutoff *= self.position_conversion
+                if cutoff < model_cutoff:
                     logging.warning(
-                        "Specified cutoff for neighbor list smaller than cutoff in model."
+                        f"Specified cutoff for neighbor list {cutoff} smaller than cutoff in model {model_cutoff}."
                     )
 
             # Convert from model units to internal units
@@ -138,7 +141,9 @@ class SchnetPackCalculator(MDCalculator):
         Returns:
             dict(torch.Tensor): Schnetpack inputs in dictionary format.
         """
-        positions, atom_types, atom_masks, cells = self._get_system_molecules(system)
+        positions, atom_types, atom_masks, cells, pbc = self._get_system_molecules(
+            system
+        )
         neighbors, neighbor_mask, offsets = self._get_system_neighbors(system)
 
         inputs = {
@@ -149,6 +154,7 @@ class SchnetPackCalculator(MDCalculator):
             Properties.cell_offset: offsets,
             Properties.neighbors: neighbors,
             Properties.neighbor_mask: neighbor_mask,
+            Properties.pbc: pbc,
         }
 
         return inputs

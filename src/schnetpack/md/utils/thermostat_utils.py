@@ -59,13 +59,14 @@ class GLEMatrixParser:
     """
 
     # Automatically recognized format and converts to units
+    # TODO: think about this carefully
     unit_conversions = {
-        "atomic time units^-1": 1,
-        "picoseconds^-1": 1 / 1000 / MDUnits.fs2atu,
-        "seconds^-1": units._aut,
-        "femtoseconds^-1": 1 / MDUnits.fs2atu,
-        "eV": 1 / units.Ha,
-        "atomic energy units": 1,
+        "atomic time units^-1": 1.0 / MDUnits.unit2internal("aut"),
+        "seconds^-1": 1.0 / MDUnits.unit2internal("s"),
+        "femtoseconds^-1": 1.0 / MDUnits.unit2internal("fs"),
+        "picoseconds^-1": 1.0 / 1000.0 / MDUnits.unit2internal("fs"),
+        "eV": MDUnits.unit2internal("eV"),
+        "atomic energy units": MDUnits.unit2internal("Ha"),
         "K": MDUnits.kB,
     }
 

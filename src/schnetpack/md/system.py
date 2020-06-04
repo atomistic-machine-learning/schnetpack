@@ -164,16 +164,16 @@ class System:
             )
             self.atom_masks[:, i, : self.n_atoms[i]] = 1.0
             self.masses[i, : self.n_atoms[i]] = torch.from_numpy(
-                molecules[i].get_masses() * MDUnits.d2amu
+                molecules[i].get_masses() * MDUnits.da2internal
             )
 
             # Dynamic properties
             self.positions[:, i, : self.n_atoms[i], :] = torch.from_numpy(
-                molecules[i].positions * MDUnits.angs2bohr
+                molecules[i].positions * MDUnits.angs2internal
             )
             # Properties for cell simulations
             self.cells[:, i, :, :] = torch.from_numpy(
-                molecules[i].cell * MDUnits.angs2bohr
+                molecules[i].cell * MDUnits.angs2internal
             )
             self.pbc[i, :] = torch.from_numpy(molecules[i].pbc)
 
@@ -331,13 +331,13 @@ class System:
 
         return pressure.detach()
 
-    def get_ase_atoms(self, atomic_units=True):
+    def get_ase_atoms(self, internal_units=True):
         """
         Convert the stored molecular configurations into ASE Atoms objects. This is e.g. used for the
         neighbor lists based on environment providers. All units are atomic units by default, as used in the calculator
 
         Args:
-            atomic_units (bool): Whether atomic units or Angstrom should be returned (default=True). This should
+            internal_units (bool): Whether atomic units or Angstrom should be returned (default=True). This should
                                  always be True when used with an EnvironmentProviderNeighborList.
 
         Returns:
@@ -366,9 +366,9 @@ class System:
                     pbc = None
 
                 # If requested, convert units of space to Angstrom
-                if not atomic_units:
-                    positions /= MDUnits.angs2bohr
-                    cell /= MDUnits.angs2bohr
+                if not internal_units:
+                    positions /= MDUnits.angs2internal
+                    cell /= MDUnits.angs2internal
 
                 mol = Atoms(atom_types, positions, cell=cell, pbc=pbc)
                 atoms.append(mol)
