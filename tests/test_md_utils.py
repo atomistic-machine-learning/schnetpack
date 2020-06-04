@@ -1,5 +1,6 @@
 import schnetpack as spk
 import pytest
+from ase import units
 
 from tests.fixtures import *
 
