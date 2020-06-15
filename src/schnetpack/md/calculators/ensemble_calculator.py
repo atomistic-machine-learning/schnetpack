@@ -24,12 +24,18 @@ class EnsembleCalculator:
         for p in accumulated:
             tmp = torch.stack([result[p].detach() for result in results])
             ensemble_results[p] = torch.mean(tmp, dim=0)
-            ensemble_results["{:s}_stddev".format(p)] = torch.std(tmp, dim=0)
+            ensemble_results["{:s}_var".format(p)] = torch.var(tmp, dim=0)
 
         return ensemble_results
 
-    def _update_required_properties(self, required_properties):
-        newp = []
+    @staticmethod
+    def _update_required_properties(required_properties):
+        new_required = []
         for p in required_properties:
-            newp += [p, "{:s}_stddev".format(p)]
-        self.required_properties = newp
+            prop_string = "{:s}_var".format(p)
+            new_required += [p, prop_string]
+            # Update properties
+            # self.required_properties += [prop_string]
+            # Update conversion
+            # self.property_conversion[prop_string] = self.property_conversion[p]
+        return new_required

@@ -248,8 +248,8 @@ class EnsembleSchnetPackCalculator(EnsembleCalculator, SchnetPackCalculator):
         cutoff=-1.0,
         cutoff_shell=1.0,
     ):
-        self._update_required_properties(required_properties)
         self.models = models
+        required_properties = self._update_required_properties(required_properties)
 
         super(EnsembleSchnetPackCalculator, self).__init__(
             models[0],
