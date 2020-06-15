@@ -368,7 +368,8 @@ class System:
                 # If requested, convert units of space to Angstrom
                 if not internal_units:
                     positions /= MDUnits.angs2internal
-                    cell /= MDUnits.angs2internal
+                    if cell is not None:
+                        cell /= MDUnits.angs2internal
 
                 mol = Atoms(atom_types, positions, cell=cell, pbc=pbc)
                 atoms.append(mol)
