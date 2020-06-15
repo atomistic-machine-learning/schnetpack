@@ -1,8 +1,8 @@
 import schnetpack
 from schnetpack import Properties
-from schnetpack.md.calculators import MDCalculator
-from schnetpack.md.utils import MDUnits
 
+from schnetpack.md.calculators import MDCalculator
+from schnetpack.md.calculators.ensemble_calculator import EnsembleCalculator
 from schnetpack.md.neighbor_lists import SimpleNeighborList
 import logging
 
@@ -107,12 +107,15 @@ class SchnetPackCalculator(MDCalculator):
                 # cutoff *= self.position_conversion
             else:
                 # Check whether set cutoff is reasonable
-                model_cutoff = self._get_model_cutoff()
-                # cutoff *= self.position_conversion
-                if cutoff < model_cutoff:
-                    logging.warning(
-                        f"Specified cutoff for neighbor list {cutoff} smaller than cutoff in model {model_cutoff}."
-                    )
+                try:
+                    model_cutoff = self._get_model_cutoff()
+                    # cutoff *= self.position_conversion
+                    if cutoff < model_cutoff:
+                        logging.warning(
+                            f"Specified cutoff for neighbor list {cutoff} smaller than cutoff in model {model_cutoff}."
+                        )
+                except AttributeError:
+                    print("No cutoff found")
 
             # Convert from model units to internal units
             cutoff /= self.position_conversion
@@ -227,3 +230,38 @@ class SchnetPackCalculator(MDCalculator):
         logging.info("Detected cutoff radius of {:5.3f}...".format(model_cutoff))
 
         return model_cutoff
+
+
+class EnsembleSchnetPackCalculator(EnsembleCalculator, SchnetPackCalculator):
+    def __init__(
+        self,
+        models,
+        required_properties,
+        force_handle,
+        position_conversion="Angstrom",
+        force_conversion="eV / Angstrom",
+        property_conversion={},
+        stress_handle=None,
+        stress_conversion="eV / Angstrom / Angstrom / Angstrom",
+        detach=True,
+        neighbor_list=SimpleNeighborList,
+        cutoff=-1.0,
+        cutoff_shell=1.0,
+    ):
+        self._update_required_properties(required_properties)
+        self.models = models
+
+        super(EnsembleSchnetPackCalculator, self).__init__(
+            models[0],
+            required_properties=required_properties,
+            force_handle=force_handle,
+            position_conversion=position_conversion,
+            force_conversion=force_conversion,
+            property_conversion=property_conversion,
+            stress_handle=stress_handle,
+            stress_conversion=stress_conversion,
+            detach=detach,
+            neighbor_list=neighbor_list,
+            cutoff=cutoff,
+            cutoff_shell=cutoff_shell,
+        )

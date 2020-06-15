@@ -91,9 +91,10 @@ class AtomDistances(nn.Module):
 
     """
 
-    def __init__(self, return_directions=False):
+    def __init__(self, return_directions=False, normalize_vecs=False):
         super(AtomDistances, self).__init__()
         self.return_directions = return_directions
+        self.normalize_vecs = normalize_vecs
 
     def forward(
         self, positions, neighbors, cell=None, cell_offsets=None, neighbor_mask=None
@@ -122,7 +123,7 @@ class AtomDistances(nn.Module):
             cell,
             cell_offsets,
             return_vecs=self.return_directions,
-            normalize_vecs=True,
+            normalize_vecs=self.normalize_vecs,
             neighbor_mask=neighbor_mask,
         )
 
