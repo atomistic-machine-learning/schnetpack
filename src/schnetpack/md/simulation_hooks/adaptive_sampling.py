@@ -114,10 +114,8 @@ class AdaptiveSamplingHook(SimulationHook):
 
             # Reinitialize velocities if requested
             if self.reset:
-                # TODO: Reset only parts of the system for which a sample was collected?
-                #   -> easy for positions, cells etc. harder for velocity init.
                 logging.info("Resetting system...")
-                self._reset_system(simulator.system)
+                self._reset_system(simulator.system, mask=sample_molecule)
 
         if len(self.samples) >= self.n_samples:
             dataset = AtomsData(
@@ -145,8 +143,21 @@ class AdaptiveSamplingHook(SimulationHook):
     def _write_sample(self, sample):
         raise NotImplementedError
 
-    def _reset_system(self, system):
-        system.positions = copy.deepcopy(self.init_positions)
-        system.forces = copy.deepcopy(self.init_forces)
-        system.cells = copy.deepcopy(self.init_cells)
-        self.initializer.initialize_system(system)
+    def _reset_system(self, system, mask=None):
+        if mask is None:
+            system.positions = copy.deepcopy(self.init_positions)
+            system.forces = copy.deepcopy(self.init_forces)
+            system.cells = copy.deepcopy(self.init_cells)
+            self.initializer.initialize_system(system)
+        else:
+            system.positions[mask == 1, ...] = copy.deepcopy(
+                self.init_positions[mask == 1, ...]
+            )
+            system.forces[mask == 1, ...] = copy.deepcopy(
+                self.init_forces[mask == 1, ...]
+            )
+            if self.init_cells is not None:
+                system.cells[mask == 1, ...] = copy.deepcopy(
+                    self.init_cells[mask == 1, ...]
+                )
+            self.initializer.initialize_system(system, mask=mask)
