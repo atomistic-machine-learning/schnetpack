@@ -11,7 +11,6 @@ import schnetpack.md.simulation_hooks.thermostats as thermostats
 import schnetpack.md.simulation_hooks.barostats as barostats
 import schnetpack.md.simulation_hooks.logging_hooks as logging_hooks
 import schnetpack.md.simulation_hooks.sampling as sampling
-
 from collections import OrderedDict
 
 
@@ -301,6 +300,11 @@ class CalculatorInit(Initializer):
             "schnet",
             None,
         ),
+        "schnet_ensemble": (
+            schnetpack.md.calculators.schnet_calculator.EnsembleSchnetPackCalculator,
+            "schnet_ensemble",
+            None,
+        ),
         "orca": (calculators.OrcaCalculator, "orca", None),
         "sgdml": (calculators.SGDMLCalculator, "sgdml", None),
         "custom": (load_custom_calculator, "custom", None),
@@ -308,6 +312,9 @@ class CalculatorInit(Initializer):
     required_inputs = {
         "schnet": OrderedDict(
             {"model": model, "required_properties": list, "force_handle": str}
+        ),
+        "schnet_ensemble": OrderedDict(
+            {"models": list, "required_properties": list, "force_handle": str}
         ),
         "orca": OrderedDict(
             {
@@ -342,6 +349,17 @@ class BiasPotentialInit(Initializer):
 
 class ColVars:
     available = {"bond": sampling.BondColvar}
+
+
+class AdaptiveSamplingInit(Initializer):
+    """
+    Set up directives for adaptive sampling
+    """
+
+    allowed_options = {"ensemble": (sampling.AdaptiveSampling, "ensemble", None)}
+    required_inputs = {
+        "ensemble": OrderedDict({"thresholds": dict, "n_samples": int, "dataset": str})
+    }
 
 
 class LoggerStreams:

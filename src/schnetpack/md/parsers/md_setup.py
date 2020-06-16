@@ -65,6 +65,9 @@ class MDSimulation:
         # Get bias potentials if applicable
         SetupBiasPotential(self)
 
+        # Set up adaptive sampling
+        SetupAdaptiveSampling(self)
+
         # Setup Logging
         SetupLogging(self)
 
@@ -344,20 +347,29 @@ class SetupCalculator(SetupBlock):
 
         # Load model, else get options
         for key in calculator:
-            if key == "model_file":
+            if key == "model_file" or key == "model_files":
                 if calculator[CalculatorInit.kind] in self.schnet_models:
                     model = self._load_model_schnetpack(
                         calculator["model_file"], md_initializer.device
                     ).to(md_initializer.device)
+                    calculator_dict["model"] = model
+                elif calculator[CalculatorInit.kind] == "schnet_ensemble":
+                    models = [
+                        self._load_model_schnetpack(model, md_initializer.device).to(
+                            md_initializer.device
+                        )
+                        for model in calculator["model_files"]
+                    ]
+                    calculator_dict["models"] = models
                 elif calculator[CalculatorInit.kind] == "sgdml":
                     model = self._load_model_sgdml(calculator["model_file"]).to(
                         md_initializer.device
                     )
+                    calculator_dict["model"] = model
                 else:
                     raise ValueError(
                         f"Unrecognized ML calculator {calculator[CalculatorInit.kind]}"
                     )
-                calculator_dict["model"] = model
             elif key == "neighbor_list":
                 # Check for neighbor list
                 calculator_dict[key] = self.neighbor_list[calculator[key]]
@@ -570,6 +582,24 @@ class SetupBiasPotential(SetupBlock):
             # For accelerated molecular dynamics
             else:
                 md_initializer.hooks += [BiasPotentialInit(bias_potential).initialized]
+
+
+class SetupAdaptiveSampling(SetupBlock):
+    default_options = {}
+    target_block = "adaptive_sampling"
+
+    def _setup(self, md_initializer):
+        if self.target_block in md_initializer.config:
+            adaptive_sampling = self.target_config_block
+
+            if adaptive_sampling[AdaptiveSamplingInit.kind] == "ensemble":
+                with open(adaptive_sampling["thresholds"], "r") as tf:
+                    thresholds = yaml.load(tf)
+                adaptive_sampling["thresholds"] = thresholds
+
+            md_initializer.hooks += [
+                AdaptiveSamplingInit(adaptive_sampling).initialized
+            ]
 
 
 class SetupLogging(SetupBlock):
