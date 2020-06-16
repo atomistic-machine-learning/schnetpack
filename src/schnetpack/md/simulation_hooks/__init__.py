@@ -3,7 +3,6 @@ from .thermostats import *
 from .barostats import *
 from .sampling import *
 from .logging_hooks import *
-from .adaptive_sampling import *
 
 # class MTKBarostat(BarostatHook):
 #    def __init__(self, target_pressure, time_constant, temperature_bath, detach=True):
