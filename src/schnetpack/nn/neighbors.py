@@ -73,10 +73,9 @@ def atom_distances(
         distances = tmp_distances
 
     if return_vecs:
-        tmp_distances = torch.ones_like(distances)
-        tmp_distances[neighbor_mask != 0] = distances[neighbor_mask != 0]
-
         if normalize_vecs:
+            tmp_distances = torch.ones_like(distances)
+            tmp_distances[neighbor_mask != 0] = distances[neighbor_mask != 0]
             dist_vec = dist_vec / tmp_distances[:, :, :, None]
         return distances, dist_vec
     return distances
