@@ -214,7 +214,7 @@ class SchNet(nn.Module):
         # get atom embeddings for the input atomic numbers
         x = self.embedding(atomic_numbers)
 
-        if False and self.charged_systems and Properties.charge in inputs.keys():
+        if self.charged_systems and Properties.charge in inputs.keys():
             n_atoms = torch.sum(atom_mask, dim=1, keepdim=True)
             charge = inputs[Properties.charge] / n_atoms  # B
             charge = charge[:, None] * self.charge  # B x F
