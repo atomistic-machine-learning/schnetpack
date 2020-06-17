@@ -4,6 +4,7 @@ In general, these routines are derived from :obj:`schnetpack.md.simulation_hooks
 on the middle part of each simulator step.
 Currently, accelerated molecular dynamics and metadynamics are implemented.
 """
+import numpy as np
 import copy
 import logging
 import os
@@ -469,6 +470,7 @@ class AdaptiveSampling(SimulationHook):
                             .detach()
                             .cpu()
                             .numpy()
+                            .astype(np.float32)
                         )
                     self.samples_thresholds.append(sample_thresholds)
                 idx_c += 1
