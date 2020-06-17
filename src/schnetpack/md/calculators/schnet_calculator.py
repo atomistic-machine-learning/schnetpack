@@ -114,7 +114,7 @@ class SchnetPackCalculator(MDCalculator):
                         logging.warning(
                             f"Specified cutoff for neighbor list {cutoff} smaller than cutoff in model {model_cutoff}."
                         )
-                except AttributeError:
+                except:
                     print("No cutoff found")
 
             # Convert from model units to internal units
