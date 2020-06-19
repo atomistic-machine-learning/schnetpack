@@ -1,5 +1,4 @@
 import pytest
-import numpy as np
 from schnetpack.nn.cutoff import HardCutoff
 import schnetpack as spk
 
@@ -28,17 +27,6 @@ __all__ = [
     "output_module_2",
     "output_modules",
     "atomistic_model",
-    # spk.nn
-    "gaussion_smearing_layer",
-    "cfconv_layer",
-    "dense_layer",
-    "mlp_layer",
-    "n_mlp_tiles",
-    "tiled_mlp_layer",
-    "elements",
-    "elemental_gate_layer",
-    "cutoff_layer",
-    "atom_distances",
 ]
 
 
@@ -203,70 +191,6 @@ def output_modules(output_module_1, output_module_2):
 @pytest.fixture
 def atomistic_model(schnet, output_modules):
     return spk.AtomisticModel(schnet, output_modules)
-
-
-# spk.nn
-@pytest.fixture
-def gaussion_smearing_layer(n_gaussians, trainable_gaussians):
-    return spk.nn.GaussianSmearing(
-        n_gaussians=n_gaussians, trainable=trainable_gaussians
-    )
-
-
-@pytest.fixture
-def cfconv_layer(
-    n_atom_basis, n_filters, schnet_interaction, cutoff_layer,
-):
-    return spk.nn.CFConv(
-        n_in=n_atom_basis,
-        n_filters=n_filters,
-        n_out=n_atom_basis,
-        filter_network=schnet_interaction.filter_network,
-        cutoff_network=cutoff_layer,
-        activation=None,
-        normalize_filter=False,
-        axis=2,
-    )
-
-
-@pytest.fixture
-def dense_layer(random_input_dim, random_output_dim):
-    return spk.nn.Dense(random_input_dim, random_output_dim)
-
-
-@pytest.fixture
-def mlp_layer(random_input_dim, random_output_dim):
-    return spk.nn.MLP(random_input_dim, random_output_dim)
-
-
-@pytest.fixture
-def n_mlp_tiles():
-    return np.random.randint(1, 6, 1).item()
-
-
-@pytest.fixture
-def tiled_mlp_layer(random_input_dim, random_output_dim, n_mlp_tiles):
-    return spk.nn.TiledMultiLayerNN(random_input_dim, random_output_dim, n_mlp_tiles)
-
-
-@pytest.fixture
-def elements():
-    return list(set(np.random.randint(1, 30, 10)))
-
-
-@pytest.fixture
-def elemental_gate_layer(elements):
-    return spk.nn.ElementalGate(elements=elements)
-
-
-@pytest.fixture
-def cutoff_layer(cutoff_network, cutoff):
-    return cutoff_network(cutoff=cutoff)
-
-
-@pytest.fixture
-def atom_distances():
-    return spk.nn.AtomDistances()
 
 
 # utility functions

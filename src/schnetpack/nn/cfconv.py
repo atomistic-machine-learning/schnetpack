@@ -5,10 +5,44 @@ from schnetpack.nn import Dense
 from schnetpack.nn.base import Aggregate
 
 
-__all__ = ["CFConv"]
+__all__ = ["BaseConvolutionLayer", "CFConv"]
 
 
-class CFConv(nn.Module):
+class BaseConvolutionLayer(nn.Module):
+    def __init__(
+        self, filter_network, cutoff_network=None, normalize_filter=False, axis=2
+    ):
+        super(BaseConvolutionLayer, self).__init__()
+        self.filter_network = filter_network
+        self.cutoff_network = cutoff_network
+        self.agg = Aggregate(axis=axis, mean=normalize_filter)
+
+    def forward(self, y, r_ij, neighbors, pairwise_mask, f_ij=None):
+        if f_ij is None:
+            f_ij = r_ij.unsqueeze(-1)
+
+        # pass expanded interactomic distances through filter block
+        W = self.filter_network(f_ij)
+        # apply cutoff
+        if self.cutoff_network is not None:
+            C = self.cutoff_network(r_ij)
+            W = W * C.unsqueeze(-1)
+
+        # reshape y for element-wise multiplication by W
+        nbh_size = neighbors.size()
+        nbh = neighbors.view(-1, nbh_size[1] * nbh_size[2], 1)
+        nbh = nbh.expand(-1, -1, y.size(2))
+        y = torch.gather(y, 1, nbh)
+        y = y.view(nbh_size[0], nbh_size[1], nbh_size[2], -1)
+
+        # element-wise multiplication, aggregating and Dense layer
+        y = y * W
+        y = self.agg(y, pairwise_mask)
+
+        return y
+
+
+class CFConv(BaseConvolutionLayer):
     r"""Continuous-filter convolution block used in SchNet module.
 
     Args:
@@ -35,12 +69,14 @@ class CFConv(nn.Module):
         normalize_filter=False,
         axis=2,
     ):
-        super(CFConv, self).__init__()
+        super(CFConv, self).__init__(
+            filter_network=filter_network,
+            cutoff_network=cutoff_network,
+            normalize_filter=normalize_filter,
+            axis=axis,
+        )
         self.in2f = Dense(n_in, n_filters, bias=False, activation=None)
         self.f2out = Dense(n_filters, n_out, bias=True, activation=activation)
-        self.filter_network = filter_network
-        self.cutoff_network = cutoff_network
-        self.agg = Aggregate(axis=axis, mean=normalize_filter)
 
     def forward(self, x, r_ij, neighbors, pairwise_mask, f_ij=None):
         """Compute convolution block.
@@ -59,27 +95,15 @@ class CFConv(nn.Module):
             torch.Tensor: block output with (N_b, N_a, n_out) shape.
 
         """
-        if f_ij is None:
-            f_ij = r_ij.unsqueeze(-1)
-
-        # pass expanded interactomic distances through filter block
-        W = self.filter_network(f_ij)
-        # apply cutoff
-        if self.cutoff_network is not None:
-            C = self.cutoff_network(r_ij)
-            W = W * C.unsqueeze(-1)
-
-        # pass initial embeddings through Dense layer
+        # dense layer: input-dim --> filter_dim
         y = self.in2f(x)
-        # reshape y for element-wise multiplication by W
-        nbh_size = neighbors.size()
-        nbh = neighbors.view(-1, nbh_size[1] * nbh_size[2], 1)
-        nbh = nbh.expand(-1, -1, y.size(2))
-        y = torch.gather(y, 1, nbh)
-        y = y.view(nbh_size[0], nbh_size[1], nbh_size[2], -1)
 
-        # element-wise multiplication, aggregating and Dense layer
-        y = y * W
-        y = self.agg(y, pairwise_mask)
+        # convolution
+        y = super().forward(
+            y=y, r_ij=r_ij, neighbors=neighbors, pairwise_mask=pairwise_mask, f_ij=f_ij
+        )
+
+        # dense layer: filter-dim --> output-dim
         y = self.f2out(y)
+
         return y

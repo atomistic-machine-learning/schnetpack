@@ -1,11 +1,20 @@
 import torch
 from torch import nn
+import schnetpack as spk
 
 from schnetpack import Properties
-from schnetpack.nn import shifted_softplus, Dense
+from schnetpack.nn import shifted_softplus, Dense, get_activation_layer, Swish
+from torch.nn.init import zeros_, orthogonal_
 
 
-__all__ = ["MLP", "TiledMultiLayerNN", "ElementalGate", "GatedNetwork"]
+__all__ = [
+    "MLP",
+    "TiledMultiLayerNN",
+    "ElementalGate",
+    "GatedNetwork",
+    "ResidualBlock",
+    "ResidualStack",
+]
 
 
 class MLP(nn.Module):
@@ -214,3 +223,63 @@ class GatedNetwork(nn.Module):
         representation = inputs["representation"]
         gated_network = self.gate(atomic_numbers) * self.network(representation)
         return torch.sum(gated_network, -1, keepdim=True)
+
+
+class ResidualBlock(nn.Module):
+    r"""
+    Residual-block for PhysNet-architecture.
+
+    Args:
+        n_features (int): input/output dimension
+        activation (callable): activation function
+
+    """
+
+    def __init__(self, n_features, activation=Swish):
+        super(ResidualBlock, self).__init__()
+
+        # initialize modules
+        self.layers = nn.Sequential(
+            spk.nn.Dense(
+                n_features,
+                n_features,
+                pre_activation=activation,
+                weight_init=orthogonal_,
+                bias_init=zeros_,
+            ),
+            spk.nn.Dense(
+                n_features,
+                n_features,
+                pre_activation=activation,
+                weight_init=zeros_,
+                bias_init=zeros_,
+            ),
+        )
+
+    def forward(self, x):
+        y = self.layers(x)
+
+        return x + y
+
+
+class ResidualStack(nn.Module):
+    r"""
+    Stack of pre-activation residual blocks.
+
+    Args:
+        n_blocks (int): number of pre-activation residual blocks
+        n_features (int): dimension of residual blocks
+        activation (callable): activation function of residual blocks
+
+    """
+
+    def __init__(self, n_blocks, n_features, activation=Swish):
+        super(ResidualStack, self).__init__()
+
+        # initialize modules
+        self.stack = nn.Sequential(
+            *[ResidualBlock(n_features, activation) for _ in range(n_blocks)]
+        )
+
+    def forward(self, x):
+        return self.stack(x)

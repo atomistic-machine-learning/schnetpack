@@ -19,6 +19,8 @@ __all__ = [
     "assert_instance_has_props",
     "assert_params_changed",
     "assert_output_shape_valid",
+    "assert_shape_invariance",
+    "assert_nn_equal_params",
 ]
 
 
@@ -265,3 +267,32 @@ def assert_valid_script(
         expected_eval_dim = 6 + int(has_forces) * 6
         assert len(lines[0].split(",")) == len(lines[1].split(",")) == expected_eval_dim
         assert len(lines) == 2
+
+
+def assert_shape_invariance(nn_layer, in_data=None):
+    """
+    Assert shape is not affected by forward pass of nn-layer.
+
+    Args:
+        nn_layer (nn.Module): layer to be tested
+        in_data (torch.Tensor, optional): provides input data to pass through layer
+
+    """
+    if in_data is None:
+        in_data = torch.rand(10)
+    out_data = nn_layer(in_data)
+
+    assert in_data.shape == out_data.shape
+
+
+def assert_nn_equal_params(module1, module2):
+    """
+    Test if two nn layers have equal parameters.
+
+    Args:
+        module1 (nn.Module): module 1
+        module2 (nn.Module): module 2
+
+    """
+    for p1, p2 in zip(module1.parameters(), module2.parameters()):
+        assert all(p1 == p2)

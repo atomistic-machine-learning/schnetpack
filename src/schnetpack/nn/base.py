@@ -3,6 +3,7 @@ from torch import nn
 from torch.nn.init import xavier_uniform_
 
 from schnetpack.nn.initializers import zeros_initializer
+from schnetpack.nn.activations import get_activation_layer
 
 
 __all__ = ["Dense", "GetItem", "ScaleShift", "Standardize", "Aggregate"]
@@ -12,7 +13,7 @@ class Dense(nn.Linear):
     r"""Fully connected linear layer with activation function.
 
     .. math::
-       y = activation(xW^T + b)
+       y = activation(pre_activation(x)W^T + b)
 
     Args:
         in_features (int): number of input feature :math:`x`.
@@ -30,12 +31,14 @@ class Dense(nn.Linear):
         out_features,
         bias=True,
         activation=None,
+        pre_activation=None,
         weight_init=xavier_uniform_,
         bias_init=zeros_initializer,
     ):
         self.weight_init = weight_init
         self.bias_init = bias_init
-        self.activation = activation
+        self.pre_activation = get_activation_layer(pre_activation, in_features)
+        self.activation = get_activation_layer(activation, in_features)
         # initialize linear layer y = xW^T + b
         super(Dense, self).__init__(in_features, out_features, bias)
 
@@ -55,11 +58,12 @@ class Dense(nn.Linear):
             torch.Tensor: layer output.
 
         """
+        # pre-activation function
+        y = self.pre_activation(inputs)
         # compute linear layer y = xW^T + b
-        y = super(Dense, self).forward(inputs)
+        y = super(Dense, self).forward(y)
         # add activation function
-        if self.activation:
-            y = self.activation(y)
+        y = self.activation(y)
         return y
 
 

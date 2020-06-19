@@ -38,7 +38,7 @@ class AtomisticModel(nn.Module):
 
     def forward(self, inputs):
         """
-        Forward representation output through output modules.
+        Forward input data through representation block and output modules.
         """
         if self.requires_dr:
             inputs[Properties.R].requires_grad_()
@@ -58,8 +58,12 @@ class AtomisticModel(nn.Module):
                 inputs[Properties.cell], displacement
             )
 
-        inputs["representation"] = self.representation(inputs)
+        # add representation calculations to inputs dict
+        inputs.update(self.representation(inputs))
+
+        # compute output modules
         outs = {}
         for output_model in self.output_modules:
             outs.update(output_model(inputs))
+
         return outs

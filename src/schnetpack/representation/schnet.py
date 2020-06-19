@@ -104,7 +104,8 @@ class SchNet(nn.Module):
             functions are adjusted during training process.
         distance_expansion (nn.Module, optional): layer for expanding interatomic
             distances in a basis.
-        charged_systems (bool, optional):
+        charged_systems (bool, optional): do not use!
+        return_intermediate (bool, optional): return distance matrix if selected
 
     References:
     .. [#schnet1] Schütt, Arbabzadah, Chmiela, Müller, Tkatchenko:
@@ -135,6 +136,7 @@ class SchNet(nn.Module):
         trainable_gaussians=False,
         distance_expansion=None,
         charged_systems=False,
+        return_distances=False,
     ):
         super(SchNet, self).__init__()
 
@@ -188,21 +190,25 @@ class SchNet(nn.Module):
 
         # set attributes
         self.return_intermediate = return_intermediate
+        self.return_distances = return_distances
+
+        # todo: not used atm...
         self.charged_systems = charged_systems
         if charged_systems:
             self.charge = nn.Parameter(torch.Tensor(1, n_atom_basis))
             self.charge.data.normal_(0, 1.0 / n_atom_basis ** 0.5)
 
     def forward(self, inputs):
-        """Compute atomic representations/embeddings.
+        """
+        Compute atomic representations/embeddings.
 
         Args:
             inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
 
         Returns:
-            torch.Tensor: atom-wise representation.
-            list of torch.Tensor: intermediate atom-wise representations, if
-            return_intermediate=True was used.
+            dict: atomic features representations
+                  intermediate features if return_intermediate==True
+                  distance matrix if return_distances==True
 
         """
         # get tensors from input dictionary
@@ -239,6 +245,11 @@ class SchNet(nn.Module):
             if self.return_intermediate:
                 xs.append(x)
 
+        # build results dict
+        results = dict(representation=x)
         if self.return_intermediate:
-            return x, xs
-        return x
+            results.update(dict(intermediate_interactions=xs))
+        if self.return_distances:
+            results.update(dict(distances=r_ij))
+
+        return results

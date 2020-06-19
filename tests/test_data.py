@@ -200,4 +200,3 @@ def test_ani1(ani1_path, ani1_dataset):
     """
     atoms_data = spk.AtomsData(ani1_path)
     assert_dataset_equal(atoms_data, ani1_dataset)
-

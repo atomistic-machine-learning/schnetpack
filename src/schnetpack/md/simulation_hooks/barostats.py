@@ -371,8 +371,8 @@ class NHCBarostatIsotropic(BarostatHook):
                 self._chain_backward(time_step)
 
         if self.detach:
-            #self.t_positions = self.t_positions.detach()
-            #self.t_positions_cell = self.t_positions_cell.detach()
+            # self.t_positions = self.t_positions.detach()
+            # self.t_positions_cell = self.t_positions_cell.detach()
             self.t_velocities = self.t_velocities.detach()
             self.t_velocities_cell = self.t_velocities_cell.detach()
             self.b_velocities_cell = self.b_velocities_cell.detach()

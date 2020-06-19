@@ -3,7 +3,7 @@ import torch
 from torch import nn as nn
 from torch.autograd import grad
 
-import schnetpack
+import schnetpack as spk
 from schnetpack import nn as L, Properties
 
 __all__ = [
@@ -72,7 +72,7 @@ class Atomwise(nn.Module):
         aggregation_mode="sum",
         n_layers=2,
         n_neurons=None,
-        activation=schnetpack.nn.activations.shifted_softplus,
+        activation=spk.nn.activations.shifted_softplus,
         property="y",
         contributions=None,
         derivative=None,
@@ -108,20 +108,20 @@ class Atomwise(nn.Module):
         # build output network
         if outnet is None:
             self.out_net = nn.Sequential(
-                schnetpack.nn.base.GetItem("representation"),
-                schnetpack.nn.blocks.MLP(n_in, n_out, n_neurons, n_layers, activation),
+                spk.nn.base.GetItem("representation"),
+                spk.nn.blocks.MLP(n_in, n_out, n_neurons, n_layers, activation),
             )
         else:
             self.out_net = outnet
 
         # build standardization layer
-        self.standardize = schnetpack.nn.base.ScaleShift(mean, stddev)
+        self.standardize = spk.nn.base.ScaleShift(mean, stddev)
 
         # build aggregation layer
         if aggregation_mode == "sum":
-            self.atom_pool = schnetpack.nn.base.Aggregate(axis=1, mean=False)
+            self.atom_pool = spk.nn.base.Aggregate(axis=1, mean=False)
         elif aggregation_mode == "avg":
-            self.atom_pool = schnetpack.nn.base.Aggregate(axis=1, mean=True)
+            self.atom_pool = spk.nn.base.Aggregate(axis=1, mean=True)
         else:
             raise AtomwiseError(
                 "{} is not a valid aggregation " "mode!".format(aggregation_mode)
@@ -129,7 +129,8 @@ class Atomwise(nn.Module):
 
     def forward(self, inputs):
         r"""
-        predicts atomwise property
+        Predicts atomwise properties.
+
         """
         atomic_numbers = inputs[Properties.Z]
         atom_mask = inputs[Properties.atom_mask]
@@ -217,7 +218,7 @@ class DipoleMoment(Atomwise):
         n_in,
         n_layers=2,
         n_neurons=None,
-        activation=schnetpack.nn.activations.shifted_softplus,
+        activation=spk.nn.activations.shifted_softplus,
         property="y",
         contributions=None,
         predict_magnitude=False,
@@ -312,12 +313,12 @@ class ElementalAtomwise(Atomwise):
         create_graph=True,
         elements=frozenset((1, 6, 7, 8, 9)),
         n_hidden=50,
-        activation=schnetpack.nn.activations.shifted_softplus,
+        activation=spk.nn.activations.shifted_softplus,
         mean=None,
         stddev=None,
         atomref=None,
     ):
-        outnet = schnetpack.nn.blocks.GatedNetwork(
+        outnet = spk.nn.blocks.GatedNetwork(
             n_in,
             n_out,
             elements,
@@ -373,11 +374,11 @@ class ElementalDipoleMoment(DipoleMoment):
         predict_magnitude=False,
         elements=frozenset((1, 6, 7, 8, 9)),
         n_hidden=50,
-        activation=schnetpack.nn.activations.shifted_softplus,
+        activation=spk.nn.activations.shifted_softplus,
         mean=None,
         stddev=None,
     ):
-        outnet = schnetpack.nn.blocks.GatedNetwork(
+        outnet = spk.nn.blocks.GatedNetwork(
             n_in,
             n_out,
             elements,
@@ -561,7 +562,7 @@ class ElectronicSpatialExtent(Atomwise):
         n_in,
         n_layers=2,
         n_neurons=None,
-        activation=schnetpack.nn.activations.shifted_softplus,
+        activation=spk.nn.activations.shifted_softplus,
         property="y",
         contributions=None,
         mean=None,
@@ -601,3 +602,197 @@ class ElectronicSpatialExtent(Atomwise):
             result[self.contributions] = charges
 
         return result
+
+
+class AtomwiseCorrected(nn.Module):
+    r"""
+    Predicts atom-wise contributions and accumulates global prediction. Similar to
+    Atomwise but with the support of correction terms. Deduced from PhysNet.
+
+    Args:
+        n_in (int): input dimension
+        n_out (int, optional): dimension of output property
+        n_layers (int, optional): number of layers for out_net if out_net is not
+            specified
+        n_neurons (int, optional): number of neurons for out_net if out_net is not
+            specified
+        out_net (nn.Module, optional): custom output module. If nothing is specified,
+            the out-net is build with the use of n_layers, n_neurons and n_out.
+        activation (callable, optional): activation function
+        charge_net (nn.Module, optional): custom charge module. If nothing is
+            specified, the charge-net is build with the use of n_layers, n_neurons and
+            n_out.
+        property (str, optional): name of property in output dict
+        contributions (str, optional): returns property contributions if not None
+        derivative (str, optional): returns derivative if not None
+        negative_dr (bool, optional): multiply derivative with -1 if selected
+        # mean=None,
+        # stddev=None,
+        # atomref=None,
+        aggregation_mode (str, optional): mode of aggregation; 'sum' or 'mean'
+        corrections (iterable, optional): collection of correction modules
+        use_element_bias (bool, optional): makes use trainable element-bias
+        max_z (int, optional): maximum atomic number for element bias layer
+
+    """
+
+    def __init__(
+            self,
+            n_in,
+            n_out=1,
+            n_layers=2,
+            n_neurons=None,
+            out_net=None,
+            activation=spk.nn.activations.shifted_softplus,
+            charge_net=None,
+            property="y",
+            contributions=None,
+            derivative=None,
+            negative_dr=False,
+            # mean=None,
+            # stddev=None,
+            # atomref=None,
+            aggregation_mode="sum",
+            corrections=[],
+            use_element_bias=False,
+            max_z=87,
+    ):
+        super(AtomwiseCorrected, self).__init__()
+
+        # initialize attributes
+        self.property = property
+        self.contributions = contributions
+        self.derivative = derivative
+        self.negative_dr = negative_dr
+        self.use_element_bias = use_element_bias
+
+        # define modules
+        self.register_parameter("element_bias", nn.Parameter(torch.Tensor(max_z)))
+        if out_net is None:
+            out_net = nn.Sequential(
+                spk.nn.base.GetItem("representation"),
+                spk.nn.blocks.MLP(n_in, n_out, n_neurons, n_layers, activation),
+            )
+        self.out_net = out_net
+        if charge_net is None:
+            charge_net = nn.Sequential(
+                spk.nn.base.GetItem("representation"),
+                spk.nn.blocks.MLP(n_in, 1, n_neurons, n_layers, activation),
+            )
+        self.charge_net = charge_net
+
+        # aggregation mode
+        if aggregation_mode == "sum":
+            self.atom_pool = spk.nn.base.Aggregate(axis=1, mean=False)
+        elif aggregation_mode == "avg":
+            self.atom_pool = spk.nn.base.Aggregate(axis=1, mean=True)
+        else:
+            raise AtomwiseError(
+                "{} is not a valid aggregation " "mode!".format(aggregation_mode)
+            )
+
+        # add corrections
+        self.corrections = corrections
+
+    def forward(self, inputs):
+        r"""
+        Predicts atomwise properties.
+
+        """
+        # compute atom-wise properties and charges
+        yi = self.out_net(inputs)
+        qi = self.charge_net(inputs)
+        atomwise_predictions = dict(yi=yi, qi=qi)
+
+        # compute corrections
+        y_corr = 0.
+        for correction_layer in self.corrections:
+            y_corr += correction_layer(inputs, atomwise_predictions)
+
+        # compute property
+        y = self.atom_pool(yi) + y_corr
+
+        # collect results
+        result = {self.property: y}
+
+        if self.contributions is not None:
+            result[self.contributions] = yi
+
+        if self.derivative is not None:
+            sign = -1.0 if self.negative_dr else 1.0
+            dy = grad(
+                result[self.property],
+                inputs[Properties.R],
+                grad_outputs=torch.ones_like(result[self.property]),
+                create_graph=self.create_graph,
+                retain_graph=True,
+            )[0]
+            result[self.derivative] = sign * dy
+
+        return result
+
+
+class ModularAtomwise(nn.Module):
+    r"""
+    Predicts atom-wise contributions and accumulates global prediction from
+    intermediate interaction features.
+
+    Args:
+        atomwise (nn.Module): atomwise outpur module
+        n_in (int): dimension of input features
+        n_interactions (int): number of interaction layers
+        n_residuals (int): number of residual blocks to be applied on a modular level
+        activation (callable): activation function for dense layers
+
+    """
+    def __init__(
+            self,
+            atomwise,
+            n_in,
+            n_interactions,
+            n_residuals=1,
+            activation=spk.nn.Swish,
+    ):
+        super(ModularAtomwise, self).__init__()
+
+        # layer for intermediate interaction features
+        self.mod_net = nn.ModuleList([
+            nn.Sequential(
+                spk.nn.ResidualStack(
+                    n_features=n_in,
+                    n_blocks=n_residuals,
+                    activation=activation,
+                ),
+                spk.nn.Dense(
+                    in_features=n_in, out_features=n_in, pre_activation=activation
+                ),
+            ) for _ in range(n_interactions)]
+        )
+
+        # aggregation layer for intermediate interactions
+        self.mod_aggregation = spk.nn.Aggregate(axis=-1)
+
+        # atomwise layer
+        self.atomwise = atomwise
+
+
+    def forward(self, inputs):
+        r"""
+        predicts atomwise property
+        """
+        # todo: check if embedding is used or not
+        # pass intermediate interactions through layer
+        intermediate_interactions = []
+        for i_features, mod_net in zip(
+                inputs["intermediate_interactions"], self.mod_net
+        ):
+            intermediate_interactions.append(mod_net(i_features))
+        intermediate_interactions = torch.cat(intermediate_interactions)
+
+        # update representation with aggregated intermediates
+        inputs.update(
+            dict(representation=self.mod_aggregation(intermediate_interactions))
+        )
+
+        # return pass through atomwise layer
+        return self.atomwise(inputs)

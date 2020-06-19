@@ -6,12 +6,7 @@ from schnetpack.data import StatisticsAccumulator
 from schnetpack import Properties
 
 
-__all__ = [
-    "HDNNException",
-    "SymmetryFunctions",
-    "BehlerSFBlock",
-    "StandardizeSF"
-]
+__all__ = ["HDNNException", "SymmetryFunctions", "BehlerSFBlock", "StandardizeSF"]
 
 
 class HDNNException(Exception):

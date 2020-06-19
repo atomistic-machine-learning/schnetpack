@@ -7,6 +7,7 @@ from .io import *
 from .train import *
 from .script_fixtures import *
 from .md import *
+from .nn import *
 
 # import pytest
 # import numpy as np
