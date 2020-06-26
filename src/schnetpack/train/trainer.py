@@ -192,6 +192,7 @@ class Trainer:
                     loss.backward()
                     self.optimizer.step()
                     self.step += 1
+                    print(loss)
 
                     for h in self.hooks:
                         h.on_batch_end(self, train_batch, result, loss)

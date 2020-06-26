@@ -8,6 +8,7 @@ from schnetpack.nn.cutoff import CosineCutoff
 from schnetpack.nn.acsf import GaussianSmearing
 from schnetpack.nn.neighbors import AtomDistances
 from schnetpack.nn.activations import shifted_softplus
+from schnetpack.representation import AtomisticRepresentation, InteractionAggregation
 
 
 __all__ = ["SchNetInteraction", "SchNet"]
@@ -37,20 +38,24 @@ class SchNetInteraction(nn.Module):
         normalize_filter=False,
     ):
         super(SchNetInteraction, self).__init__()
+
+        # attributes
+        self.n_atom_basis = n_atom_basis
+
         # filter block used in interaction block
-        self.filter_network = nn.Sequential(
+        filter_network = nn.Sequential(
             Dense(n_spatial_basis, n_filters, activation=shifted_softplus),
             Dense(n_filters, n_filters),
         )
         # cutoff layer used in interaction block
-        self.cutoff_network = cutoff_network(cutoff)
+        cutoff_network = cutoff_network(cutoff)
         # interaction block
         self.cfconv = CFConv(
             n_atom_basis,
             n_filters,
             n_atom_basis,
-            self.filter_network,
-            cutoff_network=self.cutoff_network,
+            filter_network,
+            cutoff_network=cutoff_network,
             activation=shifted_softplus,
             normalize_filter=normalize_filter,
         )
@@ -80,7 +85,7 @@ class SchNetInteraction(nn.Module):
         return v
 
 
-class SchNet(nn.Module):
+class SchNet(AtomisticRepresentation):
     """SchNet architecture for learning representations of atomistic systems.
 
     Args:
@@ -138,28 +143,20 @@ class SchNet(nn.Module):
         charged_systems=False,
         return_distances=False,
     ):
-        super(SchNet, self).__init__()
-
-        self.n_atom_basis = n_atom_basis
         # make a lookup table to store embeddings for each element (up to atomic
         # number max_z) each of which is a vector of size n_atom_basis
-        self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
-
-        # layer for computing interatomic distances
-        self.distances = AtomDistances()
+        embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
 
         # layer for expanding interatomic distances in a basis
         if distance_expansion is None:
-            self.distance_expansion = GaussianSmearing(
+            distance_expansion = GaussianSmearing(
                 0.0, cutoff, n_gaussians, trainable=trainable_gaussians
             )
-        else:
-            self.distance_expansion = distance_expansion
 
-        # block for computing interaction
+        # initialize interaction blocks
         if coupled_interactions:
             # use the same SchNetInteraction instance (hence the same weights)
-            self.interactions = nn.ModuleList(
+            interactions = nn.ModuleList(
                 [
                     SchNetInteraction(
                         n_atom_basis=n_atom_basis,
@@ -174,7 +171,7 @@ class SchNet(nn.Module):
             )
         else:
             # use one SchNetInteraction instance for each interaction
-            self.interactions = nn.ModuleList(
+            interactions = nn.ModuleList(
                 [
                     SchNetInteraction(
                         n_atom_basis=n_atom_basis,
@@ -188,9 +185,8 @@ class SchNet(nn.Module):
                 ]
             )
 
-        # set attributes
-        self.return_intermediate = return_intermediate
-        self.return_distances = return_distances
+        # define how intermediate interactions are transformed to representation
+        interaction_aggregation = InteractionAggregation(mode="last")
 
         # todo: not used atm...
         self.charged_systems = charged_systems
@@ -198,7 +194,17 @@ class SchNet(nn.Module):
             self.charge = nn.Parameter(torch.Tensor(1, n_atom_basis))
             self.charge.data.normal_(0, 1.0 / n_atom_basis ** 0.5)
 
-    def forward(self, inputs):
+        super(SchNet, self).__init__(
+            embedding=embedding,
+            distance_expansion=distance_expansion,
+            interactions=interactions,
+            interaction_aggregation=interaction_aggregation,
+            return_intermediate=return_intermediate,
+            return_distances=return_distances,
+            sum_before_interaction_append=True,
+        )
+
+    def old_forward(self, inputs):
         """
         Compute atomic representations/embeddings.
 

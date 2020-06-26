@@ -19,7 +19,7 @@ class Embedding(nn.Module):
         super(Embedding, self).__init__()
         self.n_features = n_features
         self.register_buffer(
-            "electron_config", torch.tensor(normalized_electron_config)
+            "electron_config", torch.tensor(normalized_electron_config, dtype=torch.float32)
         )
         self.register_parameter(
             "element_embedding", nn.Parameter(torch.zeros(Zmax, self.n_features))
@@ -33,9 +33,21 @@ class Embedding(nn.Module):
         )
 
     def forward(self, Z):
+        z_shape = Z.shape
+
+        # expand atomic numbers with feature dimension and concat batch-dim and atom-dim
         Z = Z.view(-1, 1).repeat(1, self.n_features)
+
+        # compute embedding vectors
         embedding = self.element_embedding + self.config_linear(self.electron_config)
-        return torch.gather(embedding, 0, Z)
+
+        # gather embedding vectors by atomic number
+        embedding = torch.gather(embedding, 0, Z)
+
+        # reshape to batch-dim x atom-dim x feature-dim
+        embedding = embedding.view(*z_shape, self.n_features)
+
+        return embedding
 
 
 electron_config = np.array(

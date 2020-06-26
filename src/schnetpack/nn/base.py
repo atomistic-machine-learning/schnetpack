@@ -6,7 +6,14 @@ from schnetpack.nn.initializers import zeros_initializer
 from schnetpack.nn.activations import get_activation_layer
 
 
-__all__ = ["Dense", "GetItem", "ScaleShift", "Standardize", "Aggregate"]
+__all__ = [
+    "Dense",
+    "GetItem",
+    "ScaleShift",
+    "Standardize",
+    "Aggregate",
+    "PassthroughLayer"
+]
 
 
 class Dense(nn.Linear):
@@ -37,10 +44,11 @@ class Dense(nn.Linear):
     ):
         self.weight_init = weight_init
         self.bias_init = bias_init
-        self.pre_activation = get_activation_layer(pre_activation, in_features)
-        self.activation = get_activation_layer(activation, in_features)
-        # initialize linear layer y = xW^T + b
+
         super(Dense, self).__init__(in_features, out_features, bias)
+
+        self.pre_activation = get_activation_layer(pre_activation, in_features)
+        self.activation = get_activation_layer(activation, out_features)
 
     def reset_parameters(self):
         """Reinitialize model weight and bias values."""
@@ -199,3 +207,12 @@ class Aggregate(nn.Module):
                 N = input.size(self.axis)
             y = y / N
         return y
+
+
+class PassthroughLayer(nn.Module):
+    """
+    Dummy layer to pass inputs through without any interaction.
+
+    """
+    def forward(self, x):
+        return x

@@ -5,6 +5,7 @@ from torch.nn.init import zeros_, orthogonal_
 
 from schnetpack.nn import AtomDistances
 from schnetpack import Properties
+from schnetpack.representation import AtomisticRepresentation
 
 
 __all__ = ["PhysNetInteraction", "PhysNet"]
@@ -14,15 +15,19 @@ class PhysNetInteraction(nn.Module):
     def __init__(
         self,
         n_features,
-        n_basis_functions,
-        n_residuals_in,
-        n_residuals_i,
-        n_residuals_j,
-        n_residuals_v,
-        n_residuals_out,
+        n_gaussians=25,
+        n_residuals_in=1,
+        n_residuals_i=1,
+        n_residuals_j=1,
+        n_residuals_v=1,
+        n_residuals_out=1,
         activation=spk.nn.Swish,
+        cutoff=None,
     ):
         super(PhysNetInteraction, self).__init__()
+
+        # attributes
+        self.n_atom_basis = n_features
 
         # input residual stack
         self.input_residual = spk.nn.ResidualStack(
@@ -54,8 +59,9 @@ class PhysNetInteraction(nn.Module):
         # convolution layer
         self.convolution_layer = spk.nn.BaseConvolutionLayer(
             filter_network=spk.nn.Dense(
-                n_basis_functions, n_features, bias=False, weight_init=zeros_
+                n_gaussians, n_features, bias=False, weight_init=zeros_
             ),
+            # todo: add cutoff!
         )
 
         # merged v branch
@@ -107,17 +113,19 @@ class PhysNetInteraction(nn.Module):
         return x
 
 
-class PhysNet(nn.Module):
+class PhysNet(AtomisticRepresentation):
+
     def __init__(
         self,
-        n_features=128,
-        n_basis_functions=32,
+        n_atom_basis=128,
+        n_gaussians=32,
         n_interactions=6,
         n_residual_pre_x=1,
         n_residual_post_x=1,
         n_residual_pre_vi=1,
         n_residual_pre_vj=1,
         n_residual_post_v=1,
+        n_residual_post_interaction=1,
         distance_expansion=None,
         exp_weighting=True,
         cutoff=7.937658158457616,  # 15 Bohr converted to Angstrom
@@ -129,28 +137,27 @@ class PhysNet(nn.Module):
         coupled_interactions=False,
         return_intermediate=True,
         return_distances=True,
+        interaction_aggregation="sum",
+        trainable_gaussians=False,
     ):
-        self.register_parameter("element_bias", nn.Parameter(torch.Tensor(max_z)))
-        # element specific bias for outputs
-        self.embedding = spk.nn.Embedding(n_features, max_z)
 
-        # layer for computing interatomic distances
-        self.distances = AtomDistances()
+        # element specific bias for outputs
+        embedding = spk.nn.Embedding(n_atom_basis, max_z)
 
         # layer for expanding interatomic distances in a basis
+        # todo: rewrite other distance expansion functions
         if distance_expansion is None:
-            distance_expansion = spk.nn.ExponentialBernsteinPolynomials(
-                self.num_basis_functions, exp_weighting=self.exp_weighting
+            distance_expansion = spk.nn.GaussianSmearing(
+                0.0, cutoff, n_gaussians, trainable=trainable_gaussians
             )
-        self.distance_expansion = distance_expansion
 
         # interaction blocks
         if coupled_interactions:
-            self.interactions = nn.ModuleList(
+            interactions = nn.ModuleList(
                 [
                     PhysNetInteraction(
-                        n_features=n_features,
-                        n_basis_functions=n_basis_functions,
+                        n_features=n_atom_basis,
+                        n_gaussians=n_gaussians,
                         n_residuals_in=n_residual_pre_x,
                         n_residuals_i=n_residual_pre_vi,
                         n_residuals_j=n_residual_pre_vj,
@@ -163,11 +170,11 @@ class PhysNet(nn.Module):
             )
         else:
             # use one SchNetInteraction instance for each interaction
-            self.interactions = nn.ModuleList(
+            interactions = nn.ModuleList(
                 [
                     PhysNetInteraction(
-                        n_features=n_features,
-                        n_basis_functions=n_basis_functions,
+                        n_features=n_atom_basis,
+                        n_gaussians=n_gaussians,
                         n_residuals_in=n_residual_pre_x,
                         n_residuals_i=n_residual_pre_vi,
                         n_residuals_j=n_residual_pre_vj,
@@ -179,56 +186,37 @@ class PhysNet(nn.Module):
                 ]
             )
 
-        # set attributes
-        self.return_intermediate = return_intermediate
-        self.return_distances = return_distances
-
-    def forward(self, inputs):
-        """
-        Compute atomic representations/embeddings.
-
-        Args:
-            inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
-
-        Returns:
-            dict: atomic features representations; intermediate features if
-            return_intermediate==True; distance matrix if return_distances==True
-
-        """
-        # get tensors from input dictionary
-        atomic_numbers = inputs[Properties.Z]
-        positions = inputs[Properties.R]
-        cell = inputs[Properties.cell]
-        cell_offset = inputs[Properties.cell_offset]
-        neighbors = inputs[Properties.neighbors]
-        neighbor_mask = inputs[Properties.neighbor_mask]
-        atom_mask = inputs[Properties.atom_mask]
-
-        # get atom embeddings for the input atomic numbers
-        x = self.embedding(atomic_numbers)
-
-        # compute interatomic distance and distance expansion
-        r_ij = self.distances(
-            positions, neighbors, cell, cell_offset, neighbor_mask=neighbor_mask
+        post_interactions = nn.ModuleList(
+            [
+                nn.Sequential(
+                    spk.nn.ResidualStack(
+                        n_features=n_atom_basis,
+                        n_blocks=n_residual_post_interaction,
+                        activation=activation,
+                    ),
+                    spk.nn.Dense(
+                        in_features=n_atom_basis,
+                        out_features=n_atom_basis,
+                        pre_activation=activation,
+                    ),
+                )
+                for _ in range(n_interactions)
+            ]
         )
-        f_ij = self.distance_expansion(r_ij)
 
-        # store intermediate representations
-        if self.return_intermediate:
-            xs = [x]
-        # compute interaction block to update atomic embeddings
-        for interaction in self.interactions:
-            v = interaction(x, r_ij, neighbors, neighbor_mask, f_ij=f_ij)
-            x = x + v
-            if self.return_intermediate:
-                # todo: eventually append(x)? or append(v) in schnet?
-                xs.append(v)
+        # intermediate interactions to representation
+        interaction_aggregation = spk.representation.InteractionAggregation(
+            mode=interaction_aggregation
+        )
 
-        # build results dict
-        results = dict(representation=x)
-        if self.return_intermediate:
-            results.update(dict(intermediate_interactions=xs))
-        if self.return_distances:
-            results.update(dict(distances=r_ij))
-
-        return results
+        super(PhysNet, self).__init__(
+            embedding=embedding,
+            distance_expansion=distance_expansion,
+            interactions=interactions,
+            post_interactions=post_interactions,
+            interaction_aggregation=interaction_aggregation,
+            return_intermediate=return_intermediate,
+            return_distances=return_distances,
+            sum_before_interaction_append=False,
+        )
+    

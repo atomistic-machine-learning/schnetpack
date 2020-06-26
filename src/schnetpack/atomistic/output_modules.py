@@ -13,6 +13,7 @@ __all__ = [
     "ElementalDipoleMoment",
     "Polarizability",
     "ElectronicSpatialExtent",
+    "AtomwiseCorrected",
 ]
 
 
@@ -52,7 +53,7 @@ class Atomwise(nn.Module):
             an (max_z + 1) x 1 array where atomref[Z] corresponds to the reference
             property of element Z. The value of atomref[0] must be zero, as this
             corresponds to the reference property for for "mask" atoms. (default: None)
-        outnet (callable): Network used for atomistic outputs. Takes schnetpack input
+        out_net (callable): Network used for atomistic outputs. Takes schnetpack input
             dictionary as input. Output is not normalized. If set to None,
             a pyramidal network is generated automatically. (default: None)
 
@@ -82,7 +83,7 @@ class Atomwise(nn.Module):
         mean=None,
         stddev=None,
         atomref=None,
-        outnet=None,
+        out_net=None,
     ):
         super(Atomwise, self).__init__()
 
@@ -100,19 +101,19 @@ class Atomwise(nn.Module):
         # initialize single atom energies
         if atomref is not None:
             self.atomref = nn.Embedding.from_pretrained(
-                torch.from_numpy(atomref.astype(np.float32))
+                torch.from_numpy(atomref[property].astype(np.float32))
             )
         else:
             self.atomref = None
 
         # build output network
-        if outnet is None:
+        if out_net is None:
             self.out_net = nn.Sequential(
                 spk.nn.base.GetItem("representation"),
                 spk.nn.blocks.MLP(n_in, n_out, n_neurons, n_layers, activation),
             )
         else:
-            self.out_net = outnet
+            self.out_net = out_net
 
         # build standardization layer
         self.standardize = spk.nn.base.ScaleShift(mean, stddev)
@@ -224,7 +225,7 @@ class DipoleMoment(Atomwise):
         predict_magnitude=False,
         mean=None,
         stddev=None,
-        outnet=None,
+        out_net=None,
     ):
         self.predict_magnitude = predict_magnitude
         super(DipoleMoment, self).__init__(
@@ -236,7 +237,7 @@ class DipoleMoment(Atomwise):
             activation=activation,
             mean=mean,
             stddev=stddev,
-            outnet=outnet,
+            out_net=out_net,
             property=property,
             contributions=contributions,
         )
@@ -318,7 +319,7 @@ class ElementalAtomwise(Atomwise):
         stddev=None,
         atomref=None,
     ):
-        outnet = spk.nn.blocks.GatedNetwork(
+        out_net = spk.nn.blocks.GatedNetwork(
             n_in,
             n_out,
             elements,
@@ -342,7 +343,7 @@ class ElementalAtomwise(Atomwise):
             mean=mean,
             stddev=stddev,
             atomref=atomref,
-            outnet=outnet,
+            out_net=out_net,
         )
 
 
@@ -378,7 +379,7 @@ class ElementalDipoleMoment(DipoleMoment):
         mean=None,
         stddev=None,
     ):
-        outnet = spk.nn.blocks.GatedNetwork(
+        out_net = spk.nn.blocks.GatedNetwork(
             n_in,
             n_out,
             elements,
@@ -394,7 +395,7 @@ class ElementalDipoleMoment(DipoleMoment):
             activation=activation,
             property=property,
             contributions=contributions,
-            outnet=outnet,
+            out_net=out_net,
             predict_magnitude=predict_magnitude,
             mean=mean,
             stddev=stddev,
@@ -419,7 +420,7 @@ class Polarizability(Atomwise):
             freed. Note that in nearly all cases setting this option to True is not nee
             ded and often can be worked around in a much more efficient way. Defaults to
             the value of create_graph. (default: False)
-        outnet (callable): Network used for atomistic outputs. Takes schnetpack input
+        out_net (callable): Network used for atomistic outputs. Takes schnetpack input
             dictionary as input. Output is not normalized. If set to None,
             a pyramidal network is generated automatically. (default: None)
         cutoff_network (nn.Module): cutoff network (default: None)
@@ -440,7 +441,7 @@ class Polarizability(Atomwise):
         property="y",
         isotropic=False,
         create_graph=True,
-        outnet=None,
+        out_net=None,
         cutoff_network=None,
     ):
         super(Polarizability, self).__init__(
@@ -453,7 +454,7 @@ class Polarizability(Atomwise):
             property=property,
             derivative=None,
             create_graph=create_graph,
-            outnet=outnet,
+            out_net=out_net,
         )
         self.isotropic = isotropic
         self.nbh_agg = L.Aggregate(2)
@@ -567,7 +568,7 @@ class ElectronicSpatialExtent(Atomwise):
         contributions=None,
         mean=None,
         stddev=None,
-        outnet=None,
+        out_net=None,
     ):
         super(ElectronicSpatialExtent, self).__init__(
             n_in,
@@ -578,7 +579,7 @@ class ElectronicSpatialExtent(Atomwise):
             activation=activation,
             mean=mean,
             stddev=stddev,
-            outnet=outnet,
+            out_net=out_net,
             property=property,
             contributions=contributions,
         )
@@ -604,7 +605,7 @@ class ElectronicSpatialExtent(Atomwise):
         return result
 
 
-class AtomwiseCorrected(nn.Module):
+class AtomwiseCorrected(Atomwise):
     r"""
     Predicts atom-wise contributions and accumulates global prediction. Similar to
     Atomwise but with the support of correction terms. Deduced from PhysNet.
@@ -637,61 +638,59 @@ class AtomwiseCorrected(nn.Module):
     """
 
     def __init__(
-            self,
-            n_in,
-            n_out=1,
-            n_layers=2,
-            n_neurons=None,
-            out_net=None,
-            activation=spk.nn.activations.shifted_softplus,
-            charge_net=None,
-            property="y",
-            contributions=None,
-            derivative=None,
-            negative_dr=False,
-            # mean=None,
-            # stddev=None,
-            # atomref=None,
-            aggregation_mode="sum",
-            corrections=[],
-            use_element_bias=False,
-            max_z=87,
+        self,
+        n_in,
+        n_out=1,
+        n_layers=2,
+        n_neurons=None,
+        out_net=None,
+        activation=spk.nn.Swish,
+        charge_net=None,
+        property="y",
+        contributions=None,
+        derivative=None,
+        negative_dr=False,
+        # mean=None,
+        # stddev=None,
+        # atomref=None,
+        aggregation_mode="sum",
+        corrections=[],
+        use_element_bias=False,
+        max_z=87,
     ):
-        super(AtomwiseCorrected, self).__init__()
+        super(AtomwiseCorrected, self).__init__(
+            n_in=n_in,
+            n_out=n_out,
+            n_layers=n_layers,
+            n_neurons=n_neurons,
+            activation=activation,
+            property=property,
+            contributions=contributions,
+            derivative=derivative,
+            negative_dr=negative_dr,
+            stress=None,
+            create_graph=True,
+            # todo:eventually support mean and atomref?
+            mean=None,
+            stddev=None,
+            atomref=None,
+            out_net=out_net,
+        )
 
         # initialize attributes
-        self.property = property
-        self.contributions = contributions
-        self.derivative = derivative
-        self.negative_dr = negative_dr
         self.use_element_bias = use_element_bias
 
         # define modules
+        # element bias
         self.register_parameter("element_bias", nn.Parameter(torch.Tensor(max_z)))
-        if out_net is None:
-            out_net = nn.Sequential(
-                spk.nn.base.GetItem("representation"),
-                spk.nn.blocks.MLP(n_in, n_out, n_neurons, n_layers, activation),
-            )
-        self.out_net = out_net
+        # charge predicting network
         if charge_net is None:
             charge_net = nn.Sequential(
                 spk.nn.base.GetItem("representation"),
                 spk.nn.blocks.MLP(n_in, 1, n_neurons, n_layers, activation),
             )
         self.charge_net = charge_net
-
-        # aggregation mode
-        if aggregation_mode == "sum":
-            self.atom_pool = spk.nn.base.Aggregate(axis=1, mean=False)
-        elif aggregation_mode == "avg":
-            self.atom_pool = spk.nn.base.Aggregate(axis=1, mean=True)
-        else:
-            raise AtomwiseError(
-                "{} is not a valid aggregation " "mode!".format(aggregation_mode)
-            )
-
-        # add corrections
+        # correction terms
         self.corrections = corrections
 
     def forward(self, inputs):
@@ -705,7 +704,7 @@ class AtomwiseCorrected(nn.Module):
         atomwise_predictions = dict(yi=yi, qi=qi)
 
         # compute corrections
-        y_corr = 0.
+        y_corr = 0.0
         for correction_layer in self.corrections:
             y_corr += correction_layer(inputs, atomwise_predictions)
 
@@ -730,69 +729,3 @@ class AtomwiseCorrected(nn.Module):
             result[self.derivative] = sign * dy
 
         return result
-
-
-class ModularAtomwise(nn.Module):
-    r"""
-    Predicts atom-wise contributions and accumulates global prediction from
-    intermediate interaction features.
-
-    Args:
-        atomwise (nn.Module): atomwise outpur module
-        n_in (int): dimension of input features
-        n_interactions (int): number of interaction layers
-        n_residuals (int): number of residual blocks to be applied on a modular level
-        activation (callable): activation function for dense layers
-
-    """
-    def __init__(
-            self,
-            atomwise,
-            n_in,
-            n_interactions,
-            n_residuals=1,
-            activation=spk.nn.Swish,
-    ):
-        super(ModularAtomwise, self).__init__()
-
-        # layer for intermediate interaction features
-        self.mod_net = nn.ModuleList([
-            nn.Sequential(
-                spk.nn.ResidualStack(
-                    n_features=n_in,
-                    n_blocks=n_residuals,
-                    activation=activation,
-                ),
-                spk.nn.Dense(
-                    in_features=n_in, out_features=n_in, pre_activation=activation
-                ),
-            ) for _ in range(n_interactions)]
-        )
-
-        # aggregation layer for intermediate interactions
-        self.mod_aggregation = spk.nn.Aggregate(axis=-1)
-
-        # atomwise layer
-        self.atomwise = atomwise
-
-
-    def forward(self, inputs):
-        r"""
-        predicts atomwise property
-        """
-        # todo: check if embedding is used or not
-        # pass intermediate interactions through layer
-        intermediate_interactions = []
-        for i_features, mod_net in zip(
-                inputs["intermediate_interactions"], self.mod_net
-        ):
-            intermediate_interactions.append(mod_net(i_features))
-        intermediate_interactions = torch.cat(intermediate_interactions)
-
-        # update representation with aggregated intermediates
-        inputs.update(
-            dict(representation=self.mod_aggregation(intermediate_interactions))
-        )
-
-        # return pass through atomwise layer
-        return self.atomwise(inputs)

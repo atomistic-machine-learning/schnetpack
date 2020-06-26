@@ -12,6 +12,7 @@ __all__ = [
     "get_activation_layer",
     "none_activation",
     "softplus_inverse",
+    "switch_function",
 ]
 
 
@@ -108,3 +109,17 @@ def softplus_inverse(x):
     if not isinstance(x, torch.Tensor):
         x = torch.tensor(x)
     return x + torch.log(-torch.expm1(-x))
+
+
+def switch_function(x, cuton, cutoff):
+    x = (x - cuton) / (cutoff - cuton)
+    ones = torch.ones_like(x)
+    zeros = torch.zeros_like(x)
+    fp = _switch_component(x, ones, zeros)
+    fm = _switch_component(1 - x, ones, zeros)
+    return torch.where(x <= 0, ones, torch.where(x >= 1, zeros, fm / (fp + fm)))
+
+
+def _switch_component(x, ones, zeros):
+    x_ = torch.where(x <= 0, ones, x)
+    return torch.where(x <= 0, zeros, torch.exp(-ones / x_))

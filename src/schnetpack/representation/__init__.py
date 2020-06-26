@@ -15,5 +15,7 @@ References
    The Journal of Chemical Physics 148 (24), 241709. 2018.
 """
 
+from schnetpack.representation.base import *
 from schnetpack.representation.schnet import *
 from schnetpack.representation.hdnn import *
+from schnetpack.representation.physnet import *
