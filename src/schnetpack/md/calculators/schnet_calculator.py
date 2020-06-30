@@ -47,6 +47,7 @@ class SchnetPackCalculator(MDCalculator):
         neighbor_list=SimpleNeighborList,
         cutoff=-1.0,
         cutoff_shell=1.0,
+        cutoff_lr=None,
     ):
         super(SchnetPackCalculator, self).__init__(
             required_properties,
@@ -67,7 +68,7 @@ class SchnetPackCalculator(MDCalculator):
             )
 
         self.neighbor_list = self._init_neighbor_list(
-            neighbor_list, cutoff, cutoff_shell
+            neighbor_list, cutoff, cutoff_shell, cutoff_lr
         )
 
     def calculate(self, system):
@@ -82,7 +83,7 @@ class SchnetPackCalculator(MDCalculator):
         self.results = self.model(inputs)
         self._update_system(system)
 
-    def _init_neighbor_list(self, neighbor_list, cutoff, cutoff_shell):
+    def _init_neighbor_list(self, neighbor_list, cutoff, cutoff_shell, cutoff_lr):
         """
         Function for properly setting up the neighbor list used for the SchNetPack calculator.
         This automatically checks, whether a proper cutoff has been provided and moves neighbor lists which support
@@ -121,15 +122,18 @@ class SchnetPackCalculator(MDCalculator):
             cutoff /= self.position_conversion
             cutoff_shell /= self.position_conversion
 
-        # Initialize the neighbor list
-        if neighbor_list == schnetpack.md.neighbor_lists.TorchNeighborList:
-            # For torch based neighbor lists, determine the model device and pass it during init.
-            model_device = next(self.model.parameters()).device
-            neighbor_list = neighbor_list(
-                cutoff, shell=cutoff_shell, device=model_device
+        if isinstance(neighbor_list, schnetpack.md.neighbor_lists.TorchNeighborList):
+            device = next(self.model.parameters()).device
+        else:
+            device = None
+
+        if cutoff_lr is not None:
+            cutoff_lr /= self.position_conversion
+            neighbor_list = schnetpack.md.neighbor_lists.DualNeighborList(
+                cutoff, cutoff_lr, neighbor_list, shell=cutoff_shell, device=device
             )
         else:
-            neighbor_list = neighbor_list(cutoff, shell=cutoff_shell)
+            neighbor_list = neighbor_list(cutoff, shell=cutoff_shell, device=device)
 
         return neighbor_list
 
@@ -147,18 +151,17 @@ class SchnetPackCalculator(MDCalculator):
         positions, atom_types, atom_masks, cells, pbc = self._get_system_molecules(
             system
         )
-        neighbors, neighbor_mask, offsets = self._get_system_neighbors(system)
 
         inputs = {
             Properties.R: positions,
             Properties.Z: atom_types,
             Properties.atom_mask: atom_masks,
             Properties.cell: cells,
-            Properties.cell_offset: offsets,
-            Properties.neighbors: neighbors,
-            Properties.neighbor_mask: neighbor_mask,
             Properties.pbc: pbc,
         }
+
+        neighbors = self._get_system_neighbors(system)
+        inputs.update(neighbors)
 
         return inputs
 
@@ -183,19 +186,54 @@ class SchnetPackCalculator(MDCalculator):
 
         neighbor_list, neighbor_mask, offsets = self.neighbor_list.get_neighbors(system)
 
-        neighbor_list = neighbor_list.view(
-            -1, system.max_n_atoms, self.neighbor_list.max_neighbors
+        neighbor_list, neighbor_mask, offsets = self._format_neighbors(
+            neighbor_list,
+            neighbor_mask,
+            offsets,
+            system.max_n_atoms,
+            self.neighbor_list.max_neighbors,
         )
-        neighbor_mask = neighbor_mask.view(
-            -1, system.max_n_atoms, self.neighbor_list.max_neighbors
-        )
+        neighbors = {
+            Properties.neighbors: neighbor_list,
+            Properties.neighbor_mask: neighbor_mask,
+            Properties.cell_offset: offsets,
+        }
+
+        # Check if two cutoffs are present
+        if isinstance(
+            self.neighbor_list, schnetpack.md.neighbor_lists.DualNeighborList
+        ):
+            neighbor_list_lr, neighbor_mask_lr, offsets_lr = self.neighbor_list.get_neighbors_lr(
+                system
+            )
+
+            neighbor_list_lr, neighbor_mask_lr, offsets_lr = self._format_neighbors(
+                neighbor_list_lr,
+                neighbor_mask_lr,
+                offsets_lr,
+                system.max_n_atoms,
+                self.neighbor_list.max_neighbors_lr,
+            )
+            neighbors.update(
+                {
+                    Properties.neighbors_lr: neighbor_list_lr,
+                    Properties.neighbor_mask_lr: neighbor_mask_lr,
+                    Properties.cell_offset_lr: offsets_lr,
+                }
+            )
+
+        return neighbors
+
+    @staticmethod
+    def _format_neighbors(
+        neighbor_list, neighbor_mask, offsets, max_n_atoms, max_neighbors
+    ):
+        neighbor_list = neighbor_list.view(-1, max_n_atoms, max_neighbors)
+        neighbor_mask = neighbor_mask.view(-1, max_n_atoms, max_neighbors)
 
         # Offsets need not be transformed to units, only cell
         if offsets is not None:
-            offsets = offsets.view(
-                -1, system.max_n_atoms, self.neighbor_list.max_neighbors, 3
-            )
-
+            offsets = offsets.view(-1, max_n_atoms, max_neighbors, 3)
         return neighbor_list, neighbor_mask, offsets
 
     def _get_model_cutoff(self):
@@ -247,6 +285,7 @@ class EnsembleSchnetPackCalculator(EnsembleCalculator, SchnetPackCalculator):
         neighbor_list=SimpleNeighborList,
         cutoff=-1.0,
         cutoff_shell=1.0,
+        cutoff_lr=None,
     ):
         self.models = models
         required_properties = self._update_required_properties(required_properties)
@@ -264,4 +303,5 @@ class EnsembleSchnetPackCalculator(EnsembleCalculator, SchnetPackCalculator):
             neighbor_list=neighbor_list,
             cutoff=cutoff,
             cutoff_shell=cutoff_shell,
+            cutoff_lr=cutoff_lr,
         )

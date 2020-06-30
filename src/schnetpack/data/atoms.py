@@ -101,6 +101,7 @@ class AtomsData(Dataset):
         load_only=None,
         units=None,
         environment_provider=SimpleEnvironmentProvider(),
+        environment_provider_lr=None,
         collect_triples=False,
         centering_function=get_center_of_mass,
     ):
@@ -125,6 +126,7 @@ class AtomsData(Dataset):
             units = [1.0] * len(self.available_properties)
         self.units = dict(zip(self.available_properties, units))
         self.environment_provider = environment_provider
+        self.environment_provider_lr = environment_provider_lr
         self.collect_triples = collect_triples
         self.centering_function = centering_function
 
@@ -190,6 +192,7 @@ class AtomsData(Dataset):
             collect_triples=self.collect_triples,
             centering_function=self.centering_function,
             available_properties=self.available_properties,
+            environment_provider_lr=self.environment_provider_lr,
         )
 
     def __len__(self):
@@ -336,6 +339,7 @@ class AtomsData(Dataset):
             collect_triples=self.collect_triples,
             centering_function=self.centering_function,
             output=properties,
+            environment_provider_lr=self.environment_provider_lr,
         )
 
         return at, properties
@@ -437,6 +441,7 @@ def _convert_atoms(
     collect_triples=False,
     centering_function=None,
     output=None,
+    environment_provider_lr=None,
 ):
     """
         Helper function to convert ASE atoms object to SchNetPack input format.
@@ -479,6 +484,14 @@ def _convert_atoms(
     inputs[Properties.cell] = torch.FloatTensor(cell)
     inputs[Properties.cell_offset] = torch.FloatTensor(offsets.astype(np.float32))
 
+    # Get expanded environment for long range interactions
+    if environment_provider_lr is not None:
+        nbh_idx_lr, offsets_lr = environment_provider_lr.get_environment(atoms)
+        inputs[Properties.neighbors_lr] = torch.LongTensor(nbh_idx_lr.astype(np.int))
+        inputs[Properties.cell_offset_lr] = torch.FloatTensor(
+            offsets_lr.astype(np.float32)
+        )
+
     # If requested get neighbor lists for triples
     if collect_triples:
         nbh_idx_j, nbh_idx_k, offset_idx_j, offset_idx_k = collect_atom_triples(nbh_idx)
@@ -511,12 +524,16 @@ class AtomsConverter:
         environment_provider=SimpleEnvironmentProvider(),
         collect_triples=False,
         device=torch.device("cpu"),
+        environment_provider_lr=None,
     ):
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
 
         # Get device
         self.device = device
+
+        # Environment provider for long range interactions
+        self.environment_provider_lr = environment_provider_lr
 
     def __call__(self, atoms):
         """
@@ -527,7 +544,12 @@ class AtomsConverter:
             dict of torch.Tensor: Properties including neighbor lists and masks
                 reformated into SchNetPack input format.
         """
-        inputs = _convert_atoms(atoms, self.environment_provider, self.collect_triples)
+        inputs = _convert_atoms(
+            atoms,
+            environment_provider=self.environment_provider,
+            collect_triples=self.collect_triples,
+            environment_provider_lr=self.environment_provider_lr,
+        )
 
         # Calculate masks
         inputs[Properties.atom_mask] = torch.ones_like(inputs[Properties.Z]).float()
@@ -536,6 +558,15 @@ class AtomsConverter:
         inputs[Properties.neighbors] = (
             inputs[Properties.neighbors] * inputs[Properties.neighbor_mask].long()
         )
+
+        if self.environment_provider_lr is not None:
+            inputs[Properties.neighbor_mask_lr] = (
+                inputs[Properties.neighbors_lr] >= 0
+            ).float()
+            inputs[Properties.neighbors_lr] = (
+                inputs[Properties.neighbors_lr]
+                * inputs[Properties.neighbor_mask_lr].long()
+            )
 
         if self.collect_triples:
             mask_triples = torch.ones_like(inputs[Properties.neighbor_pairs_j])

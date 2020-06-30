@@ -21,7 +21,8 @@ class MDNeighborList:
                        moves farther than this shell. (Or if the simulation cell changes.)
     """
 
-    def __init__(self, cutoff, shell=None):
+    def __init__(self, cutoff, shell=None, device=None):
+        self.device = device
 
         # Check cutoff and shell, as well as possible conventions
         self.cutoff = cutoff
@@ -106,8 +107,8 @@ class SimpleNeighborList(MDNeighborList):
         cutoff (float): Cutoff radius used for neighbor list construction, not used in the present implementation.
     """
 
-    def __init__(self, cutoff=None, shell=None):
-        super(SimpleNeighborList, self).__init__(cutoff, shell)
+    def __init__(self, cutoff=None, shell=None, device=None):
+        super(SimpleNeighborList, self).__init__(cutoff, shell, device=device)
 
     def _construct_neighbor_list(self, system):
         """
@@ -178,8 +179,10 @@ class EnvironmentProviderNeighborList(MDNeighborList):
                        moves farther than this shell. (Or if the simulation cell changes.)
     """
 
-    def __init__(self, cutoff, shell=1.0):
-        super(EnvironmentProviderNeighborList, self).__init__(cutoff, shell)
+    def __init__(self, cutoff, shell=1.0, device=None):
+        super(EnvironmentProviderNeighborList, self).__init__(
+            cutoff, shell, device=device
+        )
 
         # Setup the environment provider
         self._environment_provider = None
@@ -271,8 +274,8 @@ class ASENeighborList(EnvironmentProviderNeighborList):
                        moves farther than this shell. (Or if the simulation cell changes.)
     """
 
-    def __init__(self, cutoff, shell):
-        super(ASENeighborList, self).__init__(cutoff=cutoff, shell=shell)
+    def __init__(self, cutoff, shell, device=None):
+        super(ASENeighborList, self).__init__(cutoff=cutoff, shell=shell, device=device)
 
     def _set_environment_provider(self):
         """
@@ -296,8 +299,9 @@ class TorchNeighborList(EnvironmentProviderNeighborList):
     """
 
     def __init__(self, cutoff, shell, device=torch.device("cpu")):
-        self.device = device
-        super(TorchNeighborList, self).__init__(cutoff=cutoff, shell=shell)
+        super(TorchNeighborList, self).__init__(
+            cutoff=cutoff, shell=shell, device=device
+        )
 
     def _set_environment_provider(self):
         """
@@ -306,3 +310,31 @@ class TorchNeighborList(EnvironmentProviderNeighborList):
         self._environment_provider = schnetpack.environment.TorchEnvironmentProvider(
             self.cutoff_shell, self.device
         )
+
+
+class DualNeighborList:
+    def __init__(
+        self, cutoff_short, cutoff_long, neighbor_list, shell=1.0, device=None
+    ):
+        self.neighbor_list_short = neighbor_list(cutoff_short, shell, device=device)
+        self.neighbor_list_long = neighbor_list(cutoff_long, shell, device=device)
+
+    def get_neighbors(self, system):
+        neighbors, neighbor_mask, offsets = self.neighbor_list_short.get_neighbors(
+            system
+        )
+        return neighbors, neighbor_mask, offsets
+
+    def get_neighbors_lr(self, system):
+        neighbors_long, neighbor_mask_long, offsets_long = self.neighbor_list_long.get_neighbors(
+            system
+        )
+        return neighbors_long, neighbor_mask_long, offsets_long
+
+    @property
+    def max_neighbors(self):
+        return self.neighbor_list_short.max_neighbors
+
+    @property
+    def max_neighbors_lr(self):
+        return self.neighbor_list_long.max_neighbors
