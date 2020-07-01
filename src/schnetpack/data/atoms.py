@@ -560,9 +560,8 @@ class AtomsConverter:
         )
 
         if self.environment_provider_lr is not None:
-            inputs[Properties.neighbor_mask_lr] = (
-                inputs[Properties.neighbors_lr] >= 0
-            ).float()
+            mask = inputs[Properties.neighbors_lr] >= 0
+            inputs[Properties.neighbor_mask_lr] = mask.float()
             inputs[Properties.neighbors_lr] = (
                 inputs[Properties.neighbors_lr]
                 * inputs[Properties.neighbor_mask_lr].long()
