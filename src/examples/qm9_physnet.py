@@ -21,7 +21,8 @@ val_loader = spk.data.AtomsLoader(val)
 # create model
 print("creating model...")
 # representation
-reps = rep.PhysNet(activation=spk.nn.shifted_softplus)
+reps = rep.PhysNet(activation=spk.nn.shifted_softplus,
+                   distance_expansion=spk.nn.ExponentialGaussianFunctions(32))
 # output module as modular wrapper and atomwise layer
 corrections = [spk.atomistic.ElectrostaticEnergy(cuton=0., cutoff=10.)]
 output_layer = schnetpack.atomistic.AtomwiseCorrected(

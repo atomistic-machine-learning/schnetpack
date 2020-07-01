@@ -16,24 +16,22 @@ class ExponentialGaussianFunctions(nn.Module):
         self.exp_weighting = exp_weighting
         self.register_buffer(
             "center",
-            torch.linspace(1, 0, self.num_basis_functions, dtype=torch.float64),
+            torch.linspace(1, 0, self.num_basis_functions, dtype=torch.float32),
         )
         self.register_buffer(
-            "width", torch.tensor(1.0 * self.num_basis_functions, dtype=torch.float64)
+            "width", torch.tensor(1.0 * self.num_basis_functions, dtype=torch.float32)
         )
         self.register_parameter(
-            "_alpha", nn.Parameter(torch.tensor(1.0, dtype=torch.float64))
+            "_alpha", nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
         )
         self.reset_parameters()
 
     def reset_parameters(self):
         nn.init.constant_(self._alpha, spk.nn.softplus_inverse(self.ini_alpha))
 
-    def forward(self, r, cutoff_values):
-        expalphar = torch.exp(-F.softplus(self._alpha) * r.view(-1, 1))
-        rbf = cutoff_values.view(-1, 1) * torch.exp(
-            -self.width * (expalphar - self.center) ** 2
-        )
+    def forward(self, r):
+        expalphar = torch.exp(-F.softplus(self._alpha) * r.unsqueeze(-1))
+        rbf = torch.exp(-self.width * (expalphar - self.center) ** 2)
         if self.exp_weighting:
             return rbf * expalphar
         else:
@@ -69,22 +67,24 @@ class ExponentialBernsteinPolynomials(nn.Module):
             n = n[:-1]
             logbinomial = logbinomial[:-1]
         # register buffers and parameters
-        self.register_buffer("logc", torch.tensor(logbinomial, dtype=torch.float64))
-        self.register_buffer("n", torch.tensor(n, dtype=torch.float64))
-        self.register_buffer("v", torch.tensor(v, dtype=torch.float64))
+        self.register_buffer("logc", torch.tensor(logbinomial, dtype=torch.float32))
+        self.register_buffer("n", torch.tensor(n, dtype=torch.float32))
+        self.register_buffer("v", torch.tensor(v, dtype=torch.float32))
         self.register_parameter(
-            "_alpha", nn.Parameter(torch.tensor(1.0, dtype=torch.float64))
+            "_alpha", nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
         )
         self.reset_parameters()
 
     def reset_parameters(self):
         nn.init.constant_(self._alpha, spk.nn.softplus_inverse(self.ini_alpha))
 
-    def forward(self, r, cutoff_values):
-        alphar = -F.softplus(self._alpha) * r.view(-1, 1)
+    def forward(self, r):
+        alphar = -F.softplus(self._alpha) * r.unsqueeze(-1)
         x = self.logc + self.n * alphar + self.v * torch.log(-torch.expm1(alphar))
-        # x[torch.isnan(x)] = 0.0 #removes nan for r == 0, should not be necessary
-        rbf = cutoff_values.view(-1, 1) * torch.exp(x)
+        # remove nans and -infs from masked distances
+        # todo: maybe use neighbor mask as cleaner solution...
+        x[torch.isnan(x) | torch.isinf(x)] = 0.0
+        rbf = torch.exp(x)
         if self.exp_weighting:
             return rbf * torch.exp(alphar)
         else:
@@ -103,22 +103,25 @@ class BernsteinPolynomials(nn.Module):
         n = (num_basis_functions - 1) - v
         logbinomial = logfactorial[-1] - logfactorial[v] - logfactorial[n]
         # register buffers and parameters
-        self.register_buffer("cutoff", torch.tensor(cutoff, dtype=torch.float64))
-        self.register_buffer("logc", torch.tensor(logbinomial, dtype=torch.float64))
-        self.register_buffer("n", torch.tensor(n, dtype=torch.float64))
-        self.register_buffer("v", torch.tensor(v, dtype=torch.float64))
+        self.register_buffer("cutoff", torch.tensor(cutoff, dtype=torch.float32))
+        self.register_buffer("logc", torch.tensor(logbinomial, dtype=torch.float32))
+        self.register_buffer("n", torch.tensor(n, dtype=torch.float32))
+        self.register_buffer("v", torch.tensor(v, dtype=torch.float32))
         self.reset_parameters()
 
     def reset_parameters(self):
         pass
 
-    def forward(self, r, cutoff_values):
-        x = r.view(-1, 1) / self.cutoff
+    def forward(self, r):
+        x = r.unsqueeze(-1) / self.cutoff
         x = torch.where(x < 1.0, x, 0.5 * torch.ones_like(x))  # prevent NaNs
         x = torch.log(x)
         x = self.logc + self.n * x + self.v * torch.log(-torch.expm1(x))
-        # x[torch.isnan(x)] = 0.0 #removes nan for r == 0, should not be necessary
-        rbf = cutoff_values.view(-1, 1) * torch.exp(x)
+        # remove nans and -infs from masked distances
+        # todo: maybe use neighbor mask as cleaner solution...
+        x[torch.isnan(x) | torch.isinf(x)] = 0.0
+        # necessary
+        rbf = torch.exp(x)
         return rbf
 
 
@@ -126,22 +129,22 @@ class GaussianFunctions(nn.Module):
     def __init__(self, num_basis_functions, cutoff):
         super(GaussianFunctions, self).__init__()
         self.num_basis_functions = num_basis_functions
-        self.register_buffer("cutoff", torch.tensor(cutoff, dtype=torch.float64))
+        self.register_buffer("cutoff", torch.tensor(cutoff, dtype=torch.float32))
         self.register_buffer(
             "center",
-            torch.linspace(0, cutoff, self.num_basis_functions, dtype=torch.float64),
+            torch.linspace(0, cutoff, self.num_basis_functions, dtype=torch.float32),
         )
         self.register_buffer(
             "width",
-            torch.tensor(self.num_basis_functions / cutoff, dtype=torch.float64),
+            torch.tensor(self.num_basis_functions / cutoff, dtype=torch.float32),
         )
         self.reset_parameters()
 
     def reset_parameters(self):
         pass
 
-    def forward(self, r, cutoff_values):
-        rbf = cutoff_values.view(-1, 1) * torch.exp(
-            -self.width * (r.view(-1, 1) - self.center) ** 2
+    def forward(self, r):
+        rbf = torch.exp(
+            -self.width * (r.unsqueeze(-1) - self.center) ** 2
         )
         return rbf

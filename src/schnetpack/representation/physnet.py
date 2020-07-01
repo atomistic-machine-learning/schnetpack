@@ -22,12 +22,16 @@ class PhysNetInteraction(nn.Module):
         n_residuals_v=1,
         n_residuals_out=1,
         activation=spk.nn.Swish,
-        cutoff=None,
+        cutoff=5.,
+        cutoff_network=spk.nn.CosineCutoff,
     ):
         super(PhysNetInteraction, self).__init__()
 
         # attributes
         self.n_atom_basis = n_features
+
+        # cutoff network
+        cutoff_network = cutoff_network(cutoff)
 
         # input residual stack
         self.input_residual = spk.nn.ResidualStack(
@@ -59,8 +63,9 @@ class PhysNetInteraction(nn.Module):
         # convolution layer
         self.convolution_layer = spk.nn.BaseConvolutionLayer(
             filter_network=spk.nn.Dense(
-                n_gaussians, n_features, bias=False, weight_init=zeros_
+                n_gaussians, n_features, bias=False, weight_init=zeros_,
             ),
+            cutoff_network=cutoff_network,
             # todo: add cutoff!
         )
 
@@ -139,6 +144,7 @@ class PhysNet(AtomisticRepresentation):
         return_distances=True,
         interaction_aggregation="sum",
         trainable_gaussians=False,
+        cutoff_network=spk.nn.CosineCutoff,
     ):
 
         # element specific bias for outputs
@@ -164,6 +170,8 @@ class PhysNet(AtomisticRepresentation):
                         n_residuals_v=n_residual_post_v,
                         n_residuals_out=n_residual_post_x,
                         activation=activation,
+                        cutoff=cutoff,
+                        cutoff_network=cutoff_network,
                     )
                 ]
                 * n_interactions
@@ -181,6 +189,8 @@ class PhysNet(AtomisticRepresentation):
                         n_residuals_v=n_residual_post_v,
                         n_residuals_out=n_residual_post_x,
                         activation=activation,
+                        cutoff=cutoff,
+                        cutoff_network=cutoff_network,
                     )
                     for _ in range(n_interactions)
                 ]

@@ -712,7 +712,7 @@ class AtomwiseCorrected(Atomwise):
         y = self.atom_pool(yi) + y_corr
 
         # collect results
-        result = {self.property: y}
+        result = {self.property: y, "charges": qi}
 
         if self.contributions is not None:
             result[self.contributions] = yi
