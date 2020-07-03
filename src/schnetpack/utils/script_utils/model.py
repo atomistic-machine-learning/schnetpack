@@ -18,7 +18,7 @@ def get_representation(args, train_loader=None):
             n_filters=args.features,
             n_interactions=args.interactions,
             cutoff=args.cutoff,
-            n_gaussians=args.num_gaussians,
+            n_basis_functions=args.num_gaussians,
             cutoff_network=cutoff_network,
         )
 

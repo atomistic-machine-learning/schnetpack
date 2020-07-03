@@ -119,7 +119,7 @@ def schnet(
         n_filters=n_filters,
         n_interactions=n_interactions,
         cutoff=cutoff,
-        n_gaussians=n_gaussians,
+        n_basis_functions=n_gaussians,
         normalize_filter=normalize_filter,
         coupled_interactions=coupled_interactions,
         return_intermediate=return_intermediate,
@@ -142,7 +142,7 @@ def schnet_interaction(
 ):
     return spk.representation.SchNetInteraction(
         n_atom_basis=n_atom_basis,
-        n_spatial_basis=n_spatial_basis,
+        n_basis_functions=n_spatial_basis,
         n_filters=n_filters,
         cutoff=cutoff,
         cutoff_network=cutoff_network,

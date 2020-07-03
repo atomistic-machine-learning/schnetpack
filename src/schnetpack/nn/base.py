@@ -12,7 +12,7 @@ __all__ = [
     "ScaleShift",
     "Standardize",
     "Aggregate",
-    "PassthroughLayer"
+    "PassthroughLayer",
 ]
 
 
@@ -214,5 +214,6 @@ class PassthroughLayer(nn.Module):
     Dummy layer to pass inputs through without any interaction.
 
     """
+
     def forward(self, x):
         return x

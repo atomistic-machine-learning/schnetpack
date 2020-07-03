@@ -636,7 +636,8 @@ class AtomwiseCorrected(Atomwise):
         max_z (int, optional): maximum atomic number for element bias layer
 
     """
-
+    # todo: hier allgemein lassen, oder immer qi, ei, ... zurückgeben? Evtl gleich
+    #  dipole mitberechnen (für loss fkt)
     def __init__(
         self,
         n_in,
@@ -649,7 +650,9 @@ class AtomwiseCorrected(Atomwise):
         property="y",
         contributions=None,
         derivative=None,
-        negative_dr=False,
+        negative_dr=True,
+        # todo: negative_dr: bool or float?
+        # todo: dipole moment
         # mean=None,
         # stddev=None,
         # atomref=None,
@@ -670,7 +673,7 @@ class AtomwiseCorrected(Atomwise):
             negative_dr=negative_dr,
             stress=None,
             create_graph=True,
-            # todo:eventually support mean and atomref?
+            # todo: eventually support mean and atomref?
             mean=None,
             stddev=None,
             atomref=None,
@@ -698,12 +701,14 @@ class AtomwiseCorrected(Atomwise):
         Predicts atomwise properties.
 
         """
+        # todo: element bias
         # compute atom-wise properties and charges
         yi = self.out_net(inputs)
         qi = self.charge_net(inputs)
         atomwise_predictions = dict(yi=yi, qi=qi)
 
         # compute corrections
+        # todo: recompute r_ij if different cutoffs
         y_corr = 0.0
         for correction_layer in self.corrections:
             y_corr += correction_layer(inputs, atomwise_predictions)
@@ -712,6 +717,7 @@ class AtomwiseCorrected(Atomwise):
         y = self.atom_pool(yi) + y_corr
 
         # collect results
+        # todo: charge correction + dipole moment
         result = {self.property: y, "charges": qi}
 
         if self.contributions is not None:

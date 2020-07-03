@@ -21,10 +21,16 @@ val_loader = spk.data.AtomsLoader(val)
 # create model
 print("creating model...")
 # representation
-reps = rep.PhysNet(activation=spk.nn.shifted_softplus,
-                   distance_expansion=spk.nn.ExponentialGaussianFunctions(32))
+reps = rep.PhysNet(
+    activation=spk.nn.shifted_softplus,
+    distance_expansion=spk.nn.ExponentialGaussianFunctions(32),
+)
 # output module as modular wrapper and atomwise layer
-corrections = [spk.atomistic.ElectrostaticEnergy(cuton=0., cutoff=10.)]
+corrections = [
+    spk.atomistic.ElectrostaticEnergy(cuton=0.0, cutoff=10.0),
+    spk.atomistic.ZBLRepulsionEnergy(),
+    #spk.atomistic.D4DispersionEnergy(cutoff=10.),
+]
 output_layer = schnetpack.atomistic.AtomwiseCorrected(
     n_in=reps.n_atom_basis, corrections=corrections, property=QM9.U0
 )
@@ -36,7 +42,7 @@ out2 = schnetpack.atomistic.Atomwise(
 )
 
 # atomistic model
-model = schnetpack.atomistic.AtomisticModel(reps, out2)
+model = schnetpack.atomistic.AtomisticModel(reps, output_layer)
 
 # create trainer
 print("setting up trainer...")

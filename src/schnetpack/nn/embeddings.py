@@ -19,7 +19,8 @@ class Embedding(nn.Module):
         super(Embedding, self).__init__()
         self.n_features = n_features
         self.register_buffer(
-            "electron_config", torch.tensor(normalized_electron_config, dtype=torch.float32)
+            "electron_config",
+            torch.tensor(normalized_electron_config, dtype=torch.float32),
         )
         self.register_parameter(
             "element_embedding", nn.Parameter(torch.zeros(Zmax, self.n_features))

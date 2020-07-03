@@ -19,7 +19,7 @@ class SchNetInteraction(nn.Module):
 
     Args:
         n_atom_basis (int): number of features to describe atomic environments.
-        n_spatial_basis (int): number of input features of filter-generating networks.
+        n_basis_functions (int): number of input features of filter-generating networks.
         n_filters (int): number of filters used in continuous-filter convolution.
         cutoff (float): cutoff radius.
         cutoff_network (nn.Module, optional): cutoff layer.
@@ -31,7 +31,7 @@ class SchNetInteraction(nn.Module):
     def __init__(
         self,
         n_atom_basis,
-        n_spatial_basis,
+        n_basis_functions,
         n_filters,
         cutoff,
         cutoff_network=CosineCutoff,
@@ -44,7 +44,7 @@ class SchNetInteraction(nn.Module):
 
         # filter block used in interaction block
         filter_network = nn.Sequential(
-            Dense(n_spatial_basis, n_filters, activation=shifted_softplus),
+            Dense(n_basis_functions, n_filters, activation=shifted_softplus),
             Dense(n_filters, n_filters),
         )
         # cutoff layer used in interaction block
@@ -94,7 +94,7 @@ class SchNet(AtomisticRepresentation):
         n_filters (int, optional): number of filters used in continuous-filter convolution
         n_interactions (int, optional): number of interaction blocks.
         cutoff (float, optional): cutoff radius.
-        n_gaussians (int, optional): number of Gaussian functions used to expand
+        n_basis_functions (int, optional): number of Gaussian functions used to expand
             atomic distances.
         normalize_filter (bool, optional): if True, divide aggregated filter by number
             of neighbors over which convolution is applied.
@@ -132,7 +132,7 @@ class SchNet(AtomisticRepresentation):
         n_filters=128,
         n_interactions=3,
         cutoff=5.0,
-        n_gaussians=25,
+        n_basis_functions=25,
         normalize_filter=False,
         coupled_interactions=False,
         return_intermediate=False,
@@ -150,7 +150,7 @@ class SchNet(AtomisticRepresentation):
         # layer for expanding interatomic distances in a basis
         if distance_expansion is None:
             distance_expansion = GaussianSmearing(
-                0.0, cutoff, n_gaussians, trainable=trainable_gaussians
+                0.0, cutoff, n_basis_functions, trainable=trainable_gaussians
             )
 
         # initialize interaction blocks
@@ -160,7 +160,7 @@ class SchNet(AtomisticRepresentation):
                 [
                     SchNetInteraction(
                         n_atom_basis=n_atom_basis,
-                        n_spatial_basis=n_gaussians,
+                        n_basis_functions=n_basis_functions,
                         n_filters=n_filters,
                         cutoff_network=cutoff_network,
                         cutoff=cutoff,
@@ -175,7 +175,7 @@ class SchNet(AtomisticRepresentation):
                 [
                     SchNetInteraction(
                         n_atom_basis=n_atom_basis,
-                        n_spatial_basis=n_gaussians,
+                        n_basis_functions=n_basis_functions,
                         n_filters=n_filters,
                         cutoff_network=cutoff_network,
                         cutoff=cutoff,

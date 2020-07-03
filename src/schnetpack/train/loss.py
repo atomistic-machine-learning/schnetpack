@@ -38,15 +38,15 @@ def build_mse_loss(properties, loss_tradeoff=None):
 
     return loss_fn
 
-class PhysNetLoss(nn.Module):
 
+class PhysNetLoss(nn.Module):
     def __init__(
-            self,
-            energy_factor=1.,
-            forces_factor=0.,
-            charge_factor=0.,
-            dipole_factor=0.,
-            nh_penalty_factor=1e-2,
+        self,
+        energy_factor=1.0,
+        forces_factor=0.0,
+        charge_factor=0.0,
+        dipole_factor=0.0,
+        nh_penalty_factor=1e-2,
     ):
         super(PhysNetLoss, self).__init__()
 
@@ -58,40 +58,40 @@ class PhysNetLoss(nn.Module):
         self.nh_penalty_factor = nh_penalty_factor
 
     def forward(
-            self,
-            E=None,
-            E_ref=None,
-            F_i=None,
-            F_i_ref=None,
-            q_i=None,
-            Q_ref=None,
-            p_ref=None,
-            E_i=None,
-            r_i=None,
-            atom_mask=None,
+        self,
+        E=None,
+        E_ref=None,
+        F_i=None,
+        F_i_ref=None,
+        q_i=None,
+        Q_ref=None,
+        p_ref=None,
+        E_i=None,
+        r_i=None,
+        atom_mask=None,
     ):
         N = atom_mask.sum(1)
 
-        loss = 0.
+        loss = 0.0
 
         # energy contribution
-        if self.energy_factor > 0.:
+        if self.energy_factor > 0.0:
             energy_loss = torch.mean(torch.abs(E - E_ref))
             loss += self.energy_factor * energy_loss
 
         # forces contribution
-        if self.forces_factor > 0.:
-            force_loss = torch.sum(1/(3*N) * torch.sum(F_i-F_i_ref, 1))
+        if self.forces_factor > 0.0:
+            force_loss = torch.sum(1 / (3 * N) * torch.sum(F_i - F_i_ref, 1))
             loss += self.forces_factor * force_loss
 
         # charges contribution
-        if self.charges_factor > 0.:
+        if self.charges_factor > 0.0:
             charge_loss = torch.sum(torch.sum(q_i, -1), Q_ref)
             loss += self.charge_factor * charge_loss
 
         # dipole contribution
-        if self.dipole_factor > 0.:
-            dipole_loss = torch.mean(torch.sum(q_i*r_i, -1) - p_ref)
+        if self.dipole_factor > 0.0:
+            dipole_loss = torch.mean(torch.sum(q_i * r_i, -1) - p_ref)
 
         # non-hierarchicality penalty
         # todo: not sure...

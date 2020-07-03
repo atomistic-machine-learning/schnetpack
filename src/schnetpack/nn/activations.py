@@ -68,6 +68,7 @@ def activation_factory(activation):
 
 
 def get_activation_layer(activation, n_features=None):
+    # todo: kwarg
     """
     Build activation layer.
 

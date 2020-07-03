@@ -43,17 +43,16 @@ class InteractionAggregation(nn.Module):
 
 
 class AtomisticRepresentation(nn.Module):
-
     def __init__(
-            self,
-            embedding,
-            distance_expansion,
-            interactions,
-            post_interactions=None,
-            interaction_aggregation=InteractionAggregation(mode="last"),
-            return_intermediate=False,
-            return_distances=False,
-            sum_before_interaction_append=False,
+        self,
+        embedding,
+        distance_expansion,
+        interactions,
+        post_interactions=None,
+        interaction_aggregation=InteractionAggregation(mode="last"),
+        return_intermediate=False,
+        return_distances=False,
+        sum_before_interaction_append=False,
     ):
         # initialize layer
         super(AtomisticRepresentation, self).__init__()
@@ -102,11 +101,10 @@ class AtomisticRepresentation(nn.Module):
         # compute intermediate interactions
         intermediate_interactions = []
         for interaction, post_interaction in zip(
-                self.interactions, self.post_interactions
+            self.interactions, self.post_interactions
         ):
             v = interaction(x, r_ij, neighbors, neighbor_mask, f_ij=f_ij)
             x = x + v
-            # todo: eventually append(x)? or append(v) in schnet?
             # todo: post_interactions in schnet? maybe then as x, y = interaction(x)
             #       like in physnet original code.
             if self.sum_before_interaction_append:

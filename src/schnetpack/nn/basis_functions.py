@@ -79,10 +79,12 @@ class ExponentialBernsteinPolynomials(nn.Module):
         nn.init.constant_(self._alpha, spk.nn.softplus_inverse(self.ini_alpha))
 
     def forward(self, r):
+        # todo: torch where rij==0 -> 1 or cutoff...
         alphar = -F.softplus(self._alpha) * r.unsqueeze(-1)
         x = self.logc + self.n * alphar + self.v * torch.log(-torch.expm1(alphar))
         # remove nans and -infs from masked distances
         # todo: maybe use neighbor mask as cleaner solution...
+        # todo: torch.where(..., rij==0, )
         x[torch.isnan(x) | torch.isinf(x)] = 0.0
         rbf = torch.exp(x)
         if self.exp_weighting:
@@ -144,7 +146,5 @@ class GaussianFunctions(nn.Module):
         pass
 
     def forward(self, r):
-        rbf = torch.exp(
-            -self.width * (r.unsqueeze(-1) - self.center) ** 2
-        )
+        rbf = torch.exp(-self.width * (r.unsqueeze(-1) - self.center) ** 2)
         return rbf

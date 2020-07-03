@@ -3,8 +3,6 @@ import torch.nn as nn
 import schnetpack as spk
 from torch.nn.init import zeros_, orthogonal_
 
-from schnetpack.nn import AtomDistances
-from schnetpack import Properties
 from schnetpack.representation import AtomisticRepresentation
 
 
@@ -15,15 +13,15 @@ class PhysNetInteraction(nn.Module):
     def __init__(
         self,
         n_features,
-        n_gaussians=25,
+        n_basis_functions=25,
         n_residuals_in=1,
         n_residuals_i=1,
         n_residuals_j=1,
         n_residuals_v=1,
         n_residuals_out=1,
         activation=spk.nn.Swish,
-        cutoff=5.,
-        cutoff_network=spk.nn.CosineCutoff,
+        cutoff=5.0,
+        cutoff_network=spk.nn.MollifierCutoff,
     ):
         super(PhysNetInteraction, self).__init__()
 
@@ -63,10 +61,9 @@ class PhysNetInteraction(nn.Module):
         # convolution layer
         self.convolution_layer = spk.nn.BaseConvolutionLayer(
             filter_network=spk.nn.Dense(
-                n_gaussians, n_features, bias=False, weight_init=zeros_,
+                n_basis_functions, n_features, bias=False, weight_init=zeros_,
             ),
             cutoff_network=cutoff_network,
-            # todo: add cutoff!
         )
 
         # merged v branch
@@ -87,8 +84,6 @@ class PhysNetInteraction(nn.Module):
         )
 
     def forward(self, x, r_ij, neighbors, neighbor_mask, f_ij=None):
-        # todo: use filter dimension like in spk?
-        # todo: missing qfeatures and sfeatures from modular block
         # input residual stack
         x = self.input_residual(x)
 
@@ -111,6 +106,7 @@ class PhysNetInteraction(nn.Module):
 
         # residual sum
         x = x + v
+        # todo: missing qfeatures and sfeatures from modular block
 
         # output residual stack
         x = self.output_residual(x)
@@ -119,11 +115,10 @@ class PhysNetInteraction(nn.Module):
 
 
 class PhysNet(AtomisticRepresentation):
-
     def __init__(
         self,
         n_atom_basis=128,
-        n_gaussians=32,
+        n_basis_functions=32,
         n_interactions=6,
         n_residual_pre_x=1,
         n_residual_post_x=1,
@@ -144,7 +139,10 @@ class PhysNet(AtomisticRepresentation):
         return_distances=True,
         interaction_aggregation="sum",
         trainable_gaussians=False,
-        cutoff_network=spk.nn.CosineCutoff,
+        cutoff_network=spk.nn.MollifierCutoff,
+        # todo: check if mollifier cutoff is available...
+        # todo: basis func bernstein
+        # todo: refactor n_gaussians to n_basis_funcs or similar
     ):
 
         # element specific bias for outputs
@@ -154,7 +152,7 @@ class PhysNet(AtomisticRepresentation):
         # todo: rewrite other distance expansion functions
         if distance_expansion is None:
             distance_expansion = spk.nn.GaussianSmearing(
-                0.0, cutoff, n_gaussians, trainable=trainable_gaussians
+                0.0, cutoff, n_basis_functions, trainable=trainable_gaussians
             )
 
         # interaction blocks
@@ -163,7 +161,7 @@ class PhysNet(AtomisticRepresentation):
                 [
                     PhysNetInteraction(
                         n_features=n_atom_basis,
-                        n_gaussians=n_gaussians,
+                        n_basis_functions=n_basis_functions,
                         n_residuals_in=n_residual_pre_x,
                         n_residuals_i=n_residual_pre_vi,
                         n_residuals_j=n_residual_pre_vj,
@@ -182,7 +180,7 @@ class PhysNet(AtomisticRepresentation):
                 [
                     PhysNetInteraction(
                         n_features=n_atom_basis,
-                        n_gaussians=n_gaussians,
+                        n_basis_functions=n_basis_functions,
                         n_residuals_in=n_residual_pre_x,
                         n_residuals_i=n_residual_pre_vi,
                         n_residuals_j=n_residual_pre_vj,
@@ -229,4 +227,3 @@ class PhysNet(AtomisticRepresentation):
             return_distances=return_distances,
             sum_before_interaction_append=False,
         )
-    

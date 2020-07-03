@@ -34,9 +34,11 @@ distance_expansion = spk.nn.GaussianSmearing(n_gaussians=n_gaussians)
 # interaction blocks
 interactions = [
     spk.representation.PhysNetInteraction(
-        n_features=n_atom_basis, n_gaussians=n_gaussians,
-        activation=spk.nn.shifted_softplus
-    ) for _ in range(n_interactions)
+        n_features=n_atom_basis,
+        n_basis_functions=n_gaussians,
+        activation=spk.nn.shifted_softplus,
+    )
+    for _ in range(n_interactions)
 ]
 
 # post interaction network
@@ -55,7 +57,7 @@ reps = rep.AtomisticRepresentation(
 )
 
 # output module as modular wrapper and atomwise layer
-corrections = [spk.atomistic.ElectrostaticEnergy(cuton=0., cutoff=10.)]
+corrections = [spk.atomistic.ElectrostaticEnergy(cuton=0.0, cutoff=10.0)]
 output_layer = schnetpack.atomistic.AtomwiseCorrected(
     n_in=reps.n_atom_basis, corrections=corrections, property=QM9.U0
 )
