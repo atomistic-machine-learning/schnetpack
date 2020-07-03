@@ -214,6 +214,33 @@ class PassthroughLayer(nn.Module):
     Dummy layer to pass inputs through without any interaction.
 
     """
-
+    # todo: check if same as nn.Identity
     def forward(self, x):
         return x
+
+
+class ComponentWise(nn.Module):
+    """
+    Layer for component-wise multiplication with trainable parameters.
+
+    Args:
+        dim (int): dimension of input tensor
+        weight_init (callable, optional): weight initializer from current weight.
+
+    """
+
+    def __init__(self, dim, weight_init=nn.init.zeros_):
+        super(ComponentWise, self).__init__()
+
+        # initialize weight vector
+        self.weight = nn.Parameter(torch.Tensor(dim))
+        self.weight_init = weight_init
+
+        # reset parameters
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.weight_init(self.weight)
+
+    def forward(self, inputs):
+        return inputs * self.weight
