@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import schnetpack as spk
 from torch.nn.init import zeros_, orthogonal_
 
@@ -83,7 +84,42 @@ class PhysNetInteraction(nn.Module):
             n_residuals_out, n_features, activation=activation
         )
 
-    def forward(self, x, r_ij, neighbors, neighbor_mask, f_ij=None):
+        # charge and spin embeddings
+        self.charge_embedding = nn.Parameter(torch.Tensor(n_features))
+        self.spin_embedding = nn.Parameter(torch.Tensor(n_features))
+        self.charge_keys = nn.Parameter(torch.Tensor(n_features))
+        self.spin_keys = nn.Parameter(torch.Tensor(n_features))
+
+        # reset parameters
+        self.reset_parameters()
+
+    def _attention_weights(self, x, key, charges):
+        # compute weights
+        w = F.softplus(torch.sum(x*(charges.sign()*key),-1, keepdim=True))
+
+        # compute weight norms
+        wsum = w.sum(-2, keepdim=True)
+
+        # return normalized weights; 1e-8 prevents possible division by 0
+        return w/(wsum+1e-8)
+
+    def reset_parameters(self):
+        nn.init.zeros_(self.charge_embedding)
+        nn.init.zeros_(self.spin_embedding)
+        nn.init.zeros_(self.charge_keys)
+        nn.init.zeros_(self.spin_keys)
+
+    def forward(
+            self,
+            x,
+            r_ij,
+            neighbors,
+            neighbor_mask,
+            f_ij=None,
+            charges=None,
+            spins=None
+    ):
+        # todo: docstring
         # input residual stack
         x = self.input_residual(x)
 
@@ -106,7 +142,17 @@ class PhysNetInteraction(nn.Module):
 
         # residual sum
         x = x + v
-        # todo: missing qfeatures and sfeatures from modular block
+
+        # compute attention weights
+        # todo: check if attention layer can be used / cmul-layer can be used
+        if charges is not None:
+            charge_weights = self._attention_weights(x, self.charge_keys, charges)
+            qfeatures = (charges * charge_weights) * self.charge_embedding
+            x = x + qfeatures
+        if spins is not None:
+            spin_weights = self._attention_weights(x, self.spin_keys, spins)
+            sfeatures = (spins*spin_weights) * self.spin_embedding
+            x = x + sfeatures
 
         # output residual stack
         x = self.output_residual(x)
@@ -129,10 +175,7 @@ class PhysNet(AtomisticRepresentation):
         distance_expansion=None,
         exp_weighting=True,
         cutoff=7.937658158457616,  # 15 Bohr converted to Angstrom
-        lr_cutoff=None,
         activation=spk.nn.Swish,
-        module_keep_prob=1.0,
-        load_from=None,
         max_z=87,
         coupled_interactions=False,
         return_intermediate=True,
