@@ -69,7 +69,7 @@ class AtomisticRepresentation(nn.Module):
         self.interactions = interactions
         if post_interactions is None:
             post_interactions = nn.ModuleList(
-                spk.nn.PassthroughLayer() for _ in range(len(interactions))
+                nn.Identity() for _ in range(len(interactions))
             )
         self.post_interactions = post_interactions
         self.interaction_aggregation = interaction_aggregation
@@ -105,8 +105,6 @@ class AtomisticRepresentation(nn.Module):
         ):
             v = interaction(x, r_ij, neighbors, neighbor_mask, f_ij=f_ij)
             x = x + v
-            # todo: post_interactions in schnet? maybe then as x, y = interaction(x)
-            #       like in physnet original code.
             if self.sum_before_interaction_append:
                 intermediate_interactions.append(post_interaction(x))
             else:

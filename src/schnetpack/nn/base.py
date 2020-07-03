@@ -12,7 +12,6 @@ __all__ = [
     "ScaleShift",
     "Standardize",
     "Aggregate",
-    "PassthroughLayer",
 ]
 
 
@@ -207,16 +206,6 @@ class Aggregate(nn.Module):
                 N = input.size(self.axis)
             y = y / N
         return y
-
-
-class PassthroughLayer(nn.Module):
-    """
-    Dummy layer to pass inputs through without any interaction.
-
-    """
-    # todo: check if same as nn.Identity
-    def forward(self, x):
-        return x
 
 
 class ComponentWise(nn.Module):
