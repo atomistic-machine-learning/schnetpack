@@ -702,9 +702,18 @@ class AtomwiseCorrected(Atomwise):
 
         """
         # todo: element bias
-        # compute atom-wise properties and charges
+        # get input properties
+        total_charges = inputs[Properties.charges]
+
+        # compute atom-wise properties
         yi = self.out_net(inputs)
+
+        # compute atomwise charges and charge correction
         qi = self.charge_net(inputs)
+        charge_correction = qi.sum(-1, keepdim=True) - total_charges
+        qi = qi + charge_correction.expand(qi.shape) / qi.shape[-1]
+
+        # collect predictions
         atomwise_predictions = dict(yi=yi, qi=qi)
 
         # compute corrections
@@ -717,7 +726,7 @@ class AtomwiseCorrected(Atomwise):
         y = self.atom_pool(yi) + y_corr
 
         # collect results
-        # todo: charge correction + dipole moment
+        # todo: dipole moment
         result = {self.property: y, "charges": qi}
 
         if self.contributions is not None:
