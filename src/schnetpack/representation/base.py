@@ -87,6 +87,14 @@ class AtomisticRepresentation(nn.Module):
         neighbors = inputs[Properties.neighbors]
         neighbor_mask = inputs[Properties.neighbor_mask]
         atom_mask = inputs[Properties.atom_mask]
+        if Properties.charges in inputs.keys():
+            charges = inputs[Properties.charges]
+        else:
+            charges = None
+        if Properties.spin in inputs[Properties.spin]:
+            spins = inputs[Properties.spin]
+        else:
+            spins = None
 
         # get atom embeddings for the input atomic numbers
         x = self.embedding(atomic_numbers)
@@ -103,7 +111,15 @@ class AtomisticRepresentation(nn.Module):
         for interaction, post_interaction in zip(
             self.interactions, self.post_interactions
         ):
-            v = interaction(x, r_ij, neighbors, neighbor_mask, f_ij=f_ij)
+            v = interaction(
+                x,
+                r_ij,
+                neighbors,
+                neighbor_mask,
+                f_ij=f_ij,
+                charges=charges,
+                spins=spins,
+            )
             x = x + v
             if self.sum_before_interaction_append:
                 intermediate_interactions.append(post_interaction(x))

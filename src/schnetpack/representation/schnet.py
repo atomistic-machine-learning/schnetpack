@@ -6,7 +6,6 @@ from schnetpack import Properties
 from schnetpack.nn.cfconv import CFConv
 from schnetpack.nn.cutoff import CosineCutoff
 from schnetpack.nn.acsf import GaussianSmearing
-from schnetpack.nn.neighbors import AtomDistances
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.representation import AtomisticRepresentation, InteractionAggregation
 
@@ -62,7 +61,7 @@ class SchNetInteraction(nn.Module):
         # dense layer
         self.dense = Dense(n_atom_basis, n_atom_basis, bias=True, activation=None)
 
-    def forward(self, x, r_ij, neighbors, neighbor_mask, f_ij=None):
+    def forward(self, x, r_ij, neighbors, neighbor_mask, f_ij=None, **kwargs):
         """Compute interaction output.
 
         Args:

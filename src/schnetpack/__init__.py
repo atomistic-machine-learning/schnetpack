@@ -6,6 +6,7 @@ class Properties:
     # geometry
     Z = "_atomic_numbers"
     charge = "_charge"
+    spin = "_spin"
     atom_mask = "_atom_mask"
     position = "_positions"
     R = position

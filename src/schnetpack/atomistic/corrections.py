@@ -151,8 +151,9 @@ class ZBLRepulsionEnergy(nn.Module):
         )
 
         # compute ij values
-        corr_ij = torch.where(neighbor_mask!=0, self.kehalf * f * zizj /
-                                       r_ij, torch.zeros_like(r_ij))
+        corr_ij = torch.where(
+            neighbor_mask != 0, self.kehalf * f * zizj / r_ij, torch.zeros_like(r_ij)
+        )
         return torch.sum(corr_ij, (-1, -2), keepdim=True).squeeze(-1)
 
 
@@ -339,8 +340,7 @@ class D4DispersionEnergy(nn.Module):
         Z = inputs["atomic_numbers"]
         r_ij = inputs["distances"]
         qa = atomwise_predictions["qi"]
-        
-        
+
         if idx_i.numel() == 0:
             zeros = r_ij.new_zeros(n_atoms)
             return zeros, zeros, zeros
@@ -354,7 +354,9 @@ class D4DispersionEnergy(nn.Module):
         )
         tmp = den * 0.5 * (1.0 + torch.erf(-self.kn * (r_ij - rco) / rco))
         if self.cutoff is not None:
-            tmp = tmp * spk.nn.activations.switch_function(r_ij, self.cuton, self.cutoff)
+            tmp = tmp * spk.nn.activations.switch_function(
+                r_ij, self.cuton, self.cutoff
+            )
         covcn = r_ij.new_zeros(n_atoms).index_add_(0, idx_i, tmp)
 
         # calculate gaussian weights

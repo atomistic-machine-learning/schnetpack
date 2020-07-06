@@ -95,13 +95,13 @@ class PhysNetInteraction(nn.Module):
 
     def _attention_weights(self, x, key, charges):
         # compute weights
-        w = F.softplus(torch.sum(x*(charges.sign()*key),-1, keepdim=True))
+        w = F.softplus(torch.sum(x * (charges.sign() * key), -1, keepdim=True))
 
         # compute weight norms
         wsum = w.sum(-2, keepdim=True)
 
         # return normalized weights; 1e-8 prevents possible division by 0
-        return w/(wsum+1e-8)
+        return w / (wsum + 1e-8)
 
     def reset_parameters(self):
         nn.init.zeros_(self.charge_embedding)
@@ -110,14 +110,15 @@ class PhysNetInteraction(nn.Module):
         nn.init.zeros_(self.spin_keys)
 
     def forward(
-            self,
-            x,
-            r_ij,
-            neighbors,
-            neighbor_mask,
-            f_ij=None,
-            charges=None,
-            spins=None
+        self,
+        x,
+        r_ij,
+        neighbors,
+        neighbor_mask,
+        f_ij=None,
+        charges=None,
+        spins=None,
+        **kwargs,
     ):
         # todo: docstring
         # input residual stack
@@ -151,7 +152,7 @@ class PhysNetInteraction(nn.Module):
             x = x + qfeatures
         if spins is not None:
             spin_weights = self._attention_weights(x, self.spin_keys, spins)
-            sfeatures = (spins*spin_weights) * self.spin_embedding
+            sfeatures = (spins * spin_weights) * self.spin_embedding
             x = x + sfeatures
 
         # output residual stack
@@ -192,11 +193,8 @@ class PhysNet(AtomisticRepresentation):
         embedding = spk.nn.Embedding(n_atom_basis, max_z)
 
         # layer for expanding interatomic distances in a basis
-        # todo: rewrite other distance expansion functions
         if distance_expansion is None:
-            distance_expansion = spk.nn.GaussianSmearing(
-                0.0, cutoff, n_basis_functions, trainable=trainable_gaussians
-            )
+            distance_expansion = spk.nn.BernsteinPolynomials(n_basis_functions, cutoff,)
 
         # interaction blocks
         if coupled_interactions:
