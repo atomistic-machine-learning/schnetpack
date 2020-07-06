@@ -91,7 +91,7 @@ class AtomisticRepresentation(nn.Module):
             charges = inputs[Properties.charges]
         else:
             charges = None
-        if Properties.spin in inputs[Properties.spin]:
+        if Properties.spin in inputs.keys():
             spins = inputs[Properties.spin]
         else:
             spins = None

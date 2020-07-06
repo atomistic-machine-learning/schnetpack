@@ -4,7 +4,8 @@ class Properties:
     """
 
     # geometry
-    Z = "_atomic_numbers"
+    atomic_numbers = "_atomic_numbers"
+    Z = atomic_numbers
     charge = "_charge"
     spin = "_spin"
     atom_mask = "_atom_mask"

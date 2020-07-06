@@ -636,8 +636,7 @@ class AtomwiseCorrected(Atomwise):
         max_z (int, optional): maximum atomic number for element bias layer
 
     """
-    # todo: hier allgemein lassen, oder immer qi, ei, ... zurückgeben? Evtl gleich
-    #  dipole mitberechnen (für loss fkt)
+    # todo: hier allgemein lassen, oder immer qi, ei, ... zurückgeben?
     def __init__(
         self,
         n_in,
@@ -652,7 +651,7 @@ class AtomwiseCorrected(Atomwise):
         derivative=None,
         negative_dr=True,
         # todo: negative_dr: bool or float?
-        # todo: dipole moment
+        dipole_moment=None,
         # mean=None,
         # stddev=None,
         # atomref=None,
@@ -682,10 +681,12 @@ class AtomwiseCorrected(Atomwise):
 
         # initialize attributes
         self.use_element_bias = use_element_bias
+        self.dipole_moment = dipole_moment
 
         # define modules
         # element bias
-        self.register_parameter("element_bias", nn.Parameter(torch.Tensor(max_z)))
+        self.element_bias = nn.Parameter(torch.Tensor(max_z))
+
         # charge predicting network
         if charge_net is None:
             charge_net = nn.Sequential(
@@ -693,6 +694,7 @@ class AtomwiseCorrected(Atomwise):
                 spk.nn.blocks.MLP(n_in, 1, n_neurons, n_layers, activation),
             )
         self.charge_net = charge_net
+
         # correction terms
         self.corrections = corrections
 
@@ -701,12 +703,13 @@ class AtomwiseCorrected(Atomwise):
         Predicts atomwise properties.
 
         """
-        # todo: element bias
         # get input properties
         total_charges = inputs[Properties.charges]
+        positions = inputs[Properties.position]
+        atomic_numbers = inputs[Properties.atomic_numbers]
 
         # compute atom-wise properties
-        yi = self.out_net(inputs)
+        yi = self.out_net(inputs) + self.element_bias[atomic_numbers].unsqueeze(-1)
 
         # compute atomwise charges and charge correction
         qi = self.charge_net(inputs)
@@ -726,17 +729,19 @@ class AtomwiseCorrected(Atomwise):
         y = self.atom_pool(yi) + y_corr
 
         # collect results
-        # todo: dipole moment
         result = {self.property: y, "charges": qi}
 
         if self.contributions is not None:
             result[self.contributions] = yi
 
+        if self.dipole_moment is not None:
+            result[self.dipole_moment] = torch.sum(qi * inputs, -2)
+
         if self.derivative is not None:
             sign = -1.0 if self.negative_dr else 1.0
             dy = grad(
                 result[self.property],
-                inputs[Properties.R],
+                positions,
                 grad_outputs=torch.ones_like(result[self.property]),
                 create_graph=self.create_graph,
                 retain_graph=True,
