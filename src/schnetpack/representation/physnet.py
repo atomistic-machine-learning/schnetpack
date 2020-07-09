@@ -13,7 +13,7 @@ __all__ = ["PhysNetInteraction", "PhysNet"]
 class PhysNetInteraction(nn.Module):
     def __init__(
         self,
-        n_features,
+        n_atom_basis,
         n_basis_functions=25,
         n_residuals_in=1,
         n_residuals_i=1,
@@ -27,32 +27,32 @@ class PhysNetInteraction(nn.Module):
         super(PhysNetInteraction, self).__init__()
 
         # attributes
-        self.n_atom_basis = n_features
+        self.n_atom_basis = n_atom_basis
 
         # cutoff network
         cutoff_network = cutoff_network(cutoff)
 
         # input residual stack
         self.input_residual = spk.nn.ResidualStack(
-            n_residuals_in, n_features, activation=activation
+            n_residuals_in, n_atom_basis, activation=activation
         )
 
         # i and j branches
         self.branch_i = nn.Sequential(
-            spk.nn.ResidualStack(n_residuals_i, n_features, activation=activation),
+            spk.nn.ResidualStack(n_residuals_i, n_atom_basis, activation=activation),
             spk.nn.Dense(
-                n_features,
-                n_features,
+                n_atom_basis,
+                n_atom_basis,
                 pre_activation=activation,
                 weight_init=orthogonal_,
                 bias_init=zeros_,
             ),
         )
         self.branch_j = nn.Sequential(
-            spk.nn.ResidualStack(n_residuals_j, n_features, activation=activation),
+            spk.nn.ResidualStack(n_residuals_j, n_atom_basis, activation=activation),
             spk.nn.Dense(
-                n_features,
-                n_features,
+                n_atom_basis,
+                n_atom_basis,
                 pre_activation=activation,
                 weight_init=orthogonal_,
                 bias_init=zeros_,
@@ -62,17 +62,17 @@ class PhysNetInteraction(nn.Module):
         # convolution layer
         self.convolution_layer = spk.nn.BaseConvolutionLayer(
             filter_network=spk.nn.Dense(
-                n_basis_functions, n_features, bias=False, weight_init=zeros_,
+                n_basis_functions, n_atom_basis, bias=False, weight_init=zeros_,
             ),
             cutoff_network=cutoff_network,
         )
 
         # merged v branch
         self.branch_v = nn.Sequential(
-            spk.nn.ResidualStack(n_residuals_v, n_features, activation=activation),
+            spk.nn.ResidualStack(n_residuals_v, n_atom_basis, activation=activation),
             spk.nn.Dense(
-                n_features,
-                n_features,
+                n_atom_basis,
+                n_atom_basis,
                 pre_activation=activation,
                 weight_init=orthogonal_,
                 bias_init=zeros_,
@@ -81,14 +81,14 @@ class PhysNetInteraction(nn.Module):
 
         # output residual stack
         self.output_residual = spk.nn.ResidualStack(
-            n_residuals_out, n_features, activation=activation
+            n_residuals_out, n_atom_basis, activation=activation
         )
 
         # charge and spin embeddings
-        self.charge_embedding = nn.Parameter(torch.Tensor(n_features))
-        self.spin_embedding = nn.Parameter(torch.Tensor(n_features))
-        self.charge_keys = nn.Parameter(torch.Tensor(n_features))
-        self.spin_keys = nn.Parameter(torch.Tensor(n_features))
+        self.charge_embedding = nn.Parameter(torch.Tensor(n_atom_basis))
+        self.spin_embedding = nn.Parameter(torch.Tensor(n_atom_basis))
+        self.charge_keys = nn.Parameter(torch.Tensor(n_atom_basis))
+        self.spin_keys = nn.Parameter(torch.Tensor(n_atom_basis))
 
         # reset parameters
         self.reset_parameters()
@@ -201,7 +201,7 @@ class PhysNet(AtomisticRepresentation):
             interactions = nn.ModuleList(
                 [
                     PhysNetInteraction(
-                        n_features=n_atom_basis,
+                        n_atom_basis=n_atom_basis,
                         n_basis_functions=n_basis_functions,
                         n_residuals_in=n_residual_pre_x,
                         n_residuals_i=n_residual_pre_vi,
@@ -220,7 +220,7 @@ class PhysNet(AtomisticRepresentation):
             interactions = nn.ModuleList(
                 [
                     PhysNetInteraction(
-                        n_features=n_atom_basis,
+                        n_atom_basis=n_atom_basis,
                         n_basis_functions=n_basis_functions,
                         n_residuals_in=n_residual_pre_x,
                         n_residuals_i=n_residual_pre_vi,
