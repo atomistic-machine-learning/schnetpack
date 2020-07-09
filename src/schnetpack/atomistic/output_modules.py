@@ -641,7 +641,7 @@ class AtomwiseCorrected(Atomwise):
         self,
         n_in,
         n_out=1,
-        n_layers=2,
+        n_layers=1,
         n_neurons=None,
         out_net=None,
         activation=spk.nn.Swish,
@@ -660,6 +660,11 @@ class AtomwiseCorrected(Atomwise):
         use_element_bias=False,
         max_z=87,
     ):
+        if out_net is None:
+            out_net = nn.Sequential(
+                spk.nn.base.GetItem("representation"),
+                spk.nn.blocks.MLP(n_in, 1, n_neurons, n_layers, activation, bias=False),
+            )
         super(AtomwiseCorrected, self).__init__(
             n_in=n_in,
             n_out=n_out,
@@ -691,7 +696,7 @@ class AtomwiseCorrected(Atomwise):
         if charge_net is None:
             charge_net = nn.Sequential(
                 spk.nn.base.GetItem("representation"),
-                spk.nn.blocks.MLP(n_in, 1, n_neurons, n_layers, activation),
+                spk.nn.blocks.MLP(n_in, 1, n_neurons, n_layers, activation, bias=False),
             )
         self.charge_net = charge_net
 
