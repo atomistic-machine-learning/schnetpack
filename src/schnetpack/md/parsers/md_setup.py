@@ -327,7 +327,8 @@ class SetupCalculator(SetupBlock):
         # "cutoff_shell": 1.0,
     }
     target_block = "calculator"
-    schnet_models = ["schnet", "custom"]
+    basic_models = ["schnet", "custom"]
+    ensemble_models = ["schnet_ensemble", "custom_ensemble"]
     neighbor_list = {
         "simple": SimpleNeighborList,
         "ase": ASENeighborList,
@@ -347,13 +348,14 @@ class SetupCalculator(SetupBlock):
 
         # Load model, else get options
         for key in calculator:
+            # TODO Figure out conventions for ensemble
             if key == "model_file" or key == "model_files":
-                if calculator[CalculatorInit.kind] in self.schnet_models:
+                if calculator[CalculatorInit.kind] in self.basic_models:
                     model = self._load_model_schnetpack(
                         calculator["model_file"], md_initializer.device
                     ).to(md_initializer.device)
                     calculator_dict["model"] = model
-                elif calculator[CalculatorInit.kind] == "schnet_ensemble":
+                elif calculator[CalculatorInit.kind] in self.ensemble_models:
                     models = [
                         self._load_model_schnetpack(model, md_initializer.device).to(
                             md_initializer.device

@@ -308,6 +308,7 @@ class CalculatorInit(Initializer):
         "orca": (calculators.OrcaCalculator, "orca", None),
         "sgdml": (calculators.SGDMLCalculator, "sgdml", None),
         "custom": (load_custom_calculator, "custom", None),
+        "custom_ensemble": (load_custom_calculator, "custom_ensemble", None),
     }
     required_inputs = {
         "schnet": OrderedDict(
@@ -327,6 +328,7 @@ class CalculatorInit(Initializer):
         ),
         "sgdml": OrderedDict({"model": model}),
         "custom": OrderedDict({"calculator_module": str, "class_name": str}),
+        "custom_ensemble": OrderedDict({"calculator_module": str, "class_name": str}),
     }
 
 
