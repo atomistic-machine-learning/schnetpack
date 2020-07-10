@@ -1,4 +1,5 @@
 import torch
+import schnetpack
 
 __all__ = ["EnsembleCalculator"]
 
@@ -27,6 +28,10 @@ class EnsembleCalculator:
             ensemble_results["{:s}_var".format(p)] = torch.var(tmp, dim=0)
 
         return ensemble_results
+
+    def _activate_stress(self, stress_handle):
+        for model in self.models:
+            schnetpack.utils.activate_stress_computation(model, stress=stress_handle)
 
     @staticmethod
     def _update_required_properties(required_properties):

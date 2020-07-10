@@ -63,13 +63,14 @@ class SchnetPackCalculator(MDCalculator):
 
         # If stress is required, activate stress computation in model
         if stress_handle is not None:
-            schnetpack.utils.activate_stress_computation(
-                self.model, stress=stress_handle
-            )
+            self._activate_stress(stress_handle)
 
         self.neighbor_list = self._init_neighbor_list(
             neighbor_list, cutoff, cutoff_shell, cutoff_lr
         )
+
+    def _activate_stress(self, stress_handle):
+        schnetpack.utils.activate_stress_computation(self.model, stress=stress_handle)
 
     def calculate(self, system):
         """
