@@ -34,7 +34,7 @@ distance_expansion = spk.nn.GaussianSmearing(n_gaussians=n_gaussians)
 # interaction blocks
 interactions = [
     spk.representation.PhysNetInteraction(
-        n_features=n_atom_basis,
+        n_atom_basis=n_atom_basis,
         n_basis_functions=n_gaussians,
         activation=spk.nn.shifted_softplus,
     )

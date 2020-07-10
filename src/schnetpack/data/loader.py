@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 from schnetpack import Properties
 from .stats import StatisticsAccumulator
 
-__all__ = ["AtomsLoader"]
+__all__ = ["AtomsLoader", "_collate_aseatoms"]
 
 
 def _collate_aseatoms(examples):

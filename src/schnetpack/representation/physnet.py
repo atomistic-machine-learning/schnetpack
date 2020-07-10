@@ -93,12 +93,12 @@ class PhysNetInteraction(nn.Module):
         # reset parameters
         self.reset_parameters()
 
-    def _attention_weights(self, x, key, charges):
+    def _attention_weights(self, x, key, charges, atom_mask):
         # compute weights
-        w = F.softplus(torch.sum(x * (charges.sign() * key), -1, keepdim=True))
-
+        w = F.softplus(torch.sum(x * (charges.sign() * key).unsqueeze(1), -1))
+        w = w * atom_mask
         # compute weight norms
-        wsum = w.sum(-2, keepdim=True)
+        wsum = w.sum(-1, keepdim=True)
 
         # return normalized weights; 1e-8 prevents possible division by 0
         return w / (wsum + 1e-8)
@@ -118,6 +118,7 @@ class PhysNetInteraction(nn.Module):
         f_ij=None,
         charges=None,
         spins=None,
+        atom_mask=None,
         **kwargs,
     ):
         # todo: docstring
@@ -147,11 +148,12 @@ class PhysNetInteraction(nn.Module):
         # compute attention weights
         # todo: check if attention layer can be used / cmul-layer can be used
         if charges is not None:
-            charge_weights = self._attention_weights(x, self.charge_keys, charges)
-            qfeatures = (charges * charge_weights) * self.charge_embedding
+            charge_weights = self._attention_weights(x, self.charge_keys, charges,
+                                                     atom_mask)
+            qfeatures = (charges * charge_weights).unsqueeze(-1) * self.charge_embedding
             x = x + qfeatures
         if spins is not None:
-            spin_weights = self._attention_weights(x, self.spin_keys, spins)
+            spin_weights = self._attention_weights(x, self.spin_keys, spins, atom_mask)
             sfeatures = (spins * spin_weights) * self.spin_embedding
             x = x + sfeatures
 

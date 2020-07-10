@@ -3,7 +3,8 @@ import torch
 from torch import nn
 
 
-__all__ = ["CosineCutoff", "MollifierCutoff", "HardCutoff", "get_cutoff_by_string"]
+__all__ = ["CosineCutoff", "MollifierCutoff", "HardCutoff", "get_cutoff_by_string",
+           "PhysNetCutoff"]
 
 
 def get_cutoff_by_string(key):
@@ -123,3 +124,16 @@ class HardCutoff(nn.Module):
         """
         mask = (distances <= self.cutoff).float()
         return mask
+
+
+class PhysNetCutoff(nn.Module):
+    def __init__(self, cutoff):
+        super(PhysNetCutoff, self).__init__()
+        self.cutoff = cutoff
+
+    def forward(self, x):
+        zeros = torch.zeros_like(x)
+        x_ = torch.where(x < self.cutoff, x, zeros)
+        return torch.where(x < self.cutoff,
+                           torch.exp(-x_ ** 2 / ((self.cutoff - x_) * (self.cutoff +
+                                                                       x_))), zeros)

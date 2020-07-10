@@ -663,7 +663,7 @@ class AtomwiseCorrected(Atomwise):
         if out_net is None:
             out_net = nn.Sequential(
                 spk.nn.base.GetItem("representation"),
-                spk.nn.blocks.MLP(n_in, 1, n_neurons, n_layers, activation, bias=False),
+                spk.nn.Dense(n_in, n_out, bias=False),
             )
         super(AtomwiseCorrected, self).__init__(
             n_in=n_in,
@@ -696,7 +696,7 @@ class AtomwiseCorrected(Atomwise):
         if charge_net is None:
             charge_net = nn.Sequential(
                 spk.nn.base.GetItem("representation"),
-                spk.nn.blocks.MLP(n_in, 1, n_neurons, n_layers, activation, bias=False),
+                spk.nn.Dense(n_in, n_out, bias=False),
             )
         self.charge_net = charge_net
 
@@ -712,14 +712,18 @@ class AtomwiseCorrected(Atomwise):
         total_charges = inputs[Properties.charges]
         positions = inputs[Properties.position]
         atomic_numbers = inputs[Properties.atomic_numbers]
+        atom_mask = inputs[Properties.atom_mask]
 
         # compute atom-wise properties
         yi = self.out_net(inputs) + self.element_bias[atomic_numbers].unsqueeze(-1)
+        yi = yi * atom_mask.unsqueeze(-1)
 
         # compute atomwise charges and charge correction
         qi = self.charge_net(inputs)
-        charge_correction = qi.sum(-1, keepdim=True) - total_charges
-        qi = qi + charge_correction.expand(qi.shape) / qi.shape[-1]
+        qi = qi * atom_mask.unsqueeze(-1)
+
+        charge_correction = total_charges - qi.sum(1)
+        qi = qi + (charge_correction / atom_mask.sum(-1).unsqueeze(-1)).unsqueeze(-1)
 
         # collect predictions
         atomwise_predictions = dict(yi=yi, qi=qi)

@@ -87,6 +87,7 @@ class AtomisticRepresentation(nn.Module):
         neighbors = inputs[Properties.neighbors]
         neighbor_mask = inputs[Properties.neighbor_mask]
         atom_mask = inputs[Properties.atom_mask]
+
         if Properties.charges in inputs.keys():
             charges = inputs[Properties.charges]
         else:
@@ -119,6 +120,7 @@ class AtomisticRepresentation(nn.Module):
                 f_ij=f_ij,
                 charges=charges,
                 spins=spins,
+                atom_mask=atom_mask,
             )
             x = x + v
             if self.sum_before_interaction_append:
