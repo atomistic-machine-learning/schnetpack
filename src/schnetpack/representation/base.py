@@ -3,7 +3,6 @@ import torch.nn as nn
 import schnetpack as spk
 from schnetpack import Properties
 
-
 __all__ = ["InteractionAggregation", "AtomisticRepresentation"]
 
 
@@ -112,7 +111,8 @@ class AtomisticRepresentation(nn.Module):
         for interaction, post_interaction in zip(
             self.interactions, self.post_interactions
         ):
-            v = interaction(
+            # interaction layer x+v
+            x = interaction(
                 x,
                 r_ij,
                 neighbors,
@@ -122,11 +122,12 @@ class AtomisticRepresentation(nn.Module):
                 spins=spins,
                 atom_mask=atom_mask,
             )
-            x = x + v
-            if self.sum_before_interaction_append:
-                intermediate_interactions.append(post_interaction(x))
-            else:
-                intermediate_interactions.append(post_interaction(v))
+
+            # post interaction layer
+            y = post_interaction(x)
+
+            # collect intermediate results
+            intermediate_interactions.append(y)
 
         # get representation by aggregating intermediate interactions or selecting
         # last interaction output

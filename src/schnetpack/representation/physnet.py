@@ -79,29 +79,19 @@ class PhysNetInteraction(nn.Module):
             ),
         )
 
-        # output residual stack
-        self.output_residual = spk.nn.ResidualStack(
-            n_residuals_out, n_atom_basis, activation=activation
-        )
-
         # charge and spin embeddings
         self.charge_embedding = nn.Parameter(torch.Tensor(n_atom_basis))
         self.spin_embedding = nn.Parameter(torch.Tensor(n_atom_basis))
         self.charge_keys = nn.Parameter(torch.Tensor(n_atom_basis))
         self.spin_keys = nn.Parameter(torch.Tensor(n_atom_basis))
 
+        # output residual stack
+        self.output_residual = spk.nn.ResidualStack(
+            n_residuals_out, n_atom_basis, activation=activation
+        )
+
         # reset parameters
         self.reset_parameters()
-
-    def _attention_weights(self, x, key, charges, atom_mask):
-        # compute weights
-        w = F.softplus(torch.sum(x * (charges.sign() * key).unsqueeze(1), -1))
-        w = w * atom_mask
-        # compute weight norms
-        wsum = w.sum(-1, keepdim=True)
-
-        # return normalized weights; 1e-8 prevents possible division by 0
-        return w / (wsum + 1e-8)
 
     def reset_parameters(self):
         nn.init.zeros_(self.charge_embedding)
@@ -138,24 +128,24 @@ class PhysNetInteraction(nn.Module):
             f_ij=f_ij,
         )
 
-        # megre x_i and x_j to v-branch
+        # merge x_i and x_j to v-branch
         v = x_i + x_j
         v = self.branch_v(v)
 
         # residual sum
         x = x + v
 
-        # compute attention weights
         # todo: check if attention layer can be used / cmul-layer can be used
+        sfeatures, qfeatures = 0., 0.
         if charges is not None:
             charge_weights = self._attention_weights(x, self.charge_keys, charges,
                                                      atom_mask)
             qfeatures = (charges * charge_weights).unsqueeze(-1) * self.charge_embedding
-            x = x + qfeatures
         if spins is not None:
             spin_weights = self._attention_weights(x, self.spin_keys, spins, atom_mask)
-            sfeatures = (spins * spin_weights) * self.spin_embedding
-            x = x + sfeatures
+            sfeatures = (spins * spin_weights).unsqueeze(-1) * self.spin_embedding
+
+        x = x + sfeatures + qfeatures
 
         # output residual stack
         x = self.output_residual(x)
@@ -176,7 +166,6 @@ class PhysNet(AtomisticRepresentation):
         n_residual_post_v=1,
         n_residual_post_interaction=1,
         distance_expansion=None,
-        exp_weighting=True,
         cutoff=7.937658158457616,  # 15 Bohr converted to Angstrom
         activation=spk.nn.Swish,
         max_z=87,
@@ -184,7 +173,6 @@ class PhysNet(AtomisticRepresentation):
         return_intermediate=True,
         return_distances=True,
         interaction_aggregation="sum",
-        trainable_gaussians=False,
         cutoff_network=spk.nn.MollifierCutoff,
         # todo: check if mollifier cutoff is available...
         # todo: basis func bernstein

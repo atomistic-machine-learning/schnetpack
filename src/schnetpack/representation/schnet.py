@@ -81,11 +81,14 @@ class SchNetInteraction(nn.Module):
         # continuous-filter convolution interaction block followed by Dense layer
         v = self.cfconv(x, r_ij, neighbors, neighbor_mask, f_ij)
         v = self.dense(v)
-        return v
+
+        # todo: returns x+v now. Previously only v!
+        return x + v
 
 
 class SchNet(AtomisticRepresentation):
-    """SchNet architecture for learning representations of atomistic systems.
+    """
+    SchNet architecture for learning representations of atomistic systems.
 
     Args:
         n_atom_basis (int, optional): number of features to describe atomic environments.

@@ -248,9 +248,12 @@ class DipoleMoment(Atomwise):
         """
         positions = inputs[Properties.R]
         atom_mask = inputs[Properties.atom_mask][:, :, None]
+        total_charges = inputs[Properties.charges]
 
         # run prediction
         charges = self.out_net(inputs) * atom_mask
+        charge_correction = total_charges - charges.sum(1)
+        charges = charges + (charge_correction / atom_mask.sum(-1).unsqueeze(-1)).unsqueeze(-1)
         yi = positions * charges
         y = self.atom_pool(yi)
 
