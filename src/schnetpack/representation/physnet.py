@@ -93,6 +93,16 @@ class PhysNetInteraction(nn.Module):
         # reset parameters
         self.reset_parameters()
 
+    def _attention_weights(self, x, key, charges, atom_mask):
+        # compute weights
+        w = F.softplus(torch.sum(x * (charges.sign() * key).unsqueeze(1), -1))
+        w = w * atom_mask
+        # compute weight norms
+        wsum = w.sum(-1, keepdim=True)
+
+        # return normalized weights; 1e-8 prevents possible division by 0
+        return w / (wsum + 1e-8)
+
     def reset_parameters(self):
         nn.init.zeros_(self.charge_embedding)
         nn.init.zeros_(self.spin_embedding)
