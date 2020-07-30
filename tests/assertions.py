@@ -127,7 +127,7 @@ def assert_instance_has_props(instance, pdict, pnames):
 
 
 # model assertions
-def assert_params_changed(model, batch, exclude=[]):
+def assert_params_changed(model, batch, exclude=[], key=None):
     """
     Check if all model-parameters are updated when training.
 
@@ -135,6 +135,7 @@ def assert_params_changed(model, batch, exclude=[]):
         model (torch.nn.Module): model to test
         batch (torch.utils.data.Dataset): batch of input data
         exclude (list): layers that are not necessarily updated
+        key (str): dict key of prediction. Only use when model returns dict.
     """
     # save state-dict
     torch.save(model.state_dict(), "before")
@@ -142,6 +143,8 @@ def assert_params_changed(model, batch, exclude=[]):
     optimizer = Adam(model.parameters())
     loss_fn = MSELoss()
     pred = model(batch)
+    if key is not None:
+        pred = pred[key]
     loss = loss_fn(pred, torch.rand(pred.shape))
     optimizer.zero_grad()
     loss.backward()
@@ -157,7 +160,7 @@ def assert_params_changed(model, batch, exclude=[]):
         ).any(), "{} layer has not been updated!".format(key)
 
 
-def assert_output_shape_valid(model, batch, out_shape):
+def assert_output_shape_valid(model, batch, out_shape, key=None):
     """
     Check if the model returns the desired output shape.
 
@@ -167,6 +170,8 @@ def assert_output_shape_valid(model, batch, out_shape):
         out_shape (list): desired output shape
     """
     pred = model(*batch)
+    if key is not None:
+        pred = pred[key]
     assert list(pred.shape) == out_shape, "Model does not return expected shape!"
 
 

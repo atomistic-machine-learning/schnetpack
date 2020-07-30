@@ -121,7 +121,7 @@ def cfconv_layer(
         n_in=n_atom_basis,
         n_filters=n_filters,
         n_out=n_atom_basis,
-        filter_network=schnet_interaction.filter_network,
+        filter_network=schnet_interaction.cfconv.filter_network,
         cutoff_network=cutoff_layer,
         activation=None,
         normalize_filter=False,

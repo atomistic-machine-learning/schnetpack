@@ -59,7 +59,12 @@ class AtomisticModel(nn.Module):
             )
 
         # add representation calculations to inputs dict
-        inputs.update(self.representation(inputs))
+        rep = self.representation(inputs)
+
+        # todo: change in WACSF after talking to Michael
+        if not type(rep) == dict:
+            rep = dict(representation=rep)
+        inputs.update(rep)
 
         # compute output modules
         outs = {}

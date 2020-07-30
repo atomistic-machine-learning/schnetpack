@@ -37,9 +37,8 @@ def test_shape_swish(swish, random_input_dim):
     assert_shape_invariance(swish, in_data=torch.rand(random_input_dim))
 
 
-def test_swish_parameter_update(swish):
-    batch = torch.rand(4, 5,)
-    assert_params_changed(swish)
+def test_swish_parameter_update(swish, random_float_input):
+    assert_params_changed(swish, random_float_input)
 
 
 # utility functions

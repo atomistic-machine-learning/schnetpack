@@ -21,7 +21,7 @@ def test_parameter_update_schnet(
         exclude += ["distance_expansion"]
 
     assert_params_changed(
-        schnet, schnet_batch, exclude=exclude,
+        schnet, schnet_batch, exclude=exclude, key="representation"
     )
 
 
@@ -46,7 +46,8 @@ def test_parameter_update_schnet(
 
 # test shapes of spk.representation
 def test_shape_schnet(schnet, schnet_batch, schnet_output_shape):
-    assert_output_shape_valid(schnet, [schnet_batch], schnet_output_shape)
+    assert_output_shape_valid(schnet, [schnet_batch], schnet_output_shape,
+                              key="representation")
 
 
 def test_shape_schnetinteraction(
