@@ -28,7 +28,7 @@ reps = rep.PhysNet(
 # output module as modular wrapper and atomwise layer
 corrections = [
     spk.atomistic.ElectrostaticEnergy(cuton=0.0, cutoff=10.0),
-    spk.atomistic.ZBLRepulsionEnergy(),
+    # spk.atomistic.ZBLRepulsionEnergy(),
     # spk.atomistic.D4DispersionEnergy(cutoff=10.),
 ]
 output_layer = schnetpack.atomistic.AtomwiseCorrected(
@@ -47,7 +47,8 @@ model = schnetpack.atomistic.AtomisticModel(reps, output_layer)
 # create trainer
 print("setting up trainer...")
 modeldir = "modeldir"
-rmtree(modeldir)
+if os.path.exists(modeldir):
+    rmtree(modeldir)
 opt = Adam(model.parameters(), lr=1e-4)
 loss = lambda b, p: F.mse_loss(p[QM9.U0], b[QM9.U0])
 trainer = spk.train.Trainer(modeldir, model, loss, opt, loader, val_loader)

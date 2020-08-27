@@ -7,6 +7,8 @@ import torch
 from ase.db import connect
 from base64 import b64decode
 from tqdm import tqdm
+import torch.nn as nn
+import schnetpack as spk
 
 __all__ = [
     "set_random_seed",
@@ -17,6 +19,7 @@ __all__ = [
     "load_model",
     "read_deprecated_database",
     "activate_stress_computation",
+    "save_model",
 ]
 
 
@@ -119,7 +122,7 @@ class DeprecationHelper(object):
         return getattr(self.new_target, attr)
 
 
-def load_model(model_path, map_location=None):
+def load_model(model_path, map_location=None, data_parallel=False, update_version=True):
     """
     Wrapper function for `for safely loading models where certain new attributes of the model class are not present.
     E.g. "requires_stress" for computing the stress tensor.
@@ -132,23 +135,34 @@ def load_model(model_path, map_location=None):
         :class:`schnetpack.atomistic.AtomisticModel`: Loaded SchNetPack model.
 
     """
+    # load model with torch
     model = torch.load(model_path, map_location=map_location)
 
-    # Check for data parallel models
+    # don't load as DataParallel model
     if hasattr(model, "module"):
-        model_module = model.module
-        output_modules = model.module.output_modules
-    else:
-        model_module = model
-        output_modules = model.output_modules
+        model = model.module
 
-    # Set stress tensor attribute if not present
-    if not hasattr(model_module, "requires_stress"):
-        model_module.requires_stress = False
-        for module in output_modules:
-            module.stress = None
+    # update model to newest spk version
+    if update_version:
+        model_updater = spk.utils.AtomisticModelUpdate(model)
+        model_updater.update()
+
+    # transform to DataParallel model if desired
+    if data_parallel:
+        model = nn.DataParallel(model)
 
     return model
+
+
+def save_model(model, file_path):
+    # move to cpu
+    cpu_model = model.to("cpu")
+
+    # remove data parallel
+    if hasattr(cpu_model, "module"):
+        cpu_model = cpu_model.module
+
+    torch.save(cpu_model, file_path)
 
 
 def read_deprecated_database(db_path):

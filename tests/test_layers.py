@@ -20,9 +20,7 @@ def test_parameter_update_schnet(
     if not trainable_gaussians:
         exclude += ["distance_expansion"]
 
-    assert_params_changed(
-        schnet, schnet_batch, exclude=exclude, key="representation"
-    )
+    assert_params_changed(schnet, schnet_batch, exclude=exclude, key="representation")
 
 
 # def dont_test_parameter_update_schnet_with_cutoff(
@@ -46,8 +44,9 @@ def test_parameter_update_schnet(
 
 # test shapes of spk.representation
 def test_shape_schnet(schnet, schnet_batch, schnet_output_shape):
-    assert_output_shape_valid(schnet, [schnet_batch], schnet_output_shape,
-                              key="representation")
+    assert_output_shape_valid(
+        schnet, [schnet_batch], schnet_output_shape, key="representation"
+    )
 
 
 def test_shape_schnetinteraction(

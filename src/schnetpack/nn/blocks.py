@@ -70,8 +70,9 @@ class MLP(nn.Module):
             for i in range(n_layers - 1)
         ]
         # assign a Dense layer (without activation function) to the output layer
-        layers.append(Dense(self.n_neurons[-2], self.n_neurons[-1], activation=None,
-                            bias=bias))
+        layers.append(
+            Dense(self.n_neurons[-2], self.n_neurons[-1], activation=None, bias=bias)
+        )
         # put all layers together to make the network
         self.out_net = nn.Sequential(*layers)
 

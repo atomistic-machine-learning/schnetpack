@@ -15,11 +15,9 @@ class PhysNetInteraction(nn.Module):
         self,
         n_atom_basis,
         n_basis_functions=25,
-        n_residuals_in=1,
         n_residuals_i=1,
         n_residuals_j=1,
         n_residuals_v=1,
-        n_residuals_out=1,
         activation=spk.nn.Swish,
         cutoff=5.0,
         cutoff_network=spk.nn.MollifierCutoff,
@@ -31,11 +29,6 @@ class PhysNetInteraction(nn.Module):
 
         # cutoff network
         cutoff_network = cutoff_network(cutoff)
-
-        # input residual stack
-        self.input_residual = spk.nn.ResidualStack(
-            n_residuals_in, n_atom_basis, activation=activation
-        )
 
         # i and j branches
         self.branch_i = nn.Sequential(
@@ -79,36 +72,6 @@ class PhysNetInteraction(nn.Module):
             ),
         )
 
-        # charge and spin embeddings
-        self.charge_embedding = nn.Parameter(torch.Tensor(n_atom_basis))
-        self.spin_embedding = nn.Parameter(torch.Tensor(n_atom_basis))
-        self.charge_keys = nn.Parameter(torch.Tensor(n_atom_basis))
-        self.spin_keys = nn.Parameter(torch.Tensor(n_atom_basis))
-
-        # output residual stack
-        self.output_residual = spk.nn.ResidualStack(
-            n_residuals_out, n_atom_basis, activation=activation
-        )
-
-        # reset parameters
-        self.reset_parameters()
-
-    def _attention_weights(self, x, key, charges, atom_mask):
-        # compute weights
-        w = F.softplus(torch.sum(x * (charges.sign() * key).unsqueeze(1), -1))
-        w = w * atom_mask
-        # compute weight norms
-        wsum = w.sum(-1, keepdim=True)
-
-        # return normalized weights; 1e-8 prevents possible division by 0
-        return w / (wsum + 1e-8)
-
-    def reset_parameters(self):
-        nn.init.zeros_(self.charge_embedding)
-        nn.init.zeros_(self.spin_embedding)
-        nn.init.zeros_(self.charge_keys)
-        nn.init.zeros_(self.spin_keys)
-
     def forward(
         self,
         x,
@@ -122,9 +85,6 @@ class PhysNetInteraction(nn.Module):
         **kwargs,
     ):
         # todo: docstring
-        # input residual stack
-        x = self.input_residual(x)
-
         # i and j branches
         x_i = self.branch_i(x)
         x_j = self.branch_j(x)
@@ -142,25 +102,7 @@ class PhysNetInteraction(nn.Module):
         v = x_i + x_j
         v = self.branch_v(v)
 
-        # residual sum
-        x = x + v
-
-        # todo: check if attention layer can be used / cmul-layer can be used
-        sfeatures, qfeatures = 0., 0.
-        if charges is not None:
-            charge_weights = self._attention_weights(x, self.charge_keys, charges,
-                                                     atom_mask)
-            qfeatures = (charges * charge_weights).unsqueeze(-1) * self.charge_embedding
-        if spins is not None:
-            spin_weights = self._attention_weights(x, self.spin_keys, spins, atom_mask)
-            sfeatures = (spins * spin_weights).unsqueeze(-1) * self.spin_embedding
-
-        x = x + sfeatures + qfeatures
-
-        # output residual stack
-        x = self.output_residual(x)
-
-        return x
+        return v
 
 
 class PhysNet(AtomisticRepresentation):
@@ -169,12 +111,12 @@ class PhysNet(AtomisticRepresentation):
         n_atom_basis=128,
         n_basis_functions=32,
         n_interactions=6,
-        n_residual_pre_x=1,
-        n_residual_post_x=1,
+        n_residual_pre_interaction=1,
         n_residual_pre_vi=1,
         n_residual_pre_vj=1,
         n_residual_post_v=1,
         n_residual_post_interaction=1,
+        n_residual_interaction_output=1,
         distance_expansion=None,
         cutoff=7.937658158457616,  # 15 Bohr converted to Angstrom
         activation=spk.nn.Swish,
@@ -184,9 +126,10 @@ class PhysNet(AtomisticRepresentation):
         return_distances=True,
         interaction_aggregation="sum",
         cutoff_network=spk.nn.MollifierCutoff,
+        charge_refinement=None,
+        magmom_refinement=None,
         # todo: check if mollifier cutoff is available...
         # todo: basis func bernstein
-        # todo: refactor n_gaussians to n_basis_funcs or similar
     ):
 
         # element specific bias for outputs
@@ -196,6 +139,26 @@ class PhysNet(AtomisticRepresentation):
         if distance_expansion is None:
             distance_expansion = spk.nn.BernsteinPolynomials(n_basis_functions, cutoff,)
 
+        # pre interaction blocks
+        if coupled_interactions:
+            pre_interactions = nn.ModuleList(
+                [
+                    spk.nn.ResidualStack(
+                        n_residual_pre_interaction, n_atom_basis, activation=activation
+                    )
+                ]
+                * n_interactions
+            )
+        else:
+            pre_interactions = nn.ModuleList(
+                [
+                    spk.nn.ResidualStack(
+                        n_residual_pre_interaction, n_atom_basis, activation=activation
+                    )
+                    for _ in range(n_interactions)
+                ]
+            )
+
         # interaction blocks
         if coupled_interactions:
             interactions = nn.ModuleList(
@@ -203,11 +166,9 @@ class PhysNet(AtomisticRepresentation):
                     PhysNetInteraction(
                         n_atom_basis=n_atom_basis,
                         n_basis_functions=n_basis_functions,
-                        n_residuals_in=n_residual_pre_x,
                         n_residuals_i=n_residual_pre_vi,
                         n_residuals_j=n_residual_pre_vj,
                         n_residuals_v=n_residual_post_v,
-                        n_residuals_out=n_residual_post_x,
                         activation=activation,
                         cutoff=cutoff,
                         cutoff_network=cutoff_network,
@@ -216,17 +177,14 @@ class PhysNet(AtomisticRepresentation):
                 * n_interactions
             )
         else:
-            # use one SchNetInteraction instance for each interaction
             interactions = nn.ModuleList(
                 [
                     PhysNetInteraction(
                         n_atom_basis=n_atom_basis,
                         n_basis_functions=n_basis_functions,
-                        n_residuals_in=n_residual_pre_x,
                         n_residuals_i=n_residual_pre_vi,
                         n_residuals_j=n_residual_pre_vj,
                         n_residuals_v=n_residual_post_v,
-                        n_residuals_out=n_residual_post_x,
                         activation=activation,
                         cutoff=cutoff,
                         cutoff_network=cutoff_network,
@@ -235,23 +193,100 @@ class PhysNet(AtomisticRepresentation):
                 ]
             )
 
-        post_interactions = nn.ModuleList(
-            [
-                nn.Sequential(
-                    spk.nn.ResidualStack(
-                        n_features=n_atom_basis,
-                        n_blocks=n_residual_post_interaction,
-                        activation=activation,
-                    ),
-                    spk.nn.Dense(
-                        in_features=n_atom_basis,
-                        out_features=n_atom_basis,
-                        pre_activation=activation,
-                    ),
+        # refinement blocks
+        if coupled_interactions:
+            refinement_layers = []
+            if charge_refinement is not None:
+                refinement_layers.append(
+                    spk.representation.InteractionRefinement(
+                        n_features=n_atom_basis, property=charge_refinement
+                    )
                 )
-                for _ in range(n_interactions)
-            ]
-        )
+            if magmom_refinement is not None:
+                refinement_layers.append(
+                    spk.representation.InteractionRefinement(
+                        n_features=n_atom_basis, property=magmom_refinement
+                    )
+                )
+            refinement_block = spk.nn.FeatureSum(layers=refinement_layers)
+            refinement_blocks = nn.ModuleList([refinement_block] * n_interactions)
+        else:
+            refinement_blocks = []
+            for _ in range(n_interactions):
+                refinement_layers = []
+                if charge_refinement is not None:
+                    refinement_layers.append(
+                        spk.representation.InteractionRefinement(
+                            n_features=n_atom_basis, property=charge_refinement
+                        )
+                    )
+                if magmom_refinement is not None:
+                    refinement_layers.append(
+                        spk.representation.InteractionRefinement(
+                            n_features=n_atom_basis, property=magmom_refinement
+                        )
+                    )
+                refinement_block = spk.nn.FeatureSum(layers=refinement_layers)
+                refinement_blocks.append(refinement_block)
+            refinement_blocks = nn.ModuleList(refinement_blocks)
+
+        # post-interaction block
+        if coupled_interactions:
+            post_interactions = nn.ModuleList(
+                [
+                    spk.nn.ResidualStack(
+                        n_residual_post_interaction, n_atom_basis, activation=activation
+                    )
+                ]
+                * n_interactions
+            )
+        else:
+            post_interactions = nn.ModuleList(
+                [
+                    spk.nn.ResidualStack(
+                        n_residual_post_interaction, n_atom_basis, activation=activation
+                    )
+                    for _ in range(n_interactions)
+                ]
+            )
+
+        # interaction output filter
+        if coupled_interactions:
+            interaction_outputs = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        spk.nn.ResidualStack(
+                            n_features=n_atom_basis,
+                            n_blocks=n_residual_interaction_output,
+                            activation=activation,
+                        ),
+                        spk.nn.Dense(
+                            in_features=n_atom_basis,
+                            out_features=n_atom_basis,
+                            pre_activation=activation,
+                        ),
+                    )
+                ]
+                * n_interactions
+            )
+        else:
+            interaction_outputs = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        spk.nn.ResidualStack(
+                            n_features=n_atom_basis,
+                            n_blocks=n_residual_interaction_output,
+                            activation=activation,
+                        ),
+                        spk.nn.Dense(
+                            in_features=n_atom_basis,
+                            out_features=n_atom_basis,
+                            pre_activation=activation,
+                        ),
+                    )
+                    for _ in range(n_interactions)
+                ]
+            )
 
         # intermediate interactions to representation
         interaction_aggregation = spk.representation.InteractionAggregation(
@@ -262,7 +297,10 @@ class PhysNet(AtomisticRepresentation):
             embedding=embedding,
             distance_expansion=distance_expansion,
             interactions=interactions,
+            pre_interactions=pre_interactions,
+            interaction_refinements=refinement_blocks,
             post_interactions=post_interactions,
+            interaction_outputs=interaction_outputs,
             interaction_aggregation=interaction_aggregation,
             return_intermediate=return_intermediate,
             return_distances=return_distances,

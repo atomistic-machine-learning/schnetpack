@@ -82,8 +82,7 @@ class SchNetInteraction(nn.Module):
         v = self.cfconv(x, r_ij, neighbors, neighbor_mask, f_ij)
         v = self.dense(v)
 
-        # todo: returns x+v now. Previously only v!
-        return x + v
+        return v
 
 
 class SchNet(AtomisticRepresentation):

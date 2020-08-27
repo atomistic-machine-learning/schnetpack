@@ -12,6 +12,7 @@ __all__ = [
     "ScaleShift",
     "Standardize",
     "Aggregate",
+    "FeatureSum",
 ]
 
 
@@ -233,3 +234,16 @@ class ComponentWise(nn.Module):
 
     def forward(self, inputs):
         return inputs * self.weight
+
+
+class FeatureSum(nn.Module):
+    def __init__(self, layers=[]):
+        super(FeatureSum, self).__init__()
+        self.layers = layers
+
+    def forward(self, inputs):
+        feature_sum = 0.0
+        for layer in self.layers:
+            feature_sum = feature_sum + layer(inputs)
+
+        return feature_sum

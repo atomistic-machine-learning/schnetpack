@@ -3,6 +3,7 @@ import io
 
 from setuptools import setup, find_packages
 
+
 def read(fname):
     with io.open(os.path.join(os.path.dirname(__file__), fname), encoding="utf-8") as f:
         return f.read()
@@ -10,7 +11,7 @@ def read(fname):
 
 setup(
     name="schnetpack",
-    version="0.3.1",
+    version="0.3.2",
     author="Kristof T. Schuett, Michael Gastegger, Pan Kessel, Kim Nicoli",
     email="michael.gastegger@tu-berlin.de",
     url="https://github.com/atomistic-machine-learning/schnetpack",
