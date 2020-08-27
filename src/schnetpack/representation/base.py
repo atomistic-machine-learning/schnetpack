@@ -51,8 +51,8 @@ class InteractionRefinement(nn.Module):
         self.property = property
 
         # trainable parameters
-        self.embedding = nn.Parameter(torch.Tensor(n_features))
-        self.keys = nn.Parameter(torch.Tensor(n_features))
+        self.register_parameter('embedding', nn.Parameter(torch.Tensor(n_features)))
+        self.register_parameter('keys', nn.Parameter(torch.Tensor(n_features)))
 
     def _attention_weights(self, x, property, atom_mask):
         # compute weights

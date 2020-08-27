@@ -195,7 +195,7 @@ class PhysNet(AtomisticRepresentation):
 
         # refinement blocks
         if coupled_interactions:
-            refinement_layers = []
+            refinement_layers = nn.ModuleList()
             if charge_refinement is not None:
                 refinement_layers.append(
                     spk.representation.InteractionRefinement(
@@ -211,9 +211,9 @@ class PhysNet(AtomisticRepresentation):
             refinement_block = spk.nn.FeatureSum(layers=refinement_layers)
             refinement_blocks = nn.ModuleList([refinement_block] * n_interactions)
         else:
-            refinement_blocks = []
+            refinement_blocks = nn.ModuleList()
             for _ in range(n_interactions):
-                refinement_layers = []
+                refinement_layers = nn.ModuleList()
                 if charge_refinement is not None:
                     refinement_layers.append(
                         spk.representation.InteractionRefinement(
@@ -228,7 +228,6 @@ class PhysNet(AtomisticRepresentation):
                     )
                 refinement_block = spk.nn.FeatureSum(layers=refinement_layers)
                 refinement_blocks.append(refinement_block)
-            refinement_blocks = nn.ModuleList(refinement_blocks)
 
         # post-interaction block
         if coupled_interactions:
