@@ -220,12 +220,14 @@ class DipoleMoment(Atomwise):
         activation=schnetpack.nn.activations.shifted_softplus,
         property="y",
         contributions=None,
+        charge_correction=None,
         predict_magnitude=False,
         mean=None,
         stddev=None,
         outnet=None,
     ):
         self.predict_magnitude = predict_magnitude
+        self.charge_correction = charge_correction
         super(DipoleMoment, self).__init__(
             n_in,
             1,
@@ -245,10 +247,19 @@ class DipoleMoment(Atomwise):
         predicts dipole moment
         """
         positions = inputs[Properties.R]
-        atom_mask = inputs[Properties.atom_mask][:, :, None]
+        atom_mask = inputs[Properties.atom_mask]
 
         # run prediction
-        charges = self.out_net(inputs) * atom_mask
+        charges = self.out_net(inputs) * atom_mask[:, :, None]
+
+        # charge correction
+        if self.charge_correction is not None:
+            total_charges = inputs[self.charge_correction]
+            charge_correction = total_charges - charges.sum(1)
+            charges = charges + (
+                charge_correction / atom_mask.sum(-1).unsqueeze(-1)
+            ).unsqueeze(-1)
+
         yi = positions * charges
         y = self.atom_pool(yi)
 
