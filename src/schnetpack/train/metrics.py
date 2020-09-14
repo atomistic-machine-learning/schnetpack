@@ -349,7 +349,7 @@ class SumMAE(MeanAbsoluteError):
             (Default: None)
         name (str): name used in logging for this metric. If set to `None`,
                     `LengthMAE_[target]` will be used (Default: None)
-   """
+    """
 
     def __init__(
         self, target, model_output=None, axis=1, name=None, element_wise=False
@@ -401,7 +401,7 @@ class LengthMAE(MeanAbsoluteError):
             (Default: None)
         name (str): name used in logging for this metric. If set to `None`,
                     `LengthMAE_[target]` will be used (Default: None)
-   """
+    """
 
     def __init__(self, target, model_output=None, name=None, element_wise=False):
         name = "LengthMAE_" + target if name is None else name
@@ -427,7 +427,7 @@ class LengthRMSE(RootMeanSquaredError):
                     `LengthRMSE_[target]` will be used (Default: None)
         element_wise (bool): set to True if the model output is an element-wise
             property (forces, positions, ...)
-   """
+    """
 
     def __init__(self, target, model_output=None, name=None, element_wise=False):
         name = "LengthRMSE_" + target if name is None else name

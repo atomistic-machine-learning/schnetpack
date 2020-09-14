@@ -46,6 +46,7 @@ def main(args):
     os.makedirs(os.path.dirname(args.db_path), exist_ok=True)
 
     logging.info("parsing data...")
+    print("**************", args.molecular_properties)
     generate_db(
         args.file_path, args.db_path, args.atomic_properties, args.molecular_properties
     )

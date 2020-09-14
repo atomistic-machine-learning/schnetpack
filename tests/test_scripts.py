@@ -2,6 +2,7 @@ import os
 import pytest
 import json
 from ase.db import connect
+from .fixtures import *
 
 
 def run_args_from_settings(settings):
@@ -231,13 +232,13 @@ def test_custom(script_runner, tmpdir_factory):
     )
 
 
-def test_parsing_script(script_runner, tmpdir_factory):
+def test_parsing_script(script_runner, tmpdir_factory, xyz_path, db_path):
 
     # define settings
-    file_path = "tests/data/ethanol_snip.xyz"
-    dbpath = os.path.join(tmpdir_factory.mktemp("test_parsing").strpath, "database.db")
+    file_path = xyz_path
+    dbpath = db_path
     atomic_properties = "Properties=species:S:1:pos:R:3:forces:R:3"
-    molecular_properties = ["energy"]
+    molecular_properties = "energy"
 
     # run script
     ret = script_runner.run(
