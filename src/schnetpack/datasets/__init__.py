@@ -9,25 +9,25 @@ from schnetpack.environment import SimpleEnvironmentProvider
 
 class DownloadableAtomsData(AtomsData):
     """
-        Base class for online datasets that can be automatically downloaded.
+    Base class for online datasets that can be automatically downloaded.
 
-        Args:
-            dbpath (str): path to directory containing database.
-            subset (list, optional): indices to subset. Set to None for entire database.
-            available_properties (list, optional): complete set of physical properties
-                that are contained in the database.
-            load_only (list, optional): reduced set of properties to be loaded
-            units (list, optional): definition of units for all available properties
-            environment_provider (spk.environment.BaseEnvironmentProvider): define how
-                neighborhood is calculated
-                (default=spk.environment.SimpleEnvironmentProvider).
-            collect_triples (bool, optional): Set to True if angular features are
-            needed.
-            centering_function (callable or None): Function for calculating center of
-                molecule (center of mass/geometry/...). Center will be subtracted from
-                positions.
-            download (bool): If true, automatically download dataset
-                if it does not exist.
+    Args:
+        dbpath (str): path to directory containing database.
+        subset (list, optional): indices to subset. Set to None for entire database.
+        available_properties (list, optional): complete set of physical properties
+            that are contained in the database.
+        load_only (list, optional): reduced set of properties to be loaded
+        units (list, optional): definition of units for all available properties
+        environment_provider (spk.environment.BaseEnvironmentProvider): define how
+            neighborhood is calculated
+            (default=spk.environment.SimpleEnvironmentProvider).
+        collect_triples (bool, optional): Set to True if angular features are
+        needed.
+        centering_function (callable or None): Function for calculating center of
+            molecule (center of mass/geometry/...). Center will be subtracted from
+            positions.
+        download (bool): If true, automatically download dataset
+            if it does not exist.
 
     """
 
