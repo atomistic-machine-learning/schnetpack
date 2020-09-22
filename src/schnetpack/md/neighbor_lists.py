@@ -179,14 +179,23 @@ class EnvironmentProviderNeighborList(MDNeighborList):
                        moves farther than this shell. (Or if the simulation cell changes.)
     """
 
-    def __init__(self, cutoff, shell=1.0, device=None):
+    def __init__(self, cutoff, shell=1.0, device=None, use_internal_units=True):
         super(EnvironmentProviderNeighborList, self).__init__(
             cutoff, shell, device=device
         )
+        self.use_internal_units = use_internal_units
+        self.provider_cutoff = self._get_provider_cutoff()
 
         # Setup the environment provider
         self._environment_provider = None
         self._set_environment_provider()
+
+    def _get_provider_cutoff(self):
+        if self.use_internal_units:
+            provider_cutoff = self.cutoff_shell
+        else:
+            provider_cutoff = self.cutoff_shell / schnetpack.md.MDUnits.angs2internal
+        return provider_cutoff
 
     def _set_environment_provider(self):
         """
@@ -201,7 +210,7 @@ class EnvironmentProviderNeighborList(MDNeighborList):
         reconverted into the format required for the calculators. In addition, the old cells and positons are
         stored to check if updates of the neighbor list are necessary.
         """
-        atoms = system.get_ase_atoms(internal_units=True)
+        atoms = system.get_ase_atoms(internal_units=self.use_internal_units)
 
         neighbor_idx = []
         offsets = []
@@ -267,6 +276,8 @@ class ASENeighborList(EnvironmentProviderNeighborList):
     Neighbor list based on the schnetpack.utils.environment.AseEnvironmentProvider. This can deal with periodic
     boundary conditions and general unit cells. However, the provider runs on CPU only and will only provide
     significant performance gains over the torch based one for very large systems.
+    The ASE neighbor_list internally uses a minimum bin size of 3A, hence positions and cells need to be converted
+    to A before passing them to the neighbor list to avoid performance issues.
 
     Args:
         cutoff (float): Cutoff radius used for neighbor list construction.
@@ -275,14 +286,16 @@ class ASENeighborList(EnvironmentProviderNeighborList):
     """
 
     def __init__(self, cutoff, shell, device=None):
-        super(ASENeighborList, self).__init__(cutoff=cutoff, shell=shell, device=device)
+        super(ASENeighborList, self).__init__(
+            cutoff=cutoff, shell=shell, device=device, use_internal_units=False
+        )
 
     def _set_environment_provider(self):
         """
         Set the environment provider.
         """
         self._environment_provider = schnetpack.environment.AseEnvironmentProvider(
-            self.cutoff_shell
+            self.provider_cutoff
         )
 
 
