@@ -266,12 +266,7 @@ class IntegratorInit(Initializer):
         ),
         "npt_verlet": OrderedDict({"time_step": float}),
         "npt_ring_polymer": OrderedDict(
-            {
-                "n_beads": int,
-                "time_step": float,
-                "temperature": float,
-                # "barostat": barostats.BarostatHook,
-            }
+            {"n_beads": int, "time_step": float, "temperature": float}
         ),
     }
 
