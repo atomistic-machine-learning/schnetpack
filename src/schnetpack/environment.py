@@ -263,35 +263,38 @@ def neighbor_pairs(padding_mask, coordinates, cell, shifts, cutoff):
     all_atoms = torch.arange(num_atoms, device=cell.device)
 
     # Step 2: center cell
-    p1_center, p2_center = torch.combinations(all_atoms).unbind(-1)
-    shifts_center = shifts.new_zeros(p1_center.shape[0], 3)
+    p12_center = torch.triu_indices(num_atoms, num_atoms, 1, device=cell.device)
+    shifts_center = shifts.new_zeros((p12_center.shape[1], 3))
 
     # Step 3: cells with shifts
     # shape convention (shift index, molecule index, atom index, 3)
     num_shifts = shifts.shape[0]
     all_shifts = torch.arange(num_shifts, device=cell.device)
-    shift_index, p1, p2 = torch.cartesian_prod(all_shifts, all_atoms, all_atoms).unbind(
-        -1
-    )
+    prod = torch.cartesian_prod(all_shifts, all_atoms, all_atoms).t()
+    shift_index = prod[0]
+    p12 = prod[1:]
     shifts_outside = shifts.index_select(0, shift_index)
 
     # Step 4: combine results for all cells
     shifts_all = torch.cat([shifts_center, shifts_outside])
-    p1_all = torch.cat([p1_center, p1])
-    p2_all = torch.cat([p2_center, p2])
-
-    shift_values = torch.mm(shifts_all.to(cell.dtype), cell)
+    p12_all = torch.cat([p12_center, p12], dim=1)
+    shift_values = shifts_all.to(cell.dtype) @ cell
 
     # step 5, compute distances, and find all pairs within cutoff
-    distances = (coordinates[p1_all] - coordinates[p2_all] + shift_values).norm(2, -1)
-
-    padding_mask = (padding_mask[p1_all]) | (padding_mask[p2_all])
+    selected_coordinates = coordinates.index_select(0, p12_all.view(-1)).view(2, -1, 3)
+    distances = (
+        selected_coordinates[0, ...] - selected_coordinates[1, ...] + shift_values
+    ).norm(2, -1)
+    padding_mask = padding_mask.index_select(0, p12_all.view(-1)).view(2, -1).any(0)
     distances.masked_fill_(padding_mask, math.inf)
-    in_cutoff = torch.nonzero(distances < cutoff, as_tuple=False)
+    in_cutoff = (distances < cutoff).nonzero()
+
     pair_index = in_cutoff.squeeze()
-    atom_index1 = p1_all[pair_index]
-    atom_index2 = p2_all[pair_index]
+    atom_index12 = p12_all[:, pair_index]
     shifts = shifts_all.index_select(0, pair_index)
+    atom_index1 = atom_index12[0, ...]
+    atom_index2 = atom_index12[1, ...]
+
     return atom_index1, atom_index2, shifts
 
 
