@@ -277,24 +277,25 @@ class System:
             eps (float): Small offset for numerical stability
         """
         # Compute fractional coordinates
-        tmp_positions = self.positions.transpose(2, 3)
-        tmp_cells = self.cells.transpose(2, 3)
-        inv_positions, _ = torch.solve(tmp_positions, tmp_cells)
-        inv_positions = inv_positions.transpose(2, 3)
+        with torch.no_grad():
+            tmp_positions = self.positions.transpose(2, 3)
+            tmp_cells = self.cells.transpose(2, 3)
+            inv_positions, _ = torch.solve(tmp_positions, tmp_cells)
+            inv_positions = inv_positions.transpose(2, 3)
 
-        # Get periodic coordinates
-        periodic = torch.masked_select(inv_positions, self.pbc[None, :, None, :])
+            # Get periodic coordinates
+            periodic = torch.masked_select(inv_positions, self.pbc[None, :, None, :])
 
-        # Apply periodic boundary conditions (with small buffer)
-        periodic = periodic + eps
-        periodic = periodic % 1.0
-        periodic = periodic - eps
+            # Apply periodic boundary conditions (with small buffer)
+            periodic = periodic + eps
+            periodic = periodic % 1.0
+            periodic = periodic - eps
 
-        # Update fractional coordinates
-        inv_positions.masked_scatter_(self.pbc[None, :, None, :], periodic)
+            # Update fractional coordinates
+            inv_positions.masked_scatter_(self.pbc[None, :, None, :], periodic)
 
-        # Convert to positions
-        self.positions = torch.matmul(inv_positions, self.cells)
+            # Convert to positions
+            self.positions = torch.matmul(inv_positions, self.cells)
 
     def compute_pressure(self, tensor=False, kinetic_component=False):
         """
