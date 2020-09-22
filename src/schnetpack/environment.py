@@ -287,7 +287,7 @@ def neighbor_pairs(padding_mask, coordinates, cell, shifts, cutoff):
     ).norm(2, -1)
     padding_mask = padding_mask.index_select(0, p12_all.view(-1)).view(2, -1).any(0)
     distances.masked_fill_(padding_mask, math.inf)
-    in_cutoff = (distances <= cutoff).nonzero()
+    in_cutoff = (distances < cutoff).nonzero()
 
     pair_index = in_cutoff.squeeze()
     atom_index12 = p12_all[:, pair_index]
