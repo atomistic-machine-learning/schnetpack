@@ -195,13 +195,18 @@ class HDF5Loader:
                 :, :, mol_idx, :n_atoms, ...
             ]
         else:
-            target_property = self.properties[property_name][:, :, mol_idx, ...]
+            if self.properties[property_name] is not None:
+                target_property = self.properties[property_name][:, :, mol_idx, ...]
+            else:
+                target_property = None
 
         # Compute the centroid unless requested otherwise
         if replica_idx is None:
-            target_property = np.mean(target_property, axis=1)
+            if target_property is not None:
+                target_property = np.mean(target_property, axis=1)
         else:
-            target_property = target_property[:, replica_idx, ...]
+            if target_property is not None:
+                target_property = target_property[:, replica_idx, ...]
 
         return target_property
 
