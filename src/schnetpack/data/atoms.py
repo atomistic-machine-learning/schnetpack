@@ -679,7 +679,7 @@ def torchify_dict(property_dict):
         if prop.dtype in [np.int, np.int32, np.int64]:
             torch_properties[pname] = torch.LongTensor(prop)
         elif prop.dtype in [np.float, np.float32, np.float64]:
-            torch_properties[pname] = torch.FloatTensor(prop)
+            torch_properties[pname] = torch.FloatTensor(prop.copy())
         else:
             raise AtomsDataError(
                 "Invalid datatype {} for property {}!".format(type(prop), pname)
