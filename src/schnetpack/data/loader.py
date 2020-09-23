@@ -61,15 +61,6 @@ def _collate_aseatoms(examples):
             batch[Properties.neighbor_pairs_j]
         ).float()
 
-    # TODO: stuff for second cutoff list...
-    requires_lr = Properties.neighbors_lr in batch.keys()
-    has_neighbor_mask_lr = Properties.neighbor_mask_lr in batch.keys()
-
-    if requires_lr and not has_neighbor_mask_lr:
-        batch[Properties.neighbor_mask_lr] = torch.zeros_like(
-            batch[Properties.neighbors_lr]
-        )
-
     # build batch and pad
     for k, properties in enumerate(examples):
         for prop, val in properties.items():
@@ -85,15 +76,6 @@ def _collate_aseatoms(examples):
             mask = nbh >= 0
             batch[Properties.neighbor_mask][s] = mask
             batch[Properties.neighbors][s] = nbh * mask.long()
-
-        # Add mask if long range neighbor list is requested
-        if requires_lr and not has_neighbor_mask_lr:
-            nbh_lr = properties[Properties.neighbors_lr]
-            shape = nbh_lr.size()
-            s = (k,) + tuple([slice(0, d) for d in shape])
-            mask_lr = nbh_lr >= 0
-            batch[Properties.neighbor_mask_lr][s] = mask_lr
-            batch[Properties.neighbors_lr][s] = nbh_lr * mask_lr.long()
 
         if not has_atom_mask:
             z = properties[Properties.Z]
