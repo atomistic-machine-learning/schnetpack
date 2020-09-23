@@ -117,7 +117,7 @@ class SchnetPackCalculator(MDCalculator):
                             f"Specified cutoff for neighbor list {cutoff} smaller than cutoff in model {model_cutoff}."
                         )
                 except:
-                    print("No cutoff found")
+                    print("No cutoff found in model, using {:f}".format(cutoff))
 
             # Convert from model units to internal units
             cutoff /= self.position_conversion
