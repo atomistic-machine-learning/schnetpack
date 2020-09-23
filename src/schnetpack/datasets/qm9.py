@@ -26,7 +26,8 @@ class QM9(DownloadableAtomsData):
     Args:
         dbpath (str): path to directory containing database.
         download (bool, optional): enable downloading if database does not exists.
-        subset (list, optional): indices to subset. Set to None for entire database.
+        subset (list, optional): Deprecated! Do not use! Subsets are created with
+            AtomsDataSubset class.
         load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
         remove_uncharacterized (bool, optional): remove uncharacterized molecules.
@@ -118,20 +119,6 @@ class QM9(DownloadableAtomsData):
             units=units,
             environment_provider=environment_provider,
             **kwargs
-        )
-
-    def create_subset(self, idx):
-        idx = np.array(idx)
-        subidx = idx if self.subset is None else np.array(self.subset)[idx]
-
-        return QM9(
-            dbpath=self.dbpath,
-            download=False,
-            subset=subidx,
-            load_only=self.load_only,
-            collect_triples=self.collect_triples,
-            remove_uncharacterized=False,
-            environment_provider=self.environment_provider,
         )
 
     def _download(self):

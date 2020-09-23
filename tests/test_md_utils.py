@@ -1,20 +1,8 @@
-import os
+import schnetpack as spk
 import pytest
-
-from schnetpack import Properties
-
-import schnetpack.md.utils.hdf5_data
-import schnetpack.md.utils.md_units
-
 from ase import units
 
-
-@pytest.fixture
-def hdf5_dataset():
-    hdf5_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "data/test_simulation.hdf5"
-    )
-    return schnetpack.md.utils.hdf5_data.HDF5Loader(hdf5_path, load_properties=True)
+from tests.fixtures import *
 
 
 def test_properties(hdf5_dataset):
@@ -47,8 +35,8 @@ def test_properties(hdf5_dataset):
 
 def test_molecule(hdf5_dataset):
     # Test molecule properties
-    assert Properties.R in hdf5_dataset.properties
-    assert Properties.Z in hdf5_dataset.properties
+    assert spk.Properties.R in hdf5_dataset.properties
+    assert spk.Properties.Z in hdf5_dataset.properties
     assert "velocities" in hdf5_dataset.properties
 
     # Check positions
@@ -56,7 +44,7 @@ def test_molecule(hdf5_dataset):
     assert positions.shape == (2, 16, 3)
 
     # Check atom_types
-    atom_types = hdf5_dataset.get_property(Properties.Z)
+    atom_types = hdf5_dataset.get_property(spk.Properties.Z)
     assert atom_types.shape == (16,)
 
     # Check velocities
@@ -70,37 +58,37 @@ def test_molecule(hdf5_dataset):
 @pytest.fixture
 def unit_conversion():
     conversions = {
-        "kcal / mol": units.kcal / units.mol / schnetpack.md.utils.MDUnits.energy_unit,
-        "kcal/mol": units.kcal / units.mol / schnetpack.md.utils.MDUnits.energy_unit,
+        "kcal / mol": units.kcal / units.mol / spk.md.utils.MDUnits.energy_unit,
+        "kcal/mol": units.kcal / units.mol / spk.md.utils.MDUnits.energy_unit,
         "kJ /mol": 1.0,
-        "A": 1.0 / schnetpack.md.utils.MDUnits.length_unit,
+        "A": 1.0 / spk.md.utils.MDUnits.length_unit,
         "kcal / mol / Bohr": units.kcal
         / units.mol
         / units.Bohr
         / (
-            schnetpack.md.utils.MDUnits.energy_unit
-            / schnetpack.md.utils.MDUnits.length_unit
+            spk.md.utils.MDUnits.energy_unit
+            / spk.md.utils.MDUnits.length_unit
         ),
         "kcal / mol / A": units.kcal
         / units.mol
         / units.Angstrom
         / (
-            schnetpack.md.utils.MDUnits.energy_unit
-            / schnetpack.md.utils.MDUnits.length_unit
+            spk.md.utils.MDUnits.energy_unit
+            / spk.md.utils.MDUnits.length_unit
         ),
         "kcal / mol / Angs": units.kcal
         / units.mol
         / units.Angstrom
         / (
-            schnetpack.md.utils.MDUnits.energy_unit
-            / schnetpack.md.utils.MDUnits.length_unit
+            spk.md.utils.MDUnits.energy_unit
+            / spk.md.utils.MDUnits.length_unit
         ),
         "kcal / mol / Angstrom": units.kcal
         / units.mol
         / units.Angstrom
         / (
-            schnetpack.md.utils.MDUnits.energy_unit
-            / schnetpack.md.utils.MDUnits.length_unit
+            spk.md.utils.MDUnits.energy_unit
+            / spk.md.utils.MDUnits.length_unit
         ),
         0.57667: 0.57667,
     }
@@ -120,17 +108,17 @@ def unit_conversion_dual():
 def test_unit_conversion(unit_conversion, unit_conversion_dual):
     for unit, factor in unit_conversion.items():
         assert (
-            abs(schnetpack.md.utils.md_units.MDUnits.unit2internal(unit) - factor)
+            abs(spk.md.utils.md_units.MDUnits.unit2internal(unit) - factor)
             < 1e-6
         )
         assert (
-            abs(schnetpack.md.utils.md_units.MDUnits.internal2unit(unit) - 1.0 / factor)
+            abs(spk.md.utils.md_units.MDUnits.internal2unit(unit) - 1.0 / factor)
             < 1e-6
         )
 
     for unit_duple, factor in unit_conversion_dual.items():
         unit1, unit2 = unit_duple
         assert (
-            abs(schnetpack.md.utils.md_units.MDUnits.unit2unit(unit1, unit2) - factor)
+            abs(spk.md.utils.md_units.MDUnits.unit2unit(unit1, unit2) - factor)
             < 1e-6
         )

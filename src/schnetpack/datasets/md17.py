@@ -21,7 +21,7 @@ class MD17(DownloadableAtomsData):
 
     Args:
         dbpath (str): path to database
-        molecule (str): Name of molecule to load into database. Allowed are:
+        molecule (str or None): Name of molecule to load into database. Allowed are:
                             aspirin
                             benzene
                             ethanol
@@ -30,8 +30,8 @@ class MD17(DownloadableAtomsData):
                             salicylic_acid
                             toluene
                             uracil
-        subset (list): indices of subset. Set to None for entire dataset
-            (default: None)
+        subset (list, optional): Deprecated! Do not use! Subsets are created with
+            AtomsDataSubset class.
         download (bool): set true if dataset should be downloaded
             (default: True)
         collect_triples (bool): set true if triples for angular functions
@@ -95,20 +95,6 @@ class MD17(DownloadableAtomsData):
             download=download,
             available_properties=available_properties,
             environment_provider=environment_provider,
-        )
-
-    def create_subset(self, idx):
-        idx = np.array(idx)
-        subidx = idx if self.subset is None else np.array(self.subset)[idx]
-
-        return MD17(
-            dbpath=self.dbpath,
-            molecule=self.molecule,
-            subset=subidx,
-            download=False,
-            collect_triples=self.collect_triples,
-            load_only=self.load_only,
-            environment_provider=self.environment_provider,
         )
 
     def _download(self):
