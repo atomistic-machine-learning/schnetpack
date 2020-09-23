@@ -3,9 +3,11 @@ import torch
 import numpy as np
 import pytest
 from ase import Atoms
+from ase.db import connect
 
 import schnetpack as spk
 import schnetpack.data
+from .fixtures import *
 
 __all__ = ["max_atoms", "example_asedata", "property_spec", "example_data", "num_data"]
 
@@ -192,3 +194,18 @@ def test_get_center(h2o, o2):
     cog = spk.data.get_center_of_geometry(h2o)
 
     np.testing.assert_raises(AssertionError, np.testing.assert_array_equal, com, cog)
+
+
+def test_db_parsing(xyz_path, db_path):
+    atomic_properties = "Properties=species:S:1:pos:R:3:forces:R:3"
+    molecular_properties = ["energy"]
+    spk.generate_db(
+        xyz_path,
+        db_path,
+        molecular_properties=molecular_properties,
+        atomic_properties=atomic_properties,
+    )
+    with connect(db_path) as conn:
+        assert len(conn) == 3
+        atmsrow = conn.get(1)
+        assert {"energy", "forces"} == set(list(atmsrow.data.keys()))

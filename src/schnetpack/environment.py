@@ -287,7 +287,7 @@ def neighbor_pairs(padding_mask, coordinates, cell, shifts, cutoff):
 
     padding_mask = (padding_mask[p1_all]) | (padding_mask[p2_all])
     distances.masked_fill_(padding_mask, math.inf)
-    in_cutoff = (distances < cutoff).nonzero()
+    in_cutoff = torch.nonzero(distances < cutoff, as_tuple=False)
     pair_index = in_cutoff.squeeze()
     atom_index1 = p1_all[pair_index]
     atom_index2 = p2_all[pair_index]
