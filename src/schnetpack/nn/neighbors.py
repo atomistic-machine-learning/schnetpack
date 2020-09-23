@@ -73,9 +73,10 @@ def atom_distances(
         distances = tmp_distances
 
     if return_vecs:
+        tmp_distances = torch.ones_like(distances)
+        tmp_distances[neighbor_mask != 0] = distances[neighbor_mask != 0]
+
         if normalize_vecs:
-            tmp_distances = torch.ones_like(distances)
-            tmp_distances[neighbor_mask != 0] = distances[neighbor_mask != 0]
             dist_vec = dist_vec / tmp_distances[:, :, :, None]
         return distances, dist_vec
     return distances
@@ -90,10 +91,9 @@ class AtomDistances(nn.Module):
 
     """
 
-    def __init__(self, return_directions=False, normalize_vecs=False):
+    def __init__(self, return_directions=False):
         super(AtomDistances, self).__init__()
         self.return_directions = return_directions
-        self.normalize_vecs = normalize_vecs
 
     def forward(
         self, positions, neighbors, cell=None, cell_offsets=None, neighbor_mask=None
@@ -122,7 +122,7 @@ class AtomDistances(nn.Module):
             cell,
             cell_offsets,
             return_vecs=self.return_directions,
-            normalize_vecs=self.normalize_vecs,
+            normalize_vecs=True,
             neighbor_mask=neighbor_mask,
         )
 
