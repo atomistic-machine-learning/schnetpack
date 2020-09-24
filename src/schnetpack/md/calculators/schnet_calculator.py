@@ -84,9 +84,13 @@ class SchnetPackCalculator(MDCalculator):
         }
 
         if self.triples_required:
-            nbh_j, nbh_k, offset_idx_j, offset_idx_k, pair_mask = collect_atom_triples_batch(
-                neighbors, neighbor_mask
-            )
+            (
+                nbh_j,
+                nbh_k,
+                offset_idx_j,
+                offset_idx_k,
+                pair_mask,
+            ) = collect_atom_triples_batch(neighbors, neighbor_mask)
             inputs[Properties.neighbor_pairs_j] = nbh_j
             inputs[Properties.neighbor_pairs_k] = nbh_k
             inputs[Properties.neighbor_offsets_j] = offset_idx_j

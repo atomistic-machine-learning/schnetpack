@@ -218,9 +218,13 @@ def test_collect_atom_triples_batch(four_atoms, ase_env):
     batch_mask_jk = torch.LongTensor(np.array([mask_1_jk, mask_2_jk]))
 
     # Collect triples via batch method
-    nbh_j, nbh_k, offset_idx_j, offset_idx_k, pair_mask = env.collect_atom_triples_batch(
-        batch_nbh, batch_nbh_mask
-    )
+    (
+        nbh_j,
+        nbh_k,
+        offset_idx_j,
+        offset_idx_k,
+        pair_mask,
+    ) = env.collect_atom_triples_batch(batch_nbh, batch_nbh_mask)
 
     assert np.allclose(batch_nbh_j, nbh_j)
     assert np.allclose(batch_nbh_k, nbh_k)
