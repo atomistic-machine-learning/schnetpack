@@ -335,3 +335,46 @@ def collect_atom_triples(nbh_idx):
     offset_idx_k = offset_idx_k[:, triu_idx_flat]
 
     return nbh_idx_j, nbh_idx_k, offset_idx_j, offset_idx_k
+
+
+def collect_atom_triples_batch(neighbors, neighbor_mask):
+    """
+    Batch/torch version for collecting atom triples, offset indices and the corresponding mask directly from a
+    batch of neighbor indices and their corresponding mask. This is e.g. used in the
+    schnetpack.md.calculators.SchnetPackCalculator class to generate extended inputs for Behler type symmetry
+    functions.
+
+    Args:
+        neighbors (torch.LongTensor): (n_batch x n_atoms x n_neighbors) tensor holding the indices of all
+                                      neighbor atoms (e.g. from NeighborList or EnvironmentProvider).
+        neighbor_mask (torch.LongTensor): (n_batch x n_atoms x n_neighbors) binary tensor indicating non-existent
+                                          atoms due to padding.
+
+    Returns:
+        torch.LongTensor: (n_batch x n_atoms x n_triples) indices of the first neighbor in all triples.
+        torch.LongTensor: (n_batch x n_atoms x n_triples) indices of the second neighbor in all triples.
+        torch.LongTensor: (n_batch x n_atoms x n_triples) first neighbor offset indices for PBC.
+        torch.LongTensor: (n_batch x n_atoms x n_triples) second neighbor offset indices for PBC.
+        torch.LongTensor: (n_batch x n_atoms x n_triples) mask indicating all invalid pairs due to padding.
+    """
+    B, A, N = neighbors.shape
+
+    # Generate indices of all possible unique pairs
+    idx_k, idx_j = torch.combinations(
+        torch.arange(N, device=neighbors.device).long(), r=2, with_replacement=False
+    ).unbind(1)
+
+    # Generate triple indices
+    nbh_idx_j = neighbors[:, :, idx_j]
+    nhb_idx_k = neighbors[:, :, idx_k]
+
+    # Generate triple offset indices
+    offset_idx_j = idx_j.repeat((B, A, 1))
+    offset_idx_k = idx_k.repeat((B, A, 1))
+
+    # Generate mask for triples
+    mask_j = neighbor_mask[:, :, idx_j]
+    mask_k = neighbor_mask[:, :, idx_k]
+    mask_triples = mask_j * mask_k
+
+    return nbh_idx_j, nhb_idx_k, offset_idx_j, offset_idx_k, mask_triples

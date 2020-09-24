@@ -13,12 +13,21 @@ def simulation_dir():
     return tempdir
 
 
-@pytest.fixture(scope="module")
-def model_path():
+@pytest.fixture(scope="module", params=[0, 1])
+def model_path(request):
+    models = ["data/test_md_model.model", "data/test_md_model_wacsf.model"]
     model = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "data/test_md_model.model"
+        os.path.dirname(os.path.realpath(__file__)), models[request.param]
     )
     return model
+
+
+# @pytest.fixture(scope="module")
+# def model_path():
+#     model = os.path.join(
+#         os.path.dirname(os.path.realpath(__file__)), "data/test_md_model.model"
+#     )
+#     return model
 
 
 @pytest.fixture(scope="module")
