@@ -214,9 +214,7 @@ def gaussion_smearing_layer(n_gaussians, trainable_gaussians):
 
 
 @pytest.fixture
-def cfconv_layer(
-    n_atom_basis, n_filters, schnet_interaction, cutoff_layer,
-):
+def cfconv_layer(n_atom_basis, n_filters, schnet_interaction, cutoff_layer):
     return spk.nn.CFConv(
         n_in=n_atom_basis,
         n_filters=n_filters,
@@ -236,6 +234,7 @@ def dense_layer(random_input_dim, random_output_dim):
 
 @pytest.fixture
 def mlp_layer(random_input_dim, random_output_dim):
+    print(random_input_dim, "MLP", random_output_dim)
     return spk.nn.MLP(random_input_dim, random_output_dim)
 
 

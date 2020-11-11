@@ -74,8 +74,7 @@ class TestSacred:
         md_thermostats,
         md_integrator,
     ):
-        md_config = \
-            setup_basic_md(md_config, sim_dir, molecule_path, md_model_path)
+        md_config = setup_basic_md(md_config, sim_dir, molecule_path, md_model_path)
         md_config = setup_md(md_config, md_integrator, md_thermostats)
 
         md = MDSimulation(md_config)
@@ -92,9 +91,7 @@ class TestSacred:
 
         # Test restart
         md_config["overwrite"] = False
-        md_config["dynamics"]["restart"] = os.path.join(
-            sim_dir, "checkpoint.chk"
-        )
+        md_config["dynamics"]["restart"] = os.path.join(sim_dir, "checkpoint.chk")
         md = MDSimulation(md_config)
         md.save_config()
         md.run()
@@ -127,9 +124,7 @@ class TestSacred:
 
         # Test restart
         md_config["overwrite"] = False
-        md_config["dynamics"]["restart"] = os.path.join(
-            sim_dir, "checkpoint.chk"
-        )
+        md_config["dynamics"]["restart"] = os.path.join(sim_dir, "checkpoint.chk")
         md = MDSimulation(md_config)
         md.save_config()
         md.run()

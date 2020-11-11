@@ -4,7 +4,6 @@ import numpy as np
 from ase import Atoms
 import schnetpack as spk
 
-
 __all__ = [
     # general
     "tmp_data_dir",
@@ -106,7 +105,7 @@ def empty_dataset(tmp_data_dir, available_properties):
 @pytest.fixture(scope="session")
 def property_shapes():
     return dict(
-        property1=[1], derivative1=[-1, 3], contributions1=[-1, 1], property2=[1],
+        property1=[1], derivative1=[-1, 3], contributions1=[-1, 1], property2=[1]
     )
 
 
@@ -279,9 +278,12 @@ def target_orca_db_path(shared_datadir):
     return os.path.join(shared_datadir, "test_orca_parser.db")
 
 
-@pytest.fixture
-def md_model_path(shared_datadir):
-    return os.path.join(shared_datadir, "test_md_model.model")
+@pytest.fixture(params=[0, 1], ids=["schnet", "acsf"])
+def md_model_path(request, shared_datadir):
+    models = ["test_md_model.model", "test_md_model_wacsf.model"]
+    model = os.path.join(shared_datadir, models[request.param])
+
+    return model
 
 
 # example datasets

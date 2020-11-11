@@ -8,6 +8,7 @@ from schnetpack import environment as env
 __all__ = [
     "single_atom",
     "two_atoms",
+    "four_atoms",
     "single_site_crystal",
     "two_site_crystal",
     "crystal",
@@ -27,6 +28,14 @@ def single_atom():
 @pytest.fixture
 def two_atoms():
     return Atoms([6, 6], positions=[[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]])
+
+
+@pytest.fixture
+def four_atoms():
+    return Atoms(
+        [6, 6, 6, 6],
+        positions=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0, 1.0]],
+    )
 
 
 @pytest.fixture

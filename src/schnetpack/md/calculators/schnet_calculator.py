@@ -6,6 +6,9 @@ from schnetpack.md.calculators.ensemble_calculator import EnsembleCalculator
 from schnetpack.md.neighbor_lists import SimpleNeighborList
 import logging
 
+from schnetpack.md.utils import MDUnits, check_triples_required
+from schnetpack.environment import collect_atom_triples_batch
+
 
 class SchnetPackCalculator(MDCalculator):
     """
@@ -60,6 +63,9 @@ class SchnetPackCalculator(MDCalculator):
             detach=detach,
         )
         self.model = model
+
+        # Check if atom triples need to be computed (e.g. for Behler functions)
+        self.triples_required = check_triples_required(model)
 
         # If stress is required, activate stress computation in model
         if stress_handle is not None:
@@ -200,6 +206,21 @@ class SchnetPackCalculator(MDCalculator):
             Properties.cell_offset: offsets,
         }
 
+        # Check if triples are required
+        if self.triples_required:
+            (
+                nbh_j,
+                nbh_k,
+                offset_idx_j,
+                offset_idx_k,
+                pair_mask,
+            ) = collect_atom_triples_batch(neighbor_list, neighbor_mask)
+            neighbors[Properties.neighbor_pairs_j] = nbh_j
+            neighbors[Properties.neighbor_pairs_k] = nbh_k
+            neighbors[Properties.neighbor_offsets_j] = offset_idx_j
+            neighbors[Properties.neighbor_offsets_k] = offset_idx_k
+            neighbors[Properties.neighbor_pairs_mask] = pair_mask
+
         # Check if two cutoffs are present
         if isinstance(
             self.neighbor_list, schnetpack.md.neighbor_lists.DualNeighborList
@@ -256,7 +277,9 @@ class SchnetPackCalculator(MDCalculator):
         if isinstance(representation, schnetpack.representation.SchNet):
             model_cutoff = representation.interactions[0].cutoff_network.cutoff
         elif isinstance(representation, schnetpack.representation.BehlerSFBlock):
-            model_cutoff = representation.cutoff_radius
+            model_cutoff = representation.cutoff.cutoff
+        elif isinstance(representation, schnetpack.representation.StandardizeSF):
+            model_cutoff = representation.SFBlock.cutoff.cutoff
         else:
             raise ValueError(
                 "Unrecognized model representation {:s }for cutoff detection.".format(
