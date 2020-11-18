@@ -315,12 +315,10 @@ class SetupCalculator(SetupBlock):
         CalculatorInit.kind: "schnet",
         "required_properties": ["energy", "forces"],
         "force_handle": "forces",
-        "position_conversion": "Angstrom",
-        "force_conversion": "kcal/mol/Angstrom",
         "property_conversion": {},
     }
     target_block = "calculator"
-    schnet_models = ["schnet"]
+    schnet_models = ["schnet", "custom"]
 
     def _setup(self, md_initializer):
         """
