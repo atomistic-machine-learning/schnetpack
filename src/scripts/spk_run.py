@@ -29,7 +29,7 @@ def main(args):
 
     # get dataset
     environment_provider = get_environment_provider(train_args, device=device)
-    dataset = get_dataset(args, environment_provider=environment_provider)
+    dataset = get_dataset(train_args, environment_provider=environment_provider)
 
     # get dataloaders
     split_path = os.path.join(args.modelpath, "split.npz")
