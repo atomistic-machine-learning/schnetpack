@@ -223,7 +223,7 @@ class QM9(DownloadableAtomsData):
                 lines = f.readlines()
                 l = lines[1].split()[2:]
                 for pn, p in zip(self.available_properties, l):
-                    properties[pn] = np.array([float(p) * self.units[pn]])
+                    properties[pn] = np.array([float(p * self.units[pn]]),dtype=np.float32)
                 with open(tmp, "wt") as fout:
                     for line in lines:
                         fout.write(line.replace("*^", "e"))
