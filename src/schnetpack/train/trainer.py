@@ -221,6 +221,8 @@ class Trainer:
                         val_batch = {k: v.to(device) for k, v in val_batch.items()}
 
                         val_result = self._model(val_batch)
+                        val_result = {k: v.detach() for k, v in val_result.items()}
+
                         val_batch_loss = (
                             self.loss_fn(val_batch, val_result).data.cpu().numpy()
                         )
