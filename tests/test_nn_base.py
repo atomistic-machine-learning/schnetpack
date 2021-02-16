@@ -1,6 +1,6 @@
 import torch
 
-from schnetpack.nn.base import Aggregate, MaxAggregate
+from schnetpack.nn.base import Aggregate, MaxAggregate, SoftmaxAggregate
 
 
 def test_nn_aggregate_axis():
@@ -50,3 +50,18 @@ def test_nn_aggregate_axis_max():
     assert torch.allclose(torch.FloatTensor([2, 1, 0]), agg(data, mask))
     agg = MaxAggregate(axis=1)
     assert torch.allclose(torch.FloatTensor([1, 2]), agg(data, mask))
+
+
+def test_nn_aggregate_axis_softmax():
+    data = torch.FloatTensor([[0, 1, 2], [2, 1, 0]])
+
+    # Test different axes
+    agg = SoftmaxAggregate(axis=0)
+    assert torch.allclose(torch.FloatTensor([1.76159415595576, 1, 1.76159415595576]), agg(data))
+    agg = SoftmaxAggregate(axis=1)
+    assert torch.allclose(torch.FloatTensor([1.57521038260444]*2), agg(data))
+
+    # Test with a mask
+    mask = torch.IntTensor([[1, 1, 0], [1, 0, 0]])
+    agg = SoftmaxAggregate(axis=1)
+    assert torch.allclose(torch.FloatTensor([0.731058578630005, 2]), agg(data, mask))

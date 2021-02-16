@@ -124,6 +124,8 @@ class Atomwise(nn.Module):
             self.atom_pool = schnetpack.nn.base.Aggregate(axis=1, mean=True)
         elif aggregation_mode == "max":
             self.atom_pool = schnetpack.nn.base.MaxAggregate(axis=1)
+        elif aggregation_mode == "softmax":
+            self.atom_pool = schnetpack.nn.base.MaxAggregate(axis=1)
         else:
             raise AtomwiseError(
                 "{} is not a valid aggregation " "mode!".format(aggregation_mode)
