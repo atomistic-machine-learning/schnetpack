@@ -351,17 +351,19 @@ class System:
                     self.positions[idx_r, idx_m, : self.n_atoms[idx_m]]
                     .cpu()
                     .detach()
+                    .clone()
                     .numpy()
                 )
                 atom_types = (
                     self.atom_types[idx_r, idx_m, : self.n_atoms[idx_m]]
                     .cpu()
                     .detach()
+                    .clone()
                     .numpy()
                 )
                 if self.cells is not None:
-                    cell = self.cells[idx_r, idx_m].cpu().detach().numpy()
-                    pbc = self.pbc[idx_m].cpu().detach().numpy()
+                    cell = self.cells[idx_r, idx_m].cpu().detach().clone().numpy()
+                    pbc = self.pbc[idx_m].cpu().detach().clone().numpy()
                 else:
                     cell = None
                     pbc = None
