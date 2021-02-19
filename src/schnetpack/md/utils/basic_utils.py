@@ -74,7 +74,7 @@ def check_triples_required(model):
     if hasattr(model, "module"):
         representation_layer = model.module.representation
     else:
-        representation_layer = model.representation
+        representation_layer = model.field_representation
 
     # If representation is standardized, extract it from standardization layer
     if isinstance(representation_layer, representation.StandardizeSF):

@@ -86,6 +86,7 @@ class MDNeighborList:
             return True
 
         # Check if atoms have moved out of the boundary
+        # TODO: positions should all be wrapped into cell to account for pbc
         max_displacement = torch.max(
             torch.norm(system.positions - self.last_positions, 2, 3)
         ).detach()

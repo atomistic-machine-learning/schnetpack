@@ -72,6 +72,12 @@ class Simulator:
         """
 
         self.n_steps = n_steps
+        # self.system.wrap_positions()
+
+        from ase.io import write
+
+        atoms = self.system.get_ase_atoms(internal_units=False)
+        write("initial.xyz", atoms[0])
 
         # Perform initial computation of forces
         if self.system.forces is None:
@@ -102,6 +108,9 @@ class Simulator:
 
             # Do half step momenta
             self.integrator.half_step(self.system)
+
+            atoms = self.system.get_ase_atoms(internal_units=False)
+            write("step_{:03d}.xyz".format(_), atoms[0])
 
             # Call hooks after second half step
             # Hooks are called in reverse order to guarantee symmetry of
