@@ -125,6 +125,7 @@ class MaterialsProject(DownloadableAtomsData):
                                 "band_gap",
                                 "material_id",
                                 "warnings",
+                                "created_at",
                             ],
                         )
 
@@ -148,6 +149,10 @@ class MaterialsProject(DownloadableAtomsData):
                                             "total_magnetization"
                                         ],
                                         MaterialsProject.BandGap: q["band_gap"],
+                                    },
+                                    key_value_pairs={
+                                        "material_id": q["material_id"],
+                                        "created_at": q["created_at"],
                                     },
                                 )
         self.set_metadata({})
