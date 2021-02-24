@@ -263,35 +263,38 @@ def neighbor_pairs(padding_mask, coordinates, cell, shifts, cutoff):
     all_atoms = torch.arange(num_atoms, device=cell.device)
 
     # Step 2: center cell
-    p1_center, p2_center = torch.combinations(all_atoms).unbind(-1)
-    shifts_center = shifts.new_zeros(p1_center.shape[0], 3)
+    p12_center = torch.triu_indices(num_atoms, num_atoms, 1, device=cell.device)
+    shifts_center = shifts.new_zeros((p12_center.shape[1], 3))
 
     # Step 3: cells with shifts
     # shape convention (shift index, molecule index, atom index, 3)
     num_shifts = shifts.shape[0]
     all_shifts = torch.arange(num_shifts, device=cell.device)
-    shift_index, p1, p2 = torch.cartesian_prod(all_shifts, all_atoms, all_atoms).unbind(
-        -1
-    )
+    prod = torch.cartesian_prod(all_shifts, all_atoms, all_atoms).t()
+    shift_index = prod[0]
+    p12 = prod[1:]
     shifts_outside = shifts.index_select(0, shift_index)
 
     # Step 4: combine results for all cells
     shifts_all = torch.cat([shifts_center, shifts_outside])
-    p1_all = torch.cat([p1_center, p1])
-    p2_all = torch.cat([p2_center, p2])
-
-    shift_values = torch.mm(shifts_all.to(cell.dtype), cell)
+    p12_all = torch.cat([p12_center, p12], dim=1)
+    shift_values = shifts_all.to(cell.dtype) @ cell
 
     # step 5, compute distances, and find all pairs within cutoff
-    distances = (coordinates[p1_all] - coordinates[p2_all] + shift_values).norm(2, -1)
-
-    padding_mask = (padding_mask[p1_all]) | (padding_mask[p2_all])
+    selected_coordinates = coordinates.index_select(0, p12_all.view(-1)).view(2, -1, 3)
+    distances = (
+        selected_coordinates[0, ...] - selected_coordinates[1, ...] + shift_values
+    ).norm(2, -1)
+    padding_mask = padding_mask.index_select(0, p12_all.view(-1)).view(2, -1).any(0)
     distances.masked_fill_(padding_mask, math.inf)
     in_cutoff = (distances < cutoff).nonzero()
+
     pair_index = in_cutoff.squeeze()
-    atom_index1 = p1_all[pair_index]
-    atom_index2 = p2_all[pair_index]
+    atom_index12 = p12_all[:, pair_index]
     shifts = shifts_all.index_select(0, pair_index)
+    atom_index1 = atom_index12[0, ...]
+    atom_index2 = atom_index12[1, ...]
+
     return atom_index1, atom_index2, shifts
 
 
@@ -332,3 +335,46 @@ def collect_atom_triples(nbh_idx):
     offset_idx_k = offset_idx_k[:, triu_idx_flat]
 
     return nbh_idx_j, nbh_idx_k, offset_idx_j, offset_idx_k
+
+
+def collect_atom_triples_batch(neighbors, neighbor_mask):
+    """
+    Batch/torch version for collecting atom triples, offset indices and the corresponding mask directly from a
+    batch of neighbor indices and their corresponding mask. This is e.g. used in the
+    schnetpack.md.calculators.SchnetPackCalculator class to generate extended inputs for Behler type symmetry
+    functions.
+
+    Args:
+        neighbors (torch.LongTensor): (n_batch x n_atoms x n_neighbors) tensor holding the indices of all
+                                      neighbor atoms (e.g. from NeighborList or EnvironmentProvider).
+        neighbor_mask (torch.LongTensor): (n_batch x n_atoms x n_neighbors) binary tensor indicating non-existent
+                                          atoms due to padding.
+
+    Returns:
+        torch.LongTensor: (n_batch x n_atoms x n_triples) indices of the first neighbor in all triples.
+        torch.LongTensor: (n_batch x n_atoms x n_triples) indices of the second neighbor in all triples.
+        torch.LongTensor: (n_batch x n_atoms x n_triples) first neighbor offset indices for PBC.
+        torch.LongTensor: (n_batch x n_atoms x n_triples) second neighbor offset indices for PBC.
+        torch.LongTensor: (n_batch x n_atoms x n_triples) mask indicating all invalid pairs due to padding.
+    """
+    B, A, N = neighbors.shape
+
+    # Generate indices of all possible unique pairs
+    idx_k, idx_j = torch.combinations(
+        torch.arange(N, device=neighbors.device).long(), r=2, with_replacement=False
+    ).unbind(1)
+
+    # Generate triple indices
+    nbh_idx_j = neighbors[:, :, idx_j]
+    nhb_idx_k = neighbors[:, :, idx_k]
+
+    # Generate triple offset indices
+    offset_idx_j = idx_j.repeat((B, A, 1))
+    offset_idx_k = idx_k.repeat((B, A, 1))
+
+    # Generate mask for triples
+    mask_j = neighbor_mask[:, :, idx_j]
+    mask_k = neighbor_mask[:, :, idx_k]
+    mask_triples = mask_j * mask_k
+
+    return nbh_idx_j, nhb_idx_k, offset_idx_j, offset_idx_k, mask_triples

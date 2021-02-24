@@ -23,7 +23,7 @@ class Trainer:
        loss_is_normalized (bool, optional): if True, the loss per data point will be
            reported. Otherwise, the accumulated loss is reported.
 
-   """
+    """
 
     def __init__(
         self,

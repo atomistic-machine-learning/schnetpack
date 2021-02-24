@@ -1,6 +1,7 @@
 from schnetpack import Properties
 from schnetpack.md.calculators import MDCalculator
-from schnetpack.md.utils import MDUnits
+from schnetpack.md.utils import MDUnits, check_triples_required
+from schnetpack.environment import collect_atom_triples_batch
 
 
 class SchnetPackCalculator(MDCalculator):
@@ -43,6 +44,9 @@ class SchnetPackCalculator(MDCalculator):
 
         self.model = model
 
+        # Check if atom triples need to be computed (e.g. for Behler functions)
+        self.triples_required = check_triples_required(model)
+
     def calculate(self, system):
         """
         Main routine, generates a properly formatted input for the schnetpack model from the system, performs the
@@ -78,5 +82,19 @@ class SchnetPackCalculator(MDCalculator):
             Properties.neighbors: neighbors,
             Properties.neighbor_mask: neighbor_mask,
         }
+
+        if self.triples_required:
+            (
+                nbh_j,
+                nbh_k,
+                offset_idx_j,
+                offset_idx_k,
+                pair_mask,
+            ) = collect_atom_triples_batch(neighbors, neighbor_mask)
+            inputs[Properties.neighbor_pairs_j] = nbh_j
+            inputs[Properties.neighbor_pairs_k] = nbh_k
+            inputs[Properties.neighbor_offsets_j] = offset_idx_j
+            inputs[Properties.neighbor_offsets_k] = offset_idx_k
+            inputs[Properties.neighbor_pairs_mask] = pair_mask
 
         return inputs

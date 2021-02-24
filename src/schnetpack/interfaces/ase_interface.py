@@ -108,55 +108,58 @@ class SpkCalculator(Calculator):
         """
         # First call original calculator to set atoms attribute
         # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
-        Calculator.calculate(self, atoms)
 
-        # Convert to schnetpack input format
-        model_inputs = self.atoms_converter(atoms)
-        # Call model
-        model_results = self.model(model_inputs)
+        if self.calculation_required(atoms, properties):
+            Calculator.calculate(self, atoms)
+            # Convert to schnetpack input format
+            model_inputs = self.atoms_converter(atoms)
+            # Call model
+            model_results = self.model(model_inputs)
 
-        results = {}
-        # Convert outputs to calculator format
-        if self.model_energy is not None:
-            if self.model_energy not in model_results.keys():
-                raise SpkCalculatorError(
-                    "'{}' is not a property of your model. Please "
-                    "check the model "
-                    "properties!".format(self.model_energy)
-                )
-            energy = model_results[self.model_energy].cpu().data.numpy()
-            results[self.energy] = (
-                energy.item() * self.energy_units
-            )  # ase calculator should return scalar energy
+            results = {}
+            # Convert outputs to calculator format
+            if self.model_energy is not None:
+                if self.model_energy not in model_results.keys():
+                    raise SpkCalculatorError(
+                        "'{}' is not a property of your model. Please "
+                        "check the model "
+                        "properties!".format(self.model_energy)
+                    )
+                energy = model_results[self.model_energy].cpu().data.numpy()
+                results[self.energy] = (
+                    energy.item() * self.energy_units
+                )  # ase calculator should return scalar energy
 
-        if self.model_forces is not None:
-            if self.model_forces not in model_results.keys():
-                raise SpkCalculatorError(
-                    "'{}' is not a property of your model. Please "
-                    "check the model"
-                    "properties!".format(self.model_forces)
-                )
-            forces = model_results[self.model_forces].cpu().data.numpy()
-            results[self.forces] = forces.reshape((len(atoms), 3)) * self.forces_units
-
-        if self.model_stress is not None:
-            if atoms.cell.volume <= 0.0:
-                raise SpkCalculatorError(
-                    "Cell with 0 volume encountered for stress computation"
+            if self.model_forces is not None:
+                if self.model_forces not in model_results.keys():
+                    raise SpkCalculatorError(
+                        "'{}' is not a property of your model. Please "
+                        "check the model"
+                        "properties!".format(self.model_forces)
+                    )
+                forces = model_results[self.model_forces].cpu().data.numpy()
+                results[self.forces] = (
+                    forces.reshape((len(atoms), 3)) * self.forces_units
                 )
 
-            if self.model_stress not in model_results.keys():
-                raise SpkCalculatorError(
-                    "'{}' is not a property of your model. Please "
-                    "check the model"
-                    "properties! If desired, stress tensor computation can be "
-                    "activated via schnetpack.utils.activate_stress_computation "
-                    "at ones own risk.".format(self.model_stress)
-                )
-            stress = model_results[self.model_stress].cpu().data.numpy()
-            results[self.stress] = stress.reshape((3, 3)) * self.stress_units
+            if self.model_stress is not None:
+                if atoms.cell.volume <= 0.0:
+                    raise SpkCalculatorError(
+                        "Cell with 0 volume encountered for stress computation"
+                    )
 
-        self.results = results
+                if self.model_stress not in model_results.keys():
+                    raise SpkCalculatorError(
+                        "'{}' is not a property of your model. Please "
+                        "check the model"
+                        "properties! If desired, stress tensor computation can be "
+                        "activated via schnetpack.utils.activate_stress_computation "
+                        "at ones own risk.".format(self.model_stress)
+                    )
+                stress = model_results[self.model_stress].cpu().data.numpy()
+                results[self.stress] = stress.reshape((3, 3)) * self.stress_units
+
+            self.results = results
 
 
 class AseInterface:

@@ -1,6 +1,7 @@
 import torch
+from schnetpack import representation
 
-__all__ = ["compute_centroid", "batch_inverse"]
+__all__ = ["compute_centroid", "batch_inverse", "check_triples_required"]
 
 
 def compute_centroid(ensemble):
@@ -58,3 +59,35 @@ class RunningAverage:
         """
         self.average = (self.counts * self.average + value) / (self.counts + 1)
         self.counts += 1
+
+
+def check_triples_required(model):
+    """
+    Check, if the model has a representation which requires the computation of triples between atoms.
+    E.g. angular terms in Behler symmetry functions.
+
+    Args:
+        model (schnetpack.model.AtomisticModel):
+
+    Returns:
+        bool: Indicator whether model needs triples or not.
+    """
+    # check if DataParallel or conventional
+    if hasattr(model, "module"):
+        representation_layer = model.module.representation
+    else:
+        representation_layer = model.representation
+
+    # If representation is standardized, extract it from standardization layer
+    if isinstance(representation_layer, representation.StandardizeSF):
+        representation_layer = representation_layer.SFBlock
+
+    # Check if representation uses SFs
+    if isinstance(representation_layer, representation.SymmetryFunctions):
+        # Check if angular terms are present:
+        if representation_layer.n_angular > 0:
+            return True
+        else:
+            return False
+    else:
+        return False
