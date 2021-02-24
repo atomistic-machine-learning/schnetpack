@@ -4,7 +4,6 @@ from torch import nn
 from schnetpack import Properties
 from schnetpack.nn import shifted_softplus, Dense
 
-
 __all__ = ["MLP", "TiledMultiLayerNN", "ElementalGate", "GatedNetwork"]
 
 
@@ -36,7 +35,7 @@ class MLP(nn.Module):
             self.n_neurons = []
             for i in range(n_layers):
                 self.n_neurons.append(c_neurons)
-                c_neurons = c_neurons // 2
+                c_neurons = max(n_out, c_neurons // 2)
             self.n_neurons.append(n_out)
         else:
             # get list of number of nodes hidden layers

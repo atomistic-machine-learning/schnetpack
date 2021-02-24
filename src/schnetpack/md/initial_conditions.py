@@ -4,7 +4,6 @@ This entails sampling the momenta from random distributions corresponding to cer
 """
 import torch
 
-
 __all__ = ["Initializer", "MaxwellBoltzmannInit"]
 
 
@@ -19,22 +18,24 @@ class Initializer:
     def __init__(self, temperature):
         self.temperature = temperature
 
-    def initialize_system(self, system):
+    def initialize_system(self, system, mask=None):
         """
         Initialize the system according to the instructions given in _setup_momenta.
 
         Args:
             system (object): System class containing all molecules and their replicas.
+            mask (array): Mask where 1 indicates that velocities of system will be changed.
         """
-        self._setup_momenta(system)
+        self._setup_momenta(system, mask=mask)
 
-    def _setup_momenta(self, system):
+    def _setup_momenta(self, system, mask=None):
         """
         Main routine for initializing system momenta based on the molecules defined in system and the provided
         temperature. To be implemented.
 
         Args:
             system (object): System class containing all molecules and their replicas.
+            mask (array): Mask where 1 indicates that velocities of system will be changed.
         """
         raise NotImplementedError
 
@@ -58,7 +59,7 @@ class MaxwellBoltzmannInit(Initializer):
         self.remove_translation = remove_translation
         self.remove_rotation = remove_rotation
 
-    def _setup_momenta(self, system):
+    def _setup_momenta(self, system, mask=None):
         """
         Initialize the momenta, by drawing from a random normal distribution and rescaling the momenta to the desired
         temperature afterwards. In addition, the system is centered at its center of mass.
@@ -69,11 +70,17 @@ class MaxwellBoltzmannInit(Initializer):
         # Move center of mass to origin
         system.remove_com()
 
-        # Initialize velocities
-        velocities = torch.randn(system.momenta.shape, device=system.device)
-
         # Set initial system momenta and apply atom masks
-        system.momenta = velocities * system.masses * system.atom_masks
+        momenta = (
+            torch.randn(system.momenta.shape, device=system.device)
+            * system.masses
+            * system.atom_masks
+        )
+
+        if mask is None:
+            system.momenta = momenta
+        else:
+            system.momenta[mask == 1] = momenta[mask == 1]
 
         # Remove translational motion if requested
         if self.remove_translation:
@@ -85,4 +92,7 @@ class MaxwellBoltzmannInit(Initializer):
 
         # Scale velocities to desired temperature
         scaling = torch.sqrt(self.temperature / system.temperature)
-        system.momenta *= scaling[:, :, None, None]
+        if mask is None:
+            system.momenta *= scaling[:, :, None, None]
+        else:
+            system.momenta[mask == 1, ...] *= scaling[mask == 1][:, None, None]

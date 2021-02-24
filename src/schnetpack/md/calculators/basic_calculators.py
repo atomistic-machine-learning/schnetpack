@@ -38,21 +38,39 @@ class MDCalculator:
         position_conversion=1.0,
         force_conversion=1.0,
         property_conversion={},
+        stress_handle=None,
+        stress_conversion=1.0,
         detach=True,
     ):
         self.results = {}
         self.force_handle = force_handle
+        self.stress_handle = stress_handle
         self.required_properties = required_properties
 
         # Perform automatic conversion of units
-        self.position_conversion = MDUnits.parse_mdunit(position_conversion)
-        self.force_conversion = MDUnits.parse_mdunit(force_conversion)
+        # internal -> calculator
+        self.position_conversion = MDUnits.internal2unit(position_conversion)
+
+        # calculator -> internal
+        self.force_conversion = MDUnits.unit2internal(force_conversion)
+        self.stress_conversion = MDUnits.unit2internal(stress_conversion)
         self.property_conversion = {
-            p: MDUnits.parse_mdunit(property_conversion[p]) for p in property_conversion
+            p: MDUnits.unit2internal(property_conversion[p])
+            for p in property_conversion
         }
+
+        # Default conversion (1.0) for all units not set above
         self._init_default_conversion()
 
         self.detach = detach
+
+    def check_calculator(self, system):
+        # TODO:
+        #   1) check cell
+        #   2) check cutoff region
+        #   3) Reset all known NBLS
+        #   4) check PBC
+        raise NotImplementedError
 
     def calculate(self, system):
         """
@@ -109,31 +127,9 @@ class MDCalculator:
             # Set the forces for the system (at this point, already detached)
             self._set_system_forces(system)
 
-    def _get_system_neighbors(self, system):
-        """
-        Auxiliary function, which extracts neighbor lists formatted for schnetpack models from the system class.
-        This is done by collapsing the replica and molecule dimension into one batch dimension.
-
-        Args:
-            system (schnetpack.md.System): System object containing current state of the simulation.
-
-        Returns:
-            torch.LongTensor: (n_replicas*n_molecules) x n_atoms x (n_atoms-1) tensor holding the indices of all
-                              neighbor atoms.
-            torch.LongTensor: (n_replicas*n_molecules) x n_atoms x (n_atoms-1) binary tensor indicating padded
-                              dimensions.
-        """
-        if system.neighbor_list is None:
-            raise ValueError("System does not have neighbor list.")
-        neighbor_list, neighbor_mask = system.neighbor_list.get_neighbors()
-
-        neighbor_list = neighbor_list.view(
-            -1, system.max_n_atoms, system.max_n_atoms - 1
-        )
-        neighbor_mask = neighbor_mask.view(
-            -1, system.max_n_atoms, system.max_n_atoms - 1
-        )
-        return neighbor_list, neighbor_mask
+            # Set stress of the system if requested:
+            if self.stress_handle is not None:
+                self._set_system_stress(system)
 
     def _get_system_molecules(self, system):
         """
@@ -152,9 +148,16 @@ class MDCalculator:
             system.positions.view(-1, system.max_n_atoms, 3) * self.position_conversion
         )
 
+        cells = system.cells
+        pbc = system.pbc
+        if system.cells is not None:
+            cells = cells.view(-1, 3, 3) * self.position_conversion
+            pbc = pbc.view(-1, 3)
+
         atom_types = system.atom_types.view(-1, system.max_n_atoms)
         atom_masks = system.atom_masks.view(-1, system.max_n_atoms)
-        return positions, atom_types, atom_masks
+
+        return positions, atom_types, atom_masks, cells, pbc
 
     def _set_system_forces(self, system):
         """
@@ -171,11 +174,12 @@ class MDCalculator:
             * self.force_conversion
         )
 
-    def _get_ase_molecules(self, system):
-        """
-        Dummy function to get molecules in ASE format.
-        """
-        pass
+    def _set_system_stress(self, system):
+        stress = self.results[self.stress_handle]
+        system.stress = (
+            stress.view(system.n_replicas, system.n_molecules, 3, 3)
+            * self.stress_conversion
+        )
 
 
 class QMCalculatorError(Exception):
@@ -221,7 +225,7 @@ class QMCalculator(MDCalculator):
         force_handle,
         compdir,
         qm_executable,
-        position_conversion=1.0 / MDUnits.angs2bohr,
+        position_conversion="Angstrom",
         force_conversion=1.0,
         property_conversion={},
         adaptive=False,

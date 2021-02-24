@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from schnetpack.data import AtomsDataError, AtomsDataSubset
 
 
 def train_test_split(
@@ -17,6 +18,7 @@ def train_test_split(
     be supplied. The remaining data will be used in the test dataset.
 
     Args:
+        data (spk.data.AtomsData): full atomistic dataset
         num_train (int): number of training examples
         num_val (int): number of validation examples
         split_file (str): Path to split file. If file exists, splits will
@@ -24,9 +26,9 @@ def train_test_split(
                           where the generated split is stored.
 
     Returns:
-        schnetpack.data.AtomsData: training dataset
-        schnetpack.data.AtomsData: validation dataset
-        schnetpack.data.AtomsData: test dataset
+        spk.data.AtomsDataSubset: subset with training data
+        spk.data.AtomsDataSubset: subset with validation data
+        spk.data.AtomsDataSubset: subset with test data
 
     """
     if split_file is not None and os.path.exists(split_file):
@@ -80,7 +82,28 @@ def train_test_split(
                 split_file, train_idx=train_idx, val_idx=val_idx, test_idx=test_idx
             )
 
-    train = data.create_subset(train_idx)
-    val = data.create_subset(val_idx)
-    test = data.create_subset(test_idx)
+    train = create_subset(data, train_idx)
+    val = create_subset(data, val_idx)
+    test = create_subset(data, test_idx)
+
     return train, val, test
+
+
+def create_subset(dataset, indices):
+    r"""
+    Create a subset of atomistic datasets.
+
+    Args:
+        dataset (torch.utils.data.Dataset): dataset
+        indices (sequence): indices of the subset
+
+    Returns:
+        spk.data.AtomsDataSubset: subset of input dataset
+
+    """
+    max_id = 0 if len(indices) == 0 else max(indices)
+    if len(dataset) <= max_id:
+        raise AtomsDataError(
+            "The subset indices do not match the total length of the dataset!"
+        )
+    return AtomsDataSubset(dataset, indices)

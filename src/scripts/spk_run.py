@@ -120,6 +120,4 @@ if __name__ == "__main__":
     if args.mode == "from_json":
         args = spk.utils.read_from_json(args.json_path)
 
-    import argparse
-
     main(args)

@@ -9,6 +9,7 @@ import logging
 import h5py
 import numpy as np
 from ase import data
+import warnings
 
 from schnetpack import Properties
 from schnetpack.md.utils import MDUnits
@@ -89,13 +90,52 @@ class HDF5Loader:
         self.entries = self.total_entries - self.skip_initial
 
         # Write to main property dictionary
-        self.properties[Properties.Z] = structures.attrs["atom_types"][0, ...]
+        if structures.ndim == 4:
+            self._load_structures(structures)
+        else:
+            # Check for deprecated format
+            warnings.warn(
+                "Old format of hdf5 detected, periodic systems not supported.",
+                DeprecationWarning,
+            )
+            self._load_structures_deprectated(structures)
+
+    def _load_structures_deprectated(self, structures):
+        self.properties[Properties.Z] = structures.attrs["atom_types"][0]
+
+        # Get positions
         self.properties[Properties.R] = structures[
             self.skip_initial : self.total_entries, ..., :3
         ]
+        # Get velocities
         self.properties["velocities"] = structures[
             self.skip_initial : self.total_entries, ..., 3:
         ]
+
+    def _load_structures(self, structures):
+        self.properties[Properties.Z] = structures.attrs["atom_types"][0]
+
+        # Get length of position and velocity blocks
+        max_n_atoms = structures.attrs["max_n_atoms"]
+        block_length = 3 * max_n_atoms
+        self.pbc = structures.attrs["pbc"]
+
+        # Get positions
+        self.properties[Properties.R] = structures[
+            self.skip_initial : self.total_entries, ..., :block_length
+        ].reshape((self.entries, self.n_replicas, self.n_molecules, max_n_atoms, 3))
+        # Get velocities
+        self.properties["velocities"] = structures[
+            self.skip_initial : self.total_entries, ..., block_length : 2 * block_length
+        ].reshape((self.entries, self.n_replicas, self.n_molecules, max_n_atoms, 3))
+
+        # Get cells if present
+        if structures.shape[-1] > 2 * block_length:
+            self.properties[Properties.cell] = structures[
+                self.skip_initial : self.total_entries, ..., 2 * block_length :
+            ].reshape((self.entries, self.n_replicas, self.n_molecules, 3, 3))
+        else:
+            self.properties[Properties.cell] = None
 
     def _load_properties(self):
         """
@@ -155,13 +195,18 @@ class HDF5Loader:
                 :, :, mol_idx, :n_atoms, ...
             ]
         else:
-            target_property = self.properties[property_name][:, :, mol_idx, ...]
+            if self.properties[property_name] is not None:
+                target_property = self.properties[property_name][:, :, mol_idx, ...]
+            else:
+                target_property = None
 
         # Compute the centroid unless requested otherwise
         if replica_idx is None:
-            target_property = np.mean(target_property, axis=1)
+            if target_property is not None:
+                target_property = np.mean(target_property, axis=1)
         else:
-            target_property = target_property[:, replica_idx, ...]
+            if target_property is not None:
+                target_property = target_property[:, replica_idx, ...]
 
         return target_property
 
@@ -217,7 +262,8 @@ class HDF5Loader:
 
         # Get the masses and convert to correct units
         masses = (
-            data.atomic_masses[self.properties[Properties.Z][mol_idx]] * MDUnits.d2amu
+            data.atomic_masses[self.properties[Properties.Z][mol_idx]]
+            * MDUnits.da2internal
         )
 
         # Compute the kinetic energy as 1/2*m*v^2

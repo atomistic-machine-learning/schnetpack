@@ -1,62 +1,9 @@
 import numpy as np
-import pytest
-from ase import Atoms
 from ase.neighborlist import neighbor_list
 import torch
-
 import schnetpack.environment as env
 
-
-@pytest.fixture
-def single_atom():
-    return Atoms([6], positions=[[0.0, 0.0, 0.0]])
-
-
-@pytest.fixture
-def two_atoms():
-    return Atoms([6, 6], positions=[[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]])
-
-
-@pytest.fixture
-def four_atoms():
-    return Atoms(
-        [6, 6, 6, 6],
-        positions=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0, 1.0]],
-    )
-
-
-@pytest.fixture
-def single_site_crystal():
-    return Atoms([6], positions=[[0.0, 0.0, 0.0]], cell=np.eye(3), pbc=True)
-
-
-@pytest.fixture
-def two_site_crystal():
-    return Atoms(
-        [6, 6], positions=[[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]], cell=np.eye(3), pbc=True
-    )
-
-
-@pytest.fixture(params=[0, 1])
-def crystal(request, single_site_crystal, two_site_crystal):
-    crystals = [single_site_crystal, two_site_crystal]
-    yield crystals[request.param]
-
-
-@pytest.fixture
-def simple_env():
-    return env.SimpleEnvironmentProvider()
-
-
-@pytest.fixture
-def ase_env():
-    return env.AseEnvironmentProvider(10.0)
-
-
-@pytest.fixture
-def torch_env():
-    # Select torch.device('cuda') to test on GPU
-    return env.TorchEnvironmentProvider(10.0, device=torch.device("cpu"))
+from tests.fixtures import *
 
 
 def test_single_atom(single_atom, simple_env, ase_env, torch_env):
@@ -129,7 +76,7 @@ def test_single_site_crystal_large_cutoff(crystal, ase_env, torch_env):
     n_nbh_torch_env = np.sum(nbh_torch >= 0, 1)
 
     # Compare the returned indices
-    nbh_ref = idx_j.reshape(crystal.get_number_of_atoms(), -1)
+    nbh_ref = idx_j.reshape(crystal.get_global_number_of_atoms(), -1)
     sorted_nbh_ref = np.sort(nbh_ref, axis=-1)
     sorted_nbh_ase = np.sort(nbh_ase, axis=-1)
     sorted_nbh_torch = np.sort(nbh_torch, axis=-1)

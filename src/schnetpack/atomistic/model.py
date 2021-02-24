@@ -43,6 +43,10 @@ class AtomisticModel(nn.Module):
         if self.requires_dr:
             inputs[Properties.R].requires_grad_()
         if self.requires_stress:
+            # Check if cell is present
+            if inputs[Properties.cell] is None:
+                raise ModelError("No cell found for stress computation.")
+
             # Generate Cartesian displacement tensor
             displacement = torch.zeros_like(inputs[Properties.cell]).to(
                 inputs[Properties.R].device

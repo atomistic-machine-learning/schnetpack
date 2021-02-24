@@ -263,6 +263,7 @@ class DipoleMoment(Atomwise):
             charges = charges + (
                 charge_correction / atom_mask.sum(-1).unsqueeze(-1)
             ).unsqueeze(-1)
+            charges *= atom_mask[:, :, None]
 
         yi = positions * charges
         y = self.atom_pool(yi)

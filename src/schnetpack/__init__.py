@@ -20,6 +20,10 @@ class Properties:
     neighbor_offsets_j = "_neighbor_offsets_j"
     neighbor_offsets_k = "_neighbor_offsets_k"
 
+    neighbors_lr = "_neighbors_lr"
+    neighbor_mask_lr = "_neighbor_mask_lr"
+    cell_offset_lr = "_cell_offset_lr"
+
     # chemical properties
     energy = "energy"
     forces = "forces"

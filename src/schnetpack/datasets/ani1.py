@@ -25,7 +25,8 @@ class ANI1(DownloadableAtomsData):
 
         dbpath (str): path to directory containing database.
         download (bool, optional): enable downloading if database does not exists.
-        subset (list, optional): indices to subset. Set to None for entire database.
+        subset (list, optional): Deprecated! Do not use! Subsets are created with
+            AtomsDataSubset class.
         load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
         num_heavy_atoms (int, optional): number of heavy atoms.
@@ -81,32 +82,7 @@ class ANI1(DownloadableAtomsData):
             environment_provider=environment_provider,
         )
 
-    def create_subset(self, idx):
-        """Return a new database that only consists of provided indices.
-
-        Args:
-            idx (numpy.ndarray): indices to subset.
-
-        Returns:
-            schnetpack.data.AtomsData: database with subset of original data.
-
-        """
-        idx = np.array(idx)
-        subidx = idx if self.subset is None else np.array(self.subset)[idx]
-
-        return type(self)(
-            dbpath=self.dbpath,
-            download=False,
-            subset=subidx,
-            load_only=self.load_only,
-            collect_triples=self.collect_triples,
-            num_heavy_atoms=self.num_heavy_atoms,
-            high_energies=self.high_energies,
-            environment_provider=self.environment_provider,
-        )
-
     def _download(self):
-
         self._load_data()
 
         atref, labels = self._create_atoms_ref()

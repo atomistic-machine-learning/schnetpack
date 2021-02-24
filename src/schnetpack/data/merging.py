@@ -1,6 +1,9 @@
+import os
 from ase.db import connect
+from .atoms import AtomsData, AtomsDataError
 
-from .atoms import AtomsData
+
+__all__ = ["merge_datasets", "save_dataset"]
 
 
 def merge_datasets(merged_dbpath, dbpaths, **mergedb_kwargs):
@@ -40,3 +43,46 @@ def merge_datasets(merged_dbpath, dbpaths, **mergedb_kwargs):
     dst.metadata = metadata
 
     return AtomsData(merged_dbpath, **mergedb_kwargs)
+
+
+def save_dataset(dbpath, dataset, overwrite=False):
+    """
+    Write dataset instance to ase-db file.
+
+    Args:
+        dbpath (str): path to the new database
+        dataset (spk.data.ConcatAtomsData or spk.data.AtomsDataSubset): dataset
+            instance to be stored
+        overwrite (bool): overwrite existing database
+
+    """
+    # check if path exists
+    if os.path.exists(dbpath):
+        if overwrite:
+            os.remove(dbpath)
+        raise AtomsDataError(
+            "The selected dbpath does already exist. Set overwrite=True or change "
+            "dbpath."
+        )
+
+    # build metadata
+    metadata = dict()
+    metadata["atomref"] = dataset.atomref
+    metadata["available_properties"] = dataset.available_properties
+
+    # write dataset
+    with connect(dbpath) as conn:
+        # write metadata
+        conn.metadata = metadata
+        # write datapoints
+        for idx in range(len(dataset)):
+            atms, data = dataset.get_properties(idx)
+            # filter available properties
+            data_clean = dict()
+            for pname, prop in data.items():
+                if pname.startswith("_"):
+                    continue
+                if pname in dataset.available_properties:
+                    data_clean[pname] = prop
+
+            conn.write(atms, data=data_clean)

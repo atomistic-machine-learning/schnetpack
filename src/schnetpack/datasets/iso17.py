@@ -25,7 +25,8 @@ class ISO17(DownloadableAtomsData):
                         test_within - remaining 20% unseen steps of reference trajectories
                         test_other - remaining 20% unseen MD trajectories
                         test_eq - equilibrium conformations of test trajectories
-        subset (list): indices of subset. Set to None for entire dataset (default: None)
+        subset (list, optional): Deprecated! Do not use! Subsets are created with
+            AtomsDataSubset class.
         load_only (list, optional): reduced set of properties to be loaded
         download (bool): set to true if dataset should be downloaded. (default: True)
         collect_triples (false): set to true to compute triples for angular functions
@@ -78,27 +79,6 @@ class ISO17(DownloadableAtomsData):
             available_properties=available_properties,
             units=units,
             environment_provider=environment_provider,
-        )
-
-    def create_subset(self, idx):
-        """
-        Returns a new dataset that only consists of provided indices.
-        Args:
-            idx (numpy.ndarray): subset indices
-        Returns:
-            schnetpack.data.AtomsData: dataset with subset of original data
-        """
-        idx = np.array(idx)
-        subidx = idx if self.subset is None else np.array(self.subset)[idx]
-
-        return type(self)(
-            self.path,
-            self.fold,
-            download=False,
-            properties=self.load_only,
-            subset=subidx,
-            collect_triples=self.collect_triples,
-            environment_provider=self.environment_provider,
         )
 
     def _download(self):
