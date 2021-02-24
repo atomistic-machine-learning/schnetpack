@@ -14,8 +14,9 @@ class StoreDictKeyPair(argparse.Action):
     From https://stackoverflow.com/a/42355279
     """
 
-    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+    def __init__(self, option_strings, dest, nargs=None, val_type=str, **kwargs):
         self._nargs = nargs
+        self.val_type = val_type
         super(StoreDictKeyPair, self).__init__(
             option_strings, dest, nargs=nargs, **kwargs
         )
@@ -24,6 +25,11 @@ class StoreDictKeyPair(argparse.Action):
         my_dict = {}
         for kv in values:
             k, v = kv.split("=")
+            # typecast
+            if self.val_type == int:
+                v = int(float(v))
+            else:
+                v = self.val_type(v)
             my_dict[k] = v
         setattr(namespace, self.dest, my_dict)
 
@@ -532,6 +538,7 @@ def get_data_parsers():
         metavar="KEY=VAL",
         help="Define loss tradeoff weights with prop=weight. (default: %(default)s)",
         default=dict(),
+        val_type=float,
     )
     return (
         qm9_parser,
