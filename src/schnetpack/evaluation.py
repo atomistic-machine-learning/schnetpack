@@ -25,6 +25,8 @@ class Evaluator:
         Returns:
 
         """
+        self.model.eval()
+
         predicted = {}
         for batch in self.dataloader:
             # build batch for prediction

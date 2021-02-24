@@ -86,6 +86,9 @@ class SchnetPackCalculator(MDCalculator):
         Args:
             system (schnetpack.md.System): System object containing current state of the simulation.
         """
+        # set model to evaluation mode to disable graph creation
+        self.model.eval()
+
         inputs = self._generate_input(system)
         self.results = self.model(inputs)
         self._update_system(system)

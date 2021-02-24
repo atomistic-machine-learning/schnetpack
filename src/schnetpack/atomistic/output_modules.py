@@ -150,13 +150,15 @@ class Atomwise(nn.Module):
         if self.contributions is not None:
             result[self.contributions] = yi
 
+        create_graph = self.create_graph if self.training else False
+
         if self.derivative is not None:
             sign = -1.0 if self.negative_dr else 1.0
             dy = grad(
                 result[self.property],
                 inputs[Properties.R],
                 grad_outputs=torch.ones_like(result[self.property]),
-                create_graph=self.create_graph,
+                create_graph=create_graph,
                 retain_graph=True,
             )[0]
             result[self.derivative] = sign * dy
@@ -168,7 +170,7 @@ class Atomwise(nn.Module):
                 result[self.property],
                 inputs["displacement"],
                 grad_outputs=torch.ones_like(result[self.property]),
-                create_graph=self.create_graph,
+                create_graph=create_graph,
                 retain_graph=True,
             )[0]
             # Compute cell volume

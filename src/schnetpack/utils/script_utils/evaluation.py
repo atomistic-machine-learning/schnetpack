@@ -41,6 +41,8 @@ def evaluate(
 
 
 def evaluate_dataset(metrics, model, loader, device):
+    model.eval()
+
     for metric in metrics:
         metric.reset()
 
