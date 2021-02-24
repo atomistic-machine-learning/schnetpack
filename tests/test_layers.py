@@ -16,6 +16,7 @@ from schnetpack.nn.cfconv import CFConv
 from schnetpack.nn.cutoff import CosineCutoff, MollifierCutoff, HardCutoff
 from schnetpack.nn.neighbors import NeighborElements
 from schnetpack.representation.schnet import SchNet, SchNetInteraction
+from schnetpack.atomistic import AtomisticModel, DipoleMoment
 
 
 @pytest.fixture
@@ -390,3 +391,20 @@ def teardown_module():
     """
     if os.path.exists("before"):
         os.remove("before")
+
+
+def test_charge_correction(schnet_batch, n_atom_basis):
+    """
+    Test if charge correction yields the desired total charges.
+
+    """
+    model = AtomisticModel(
+        SchNet(n_atom_basis),
+        DipoleMoment(n_atom_basis, charge_correction="q", contributions="q"),
+    )
+    q = torch.randint(0, 10, (schnet_batch["_positions"].shape[0], 1))
+    schnet_batch.update(q=q)
+
+    q_i = model(schnet_batch)["q"]
+
+    assert torch.allclose(q.float(), q_i.sum(1))

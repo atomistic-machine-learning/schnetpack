@@ -197,6 +197,10 @@ class DipoleMoment(Atomwise):
         property (str): name of the output property (default: "y")
         contributions (str or None): Name of property contributions in return dict.
             No contributions returned if None. (default: None)
+        charge_correction (str or None): Name of charge labels in dataset. If
+            something is selected, the charge contributions are corrected according
+            to the total charges in the dataset. No charge correction if None.
+            (default: None)
         predict_magnitude (bool): if True, predict the magnitude of the dipole moment
             instead of the vector (default: False)
         mean (torch.FloatTensor or None): mean of dipole (default: None)
