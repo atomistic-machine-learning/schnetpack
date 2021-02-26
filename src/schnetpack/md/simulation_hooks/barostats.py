@@ -381,9 +381,10 @@ class NHCBarostatIsotropic(BarostatHook):
                                                                 the time step, system, etc.
         """
         self._init_kinetic_energy(simulator.system)
-        kinetic_energy_for_thermostat, kinetic_energy_for_barostat = self._compute_kinetic_energy(
-            simulator.system
-        )
+        (
+            kinetic_energy_for_thermostat,
+            kinetic_energy_for_barostat,
+        ) = self._compute_kinetic_energy(simulator.system)
         # kinetic_energy = self._compute_kinetic_energy(simulator.system)
         pressure, volume = self._compute_pressure(simulator.system)
 
@@ -405,9 +406,10 @@ class NHCBarostatIsotropic(BarostatHook):
                 # self.t_positions_cell = self.t_positions_cell + 0.5 * time_step * self.t_velocities_cell
 
                 # Recompute kinetic energy
-                kinetic_energy_for_thermostat, kinetic_energy_for_barostat = self._compute_kinetic_energy(
-                    simulator.system
-                )
+                (
+                    kinetic_energy_for_thermostat,
+                    kinetic_energy_for_barostat,
+                ) = self._compute_kinetic_energy(simulator.system)
 
                 # Update the box velocities
                 self._update_forces_barostat(

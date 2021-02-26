@@ -339,9 +339,11 @@ class DualNeighborList:
         return neighbors, neighbor_mask, offsets
 
     def get_neighbors_lr(self, system):
-        neighbors_long, neighbor_mask_long, offsets_long = self.neighbor_list_long.get_neighbors(
-            system
-        )
+        (
+            neighbors_long,
+            neighbor_mask_long,
+            offsets_long,
+        ) = self.neighbor_list_long.get_neighbors(system)
         return neighbors_long, neighbor_mask_long, offsets_long
 
     @property

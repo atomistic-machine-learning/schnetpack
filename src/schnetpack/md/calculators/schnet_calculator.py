@@ -228,9 +228,11 @@ class SchnetPackCalculator(MDCalculator):
         if isinstance(
             self.neighbor_list, schnetpack.md.neighbor_lists.DualNeighborList
         ):
-            neighbor_list_lr, neighbor_mask_lr, offsets_lr = self.neighbor_list.get_neighbors_lr(
-                system
-            )
+            (
+                neighbor_list_lr,
+                neighbor_mask_lr,
+                offsets_lr,
+            ) = self.neighbor_list.get_neighbors_lr(system)
 
             neighbor_list_lr, neighbor_mask_lr, offsets_lr = self._format_neighbors(
                 neighbor_list_lr,

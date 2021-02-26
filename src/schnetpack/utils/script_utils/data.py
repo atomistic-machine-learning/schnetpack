@@ -20,6 +20,7 @@ def get_statistics(
         split_path (str): path to the split file
         train_loader (spk.data.AtomsLoader): dataloader for training set
         atomref (dict): atomic references
+        divide_by_atoms (dict or bool): divide mean by number of atoms if True
         logging: logger
 
     Returns:
