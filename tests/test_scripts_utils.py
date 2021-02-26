@@ -181,6 +181,7 @@ class TestModel:
             interactions=2,
             cutoff=4.0,
             num_gaussians=30,
+            normalize_filter=False,
         )
         repr = get_representation(args)
         assert type(repr) == spk.SchNet
@@ -194,6 +195,7 @@ class TestModel:
             interactions=2,
             cutoff=4.0,
             num_gaussians=30,
+            normalize_filter=False,
         )
         repr = get_representation(args)
         assert type(repr) == spk.SchNet
@@ -207,6 +209,7 @@ class TestModel:
             interactions=2,
             cutoff=4.0,
             num_gaussians=30,
+            normalize_filter=False,
         )
         repr = get_representation(args)
         assert type(repr) == spk.SchNet
@@ -253,6 +256,7 @@ class TestEvaluation:
             property="energy_U0",
             dataset="qm9",
             parallel=False,
+            normalize_filter=False,
         )
         mean = {args.property: None}
         model = get_model(
