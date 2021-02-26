@@ -34,7 +34,7 @@ setup(
         "tqdm",
         "pyyaml",
     ],
-    extras_require={"test": ["pytest", "sacred", "pytest-console-scripts"]},
+    extras_require={"test": ["pytest", "sacred", "pytest-console-scripts", "pytest-datadir"]},
     license="MIT",
     description="SchNetPack - Deep Neural Networks for Atomistic Systems",
     long_description="""
