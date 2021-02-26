@@ -310,7 +310,7 @@ class System:
         Returns:
             torch.Tensor: Depending on the tensor-flag, returns a tensor containing the pressure with dimensions
                           n_replicas x n_molecules (False) or n_replicas x n_molecules x 3 x 3 (True).
-       """
+        """
         if self.stress is None:
             raise SystemError(
                 "Stress required for computation of the instantaneous pressure."
