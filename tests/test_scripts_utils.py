@@ -139,7 +139,6 @@ def test_schnet(train_schnet_args):
     assert type(repr) == spk.SchNet
     assert len(repr.interactions) == train_schnet_args.interactions
 
-
 def test_wacsf(train_wacsf_args, train_loader):
     # build representation
     repr = spk.utils.get_representation(train_wacsf_args, train_loader)
