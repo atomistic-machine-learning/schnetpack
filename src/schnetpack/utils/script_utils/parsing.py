@@ -378,7 +378,7 @@ def get_data_parsers():
     matproj_parser.add_argument(
         "--environment_provider",
         type=str,
-        default="ase",
+        default="torch",
         choices=["simple", "ase", "torch"],
         help="Environment provider for dataset. (default: %(default)s)",
     )
@@ -460,7 +460,7 @@ def get_data_parsers():
     omdb_parser.add_argument(
         "--environment_provider",
         type=str,
-        default="ase",
+        default="torch",
         choices=["simple", "ase", "torch"],
         help="Environment provider for dataset. (default: %(default)s)",
     )
