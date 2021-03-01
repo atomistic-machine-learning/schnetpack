@@ -6,7 +6,7 @@ from ase.db import connect
 from ase.units import eV
 
 import schnetpack as spk
-from schnetpack.data import AtomsDataError
+from schnetpack.data import AtomsDataError, AtomsDataSubset
 from schnetpack.datasets import DownloadableAtomsData
 
 __all__ = ["MaterialsProject"]
@@ -106,7 +106,7 @@ class MaterialsProject(DownloadableAtomsData):
                 timestamps.append(row.key_value_pairs["created_at"])
         idxs = np.array(idxs)
         timestamps = np.array(timestamps)
-        return self.create_subset(idxs[timestamps <= timestamp])
+        return AtomsDataSubset(self, idxs[timestamps <= timestamp])
 
     def _download(self):
         """
