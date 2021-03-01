@@ -154,7 +154,6 @@ def test_schnet(train_schnet_args):
     # check representation type and n_interactions
     assert type(repr) == spk.SchNet
     assert len(repr.interactions) == train_schnet_args.interactions
-    assert type(repr) == spk.representation.BehlerSFBlock
 
 
 # evaluation
