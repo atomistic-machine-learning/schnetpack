@@ -583,6 +583,9 @@ class AtomsDataSubset(Subset):
     def atomref(self):
         return self.dataset.atomref
 
+    def get_atomref(self, properties):
+        return self.dataset.get_atomref(properties)
+
     def get_properties(self, idx, load_only=None):
         return self.dataset.get_properties(idx, load_only)
 
