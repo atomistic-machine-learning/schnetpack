@@ -163,6 +163,8 @@ def get_dataset(args, environment_provider, logging=None):
             load_only=[args.property],
             environment_provider=environment_provider,
         )
+        if args.timestamp:
+            mp = mp.at_timestamp(args.timestamp)
         return mp
     elif args.dataset == "omdb":
         if logging:

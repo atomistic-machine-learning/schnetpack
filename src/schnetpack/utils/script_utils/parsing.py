@@ -382,6 +382,12 @@ def get_data_parsers():
         help="API key for Materials Project (see https://materialsproject.org/open)",
         default=None,
     )
+    matproj_parser.add_argument(
+        "--timestamp",
+        help="Timestamp at which to reconstruct the dataset",
+        default="2017-12-04 14:20",
+    )
+
     md17_parser = ArgumentParser(add_help=False)
     md17_parser.add_argument(
         "--property",
