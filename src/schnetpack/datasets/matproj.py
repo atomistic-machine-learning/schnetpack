@@ -94,48 +94,53 @@ class MaterialsProject(DownloadableAtomsData):
                 "pymatgen"
             )
 
-        with connect(self.dbpath) as con:
-            with MPRester(self.apikey) as m:
-                for N in range(1, 9):
-                    for nsites in range(0, 300, 30):
-                        ns = {"$lt": nsites + 31, "$gt": nsites}
-                        query = m.query(
-                            criteria={
-                                "nelements": N,
-                                "is_compatible": True,
-                                "nsites": ns,
-                            },
-                            properties=[
-                                "structure",
-                                "energy_per_atom",
-                                "formation_energy_per_atom",
-                                "total_magnetization",
-                                "band_gap",
-                                "material_id",
-                                "warnings",
-                            ],
-                        )
+        # collect data
+        atms_list = []
+        properties_list = []
+        with MPRester(self.apikey) as m:
+            for N in range(1, 9):
+                for nsites in range(0, 300, 30):
+                    ns = {"$lt": nsites + 31, "$gt": nsites}
+                    query = m.query(
+                        criteria={
+                            "nelements": N,
+                            "is_compatible": True,
+                            "nsites": ns,
+                        },
+                        properties=[
+                            "structure",
+                            "energy_per_atom",
+                            "formation_energy_per_atom",
+                            "total_magnetization",
+                            "band_gap",
+                            "material_id",
+                            "warnings",
+                            "created_at",
+                        ],
+                    )
+                    for k, q in enumerate(query):
+                        s = q["structure"]
+                        if type(s) is Structure:
+                            at = Atoms(
+                                numbers=s.atomic_numbers,
+                                positions=s.cart_coords,
+                                cell=s.lattice.matrix,
+                                pbc=True,
+                            )
+                            data = {
+                                MaterialsProject.EPerAtom: q["energy_per_atom"],
+                                MaterialsProject.EformationPerAtom: q[
+                                    "formation_energy_per_atom"
+                                ],
+                                MaterialsProject.TotalMagnetization: q[
+                                    "total_magnetization"
+                                ],
+                                MaterialsProject.BandGap: q["band_gap"],
+                            }
+                            if q["created_at"] <= "2017-12-04 14:20":
+                                atms_list.append(at)
+                                properties_list.append(data)
 
-                        for k, q in enumerate(query):
-                            s = q["structure"]
-                            if type(s) is Structure:
-                                at = Atoms(
-                                    numbers=s.atomic_numbers,
-                                    positions=s.cart_coords,
-                                    cell=s.lattice.matrix,
-                                    pbc=True,
-                                )
-                                con.write(
-                                    at,
-                                    data={
-                                        MaterialsProject.EPerAtom: q["energy_per_atom"],
-                                        MaterialsProject.EformationPerAtom: q[
-                                            "formation_energy_per_atom"
-                                        ],
-                                        MaterialsProject.TotalMagnetization: q[
-                                            "total_magnetization"
-                                        ],
-                                        MaterialsProject.BandGap: q["band_gap"],
-                                    },
-                                )
+        # write systems to database
+        self.add_systems(atms_list, property_list=properties_list)
         self.set_metadata({})

@@ -328,6 +328,10 @@ class AtomsData(Dataset):
 
     # private methods
     def _add_system(self, conn, atoms, **properties):
+        """
+        Write systems to the database. Floats, ints and np.ndarrays without dimension are transformed to np.ndarrays with dimension 1.
+
+        """
         data = {}
 
         # add available properties to database
@@ -336,6 +340,9 @@ class AtomsData(Dataset):
                 data[pname] = properties[pname]
             except:
                 raise AtomsDataError("Required property missing:" + pname)
+
+        # transform to np.ndarray
+        data = numpyfy_dict(data)
 
         conn.write(atoms, data=data)
 
@@ -446,7 +453,7 @@ class AtomsData(Dataset):
                 "Updating new database",
                 total=len(atoms_list),
             ):
-                conn.write(atoms, data=properties)
+                conn.write(atoms, data=numpyfy_dict(properties))
 
 
 class ConcatAtomsData(ConcatDataset):
@@ -673,9 +680,13 @@ def _convert_atoms(
     return inputs
 
 
-def torchify_dict(property_dict):
+def torchify_dict(data):
+    """
+    Transform np.ndarrays to torch.tensors.
+
+    """
     torch_properties = {}
-    for pname, prop in property_dict.items():
+    for pname, prop in data.items():
         if prop.dtype in [np.int, np.int32, np.int64]:
             torch_properties[pname] = torch.LongTensor(prop)
         elif prop.dtype in [np.float, np.float32, np.float64]:
@@ -685,6 +696,20 @@ def torchify_dict(property_dict):
                 "Invalid datatype {} for property {}!".format(type(prop), pname)
             )
     return torch_properties
+
+
+def numpyfy_dict(data):
+    """
+    Transform floats, ints and dimensionless numpy in a dict to arrays to numpy arrays with dimenison.
+
+    """
+    for k, v in data.items():
+        if type(v) in [int, float]:
+            v = np.array([v])
+        if v.shape == ():
+            v = v[np.newaxis]
+        data[k] = v
+    return data
 
 
 class AtomsConverter:
