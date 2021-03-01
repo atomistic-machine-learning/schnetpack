@@ -432,7 +432,11 @@ class AtomsData(Dataset):
         )
 
         # read old database
-        atoms_list, properties_list = spk.utils.read_deprecated_database(self.dbpath)
+        (
+            atoms_list,
+            properties_list,
+            key_value_pairs_list,
+        ) = spk.utils.read_deprecated_database(self.dbpath)
         metadata = self.get_metadata()
 
         # move old database
@@ -441,12 +445,12 @@ class AtomsData(Dataset):
         # write updated database
         self.set_metadata(metadata=metadata)
         with connect(self.dbpath) as conn:
-            for atoms, properties in tqdm(
-                zip(atoms_list, properties_list),
+            for atoms, properties, key_value_pairs in tqdm(
+                zip(atoms_list, properties_list, key_value_pairs_list),
                 "Updating new database",
                 total=len(atoms_list),
             ):
-                conn.write(atoms, data=properties)
+                conn.write(atoms, data=properties, key_value_pairs=key_value_pairs)
 
 
 class ConcatAtomsData(ConcatDataset):

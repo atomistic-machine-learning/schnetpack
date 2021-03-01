@@ -72,6 +72,42 @@ class MaterialsProject(DownloadableAtomsData):
             download=download,
         )
 
+    def create_subset(self, idx):
+        idx = np.array(idx)
+        subidx = idx if self.subset is None else np.array(self.subset)[idx]
+
+        return MaterialsProject(
+            dbpath=self.dbpath,
+            download=False,
+            subset=subidx,
+            load_only=self.load_only,
+            collect_triples=self.collect_triples,
+            environment_provider=self.environment_provider,
+        )
+
+    def at_timestamp(self, timestamp):
+        """
+        Returns a new dataset that only consists of items created before
+        the given timestamp.
+
+        Args:
+            timestamp (str): timestamp
+
+        Returns:
+            schnetpack.datasets.matproj.MaterialsProject: dataset with subset of
+                original data
+        """
+        with connect(self.dbpath) as conn:
+            rows = conn.select(columns=["id", "key_value_pairs"])
+            idxs = []
+            timestamps = []
+            for row in rows:
+                idxs.append(row.id - 1)
+                timestamps.append(row.key_value_pairs["created_at"])
+        idxs = np.array(idxs)
+        timestamps = np.array(timestamps)
+        return self.create_subset(idxs[timestamps <= timestamp])
+
     def _download(self):
         """
         Downloads dataset provided it does not exist in self.path
@@ -113,6 +149,7 @@ class MaterialsProject(DownloadableAtomsData):
                                 "band_gap",
                                 "material_id",
                                 "warnings",
+                                "created_at",
                             ],
                         )
 
@@ -136,6 +173,10 @@ class MaterialsProject(DownloadableAtomsData):
                                             "total_magnetization"
                                         ],
                                         MaterialsProject.BandGap: q["band_gap"],
+                                    },
+                                    key_value_pairs={
+                                        "material_id": q["material_id"],
+                                        "created_at": q["created_at"],
                                     },
                                 )
         self.set_metadata({})
