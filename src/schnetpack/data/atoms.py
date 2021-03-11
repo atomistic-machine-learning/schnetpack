@@ -208,7 +208,7 @@ class AtomsData(Dataset):
         Args:
             properties (list or str): Desired properties for which the atomrefs are
                 calculated.
-                
+
         Returns:
             dict: atomic references
         """
