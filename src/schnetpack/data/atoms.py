@@ -208,7 +208,7 @@ class AtomsData(Dataset):
         Args:
             properties (list or str): Desired properties for which the atomrefs are
                 calculated.
-
+                
         Returns:
             dict: atomic references
         """
@@ -705,6 +705,7 @@ def torchify_dict(data):
     """
     torch_properties = {}
     for pname, prop in data.items():
+
         if prop.dtype in [np.int, np.int32, np.int64]:
             torch_properties[pname] = torch.LongTensor(prop)
         elif prop.dtype in [np.float, np.float32, np.float64]:

@@ -191,4 +191,5 @@ class MaterialsProject(DownloadableAtomsData):
             property_list=properties_list,
             key_value_pairs_list=key_value_pairs_list,
         )
+
         self.set_metadata({})
