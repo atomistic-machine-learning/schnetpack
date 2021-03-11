@@ -23,11 +23,12 @@ class EarlyStoppingHook(Hook):
 
     @property
     def state_dict(self):
-        return {"counter": self.counter}
+        return {"counter": self.counter, "best_loss": self.best_loss}
 
     @state_dict.setter
     def state_dict(self, state_dict):
         self.counter = state_dict["counter"]
+        self.best_loss = state_dict["best_loss"]
 
     def on_validation_end(self, trainer, val_loss):
         if val_loss > (1 - self.threshold_ratio) * self.best_loss:

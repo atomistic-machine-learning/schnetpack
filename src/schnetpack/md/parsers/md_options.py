@@ -8,9 +8,9 @@ import schnetpack.md.calculators as calculators
 import schnetpack.md.integrators as integrators
 
 import schnetpack.md.simulation_hooks.thermostats as thermostats
+import schnetpack.md.simulation_hooks.barostats as barostats
 import schnetpack.md.simulation_hooks.logging_hooks as logging_hooks
 import schnetpack.md.simulation_hooks.sampling as sampling
-
 from collections import OrderedDict
 
 
@@ -228,6 +228,25 @@ class ThermostatInit(Initializer):
     }
 
 
+class BarostatInit(Initializer):
+    """
+    Initialization instructions for barostats. Optional instructions are used to define the
+    Nose-Hoover chain thermostats.
+    """
+
+    allowed_options = {
+        "nhc_iso": (barostats.NHCBarostatIsotropic, "standard", None),
+        "nhc_aniso": (barostats.NHCBarostatAnisotropic, "standard", None),
+        "pile": (barostats.RPMDBarostat, "standard", None),
+    }
+
+    required_inputs = {
+        "standard": OrderedDict(
+            {"target_pressure": float, "temperature": float, "time_constant": float}
+        )
+    }
+
+
 class IntegratorInit(Initializer):
     """
     Initialization instructions for the available integrators.
@@ -236,11 +255,17 @@ class IntegratorInit(Initializer):
     allowed_options = {
         "verlet": (integrators.VelocityVerlet, "verlet", None),
         "ring_polymer": (integrators.RingPolymer, "ring_polymer", None),
+        "npt_verlet": (integrators.NPTVelocityVerlet, "npt_verlet", None),
+        "npt_ring_polymer": (integrators.NPTRingPolymer, "npt_ring_polymer", None),
     }
 
     required_inputs = {
         "verlet": OrderedDict({"time_step": float}),
         "ring_polymer": OrderedDict(
+            {"n_beads": int, "time_step": float, "temperature": float}
+        ),
+        "npt_verlet": OrderedDict({"time_step": float}),
+        "npt_ring_polymer": OrderedDict(
             {"n_beads": int, "time_step": float, "temperature": float}
         ),
     }
@@ -270,13 +295,22 @@ class CalculatorInit(Initializer):
             "schnet",
             None,
         ),
+        "schnet_ensemble": (
+            schnetpack.md.calculators.schnet_calculator.EnsembleSchnetPackCalculator,
+            "schnet_ensemble",
+            None,
+        ),
         "orca": (calculators.OrcaCalculator, "orca", None),
         "sgdml": (calculators.SGDMLCalculator, "sgdml", None),
         "custom": (load_custom_calculator, "custom", None),
+        "custom_ensemble": (load_custom_calculator, "custom_ensemble", None),
     }
     required_inputs = {
         "schnet": OrderedDict(
             {"model": model, "required_properties": list, "force_handle": str}
+        ),
+        "schnet_ensemble": OrderedDict(
+            {"models": list, "required_properties": list, "force_handle": str}
         ),
         "orca": OrderedDict(
             {
@@ -289,6 +323,7 @@ class CalculatorInit(Initializer):
         ),
         "sgdml": OrderedDict({"model": model}),
         "custom": OrderedDict({"calculator_module": str, "class_name": str}),
+        "custom_ensemble": OrderedDict({"calculator_module": str, "class_name": str}),
     }
 
 
@@ -311,6 +346,17 @@ class BiasPotentialInit(Initializer):
 
 class ColVars:
     available = {"bond": sampling.BondColvar}
+
+
+class AdaptiveSamplingInit(Initializer):
+    """
+    Set up directives for adaptive sampling
+    """
+
+    allowed_options = {"ensemble": (sampling.AdaptiveSampling, "ensemble", None)}
+    required_inputs = {
+        "ensemble": OrderedDict({"thresholds": dict, "n_samples": int, "dataset": str})
+    }
 
 
 class LoggerStreams:

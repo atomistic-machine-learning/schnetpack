@@ -65,10 +65,8 @@ def check_triples_required(model):
     """
     Check, if the model has a representation which requires the computation of triples between atoms.
     E.g. angular terms in Behler symmetry functions.
-
     Args:
         model (schnetpack.model.AtomisticModel):
-
     Returns:
         bool: Indicator whether model needs triples or not.
     """

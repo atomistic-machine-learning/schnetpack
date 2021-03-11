@@ -154,13 +154,15 @@ class Atomwise(nn.Module):
         if self.contributions is not None:
             result[self.contributions] = yi
 
+        create_graph = self.create_graph if self.training else False
+
         if self.derivative is not None:
             sign = -1.0 if self.negative_dr else 1.0
             dy = grad(
                 result[self.property],
                 inputs[Properties.R],
                 grad_outputs=torch.ones_like(result[self.property]),
-                create_graph=self.create_graph,
+                create_graph=create_graph,
                 retain_graph=True,
             )[0]
             result[self.derivative] = sign * dy
@@ -172,7 +174,7 @@ class Atomwise(nn.Module):
                 result[self.property],
                 inputs["displacement"],
                 grad_outputs=torch.ones_like(result[self.property]),
-                create_graph=self.create_graph,
+                create_graph=create_graph,
                 retain_graph=True,
             )[0]
             # Compute cell volume
@@ -201,6 +203,10 @@ class DipoleMoment(Atomwise):
         property (str): name of the output property (default: "y")
         contributions (str or None): Name of property contributions in return dict.
             No contributions returned if None. (default: None)
+        charge_correction (str or None): Name of charge labels in dataset. If
+            something is selected, the charge contributions are corrected according
+            to the total charges in the dataset. No charge correction if None.
+            (default: None)
         predict_magnitude (bool): if True, predict the magnitude of the dipole moment
             instead of the vector (default: False)
         mean (torch.FloatTensor or None): mean of dipole (default: None)
@@ -224,12 +230,14 @@ class DipoleMoment(Atomwise):
         activation=schnetpack.nn.activations.shifted_softplus,
         property="y",
         contributions=None,
+        charge_correction=None,
         predict_magnitude=False,
         mean=None,
         stddev=None,
         outnet=None,
     ):
         self.predict_magnitude = predict_magnitude
+        self.charge_correction = charge_correction
         super(DipoleMoment, self).__init__(
             n_in,
             1,
@@ -249,10 +257,20 @@ class DipoleMoment(Atomwise):
         predicts dipole moment
         """
         positions = inputs[Properties.R]
-        atom_mask = inputs[Properties.atom_mask][:, :, None]
+        atom_mask = inputs[Properties.atom_mask]
 
         # run prediction
-        charges = self.out_net(inputs) * atom_mask
+        charges = self.out_net(inputs) * atom_mask[:, :, None]
+
+        # charge correction
+        if self.charge_correction is not None:
+            total_charges = inputs[self.charge_correction]
+            charge_correction = total_charges - charges.sum(1)
+            charges = charges + (
+                charge_correction / atom_mask.sum(-1).unsqueeze(-1)
+            ).unsqueeze(-1)
+            charges *= atom_mask[:, :, None]
+
         yi = positions * charges
         y = self.atom_pool(yi)
 

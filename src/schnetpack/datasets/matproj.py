@@ -6,7 +6,7 @@ from ase.db import connect
 from ase.units import eV
 
 import schnetpack as spk
-from schnetpack.data import AtomsDataError
+from schnetpack.data import AtomsDataError, AtomsDataSubset
 from schnetpack.datasets import DownloadableAtomsData
 
 __all__ = ["MaterialsProject"]
@@ -23,7 +23,8 @@ class MaterialsProject(DownloadableAtomsData):
         cutoff (float): cutoff for bulk interactions.
         apikey (str, optional): materials project key needed to download the data.
         download (bool, optional): enable downloading if database does not exists.
-        subset (list, optional): indices to subset. Set to None for entire database.
+        subset (list, optional): Deprecated! Do not use! Subsets are created with
+            AtomsDataSubset class.
         load_only (list, optional): reduced set of properties to be loaded
         collect_triples (bool, optional): Set to True if angular features are needed.
         environment_provider (spk.environment.BaseEnvironmentProvider): define how
@@ -84,6 +85,29 @@ class MaterialsProject(DownloadableAtomsData):
             environment_provider=self.environment_provider,
         )
 
+    def at_timestamp(self, timestamp):
+        """
+        Returns a new dataset that only consists of items created before
+        the given timestamp.
+
+        Args:
+            timestamp (str): timestamp
+
+        Returns:
+            schnetpack.datasets.matproj.MaterialsProject: dataset with subset of
+                original data
+        """
+        with connect(self.dbpath) as conn:
+            rows = conn.select(columns=["id", "key_value_pairs"])
+            idxs = []
+            timestamps = []
+            for row in rows:
+                idxs.append(row.id - 1)
+                timestamps.append(row.key_value_pairs["created_at"])
+        idxs = np.array(idxs)
+        timestamps = np.array(timestamps)
+        return AtomsDataSubset(self, idxs[timestamps <= timestamp])
+
     def _download(self):
         """
         Downloads dataset provided it does not exist in self.path
@@ -125,6 +149,7 @@ class MaterialsProject(DownloadableAtomsData):
                                 "band_gap",
                                 "material_id",
                                 "warnings",
+                                "created_at",
                             ],
                         )
 
@@ -148,6 +173,10 @@ class MaterialsProject(DownloadableAtomsData):
                                             "total_magnetization"
                                         ],
                                         MaterialsProject.BandGap: q["band_gap"],
+                                    },
+                                    key_value_pairs={
+                                        "material_id": q["material_id"],
+                                        "created_at": q["created_at"],
                                     },
                                 )
         self.set_metadata({})

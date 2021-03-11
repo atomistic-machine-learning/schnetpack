@@ -167,6 +167,7 @@ def read_deprecated_database(db_path):
         db_size = conn.count()
     atoms = []
     properties = []
+    key_value_pairs = []
 
     for idx in tqdm(range(1, db_size + 1), "Reading deprecated database"):
         with connect(db_path) as conn:
@@ -197,8 +198,9 @@ def read_deprecated_database(db_path):
 
         atoms.append(at)
         properties.append(props)
+        key_value_pairs.append(row.key_value_pairs)
 
-    return atoms, properties
+    return atoms, properties, key_value_pairs
 
 
 def activate_stress_computation(model, stress="stress"):

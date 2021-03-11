@@ -23,3 +23,4 @@ from .basic_calculators import *
 from .orca_calculator import *
 from .schnet_calculator import *
 from .sgdml_calculator import *
+from .ensemble_calculator import *

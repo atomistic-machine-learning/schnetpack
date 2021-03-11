@@ -4,6 +4,7 @@ from ase import units
 
 from schnetpack.md.utils import MDUnits
 
+
 # __all__ = [
 #     "load_gle_matrices",
 #     "GLEMatrixParser",
@@ -58,13 +59,14 @@ class GLEMatrixParser:
     """
 
     # Automatically recognized format and converts to units
+    # TODO: think about this carefully
     unit_conversions = {
-        "atomic time units^-1": 1,
-        "picoseconds^-1": 1 / 1000 / MDUnits.fs2atu,
-        "seconds^-1": units._aut,
-        "femtoseconds^-1": 1 / MDUnits.fs2atu,
-        "eV": 1 / units.Ha,
-        "atomic energy units": 1,
+        "atomic time units^-1": 1.0 / MDUnits.unit2internal("aut"),
+        "seconds^-1": 1.0 / MDUnits.unit2internal("s"),
+        "femtoseconds^-1": 1.0 / MDUnits.unit2internal("fs"),
+        "picoseconds^-1": 1.0 / 1000.0 / MDUnits.unit2internal("fs"),
+        "eV": MDUnits.unit2internal("eV"),
+        "atomic energy units": MDUnits.unit2internal("Ha"),
         "K": MDUnits.kB,
     }
 
@@ -149,13 +151,13 @@ class YSWeights:
         ),
         7: np.array(
             [
-                -1.17767998417887,
-                0.23557321335936,
                 0.78451361047756,
+                0.23557321335936,
+                -1.17767998417887,
                 1.31518632068390,
-                0.78451361047756,
-                0.23557321335936,
                 -1.17767998417887,
+                0.23557321335936,
+                0.78451361047756,
             ]
         ),
     }
@@ -182,3 +184,24 @@ class YSWeights:
                 torch.from_numpy(self.YS_weights[order]).float().to(self.device)
             )
         return ys_weights
+
+
+class StableSinhDiv:
+    """
+    McLaurin series of sinh(x)/x around zero to avoid numerical instabilities
+    """
+
+    def __init__(self, eps=1e-4):
+        self.e0 = 1.0
+        self.e2 = self.e0 / 6.0
+        self.e4 = self.e2 / 20.0
+        self.e6 = self.e4 / 42.0
+        self.e8 = self.e6 / 72.0
+        self.eps = eps
+
+    def f(self, x):
+        if torch.min(torch.abs(x)) < self.eps:
+            x = x ** 2
+            return (((self.e8 * x + self.e6) * x + self.e4) * x + self.e2) * x + self.e0
+        else:
+            return torch.sinh(x) / x

@@ -1,4 +1,5 @@
 import argparse
+from argparse import ArgumentParser
 from schnetpack.datasets import (
     QM9,
     ANI1,
@@ -13,8 +14,9 @@ class StoreDictKeyPair(argparse.Action):
     From https://stackoverflow.com/a/42355279
     """
 
-    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+    def __init__(self, option_strings, dest, nargs=None, val_type=str, **kwargs):
         self._nargs = nargs
+        self.val_type = val_type
         super(StoreDictKeyPair, self).__init__(
             option_strings, dest, nargs=nargs, **kwargs
         )
@@ -23,17 +25,18 @@ class StoreDictKeyPair(argparse.Action):
         my_dict = {}
         for kv in values:
             k, v = kv.split("=")
+            # typecast
+            if self.val_type == int:
+                v = int(float(v))
+            else:
+                v = self.val_type(v)
             my_dict[k] = v
         setattr(namespace, self.dest, my_dict)
 
 
 def get_mode_parsers():
-    mode_parser = argparse.ArgumentParser(add_help=False)
-
-    # mode parsers
-
     # json parser
-    json_parser = argparse.ArgumentParser(add_help=False, parents=[mode_parser])
+    json_parser = ArgumentParser(add_help=False)
     json_parser.add_argument(
         "json_path",
         type=str,
@@ -42,7 +45,7 @@ def get_mode_parsers():
     )
 
     # train parser
-    train_parser = argparse.ArgumentParser(add_help=False, parents=[mode_parser])
+    train_parser = ArgumentParser(add_help=False)
     train_parser.add_argument("datapath", help="Path to dataset")
     train_parser.add_argument("modelpath", help="Path of stored model")
     train_parser.add_argument(
@@ -142,7 +145,7 @@ def get_mode_parsers():
     )
 
     # evaluation parser
-    eval_parser = argparse.ArgumentParser(add_help=False, parents=[mode_parser])
+    eval_parser = ArgumentParser(add_help=False)
     eval_parser.add_argument("datapath", help="Path to dataset")
     eval_parser.add_argument("modelpath", help="Path of stored model")
     eval_parser.add_argument(
@@ -171,13 +174,12 @@ def get_mode_parsers():
         "--overwrite", help="Remove previous evaluation files", action="store_true"
     )
 
-    return mode_parser, json_parser, train_parser, eval_parser
+    return json_parser, train_parser, eval_parser
 
 
 def get_model_parsers():
     # model parsers
-    model_parser = argparse.ArgumentParser(add_help=False)
-    schnet_parser = argparse.ArgumentParser(add_help=False, parents=[model_parser])
+    schnet_parser = ArgumentParser(add_help=False)
     schnet_parser.add_argument(
         "--features", type=int, help="Size of atom-wise representation", default=128
     )
@@ -196,8 +198,13 @@ def get_model_parsers():
         default=50,
         help="Number of Gaussians to expand distances (default: %(default)s)",
     )
+    schnet_parser.add_argument(
+        "--normalize_filter",
+        action="store_true",
+        help="Normalize convolution filters by number of neighbors",
+    )
 
-    wacsf_parser = argparse.ArgumentParser(add_help=False, parents=[model_parser])
+    wacsf_parser = ArgumentParser(add_help=False)
     wacsf_parser.add_argument(
         "--radial",
         type=int,
@@ -255,15 +262,12 @@ def get_model_parsers():
         "(default: %(default)s).",
     )
 
-    return model_parser, schnet_parser, wacsf_parser
+    return schnet_parser, wacsf_parser
 
 
 def get_data_parsers():
-    # data parsers
-    data_parser = argparse.ArgumentParser(add_help=False)
-
     # qm9
-    qm9_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
+    qm9_parser = ArgumentParser(add_help=False)
     qm9_parser.add_argument(
         "--property",
         type=str,
@@ -312,7 +316,7 @@ def get_data_parsers():
         action="store_true",
     )
 
-    ani1_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
+    ani1_parser = ArgumentParser(add_help=False)
     ani1_parser.add_argument(
         "--property",
         type=str,
@@ -346,7 +350,7 @@ def get_data_parsers():
         " (default: %(default)s)",
         default=8,
     )
-    matproj_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
+    matproj_parser = ArgumentParser(add_help=False)
     matproj_parser.add_argument(
         "--property",
         type=str,
@@ -374,7 +378,7 @@ def get_data_parsers():
     matproj_parser.add_argument(
         "--environment_provider",
         type=str,
-        default="ase",
+        default="torch",
         choices=["simple", "ase", "torch"],
         help="Environment provider for dataset. (default: %(default)s)",
     )
@@ -383,7 +387,13 @@ def get_data_parsers():
         help="API key for Materials Project (see https://materialsproject.org/open)",
         default=None,
     )
-    md17_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
+    matproj_parser.add_argument(
+        "--timestamp",
+        help="Timestamp at which to reconstruct the dataset",
+        default="2017-12-04 14:20",
+    )
+
+    md17_parser = ArgumentParser(add_help=False)
     md17_parser.add_argument(
         "--property",
         type=str,
@@ -427,7 +437,7 @@ def get_data_parsers():
         "(default: %(default)s)",
         default=0.1,
     )
-    omdb_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
+    omdb_parser = ArgumentParser(add_help=False)
     omdb_parser.add_argument(
         "--property",
         type=str,
@@ -450,11 +460,11 @@ def get_data_parsers():
     omdb_parser.add_argument(
         "--environment_provider",
         type=str,
-        default="ase",
+        default="torch",
         choices=["simple", "ase", "torch"],
         help="Environment provider for dataset. (default: %(default)s)",
     )
-    custom_data_parser = argparse.ArgumentParser(add_help=False, parents=[data_parser])
+    custom_data_parser = ArgumentParser(add_help=False)
     custom_data_parser.add_argument(
         "--property",
         type=str,
@@ -539,9 +549,9 @@ def get_data_parsers():
         metavar="KEY=VAL",
         help="Define loss tradeoff weights with prop=weight. (default: %(default)s)",
         default=dict(),
+        val_type=float,
     )
     return (
-        data_parser,
         qm9_parser,
         ani1_parser,
         matproj_parser,
@@ -552,11 +562,11 @@ def get_data_parsers():
 
 
 def build_parser():
+    main_parser = ArgumentParser()
     # get parsers
-    mode_parser, json_parser, train_parser, eval_parser = get_mode_parsers()
-    model_parser, schnet_parser, wacsf_parser = get_model_parsers()
+    json_parser, train_parser, eval_parser = get_mode_parsers()
+    schnet_parser, wacsf_parser = get_model_parsers()
     (
-        data_parser,
         qm9_parser,
         ani1_parser,
         matproj_parser,
@@ -567,7 +577,8 @@ def build_parser():
 
     # subparser structure
     # mode
-    mode_subparsers = mode_parser.add_subparsers(dest="mode", help="main arguments")
+    mode_subparsers = main_parser.add_subparsers(dest="mode", help="main arguments")
+    mode_subparsers.required = True
     train_subparser = mode_subparsers.add_parser("train", help="training help")
     eval_subparser = mode_subparsers.add_parser(
         "eval", help="evaluation help", parents=[eval_parser]
@@ -580,6 +591,7 @@ def build_parser():
     train_subparsers = train_subparser.add_subparsers(
         dest="model", help="Model-specific arguments"
     )
+    train_subparsers.required = True
     # model
     schnet_subparser = train_subparsers.add_parser("schnet", help="SchNet help")
     wacsf_subparser = train_subparsers.add_parser("wacsf", help="wacsf help")
@@ -588,26 +600,31 @@ def build_parser():
     schnet_subparsers = schnet_subparser.add_subparsers(
         dest="dataset", help="Dataset specific arguments"
     )
+    schnet_subparsers.required = True
     schnet_subparsers.add_parser(
         "ani1",
         help="ANI1 dataset help",
         parents=[train_parser, schnet_parser, ani1_parser],
     )
-    schnet_subparsers.add_parser(
+    schnet_matproj = schnet_subparsers.add_parser(
         "matproj",
         help="Materials Project dataset help",
         parents=[train_parser, schnet_parser, matproj_parser],
     )
+    schnet_matproj.set_defaults(normalize_filter=True)
+
     schnet_subparsers.add_parser(
         "md17",
         help="MD17 dataset help",
         parents=[train_parser, schnet_parser, md17_parser],
     )
-    schnet_subparsers.add_parser(
+    schnet_omdb = schnet_subparsers.add_parser(
         "omdb",
         help="Organic Materials dataset help",
         parents=[train_parser, schnet_parser, omdb_parser],
     )
+    schnet_omdb.set_defaults(normalize_filter=True)
+
     schnet_subparsers.add_parser(
         "qm9",
         help="QM9 dataset help",
@@ -623,6 +640,7 @@ def build_parser():
     wacsf_subparsers = wacsf_subparser.add_subparsers(
         dest="dataset", help="Dataset specific arguments"
     )
+    wacsf_subparsers.required = True
     wacsf_subparsers.add_parser(
         "ani1",
         help="ANI1 dataset help",
@@ -651,9 +669,10 @@ def build_parser():
         help="Custom dataset help",
         parents=[train_parser, wacsf_parser, custom_data_parser],
     )
-    return mode_parser
+    return main_parser
 
 
 if __name__ == "__main__":
     parser = build_parser()
     args = parser.parse_args()
+    print(args)

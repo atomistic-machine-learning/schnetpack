@@ -4,12 +4,13 @@ install:
   - pip install -r docs/sphinx-requirements.txt
   - pip install codecov
   - pip install tox
+  - pip install pytest-datadir
 
 matrix:
   include:
-    - python: 3.6
-      env: TOXENV=py36
-    - python: 3.6
+    - python: 3.8
+      env: TOXENV=py38
+    - python: 3.8
       env: TOXENV=qa
 
 script:

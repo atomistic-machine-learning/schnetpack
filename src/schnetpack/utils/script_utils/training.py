@@ -4,7 +4,6 @@ import schnetpack as spk
 import torch
 from torch.optim import Adam
 
-
 __all__ = ["get_trainer", "simple_loss_fn", "tradeoff_loss_fn", "get_metrics"]
 
 
@@ -123,6 +122,7 @@ def tradeoff_loss_fn(rho, property_names):
     def loss(batch, result):
         err = 0.0
         for prop, tradeoff_weight in rho.items():
+            # TODO: contributions should not be here
             diff = batch[property_names[prop]] - result[property_names[prop]]
             diff = diff ** 2
             err += tradeoff_weight * torch.mean(diff)
@@ -149,6 +149,14 @@ def get_metrics(args):
             spk.train.metrics.RootMeanSquaredError(
                 derivative, derivative, element_wise=True
             ),
+        ]
+
+    # Add stress metric
+    stress = spk.utils.get_stress(args)
+    if stress is not None:
+        metrics += [
+            spk.train.metrics.MeanAbsoluteError(stress, stress, element_wise=True),
+            spk.train.metrics.RootMeanSquaredError(stress, stress, element_wise=True),
         ]
 
     return metrics

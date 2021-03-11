@@ -20,6 +20,7 @@ def get_statistics(
         split_path (str): path to the split file
         train_loader (spk.data.AtomsLoader): dataloader for training set
         atomref (dict): atomic references
+        divide_by_atoms (dict or bool): divide mean by number of atoms if True
         logging: logger
 
     Returns:
@@ -162,6 +163,8 @@ def get_dataset(args, environment_provider, logging=None):
             load_only=[args.property],
             environment_provider=environment_provider,
         )
+        if args.timestamp:
+            mp = mp.at_timestamp(args.timestamp)
         return mp
     elif args.dataset == "omdb":
         if logging:
@@ -181,6 +184,9 @@ def get_dataset(args, environment_provider, logging=None):
         load_only = [args.property]
         if args.derivative is not None:
             load_only.append(args.derivative)
+
+        if args.stress is not None:
+            load_only.append(args.stress)
 
         dataset = spk.AtomsData(
             args.datapath,

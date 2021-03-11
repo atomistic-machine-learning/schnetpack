@@ -111,7 +111,7 @@ class Trainer:
         self.optimizer.load_state_dict(state_dict["optimizer"])
         self._load_model_state_dict(state_dict["model"])
 
-        for h, s in zip(self.hooks, self.state_dict["hooks"]):
+        for h, s in zip(self.hooks, state_dict["hooks"]):
             h.state_dict = s
 
     def store_checkpoint(self):
@@ -178,6 +178,7 @@ class Trainer:
                 #                else:
                 train_iter = self.train_loader
 
+                self._model.train()
                 for train_batch in train_iter:
                     self.optimizer.zero_grad()
 
@@ -203,6 +204,7 @@ class Trainer:
                     self.store_checkpoint()
 
                 # validation
+                self._model.eval()
                 if self.epoch % self.validation_interval == 0 or self._stop:
                     for h in self.hooks:
                         h.on_validation_begin(self)
