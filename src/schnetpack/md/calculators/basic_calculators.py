@@ -124,12 +124,12 @@ class MDCalculator:
                     * self.property_conversion[p]
                 )
 
-            # Set the forces for the system (at this point, already detached)
-            self._set_system_forces(system)
+        # Set the forces for the system (at this point, already detached)
+        self._set_system_forces(system)
 
-            # Set stress of the system if requested:
-            if self.stress_handle is not None:
-                self._set_system_stress(system)
+        # Set stress of the system if requested:
+        if self.stress_handle is not None:
+            self._set_system_stress(system)
 
     def _get_system_molecules(self, system):
         """

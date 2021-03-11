@@ -272,7 +272,7 @@ class AtomsData(Dataset):
         return at
 
     # add systems
-    def add_system(self, atoms, **properties):
+    def add_system(self, atoms, properties=dict(), key_value_pairs=dict()):
         """
         Add atoms data to the dataset.
 
@@ -283,9 +283,9 @@ class AtomsData(Dataset):
 
         """
         with connect(self.dbpath) as conn:
-            self._add_system(conn, atoms, **properties)
+            self._add_system(conn, atoms, properties, key_value_pairs)
 
-    def add_systems(self, atoms_list, property_list):
+    def add_systems(self, atoms_list, property_list=None, key_value_pairs_list=None):
         """
         Add atoms data to the dataset.
 
@@ -296,10 +296,18 @@ class AtomsData(Dataset):
                 Keys have to match the `available_properties` of the dataset.
 
         """
-        with connect(self.dbpath) as conn:
+        # build empty dicts if property/kv_pairs list is None
+        if property_list is None:
+            property_list = [dict() for _ in range(len(atoms_list))]
+        if key_value_pairs_list is None:
+            key_value_pairs_list = [dict() for _ in range(len(atoms_list))]
 
-            for at, prop in zip(atoms_list, property_list):
-                self._add_system(conn, at, **prop)
+        # write systems to database
+        with connect(self.dbpath) as conn:
+            for at, prop, kv_pair in zip(
+                atoms_list, property_list, key_value_pairs_list
+            ):
+                self._add_system(conn, at, prop, kv_pair)
 
     # deprecated
     def create_subset(self, subset):
@@ -327,13 +335,12 @@ class AtomsData(Dataset):
         return ConcatAtomsData([self, other])
 
     # private methods
-    def _add_system(self, conn, atoms, **properties):
+    def _add_system(self, conn, atoms, properties=dict(), key_value_pairs=dict()):
         """
         Write systems to the database. Floats, ints and np.ndarrays without dimension are transformed to np.ndarrays with dimension 1.
 
         """
         data = {}
-
         # add available properties to database
         for pname in self.available_properties:
             try:
@@ -344,7 +351,7 @@ class AtomsData(Dataset):
         # transform to np.ndarray
         data = numpyfy_dict(data)
 
-        conn.write(atoms, data=data)
+        conn.write(atoms, data=data, key_value_pairs=key_value_pairs)
 
     def _get_atomref(self, property):
         """
@@ -439,7 +446,11 @@ class AtomsData(Dataset):
         )
 
         # read old database
-        atoms_list, properties_list = spk.utils.read_deprecated_database(self.dbpath)
+        (
+            atoms_list,
+            properties_list,
+            key_value_pairs_list,
+        ) = spk.utils.read_deprecated_database(self.dbpath)
         metadata = self.get_metadata()
 
         # move old database
@@ -448,12 +459,16 @@ class AtomsData(Dataset):
         # write updated database
         self.set_metadata(metadata=metadata)
         with connect(self.dbpath) as conn:
-            for atoms, properties in tqdm(
-                zip(atoms_list, properties_list),
+            for atoms, properties, key_value_pairs in tqdm(
+                zip(atoms_list, properties_list, key_value_pairs_list),
                 "Updating new database",
                 total=len(atoms_list),
             ):
-                conn.write(atoms, data=numpyfy_dict(properties))
+                conn.write(
+                    atoms,
+                    data=numpyfy_dict(properties),
+                    key_value_pairs=key_value_pairs,
+                )
 
 
 class ConcatAtomsData(ConcatDataset):
@@ -585,6 +600,9 @@ class AtomsDataSubset(Subset):
     @property
     def atomref(self):
         return self.dataset.atomref
+
+    def get_atomref(self, properties):
+        return self.dataset.get_atomref(properties)
 
     def get_properties(self, idx, load_only=None):
         return self.dataset.get_properties(idx, load_only)

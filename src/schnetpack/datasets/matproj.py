@@ -6,7 +6,7 @@ from ase.db import connect
 from ase.units import eV
 
 import schnetpack as spk
-from schnetpack.data import AtomsDataError
+from schnetpack.data import AtomsDataError, AtomsDataSubset
 from schnetpack.datasets import DownloadableAtomsData
 
 __all__ = ["MaterialsProject"]
@@ -72,6 +72,42 @@ class MaterialsProject(DownloadableAtomsData):
             download=download,
         )
 
+    def create_subset(self, idx):
+        idx = np.array(idx)
+        subidx = idx if self.subset is None else np.array(self.subset)[idx]
+
+        return MaterialsProject(
+            dbpath=self.dbpath,
+            download=False,
+            subset=subidx,
+            load_only=self.load_only,
+            collect_triples=self.collect_triples,
+            environment_provider=self.environment_provider,
+        )
+
+    def at_timestamp(self, timestamp):
+        """
+        Returns a new dataset that only consists of items created before
+        the given timestamp.
+
+        Args:
+            timestamp (str): timestamp
+
+        Returns:
+            schnetpack.datasets.matproj.MaterialsProject: dataset with subset of
+                original data
+        """
+        with connect(self.dbpath) as conn:
+            rows = conn.select(columns=["id", "key_value_pairs"])
+            idxs = []
+            timestamps = []
+            for row in rows:
+                idxs.append(row.id - 1)
+                timestamps.append(row.key_value_pairs["created_at"])
+        idxs = np.array(idxs)
+        timestamps = np.array(timestamps)
+        return AtomsDataSubset(self, idxs[timestamps <= timestamp])
+
     def _download(self):
         """
         Downloads dataset provided it does not exist in self.path
@@ -97,6 +133,7 @@ class MaterialsProject(DownloadableAtomsData):
         # collect data
         atms_list = []
         properties_list = []
+        key_value_pairs_list = []
         with MPRester(self.apikey) as m:
             for N in range(1, 9):
                 for nsites in range(0, 300, 30):
@@ -121,26 +158,37 @@ class MaterialsProject(DownloadableAtomsData):
                     for k, q in enumerate(query):
                         s = q["structure"]
                         if type(s) is Structure:
-                            at = Atoms(
-                                numbers=s.atomic_numbers,
-                                positions=s.cart_coords,
-                                cell=s.lattice.matrix,
-                                pbc=True,
+                            atms_list.append(
+                                Atoms(
+                                    numbers=s.atomic_numbers,
+                                    positions=s.cart_coords,
+                                    cell=s.lattice.matrix,
+                                    pbc=True,
+                                )
                             )
-                            data = {
-                                MaterialsProject.EPerAtom: q["energy_per_atom"],
-                                MaterialsProject.EformationPerAtom: q[
-                                    "formation_energy_per_atom"
-                                ],
-                                MaterialsProject.TotalMagnetization: q[
-                                    "total_magnetization"
-                                ],
-                                MaterialsProject.BandGap: q["band_gap"],
-                            }
-                            if q["created_at"] <= "2017-12-04 14:20":
-                                atms_list.append(at)
-                                properties_list.append(data)
+                            properties_list.append(
+                                {
+                                    MaterialsProject.EPerAtom: q["energy_per_atom"],
+                                    MaterialsProject.EformationPerAtom: q[
+                                        "formation_energy_per_atom"
+                                    ],
+                                    MaterialsProject.TotalMagnetization: q[
+                                        "total_magnetization"
+                                    ],
+                                    MaterialsProject.BandGap: q["band_gap"],
+                                }
+                            )
+                            key_value_pairs_list.append(
+                                {
+                                    "material_id": q["material_id"],
+                                    "created_at": q["created_at"],
+                                }
+                            )
 
         # write systems to database
-        self.add_systems(atms_list, property_list=properties_list)
+        self.add_systems(
+            atms_list,
+            property_list=properties_list,
+            key_value_pairs_list=key_value_pairs_list,
+        )
         self.set_metadata({})

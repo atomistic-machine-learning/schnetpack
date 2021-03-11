@@ -93,6 +93,7 @@ def train_schnet_args(modeldir, ethanol_path, logger):
         stress=None,
         aggregation_mode="sum",
         output_module="atomwise",
+        normalize_filter=False,
         rho={},
     )
 
