@@ -198,6 +198,11 @@ def get_model_parsers():
         default=50,
         help="Number of Gaussians to expand distances (default: %(default)s)",
     )
+    schnet_parser.add_argument(
+        "--normalize_filter",
+        action="store_true",
+        help="Normalize convolution filters by number of neighbors",
+    )
 
     wacsf_parser = ArgumentParser(add_help=False)
     wacsf_parser.add_argument(
@@ -373,7 +378,7 @@ def get_data_parsers():
     matproj_parser.add_argument(
         "--environment_provider",
         type=str,
-        default="ase",
+        default="torch",
         choices=["simple", "ase", "torch"],
         help="Environment provider for dataset. (default: %(default)s)",
     )
@@ -455,7 +460,7 @@ def get_data_parsers():
     omdb_parser.add_argument(
         "--environment_provider",
         type=str,
-        default="ase",
+        default="torch",
         choices=["simple", "ase", "torch"],
         help="Environment provider for dataset. (default: %(default)s)",
     )
@@ -601,21 +606,25 @@ def build_parser():
         help="ANI1 dataset help",
         parents=[train_parser, schnet_parser, ani1_parser],
     )
-    schnet_subparsers.add_parser(
+    schnet_matproj = schnet_subparsers.add_parser(
         "matproj",
         help="Materials Project dataset help",
         parents=[train_parser, schnet_parser, matproj_parser],
     )
+    schnet_matproj.set_defaults(normalize_filter=True)
+
     schnet_subparsers.add_parser(
         "md17",
         help="MD17 dataset help",
         parents=[train_parser, schnet_parser, md17_parser],
     )
-    schnet_subparsers.add_parser(
+    schnet_omdb = schnet_subparsers.add_parser(
         "omdb",
         help="Organic Materials dataset help",
         parents=[train_parser, schnet_parser, omdb_parser],
     )
+    schnet_omdb.set_defaults(normalize_filter=True)
+
     schnet_subparsers.add_parser(
         "qm9",
         help="QM9 dataset help",

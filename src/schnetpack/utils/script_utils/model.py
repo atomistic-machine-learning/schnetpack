@@ -20,6 +20,7 @@ def get_representation(args, train_loader=None):
             cutoff=args.cutoff,
             n_gaussians=args.num_gaussians,
             cutoff_network=cutoff_network,
+            normalize_filter=args.normalize_filter,
         )
 
     elif args.model == "wacsf":
