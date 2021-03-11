@@ -92,6 +92,10 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
         Y = np.loadtxt("bandgaps.csv")
         [os.remove(name) for name in names]
 
+        atoms_list = []
+        property_list = []
         with connect(self.dbpath) as con:
             for i, at in enumerate(structures):
-                con.write(at, data={OrganicMaterialsDatabase.BandGap: Y[i]})
+                atoms_list.append(at)
+                property_list.append({OrganicMaterialsDatabase.BandGap: Y[i]})
+        self.add_systems(atoms_list, property_list)
