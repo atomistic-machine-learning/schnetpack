@@ -16,7 +16,7 @@ def test_add_and_read(empty_dataset, example_data):
     """
     # add data
     for ats, props in example_data:
-        empty_dataset.add_system(ats, **props)
+        empty_dataset.add_system(ats, props)
 
     assert len(empty_dataset) == len(example_data)
     assert os.path.exists(empty_dataset.dbpath)
