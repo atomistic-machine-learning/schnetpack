@@ -195,3 +195,82 @@ class Aggregate(nn.Module):
                 N = input.size(self.axis)
             y = y / N
         return y
+
+
+class MaxAggregate(nn.Module):
+    """Pooling layer that computes the maximum for each feature over all atoms
+
+    Args:
+        axis (int): axis along which pooling is done.
+    """
+
+    def __init__(self, axis):
+        super().__init__()
+        self.axis = axis
+
+    def forward(self, input, mask=None):
+        r"""Compute layer output.
+
+        Args:
+            input (torch.Tensor): input data.
+            mask (torch.Tensor, optional): mask to be applied; e.g. neighbors mask.
+
+        Returns:
+            torch.Tensor: layer output.
+        """
+        # mask input
+        if mask is not None:
+            # If the mask is lower dimensional than the array being masked,
+            #  inject an extra dimension to the end
+            if mask.dim() < input.dim():
+                mask = torch.unsqueeze(mask, -1)
+            input = torch.where(mask > 0, input, torch.min(input))
+
+        # compute sum of input along axis
+        return torch.max(input, self.axis)[0]
+
+
+class SoftmaxAggregate(nn.Module):
+    """Pooling layer that computes the maximum for each feature over all atoms
+    using the "softmax" function to weigh the contribution of each atom to
+    the "maximum."
+
+    Args:
+        axis (int): axis along which pooling is done.
+    """
+
+    def __init__(self, axis):
+        super().__init__()
+        self.axis = axis
+
+    def forward(self, input, mask=None):
+        r"""Compute layer output.
+
+        Args:
+            input (torch.Tensor): input data.
+            mask (torch.Tensor, optional): mask to be applied; e.g. neighbors mask.
+
+        Returns:
+            torch.Tensor: layer output.
+        """
+
+        # Compute the sum of exponentials for the desired axis
+        exp_input = torch.exp(input)
+
+        # Set the contributions of "masked" atoms to zero
+        if mask is not None:
+            # If the mask is lower dimensional than the array being masked,
+            #  inject an extra dimension to the end
+            if mask.dim() < input.dim():
+                mask = torch.unsqueeze(mask, -1)
+            exp_input = torch.where(mask > 0, exp_input, torch.zeros_like(exp_input))
+
+        # Sum exponentials along the desired axis
+        exp_input_sum = torch.sum(exp_input, self.axis, keepdim=True)
+
+        # Normalize the exponential array by the
+        weights = exp_input / exp_input_sum
+
+        # compute sum of input along axis
+        output = torch.sum(input * weights, self.axis)
+        return output
