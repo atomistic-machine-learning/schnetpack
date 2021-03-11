@@ -152,7 +152,7 @@ def example_dataset(tmp_data_dir, example_data, available_properties):
     )
     # add data
     for ats, props in example_data:
-        data.add_system(ats, **props)
+        data.add_system(ats, props)
     return data
 
 

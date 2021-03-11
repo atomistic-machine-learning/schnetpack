@@ -95,7 +95,7 @@ def create_subset(dataset, indices):
 
     Args:
         dataset (torch.utils.data.Dataset): dataset
-        indices (sequence): indices of the subset
+        indices (sequence): indices of the subset; no np.ndarrays, because the ase database can not handle np.int values
 
     Returns:
         spk.data.AtomsDataSubset: subset of input dataset

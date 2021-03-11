@@ -8,7 +8,6 @@ from urllib import request as request
 import h5py
 import numpy as np
 from ase import Atoms
-from ase.db import connect
 from ase.units import Hartree
 
 import schnetpack as spk
@@ -114,40 +113,41 @@ class ANI1(DownloadableAtomsData):
         shutil.rmtree(tmpdir)
 
     def _load_h5_file(self, file_name):
-        with connect(self.dbpath) as con:
-            store = h5py.File(file_name)
-            for file_key in store:
-                for molecule_key in store[file_key]:
-                    molecule_group = store[file_key][molecule_key]
-                    species = "".join([str(s)[-2] for s in molecule_group["species"]])
-                    positions = molecule_group["coordinates"]
-                    energies = molecule_group["energies"]
+        atoms_list = []
+        properties_list = []
 
-                    # loop over conformations
-                    for i in range(energies.shape[0]):
-                        atm = Atoms(species, positions[i])
-                        energy = energies[i] * self.units[self.energy]
+        store = h5py.File(file_name)
+        for file_key in store:
+            for molecule_key in store[file_key]:
+                molecule_group = store[file_key][molecule_key]
+                species = "".join([str(s)[-2] for s in molecule_group["species"]])
+                positions = molecule_group["coordinates"]
+                energies = molecule_group["energies"]
 
-                        properties = {self.energy: energy}
+                # loop over conformations
+                for i in range(energies.shape[0]):
+                    atm = Atoms(species, positions[i])
+                    energy = energies[i] * self.units[self.energy]
+                    properties = {self.energy: energy}
+                    atoms_list.append(atm)
+                    properties_list.append(properties)
 
-                        con.write(atm, data=properties)
+                # high energy conformations as described in 'Technical Validation'
+                # section of https://arxiv.org/abs/1708.04987
+                if self.high_energies:
+                    high_energy_positions = molecule_group["coordinatesHE"]
+                    high_energies = molecule_group["energiesHE"]
 
-                    # high energy conformations as described in 'Technical Validation'
-                    # section of https://arxiv.org/abs/1708.04987
-                    if self.high_energies:
-                        high_energy_positions = molecule_group["coordinatesHE"]
-                        high_energies = molecule_group["energiesHE"]
+                    # loop over high energy conformations
+                    for i in range(high_energies.shape[0]):
+                        atm = Atoms(species, high_energy_positions[i])
+                        high_energy = high_energies[i] * self.units[self.high_energies]
+                        properties = {self.energy: high_energy}
+                        atoms_list.append(atm)
+                        properties_list.append(properties)
 
-                        # loop over high energy conformations
-                        for i in range(high_energies.shape[0]):
-                            atm = Atoms(species, high_energy_positions[i])
-                            high_energy = (
-                                high_energies[i] * self.units[self.high_energies]
-                            )
-
-                            properties = {self.energy: high_energy}
-
-                            con.write(atm, data=properties)
+        # write data to ase db
+        self.add_systems(atoms_list, property_list=properties_list)
 
     def _create_atoms_ref(self):
         atref = np.zeros((100, 6))

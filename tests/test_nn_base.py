@@ -57,9 +57,11 @@ def test_nn_aggregate_axis_softmax():
 
     # Test different axes
     agg = SoftmaxAggregate(axis=0)
-    assert torch.allclose(torch.FloatTensor([1.76159415595576, 1, 1.76159415595576]), agg(data))
+    assert torch.allclose(
+        torch.FloatTensor([1.76159415595576, 1, 1.76159415595576]), agg(data)
+    )
     agg = SoftmaxAggregate(axis=1)
-    assert torch.allclose(torch.FloatTensor([1.57521038260444]*2), agg(data))
+    assert torch.allclose(torch.FloatTensor([1.57521038260444] * 2), agg(data))
 
     # Test with a mask
     mask = torch.IntTensor([[1, 1, 0], [1, 0, 0]])

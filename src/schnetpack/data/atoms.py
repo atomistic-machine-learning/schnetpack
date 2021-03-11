@@ -272,7 +272,7 @@ class AtomsData(Dataset):
         return at
 
     # add systems
-    def add_system(self, atoms, **properties):
+    def add_system(self, atoms, properties=dict(), key_value_pairs=dict()):
         """
         Add atoms data to the dataset.
 
@@ -283,9 +283,9 @@ class AtomsData(Dataset):
 
         """
         with connect(self.dbpath) as conn:
-            self._add_system(conn, atoms, **properties)
+            self._add_system(conn, atoms, properties, key_value_pairs)
 
-    def add_systems(self, atoms_list, property_list):
+    def add_systems(self, atoms_list, property_list=None, key_value_pairs_list=None):
         """
         Add atoms data to the dataset.
 
@@ -296,10 +296,18 @@ class AtomsData(Dataset):
                 Keys have to match the `available_properties` of the dataset.
 
         """
-        with connect(self.dbpath) as conn:
+        # build empty dicts if property/kv_pairs list is None
+        if property_list is None:
+            property_list = [dict() for _ in range(len(atoms_list))]
+        if key_value_pairs_list is None:
+            key_value_pairs_list = [dict() for _ in range(len(atoms_list))]
 
-            for at, prop in zip(atoms_list, property_list):
-                self._add_system(conn, at, **prop)
+        # write systems to database
+        with connect(self.dbpath) as conn:
+            for at, prop, kv_pair in zip(
+                atoms_list, property_list, key_value_pairs_list
+            ):
+                self._add_system(conn, at, prop, kv_pair)
 
     # deprecated
     def create_subset(self, subset):
@@ -327,9 +335,12 @@ class AtomsData(Dataset):
         return ConcatAtomsData([self, other])
 
     # private methods
-    def _add_system(self, conn, atoms, **properties):
-        data = {}
+    def _add_system(self, conn, atoms, properties=dict(), key_value_pairs=dict()):
+        """
+        Write systems to the database. Floats, ints and np.ndarrays without dimension are transformed to np.ndarrays with dimension 1.
 
+        """
+        data = {}
         # add available properties to database
         for pname in self.available_properties:
             try:
@@ -337,7 +348,10 @@ class AtomsData(Dataset):
             except:
                 raise AtomsDataError("Required property missing:" + pname)
 
-        conn.write(atoms, data=data)
+        # transform to np.ndarray
+        data = numpyfy_dict(data)
+
+        conn.write(atoms, data=data, key_value_pairs=key_value_pairs)
 
     def _get_atomref(self, property):
         """
@@ -450,7 +464,11 @@ class AtomsData(Dataset):
                 "Updating new database",
                 total=len(atoms_list),
             ):
-                conn.write(atoms, data=properties, key_value_pairs=key_value_pairs)
+                conn.write(
+                    atoms,
+                    data=numpyfy_dict(properties),
+                    key_value_pairs=key_value_pairs,
+                )
 
 
 class ConcatAtomsData(ConcatDataset):
@@ -680,9 +698,14 @@ def _convert_atoms(
     return inputs
 
 
-def torchify_dict(property_dict):
+def torchify_dict(data):
+    """
+    Transform np.ndarrays to torch.tensors.
+
+    """
     torch_properties = {}
-    for pname, prop in property_dict.items():
+    for pname, prop in data.items():
+
         if prop.dtype in [np.int, np.int32, np.int64]:
             torch_properties[pname] = torch.LongTensor(prop)
         elif prop.dtype in [np.float, np.float32, np.float64]:
@@ -692,6 +715,20 @@ def torchify_dict(property_dict):
                 "Invalid datatype {} for property {}!".format(type(prop), pname)
             )
     return torch_properties
+
+
+def numpyfy_dict(data):
+    """
+    Transform floats, ints and dimensionless numpy in a dict to arrays to numpy arrays with dimenison.
+
+    """
+    for k, v in data.items():
+        if type(v) in [int, float]:
+            v = np.array([v])
+        if v.shape == ():
+            v = v[np.newaxis]
+        data[k] = v
+    return data
 
 
 class AtomsConverter:
