@@ -8,7 +8,6 @@ __all__ = [
 ]
 
 
-@torch.jit.script
 def gaussian_rbf(inputs: torch.Tensor, offsets: torch.Tensor, widths: torch.Tensor):
     coeff = -0.5 / torch.pow(widths, 2)
     diff = inputs[..., None] - offsets
@@ -20,22 +19,22 @@ class GaussianRBF(nn.Module):
     r"""Gaussian radial basis functions.
 
     Args:
-        start (float, optional): center of first Gaussian function, :math:`\mu_0`.
-        stop (float, optional): center of last Gaussian function, :math:`\mu_{N_g}`
-        n_rbf (int, optional): total number of Gaussian functions, :math:`N_g`.
-        centered (bool, optional): If True, Gaussians are centered at the origin and
-            the offsets are used to as their widths (used e.g. for angular functions).
-        trainable (bool, optional): If True, widths and offset of Gaussian functions
+        n_rbf: total number of Gaussian functions, :math:`N_g`.
+        cutoff: center of last Gaussian function, :math:`\mu_{N_g}`
+        start: center of first Gaussian function, :math:`\mu_0`.
+        trainable: If True, widths and offset of Gaussian functions
             are adjusted during training process.
 
     """
 
-    def __init__(self, n_rbf: int, cutoff: float, trainable: bool = False):
+    def __init__(
+        self, n_rbf: int, cutoff: float, start: float = 0.0, trainable: bool = False
+    ):
         super(GaussianRBF, self).__init__()
         self.n_rbf = n_rbf
 
         # compute offset and width of Gaussian functions
-        offset = torch.linspace(0.0, cutoff, n_rbf)
+        offset = torch.linspace(start, cutoff, n_rbf)
         widths = torch.FloatTensor(
             torch.abs(offset[1] - offset[0]) * torch.ones_like(offset)
         )

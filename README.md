@@ -21,9 +21,7 @@ compatible with TorchScript. Therefore, there will be breaking changes. **_
 - python 3
 - ASE
 - numpy
-- PyTorch (>=0.4.1)
-- h5py
-- Optional: tensorboardX
+- PyTorch (>=1.7.0)
 
 _**Note: We recommend using a GPU for training the neural networks.**_
 
@@ -59,43 +57,11 @@ pip install .
 You're ready to go!
 
 ## Getting started
-
-The best place to start is training a SchNetPack model on a common benchmark dataset. 
-The example scripts provided by SchNetPack are inserted into your PATH during installation. 
+ 
 
 ### QM9 example
 
-The QM9 example scripts allows to train and evaluate both SchNet and wACSF neural networks.
-The training can be started using:
 
-```
-spk_run.py train <schnet/wacsf> qm9 <dbpath> <modeldir> --split num_train num_val [--cuda]
-```
-
-where num_train and num_val need to be replaced by the number of training and validation datapoints respectively.
-
-You can choose between SchNet and wACSF networks and have to provide a path to the database file and a path to a directory which will be used to store the model. If the database path does not exist, the data is downloaded and stored there. Please note that the database path must include the file extension .db.
-With the `--cuda` flag, you can activate GPU training.
-The default hyper-parameters should work fine, however, you can change them through command-line arguments. 
-Please refer to the help at `spk_run.py train <schnet/wacsf> --help`. 
-
-The training progress will be logged in `<modeldir>/log`, either as CSV 
-(default) or as TensorBoard event files. For the latter, TensorBoard needs to be installed to view the event files.
-This can be done by installing the version included in TensorFlow 
-
-```
-pip install tensorflow
-```
-
-or the [standalone version](https://github.com/dmlc/tensorboard).
-
-To evaluate the trained model with the best validation error, call
-
-```
-spk_run.py eval <modeldir> --split test [--cuda]
-```
-
-which will run on the specified `--split` and write a result file `evaluation.txt` into the model directory.
 
 ## Documentation
 
@@ -108,6 +74,11 @@ SchNetPack: A Deep Learning Toolbox For Atomistic Systems.
 J. Chem. Theory Comput.
 [10.1021/acs.jctc.8b00908](http://dx.doi.org/10.1021/acs.jctc.8b00908)
 [arXiv:1809.01072](https://arxiv.org/abs/1809.01072). (2018)
+
+
+## Acknowledgements
+
+Hydra configs for PyTorch lightning are adapted from: [![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
 
 
 ## References
