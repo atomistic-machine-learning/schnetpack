@@ -5,7 +5,6 @@ from torch_scatter import segment_coo
 __all__ = ["CFConv"]
 
 
-@torch.jit.script
 def cfconv(
     x: torch.Tensor,
     Wij: torch.Tensor,

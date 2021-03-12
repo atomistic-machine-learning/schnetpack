@@ -1,10 +1,8 @@
 import math
 
-import torch
 from torch.nn import functional
 
 
-@torch.jit.script
 def shifted_softplus(x):
     r"""Compute shifted soft-plus activation function.
 

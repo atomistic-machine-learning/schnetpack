@@ -9,6 +9,8 @@ from ase.neighborlist import neighbor_list
 
 from schnetpack.representation.schnet import SchNet
 
+# TODO:make proper timing and golden tests
+
 
 @pytest.fixture
 def indexed_data(example_data, batch_size):
