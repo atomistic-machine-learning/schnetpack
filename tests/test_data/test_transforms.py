@@ -14,15 +14,8 @@ def aseneighbor_list(cutoff):
 
 
 def test_single_atom(single_atom, aseneighbor_list):
-    ats = single_atom
-    props = {
-        Structure.Z: ats.numbers,
-        Structure.R: ats.positions,
-        Structure.cell: ats.cell,
-        Structure.pbc: ats.pbc,
-    }
-    props_after = aseneighbor_list(props)
-    assert_consistent(props, props_after)
+    props_after = aseneighbor_list(single_atom)
+    assert_consistent(single_atom, props_after)
     assert len(props_after[Structure.Rij]) == 0
     assert len(props_after[Structure.idx_i]) == 0
     assert len(props_after[Structure.idx_j]) == 0
@@ -30,17 +23,13 @@ def test_single_atom(single_atom, aseneighbor_list):
 
 
 def test_cast(single_atom):
-    ats = single_atom
-    props = {
-        Structure.Z: ats.numbers,
-        Structure.R: ats.positions,
-        Structure.cell: ats.cell,
-        Structure.pbc: ats.pbc,
+    allf64 = [k for k, v in single_atom.items() if v.dtype is torch.float64]
+    other_types = {
+        k: v.dtype for k, v in single_atom.items() if v.dtype is not torch.float64
     }
-    allf64 = [k for k, v in props.items() if v.dtype is torch.float64]
-    other_types = {k: v.dtype for k, v in props.items() if v.dtype is not torch.float64}
 
-    props_after = CastTo32()(props)
+    assert len(allf64) > 0, single_atom
+    props_after = CastTo32()(single_atom)
 
     for k in props_after:
         if k in allf64:

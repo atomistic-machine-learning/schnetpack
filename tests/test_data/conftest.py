@@ -1,11 +1,21 @@
 import pytest
 from ase import Atoms
 import numpy as np
+import torch
+from schnetpack import Structure
 
 
 @pytest.fixture
 def single_atom():
-    return Atoms([6], positions=[[0.0, 0.0, 0.0]])
+    props = {
+        Structure.Z: torch.tensor(np.array([6])),
+        Structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0]])),
+        Structure.cell: torch.tensor(
+            np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+        ),
+        Structure.pbc: torch.tensor(np.array([False, False, False])),
+    }
+    return props
 
 
 @pytest.fixture
