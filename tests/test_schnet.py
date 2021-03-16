@@ -1,6 +1,5 @@
 import pytest
 import torch
-from tests.fixtures import *
 
 from schnetpack import Structure
 import schnetpack as spk

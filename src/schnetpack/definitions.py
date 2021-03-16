@@ -1,13 +1,12 @@
-from enum import Enum
-
 __all__ = ["Structure", "Properties"]
 
 
-class Structure(Enum):
+class Structure:
     """
     Keys to access structure properties
     """
 
+    idx = "_idx"
     Z = "_atomic_numbers"
     position = "_positions"
     R = position
@@ -31,7 +30,7 @@ class Structure(Enum):
     # cell_offset_lr = "_cell_offset_lr"
 
 
-class Properties(Enum):
+class Properties:
     # chemical properties
     energy = "energy"
     forces = "forces"

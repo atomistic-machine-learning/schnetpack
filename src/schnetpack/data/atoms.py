@@ -34,10 +34,6 @@ class AtomsDataError(Exception):
     pass
 
 
-class AtomsDataFormat(Enum):
-    ASE = "ASE"
-
-
 class AtomsDataMixin(ABC):
     """
     Base mixin class for atomistic data. Use together with PyTorch Dataset or IterableDataset
@@ -70,10 +66,11 @@ class AtomsDataMixin(ABC):
 
     @load_properties.setter
     def load_properties(self, val: List[str]):
-        props = self.available_properties
-        assert all(
-            [p in props for p in val]
-        ), "Not all given properties are available in the dataset!"
+        if val is not None:
+            props = self.available_properties
+            assert all(
+                [p in props for p in val]
+            ), "Not all given properties are available in the dataset!"
         self._load_properties = val
 
     @property
@@ -99,8 +96,6 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
         load_properties: If True, load structure properties.
     """
 
-    # TODO: add conversion for deprecated data
-
     def __init__(
         self,
         datapath: str,
@@ -124,7 +119,7 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         with connect(self.datapath) as conn:
             props = self._get_properties(
-                conn, self.load_properties, self.load_structure
+                conn, idx, self.load_properties, self.load_structure
             )
         return props
 
@@ -153,7 +148,7 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
         if load_properties is None:
             load_properties = self.load_properties
 
-        if load_properties is None:
+        if load_structure is None:
             load_structure = self.load_structure
 
         if type(indices) is int:
@@ -164,7 +159,12 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
         with connect(self.datapath) as conn:
             for i in indices:
                 properties.append(
-                    self._get_properties(conn, i, load_properties, load_structure)
+                    self._get_properties(
+                        conn,
+                        i,
+                        load_properties=load_properties,
+                        load_structure=load_structure,
+                    )
                 )
 
         return properties
@@ -175,18 +175,19 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
         row = conn.get(idx + 1)
 
         # extract properties
+        # TODO: can the copies be avoided?
         properties = {}
-        properties["_idx"] = torch.tensor([idx])
+        properties[Structure.idx] = torch.tensor([idx])
         for pname in load_properties:
-            properties[pname] = row.data[pname]
+            properties[pname] = torch.tensor(row.data[pname].copy())
 
-        Z = row["numbers"]
+        Z = row["numbers"].copy()
         properties[Structure.n_atoms] = torch.tensor(Z.shape[0])
 
         if load_structure:
-            properties[Structure.Z] = Z
-            properties[Structure.position] = torch.tensor(row["positions"])
-            properties[Structure.cell] = torch.tensor(row["cell"])
+            properties[Structure.Z] = torch.tensor(Z)
+            properties[Structure.position] = torch.tensor(row["positions"].copy())
+            properties[Structure.cell] = torch.tensor(row["cell"].copy())
             properties[Structure.pbc] = torch.tensor(row["pbc"])
 
         return properties
@@ -270,7 +271,7 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
 
     def add_systems(
         self,
-        property_list: List[Dict[str:Any]],
+        property_list: List[Dict[str, Any]],
         atoms_list: Optional[List[Atoms]] = None,
     ):
         """
