@@ -49,9 +49,11 @@ class AtomsDataMixin(ABC):
         self,
         load_properties: Optional[List[str]] = None,
         load_structure: bool = True,
+        transforms: Optional[torch.nn.Module] = None,
     ):
         self.load_properties = load_properties
         self.load_structure = load_structure
+        self.transforms = transforms
 
     @property
     @abstractmethod
@@ -101,6 +103,7 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
         datapath: str,
         load_properties: Optional[List[str]] = None,
         load_structure: bool = True,
+        transforms: Optional[torch.nn.Module] = None,
     ):
         self.datapath = datapath
         self.conn = None
@@ -110,6 +113,7 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
             self,
             load_properties=load_properties,
             load_structure=load_structure,
+            transforms=transforms,
         )
 
     def __len__(self) -> int:
@@ -121,6 +125,10 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
             props = self._get_properties(
                 conn, idx, self.load_properties, self.load_structure
             )
+
+        if self.transforms:
+            props = self.transforms(props)
+
         return props
 
     def _check_db(self):

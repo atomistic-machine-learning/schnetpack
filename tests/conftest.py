@@ -2,6 +2,12 @@ import numpy as np
 import pytest
 from ase import Atoms
 
+
+@pytest.fixture(scope="session")
+def cutoff():
+    return 5.0
+
+
 # example datasets
 @pytest.fixture(scope="session")
 def max_atoms():

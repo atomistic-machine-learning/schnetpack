@@ -18,6 +18,7 @@ class Structure:
     seg_m = "_seg_m"
     idx_i = "_idx_i"
     idx_j = "_idx_j"
+    Rij = "_Rij"
     n_atoms = "_n_atoms"
 
     # neighbor_pairs_j = "_neighbor_pairs_j"
