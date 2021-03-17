@@ -25,7 +25,7 @@ from schnetpack import Structure
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["ASEAtomsData", "AtomsDataFormat"]
+__all__ = ["ASEAtomsData", "AtomsDataFormat", "resolve_format"]
 
 
 class AtomsDataFormat(Enum):
@@ -42,12 +42,20 @@ extension_map = {AtomsDataFormat.ASE: ".db"}
 def resolve_format(datapath: str, format: Optional[AtomsDataFormat]):
     file, suffix = os.path.splitext(datapath)
     if suffix == ".db":
+        if format is None:
+            format = AtomsDataFormat.ASE
         assert (
             format is AtomsDataFormat.ASE
         ), f"File extension {suffix} is not compatible with chosen format {format}"
-        return datapath, format
-    elif len(suffix) == 0:
-        datapath = datapath + ""
+    elif len(suffix) == 0 and format:
+        datapath = datapath + extension_map[format]
+    elif len(suffix) == 0 and format is None:
+        raise AtomsDataError(
+            "If format is not given, `datapath` needs a supported file extension!"
+        )
+    else:
+        raise AtomsDataError(f"Unupported file extension: {suffix}")
+    return datapath, format
 
 
 class AtomsDataMixin(ABC):
@@ -99,6 +107,34 @@ class AtomsDataMixin(ABC):
 
     @abstractmethod
     def update_metadata(self, **kwargs):
+        pass
+
+    @abstractmethod
+    def get_properties(
+        self,
+        indices: Union[int, Iterable[int]],
+        load_properties: List[str] = None,
+        load_structure: Optional[bool] = None,
+    ):
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def create(
+        datapath: str, available_properties: List[str], **kwargs
+    ) -> "AtomsDataMixin":
+        pass
+
+    @abstractmethod
+    def add_systems(
+        self,
+        property_list: List[Dict[str, Any]],
+        atoms_list: Optional[List[Atoms]] = None,
+    ):
+        pass
+
+    @abstractmethod
+    def add_system(self, atoms: Optional[Atoms] = None, **properties):
         pass
 
 
@@ -245,20 +281,16 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
 
     @staticmethod
     def create(
-        datapath: str,
-        available_properties: List[str],
-        load_properties: Optional[List[str]] = None,
-        load_structure: bool = True,
+        datapath: str, available_properties: List[str], **kwargs
     ) -> "ASEAtomsData":
         """
 
         Args:
             datapath: Path to ASE DB.
-            load_properties: Set of properties to be loaded and returned.
-                If None, all properties in the ASE dB will be returned.
-            load_properties: If True, load structure properties.
+            kwargs: Pass arguments to init.
 
         Returns:
+            newly created ASEAtomsData
 
         """
         if not datapath.endswith(".db"):
@@ -273,9 +305,7 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
         with connect(datapath) as conn:
             conn.metadata = {"_available_properties": available_properties}
 
-        return ASEAtomsData(
-            datapath, load_properties=load_properties, load_structure=load_structure
-        )
+        return ASEAtomsData(datapath, **kwargs)
 
     # add systems
     def add_system(self, atoms: Optional[Atoms] = None, **properties):
