@@ -9,6 +9,7 @@ h5py
 tqdm
 pytest
 pytest-datadir
+torch-scatter
 
 pre-commit
 black
