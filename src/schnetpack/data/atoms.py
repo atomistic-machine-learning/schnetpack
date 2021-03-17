@@ -25,13 +25,29 @@ from schnetpack import Structure
 
 logger = logging.getLogger(__name__)
 
-__all__ = [
-    "ASEAtomsData",
-]
+__all__ = ["ASEAtomsData", "AtomsDataFormat"]
+
+
+class AtomsDataFormat(Enum):
+    ASE = "ase"
 
 
 class AtomsDataError(Exception):
     pass
+
+
+extension_map = {AtomsDataFormat.ASE: ".db"}
+
+
+def resolve_format(datapath: str, format: Optional[AtomsDataFormat]):
+    file, suffix = os.path.splitext(datapath)
+    if suffix == ".db":
+        assert (
+            format is AtomsDataFormat.ASE
+        ), f"File extension {suffix} is not compatible with chosen format {format}"
+        return datapath, format
+    elif len(suffix) == 0:
+        datapath = datapath + ""
 
 
 class AtomsDataMixin(ABC):
