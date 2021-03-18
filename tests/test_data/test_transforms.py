@@ -1,6 +1,8 @@
 from schnetpack.data.transforms import *
 import numpy as np
 import pytest
+import torch
+from ase.data import atomic_masses
 
 
 def assert_consistent(orig, transformed):
@@ -36,3 +38,25 @@ def test_cast(single_atom):
             assert props_after[k].dtype is torch.float32
         else:
             assert props_after[k].dtype is other_types[k]
+
+
+def test_remove_com(four_atoms):
+    positions_trans = SubtractCenterOfMass()(four_atoms)
+
+    com = torch.tensor([0.0, 0.0, 0.0])
+    for r_i, m_i in zip(
+        positions_trans[Structure.position], atomic_masses[four_atoms[Structure.Z]]
+    ):
+        com += r_i * m_i
+
+    torch.testing.assert_allclose(com, torch.tensor([0.0, 0.0, 0.0]))
+
+
+def test_remove_cog(four_atoms):
+    positions_trans = SubtractCenterOfGeometry()(four_atoms)
+
+    cog = torch.tensor([0.0, 0.0, 0.0])
+    for r_i in positions_trans[Structure.position]:
+        cog += r_i
+
+    torch.testing.assert_allclose(cog, torch.tensor([0.0, 0.0, 0.0]))

@@ -20,27 +20,54 @@ def single_atom():
 
 @pytest.fixture
 def two_atoms():
-    return Atoms([6, 6], positions=[[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]])
+    props = {
+        Structure.Z: torch.tensor(np.array([6, 2])),
+        Structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]])),
+        Structure.cell: torch.tensor(
+            np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+        ),
+        Structure.pbc: torch.tensor(np.array([False, False, False])),
+    }
+    return props
 
 
 @pytest.fixture
 def four_atoms():
-    return Atoms(
-        [6, 6, 6, 6],
-        positions=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0, 1.0]],
-    )
+    props = {
+        Structure.Z: torch.tensor(np.array([6, 2, 1, 7])),
+        Structure.R: torch.tensor(
+            np.array(
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0, 1.0]]
+            )
+        ),
+        Structure.cell: torch.tensor(
+            np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+        ),
+        Structure.pbc: torch.tensor(np.array([False, False, False])),
+    }
+    return props
 
 
 @pytest.fixture
 def single_site_crystal():
-    return Atoms([6], positions=[[0.0, 0.0, 0.0]], cell=np.eye(3), pbc=True)
+    props = {
+        Structure.Z: torch.tensor(np.array([6])),
+        Structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0]])),
+        Structure.cell: torch.tensor(np.eye(3)),
+        Structure.pbc: torch.tensor(np.array([True, True, True])),
+    }
+    return props
 
 
 @pytest.fixture
 def two_site_crystal():
-    return Atoms(
-        [6, 6], positions=[[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]], cell=np.eye(3), pbc=True
-    )
+    props = {
+        Structure.Z: torch.tensor(np.array([6, 1])),
+        Structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])),
+        Structure.cell: torch.tensor(np.eye(3)),
+        Structure.pbc: torch.tensor(np.array([True, True, True])),
+    }
+    return props
 
 
 @pytest.fixture(params=[0, 1])
