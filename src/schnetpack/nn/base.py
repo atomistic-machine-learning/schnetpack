@@ -16,15 +16,6 @@ class Dense(nn.Linear):
 
     .. math::
        y = activation(xW^T + b)
-
-    Args:
-        in_features: number of input feature :math:`x`.
-        out_features: umber of output features :math:`y`.
-        bias: If False, the layer will not adapt bias :math:`b`.
-        activation: if None, no activation function is used.
-        weight_init: weight initializer from current weight.
-        bias_init: bias initializer from current bias.
-
     """
 
     def __init__(
@@ -36,6 +27,15 @@ class Dense(nn.Linear):
         weight_init: Callable = xavier_uniform_,
         bias_init: Callable = zeros_,
     ):
+        """
+        Args:
+            in_features: number of input feature :math:`x`.
+            out_features: umber of output features :math:`y`.
+            bias: If False, the layer will not adapt bias :math:`b`.
+            activation: if None, no activation function is used.
+            weight_init: weight initializer from current weight.
+            bias_init: bias initializer from current bias.
+        """
         self.weight_init = weight_init
         self.bias_init = bias_init
         super(Dense, self).__init__(in_features, out_features, bias)

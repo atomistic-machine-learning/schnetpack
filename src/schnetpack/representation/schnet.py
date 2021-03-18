@@ -12,16 +12,7 @@ import logging
 
 
 class SchNetInteraction(nn.Module):
-    r"""SchNet interaction block for modeling interactions of atomistic systems.
-
-    Args:
-        n_atom_basis: number of features to describe atomic environments.
-        n_rbf (int): number of radial basis functions.
-        n_filters: number of filters used in continuous-filter convolution.
-        normalize_filter: if True, divide aggregated filter by number
-            of neighbors over which convolution is applied.
-        activation: if None, no activation function is used.
-    """
+    r""" SchNet interaction block for modeling interactions of atomistic systems. """
 
     def __init__(
         self,
@@ -31,6 +22,15 @@ class SchNetInteraction(nn.Module):
         normalize_filter: bool = False,
         activation: Callable = shifted_softplus,
     ):
+        """
+        Args:
+            n_atom_basis: number of features to describe atomic environments.
+            n_rbf (int): number of radial basis functions.
+            n_filters: number of filters used in continuous-filter convolution.
+            normalize_filter: if True, divide aggregated filter by number
+                of neighbors over which convolution is applied.
+            activation: if None, no activation function is used.
+        """
         super(SchNetInteraction, self).__init__()
         self.in2f = Dense(n_atom_basis, n_filters, bias=False, activation=None)
         self.cfconv = CFConv(reduce="mean" if normalize_filter else "sum")
@@ -102,35 +102,17 @@ class SchNet(nn.Module):
         activation=shifted_softplus,
     ):
         """
-            Args:
-        n_atom_basis:
-        n_filters:
-        n_interactions: number of interaction blocks.
-        cutoff: cutoff radius.
-        n_gaussians: number of Gaussian functions used to expand
-            atomic distances.
-        normalize_filter: if True, divide aggregated filter by number
-            of neighbors over which convolution is applied.
-        coupled_interactions: if True, share the weights across
-            interaction blocks and filter-generating networks.
-        return_intermediate: if True, `forward` method also returns
-            intermediate atomic representations after each interaction block is applied.
-        max_z: maximum nuclear charge allowed in database. This
-            determines the size of the dictionary of embedding; i.e. num_embeddings.
-        cutoff_network: cutoff layer.
-        distance_expansion: layer for expanding interatomic
-            distances in a basis.
         Args:
             n_atom_basis: number of features to describe atomic environments.
-            This determines the size of each embedding vector; i.e. embeddings_dim.
+                This determines the size of each embedding vector; i.e. embeddings_dim.
             n_interactions: number of interaction blocks.
             radial_basis: layer for expanding interatomic distances in a basis set
             cutoff_fn: cutoff function
             n_filters: number of filters used in continuous-filter convolution
             normalize_filter: if True, divide aggregated filter by number
-            of neighbors over which convolution is applied.
+                of neighbors over which convolution is applied.
             coupled_interactions: if True, share the weights across
-            interaction blocks and filter-generating networks.
+                interaction blocks and filter-generating networks.
             return_intermediate:
             max_z:
             charged_systems:

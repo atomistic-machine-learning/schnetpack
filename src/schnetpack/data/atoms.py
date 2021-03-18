@@ -25,7 +25,13 @@ from schnetpack import Structure
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["ASEAtomsData", "AtomsDataFormat", "resolve_format"]
+__all__ = [
+    "ASEAtomsData",
+    "AtomsDataFormat",
+    "resolve_format",
+    "create_dataset",
+    "load_dataset",
+]
 
 
 class AtomsDataFormat(Enum):
@@ -54,8 +60,28 @@ def resolve_format(datapath: str, format: Optional[AtomsDataFormat]):
             "If format is not given, `datapath` needs a supported file extension!"
         )
     else:
-        raise AtomsDataError(f"Unupported file extension: {suffix}")
+        raise AtomsDataError(f"Unsupported file extension: {suffix}")
     return datapath, format
+
+
+def create_dataset(
+    datapath: str, format: AtomsDataFormat, available_properties: List[str], **kwargs
+) -> Dataset:
+    if format is AtomsDataFormat.ASE:
+        dataset = ASEAtomsData.create(
+            datapath=datapath, available_properties=available_properties, **kwargs
+        )
+    else:
+        raise AtomsDataError(f"Unknown format: {format}")
+    return dataset
+
+
+def load_dataset(datapath: str, format: AtomsDataFormat, **kwargs) -> Dataset:
+    if format is AtomsDataFormat.ASE:
+        dataset = ASEAtomsData(datapath=datapath, **kwargs)
+    else:
+        raise AtomsDataError(f"Unknown format: {format}")
+    return dataset
 
 
 class AtomsDataMixin(ABC):
@@ -63,10 +89,7 @@ class AtomsDataMixin(ABC):
     Base mixin class for atomistic data. Use together with PyTorch Dataset or IterableDataset
     to implement concrete data formats.
 
-    Args:
-        load_properties: Set of properties to be loaded and returned.
-            If None, all properties in the ASE dB will be returned.
-        load_properties: If True, load structure properties.
+
     """
 
     def __init__(
@@ -75,6 +98,14 @@ class AtomsDataMixin(ABC):
         load_structure: bool = True,
         transforms: Optional[torch.nn.Module] = None,
     ):
+        """
+
+        Args:
+            load_properties: Set of properties to be loaded and returned.
+                If None, all properties in the ASE dB will be returned.
+            load_properties: If True, load structure properties.
+            transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
+        """
         self.load_properties = load_properties
         self.load_structure = load_structure
         self.transforms = transforms
@@ -143,11 +174,7 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
     PyTorch dataset for atomistic data. The raw data is stored in the specified
     ASE database.
 
-    Args:
-        datapath: Path to ASE DB.
-        load_properties: Set of properties to be loaded and returned.
-            If None, all properties in the ASE dB will be returned.
-        load_properties: If True, load structure properties.
+
     """
 
     def __init__(
@@ -157,6 +184,14 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
         load_structure: bool = True,
         transforms: Optional[torch.nn.Module] = None,
     ):
+        """
+        Args:
+            datapath: Path to ASE DB.
+            load_properties: Set of properties to be loaded and returned.
+                If None, all properties in the ASE dB will be returned.
+            load_properties: If True, load structure properties.
+            transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
+        """
         self.datapath = datapath
         self.conn = None
         self._check_db()
