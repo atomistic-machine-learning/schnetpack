@@ -14,6 +14,7 @@ def single_atom():
             np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
         ),
         Structure.pbc: torch.tensor(np.array([False, False, False])),
+        Structure.n_atoms: torch.tensor([1]),
     }
     return props
 
@@ -27,6 +28,7 @@ def two_atoms():
             np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
         ),
         Structure.pbc: torch.tensor(np.array([False, False, False])),
+        Structure.n_atoms: torch.tensor([2]),
     }
     return props
 
@@ -44,6 +46,7 @@ def four_atoms():
             np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
         ),
         Structure.pbc: torch.tensor(np.array([False, False, False])),
+        Structure.n_atoms: torch.tensor([4]),
     }
     return props
 
@@ -55,6 +58,7 @@ def single_site_crystal():
         Structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0]])),
         Structure.cell: torch.tensor(np.eye(3)),
         Structure.pbc: torch.tensor(np.array([True, True, True])),
+        Structure.n_atoms: torch.tensor([1]),
     }
     return props
 
@@ -66,6 +70,7 @@ def two_site_crystal():
         Structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])),
         Structure.cell: torch.tensor(np.eye(3)),
         Structure.pbc: torch.tensor(np.array([True, True, True])),
+        Structure.n_atoms: torch.tensor([2]),
     }
     return props
 
