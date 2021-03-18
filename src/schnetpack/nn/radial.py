@@ -16,20 +16,19 @@ def gaussian_rbf(inputs: torch.Tensor, offsets: torch.Tensor, widths: torch.Tens
 
 
 class GaussianRBF(nn.Module):
-    r"""Gaussian radial basis functions.
-
-    Args:
-        n_rbf: total number of Gaussian functions, :math:`N_g`.
-        cutoff: center of last Gaussian function, :math:`\mu_{N_g}`
-        start: center of first Gaussian function, :math:`\mu_0`.
-        trainable: If True, widths and offset of Gaussian functions
-            are adjusted during training process.
-
-    """
+    r"""Gaussian radial basis functions."""
 
     def __init__(
         self, n_rbf: int, cutoff: float, start: float = 0.0, trainable: bool = False
     ):
+        """
+        Args:
+            n_rbf: total number of Gaussian functions, :math:`N_g`.
+            cutoff: center of last Gaussian function, :math:`\mu_{N_g}`
+            start: center of first Gaussian function, :math:`\mu_0`.
+            trainable: If True, widths and offset of Gaussian functions
+                are adjusted during training process.
+        """
         super(GaussianRBF, self).__init__()
         self.n_rbf = n_rbf
 
