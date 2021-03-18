@@ -6,6 +6,7 @@ from schnetpack import Structure
 
 from ase import Atoms
 from ase.neighborlist import neighbor_list
+from ase.data import atomic_masses
 
 
 ## neighbor lists
@@ -68,3 +69,31 @@ class CastTo32(CastMap):
 
     def __init__(self):
         super().__init__(type_map={torch.float64: torch.float32})
+
+
+## centering
+
+
+class SubtractCenterOfMass(nn.Module):
+    """
+    Subtract center of mass from positions.
+
+    """
+
+    def forward(self, inputs):
+        masses = torch.tensor(atomic_masses[inputs[Structure.Z]])
+        inputs[Structure.position] -= (
+            masses.unsqueeze(-1) * inputs[Structure.position]
+        ).sum(0) / masses.sum()
+        return inputs
+
+
+class SubtractCenterOfGeometry(nn.Module):
+    """
+    Subtract center of geometry from positions.
+
+    """
+
+    def forward(self, inputs):
+        inputs[Structure.position] -= inputs[Structure.position].mean(0)
+        return inputs

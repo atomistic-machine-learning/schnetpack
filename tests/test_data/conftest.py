@@ -26,7 +26,7 @@ def two_atoms():
 @pytest.fixture
 def four_atoms():
     return Atoms(
-        [6, 6, 6, 6],
+        [6, 6, 3, 6],
         positions=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0, 1.0]],
     )
 
