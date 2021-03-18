@@ -1,14 +1,12 @@
-https://download.pytorch.org/whl/cpu/torch-1.1.0-cp35-cp35m-linux_x86_64.whl; python_version=='3.5'
-https://download.pytorch.org/whl/cpu/torch-1.1.0-cp36-cp36m-linux_x86_64.whl; python_version=='3.6'
 https://download.pytorch.org/whl/cpu/torch-1.7.1%2Bcpu-cp38-cp38-linux_x86_64.whl; python_version=='3.8'
+https://pytorch-geometric.com/whl/torch-1.7.0+cpu/torch_scatter-2.0.6-cp38-cp38-linux_x86_64.whl; python_version=='3.8'
 
 numpy
 ase
-tensorboardX
 h5py
 pyyaml
-sacred
 tqdm
 ipykernel
 nbsphinx
 pytest-datadir
+torch-scatter

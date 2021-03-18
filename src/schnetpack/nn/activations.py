@@ -1,4 +1,5 @@
-import numpy as np
+import math
+
 from torch.nn import functional
 
 
@@ -15,4 +16,4 @@ def shifted_softplus(x):
         torch.Tensor: shifted soft-plus of input.
 
     """
-    return functional.softplus(x) - np.log(2.0)
+    return functional.softplus(x) - math.log(2.0)

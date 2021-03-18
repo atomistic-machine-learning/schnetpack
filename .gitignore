@@ -16,6 +16,10 @@ docs/tutorials/*.db
 docs/tutorials/*.xyz
 docs/tutorials/qm9tut
 
+
+# hydra stuff
+outputs
+
 # C extensions
 *.so
 
