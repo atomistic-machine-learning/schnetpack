@@ -76,7 +76,7 @@ class CastTo32(CastMap):
 
 class SubtractCenterOfMass(nn.Module):
     """
-    Subtract center of mass from positions.
+    Subtract center of mass from positions. Can only be used for single structures. Batches of structures are not supported.
 
     """
 
@@ -90,7 +90,7 @@ class SubtractCenterOfMass(nn.Module):
 
 class SubtractCenterOfGeometry(nn.Module):
     """
-    Subtract center of geometry from positions.
+    Subtract center of geometry from positions. Can only be used for single structures. Batches of structures are not supported.
 
     """
 
