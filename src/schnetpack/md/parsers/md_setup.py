@@ -86,11 +86,11 @@ class MDSimulation:
 
         # If requested, read restart data
         if self.restart and (self.restart is not None):
-            state_dict = torch.load(self.restart)
+            state_dict = torch.load(self.restart, map_location=self.device)
             simulator.restart_simulation(state_dict, soft=False)
             logging.info(f"Restarting simulation from {self.restart}...")
         elif self.load_system_state:
-            state_dict = torch.load(self.load_system_state)
+            state_dict = torch.load(self.load_system_state, map_location=self.device)
             simulator.load_system_state(state_dict)
             logging.info(f"Loaded system state from {self.load_system_state}...")
 
