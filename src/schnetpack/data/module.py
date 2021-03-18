@@ -3,8 +3,18 @@ import pytorch_lightning as pl
 from .atoms import *
 import torch
 
+__all__ = ["AtomsDataModule"]
+
 
 class AtomsDataModule(pl.LightningDataModule):
+    """
+    DataModule for AtomsData
+
+    Args:
+        datapath:
+        format:
+    """
+
     def __init__(self, datapath: str, format: Optional[AtomsDataFormat]):
         super().__init__()
         self.datapath, self.format = resolve_format(datapath, format)
