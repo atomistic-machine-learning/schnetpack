@@ -55,8 +55,8 @@ def test_remove_com(four_atoms):
 def test_remove_cog(four_atoms):
     positions_trans = SubtractCenterOfGeometry()(four_atoms)
 
-    com = torch.tensor([0.0, 0.0, 0.0])
+    cog = torch.tensor([0.0, 0.0, 0.0])
     for r_i in positions_trans[Structure.position]:
-        com += r_i
+        cog += r_i
 
-    torch.testing.assert_allclose(com, torch.tensor([0.0, 0.0, 0.0]))
+    torch.testing.assert_allclose(cog, torch.tensor([0.0, 0.0, 0.0]))
