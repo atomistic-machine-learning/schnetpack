@@ -3,10 +3,8 @@ https://pytorch-geometric.com/whl/torch-1.7.0+cpu/torch_scatter-2.0.6-cp38-cp38-
 
 numpy
 ase
-tensorboardX
 h5py
 pyyaml
-sacred
 tqdm
 ipykernel
 nbsphinx
