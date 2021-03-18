@@ -59,15 +59,15 @@ def indexed_data(example_data, batch_size):
     Rij = np.vstack(Rij)
 
     inputs = {
-        Structure.Z: torch.tensor(Z).cuda(),
-        Structure.position: torch.tensor(R).cuda(),
-        Structure.cell: torch.tensor(C).cuda(),
-        "seg_m": torch.tensor(seg_m).cuda(),
-        "seg_i": torch.tensor(seg_i).cuda(),
-        "idx_j": torch.tensor(ind_j).cuda(),
-        "idx_i": torch.tensor(ind_i).cuda(),
-        "Rij": torch.tensor(Rij).cuda(),
-        Structure.cell_offset: torch.tensor(ind_S).cuda(),
+        Structure.Z: torch.tensor(Z),
+        Structure.position: torch.tensor(R),
+        Structure.cell: torch.tensor(C),
+        "seg_m": torch.tensor(seg_m),
+        "seg_i": torch.tensor(seg_i),
+        "idx_j": torch.tensor(ind_j),
+        "idx_i": torch.tensor(ind_i),
+        "Rij": torch.tensor(Rij),
+        Structure.cell_offset: torch.tensor(ind_S),
     }
 
     return inputs
@@ -106,7 +106,7 @@ def test_schnet_new_coo(indexed_data, benchmark):
         n_interactions=3,
         radial_basis=radial_basis,
         cutoff_fn=cutoff_fn,
-    ).cuda()
+    )
 
     benchmark(schnet, Z, r_ij, idx_i, idx_j)
 
@@ -131,7 +131,7 @@ def test_schnet_new_script(indexed_data, benchmark):
         n_interactions=3,
         radial_basis=radial_basis,
         cutoff_fn=cutoff_fn,
-    ).cuda()
+    )
 
     schnet = torch.jit.script(schnet)
     schnet(Z, r_ij, idx_i, idx_j)
