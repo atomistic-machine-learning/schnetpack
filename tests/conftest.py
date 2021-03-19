@@ -31,6 +31,13 @@ def property_shapes():
     )
 
 
+@pytest.fixture(scope="session")
+def property_units():
+    return dict(
+        property1="ev", derivative1="ev/A", contributions1="ev", property2="Debye"
+    )
+
+
 @pytest.fixture(params=[1, 10], ids=["small_batch", "big_batch"])
 def batch_size(request):
     return request.param

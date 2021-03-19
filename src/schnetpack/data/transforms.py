@@ -8,7 +8,13 @@ from ase import Atoms
 from ase.neighborlist import neighbor_list
 from ase.data import atomic_masses
 
-__all__ = ["ASENeighborList", "CastMap", "CastTo32"]
+__all__ = [
+    "ASENeighborList",
+    "CastMap",
+    "CastTo32",
+    "SubtractCenterOfMass",
+    "SubtractCenterOfGeometry",
+]
 
 ## neighbor lists
 

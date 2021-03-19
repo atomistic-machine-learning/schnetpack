@@ -23,7 +23,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self,
         datapath: str,
         format: Optional[AtomsDataFormat],
-        environment_provider: Optional[torch.nn.Module] = None,
+        environment_provider: Optional[torch.nn.Module],
         load_properties: List[str] = None,
         convert_float32: bool = True,
         transform_fn: Optional[torch.nn.Module] = None,
@@ -86,7 +86,7 @@ class QM9(AtomsDataModule):
         self,
         datapath: str,
         format: Optional[AtomsDataFormat],
-        environment_provider: Optional[torch.nn.Module] = None,
+        environment_provider: Optional[torch.nn.Module],
         load_properties: List[str] = None,
         remove_uncharacterized: bool = False,
         convert_float32: bool = True,
@@ -96,7 +96,6 @@ class QM9(AtomsDataModule):
         test_transform_fn: Optional[torch.nn.Module] = None,
     ):
         """
-
         Args:
             datapath: path to database (or target directory for download).
             format:
