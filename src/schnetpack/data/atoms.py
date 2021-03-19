@@ -117,6 +117,12 @@ class AtomsDataMixin(ABC):
         pass
 
     @property
+    @abstractmethod
+    def units(self) -> Dict[str, str]:
+        """ Available properties in the dataset """
+        pass
+
+    @property
     def load_properties(self) -> List[str]:
         """ Properties to be loaded """
         return self._load_properties or self.available_properties
@@ -152,7 +158,7 @@ class AtomsDataMixin(ABC):
     @staticmethod
     @abstractmethod
     def create(
-        datapath: str, available_properties: List[str], **kwargs
+        datapath: str, position_unit: str, property_unit_dict: Dict[str, str], **kwargs
     ) -> "AtomsDataMixin":
         pass
 
@@ -173,7 +179,6 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
     """
     PyTorch dataset for atomistic data. The raw data is stored in the specified
     ASE database.
-
 
     """
 
@@ -310,18 +315,26 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
     @property
     def available_properties(self) -> List[str]:
         md = self.metadata
-        return md["_available_properties"]
+        return list(md["_property_unit_dict"].keys())
+
+    @property
+    def units(self) -> Dict[str, str]:
+        """ Dictionary of propterties to units """
+        md = self.metadata
+        return md["_property_unit_dict"]
 
     ## Creation
 
     @staticmethod
     def create(
-        datapath: str, available_properties: List[str], **kwargs
+        datapath: str, distance_unit: str, property_unit_dict: Dict[str, str], **kwargs
     ) -> "ASEAtomsData":
         """
 
         Args:
             datapath: Path to ASE DB.
+            distance_unit: unit of atom positions and cell
+            property_unit_dict: defines all properties with units of the dataset.
             kwargs: Pass arguments to init.
 
         Returns:
@@ -338,7 +351,10 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
             raise AtomsDataError(f"Dataset already exists: {datapath}")
 
         with connect(datapath) as conn:
-            conn.metadata = {"_available_properties": available_properties}
+            conn.metadata = {
+                "_property_unit_dict": property_unit_dict,
+                "_distance_unit": distance_unit,
+            }
 
         return ASEAtomsData(datapath, **kwargs)
 

@@ -11,11 +11,10 @@ def asedbpath(tmpdir):
 
 
 @pytest.fixture(scope="function")
-def asedb(asedbpath, example_data, property_shapes):
-    available_props = list(property_shapes.keys())
+def asedb(asedbpath, example_data, property_units):
 
     asedb = ASEAtomsData.create(
-        datapath=asedbpath, available_properties=available_props
+        datapath=asedbpath, distance_unit="A", property_unit_dict=property_units
     )
 
     atoms_list, prop_list = zip(*example_data)
@@ -29,7 +28,10 @@ def asedb(asedbpath, example_data, property_shapes):
 def test_asedb(asedb, example_data):
     assert os.path.exists(asedb.datapath)
     assert len(example_data) == len(asedb)
-    assert asedb.metadata["_available_properties"] == asedb.available_properties
+    assert set(asedb.metadata["_property_unit_dict"].keys()) == set(
+        asedb.available_properties
+    )
+    assert asedb.metadata["_property_unit_dict"] == asedb.units
 
     props = asedb[0]
     assert set(props.keys()) == set(
