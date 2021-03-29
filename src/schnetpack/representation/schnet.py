@@ -120,6 +120,7 @@ class SchNet(nn.Module):
         """
         super().__init__()
         self.n_atom_basis = n_atom_basis
+        self.size = (1, self.n_atom_basis)
         self.n_filters = n_filters or self.n_atom_basis
         self.radial_basis = radial_basis
         self.cutoff_fn = cutoff_fn
@@ -174,4 +175,4 @@ class SchNet(nn.Module):
             v = interaction(x, f_ij, idx_i, idx_j, rcut_ij)
             x = x + v
 
-        return x
+        return {"representation": x}

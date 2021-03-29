@@ -48,7 +48,7 @@ output_modules = [
         negative_dr=True,
     )
 ]
-model = schnetpack.atomistic.model.AtomisticModel(representation, output_modules)
+model = schnetpack.atomistic.model.PropertyModel(representation, output_modules)
 
 # build optimizer
 optimizer = Adam(params=model.parameters(), lr=1e-4)

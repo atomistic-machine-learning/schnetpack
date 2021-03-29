@@ -1,19 +1,23 @@
 # @package _global_
 
 defaults:
-  - trainer: default_trainer
-  - callbacks: default_callbacks
+#  - trainer: default_trainer
+#  - callbacks: default_callbacks
+  - model: null
+  - data: null
   - logger: null
 
 work_dir: ${hydra:runtime.cwd}
+data_dir: ${work_dir}/data/
+
+print_config: True
 
 
-# # hydra configuration
+# hydra configuration
 hydra:
     # output paths for hydra logs
     run:
         dir: logs/runs/${now:%Y-%m-%d}/${now:%H-%M-%S}
 
-#  searchpath:
-#    - file://${hydra:runtime.cwd}
-#    - file://${userconfig}
+    searchpath:
+      - file://${oc.env:PWD}

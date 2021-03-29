@@ -1,0 +1,13 @@
+# @package _global_
+
+defaults:
+  - override /model: property_prediction
+  - override /model/representation: schnet
+  - override /model/optimizer: adam
+  - override /data: qm9
+  - override /logger: null
+
+cutoff: 5.0
+n_rbf: 20
+
+lr: 0.001
