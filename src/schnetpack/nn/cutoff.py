@@ -38,12 +38,13 @@ class CosineCutoff(nn.Module):
         0 & r \geqslant r_\text{cutoff} \\
         \end{cases}
 
-    Args:
-        cutoff (float, optional): cutoff radius.
-
     """
 
-    def __init__(self, cutoff: float = 5.0):
+    def __init__(self, cutoff: float):
+        """
+        Args:
+            cutoff (float, optional): cutoff radius.
+        """
         super(CosineCutoff, self).__init__()
         self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
 
@@ -82,14 +83,14 @@ class MollifierCutoff(nn.Module):
           & r < r_\text{cutoff} \\
         0 & r \geqslant r_\text{cutoff} \\
         \end{cases}
-
-    Args:
-        cutoff: Cutoff radius.
-        eps: Offset added to distances for numerical stability.
-
     """
 
-    def __init__(self, cutoff: float = 5.0, eps: float = 1.0e-7):
+    def __init__(self, cutoff: float, eps: float = 1.0e-7):
+        """
+        Args:
+            cutoff: Cutoff radius.
+            eps: Offset added to distances for numerical stability.
+        """
         super(MollifierCutoff, self).__init__()
         self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
         self.register_buffer("eps", torch.FloatTensor([eps]))

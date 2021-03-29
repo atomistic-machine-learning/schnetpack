@@ -1,3 +1,4 @@
+from schnetpack import Structure
 from schnetpack.data.transforms import *
 import numpy as np
 import pytest

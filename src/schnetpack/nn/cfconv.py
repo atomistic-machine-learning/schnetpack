@@ -34,14 +34,15 @@ def cfconv(
 class CFConv(nn.Module):
     """
     Continuous-filter convolution.
-
-    Args:
-        reduce: reduction method (sum, mean, ...)
     """
 
     reduce: str
 
     def __init__(self, reduce="sum"):
+        """
+        Args:
+            reduce: reduction method (sum, mean, ...)
+        """
         super().__init__()
         self.reduce = reduce
 

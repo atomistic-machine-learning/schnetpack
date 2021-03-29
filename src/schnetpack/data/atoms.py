@@ -25,7 +25,14 @@ from schnetpack import Structure
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["ASEAtomsData", "AtomsDataFormat", "resolve_format"]
+__all__ = [
+    "ASEAtomsData",
+    "BaseAtomsData",
+    "AtomsDataFormat",
+    "resolve_format",
+    "create_dataset",
+    "load_dataset",
+]
 
 
 class AtomsDataFormat(Enum):
@@ -39,34 +46,12 @@ class AtomsDataError(Exception):
 extension_map = {AtomsDataFormat.ASE: ".db"}
 
 
-def resolve_format(datapath: str, format: Optional[AtomsDataFormat]):
-    file, suffix = os.path.splitext(datapath)
-    if suffix == ".db":
-        if format is None:
-            format = AtomsDataFormat.ASE
-        assert (
-            format is AtomsDataFormat.ASE
-        ), f"File extension {suffix} is not compatible with chosen format {format}"
-    elif len(suffix) == 0 and format:
-        datapath = datapath + extension_map[format]
-    elif len(suffix) == 0 and format is None:
-        raise AtomsDataError(
-            "If format is not given, `datapath` needs a supported file extension!"
-        )
-    else:
-        raise AtomsDataError(f"Unupported file extension: {suffix}")
-    return datapath, format
-
-
-class AtomsDataMixin(ABC):
+class BaseAtomsData(ABC):
     """
     Base mixin class for atomistic data. Use together with PyTorch Dataset or IterableDataset
     to implement concrete data formats.
 
-    Args:
-        load_properties: Set of properties to be loaded and returned.
-            If None, all properties in the ASE dB will be returned.
-        load_properties: If True, load structure properties.
+
     """
 
     def __init__(
@@ -75,6 +60,14 @@ class AtomsDataMixin(ABC):
         load_structure: bool = True,
         transforms: Optional[torch.nn.Module] = None,
     ):
+        """
+
+        Args:
+            load_properties: Set of properties to be loaded and returned.
+                If None, all properties in the ASE dB will be returned.
+            load_properties: If True, load structure properties.
+            transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
+        """
         self.load_properties = load_properties
         self.load_structure = load_structure
         self.transforms = transforms
@@ -83,6 +76,12 @@ class AtomsDataMixin(ABC):
     @abstractmethod
     def available_properties(self) -> List[str]:
         """ Available properties in the dataset """
+        pass
+
+    @property
+    @abstractmethod
+    def units(self) -> Dict[str, str]:
+        """ Property to unit dict """
         pass
 
     @property
@@ -110,9 +109,9 @@ class AtomsDataMixin(ABC):
         pass
 
     @abstractmethod
-    def get_properties(
+    def iter_properties(
         self,
-        indices: Union[int, Iterable[int]],
+        indices: Union[int, Iterable[int]] = None,
         load_properties: List[str] = None,
         load_structure: Optional[bool] = None,
     ):
@@ -121,8 +120,8 @@ class AtomsDataMixin(ABC):
     @staticmethod
     @abstractmethod
     def create(
-        datapath: str, available_properties: List[str], **kwargs
-    ) -> "AtomsDataMixin":
+        datapath: str, position_unit: str, property_unit_dict: Dict[str, str], **kwargs
+    ) -> "BaseAtomsData":
         pass
 
     @abstractmethod
@@ -138,16 +137,11 @@ class AtomsDataMixin(ABC):
         pass
 
 
-class ASEAtomsData(Dataset, AtomsDataMixin):
+class ASEAtomsData(BaseAtomsData):
     """
     PyTorch dataset for atomistic data. The raw data is stored in the specified
     ASE database.
 
-    Args:
-        datapath: Path to ASE DB.
-        load_properties: Set of properties to be loaded and returned.
-            If None, all properties in the ASE dB will be returned.
-        load_properties: If True, load structure properties.
     """
 
     def __init__(
@@ -157,11 +151,19 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
         load_structure: bool = True,
         transforms: Optional[torch.nn.Module] = None,
     ):
+        """
+        Args:
+            datapath: Path to ASE DB.
+            load_properties: Set of properties to be loaded and returned.
+                If None, all properties in the ASE dB will be returned.
+            load_properties: If True, load structure properties.
+            transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
+        """
         self.datapath = datapath
         self.conn = None
         self._check_db()
 
-        AtomsDataMixin.__init__(
+        BaseAtomsData.__init__(
             self,
             load_properties=load_properties,
             load_structure=load_structure,
@@ -187,9 +189,9 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
         if not os.path.exists(self.datapath):
             raise AtomsDataError(f"ASE DB does not exists at {self.datapath}")
 
-    def get_properties(
+    def iter_properties(
         self,
-        indices: Union[int, Iterable[int]],
+        indices: Union[int, Iterable[int]] = None,
         load_properties: List[str] = None,
         load_structure: Optional[bool] = None,
     ):
@@ -211,23 +213,21 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
         if load_structure is None:
             load_structure = self.load_structure
 
-        if type(indices) is int:
+        if indices is None:
+            indices = range(len(self))
+        elif type(indices) is int:
             indices = [indices]
 
         # read from ase db
         properties = []
         with connect(self.datapath) as conn:
             for i in indices:
-                properties.append(
-                    self._get_properties(
-                        conn,
-                        i,
-                        load_properties=load_properties,
-                        load_structure=load_structure,
-                    )
+                yield self._get_properties(
+                    conn,
+                    i,
+                    load_properties=load_properties,
+                    load_structure=load_structure,
                 )
-
-        return properties
 
     def _get_properties(
         self, conn, idx: int, load_properties: List[str], load_structure: bool
@@ -242,10 +242,10 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
             properties[pname] = torch.tensor(row.data[pname].copy())
 
         Z = row["numbers"].copy()
-        properties[Structure.n_atoms] = torch.tensor(Z.shape[0])
+        properties[Structure.n_atoms] = torch.tensor([Z.shape[0]])
 
         if load_structure:
-            properties[Structure.Z] = torch.tensor(Z)
+            properties[Structure.Z] = torch.tensor(Z, dtype=torch.long)
             properties[Structure.position] = torch.tensor(row["positions"].copy())
             properties[Structure.cell] = torch.tensor(row["cell"].copy())
             properties[Structure.pbc] = torch.tensor(row["pbc"])
@@ -275,18 +275,26 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
     @property
     def available_properties(self) -> List[str]:
         md = self.metadata
-        return md["_available_properties"]
+        return list(md["_property_unit_dict"].keys())
+
+    @property
+    def units(self) -> Dict[str, str]:
+        """ Dictionary of propterties to units """
+        md = self.metadata
+        return md["_property_unit_dict"]
 
     ## Creation
 
     @staticmethod
     def create(
-        datapath: str, available_properties: List[str], **kwargs
+        datapath: str, distance_unit: str, property_unit_dict: Dict[str, str], **kwargs
     ) -> "ASEAtomsData":
         """
 
         Args:
             datapath: Path to ASE DB.
+            distance_unit: unit of atom positions and cell
+            property_unit_dict: defines all properties with units of the dataset.
             kwargs: Pass arguments to init.
 
         Returns:
@@ -303,7 +311,10 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
             raise AtomsDataError(f"Dataset already exists: {datapath}")
 
         with connect(datapath) as conn:
-            conn.metadata = {"_available_properties": available_properties}
+            conn.metadata = {
+                "_property_unit_dict": property_unit_dict,
+                "_distance_unit": distance_unit,
+            }
 
         return ASEAtomsData(datapath, **kwargs)
 
@@ -363,10 +374,56 @@ class ASEAtomsData(Dataset, AtomsDataMixin):
 
         data = {}
         # add available properties to database
-        for pname in self.available_properties:
+        for pname in conn.metadata["_property_unit_dict"].keys():
             try:
                 data[pname] = properties[pname]
             except:
                 raise AtomsDataError("Required property missing:" + pname)
 
         conn.write(atoms, data=data)
+
+
+def create_dataset(
+    datapath: str,
+    format: AtomsDataFormat,
+    distance_unit: str,
+    property_unit_dict: Dict[str, str],
+    **kwargs,
+) -> BaseAtomsData:
+    if format is AtomsDataFormat.ASE:
+        dataset = ASEAtomsData.create(
+            datapath=datapath,
+            distance_unit=distance_unit,
+            property_unit_dict=property_unit_dict,
+            **kwargs,
+        )
+    else:
+        raise AtomsDataError(f"Unknown format: {format}")
+    return dataset
+
+
+def load_dataset(datapath: str, format: AtomsDataFormat, **kwargs) -> Dataset:
+    if format is AtomsDataFormat.ASE:
+        dataset = ASEAtomsData(datapath=datapath, **kwargs)
+    else:
+        raise AtomsDataError(f"Unknown format: {format}")
+    return dataset
+
+
+def resolve_format(datapath: str, format: Optional[AtomsDataFormat]):
+    file, suffix = os.path.splitext(datapath)
+    if suffix == ".db":
+        if format is None:
+            format = AtomsDataFormat.ASE
+        assert (
+            format is AtomsDataFormat.ASE
+        ), f"File extension {suffix} is not compatible with chosen format {format}"
+    elif len(suffix) == 0 and format:
+        datapath = datapath + extension_map[format]
+    elif len(suffix) == 0 and format is None:
+        raise AtomsDataError(
+            "If format is not given, `datapath` needs a supported file extension!"
+        )
+    else:
+        raise AtomsDataError(f"Unsupported file extension: {suffix}")
+    return datapath, format
