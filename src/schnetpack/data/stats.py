@@ -48,8 +48,6 @@ def calculate_stats(
                 ar = atomref[p]
                 ar = ar[props[Structure.Z]]
                 v0 = segment_sum_csr(ar, props[Structure.seg_m])
-                # print(ar, props[Structure.seg_m])
-                # print(val, v0)
                 val -= v0
 
             sample_values.append(val)
