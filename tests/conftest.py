@@ -34,7 +34,7 @@ def property_shapes():
 @pytest.fixture(scope="session")
 def property_units():
     return dict(
-        property1="ev", derivative1="ev/A", contributions1="ev", property2="Debye"
+        property1="ev", derivative1="ev/Ang", contributions1="ev", property2="D"
     )
 
 
