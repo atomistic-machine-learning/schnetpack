@@ -10,6 +10,7 @@ from ase.data import atomic_masses
 
 __all__ = [
     "ASENeighborList",
+    "TorchNeighborList",
     "CastMap",
     "CastTo32",
     "SubtractCenterOfMass",
