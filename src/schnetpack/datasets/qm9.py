@@ -26,26 +26,38 @@ class AtomsDataModule(pl.LightningDataModule):
     def __init__(
         self,
         datapath: str,
+        batch_size: int,
         num_train: int,
         num_val: int,
         num_test: int = -1,
         format: Optional[AtomsDataFormat] = None,
         load_properties: Optional[List[str]] = None,
+        val_batch_size: Optional[int] = None,
+        test_batch_size: Optional[int] = None,
         transform_fn: Optional[torch.nn.Module] = None,
         train_transform_fn: Optional[torch.nn.Module] = None,
         val_transform_fn: Optional[torch.nn.Module] = None,
         test_transform_fn: Optional[torch.nn.Module] = None,
+        num_workers: int = 2,
+        num_val_workers: Optional[int] = None,
+        num_test_workers: Optional[int] = None,
     ):
         super().__init__(
             train_transforms=train_transform_fn or transform_fn,
             val_transforms=val_transform_fn or transform_fn,
             test_transforms=test_transform_fn or transform_fn,
         )
+        self.batch_size = batch_size
+        self.val_batch_size = val_batch_size or test_batch_size or batch_size
+        self.test_batch_size = test_batch_size or val_batch_size or batch_size
         self.num_train = num_train
         self.num_val = num_val
         self.num_test = num_test
         self.datapath, self.format = resolve_format(datapath, format)
         self.load_properties = load_properties
+        self.num_workers = num_workers
+        self.num_val_workers = num_val_workers or self.num_workers
+        self.num_test_workers = num_test_workers or self.num_workers
 
     def setup(self, stage: Optional[str] = None):
         self.dataset = load_dataset(self.datapath, self.format)
@@ -84,6 +96,30 @@ class AtomsDataModule(pl.LightningDataModule):
             self.setup(stage="test")
         return self._test_dataset
 
+    def train_dataloader(self):
+        return AtomsLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+
+    def val_dataloader(self):
+        return AtomsLoader(
+            self.val_dataset,
+            batch_size=self.val_batch_size,
+            num_workers=self.num_val_workers,
+            pin_memory=True,
+        )
+
+    def test_dataloader(self):
+        return AtomsLoader(
+            self.test_dataset,
+            batch_size=self.test_batch_size,
+            num_workers=self.num_test_workers,
+            pin_memory=True,
+        )
+
 
 class QM9(AtomsDataModule):
     """QM9 benchmark database for organic molecules.
@@ -117,16 +153,22 @@ class QM9(AtomsDataModule):
     def __init__(
         self,
         datapath: str,
+        batch_size: int,
         num_train: int,
         num_val: int,
         num_test: int = -1,
         format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
         remove_uncharacterized: bool = False,
+        val_batch_size: Optional[int] = None,
+        test_batch_size: Optional[int] = None,
         transform_fn: Optional[torch.nn.Module] = None,
         train_transform_fn: Optional[torch.nn.Module] = None,
         val_transform_fn: Optional[torch.nn.Module] = None,
         test_transform_fn: Optional[torch.nn.Module] = None,
+        num_workers: int = 2,
+        num_val_workers: Optional[int] = None,
+        num_test_workers: Optional[int] = None,
     ):
         """
         Args:
@@ -141,15 +183,21 @@ class QM9(AtomsDataModule):
         """
         super().__init__(
             datapath=datapath,
+            batch_size=batch_size,
             num_train=num_train,
             num_val=num_val,
             num_test=num_test,
             format=format,
             load_properties=load_properties,
+            val_batch_size=val_batch_size,
+            test_batch_size=test_batch_size,
             transform_fn=transform_fn,
             train_transform_fn=train_transform_fn,
             val_transform_fn=val_transform_fn,
             test_transform_fn=test_transform_fn,
+            num_workers=num_workers,
+            num_val_workers=num_val_workers,
+            num_test_workers=num_test_workers,
         )
 
         self.remove_uncharacterized = remove_uncharacterized
@@ -263,6 +311,8 @@ class QM9(AtomsDataModule):
             irange = np.setdiff1d(irange, np.array(uncharacterized, dtype=np.int) - 1)
 
         for i in tqdm(irange):
+            if i == 20:
+                break
             xyzfile = os.path.join(raw_path, ordered_files[i])
             properties = {}
 
@@ -286,6 +336,3 @@ class QM9(AtomsDataModule):
         logging.info("Write atoms to db...")
         dataset.add_systems(property_list=property_list)
         logging.info("Done.")
-
-    def train_dataloader(self):
-        return AtomsLoader(self.train_dataset, batch_size=100, num_workers=8)

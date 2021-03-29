@@ -1,24 +1,31 @@
-import pytest
 import os
+import pytest
 
 from schnetpack.datasets import QM9
-from schnetpack.data import calculate_stats, AtomsLoader
 
 
-@pytest.fixture(scope="module")
-def qm9(tmpdir_factory):
-    path = str(tmpdir_factory.mktemp("data").join("qm9.db"))
-    qm9 = QM9("/home/kschuett/data/new/qm9.db", num_train=100000, num_val=1000)
-    return qm9
+@pytest.fixture
+def test_qm9_path():
+    path = os.path.join(os.path.dirname(__file__), "../data/test_qm9.db")
+    return path
 
 
-def test_qm9(qm9):
-    print(qm9)
-    qm9.prepare_data()
-
-
-def test_stats(qm9):
-    stats = calculate_stats(
-        qm9.train_dataloader(), {qm9.U0: True}, atomref=qm9.dataset.metadata["atomrefs"]
+# @pytest.mark.skip("Takes too long and requires downloading the data")
+def test_qm9(test_qm9_path):
+    qm9 = QM9(
+        test_qm9_path,
+        num_train=10,
+        num_val=5,
+        batch_size=5,
+        remove_uncharacterized=True,
     )
-    print(stats)
+    assert len(qm9.train_dataset) == 10
+    assert len(qm9.val_dataset) == 5
+    assert len(qm9.test_dataset) == 5
+
+    ds = [b for b in qm9.train_dataloader()]
+    assert len(ds) == 2
+    ds = [b for b in qm9.val_dataloader()]
+    assert len(ds) == 1
+    ds = [b for b in qm9.test_dataloader()]
+    assert len(ds) == 1
