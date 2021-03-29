@@ -81,7 +81,7 @@ class BaseAtomsData(ABC):
     @property
     @abstractmethod
     def units(self) -> Dict[str, str]:
-        """ Available properties in the dataset """
+        """ Property to unit dict """
         pass
 
     @property
