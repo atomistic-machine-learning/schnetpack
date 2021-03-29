@@ -54,15 +54,12 @@ class TestNeighborLists:
 
         sort_idx = self._get_unique_idx(idx_i, idx_j, cell_offset)
 
-        return (
-            idx_i[sort_idx],
-            idx_j[sort_idx],
-            cell_offset[sort_idx],
-            Rij[sort_idx]
-        )
+        return (idx_i[sort_idx], idx_j[sort_idx], cell_offset[sort_idx], Rij[sort_idx])
 
     @staticmethod
-    def _get_unique_idx(idx_i: torch.Tensor, idx_j: torch.Tensor, offsets: torch.Tensor):
+    def _get_unique_idx(
+        idx_i: torch.Tensor, idx_j: torch.Tensor, offsets: torch.Tensor
+    ):
         """
         Compute unique indices for every neighbor pair based on the central atom, the neighbor and the cell the
         neighbor belongs to. This is used for sorting the neighbor lists in order to compare between different
@@ -82,10 +79,10 @@ class TestNeighborLists:
         n_atoms = torch.max(idx_i) + 1
 
         unique_idx = (
-                n_repeats ** 3 * (n_atoms * idx_i + idx_j)
-                + (offsets[:, 0] + n_max)
-                + n_repeats * (offsets[:, 1] + n_max)
-                + n_repeats ** 2 * (offsets[:, 2] + n_max)
+            n_repeats ** 3 * (n_atoms * idx_i + idx_j)
+            + (offsets[:, 0] + n_max)
+            + n_repeats * (offsets[:, 1] + n_max)
+            + n_repeats ** 2 * (offsets[:, 2] + n_max)
         )
 
         return torch.argsort(unique_idx)
@@ -122,7 +119,7 @@ def test_remove_com(four_atoms):
 
     com = torch.tensor([0.0, 0.0, 0.0])
     for r_i, m_i in zip(
-            positions_trans[Structure.position], atomic_masses[four_atoms[Structure.Z]]
+        positions_trans[Structure.position], atomic_masses[four_atoms[Structure.Z]]
     ):
         com += r_i * m_i
 

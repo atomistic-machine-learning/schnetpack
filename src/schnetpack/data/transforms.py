@@ -67,9 +67,7 @@ class TorchNeighborList(nn.Module):
         else:
             shifts = self._get_shifts(cell, pbc)
 
-        idx_i, idx_j, idx_S, Rij = self._get_neighbor_pairs(
-            positions, cell, shifts
-        )
+        idx_i, idx_j, idx_S, Rij = self._get_neighbor_pairs(positions, cell, shifts)
 
         # Create bidirectional id arrays, similar to what the ASE neighbor_list returns
         bi_idx_i = torch.cat((idx_i, idx_j), dim=0)
@@ -110,7 +108,9 @@ class TorchNeighborList(nn.Module):
         # shape convention (shift index, molecule index, atom index, 3)
         num_shifts = shifts.shape[0]
         all_shifts = torch.arange(num_shifts, device=cell.device)
-        shift_index, pi, pj = torch.cartesian_prod(all_shifts, all_atoms, all_atoms).unbind(-1)
+        shift_index, pi, pj = torch.cartesian_prod(
+            all_shifts, all_atoms, all_atoms
+        ).unbind(-1)
         shifts_outside = shifts.index_select(0, shift_index)
 
         # 3) combine results for all cells
@@ -137,26 +137,28 @@ class TorchNeighborList(nn.Module):
 
     def _get_shifts(self, cell, pbc):
         """Compute the shifts of unit cell along the given cell vectors to make it
-         large enough to contain all pairs of neighbor atoms with PBC under
-         consideration.
-         Copyright 2018- Xiang Gao and other ANI developers
-         (https://github.com/aiqm/torchani/blob/master/torchani/aev.py)
+        large enough to contain all pairs of neighbor atoms with PBC under
+        consideration.
+        Copyright 2018- Xiang Gao and other ANI developers
+        (https://github.com/aiqm/torchani/blob/master/torchani/aev.py)
 
-         Arguments:
-             cell (:class:`torch.Tensor`): tensor of shape (3, 3) of the three
-             vectors defining unit cell: tensor([[x1, y1, z1], [x2, y2, z2], [x3, y3, z3]])
-             pbc (:class:`torch.Tensor`): boolean vector of size 3 storing
-                 if pbc is enabled for that direction.
+        Arguments:
+            cell (:class:`torch.Tensor`): tensor of shape (3, 3) of the three
+            vectors defining unit cell: tensor([[x1, y1, z1], [x2, y2, z2], [x3, y3, z3]])
+            pbc (:class:`torch.Tensor`): boolean vector of size 3 storing
+                if pbc is enabled for that direction.
 
-         Returns:
-             :class:`torch.Tensor`: long tensor of shifts. the center cell and
-                 symmetric cells are not included.
-         """
+        Returns:
+            :class:`torch.Tensor`: long tensor of shifts. the center cell and
+                symmetric cells are not included.
+        """
         reciprocal_cell = cell.inverse().t()
         inverse_lengths = torch.norm(reciprocal_cell, dim=1)
 
         num_repeats = torch.ceil(self.cutoff * inverse_lengths).long()
-        num_repeats = torch.where(pbc, num_repeats, torch.Tensor([0], device=cell.device).long())
+        num_repeats = torch.where(
+            pbc, num_repeats, torch.Tensor([0], device=cell.device).long()
+        )
 
         r1 = torch.arange(1, num_repeats[0] + 1, device=cell.device)
         r2 = torch.arange(1, num_repeats[1] + 1, device=cell.device)
@@ -223,8 +225,8 @@ class SubtractCenterOfMass(nn.Module):
     def forward(self, inputs):
         masses = torch.tensor(atomic_masses[inputs[Structure.Z]])
         inputs[Structure.position] -= (
-                                              masses.unsqueeze(-1) * inputs[Structure.position]
-                                      ).sum(0) / masses.sum()
+            masses.unsqueeze(-1) * inputs[Structure.position]
+        ).sum(0) / masses.sum()
         return inputs
 
 
