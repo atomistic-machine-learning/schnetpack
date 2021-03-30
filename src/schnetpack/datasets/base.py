@@ -18,6 +18,12 @@ class AtomsDataModuleError(Exception):
 
 
 class AtomsDataModule(pl.LightningDataModule):
+    """
+    Base class for atoms datamodules.
+
+
+    """
+
     def __init__(
         self,
         datapath: str,
@@ -37,6 +43,26 @@ class AtomsDataModule(pl.LightningDataModule):
         num_val_workers: Optional[int] = None,
         num_test_workers: Optional[int] = None,
     ):
+        """
+
+        Args:
+            datapath: path to dataset
+            batch_size: (train) batch size
+            num_train: number of training examples
+            num_val: number of validation examples
+            num_test: number of test examples
+            format: dataset format
+            load_properties: subset of properties to load
+            val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
+            test_batch_size: test batch size. If None, use val_batch_size, then batch_size.
+            transform_fn: Transform applied to each system separately before batching.
+            train_transform_fn: Overrides transform_fn for training.
+            val_transform_fn: Overrides transform_fn for validation.
+            test_transform_fn: Overrides transform_fn for testing.
+            num_workers: Number of data loader workers.
+            num_val_workers: Number of validation data loader workers (overrides num_workers).
+            num_test_workers: Number of test data loader workers (overrides num_workers).
+        """
         super().__init__(
             train_transforms=train_transform_fn or transform_fn,
             val_transforms=val_transform_fn or transform_fn,

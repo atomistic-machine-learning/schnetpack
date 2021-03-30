@@ -206,8 +206,6 @@ class QM9(AtomsDataModule):
             irange = np.setdiff1d(irange, np.array(uncharacterized, dtype=np.int) - 1)
 
         for i in tqdm(irange):
-            if i == 20:
-                break
             xyzfile = os.path.join(raw_path, ordered_files[i])
             properties = {}
 

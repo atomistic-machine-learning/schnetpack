@@ -48,13 +48,10 @@ class AtomsLoader(DataLoader):
         sampler: Optional[Sampler[int]] = None,
         batch_sampler: Optional[Sampler[Sequence[int]]] = None,
         num_workers: int = 0,
-        collate_fn: _collate_fn_t = None,
+        collate_fn: _collate_fn_t = _atoms_collate_fn,
         pin_memory: bool = False,
         **kwargs
     ):
-        if collate_fn is None:
-            collate_fn = _atoms_collate_fn
-
         super(AtomsLoader, self).__init__(
             dataset=dataset,
             batch_size=batch_size,
