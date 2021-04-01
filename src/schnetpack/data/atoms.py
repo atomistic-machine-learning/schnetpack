@@ -21,7 +21,7 @@ from ase import Atoms
 from ase.db import connect
 from torch.utils.data import Dataset
 
-from schnetpack import Structure
+import schnetpack.structure as structure
 
 logger = logging.getLogger(__name__)
 
@@ -225,7 +225,6 @@ class ASEAtomsData(BaseAtomsData):
             indices = [indices]
 
         # read from ase db
-        properties = []
         with connect(self.datapath) as conn:
             for i in indices:
                 yield self._get_properties(
@@ -243,18 +242,18 @@ class ASEAtomsData(BaseAtomsData):
         # extract properties
         # TODO: can the copies be avoided?
         properties = {}
-        properties[Structure.idx] = torch.tensor([idx])
+        properties[structure.idx] = torch.tensor([idx])
         for pname in load_properties:
             properties[pname] = torch.tensor(row.data[pname].copy())
 
         Z = row["numbers"].copy()
-        properties[Structure.n_atoms] = torch.tensor([Z.shape[0]])
+        properties[structure.n_atoms] = torch.tensor([Z.shape[0]])
 
         if load_structure:
-            properties[Structure.Z] = torch.tensor(Z, dtype=torch.long)
-            properties[Structure.position] = torch.tensor(row["positions"].copy())
-            properties[Structure.cell] = torch.tensor(row["cell"].copy())
-            properties[Structure.pbc] = torch.tensor(row["pbc"])
+            properties[structure.Z] = torch.tensor(Z, dtype=torch.long)
+            properties[structure.position] = torch.tensor(row["positions"].copy())
+            properties[structure.cell] = torch.tensor(row["cell"].copy())
+            properties[structure.pbc] = torch.tensor(row["pbc"])
 
         return properties
 
@@ -316,6 +315,7 @@ class ASEAtomsData(BaseAtomsData):
         if os.path.exists(datapath):
             raise AtomsDataError(f"Dataset already exists: {datapath}")
 
+        print("##########", datapath)
         with connect(datapath) as conn:
             conn.metadata = {
                 "_property_unit_dict": property_unit_dict,
@@ -332,7 +332,7 @@ class ASEAtomsData(BaseAtomsData):
         Args:
             atoms: System composition and geometry. If Atoms are None,
                 the structure needs to be given as part of the property dict
-                (using Structure.Z, Structure.R, Structure.cell, Structure.pbc)
+                (using structure.Z, structure.R, structure.cell, structure.pbc)
             **properties: properties as key-value pairs. Keys have to match the
                 `available_properties` of the dataset.
 
@@ -351,7 +351,7 @@ class ASEAtomsData(BaseAtomsData):
         Args:
             atoms_list: System composition and geometry. If Atoms are None,
                 the structure needs to be given as part of the property dicts
-                (using Structure.Z, Structure.R, Structure.cell, Structure.pbc)
+                (using structure.Z, structure.R, structure.cell, structure.pbc)
             property_list: Properties as list of key-value pairs in the same
                 order as corresponding list of `atoms`.
                 Keys have to match the `available_properties` of the dataset
@@ -368,10 +368,10 @@ class ASEAtomsData(BaseAtomsData):
         """ Add systems to DB """
         if atoms is None:
             try:
-                Z = properties[Structure.Z]
-                R = properties[Structure.R]
-                cell = properties[Structure.cell]
-                pbc = properties[Structure.pbc]
+                Z = properties[structure.Z]
+                R = properties[structure.R]
+                cell = properties[structure.cell]
+                pbc = properties[structure.pbc]
                 atoms = Atoms(numbers=Z, positions=R, cell=cell, pbc=pbc)
             except KeyError as e:
                 raise AtomsDataError(

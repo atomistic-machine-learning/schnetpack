@@ -2,7 +2,7 @@ from typing import Dict, Tuple
 import torch
 from torch_scatter import segment_sum_csr
 
-from schnetpack import Structure
+import schnetpack.structure as structure
 from schnetpack.data import AtomsLoader
 from tqdm import tqdm
 
@@ -46,8 +46,8 @@ def calculate_stats(
             val = props[p][None, :]
             if atomref and p in atomref.keys():
                 ar = atomref[p]
-                ar = ar[props[Structure.Z]]
-                v0 = segment_sum_csr(ar, props[Structure.seg_m])
+                ar = ar[props[structure.Z]]
+                v0 = segment_sum_csr(ar, props[structure.seg_m])
                 val -= v0
 
             sample_values.append(val)
@@ -56,7 +56,7 @@ def calculate_stats(
         batch_size = sample_values.shape[1]
         new_count = count + batch_size
 
-        norm = norm_mask[:, None] * props[Structure.n_atoms][None, :] + (
+        norm = norm_mask[:, None] * props[structure.n_atoms][None, :] + (
             1 - norm_mask[:, None]
         )
         sample_values /= norm

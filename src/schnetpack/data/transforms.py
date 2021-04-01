@@ -2,7 +2,7 @@ from typing import Dict
 
 import torch
 import torch.nn as nn
-from schnetpack import Structure
+import schnetpack.structure as structure
 
 from ase import Atoms
 from ase.neighborlist import neighbor_list
@@ -36,18 +36,18 @@ class ASENeighborList(nn.Module):
         self.cutoff = cutoff
 
     def forward(self, inputs):
-        Z = inputs[Structure.Z]
-        R = inputs[Structure.R]
-        cell = inputs[Structure.cell]
-        pbc = inputs[Structure.pbc]
+        Z = inputs[structure.Z]
+        R = inputs[structure.R]
+        cell = inputs[structure.cell]
+        pbc = inputs[structure.pbc]
         at = Atoms(numbers=Z, positions=R, cell=cell, pbc=pbc)
         idx_i, idx_j, idx_S, Rij = neighbor_list(
             "ijSD", at, self.cutoff, self_interaction=False
         )
-        inputs[Structure.idx_i] = torch.tensor(idx_i)
-        inputs[Structure.idx_j] = torch.tensor(idx_j)
-        inputs[Structure.Rij] = torch.tensor(Rij)
-        inputs[Structure.cell_offset] = torch.tensor(idx_S)
+        inputs[structure.idx_i] = torch.tensor(idx_i)
+        inputs[structure.idx_j] = torch.tensor(idx_j)
+        inputs[structure.Rij] = torch.tensor(Rij)
+        inputs[structure.cell_offset] = torch.tensor(idx_S)
         return inputs
 
 
@@ -66,9 +66,9 @@ class TorchNeighborList(nn.Module):
         self.cutoff = cutoff
 
     def forward(self, inputs):
-        positions = inputs[Structure.R]
-        pbc = inputs[Structure.pbc]
-        cell = inputs[Structure.cell]
+        positions = inputs[structure.R]
+        pbc = inputs[structure.pbc]
+        cell = inputs[structure.cell]
 
         # Check if shifts are needed for periodic boundary conditions
         if torch.all(pbc == 0):
@@ -87,10 +87,10 @@ class TorchNeighborList(nn.Module):
         # Sort along first dimension (necessary for atom-wise pooling)
         sorted_idx = torch.argsort(bi_idx_i)
 
-        inputs[Structure.idx_i] = bi_idx_i[sorted_idx]
-        inputs[Structure.idx_j] = bi_idx_j[sorted_idx]
-        inputs[Structure.Rij] = bi_Rij[sorted_idx]
-        inputs[Structure.cell_offset] = bi_idx_S[sorted_idx]
+        inputs[structure.idx_i] = bi_idx_i[sorted_idx]
+        inputs[structure.idx_j] = bi_idx_j[sorted_idx]
+        inputs[structure.Rij] = bi_Rij[sorted_idx]
+        inputs[structure.cell_offset] = bi_idx_S[sorted_idx]
 
         return inputs
 
@@ -233,9 +233,9 @@ class SubtractCenterOfMass(nn.Module):
     """
 
     def forward(self, inputs):
-        masses = torch.tensor(atomic_masses[inputs[Structure.Z]])
-        inputs[Structure.position] -= (
-            masses.unsqueeze(-1) * inputs[Structure.position]
+        masses = torch.tensor(atomic_masses[inputs[structure.Z]])
+        inputs[structure.position] -= (
+            masses.unsqueeze(-1) * inputs[structure.position]
         ).sum(0) / masses.sum()
         return inputs
 
@@ -247,5 +247,5 @@ class SubtractCenterOfGeometry(nn.Module):
     """
 
     def forward(self, inputs):
-        inputs[Structure.position] -= inputs[Structure.position].mean(0)
+        inputs[structure.position] -= inputs[structure.position].mean(0)
         return inputs

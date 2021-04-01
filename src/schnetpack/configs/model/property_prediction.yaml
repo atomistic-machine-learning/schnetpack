@@ -12,6 +12,12 @@ optimizer:
   weight_decay: 0.0
 
 outputs:
-  - property: null
+  - property: ${property}
+    representaton_keys: null
+    requires_stats: True
+    requires_atomref: True
     module:
       _target_: schnetpack.outputs.Atomwise
+    loss:
+      _target_: torch.nn.MSELoss
+    loss_weight: 1.

@@ -11,3 +11,4 @@ cutoff: 5.0
 n_rbf: 20
 
 lr: 0.001
+property: energy_U0
