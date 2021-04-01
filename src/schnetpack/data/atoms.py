@@ -17,6 +17,7 @@ from enum import Enum
 from typing import Optional, List, Dict, Any, Iterable, Union
 
 import torch
+import copy
 from ase import Atoms
 from ase.db import connect
 from torch.utils.data import Dataset
@@ -50,8 +51,6 @@ class BaseAtomsData(ABC):
     """
     Base mixin class for atomistic data. Use together with PyTorch Dataset or IterableDataset
     to implement concrete data formats.
-
-
     """
 
     def __init__(
@@ -59,18 +58,25 @@ class BaseAtomsData(ABC):
         load_properties: Optional[List[str]] = None,
         load_structure: bool = True,
         transforms: Optional[torch.nn.Module] = None,
+        subset_idx: Optional[List[int]] = None,
     ):
         """
-
         Args:
             load_properties: Set of properties to be loaded and returned.
                 If None, all properties in the ASE dB will be returned.
             load_properties: If True, load structure properties.
             transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
+            subset: List of data indices.
         """
         self.load_properties = load_properties
         self.load_structure = load_structure
         self.transforms = transforms
+        self.subset_idx = subset_idx
+
+    def subset(self, subset_idx: Optional[List[int]]):
+        ds = copy.copy(self)
+        ds.subset_idx = subset_idx
+        return ds
 
     @property
     @abstractmethod
@@ -82,12 +88,6 @@ class BaseAtomsData(ABC):
     @abstractmethod
     def units(self) -> Dict[str, str]:
         """ Property to unit dict """
-        pass
-
-    @property
-    @abstractmethod
-    def units(self) -> Dict[str, str]:
-        """ Available properties in the dataset """
         pass
 
     @property
@@ -156,6 +156,7 @@ class ASEAtomsData(BaseAtomsData):
         load_properties: Optional[List[str]] = None,
         load_structure: bool = True,
         transforms: Optional[torch.nn.Module] = None,
+        subset_idx: Optional[List[int]] = None,
     ):
         """
         Args:
@@ -164,6 +165,7 @@ class ASEAtomsData(BaseAtomsData):
                 If None, all properties in the ASE dB will be returned.
             load_properties: If True, load structure properties.
             transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
+            subset_idx: List of data indices.
         """
         self.datapath = datapath
         self.conn = None
@@ -174,6 +176,7 @@ class ASEAtomsData(BaseAtomsData):
             load_properties=load_properties,
             load_structure=load_structure,
             transforms=transforms,
+            subset_idx=subset_idx,
         )
 
     def __len__(self) -> int:
@@ -181,6 +184,9 @@ class ASEAtomsData(BaseAtomsData):
             return conn.count()
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+        if self.subset_idx:
+            idx = self.subset_idx[idx]
+
         with connect(self.datapath) as conn:
             props = self._get_properties(
                 conn, idx, self.load_properties, self.load_structure
@@ -315,7 +321,6 @@ class ASEAtomsData(BaseAtomsData):
         if os.path.exists(datapath):
             raise AtomsDataError(f"Dataset already exists: {datapath}")
 
-        print("##########", datapath)
         with connect(datapath) as conn:
             conn.metadata = {
                 "_property_unit_dict": property_unit_dict,
@@ -408,7 +413,7 @@ def create_dataset(
     return dataset
 
 
-def load_dataset(datapath: str, format: AtomsDataFormat, **kwargs) -> Dataset:
+def load_dataset(datapath: str, format: AtomsDataFormat, **kwargs) -> BaseAtomsData:
     if format is AtomsDataFormat.ASE:
         dataset = ASEAtomsData(datapath=datapath, **kwargs)
     else:

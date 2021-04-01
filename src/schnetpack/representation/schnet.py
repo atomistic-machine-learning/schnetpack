@@ -88,16 +88,16 @@ class SchNet(nn.Module):
     def __init__(
         self,
         n_atom_basis: int,
-        n_interactions,
-        radial_basis,
-        cutoff_fn,
-        n_filters=None,
-        normalize_filter=False,
-        coupled_interactions=False,
-        return_intermediate=False,
-        max_z=100,
-        charged_systems=False,
-        activation=shifted_softplus,
+        n_interactions: int,
+        radial_basis: nn.Module,
+        cutoff_fn: Callable,
+        n_filters: int = None,
+        normalize_filter: bool = False,
+        coupled_interactions: bool = False,
+        return_intermediate: bool = False,
+        max_z: int = 100,
+        charged_systems: bool = False,
+        activation: Callable = shifted_softplus,
     ):
         """
         Args:

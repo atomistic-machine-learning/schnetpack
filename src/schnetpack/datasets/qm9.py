@@ -13,6 +13,7 @@ from ase import Atoms
 from ase.io.extxyz import read_xyz
 
 from schnetpack.data import *
+import schnetpack.structure as structure
 from schnetpack.datasets.base import AtomsDataModuleError, AtomsDataModule
 
 
@@ -220,10 +221,10 @@ class QM9(AtomsDataModule):
 
             tmp.seek(0)
             ats: Atoms = list(read_xyz(tmp, 0))[0]
-            properties[Structure.Z] = ats.numbers
-            properties[Structure.R] = ats.positions
-            properties[Structure.cell] = ats.cell
-            properties[Structure.pbc] = ats.pbc
+            properties[structure.Z] = ats.numbers
+            properties[structure.R] = ats.positions
+            properties[structure.cell] = ats.cell
+            properties[structure.pbc] = ats.pbc
             property_list.append(properties)
 
         logging.info("Write atoms to db...")

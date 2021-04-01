@@ -17,7 +17,6 @@ def indexed_data(example_data, batch_size):
     R = []
     C = []
     seg_m = []
-    seg_i = []
     ind_i = []
     ind_j = []
     ind_S = []
@@ -37,7 +36,6 @@ def indexed_data(example_data, batch_size):
         )
         _, seg_im = np.unique(idx_i, return_counts=True)
         seg_im = np.cumsum(np.hstack((np.zeros((1,), dtype=np.int), seg_im)))
-        seg_i.append(seg_im + n_pairs)
         ind_i.append(idx_i + n_atoms)
         ind_j.append(idx_j + n_atoms)
         ind_S.append(idx_S)
@@ -52,7 +50,6 @@ def indexed_data(example_data, batch_size):
     R = np.vstack(R).astype(np.float32)
     C = np.array(C).astype(np.float32)
     seg_m = np.hstack(seg_m)
-    seg_i = np.hstack(seg_i)
     ind_i = np.hstack(ind_i)
     ind_j = np.hstack(ind_j)
     ind_S = np.vstack(ind_S)

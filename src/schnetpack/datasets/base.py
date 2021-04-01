@@ -4,6 +4,8 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import random_split
 
+import copy
+
 from schnetpack.data import (
     AtomsDataFormat,
     resolve_format,
@@ -20,8 +22,6 @@ class AtomsDataModuleError(Exception):
 class AtomsDataModule(pl.LightningDataModule):
     """
     Base class for atoms datamodules.
-
-
     """
 
     def __init__(
@@ -44,7 +44,6 @@ class AtomsDataModule(pl.LightningDataModule):
         num_test_workers: Optional[int] = None,
     ):
         """
-
         Args:
             datapath: path to dataset
             batch_size: (train) batch size
@@ -86,9 +85,15 @@ class AtomsDataModule(pl.LightningDataModule):
             self.num_test = len(self.dataset) - self.num_train - self.num_val
 
         # TODO: handle IterDatasets
-        self._train_dataset, self._val_dataset, self._test_dataset = random_split(
-            self.dataset, [self.num_train, self.num_val, self.num_test]
-        )
+
+        lengths = [self.num_train, self.num_val, self.num_test]
+        indices = torch.randperm(sum(lengths)).tolist()
+        offsets = torch.cumsum(torch.tensor(lengths), dim=0)
+
+        self._train_dataset, self._val_dataset, self._test_dataset = [
+            self.dataset.subset(indices[offset - length : offset])
+            for offset, length in zip(offsets, lengths)
+        ]
 
     @property
     def train_dataset(self) -> BaseAtomsData:
