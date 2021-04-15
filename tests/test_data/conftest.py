@@ -2,19 +2,19 @@ import pytest
 from ase import Atoms
 import numpy as np
 import torch
-from schnetpack import Structure
+import schnetpack.structure as structure
 
 
 @pytest.fixture
 def single_atom():
     props = {
-        Structure.Z: torch.tensor(np.array([6])),
-        Structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0]])),
-        Structure.cell: torch.tensor(
+        structure.Z: torch.tensor(np.array([6])),
+        structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0]])),
+        structure.cell: torch.tensor(
             np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
         ),
-        Structure.pbc: torch.tensor(np.array([False, False, False])),
-        Structure.n_atoms: torch.tensor([1]),
+        structure.pbc: torch.tensor(np.array([False, False, False])),
+        structure.n_atoms: torch.tensor([1]),
     }
     return props
 
@@ -22,13 +22,13 @@ def single_atom():
 @pytest.fixture
 def two_atoms():
     props = {
-        Structure.Z: torch.tensor(np.array([6, 2])),
-        Structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]])),
-        Structure.cell: torch.tensor(
+        structure.Z: torch.tensor(np.array([6, 2])),
+        structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]])),
+        structure.cell: torch.tensor(
             np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
         ),
-        Structure.pbc: torch.tensor(np.array([False, False, False])),
-        Structure.n_atoms: torch.tensor([2]),
+        structure.pbc: torch.tensor(np.array([False, False, False])),
+        structure.n_atoms: torch.tensor([2]),
     }
     return props
 
@@ -36,17 +36,17 @@ def two_atoms():
 @pytest.fixture
 def four_atoms():
     props = {
-        Structure.Z: torch.tensor(np.array([6, 2, 1, 7])),
-        Structure.R: torch.tensor(
+        structure.Z: torch.tensor(np.array([6, 2, 1, 7])),
+        structure.R: torch.tensor(
             np.array(
                 [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0, 1.0]]
             )
         ),
-        Structure.cell: torch.tensor(
+        structure.cell: torch.tensor(
             np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
         ),
-        Structure.pbc: torch.tensor(np.array([False, False, False])),
-        Structure.n_atoms: torch.tensor([4]),
+        structure.pbc: torch.tensor(np.array([False, False, False])),
+        structure.n_atoms: torch.tensor([4]),
     }
     return props
 
@@ -54,11 +54,11 @@ def four_atoms():
 @pytest.fixture
 def single_site_crystal():
     props = {
-        Structure.Z: torch.tensor(np.array([6])),
-        Structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0]])),
-        Structure.cell: torch.tensor(np.eye(3)),
-        Structure.pbc: torch.tensor(np.array([True, True, True])),
-        Structure.n_atoms: torch.tensor([1]),
+        structure.Z: torch.tensor(np.array([6])),
+        structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0]])),
+        structure.cell: torch.tensor(np.eye(3)),
+        structure.pbc: torch.tensor(np.array([True, True, True])),
+        structure.n_atoms: torch.tensor([1]),
     }
     return props
 
@@ -66,11 +66,11 @@ def single_site_crystal():
 @pytest.fixture
 def two_site_crystal():
     props = {
-        Structure.Z: torch.tensor(np.array([6, 1])),
-        Structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])),
-        Structure.cell: torch.tensor(np.eye(3)),
-        Structure.pbc: torch.tensor(np.array([True, True, True])),
-        Structure.n_atoms: torch.tensor([2]),
+        structure.Z: torch.tensor(np.array([6, 1])),
+        structure.R: torch.tensor(np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])),
+        structure.cell: torch.tensor(np.eye(3)),
+        structure.pbc: torch.tensor(np.array([True, True, True])),
+        structure.n_atoms: torch.tensor([2]),
     }
     return props
 
@@ -99,8 +99,8 @@ def environment_periodic():
     """
     cutoff = 5.0
     props = {
-        Structure.Z: torch.tensor(np.ones(5) * 18),
-        Structure.R: torch.tensor(
+        structure.Z: torch.tensor(np.ones(5) * 18),
+        structure.R: torch.tensor(
             np.array(
                 [
                     [1.8475400, 3.1888300, 2.88069500],
@@ -111,13 +111,13 @@ def environment_periodic():
                 ]
             )
         ),
-        Structure.cell: torch.tensor(
+        structure.cell: torch.tensor(
             np.array([[7.0, 0.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 8.0]])
         ),
-        Structure.pbc: torch.tensor(np.array([True, True, True])),
+        structure.pbc: torch.tensor(np.array([True, True, True])),
     }
     neighbors = {
-        Structure.idx_i: torch.LongTensor(
+        structure.idx_i: torch.LongTensor(
             [
                 0,
                 0,
@@ -157,7 +157,7 @@ def environment_periodic():
                 4,
             ]
         ),
-        Structure.idx_j: torch.LongTensor(
+        structure.idx_j: torch.LongTensor(
             [
                 4,
                 1,
@@ -197,7 +197,7 @@ def environment_periodic():
                 2,
             ]
         ),
-        Structure.Rij: torch.tensor(
+        structure.Rij: torch.tensor(
             np.array(
                 [
                     [0.31884, -1.83127, -4.55375],
@@ -239,7 +239,7 @@ def environment_periodic():
                 ]
             )
         ),
-        Structure.cell_offset: torch.tensor(
+        structure.cell_offset: torch.tensor(
             np.array(
                 [
                     [0, 0, -1],
@@ -293,8 +293,8 @@ def environment_nonperiodic():
     """
     cutoff = 5.0
     props = {
-        Structure.Z: torch.tensor(np.ones(5) * 18),
-        Structure.R: torch.tensor(
+        structure.Z: torch.tensor(np.ones(5) * 18),
+        structure.R: torch.tensor(
             np.array(
                 [
                     [1.8475400, 3.1888300, 2.88069500],
@@ -305,19 +305,19 @@ def environment_nonperiodic():
                 ]
             )
         ),
-        Structure.cell: torch.tensor(
+        structure.cell: torch.tensor(
             np.array([[7.0, 0.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 8.0]])
         ),
-        Structure.pbc: torch.tensor(np.array([False, False, False])),
+        structure.pbc: torch.tensor(np.array([False, False, False])),
     }
     neighbors = {
-        Structure.idx_i: torch.LongTensor(
+        structure.idx_i: torch.LongTensor(
             [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4]
         ),
-        Structure.idx_j: torch.LongTensor(
+        structure.idx_j: torch.LongTensor(
             [1, 2, 3, 4, 0, 2, 3, 4, 4, 3, 1, 0, 0, 1, 2, 0, 1, 2]
         ),
-        Structure.Rij: torch.tensor(
+        structure.Rij: torch.tensor(
             np.array(
                 [
                     [3.30492, -1.68921, 1.16421],
@@ -341,7 +341,7 @@ def environment_nonperiodic():
                 ]
             )
         ),
-        Structure.cell_offset: torch.tensor(
+        structure.cell_offset: torch.tensor(
             np.array(
                 [
                     [0, 0, 0],

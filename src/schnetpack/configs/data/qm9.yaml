@@ -6,6 +6,5 @@ num_train: 110000
 num_val: 10000
 num_test: -1
 remove_uncharacterized: False
-num_workers: 2
-
+num_workers: 16
 

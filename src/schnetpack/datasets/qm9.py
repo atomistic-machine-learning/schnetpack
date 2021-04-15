@@ -58,13 +58,15 @@ class QM9(AtomsDataModule):
         remove_uncharacterized: bool = False,
         val_batch_size: Optional[int] = None,
         test_batch_size: Optional[int] = None,
-        transform_fn: Optional[torch.nn.Module] = None,
-        train_transform_fn: Optional[torch.nn.Module] = None,
-        val_transform_fn: Optional[torch.nn.Module] = None,
-        test_transform_fn: Optional[torch.nn.Module] = None,
+        transforms: Optional[torch.nn.Module] = None,
+        train_transforms: Optional[torch.nn.Module] = None,
+        val_transforms: Optional[torch.nn.Module] = None,
+        test_transforms: Optional[torch.nn.Module] = None,
         num_workers: int = 2,
         num_val_workers: Optional[int] = None,
         num_test_workers: Optional[int] = None,
+        property_units: Optional[Dict[str, str]] = None,
+        distance_unit: Optional[str] = None,
     ):
         """
         Args:
@@ -72,10 +74,10 @@ class QM9(AtomsDataModule):
             format:
             load_properties: reduced set of properties to be loaded
             remove_uncharacterized: do not include uncharacterized molecules.
-            transform_fn:
-            train_transform_fn:
-            val_transform_fn:
-            test_transform_fn:
+            transforms:
+            train_transforms:
+            val_transforms:
+            test_transforms:
         """
         super().__init__(
             datapath=datapath,
@@ -87,13 +89,15 @@ class QM9(AtomsDataModule):
             load_properties=load_properties,
             val_batch_size=val_batch_size,
             test_batch_size=test_batch_size,
-            transform_fn=transform_fn,
-            train_transform_fn=train_transform_fn,
-            val_transform_fn=val_transform_fn,
-            test_transform_fn=test_transform_fn,
+            transforms=transforms,
+            train_transforms=train_transforms,
+            val_transforms=val_transforms,
+            test_transforms=test_transforms,
             num_workers=num_workers,
             num_val_workers=num_val_workers,
             num_test_workers=num_test_workers,
+            property_units=property_units,
+            distance_unit=distance_unit,
         )
 
         self.remove_uncharacterized = remove_uncharacterized

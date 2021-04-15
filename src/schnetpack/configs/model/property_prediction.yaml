@@ -2,7 +2,7 @@ defaults:
   - representation: schnet
   - optimizer: null
 
-_target_: schnetpack.model.PropertyPredictionModel
+_target_: schnetpack.model.SinglePropertyModel
 _recursive_: False
 
 optimizer:
@@ -11,13 +11,13 @@ optimizer:
   eps: 1e-08
   weight_decay: 0.0
 
-outputs:
-  - property: ${property}
-    representaton_keys: null
-    requires_stats: True
-    requires_atomref: True
-    module:
-      _target_: schnetpack.outputs.Atomwise
-    loss:
-      _target_: torch.nn.MSELoss
-    loss_weight: 1.
+output:
+  property: ${property}
+  requires_stats: True
+  requires_atomref: True
+
+  module:
+    _target_: schnetpack.outputs.Atomwise
+    n_in: ${model.representation.n_atom_basis}
+  loss:
+    _target_: torch.nn.MSELoss

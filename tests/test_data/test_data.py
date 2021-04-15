@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from schnetpack.data import *
 import os
-from schnetpack import Structure
+import schnetpack.structure as structure
 from schnetpack.data import calculate_stats, AtomsLoader
 
 
@@ -38,12 +38,12 @@ def test_asedb(asedb, example_data):
     props = asedb[0]
     assert set(props.keys()) == set(
         [
-            Structure.Z,
-            Structure.R,
-            Structure.cell,
-            Structure.pbc,
-            Structure.n_atoms,
-            Structure.idx,
+            structure.Z,
+            structure.R,
+            structure.cell,
+            structure.pbc,
+            structure.n_atoms,
+            structure.idx,
         ]
         + asedb.available_properties
     )
@@ -53,12 +53,12 @@ def test_asedb(asedb, example_data):
     props = asedb[0]
     assert set(props.keys()) == set(
         [
-            Structure.Z,
-            Structure.R,
-            Structure.cell,
-            Structure.pbc,
-            Structure.n_atoms,
-            Structure.idx,
+            structure.Z,
+            structure.R,
+            structure.cell,
+            structure.pbc,
+            structure.n_atoms,
+            structure.idx,
         ]
         + load_properties
     )
@@ -67,8 +67,8 @@ def test_asedb(asedb, example_data):
     props = asedb[0]
     assert set(props.keys()) == set(
         [
-            Structure.n_atoms,
-            Structure.idx,
+            structure.n_atoms,
+            structure.idx,
         ]
         + load_properties
     )
@@ -81,12 +81,12 @@ def test_asedb_getprops(asedb):
     props = list(asedb.iter_properties(0))[0]
     assert set(props.keys()) == set(
         [
-            Structure.Z,
-            Structure.R,
-            Structure.cell,
-            Structure.pbc,
-            Structure.n_atoms,
-            Structure.idx,
+            structure.Z,
+            structure.R,
+            structure.cell,
+            structure.pbc,
+            structure.n_atoms,
+            structure.idx,
         ]
         + asedb.available_properties
     )
@@ -98,8 +98,8 @@ def test_stats():
         Z = torch.tensor([1, 1, 1])
         off = 1.0 if i % 2 == 0 else -1.0
         d = {
-            Structure.Z: Z,
-            Structure.n_atoms: torch.tensor([len(Z)]),
+            structure.Z: Z,
+            structure.n_atoms: torch.tensor([len(Z)]),
             "property1": torch.tensor([(1.0 + len(Z) * off)]),
             "property2": torch.tensor([off]),
         }
@@ -126,10 +126,10 @@ def test_asedb_add(asedb, example_data):
 
     props.update(
         {
-            Structure.Z: at.numbers,
-            Structure.R: at.positions,
-            Structure.cell: at.cell,
-            Structure.pbc: at.pbc,
+            structure.Z: at.numbers,
+            structure.R: at.positions,
+            structure.cell: at.cell,
+            structure.pbc: at.pbc,
         }
     )
     asedb.add_system(**props)

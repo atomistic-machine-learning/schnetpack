@@ -1,4 +1,4 @@
-from schnetpack import Structure
+import schnetpack.structure as structure
 from schnetpack.data.transforms import *
 import numpy as np
 import pytest
@@ -48,10 +48,10 @@ class TestNeighborLists:
             torch.LongTensor: cell offsets
             torch.Tensor: distance vectors associated with each pair
         """
-        idx_i = neighbors[Structure.idx_i]
-        idx_j = neighbors[Structure.idx_j]
-        cell_offset = neighbors[Structure.cell_offset]
-        Rij = neighbors[Structure.Rij]
+        idx_i = neighbors[structure.idx_i]
+        idx_j = neighbors[structure.idx_j]
+        cell_offset = neighbors[structure.cell_offset]
+        Rij = neighbors[structure.Rij]
 
         sort_idx = self._get_unique_idx(idx_i, idx_j, cell_offset)
 
@@ -93,10 +93,10 @@ def test_single_atom(single_atom, neighbor_list, cutoff):
     neighbor_list = neighbor_list(cutoff)
     props_after = neighbor_list(single_atom)
     assert_consistent(single_atom, props_after)
-    assert len(props_after[Structure.Rij]) == 0
-    assert len(props_after[Structure.idx_i]) == 0
-    assert len(props_after[Structure.idx_j]) == 0
-    assert len(props_after[Structure.cell_offset]) == 0
+    assert len(props_after[structure.Rij]) == 0
+    assert len(props_after[structure.idx_i]) == 0
+    assert len(props_after[structure.idx_j]) == 0
+    assert len(props_after[structure.cell_offset]) == 0
 
 
 def test_cast(single_atom):
@@ -120,7 +120,7 @@ def test_remove_com(four_atoms):
 
     com = torch.tensor([0.0, 0.0, 0.0])
     for r_i, m_i in zip(
-        positions_trans[Structure.position], atomic_masses[four_atoms[Structure.Z]]
+        positions_trans[structure.position], atomic_masses[four_atoms[structure.Z]]
     ):
         com += r_i * m_i
 
@@ -131,7 +131,7 @@ def test_remove_cog(four_atoms):
     positions_trans = SubtractCenterOfGeometry()(four_atoms)
 
     cog = torch.tensor([0.0, 0.0, 0.0])
-    for r_i in positions_trans[Structure.position]:
+    for r_i in positions_trans[structure.position]:
         cog += r_i
 
     torch.testing.assert_allclose(cog, torch.tensor([0.0, 0.0, 0.0]))

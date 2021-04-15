@@ -20,9 +20,12 @@ import torch
 import copy
 from ase import Atoms
 from ase.db import connect
+import timeit
 from torch.utils.data import Dataset
 
+import schnetpack as spk
 import schnetpack.structure as structure
+from schnetpack.data.transforms import Transform
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +60,7 @@ class BaseAtomsData(ABC):
         self,
         load_properties: Optional[List[str]] = None,
         load_structure: bool = True,
-        transforms: Optional[torch.nn.Module] = None,
+        transforms: Optional[List[Transform]] = None,
         subset_idx: Optional[List[int]] = None,
     ):
         """
@@ -65,13 +68,31 @@ class BaseAtomsData(ABC):
             load_properties: Set of properties to be loaded and returned.
                 If None, all properties in the ASE dB will be returned.
             load_properties: If True, load structure properties.
-            transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
+            transforms: preprocessing transforms (see schnetpack.data.transforms)
             subset: List of data indices.
         """
+        self._transform_module = None
         self.load_properties = load_properties
         self.load_structure = load_structure
         self.transforms = transforms
         self.subset_idx = subset_idx
+
+    @property
+    def transforms(self):
+        return self._transforms
+
+    @transforms.setter
+    def transforms(self, value: Optional[List[Transform]]):
+        self._transforms = []
+        self._transform_module = None
+
+        if value is not None:
+            for tf in value:
+                if tf.data is not None:
+                    tf = copy.copy(tf)
+                tf.data = self
+                self._transforms.append(tf)
+            self._transform_module = torch.nn.Sequential(*self._transforms)
 
     def subset(self, subset_idx: Optional[List[int]]):
         ds = copy.copy(self)
@@ -155,8 +176,10 @@ class ASEAtomsData(BaseAtomsData):
         datapath: str,
         load_properties: Optional[List[str]] = None,
         load_structure: bool = True,
-        transforms: Optional[torch.nn.Module] = None,
+        transforms: Optional[List[torch.nn.Module]] = None,
         subset_idx: Optional[List[int]] = None,
+        property_units: Optional[Dict[str, str]] = None,
+        distance_unit: Optional[str] = None,
     ):
         """
         Args:
@@ -166,10 +189,10 @@ class ASEAtomsData(BaseAtomsData):
             load_properties: If True, load structure properties.
             transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
             subset_idx: List of data indices.
+            units: property-> unit string dictionary that overwrites the native units of the dataset.
+                Units are converted automatically during loading.
         """
         self.datapath = datapath
-        self.conn = None
-        self._check_db()
 
         BaseAtomsData.__init__(
             self,
@@ -179,27 +202,61 @@ class ASEAtomsData(BaseAtomsData):
             subset_idx=subset_idx,
         )
 
+        self._check_db()
+        self.conn = connect(self.datapath, use_lock_file=False)
+
+        # initialize units
+        md = self.metadata
+        if distance_unit:
+            self.distance_conversion = spk.units.convert_units(
+                md["_distance_unit"], distance_unit
+            )
+            self.distance_unit = distance_unit
+        else:
+            self.distance_conversion = 1.0
+            self.distance_unit = md["_distance_unit"]
+
+        self._units = md["_property_unit_dict"]
+        self.conversions = {prop: 1.0 for prop in self._units}
+        if property_units is not None:
+            for prop, unit in property_units.items():
+                self.conversions[prop] = spk.units.convert_units(
+                    self._units[prop], unit
+                )
+                self._units[prop] = unit
+
     def __len__(self) -> int:
-        with connect(self.datapath) as conn:
+        if self.subset_idx:
+            return len(self.subset_idx)
+
+        with connect(self.datapath, use_lock_file=False) as conn:
             return conn.count()
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         if self.subset_idx:
             idx = self.subset_idx[idx]
 
-        with connect(self.datapath) as conn:
-            props = self._get_properties(
-                conn, idx, self.load_properties, self.load_structure
-            )
+        props = self._get_properties(
+            self.conn, idx, self.load_properties, self.load_structure
+        )
+        props = self._apply_transforms(props)
 
-        if self.transforms:
-            props = self.transforms(props)
+        return props
 
+    def _apply_transforms(self, props):
+        if self._transform_module is not None:
+            props = self._transform_module(props)
         return props
 
     def _check_db(self):
         if not os.path.exists(self.datapath):
             raise AtomsDataError(f"ASE DB does not exists at {self.datapath}")
+
+        if self.subset_idx:
+            with connect(self.datapath, use_lock_file=False) as conn:
+                n_structures = conn.count()
+
+            assert max(self.subset_idx) < n_structures
 
     def iter_properties(
         self,
@@ -231,7 +288,7 @@ class ASEAtomsData(BaseAtomsData):
             indices = [indices]
 
         # read from ase db
-        with connect(self.datapath) as conn:
+        with connect(self.datapath, use_lock_file=False) as conn:
             for i in indices:
                 yield self._get_properties(
                     conn,
@@ -250,15 +307,21 @@ class ASEAtomsData(BaseAtomsData):
         properties = {}
         properties[structure.idx] = torch.tensor([idx])
         for pname in load_properties:
-            properties[pname] = torch.tensor(row.data[pname].copy())
+            properties[pname] = (
+                torch.tensor(row.data[pname].copy()) * self.conversions[pname]
+            )
 
         Z = row["numbers"].copy()
         properties[structure.n_atoms] = torch.tensor([Z.shape[0]])
 
         if load_structure:
             properties[structure.Z] = torch.tensor(Z, dtype=torch.long)
-            properties[structure.position] = torch.tensor(row["positions"].copy())
-            properties[structure.cell] = torch.tensor(row["cell"].copy())
+            properties[structure.position] = (
+                torch.tensor(row["positions"].copy()) * self.distance_conversion
+            )
+            properties[structure.cell] = (
+                torch.tensor(row["cell"].copy()) * self.distance_conversion
+            )
             properties[structure.pbc] = torch.tensor(row["pbc"])
 
         return properties
@@ -290,9 +353,8 @@ class ASEAtomsData(BaseAtomsData):
 
     @property
     def units(self) -> Dict[str, str]:
-        """ Dictionary of propterties to units """
-        md = self.metadata
-        return md["_property_unit_dict"]
+        """ Dictionary of properties to units """
+        return self._units
 
     ## Creation
 

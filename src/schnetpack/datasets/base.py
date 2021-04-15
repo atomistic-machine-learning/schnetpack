@@ -1,10 +1,10 @@
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import random_split
 
-import copy
+from copy import copy
 
 from schnetpack.data import (
     AtomsDataFormat,
@@ -35,13 +35,15 @@ class AtomsDataModule(pl.LightningDataModule):
         load_properties: Optional[List[str]] = None,
         val_batch_size: Optional[int] = None,
         test_batch_size: Optional[int] = None,
-        transform_fn: Optional[torch.nn.Module] = None,
-        train_transform_fn: Optional[torch.nn.Module] = None,
-        val_transform_fn: Optional[torch.nn.Module] = None,
-        test_transform_fn: Optional[torch.nn.Module] = None,
-        num_workers: int = 2,
+        transforms: Optional[List[torch.nn.Module]] = None,
+        train_transforms: Optional[List[torch.nn.Module]] = None,
+        val_transforms: Optional[List[torch.nn.Module]] = None,
+        test_transforms: Optional[List[torch.nn.Module]] = None,
+        num_workers: int = 8,
         num_val_workers: Optional[int] = None,
         num_test_workers: Optional[int] = None,
+        property_units: Optional[Dict[str, str]] = None,
+        distance_unit: Optional[str] = None,
     ):
         """
         Args:
@@ -54,18 +56,18 @@ class AtomsDataModule(pl.LightningDataModule):
             load_properties: subset of properties to load
             val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
             test_batch_size: test batch size. If None, use val_batch_size, then batch_size.
-            transform_fn: Transform applied to each system separately before batching.
-            train_transform_fn: Overrides transform_fn for training.
-            val_transform_fn: Overrides transform_fn for validation.
-            test_transform_fn: Overrides transform_fn for testing.
+            transforms: Transform applied to each system separately before batching.
+            train_transforms: Overrides transform_fn for training.
+            val_transforms: Overrides transform_fn for validation.
+            test_transforms: Overrides transform_fn for testing.
             num_workers: Number of data loader workers.
             num_val_workers: Number of validation data loader workers (overrides num_workers).
             num_test_workers: Number of test data loader workers (overrides num_workers).
         """
         super().__init__(
-            train_transforms=train_transform_fn or transform_fn,
-            val_transforms=val_transform_fn or transform_fn,
-            test_transforms=test_transform_fn or transform_fn,
+            train_transforms=train_transforms or copy(transforms) or [],
+            val_transforms=val_transforms or copy(transforms) or [],
+            test_transforms=test_transforms or copy(transforms) or [],
         )
         self.batch_size = batch_size
         self.val_batch_size = val_batch_size or test_batch_size or batch_size
@@ -78,14 +80,21 @@ class AtomsDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
         self.num_val_workers = num_val_workers or self.num_workers
         self.num_test_workers = num_test_workers or self.num_workers
+        self.property_units = property_units
+        self.distance_unit = distance_unit
 
     def setup(self, stage: Optional[str] = None):
-        self.dataset = load_dataset(self.datapath, self.format)
+        self.dataset = load_dataset(
+            self.datapath,
+            self.format,
+            property_units=self.property_units,
+            distance_unit=self.distance_unit,
+        )
         if self.num_test < 0:
             self.num_test = len(self.dataset) - self.num_train - self.num_val
 
+        # split dataset
         # TODO: handle IterDatasets
-
         lengths = [self.num_train, self.num_val, self.num_test]
         indices = torch.randperm(sum(lengths)).tolist()
         offsets = torch.cumsum(torch.tensor(lengths), dim=0)
@@ -94,6 +103,11 @@ class AtomsDataModule(pl.LightningDataModule):
             self.dataset.subset(indices[offset - length : offset])
             for offset, length in zip(offsets, lengths)
         ]
+
+        # set transforms
+        self._train_dataset.transforms = self.train_transforms
+        self._val_dataset.transforms = self.val_transforms
+        self._test_dataset.transforms = self.test_transforms
 
     @property
     def train_dataset(self) -> BaseAtomsData:

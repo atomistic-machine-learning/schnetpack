@@ -5,10 +5,22 @@ defaults:
   - override /model/representation: schnet
   - override /model/optimizer: adam
   - override /data: qm9
-  - override /logger: null
+  - override /logger: tensorboard
 
 cutoff: 5.0
 n_rbf: 20
 
 lr: 0.001
+
 property: energy_U0
+
+
+data:
+  distance_unit: Ang
+  property_units:
+    energy_U0: eV
+  transforms:
+    - _target_: schnetpack.data.transforms.SubtractCenterOfMass
+    - _target_: schnetpack.data.transforms.TorchNeighborList
+      cutoff: ${cutoff}
+    - _target_: schnetpack.data.transforms.CastTo32

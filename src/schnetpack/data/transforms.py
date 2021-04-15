@@ -1,8 +1,9 @@
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
 import schnetpack.structure as structure
+import schnetpack as spk
 
 from ase import Atoms
 from ase.neighborlist import neighbor_list
@@ -18,9 +19,25 @@ __all__ = [
 ]
 
 ## neighbor lists
+class TransformException(Exception):
+    pass
 
 
-class ASENeighborList(nn.Module):
+class Transform(nn.Module):
+    """
+    Base class for all transforms
+
+    Currently, this only ensures that the reference to the data attributeis initialized.
+    """
+
+    data: Optional["spk.data.BaseAtomsData"]
+
+    def __init__(self):
+        self.data = None
+        super().__init__()
+
+
+class ASENeighborList(Transform):
     """
     Calculate neighbor list using ASE.
 
@@ -51,7 +68,7 @@ class ASENeighborList(nn.Module):
         return inputs
 
 
-class TorchNeighborList(nn.Module):
+class TorchNeighborList(Transform):
     """
     Environment provider making use of neighbor lists as implemented in TorchAni
     (https://github.com/aiqm/torchani/blob/master/torchani/aev.py).
@@ -196,7 +213,7 @@ class TorchNeighborList(nn.Module):
 ## casting
 
 
-class CastMap(nn.Module):
+class CastMap(Transform):
     """
     Cast all inputs according to type map.
     """
@@ -226,11 +243,26 @@ class CastTo32(CastMap):
 ## centering
 
 
-class SubtractCenterOfMass(nn.Module):
+class SubtractCenterOfMass(Transform):
     """
     Subtract center of mass from positions. Can only be used for single structures. Batches of structures are not supported.
 
     """
+
+    def __init__(self):
+        # self.data = None
+        super().__init__()
+
+    @property
+    def data(self):
+        try:
+            return self._data
+        except ValueError:
+            raise TransformException("Dataset has not been set for this transform!")
+
+    @data.setter
+    def data(self, value):
+        self._data = value
 
     def forward(self, inputs):
         masses = torch.tensor(atomic_masses[inputs[structure.Z]])
@@ -240,7 +272,7 @@ class SubtractCenterOfMass(nn.Module):
         return inputs
 
 
-class SubtractCenterOfGeometry(nn.Module):
+class SubtractCenterOfGeometry(Transform):
     """
     Subtract center of geometry from positions. Can only be used for single structures. Batches of structures are not supported.
 
@@ -248,4 +280,21 @@ class SubtractCenterOfGeometry(nn.Module):
 
     def forward(self, inputs):
         inputs[structure.position] -= inputs[structure.position].mean(0)
+        return inputs
+
+
+class UnitConversion(Transform):
+    def __init__(self, property_unit_map: Dict[str, str]):
+        self.property_unit_map = property_unit_map
+        self.src_units = None
+        super().__init__()
+
+    def forward(self, inputs):
+        # initialize
+        if not self.src_units:
+            units = self.data.units
+            self.src_units = {p: units[p] for p in self.property_unit_map}
+
+        for prop, tgt_unit in self.property_unit_map.items():
+            inputs[prop] *= spk.units.convert_units(self.src_units[prop], tgt_unit)
         return inputs
