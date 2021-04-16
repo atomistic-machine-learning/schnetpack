@@ -14,7 +14,7 @@ from ase.io.extxyz import read_xyz
 
 from schnetpack.data import *
 import schnetpack.structure as structure
-from schnetpack.datasets.base import AtomsDataModuleError, AtomsDataModule
+from schnetpack.data import AtomsDataModuleError, AtomsDataModule
 
 
 class QM9(AtomsDataModule):
@@ -121,16 +121,17 @@ class QM9(AtomsDataModule):
                 QM9.G: "Ha",
                 QM9.Cv: "cal/mol/K",
             }
+
+            tmpdir = tempfile.mkdtemp("qm9")
+            atomrefs = self._download_atomrefs(tmpdir)
+
             dataset = create_dataset(
                 datapath=self.datapath,
                 format=self.format,
                 distance_unit="Ang",
                 property_unit_dict=property_unit_dict,
+                atomrefs=atomrefs,
             )
-
-            tmpdir = tempfile.mkdtemp("qm9")
-            atomrefs = self._download_atomrefs(tmpdir)
-            dataset.update_metadata(atomrefs=atomrefs)
 
             if self.remove_uncharacterized:
                 uncharacterized = self._download_uncharacterized(tmpdir)

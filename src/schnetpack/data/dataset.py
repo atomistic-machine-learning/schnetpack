@@ -14,6 +14,8 @@ from schnetpack.data import (
     AtomsLoader,
 )
 
+__all__ = ["AtomsDataModule", "AtomsDataModuleError"]
+
 
 class AtomsDataModuleError(Exception):
     pass

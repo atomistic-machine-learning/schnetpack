@@ -131,6 +131,12 @@ class BaseAtomsData(ABC):
         """ Global metadata """
         pass
 
+    @property
+    @abstractmethod
+    def atomrefs(self) -> Dict[str, List[float]]:
+        """ Single-atom reference values for properties """
+        pass
+
     @abstractmethod
     def update_metadata(self, **kwargs):
         pass
@@ -147,7 +153,11 @@ class BaseAtomsData(ABC):
     @staticmethod
     @abstractmethod
     def create(
-        datapath: str, position_unit: str, property_unit_dict: Dict[str, str], **kwargs
+        datapath: str,
+        position_unit: str,
+        property_unit_dict: Dict[str, str],
+        atomrefs: Dict[str, List[float]],
+        **kwargs,
     ) -> "BaseAtomsData":
         pass
 
@@ -356,11 +366,22 @@ class ASEAtomsData(BaseAtomsData):
         """ Dictionary of properties to units """
         return self._units
 
+    @property
+    def atomrefs(self) -> Dict[str, List[float]]:
+        md = self.metadata
+        arefs = md["atomrefs"]
+        arefs = {k: self.conversions[k] * torch.tensor(v) for k, v in arefs.items()}
+        return arefs
+
     ## Creation
 
     @staticmethod
     def create(
-        datapath: str, distance_unit: str, property_unit_dict: Dict[str, str], **kwargs
+        datapath: str,
+        distance_unit: str,
+        property_unit_dict: Dict[str, str],
+        atomrefs: Dict[str, List[float]],
+        **kwargs,
     ) -> "ASEAtomsData":
         """
 
@@ -387,6 +408,7 @@ class ASEAtomsData(BaseAtomsData):
             conn.metadata = {
                 "_property_unit_dict": property_unit_dict,
                 "_distance_unit": distance_unit,
+                "atomrefs": atomrefs,
             }
 
         return ASEAtomsData(datapath, **kwargs)

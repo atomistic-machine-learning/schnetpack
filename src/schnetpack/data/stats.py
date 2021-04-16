@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 def calculate_stats(
     dataloader: AtomsLoader,
-    normalize_prop_by_atoms: Dict[str, bool],
+    divide_by_atoms: Dict[str, bool],
     atomref: Dict[str, torch.Tensor] = None,
 ) -> Dict[str, Tuple[torch.Tensor, torch.Tensor]]:
     """
@@ -22,7 +22,7 @@ def calculate_stats(
 
     Args:
         dataset: atoms data set
-        normalize_prop_by_atoms: dict from property name to bool:
+        divide_by_atoms: dict from property name to bool:
             If True, divide property by number of atoms before calculating statistics.
         atomref: reference values for single atoms to be removed before calculating stats
 
@@ -30,9 +30,9 @@ def calculate_stats(
     Returns:
 
     """
-    property_names = list(normalize_prop_by_atoms.keys())
+    property_names = list(divide_by_atoms.keys())
     norm_mask = torch.tensor(
-        [float(normalize_prop_by_atoms[p]) for p in property_names], dtype=torch.float64
+        [float(divide_by_atoms[p]) for p in property_names], dtype=torch.float64
     )
 
     count = 0
