@@ -380,7 +380,7 @@ class ASEAtomsData(BaseAtomsData):
         datapath: str,
         distance_unit: str,
         property_unit_dict: Dict[str, str],
-        atomrefs: Dict[str, List[float]],
+        atomrefs: Optional[Dict[str, List[float]]] = None,
         **kwargs,
     ) -> "ASEAtomsData":
         """
@@ -403,6 +403,8 @@ class ASEAtomsData(BaseAtomsData):
 
         if os.path.exists(datapath):
             raise AtomsDataError(f"Dataset already exists: {datapath}")
+
+        atomrefs = atomrefs or {}
 
         with connect(datapath) as conn:
             conn.metadata = {
