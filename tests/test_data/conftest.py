@@ -2,6 +2,7 @@ import pytest
 from ase import Atoms
 import numpy as np
 import torch
+
 import schnetpack.structure as structure
 
 

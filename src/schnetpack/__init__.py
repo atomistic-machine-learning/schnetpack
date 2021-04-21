@@ -9,7 +9,6 @@ from schnetpack import representation
 from schnetpack import nn
 from schnetpack import outputs
 from schnetpack import units
-from schnetpack import structure
 
 from typing import Final
 
