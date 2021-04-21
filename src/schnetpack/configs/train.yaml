@@ -9,15 +9,40 @@ defaults:
 
 work_dir: ${hydra:runtime.cwd}
 data_dir: ${work_dir}/data
+name: default
 
-print_config: True
-
+print_config: False
+run_dir: runs
+run_id: ${uuid:1}
 
 # hydra configuration
 hydra:
     # output paths for hydra logs
     run:
-        dir: logs/runs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+        dir: ${run_dir}/${name}/${run_id}
 
-    searchpath:
-      - file://${oc.env:PWD}
+#    searchpath:
+#      - file://${oc.env:PWD}
+
+    help:
+      app_name: SchNetPack Train
+
+      template: |-
+        ${hydra.help.header}
+
+        This is ${hydra.help.app_name}!
+
+        == Configuration groups ==
+        Compose your configuration from those groups (db=mysql)
+
+        $APP_CONFIG_GROUPS
+
+        == Config ==
+        This is the config generated for this run.
+        You can override everything, for example:
+        spktrain +experiment=qm9 data_dir=/path/to/datadir
+        -------
+        $CONFIG
+        -------
+
+        ${hydra.help.footer}

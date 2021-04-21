@@ -1,20 +1,26 @@
+import os
 import hydra
 import logging
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from typing import List
+from schnetpack.utils.script import log_hyperparameters
 
 from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
 from pytorch_lightning.loggers import LightningLoggerBase
 from pytorch_lightning import seed_everything
 
+import uuid
 
 log = logging.getLogger(__name__)
+
+
+OmegaConf.register_resolver("uuid", lambda x: str(uuid.uuid1()))
 
 
 @hydra.main(config_path="configs", config_name="train")
 def train(config: DictConfig):
     if config.get("print_config"):
-        print(config)
+        print(OmegaConf.to_yaml(config, resolve=False))
 
     # Set seed for random number generators in pytorch, numpy and python.random
     if "seed" in config:
@@ -29,7 +35,6 @@ def train(config: DictConfig):
     model: LightningModule = hydra.utils.instantiate(
         config.model, datamodule=datamodule
     )
-    print(model.hparams)
 
     # Init Lightning callbacks
     callbacks: List[Callback] = []
@@ -41,40 +46,50 @@ def train(config: DictConfig):
 
     # Init Lightning loggers
     logger: List[LightningLoggerBase] = []
+
     if "logger" in config:
         for _, lg_conf in config["logger"].items():
             if "_target_" in lg_conf:
                 log.info(f"Instantiating logger <{lg_conf._target_}>")
-                logger.append(hydra.utils.instantiate(lg_conf))
+                l = hydra.utils.instantiate(lg_conf)
+
+                # set run_id for AimLogger
+                if lg_conf["_target_"] == "aim.pytorch_lightning.AimLogger":
+                    from aim import Session
+
+                    sess = Session(
+                        repo=l._repo_path,
+                        experiment=l._experiment_name,
+                        flush_frequency=l._flush_frequency,
+                        system_tracking_interval=l._system_tracking_interval,
+                        run=config.run_id,
+                    )
+                    l._aim_session = sess
+
+                logger.append(l)
 
     # Init Lightning trainer
     log.info(f"Instantiating trainer <{config.trainer._target_}>")
     trainer: Trainer = hydra.utils.instantiate(
-        config.trainer, callbacks=callbacks, logger=logger, _convert_="partial"
+        config.trainer,
+        callbacks=callbacks,
+        logger=logger,
+        default_root_dir=os.path.join(config.name, config.run_id),
+        _convert_="partial",
     )
 
-    # Send some parameters from config to all lightning loggers
-    # log.info("Logging hyperparameters!")
-    # template_utils.log_hyperparameters(
-    #     config=config,
-    #     model=model,
-    #     datamodule=datamodule,
-    #     trainer=trainer,
-    #     callbacks=callbacks,
-    #     logger=logger,
-    # )
+    log.info("Logging hyperparameters.")
+    log_hyperparameters(
+        config=config, model=model, datamodule=datamodule, trainer=trainer
+    )
 
     # Train the model
-    log.info("Starting training!")
+    log.info("Starting training.")
     trainer.fit(model=model, datamodule=datamodule)
 
     # Evaluate model on test set after training
-    if not config.trainer.get("fast_dev_run"):
-        log.info("Starting testing!")
-        trainer.test()
-
-    # Make sure everything closed properly
-    log.info("Finalizing!")
+    log.info("Starting testing.")
+    trainer.test()
 
     # Print path to best checkpoint
     log.info(f"Best checkpoint path:\n{trainer.checkpoint_callback.best_model_path}")

@@ -1,13 +1,13 @@
-import pytorch_lightning.metrics
-
-import schnetpack as spk
+import logging
 
 import hydra
-import copy
+import pytorch_lightning.metrics
 import torch
-from pytorch_lightning import LightningModule, LightningDataModule
 from omegaconf import DictConfig
-import logging
+from pytorch_lightning import LightningModule
+
+import schnetpack as spk
+import cProfile
 
 log = logging.getLogger(__name__)
 
@@ -40,11 +40,13 @@ class SinglePropertyModel(LightningModule):
 
         if output.requires_stats:
             log.info("Calculate stats...")
-            stats = spk.data.calculate_stats(
-                datamodule.train_dataloader(),
-                divide_by_atoms={output.property: output.divide_stats_by_atoms},
-                atomref=atomrefs,
-            )[output.property]
+            with cProfile.Profile() as pr:
+                stats = spk.data.calculate_stats(
+                    datamodule.train_dataloader(),
+                    divide_by_atoms={output.property: output.divide_stats_by_atoms},
+                    atomref=atomrefs,
+                )[output.property]
+                pr.print_stats()
             log.info(f"{output.property} (mean / stddev): {stats[0]}, {stats[1]}")
 
             self.output = hydra.utils.instantiate(
@@ -54,9 +56,8 @@ class SinglePropertyModel(LightningModule):
                 stddev=torch.tensor(stats[1], dtype=torch.float32),
             )
         else:
-            self.output = hydra.utils.instantiate(
-                output.module, atomref=atomref[:, None]
-            )
+            atomref = atomref[:, None] if atomref else None
+            self.output = hydra.utils.instantiate(output.module, atomref=atomref)
 
         self.metric = pytorch_lightning.metrics.MeanAbsoluteError()
 
@@ -69,36 +70,36 @@ class SinglePropertyModel(LightningModule):
         pred = self(batch)
         target = batch[self.pred_property]
         loss = self.loss_fn(pred, target)
-        self.log("train/loss", loss, on_step=False, on_epoch=True, prog_bar=False)
+        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
         return loss
 
     def validation_step(self, batch, batch_idx):
         pred = self(batch)
         target = batch[self.pred_property]
         loss = self.loss_fn(pred, target)
-        self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log(
-            "val/mae",
+            "val_mae",
             self.metric(pred, target),
             on_step=False,
             on_epoch=True,
             prog_bar=True,
         )
-        return {"val/loss": loss}
+        return {"val_loss": loss}
 
     def test_step(self, batch, batch_idx):
         pred = self(batch)
         target = batch[self.pred_property]
         loss = self.loss_fn(pred, target)
-        self.log("test/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log(
-            "test/mae",
+            "test_mae",
             self.metric(pred, target),
             on_step=False,
             on_epoch=True,
             prog_bar=True,
         )
-        return {"test/loss": loss}
+        return {"test_loss": loss}
 
     def configure_optimizers(self):
         optimizer = hydra.utils.instantiate(self.optimizer, params=self.parameters())

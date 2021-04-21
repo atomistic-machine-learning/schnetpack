@@ -38,7 +38,7 @@ def calculate_stats(
     count = 0
     mean = torch.zeros_like(norm_mask)
     M2 = torch.zeros_like(norm_mask)
-    atomref = {k: torch.tensor(v) for k, v in atomref.items()}
+    atomref = {k: v for k, v in atomref.items()}
 
     for props in tqdm(dataloader):
         sample_values = []

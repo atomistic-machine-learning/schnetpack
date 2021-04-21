@@ -118,3 +118,6 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# experiments
+.aim

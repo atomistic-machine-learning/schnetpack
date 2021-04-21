@@ -12,6 +12,7 @@ n_rbf: 50
 lr: 5e-4
 
 property: energy_U0
+name: qm9_${property}
 
 
 data:
@@ -23,3 +24,4 @@ data:
     - _target_: schnetpack.data.transforms.TorchNeighborList
       cutoff: ${cutoff}
     - _target_: schnetpack.data.transforms.CastTo32
+
