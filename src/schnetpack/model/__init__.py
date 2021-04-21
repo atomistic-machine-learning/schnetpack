@@ -1,1 +1,1 @@
-from .property_prediction import *
+from .single_property import *

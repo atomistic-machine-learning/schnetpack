@@ -14,13 +14,15 @@ import uuid
 log = logging.getLogger(__name__)
 
 
-OmegaConf.register_resolver("uuid", lambda x: str(uuid.uuid1()))
+OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()))
 
 
 @hydra.main(config_path="configs", config_name="train")
 def train(config: DictConfig):
     if config.get("print_config"):
-        print(OmegaConf.to_yaml(config, resolve=False))
+        log.info(
+            f"Running with the following config:\n {OmegaConf.to_yaml(config, resolve=False)}"
+        )
 
     # Set seed for random number generators in pytorch, numpy and python.random
     if "seed" in config:

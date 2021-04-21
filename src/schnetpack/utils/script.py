@@ -15,7 +15,6 @@ def empty(*args, **kwargs):
 
 def todict(config: Union[DictConfig, Dict]):
     config_dict = yaml.safe_load(OmegaConf.to_yaml(config, resolve=True))
-    print(config_dict)
     return config_dict
 
 

@@ -11,7 +11,7 @@ work_dir: ${hydra:runtime.cwd}
 data_dir: ${work_dir}/data
 name: default
 
-print_config: False
+print_config: True
 run_dir: runs
 run_id: ${uuid:1}
 
