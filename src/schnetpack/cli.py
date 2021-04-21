@@ -3,7 +3,7 @@ import hydra
 import logging
 from omegaconf import DictConfig, OmegaConf
 from typing import List
-from schnetpack.utils.script import log_hyperparameters
+from schnetpack.utils.script import log_hyperparameters, print_config
 
 from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
 from pytorch_lightning.loggers import LightningLoggerBase
@@ -19,10 +19,22 @@ OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()))
 
 @hydra.main(config_path="configs", config_name="train")
 def train(config: DictConfig):
+    """
+    General training routine for all models defined by the provided hydra configs.
+
+    """
     if config.get("print_config"):
-        log.info(
-            f"Running with the following config:\n {OmegaConf.to_yaml(config, resolve=False)}"
+        print_config(config, resolve=True)
+
+    if not ("model" in config and "data" in config):
+        log.error(
+            f"""
+        Config incomplete! You have to specify at least `data` and `model`! 
+        For an example, try one of our pre-defined experiments:
+        > spktrain data_dir=/data/will/be/here +experiment=qm9
+        """
         )
+        return
 
     # Set seed for random number generators in pytorch, numpy and python.random
     if "seed" in config:

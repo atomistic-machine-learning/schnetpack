@@ -21,6 +21,7 @@ _** Major update! Breaking changes! Under construction! **_
 - ASE
 - numpy
 - PyTorch (>=1.7.0)
+- hydra
 
 _**Note: We recommend using a GPU for training the neural networks.**_
 
