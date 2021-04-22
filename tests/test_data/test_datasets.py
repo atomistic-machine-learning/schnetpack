@@ -47,6 +47,7 @@ def test_md17(test_md17_path):
         test_md17_path,
         num_train=10,
         num_val=5,
+        num_test=5,
         batch_size=5,
         molecule="uracil",
     )
