@@ -250,7 +250,6 @@ class SubtractCenterOfMass(Transform):
     """
 
     def __init__(self):
-        # self.data = None
         super().__init__()
 
     def forward(self, inputs):
