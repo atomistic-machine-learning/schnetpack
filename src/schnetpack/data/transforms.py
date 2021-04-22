@@ -250,19 +250,7 @@ class SubtractCenterOfMass(Transform):
     """
 
     def __init__(self):
-        # self.data = None
         super().__init__()
-
-    @property
-    def data(self):
-        try:
-            return self._data
-        except ValueError:
-            raise TransformException("Dataset has not been set for this transform!")
-
-    @data.setter
-    def data(self, value):
-        self._data = value
 
     def forward(self, inputs):
         masses = torch.tensor(atomic_masses[inputs[structure.Z]])
