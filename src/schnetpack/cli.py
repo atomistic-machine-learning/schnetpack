@@ -23,6 +23,16 @@ def train(config: DictConfig):
     General training routine for all models defined by the provided hydra configs.
 
     """
+    print(
+        """
+   _____      __    _   __     __  ____             __  
+  / ___/_____/ /_  / | / /__  / /_/ __ \____ ______/ /__
+  \__ \/ ___/ __ \/  |/ / _ \/ __/ /_/ / __ `/ ___/ //_/
+ ___/ / /__/ / / / /|  /  __/ /_/ ____/ /_/ / /__/ ,<   
+/____/\___/_/ /_/_/ |_/\___/\__/_/    \__,_/\___/_/|_|                                                          
+    """
+    )
+
     if config.get("print_config"):
         print_config(config, resolve=True)
 
