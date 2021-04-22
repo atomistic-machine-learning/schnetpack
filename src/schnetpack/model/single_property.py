@@ -5,8 +5,6 @@ import pytorch_lightning.metrics
 import torch
 
 import schnetpack as spk
-import cProfile
-
 from schnetpack.model.base import AtomisticModel
 
 log = logging.getLogger(__name__)
@@ -33,15 +31,13 @@ class SinglePropertyModel(AtomisticModel):
 
         if self._output_cfg.requires_stats:
             log.info("Calculate stats...")
-            with cProfile.Profile() as pr:
-                stats = spk.data.calculate_stats(
-                    self.datamodule.train_dataloader(),
-                    divide_by_atoms={
-                        self._output_cfg.property: self._output_cfg.divide_stats_by_atoms
-                    },
-                    atomref=atomrefs,
-                )[self._output_cfg.property]
-                pr.print_stats()
+            stats = spk.data.calculate_stats(
+                self.datamodule.train_dataloader(),
+                divide_by_atoms={
+                    self._output_cfg.property: self._output_cfg.divide_stats_by_atoms
+                },
+                atomref=atomrefs,
+            )[self._output_cfg.property]
             log.info(
                 f"{self._output_cfg.property} (mean / stddev): {stats[0]}, {stats[1]}"
             )
