@@ -4,7 +4,6 @@ PyYAML
 torch>=0.4.1
 numpy
 ase>=3.19
-tensorboardX
 h5py
 tqdm
 pytest

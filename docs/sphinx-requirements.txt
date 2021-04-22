@@ -9,4 +9,3 @@ tqdm
 ipykernel
 nbsphinx
 pytest-datadir
-torch-scatter
