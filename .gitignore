@@ -19,6 +19,7 @@ docs/tutorials/qm9tut
 
 # hydra stuff
 outputs
+logs
 
 # C extensions
 *.so
@@ -117,3 +118,7 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# experiments
+runs/
+tests/data/tmp

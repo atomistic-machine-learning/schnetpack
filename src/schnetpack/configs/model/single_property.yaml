@@ -1,0 +1,36 @@
+defaults:
+  - representation: schnet
+
+_target_: schnetpack.model.SinglePropertyModel
+_recursive_: False
+
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: ${lr}
+  eps: 1e-08
+  weight_decay: 0.0
+
+schedule:
+  monitor: val_loss
+  scheduler:
+    _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+    mode: min
+    factor: 0.5
+    patience: 25
+    threshold: 0.0001
+    threshold_mode: rel
+    cooldown: 0
+    min_lr: 1e-6
+    eps: 1e-08
+
+output:
+  property: ${property}
+  requires_atomref: True
+  requires_stats: True
+  divide_stats_by_atoms: True
+
+  module:
+    _target_: schnetpack.atomistic.Atomwise
+    n_in: ${model.representation.n_atom_basis}
+  loss:
+    _target_: torch.nn.MSELoss

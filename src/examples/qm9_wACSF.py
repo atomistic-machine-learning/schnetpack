@@ -18,7 +18,7 @@ val_loader = spk.data.AtomsLoader(val)
 # create model
 reps = rep.BehlerSFBlock()
 output = schnetpack.atomistic.ElementalAtomwise(reps.n_symfuncs)
-model = schnetpack.atomistic.AtomisticModel(reps, output)
+model = schnetpack.atomistic.PropertyModel(reps, output)
 
 # filter for trainable parameters (https://github.com/pytorch/pytorch/issues/679)
 trainable_params = filter(lambda p: p.requires_grad, model.parameters())

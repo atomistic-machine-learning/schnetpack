@@ -18,7 +18,7 @@ val_loader = spk.data.AtomsLoader(val)
 # create model
 reps = rep.SchNet()
 output = schnetpack.atomistic.Atomwise(n_in=reps.n_atom_basis)
-model = schnetpack.atomistic.AtomisticModel(reps, output)
+model = schnetpack.atomistic.PropertyModel(reps, output)
 
 # create trainer
 opt = Adam(model.parameters(), lr=1e-4)

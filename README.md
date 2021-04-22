@@ -2,6 +2,7 @@
 [![Build Status](https://travis-ci.com/atomistic-machine-learning/schnetpack.svg?branch=master)](https://travis-ci.com/atomistic-machine-learning/schnetpack)
 [![codecov](https://codecov.io/gh/atomistic-machine-learning/schnetpack/branch/master/graph/badge.svg)](https://codecov.io/gh/atomistic-machine-learning/schnetpack)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/python/black)
+[![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
 
 
 SchNetPack aims to provide accessible atomistic neural networks
@@ -13,15 +14,14 @@ extensible to custom atomistic architectures.
 - SchNet - an end-to-end continuous-filter CNN for molecules and materials [1-3]
 - wACSF - weighted atom-centered symmetry functions [4,5]
 
-_**Note: This is the last version before a major update. In the next version, 
-we plan to adopt Hydra and PyTorch Lightning, switch to indexing instead of masking and make the networks 
-compatible with TorchScript. Therefore, there will be breaking changes. **_
+_** Major update! Breaking changes! Under construction! **_
 
 ##### Requirements:
 - python 3
 - ASE
 - numpy
 - PyTorch (>=1.7.0)
+- hydra
 
 _**Note: We recommend using a GPU for training the neural networks.**_
 
@@ -61,7 +61,11 @@ You're ready to go!
 
 ### QM9 example
 
+Under construction. For a first test, use:
 
+```
+spktrain +experiment=qm9 data_dir=/path/to/data logger=[csv/aim/tensorboard]
+```
 
 ## Documentation
 
@@ -78,7 +82,7 @@ J. Chem. Theory Comput.
 
 ## Acknowledgements
 
-Hydra configs for PyTorch lightning are adapted from: [![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
+CLI and hydra configs for PyTorch lightning are adapted from this template: [![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
 
 
 ## References

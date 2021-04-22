@@ -1,14 +1,12 @@
-from typing import Callable
+from typing import Callable, Dict
 
 import torch
 from torch import nn
 
-
+import schnetpack as spk
+import schnetpack.structure as structure
 from schnetpack.nn import Dense, CFConv
-from schnetpack import Properties
 from schnetpack.nn.activations import shifted_softplus
-
-import logging
 
 
 class SchNetInteraction(nn.Module):
@@ -90,16 +88,16 @@ class SchNet(nn.Module):
     def __init__(
         self,
         n_atom_basis: int,
-        n_interactions,
-        radial_basis,
-        cutoff_fn,
-        n_filters=None,
-        normalize_filter=False,
-        coupled_interactions=False,
-        return_intermediate=False,
-        max_z=100,
-        charged_systems=False,
-        activation=shifted_softplus,
+        n_interactions: int,
+        radial_basis: nn.Module,
+        cutoff_fn: Callable,
+        n_filters: int = None,
+        normalize_filter: bool = False,
+        coupled_interactions: bool = False,
+        return_intermediate: bool = False,
+        max_z: int = 100,
+        charged_systems: bool = False,
+        activation: Callable = shifted_softplus,
     ):
         """
         Args:
@@ -120,6 +118,7 @@ class SchNet(nn.Module):
         """
         super().__init__()
         self.n_atom_basis = n_atom_basis
+        self.size = (self.n_atom_basis,)
         self.n_filters = n_filters or self.n_atom_basis
         self.radial_basis = radial_basis
         self.cutoff_fn = cutoff_fn
@@ -162,7 +161,12 @@ class SchNet(nn.Module):
                 ]
             )
 
-    def forward(self, atomic_numbers, r_ij, idx_i, idx_j):
+    def forward(self, inputs: Dict[str, torch.Tensor]):
+        atomic_numbers = inputs[structure.Z]
+        r_ij = inputs[structure.Rij]
+        idx_i = inputs[structure.idx_i]
+        idx_j = inputs[structure.idx_j]
+
         # compute atom and pair features
         x = self.embedding(atomic_numbers)
         d_ij = torch.norm(r_ij, dim=1)
@@ -174,4 +178,4 @@ class SchNet(nn.Module):
             v = interaction(x, f_ij, idx_i, idx_j, rcut_ij)
             x = x + v
 
-        return x
+        return {"scalar_representation": x}

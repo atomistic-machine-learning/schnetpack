@@ -5,7 +5,7 @@ from typing import Optional, Sequence
 from torch.utils.data import Dataset, Sampler
 from torch.utils.data.dataloader import _collate_fn_t, T_co
 
-from schnetpack import Structure
+import schnetpack.structure as structure
 
 
 def _atoms_collate_fn(batch):
@@ -19,16 +19,16 @@ def _atoms_collate_fn(batch):
         dict[str->torch.Tensor]: mini-batch of atomistic systems
     """
     elem = batch[0]
-    idx_keys = {Structure.idx_i, Structure.idx_j}
+    idx_keys = {structure.idx_i, structure.idx_j}
 
     coll_batch = {}
     for key in elem:
         if key not in idx_keys:
             coll_batch[key] = torch.cat([d[key] for d in batch], 0)
 
-    seg_m = torch.cumsum(coll_batch[Structure.n_atoms], dim=0)
+    seg_m = torch.cumsum(coll_batch[structure.n_atoms], dim=0)
     seg_m = torch.cat([torch.zeros((1,), dtype=seg_m.dtype), seg_m], dim=0)
-    coll_batch[Structure.seg_m] = seg_m
+    coll_batch[structure.seg_m] = seg_m
 
     for key in idx_keys:
         if key in elem.keys():

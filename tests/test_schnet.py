@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from schnetpack import Structure
+import schnetpack.structure as structure
 import schnetpack as spk
 import numpy as np
 from ase.neighborlist import neighbor_list
@@ -17,7 +17,6 @@ def indexed_data(example_data, batch_size):
     R = []
     C = []
     seg_m = []
-    seg_i = []
     ind_i = []
     ind_j = []
     ind_S = []
@@ -37,7 +36,6 @@ def indexed_data(example_data, batch_size):
         )
         _, seg_im = np.unique(idx_i, return_counts=True)
         seg_im = np.cumsum(np.hstack((np.zeros((1,), dtype=np.int), seg_im)))
-        seg_i.append(seg_im + n_pairs)
         ind_i.append(idx_i + n_atoms)
         ind_j.append(idx_j + n_atoms)
         ind_S.append(idx_S)
@@ -52,22 +50,20 @@ def indexed_data(example_data, batch_size):
     R = np.vstack(R).astype(np.float32)
     C = np.array(C).astype(np.float32)
     seg_m = np.hstack(seg_m)
-    seg_i = np.hstack(seg_i)
     ind_i = np.hstack(ind_i)
     ind_j = np.hstack(ind_j)
     ind_S = np.vstack(ind_S)
     Rij = np.vstack(Rij)
 
     inputs = {
-        Structure.Z: torch.tensor(Z),
-        Structure.position: torch.tensor(R),
-        Structure.cell: torch.tensor(C),
-        "seg_m": torch.tensor(seg_m),
-        "seg_i": torch.tensor(seg_i),
-        "idx_j": torch.tensor(ind_j),
-        "idx_i": torch.tensor(ind_i),
-        "Rij": torch.tensor(Rij),
-        Structure.cell_offset: torch.tensor(ind_S),
+        structure.Z: torch.tensor(Z),
+        structure.position: torch.tensor(R),
+        structure.cell: torch.tensor(C),
+        structure.seg_m: torch.tensor(seg_m),
+        structure.idx_j: torch.tensor(ind_j),
+        structure.idx_i: torch.tensor(ind_i),
+        structure.Rij: torch.tensor(Rij),
+        structure.cell_offset: torch.tensor(ind_S),
     }
 
     return inputs
@@ -75,28 +71,27 @@ def indexed_data(example_data, batch_size):
 
 # def test_cfconv(indexed_data, benchmark):
 #     Z, R, seg_m, idx_i, idx_j, ind_S = (
-#         indexed_data[Structure.Z],
-#         indexed_data[Structure.R],
+#         indexed_data[structure.Z],
+#         indexed_data[structure.R],
 #         indexed_data["seg_m"],
 #         indexed_data["idx_i"],
 #         indexed_data["idx_j"],
-#         indexed_data[Structure.cell_offset],
+#         indexed_data[structure.cell_offset],
 #     )
 #
 #     benchmark(cfconv, R, R[idx_j], idx_i, idx_j)
 
 
 def test_schnet_new_coo(indexed_data, benchmark):
-    Z, R, seg_m, seg_i, idx_i, idx_j, C, ind_S, r_ij = (
-        indexed_data[Structure.Z],
-        indexed_data[Structure.R],
-        indexed_data["seg_m"],
-        indexed_data["seg_i"],
-        indexed_data["idx_i"],
-        indexed_data["idx_j"],
-        indexed_data[Structure.cell],
-        indexed_data[Structure.cell_offset],
-        indexed_data["Rij"],
+    Z, R, seg_m, idx_i, idx_j, C, ind_S, r_ij = (
+        indexed_data[structure.Z],
+        indexed_data[structure.R],
+        indexed_data[structure.seg_m],
+        indexed_data[structure.idx_i],
+        indexed_data[structure.idx_j],
+        indexed_data[structure.cell],
+        indexed_data[structure.cell_offset],
+        indexed_data[structure.Rij],
     )
 
     radial_basis = spk.nn.GaussianRBF(n_rbf=20, cutoff=5.0)
@@ -108,20 +103,19 @@ def test_schnet_new_coo(indexed_data, benchmark):
         cutoff_fn=cutoff_fn,
     )
 
-    benchmark(schnet, Z, r_ij, idx_i, idx_j)
+    benchmark(schnet, indexed_data)
 
 
 def test_schnet_new_script(indexed_data, benchmark):
-    Z, R, seg_m, seg_i, idx_i, idx_j, C, ind_S, r_ij = (
-        indexed_data[Structure.Z],
-        indexed_data[Structure.R],
-        indexed_data["seg_m"],
-        indexed_data["seg_i"],
-        indexed_data["idx_i"],
-        indexed_data["idx_j"],
-        indexed_data[Structure.cell],
-        indexed_data[Structure.cell_offset],
-        indexed_data["Rij"],
+    Z, R, seg_m, idx_i, idx_j, C, ind_S, r_ij = (
+        indexed_data[structure.Z],
+        indexed_data[structure.R],
+        indexed_data[structure.seg_m],
+        indexed_data[structure.idx_i],
+        indexed_data[structure.idx_j],
+        indexed_data[structure.cell],
+        indexed_data[structure.cell_offset],
+        indexed_data[structure.Rij],
     )
 
     radial_basis = spk.nn.GaussianRBF(n_rbf=20, cutoff=5.0)
@@ -132,8 +126,10 @@ def test_schnet_new_script(indexed_data, benchmark):
         radial_basis=radial_basis,
         cutoff_fn=cutoff_fn,
     )
+    # output = spk.outputs.Atomwise(schnet.size)
 
     schnet = torch.jit.script(schnet)
-    schnet(Z, r_ij, idx_i, idx_j)
+    schnet(indexed_data)
 
-    benchmark(schnet, Z, r_ij, idx_i, idx_j)
+    benchmark(schnet, indexed_data)
+    # benchmark(schnet, Z, r_ij, idx_i, idx_j)

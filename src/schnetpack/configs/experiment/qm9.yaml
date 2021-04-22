@@ -1,0 +1,27 @@
+# @package _global_
+
+defaults:
+  - override /model: single_property
+  - override /model/representation: schnet
+  - override /data: qm9
+  - override /logger: tensorboard
+
+cutoff: 5.0
+n_rbf: 50
+
+lr: 5e-4
+
+property: energy_U0
+name: qm9_${property}
+
+
+data:
+  distance_unit: Ang
+  property_units:
+    energy_U0: eV
+  transforms:
+    - _target_: schnetpack.data.transforms.SubtractCenterOfMass
+    - _target_: schnetpack.data.transforms.TorchNeighborList
+      cutoff: ${cutoff}
+    - _target_: schnetpack.data.transforms.CastTo32
+

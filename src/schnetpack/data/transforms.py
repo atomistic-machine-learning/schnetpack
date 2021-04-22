@@ -1,8 +1,9 @@
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
-from schnetpack import Structure
+import schnetpack.structure as structure
+import schnetpack as spk
 
 from ase import Atoms
 from ase.neighborlist import neighbor_list
@@ -18,9 +19,25 @@ __all__ = [
 ]
 
 ## neighbor lists
+class TransformException(Exception):
+    pass
 
 
-class ASENeighborList(nn.Module):
+class Transform(nn.Module):
+    """
+    Base class for all transforms
+
+    Currently, this only ensures that the reference to the data attributeis initialized.
+    """
+
+    data: Optional["spk.data.BaseAtomsData"]
+
+    def __init__(self):
+        self.data = None
+        super().__init__()
+
+
+class ASENeighborList(Transform):
     """
     Calculate neighbor list using ASE.
 
@@ -36,22 +53,22 @@ class ASENeighborList(nn.Module):
         self.cutoff = cutoff
 
     def forward(self, inputs):
-        Z = inputs[Structure.Z]
-        R = inputs[Structure.R]
-        cell = inputs[Structure.cell]
-        pbc = inputs[Structure.pbc]
+        Z = inputs[structure.Z]
+        R = inputs[structure.R]
+        cell = inputs[structure.cell]
+        pbc = inputs[structure.pbc]
         at = Atoms(numbers=Z, positions=R, cell=cell, pbc=pbc)
         idx_i, idx_j, idx_S, Rij = neighbor_list(
             "ijSD", at, self.cutoff, self_interaction=False
         )
-        inputs[Structure.idx_i] = torch.tensor(idx_i)
-        inputs[Structure.idx_j] = torch.tensor(idx_j)
-        inputs[Structure.Rij] = torch.tensor(Rij)
-        inputs[Structure.cell_offset] = torch.tensor(idx_S)
+        inputs[structure.idx_i] = torch.tensor(idx_i)
+        inputs[structure.idx_j] = torch.tensor(idx_j)
+        inputs[structure.Rij] = torch.tensor(Rij)
+        inputs[structure.cell_offset] = torch.tensor(idx_S)
         return inputs
 
 
-class TorchNeighborList(nn.Module):
+class TorchNeighborList(Transform):
     """
     Environment provider making use of neighbor lists as implemented in TorchAni
     (https://github.com/aiqm/torchani/blob/master/torchani/aev.py).
@@ -66,9 +83,9 @@ class TorchNeighborList(nn.Module):
         self.cutoff = cutoff
 
     def forward(self, inputs):
-        positions = inputs[Structure.R]
-        pbc = inputs[Structure.pbc]
-        cell = inputs[Structure.cell]
+        positions = inputs[structure.R]
+        pbc = inputs[structure.pbc]
+        cell = inputs[structure.cell]
 
         # Check if shifts are needed for periodic boundary conditions
         if torch.all(pbc == 0):
@@ -87,10 +104,10 @@ class TorchNeighborList(nn.Module):
         # Sort along first dimension (necessary for atom-wise pooling)
         sorted_idx = torch.argsort(bi_idx_i)
 
-        inputs[Structure.idx_i] = bi_idx_i[sorted_idx]
-        inputs[Structure.idx_j] = bi_idx_j[sorted_idx]
-        inputs[Structure.Rij] = bi_Rij[sorted_idx]
-        inputs[Structure.cell_offset] = bi_idx_S[sorted_idx]
+        inputs[structure.idx_i] = bi_idx_i[sorted_idx]
+        inputs[structure.idx_j] = bi_idx_j[sorted_idx]
+        inputs[structure.Rij] = bi_Rij[sorted_idx]
+        inputs[structure.cell_offset] = bi_idx_S[sorted_idx]
 
         return inputs
 
@@ -196,7 +213,7 @@ class TorchNeighborList(nn.Module):
 ## casting
 
 
-class CastMap(nn.Module):
+class CastMap(Transform):
     """
     Cast all inputs according to type map.
     """
@@ -226,26 +243,46 @@ class CastTo32(CastMap):
 ## centering
 
 
-class SubtractCenterOfMass(nn.Module):
+class SubtractCenterOfMass(Transform):
     """
     Subtract center of mass from positions. Can only be used for single structures. Batches of structures are not supported.
 
     """
 
+    def __init__(self):
+        super().__init__()
+
     def forward(self, inputs):
-        masses = torch.tensor(atomic_masses[inputs[Structure.Z]])
-        inputs[Structure.position] -= (
-            masses.unsqueeze(-1) * inputs[Structure.position]
+        masses = torch.tensor(atomic_masses[inputs[structure.Z]])
+        inputs[structure.position] -= (
+            masses.unsqueeze(-1) * inputs[structure.position]
         ).sum(0) / masses.sum()
         return inputs
 
 
-class SubtractCenterOfGeometry(nn.Module):
+class SubtractCenterOfGeometry(Transform):
     """
     Subtract center of geometry from positions. Can only be used for single structures. Batches of structures are not supported.
 
     """
 
     def forward(self, inputs):
-        inputs[Structure.position] -= inputs[Structure.position].mean(0)
+        inputs[structure.position] -= inputs[structure.position].mean(0)
+        return inputs
+
+
+class UnitConversion(Transform):
+    def __init__(self, property_unit_map: Dict[str, str]):
+        self.property_unit_map = property_unit_map
+        self.src_units = None
+        super().__init__()
+
+    def forward(self, inputs):
+        # initialize
+        if not self.src_units:
+            units = self.data.units
+            self.src_units = {p: units[p] for p in self.property_unit_map}
+
+        for prop, tgt_unit in self.property_unit_map.items():
+            inputs[prop] *= spk.units.convert_units(self.src_units[prop], tgt_unit)
         return inputs

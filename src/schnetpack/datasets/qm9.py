@@ -13,7 +13,8 @@ from ase import Atoms
 from ase.io.extxyz import read_xyz
 
 from schnetpack.data import *
-from schnetpack.datasets.base import AtomsDataModuleError, AtomsDataModule
+import schnetpack.structure as structure
+from schnetpack.data import AtomsDataModuleError, AtomsDataModule
 
 
 class QM9(AtomsDataModule):
@@ -57,24 +58,38 @@ class QM9(AtomsDataModule):
         remove_uncharacterized: bool = False,
         val_batch_size: Optional[int] = None,
         test_batch_size: Optional[int] = None,
-        transform_fn: Optional[torch.nn.Module] = None,
-        train_transform_fn: Optional[torch.nn.Module] = None,
-        val_transform_fn: Optional[torch.nn.Module] = None,
-        test_transform_fn: Optional[torch.nn.Module] = None,
+        transforms: Optional[torch.nn.Module] = None,
+        train_transforms: Optional[torch.nn.Module] = None,
+        val_transforms: Optional[torch.nn.Module] = None,
+        test_transforms: Optional[torch.nn.Module] = None,
         num_workers: int = 2,
         num_val_workers: Optional[int] = None,
         num_test_workers: Optional[int] = None,
+        property_units: Optional[Dict[str, str]] = None,
+        distance_unit: Optional[str] = None,
     ):
         """
+
         Args:
-            datapath: path to database (or target directory for download).
-            format:
-            load_properties: reduced set of properties to be loaded
+            datapath: path to dataset
+            batch_size: (train) batch size
+            num_train: number of training examples
+            num_val: number of validation examples
+            num_test: number of test examples
+            format: dataset format
+            load_properties: subset of properties to load
             remove_uncharacterized: do not include uncharacterized molecules.
-            transform_fn:
-            train_transform_fn:
-            val_transform_fn:
-            test_transform_fn:
+            val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
+            test_batch_size: test batch size. If None, use val_batch_size, then batch_size.
+            transforms: Transform applied to each system separately before batching.
+            train_transforms: Overrides transform_fn for training.
+            val_transforms: Overrides transform_fn for validation.
+            test_transforms: Overrides transform_fn for testing.
+            num_workers: Number of data loader workers.
+            num_val_workers: Number of validation data loader workers (overrides num_workers).
+            num_test_workers: Number of test data loader workers (overrides num_workers).
+            property_units: Dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
+            distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
         """
         super().__init__(
             datapath=datapath,
@@ -86,13 +101,15 @@ class QM9(AtomsDataModule):
             load_properties=load_properties,
             val_batch_size=val_batch_size,
             test_batch_size=test_batch_size,
-            transform_fn=transform_fn,
-            train_transform_fn=train_transform_fn,
-            val_transform_fn=val_transform_fn,
-            test_transform_fn=test_transform_fn,
+            transforms=transforms,
+            train_transforms=train_transforms,
+            val_transforms=val_transforms,
+            test_transforms=test_transforms,
             num_workers=num_workers,
             num_val_workers=num_val_workers,
             num_test_workers=num_test_workers,
+            property_units=property_units,
+            distance_unit=distance_unit,
         )
 
         self.remove_uncharacterized = remove_uncharacterized
@@ -116,16 +133,17 @@ class QM9(AtomsDataModule):
                 QM9.G: "Ha",
                 QM9.Cv: "cal/mol/K",
             }
+
+            tmpdir = tempfile.mkdtemp("qm9")
+            atomrefs = self._download_atomrefs(tmpdir)
+
             dataset = create_dataset(
                 datapath=self.datapath,
                 format=self.format,
                 distance_unit="Ang",
                 property_unit_dict=property_unit_dict,
+                atomrefs=atomrefs,
             )
-
-            tmpdir = tempfile.mkdtemp("qm9")
-            atomrefs = self._download_atomrefs(tmpdir)
-            dataset.update_metadata(atomrefs=atomrefs)
 
             if self.remove_uncharacterized:
                 uncharacterized = self._download_uncharacterized(tmpdir)
@@ -220,10 +238,10 @@ class QM9(AtomsDataModule):
 
             tmp.seek(0)
             ats: Atoms = list(read_xyz(tmp, 0))[0]
-            properties[Structure.Z] = ats.numbers
-            properties[Structure.R] = ats.positions
-            properties[Structure.cell] = ats.cell
-            properties[Structure.pbc] = ats.pbc
+            properties[structure.Z] = ats.numbers
+            properties[structure.R] = ats.positions
+            properties[structure.cell] = ats.cell
+            properties[structure.pbc] = ats.pbc
             property_list.append(properties)
 
         logging.info("Write atoms to db...")

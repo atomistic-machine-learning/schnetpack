@@ -2,14 +2,14 @@ from typing import Dict, Tuple
 import torch
 from torch_scatter import segment_sum_csr
 
-from schnetpack import Structure
+import schnetpack.structure as structure
 from schnetpack.data import AtomsLoader
 from tqdm import tqdm
 
 
 def calculate_stats(
     dataloader: AtomsLoader,
-    normalize_prop_by_atoms: Dict[str, bool],
+    divide_by_atoms: Dict[str, bool],
     atomref: Dict[str, torch.Tensor] = None,
 ) -> Dict[str, Tuple[torch.Tensor, torch.Tensor]]:
     """
@@ -22,7 +22,7 @@ def calculate_stats(
 
     Args:
         dataset: atoms data set
-        normalize_prop_by_atoms: dict from property name to bool:
+        divide_by_atoms: dict from property name to bool:
             If True, divide property by number of atoms before calculating statistics.
         atomref: reference values for single atoms to be removed before calculating stats
 
@@ -30,15 +30,15 @@ def calculate_stats(
     Returns:
 
     """
-    property_names = list(normalize_prop_by_atoms.keys())
+    property_names = list(divide_by_atoms.keys())
     norm_mask = torch.tensor(
-        [float(normalize_prop_by_atoms[p]) for p in property_names], dtype=torch.float64
+        [float(divide_by_atoms[p]) for p in property_names], dtype=torch.float64
     )
 
     count = 0
     mean = torch.zeros_like(norm_mask)
     M2 = torch.zeros_like(norm_mask)
-    atomref = {k: torch.tensor(v) for k, v in atomref.items()}
+    atomref = {k: v for k, v in atomref.items()}
 
     for props in tqdm(dataloader):
         sample_values = []
@@ -46,8 +46,8 @@ def calculate_stats(
             val = props[p][None, :]
             if atomref and p in atomref.keys():
                 ar = atomref[p]
-                ar = ar[props[Structure.Z]]
-                v0 = segment_sum_csr(ar, props[Structure.seg_m])
+                ar = ar[props[structure.Z]]
+                v0 = segment_sum_csr(ar, props[structure.seg_m])
                 val -= v0
 
             sample_values.append(val)
@@ -56,7 +56,7 @@ def calculate_stats(
         batch_size = sample_values.shape[1]
         new_count = count + batch_size
 
-        norm = norm_mask[:, None] * props[Structure.n_atoms][None, :] + (
+        norm = norm_mask[:, None] * props[structure.n_atoms][None, :] + (
             1 - norm_mask[:, None]
         )
         sample_values /= norm
