@@ -65,6 +65,7 @@ class AtomsDataModule(pl.LightningDataModule):
             num_workers: Number of data loader workers.
             num_val_workers: Number of validation data loader workers (overrides num_workers).
             num_test_workers: Number of test data loader workers (overrides num_workers).
+            distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
         """
         super().__init__(
             train_transforms=train_transforms or copy(transforms) or [],
