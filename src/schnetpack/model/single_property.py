@@ -5,7 +5,6 @@ import pytorch_lightning.metrics
 import torch
 
 import schnetpack as spk
-
 from schnetpack.model.base import AtomisticModel
 
 log = logging.getLogger(__name__)
