@@ -9,9 +9,7 @@ import schnetpack.structure as structure
 
 class Atomwise(nn.Module):
     """
-    Predicts atom-wise contributions and accumulates global prediction, e.g. for the
-    energy.
-
+    Predicts atom-wise contributions and accumulates global prediction, e.g. for the energy.
     """
 
     def __init__(
@@ -29,6 +27,29 @@ class Atomwise(nn.Module):
         outnet=None,
         representation_key="scalar_representation",
     ):
+        """
+        Args:
+            n_in: input dimension of representation
+            n_out: output dimension of target property (default: 1)
+            aggregation_mode: one of {sum, avg} (default: sum)
+            n_layers: number of nn in output network (default: 2)
+            n_neurons: number of neurons in each layer of the output
+                network. If `None`, divide neurons by 2 in each layer. (default: None)
+            activation: activation function for hidden nn
+                (default: spk.nn.activations.shifted_softplus)
+            return_contributions: If true, returns also atomwise contributions.
+            mean: Mean of property to predict.
+                Should be specified per atom for `aggregation_mode=sum`, and exclude atomref, if given.
+            stddev: Standard deviation of property to predict.
+                Should be specified per atom for `aggregation_mode=sum`, and exclude atomref, if given.
+            atomref: reference single-atom properties. Expects
+                an (max_z + 1) x 1 array where atomref[Z] corresponds to the reference
+                property of element Z.
+            outnet: Network used for atomistic outputs. Takes schnetpack input
+                dictionary as input. Output is not normalized. If set to None,
+                a pyramidal network is generated automatically.
+            representation_key: The key of the representation to use in the provided input dictionary.
+        """
         super(Atomwise, self).__init__()
 
         if isinstance(n_in, Sequence):
