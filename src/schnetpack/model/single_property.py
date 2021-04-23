@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 class SinglePropertyModel(AtomisticModel):
     """
-    LightningModule for models that predict single chemical properties, e.g. for QM9 benchmarks.
+    AtomisticModel for models that predict single chemical properties, e.g. for QM9 benchmarks.
     """
 
     def build_model(
@@ -45,8 +45,8 @@ class SinglePropertyModel(AtomisticModel):
             self.output = hydra.utils.instantiate(
                 self._output_cfg.module,
                 atomref=atomref,
-                mean=torch.tensor(stats[0], dtype=torch.float32),
-                stddev=torch.tensor(stats[1], dtype=torch.float32),
+                mean=stats[0],
+                stddev=stats[1],
             )
         else:
             atomref = atomref[:, None] if atomref else None
@@ -54,7 +54,12 @@ class SinglePropertyModel(AtomisticModel):
                 self._output_cfg.module, atomref=atomref
             )
 
-        self.metric = pytorch_lightning.metrics.MeanAbsoluteError()
+        self.metrics = torch.nn.ModuleDict(
+            {
+                name: hydra.utils.instantiate(metric)
+                for name, metric in self._output_cfg.metrics.items()
+            }
+        )
 
     def forward(self, inputs):
         inputs.update(self.representation(inputs))
@@ -66,6 +71,14 @@ class SinglePropertyModel(AtomisticModel):
         target = batch[self.pred_property]
         loss = self.loss_fn(pred, target)
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
+        for name, metric in self.metrics.items():
+            self.log(
+                f"train_{name}",
+                metric(pred, target),
+                on_step=True,
+                on_epoch=True,
+                prog_bar=True,
+            )
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -73,13 +86,14 @@ class SinglePropertyModel(AtomisticModel):
         target = batch[self.pred_property]
         loss = self.loss_fn(pred, target)
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log(
-            "val_mae",
-            self.metric(pred, target),
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-        )
+        for name, metric in self.metrics.items():
+            self.log(
+                f"val_{name}",
+                metric(pred, target),
+                on_step=False,
+                on_epoch=True,
+                prog_bar=False,
+            )
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_idx):
@@ -87,13 +101,14 @@ class SinglePropertyModel(AtomisticModel):
         target = batch[self.pred_property]
         loss = self.loss_fn(pred, target)
         self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log(
-            "test_mae",
-            self.metric(pred, target),
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-        )
+        for name, metric in self.metrics.items():
+            self.log(
+                f"test_{name}",
+                metric(pred, target),
+                on_step=False,
+                on_epoch=True,
+                prog_bar=False,
+            )
         return {"test_loss": loss}
 
     def configure_optimizers(self):
