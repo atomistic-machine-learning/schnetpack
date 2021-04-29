@@ -25,8 +25,8 @@ schedule:
 
 output:
   property: ${property}
-  requires_atomref: True
-  requires_stats: True
+  requires_atomref: False
+  requires_stats: False
   divide_stats_by_atoms: True
 
   module:

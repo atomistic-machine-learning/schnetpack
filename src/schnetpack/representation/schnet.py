@@ -3,7 +3,6 @@ from typing import Callable, Dict
 import torch
 from torch import nn
 
-import schnetpack as spk
 import schnetpack.structure as structure
 from schnetpack.nn import Dense, CFConv
 from schnetpack.nn.activations import shifted_softplus
@@ -17,7 +16,6 @@ class SchNetInteraction(nn.Module):
         n_atom_basis: int,
         n_rbf: int,
         n_filters: int,
-        normalize_filter: bool = False,
         activation: Callable = shifted_softplus,
     ):
         """
@@ -25,13 +23,11 @@ class SchNetInteraction(nn.Module):
             n_atom_basis: number of features to describe atomic environments.
             n_rbf (int): number of radial basis functions.
             n_filters: number of filters used in continuous-filter convolution.
-            normalize_filter: if True, divide aggregated filter by number
-                of neighbors over which convolution is applied.
             activation: if None, no activation function is used.
         """
         super(SchNetInteraction, self).__init__()
         self.in2f = Dense(n_atom_basis, n_filters, bias=False, activation=None)
-        self.cfconv = CFConv(reduce="mean" if normalize_filter else "sum")
+        self.cfconv = CFConv()
         self.f2out = nn.Sequential(
             Dense(n_filters, n_atom_basis, activation=activation),
             Dense(n_atom_basis, n_atom_basis, activation=None),
@@ -92,7 +88,6 @@ class SchNet(nn.Module):
         radial_basis: nn.Module,
         cutoff_fn: Callable,
         n_filters: int = None,
-        normalize_filter: bool = False,
         coupled_interactions: bool = False,
         return_intermediate: bool = False,
         max_z: int = 100,
@@ -107,8 +102,6 @@ class SchNet(nn.Module):
             radial_basis: layer for expanding interatomic distances in a basis set
             cutoff_fn: cutoff function
             n_filters: number of filters used in continuous-filter convolution
-            normalize_filter: if True, divide aggregated filter by number
-                of neighbors over which convolution is applied.
             coupled_interactions: if True, share the weights across
                 interaction blocks and filter-generating networks.
             return_intermediate:
@@ -140,7 +133,6 @@ class SchNet(nn.Module):
                         n_atom_basis=self.n_atom_basis,
                         n_rbf=self.radial_basis.n_rbf,
                         n_filters=self.n_filters,
-                        normalize_filter=normalize_filter,
                         activation=activation,
                     )
                 ]
@@ -154,7 +146,6 @@ class SchNet(nn.Module):
                         n_atom_basis=self.n_atom_basis,
                         n_rbf=self.radial_basis.n_rbf,
                         n_filters=self.n_filters,
-                        normalize_filter=normalize_filter,
                         activation=activation,
                     )
                     for _ in range(n_interactions)
@@ -162,6 +153,7 @@ class SchNet(nn.Module):
             )
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
+
         atomic_numbers = inputs[structure.Z]
         r_ij = inputs[structure.Rij]
         idx_i = inputs[structure.idx_i]

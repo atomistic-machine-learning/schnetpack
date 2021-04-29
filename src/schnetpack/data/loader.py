@@ -28,7 +28,10 @@ def _atoms_collate_fn(batch):
 
     seg_m = torch.cumsum(coll_batch[structure.n_atoms], dim=0)
     seg_m = torch.cat([torch.zeros((1,), dtype=seg_m.dtype), seg_m], dim=0)
-    coll_batch[structure.seg_m] = seg_m
+    idx_m = torch.repeat_interleave(
+        torch.arange(len(batch)), repeats=coll_batch[structure.n_atoms], dim=0
+    )
+    coll_batch[structure.idx_m] = idx_m
 
     for key in idx_keys:
         if key in elem.keys():

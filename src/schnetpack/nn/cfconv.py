@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-from torch_scatter import segment_coo
 
 __all__ = ["CFConv"]
 
@@ -10,7 +9,6 @@ def cfconv(
     Wij: torch.Tensor,
     idx_i: torch.Tensor,
     idx_j: torch.Tensor,
-    reduce: str = "sum",
 ) -> torch.Tensor:
     """
     Continuous-filter convolution.
@@ -26,8 +24,11 @@ def cfconv(
         convolved inputs
 
     """
-    x_ij = x[idx_j] * Wij
-    y = segment_coo(x_ij, idx_i, reduce=reduce)
+    x_j = x[idx_j]  # torch.gather(x, 0, idx_j[:, None])
+    x_ij = x_j * Wij
+    # y = segment_coo(x_ij, idx_i, reduce=reduce)
+    tmp = torch.zeros(x.shape, dtype=x_ij.dtype, device=x_ij.device)
+    y = tmp.index_add(0, idx_i, x_ij)
     return y
 
 
@@ -38,13 +39,12 @@ class CFConv(nn.Module):
 
     reduce: str
 
-    def __init__(self, reduce="sum"):
+    def __init__(self):
         """
         Args:
             reduce: reduction method (sum, mean, ...)
         """
         super().__init__()
-        self.reduce = reduce
 
     def forward(
         self,
@@ -63,4 +63,4 @@ class CFConv(nn.Module):
         Returns:
             convolved inputs
         """
-        return cfconv(x, Wij, idx_i, idx_j, self.reduce)
+        return cfconv(x, Wij, idx_i, idx_j)

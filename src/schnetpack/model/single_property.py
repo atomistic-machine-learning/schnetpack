@@ -19,40 +19,10 @@ class SinglePropertyModel(AtomisticModel):
         self,
     ):
         self.representation = hydra.utils.instantiate(self._representation_cfg)
+        self.output = hydra.utils.instantiate(self._output_cfg.module)
+
         self.loss_fn = hydra.utils.instantiate(self._output_cfg.loss)
         self.pred_property = self._output_cfg.property
-
-        if self._output_cfg.requires_atomref:
-            atomrefs = self.datamodule.train_dataset.atomrefs
-            atomref = atomrefs[self._output_cfg.property][:, None]
-        else:
-            atomrefs = None
-            atomref = None
-
-        if self._output_cfg.requires_stats:
-            log.info("Calculate stats...")
-            stats = spk.data.calculate_stats(
-                self.datamodule.train_dataloader(),
-                divide_by_atoms={
-                    self._output_cfg.property: self._output_cfg.divide_stats_by_atoms
-                },
-                atomref=atomrefs,
-            )[self._output_cfg.property]
-            log.info(
-                f"{self._output_cfg.property} (mean / stddev): {stats[0]}, {stats[1]}"
-            )
-
-            self.output = hydra.utils.instantiate(
-                self._output_cfg.module,
-                atomref=atomref,
-                mean=stats[0],
-                stddev=stats[1],
-            )
-        else:
-            atomref = atomref[:, None] if atomref else None
-            self.output = hydra.utils.instantiate(
-                self._output_cfg.module, atomref=atomref
-            )
 
         self.metrics = torch.nn.ModuleDict(
             {
@@ -127,3 +97,5 @@ class SinglePropertyModel(AtomisticModel):
         if self._schedule_cfg.monitor:
             optimconf["monitor"] = self._schedule_cfg.monitor
         return optimconf
+
+    # TODO: add eval mode post-processing

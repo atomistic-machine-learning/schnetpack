@@ -20,12 +20,10 @@ import torch
 import copy
 from ase import Atoms
 from ase.db import connect
-import timeit
-from torch.utils.data import Dataset
 
 import schnetpack as spk
 import schnetpack.structure as structure
-from schnetpack.data.transforms import Transform
+from schnetpack.transforms import Transform
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +131,7 @@ class BaseAtomsData(ABC):
 
     @property
     @abstractmethod
-    def atomrefs(self) -> Dict[str, List[float]]:
+    def atomrefs(self) -> Dict[str, torch.Tensor]:
         """ Single-atom reference values for properties """
         pass
 
@@ -367,7 +365,7 @@ class ASEAtomsData(BaseAtomsData):
         return self._units
 
     @property
-    def atomrefs(self) -> Dict[str, List[float]]:
+    def atomrefs(self) -> Dict[str, torch.Tensor]:
         md = self.metadata
         arefs = md["atomrefs"]
         arefs = {k: self.conversions[k] * torch.tensor(v) for k, v in arefs.items()}

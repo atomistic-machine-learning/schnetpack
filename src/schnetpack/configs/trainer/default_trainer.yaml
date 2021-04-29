@@ -2,6 +2,9 @@ _target_: pytorch_lightning.Trainer
 
 # set `1` to train on GPU, `0` to train on CPU only
 gpus: 1
+precision: 32
+amp_backend: native
+
 
 min_epochs: 500
 max_epochs: 1500

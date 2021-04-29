@@ -59,7 +59,7 @@ def indexed_data(example_data, batch_size):
         structure.Z: torch.tensor(Z),
         structure.position: torch.tensor(R),
         structure.cell: torch.tensor(C),
-        structure.seg_m: torch.tensor(seg_m),
+        structure.idx_m: torch.tensor(seg_m),
         structure.idx_j: torch.tensor(ind_j),
         structure.idx_i: torch.tensor(ind_i),
         structure.Rij: torch.tensor(Rij),
@@ -86,7 +86,7 @@ def test_schnet_new_coo(indexed_data, benchmark):
     Z, R, seg_m, idx_i, idx_j, C, ind_S, r_ij = (
         indexed_data[structure.Z],
         indexed_data[structure.R],
-        indexed_data[structure.seg_m],
+        indexed_data[structure.idx_m],
         indexed_data[structure.idx_i],
         indexed_data[structure.idx_j],
         indexed_data[structure.cell],
@@ -110,7 +110,7 @@ def test_schnet_new_script(indexed_data, benchmark):
     Z, R, seg_m, idx_i, idx_j, C, ind_S, r_ij = (
         indexed_data[structure.Z],
         indexed_data[structure.R],
-        indexed_data[structure.seg_m],
+        indexed_data[structure.idx_m],
         indexed_data[structure.idx_i],
         indexed_data[structure.idx_j],
         indexed_data[structure.cell],

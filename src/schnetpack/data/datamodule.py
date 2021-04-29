@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 
 import pytorch_lightning as pl
 import torch
@@ -12,6 +12,7 @@ from schnetpack.data import (
     load_dataset,
     BaseAtomsData,
     AtomsLoader,
+    calculate_stats,
 )
 
 __all__ = ["AtomsDataModule", "AtomsDataModuleError"]
@@ -58,7 +59,7 @@ class AtomsDataModule(pl.LightningDataModule):
             load_properties: subset of properties to load
             val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
             test_batch_size: test batch size. If None, use val_batch_size, then batch_size.
-            transforms: Transform applied to each system separately before batching.
+            transforms: Preprocessing transform applied to each system separately before batching.
             train_transforms: Overrides transform_fn for training.
             val_transforms: Overrides transform_fn for validation.
             test_transforms: Overrides transform_fn for testing.
@@ -73,6 +74,10 @@ class AtomsDataModule(pl.LightningDataModule):
             val_transforms=val_transforms or copy(transforms) or [],
             test_transforms=test_transforms or copy(transforms) or [],
         )
+        self._check_transforms(self.train_transforms)
+        self._check_transforms(self.val_transforms)
+        self._check_transforms(self.test_transforms)
+
         self.batch_size = batch_size
         self.val_batch_size = val_batch_size or test_batch_size or batch_size
         self.test_batch_size = test_batch_size or val_batch_size or batch_size
@@ -86,6 +91,14 @@ class AtomsDataModule(pl.LightningDataModule):
         self.num_test_workers = num_test_workers or self.num_workers
         self.property_units = property_units
         self.distance_unit = distance_unit
+        self._stats = {}
+
+    def _check_transforms(self, transforms):
+        for t in transforms:
+            if not t.is_preprocessor:
+                raise AtomsDataModuleError(
+                    f"Transform of type {t} is not a preprocessor (is_preprocessor=False)!"
+                )
 
     def setup(self, stage: Optional[str] = None):
         self.dataset = load_dataset(
@@ -108,10 +121,31 @@ class AtomsDataModule(pl.LightningDataModule):
             for offset, length in zip(offsets, lengths)
         ]
 
-        # set transforms
+        # setup transforms
+        for t in self.train_transforms:
+            t.datamodule = self
+        for t in self.val_transforms:
+            t.datamodule = self
+        for t in self.test_transforms:
+            t.datamodule = self
         self._train_dataset.transforms = self.train_transforms
         self._val_dataset.transforms = self.val_transforms
         self._test_dataset.transforms = self.test_transforms
+
+    def get_stats(
+        self, property: str, divide_by_atoms: bool, remove_atomref: bool
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        key = (property, divide_by_atoms, remove_atomref)
+        if key in self._stats:
+            return self._stats[key]
+
+        stats = calculate_stats(
+            self.train_dataloader(),
+            divide_by_atoms={property: divide_by_atoms},
+            atomref=self.train_dataset.atomrefs,
+        )[property]
+        self._stats[key] = stats
+        return stats
 
     @property
     def train_dataset(self) -> BaseAtomsData:
@@ -140,15 +174,16 @@ class AtomsDataModule(pl.LightningDataModule):
             self.setup(stage="test")
         return self._test_dataset
 
-    def train_dataloader(self):
+    def train_dataloader(self) -> AtomsLoader:
         return AtomsLoader(
             self.train_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
+            shuffle=True,
             pin_memory=True,
         )
 
-    def val_dataloader(self):
+    def val_dataloader(self) -> AtomsLoader:
         return AtomsLoader(
             self.val_dataset,
             batch_size=self.val_batch_size,
@@ -156,7 +191,7 @@ class AtomsDataModule(pl.LightningDataModule):
             pin_memory=True,
         )
 
-    def test_dataloader(self):
+    def test_dataloader(self) -> AtomsLoader:
         return AtomsLoader(
             self.test_dataset,
             batch_size=self.test_batch_size,

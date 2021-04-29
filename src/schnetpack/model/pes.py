@@ -1,12 +1,11 @@
 import logging
 
 import hydra
-import pytorch_lightning.metrics
 import torch
+from torch.autograd import grad
+from torch_scatter import segment_sum_coo, scatter_add
 
-import schnetpack as spk
-import cProfile
-
+from schnetpack import structure
 from schnetpack.model.base import AtomisticModel
 
 log = logging.getLogger(__name__)
@@ -22,43 +21,156 @@ class PESModel(AtomisticModel):
     ):
         self.representation = hydra.utils.instantiate(self._representation_cfg)
 
-        self.loss_fn = hydra.utils.instantiate(self._output_cfg.loss)
+        self.props = {}
+        if "energy" in self._output_cfg:
+            self.props["energy"] = self._output_cfg.energy.property
 
-        if self._output_cfg.requires_atomref:
-            atomrefs = self.datamodule.train_dataset.atomrefs
-            atomref = atomrefs[self._output_cfg.property][:, None]
-        else:
-            atomrefs = None
-            atomref = None
+        self.predict_forces = "forces" in self._output_cfg
+        if self.predict_forces:
+            self.props["forces"] = self._output_cfg.forces.property
 
-        if self._output_cfg.requires_stats:
-            log.info("Calculate stats...")
-            stats = spk.data.calculate_stats(
-                self.datamodule.train_dataloader(),
-                divide_by_atoms={
-                    self._output_cfg.property: self._output_cfg.divide_stats_by_atoms
-                },
-                atomref=atomrefs,
-            )[self._output_cfg.property]
-            log.info(
-                f"{self._output_cfg.property} (mean / stddev): {stats[0]}, {stats[1]}"
-            )
+        self.predict_stress = "stress" in self._output_cfg
+        if self.predict_stress:
+            self.props["stress"] = self._output_cfg.stress.property
 
-            self.output = hydra.utils.instantiate(
-                self._output_cfg.module,
-                atomref=atomref,
-                mean=torch.tensor(stats[0], dtype=torch.float32),
-                stddev=torch.tensor(stats[1], dtype=torch.float32),
-            )
-        else:
-            atomref = atomref[:, None] if atomref else None
-            self.output = hydra.utils.instantiate(
-                self._output_cfg.module, atomref=atomref
-            )
+        self.output = hydra.utils.instantiate(self._output_cfg.module)
 
-        self.metrics = torch.nn.ModuleDict(
-            {
-                name: hydra.utils.instantiate(metric)
-                for name, metric in self._output_cfg.metrics.items()
+        self.losses = {}
+        for prop in ["energy", "forces", "stress"]:
+            try:
+                loss_fn = hydra.utils.instantiate(self._output_cfg[prop].loss)
+                loss_weight = self._output_cfg[prop].loss_weight
+                self.losses[prop] = (loss_fn, loss_weight)
+            except Exception as e:
+                print(e)
+
+        self._collect_metrics()
+
+    def _collect_metrics(self):
+        self.metrics = {}
+        if "metrics" in self._output_cfg.energy:
+            energy_metrics = {
+                "energy_" + name: hydra.utils.instantiate(metric)
+                for name, metric in self._output_cfg.energy.metrics.items()
             }
+            self.energy_metrics = torch.nn.ModuleDict(energy_metrics)
+            self.metrics["energy"] = energy_metrics
+
+        if self.predict_forces:
+            force_metrics = {
+                "force_" + name: hydra.utils.instantiate(metric)
+                for name, metric in self._output_cfg.forces.metrics.items()
+            }
+            self.force_metrics = torch.nn.ModuleDict(force_metrics)
+            self.metrics["forces"] = force_metrics
+        if self.predict_stress:
+            stress_metrics = {
+                "stress_" + name: hydra.utils.instantiate(metric)
+                for name, metric in self._output_cfg.stress.metrics.items()
+            }
+            self.stress_metrics = torch.nn.ModuleDict(stress_metrics)
+            self.metrics["stress"] = stress_metrics
+
+    def forward(self, inputs):
+        inputs[structure.Rij].requires_grad_()
+        inputs.update(self.representation(inputs))
+        Epred = self.output(inputs)
+        result = {"energy": Epred}
+
+        if self.predict_forces:
+            dEdRij = grad(
+                Epred,
+                inputs[structure.Rij],
+                grad_outputs=torch.ones_like(Epred),
+                create_graph=self.training,
+            )[0]
+
+            Fpred_i = segment_sum_coo(
+                dEdRij,
+                inputs[structure.idx_i],
+            )
+            Fpred_j = scatter_add(
+                dEdRij,
+                inputs[structure.idx_j],
+                dim=0,
+            )
+            Fpred = Fpred_i - Fpred_j
+            result["forces"] = Fpred
+
+        return result
+
+    def loss_fn(self, pred, batch):
+        loss = 0.0
+        for k, v in self.losses.items():
+            fn, weight = v
+            loss_p = weight * torch.mean((pred[k] - batch[self.props[k]]) ** 2)
+            loss += loss_p
+        return loss
+
+    def training_step(self, batch, batch_idx):
+        pred = self(batch)
+        loss = self.loss_fn(pred, batch)
+
+        self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
+        for prop, pmetrics in self.metrics.items():
+            for name, pmetric in pmetrics.items():
+                self.log(
+                    f"train_{name}",
+                    pmetric(pred[prop], batch[self.props[prop]]),
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        torch.set_grad_enabled(True)
+        pred = self(batch)
+        loss = self.loss_fn(pred, batch)
+
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
+        for prop, pmetrics in self.metrics.items():
+            for name, pmetric in pmetrics.items():
+                self.log(
+                    f"val_{name}",
+                    pmetric(pred[prop], batch[self.props[prop]]),
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+        return {"val_loss": loss}
+
+    def test_step(self, batch, batch_idx):
+        torch.set_grad_enabled(True)
+        pred = self(batch)
+        loss = self.loss_fn(pred, batch)
+
+        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
+        for prop, pmetrics in self.metrics.items():
+            for name, pmetric in pmetrics.items():
+                self.log(
+                    f"test_{name}",
+                    pmetric(pred[prop], batch[self.props[prop]]),
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                )
+        return {"test_loss": loss}
+
+    def configure_optimizers(self):
+        optimizer = hydra.utils.instantiate(
+            self._optimizer_cfg, params=self.parameters()
         )
+        schedule = hydra.utils.instantiate(
+            self._schedule_cfg.scheduler, optimizer=optimizer
+        )
+        optimconf = {
+            "optimizer": optimizer,
+            "lr_scheduler": schedule,
+        }
+        if self._schedule_cfg.monitor:
+            optimconf["monitor"] = self._schedule_cfg.monitor
+        return optimconf
+
+    # TODO: add eval mode post-processing

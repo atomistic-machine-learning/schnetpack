@@ -9,3 +9,4 @@ from schnetpack import representation
 from schnetpack import nn
 from schnetpack import units
 from schnetpack import atomistic
+from schnetpack import transforms

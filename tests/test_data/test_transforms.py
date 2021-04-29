@@ -1,6 +1,5 @@
 import schnetpack.structure as structure
-from schnetpack.data.transforms import *
-import numpy as np
+from schnetpack.transforms import *
 import pytest
 import torch
 from ase.data import atomic_masses
