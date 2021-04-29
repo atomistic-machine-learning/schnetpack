@@ -3,7 +3,6 @@ import logging
 import hydra
 import torch
 from torch.autograd import grad
-from torch_scatter import segment_sum_coo, scatter_add
 
 from schnetpack import structure
 from schnetpack.model.base import AtomisticModel
@@ -72,6 +71,7 @@ class PESModel(AtomisticModel):
             self.metrics["stress"] = stress_metrics
 
     def forward(self, inputs):
+        R = inputs[structure.R]
         inputs[structure.Rij].requires_grad_()
         inputs.update(self.representation(inputs))
         Epred = self.output(inputs)
@@ -85,14 +85,18 @@ class PESModel(AtomisticModel):
                 create_graph=self.training,
             )[0]
 
-            Fpred_i = segment_sum_coo(
-                dEdRij,
+            Fpred_i = torch.zeros_like(R)
+            Fpred_i = Fpred_i.index_add(
+                0,
                 inputs[structure.idx_i],
-            )
-            Fpred_j = scatter_add(
                 dEdRij,
+            )
+
+            Fpred_j = torch.zeros_like(R)
+            Fpred_j = Fpred_j.index_add(
+                0,
                 inputs[structure.idx_j],
-                dim=0,
+                dEdRij,
             )
             Fpred = Fpred_i - Fpred_j
             result["forces"] = Fpred
