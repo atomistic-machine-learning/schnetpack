@@ -1,10 +1,10 @@
 from typing import Dict, Tuple
+
 import torch
-from torch_scatter import segment_sum_csr
+from tqdm import tqdm
 
 import schnetpack.structure as structure
 from schnetpack.data import AtomsLoader
-from tqdm import tqdm
 
 
 def calculate_stats(
@@ -46,7 +46,9 @@ def calculate_stats(
             if atomref and p in atomref.keys():
                 ar = atomref[p]
                 ar = ar[props[structure.Z]]
-                v0 = segment_sum_csr(ar, props[structure.idx_m])
+                idx_m = props[structure.idx_m]
+                tmp = torch.zeros((idx_m[-1] + 1,), dtype=ar.dtype, device=ar.device)
+                v0 = tmp.index_add(0, idx_m, ar)
                 val -= v0
 
             sample_values.append(val)

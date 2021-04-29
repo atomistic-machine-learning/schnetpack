@@ -451,12 +451,12 @@ class AddOffsets(Transform):
             inputs[self._property] += self.mean * inputs[structure.n_atoms]
 
         if self.remove_atomrefs:
-            seg_m = inputs[structure.idx_m]
+            idx_m = inputs[structure.idx_m]
             y0i = self.atomref[inputs[structure.Z]]
             tmp = torch.zeros(
-                (seg_m[-1] + 1, self.n_out), dtype=y0i.dtype, device=y0i.device
+                (idx_m[-1] + 1, self.n_out), dtype=y0i.dtype, device=y0i.device
             )
-            y0 = tmp.index_add(0, seg_m, y0i)
+            y0 = tmp.index_add(0, idx_m, y0i)
             if not self.is_extensive:
                 y0 /= input[structure.n_atoms]
             inputs[self._property] -= y0
