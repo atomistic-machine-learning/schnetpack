@@ -16,7 +16,6 @@ import schnetpack as spk
 from ase import Atoms
 from ase.neighborlist import neighbor_list
 from ase.data import atomic_masses
-from torch_scatter import segment_csr
 
 __all__ = [
     "ASENeighborList",
