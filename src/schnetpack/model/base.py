@@ -37,5 +37,5 @@ class AtomisticModel(LightningModule):
     def build_model(
         self,
     ):
-        """ Parser dict configs and instantiate the model """
+        """Parser dict configs and instantiate the model"""
         pass

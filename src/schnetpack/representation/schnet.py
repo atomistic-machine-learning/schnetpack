@@ -9,7 +9,7 @@ from schnetpack.nn.activations import shifted_softplus
 
 
 class SchNetInteraction(nn.Module):
-    r""" SchNet interaction block for modeling interactions of atomistic systems. """
+    r"""SchNet interaction block for modeling interactions of atomistic systems."""
 
     def __init__(
         self,

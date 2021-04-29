@@ -100,18 +100,18 @@ class BaseAtomsData(ABC):
     @property
     @abstractmethod
     def available_properties(self) -> List[str]:
-        """ Available properties in the dataset """
+        """Available properties in the dataset"""
         pass
 
     @property
     @abstractmethod
     def units(self) -> Dict[str, str]:
-        """ Property to unit dict """
+        """Property to unit dict"""
         pass
 
     @property
     def load_properties(self) -> List[str]:
-        """ Properties to be loaded """
+        """Properties to be loaded"""
         return self._load_properties or self.available_properties
 
     @load_properties.setter
@@ -126,13 +126,13 @@ class BaseAtomsData(ABC):
     @property
     @abstractmethod
     def metadata(self) -> Dict[str, Any]:
-        """ Global metadata """
+        """Global metadata"""
         pass
 
     @property
     @abstractmethod
     def atomrefs(self) -> Dict[str, torch.Tensor]:
-        """ Single-atom reference values for properties """
+        """Single-atom reference values for properties"""
         pass
 
     @abstractmethod
@@ -361,7 +361,7 @@ class ASEAtomsData(BaseAtomsData):
 
     @property
     def units(self) -> Dict[str, str]:
-        """ Dictionary of properties to units """
+        """Dictionary of properties to units"""
         return self._units
 
     @property
@@ -454,7 +454,7 @@ class ASEAtomsData(BaseAtomsData):
                 self._add_system(conn, at, **prop)
 
     def _add_system(self, conn, atoms: Optional[Atoms] = None, **properties):
-        """ Add systems to DB """
+        """Add systems to DB"""
         if atoms is None:
             try:
                 Z = properties[structure.Z]

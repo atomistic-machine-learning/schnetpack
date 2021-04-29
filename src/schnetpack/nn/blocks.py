@@ -7,7 +7,7 @@ __all__ = ["MLP"]
 
 
 class MLP(nn.Module):
-    """ Multiple layer fully connected perceptron neural network.  """
+    """Multiple layer fully connected perceptron neural network."""
 
     def __init__(
         self,
