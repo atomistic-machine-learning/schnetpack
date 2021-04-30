@@ -43,7 +43,7 @@ class SpecialOption(argparse.Action):
 
 
 def get_parser():
-    """ Setup parser for command line arguments """
+    """Setup parser for command line arguments"""
     main_parser = argparse.ArgumentParser()
 
     # general commands

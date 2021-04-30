@@ -32,7 +32,7 @@ class Metric:
         self.element_wise = element_wise
 
     def add_batch(self, batch, result):
-        """ Add a batch to calculate the metric on """
+        """Add a batch to calculate the metric on"""
         raise NotImplementedError
 
     def aggregate(self):
