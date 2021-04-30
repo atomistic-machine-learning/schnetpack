@@ -5,5 +5,5 @@ molecule: aspirin
 batch_size: 10
 num_train: 950
 num_val: 50
-num_test: -1
+num_test: null
 num_workers: 8

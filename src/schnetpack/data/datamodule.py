@@ -1,10 +1,10 @@
+import os
+from copy import copy
 from typing import Optional, List, Dict, Tuple
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
-from torch.utils.data import random_split
-
-from copy import copy
 
 from schnetpack.data import (
     AtomsDataFormat,
@@ -31,9 +31,10 @@ class AtomsDataModule(pl.LightningDataModule):
         self,
         datapath: str,
         batch_size: int,
-        num_train: int,
-        num_val: int,
-        num_test: int = -1,
+        num_train: int = None,
+        num_val: int = None,
+        num_test: int = None,
+        split_file: Optional[str] = "split.npz",
         format: Optional[AtomsDataFormat] = None,
         load_properties: Optional[List[str]] = None,
         val_batch_size: Optional[int] = None,
@@ -55,6 +56,7 @@ class AtomsDataModule(pl.LightningDataModule):
             num_train: number of training examples
             num_val: number of validation examples
             num_test: number of test examples
+            split_file: path to npz file with data partitions
             format: dataset format
             load_properties: subset of properties to load
             val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
@@ -84,6 +86,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self.num_train = num_train
         self.num_val = num_val
         self.num_test = num_test
+        self.split_file = split_file
         self.datapath, self.format = resolve_format(datapath, format)
         self.load_properties = load_properties
         self.num_workers = num_workers
@@ -107,19 +110,50 @@ class AtomsDataModule(pl.LightningDataModule):
             property_units=self.property_units,
             distance_unit=self.distance_unit,
         )
-        if self.num_test < 0:
-            self.num_test = len(self.dataset) - self.num_train - self.num_val
 
         # split dataset
         # TODO: handle IterDatasets
-        lengths = [self.num_train, self.num_val, self.num_test]
-        indices = torch.randperm(sum(lengths)).tolist()
-        offsets = torch.cumsum(torch.tensor(lengths), dim=0)
 
-        self._train_dataset, self._val_dataset, self._test_dataset = [
-            self.dataset.subset(indices[offset - length : offset])
-            for offset, length in zip(offsets, lengths)
-        ]
+        if self.split_file is not None and os.path.exists(self.split_file):
+            S = np.load(self.split_file)
+            train_idx = S["train_idx"].tolist()
+            val_idx = S["val_idx"].tolist()
+            test_idx = S["test_idx"].tolist()
+            if self.num_train and self.num_train != len(train_idx):
+                raise AtomsDataModuleError(
+                    f"Split file was given, but `num_train ({self.num_train}) != len(train_idx)` ({len(train_idx)})!"
+                )
+            if self.num_val and self.num_val != len(val_idx):
+                raise AtomsDataModuleError(
+                    f"Split file was given, but `num_val ({self.num_val}) != len(val_idx)` ({len(val_idx)})!"
+                )
+            if self.num_test and self.num_test != len(test_idx):
+                raise AtomsDataModuleError(
+                    f"Split file was given, but `num_test ({self.num_test}) != len(test_idx)` ({len(test_idx)})!"
+                )
+        else:
+            if not self.num_train or not self.num_val:
+                raise AtomsDataModuleError(
+                    "If no `split_file` is given, "
+                    + "the sizes of the training and validation partitions need to be set!"
+                )
+
+            if self.num_test is None:
+                self.num_test = len(self.dataset) - self.num_train - self.num_val
+            lengths = [self.num_train, self.num_val, self.num_test]
+            offsets = torch.cumsum(torch.tensor(lengths), dim=0)
+            indices = torch.randperm(sum(lengths)).tolist()
+            train_idx, val_idx, test_idx = [
+                indices[offset - length : offset]
+                for offset, length in zip(offsets, lengths)
+            ]
+            np.savez(
+                self.split_file, train_idx=train_idx, val_idx=val_idx, test_idx=test_idx
+            )
+
+        self._train_dataset = self.dataset.subset(train_idx)
+        self._val_dataset = self.dataset.subset(val_idx)
+        self._test_dataset = self.dataset.subset(test_idx)
 
         # setup transforms
         for t in self.train_transforms:
