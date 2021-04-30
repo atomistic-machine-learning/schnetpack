@@ -50,6 +50,9 @@ def train(config: DictConfig):
     if "seed" in config:
         seed_everything(config.seed)
 
+    if not os.path.exists(config.data_dir):
+        os.makedirs(config.data_dir)
+
     # Init Lightning datamodule
     log.info(f"Instantiating datamodule <{config.data._target_}>")
     datamodule: LightningDataModule = hydra.utils.instantiate(config.data)
@@ -103,9 +106,7 @@ def train(config: DictConfig):
     )
 
     log.info("Logging hyperparameters.")
-    log_hyperparameters(
-        config=config, model=model, datamodule=datamodule, trainer=trainer
-    )
+    log_hyperparameters(config=config, model=model, trainer=trainer)
 
     # Train the model
     log.info("Starting training.")
