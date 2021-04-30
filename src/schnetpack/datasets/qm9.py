@@ -52,9 +52,10 @@ class QM9(AtomsDataModule):
         self,
         datapath: str,
         batch_size: int,
-        num_train: int,
-        num_val: int,
-        num_test: int = -1,
+        num_train: Optional[int] = None,
+        num_val: Optional[int] = None,
+        num_test: Optional[int] = None,
+        split_file: Optional[str] = "split.npz",
         format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
         remove_uncharacterized: bool = False,
@@ -78,6 +79,7 @@ class QM9(AtomsDataModule):
             num_train: number of training examples
             num_val: number of validation examples
             num_test: number of test examples
+            split_file: path to npz file with data partitions
             format: dataset format
             load_properties: subset of properties to load
             remove_uncharacterized: do not include uncharacterized molecules.
@@ -99,6 +101,7 @@ class QM9(AtomsDataModule):
             num_train=num_train,
             num_val=num_val,
             num_test=num_test,
+            split_file=split_file,
             format=format,
             load_properties=load_properties,
             val_batch_size=val_batch_size,
