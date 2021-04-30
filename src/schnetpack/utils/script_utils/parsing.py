@@ -606,24 +606,22 @@ def build_parser():
         help="ANI1 dataset help",
         parents=[train_parser, schnet_parser, ani1_parser],
     )
-    schnet_matproj = schnet_subparsers.add_parser(
+    schnet_subparsers.add_parser(
         "matproj",
         help="Materials Project dataset help",
         parents=[train_parser, schnet_parser, matproj_parser],
     )
-    schnet_matproj.set_defaults(normalize_filter=True)
 
     schnet_subparsers.add_parser(
         "md17",
         help="MD17 dataset help",
         parents=[train_parser, schnet_parser, md17_parser],
     )
-    schnet_omdb = schnet_subparsers.add_parser(
+    schnet_subparsers.add_parser(
         "omdb",
         help="Organic Materials dataset help",
         parents=[train_parser, schnet_parser, omdb_parser],
     )
-    schnet_omdb.set_defaults(normalize_filter=True)
 
     schnet_subparsers.add_parser(
         "qm9",
