@@ -1,19 +1,15 @@
-import io
 import logging
 import os
-import re
 import shutil
-import tarfile
 import tempfile
 from typing import List
 from urllib import request as request
 
 import numpy as np
 from ase import Atoms
-from ase.io.extxyz import read_xyz
 
-from schnetpack.data import *
 import schnetpack.structure as structure
+from schnetpack.data import *
 from schnetpack.data import AtomsDataModuleError, AtomsDataModule
 
 
