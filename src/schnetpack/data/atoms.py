@@ -20,12 +20,10 @@ import torch
 import copy
 from ase import Atoms
 from ase.db import connect
-import timeit
-from torch.utils.data import Dataset
 
 import schnetpack as spk
 import schnetpack.structure as structure
-from schnetpack.data.transforms import Transform
+from schnetpack.transforms import Transform
 
 logger = logging.getLogger(__name__)
 
@@ -102,18 +100,18 @@ class BaseAtomsData(ABC):
     @property
     @abstractmethod
     def available_properties(self) -> List[str]:
-        """ Available properties in the dataset """
+        """Available properties in the dataset"""
         pass
 
     @property
     @abstractmethod
     def units(self) -> Dict[str, str]:
-        """ Property to unit dict """
+        """Property to unit dict"""
         pass
 
     @property
     def load_properties(self) -> List[str]:
-        """ Properties to be loaded """
+        """Properties to be loaded"""
         return self._load_properties or self.available_properties
 
     @load_properties.setter
@@ -128,13 +126,13 @@ class BaseAtomsData(ABC):
     @property
     @abstractmethod
     def metadata(self) -> Dict[str, Any]:
-        """ Global metadata """
+        """Global metadata"""
         pass
 
     @property
     @abstractmethod
-    def atomrefs(self) -> Dict[str, List[float]]:
-        """ Single-atom reference values for properties """
+    def atomrefs(self) -> Dict[str, torch.Tensor]:
+        """Single-atom reference values for properties"""
         pass
 
     @abstractmethod
@@ -363,11 +361,11 @@ class ASEAtomsData(BaseAtomsData):
 
     @property
     def units(self) -> Dict[str, str]:
-        """ Dictionary of properties to units """
+        """Dictionary of properties to units"""
         return self._units
 
     @property
-    def atomrefs(self) -> Dict[str, List[float]]:
+    def atomrefs(self) -> Dict[str, torch.Tensor]:
         md = self.metadata
         arefs = md["atomrefs"]
         arefs = {k: self.conversions[k] * torch.tensor(v) for k, v in arefs.items()}
@@ -456,7 +454,7 @@ class ASEAtomsData(BaseAtomsData):
                 self._add_system(conn, at, **prop)
 
     def _add_system(self, conn, atoms: Optional[Atoms] = None, **properties):
-        """ Add systems to DB """
+        """Add systems to DB"""
         if atoms is None:
             try:
                 Z = properties[structure.Z]

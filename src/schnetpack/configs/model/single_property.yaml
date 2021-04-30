@@ -25,8 +25,8 @@ schedule:
 
 output:
   property: ${property}
-  requires_atomref: True
-  requires_stats: True
+  requires_atomref: False
+  requires_stats: False
   divide_stats_by_atoms: True
 
   module:
@@ -34,3 +34,8 @@ output:
     n_in: ${model.representation.n_atom_basis}
   loss:
     _target_: torch.nn.MSELoss
+  metrics:
+    mae:
+      _target_: pytorch_lightning.metrics.MeanAbsoluteError
+    mse:
+      _target_: pytorch_lightning.metrics.MeanSquaredError

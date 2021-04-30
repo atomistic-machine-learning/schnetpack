@@ -15,7 +15,7 @@ cell: Final[str] = "_cell"
 cell_offset: Final[str] = "_cell_offset"
 pbc: Final[str] = "_pbc"
 
-seg_m: Final[str] = "_seg_m"
+idx_m: Final[str] = "_seg_m"
 idx_i: Final[str] = "_idx_i"
 idx_j: Final[str] = "_idx_j"
 Rij: Final[str] = "_Rij"

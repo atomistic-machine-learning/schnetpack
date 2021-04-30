@@ -15,3 +15,7 @@ early_stopping:
     patience: 100           # how many epochs of not improving until training stops
     mode: "min"             # can be "max" or "min"
     min_delta: 0            # minimum change in the monitored metric needed to qualify as an improvement
+
+lr_monitor:
+    _target_: pytorch_lightning.callbacks.LearningRateMonitor
+    logging_interval: epoch

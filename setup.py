@@ -11,7 +11,7 @@ def read(fname):
 
 setup(
     name="schnetpack",
-    version="1.0.0-dev",
+    version="1.0.0-dev0",
     author="Kristof T. Schuett, Michael Gastegger, Pan Kessel, Kim Nicoli",
     url="https://github.com/atomistic-machine-learning/schnetpack",
     packages=find_packages("src"),
@@ -26,9 +26,11 @@ setup(
         "ase>=3.21",
         "h5py",
         "pyyaml",
-        "hydra-core==1.1.0.dev5",
+        "hydra-core>=1.1.0.dev5",
         "pytorch_lightning>=1.2.3",
+        "torchmetrics",
         "hydra-colorlog>=1.1.0.dev1",
+        "rich",
     ],
     include_package_data=True,
     extras_require={"test": ["pytest", "pytest-datadir", "pytest-benchmark"]},

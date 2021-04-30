@@ -1,4 +1,4 @@
-from typing import Union, Sequence, Callable
+from typing import Union, Sequence, Callable, Optional
 
 import torch.nn as nn
 from schnetpack.nn import Dense
@@ -7,13 +7,13 @@ __all__ = ["MLP"]
 
 
 class MLP(nn.Module):
-    """ Multiple layer fully connected perceptron neural network.  """
+    """Multiple layer fully connected perceptron neural network."""
 
     def __init__(
         self,
         n_in: int,
         n_out: int,
-        n_hidden: Union[int, Sequence[int]] = None,
+        n_hidden: Optional[Union[int, Sequence[int]]] = None,
         n_layers: int = 2,
         activation: Callable = nn.SiLU(),
     ):

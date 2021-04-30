@@ -1,4 +1,4 @@
-from typing import Callable, Union
+from typing import Callable, Union, Optional
 
 import torch
 import torch.nn.functional as F
@@ -61,16 +61,26 @@ class ScaleShift(nn.Module):
     .. math::
        y = x \times \sigma + \mu
 
-    Args:
-        mean (torch.Tensor): mean value :math:`\mu`.
-        stddev (torch.Tensor): standard deviation value :math:`\sigma`.
-
     """
 
-    def __init__(self, mean, stddev):
+    def __init__(
+        self,
+        mean: Optional[torch.Tensor] = None,
+        stddev: Optional[torch.Tensor] = None,
+        trainable: bool = False,
+    ):
+        """
+        Args:
+            mean: mean value :math:`\mu`.
+            stddev: standard deviation value :math:`\sigma`.
+            trainable:
+        """
         super(ScaleShift, self).__init__()
-        self.register_buffer("mean", mean)
-        self.register_buffer("stddev", stddev)
+
+        mean = mean or torch.tensor(0.0)
+        stddev = stddev or torch.tensor(1.0)
+        self.mean = nn.Parameter(mean, requires_grad=trainable)
+        self.stddev = nn.Parameter(stddev, requires_grad=trainable)
 
     def forward(self, input):
         """Compute layer output.

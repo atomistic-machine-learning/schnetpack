@@ -121,4 +121,4 @@ ENV/
 
 # experiments
 runs/
-tests/data/tmp
+tests/data/tmp/test*

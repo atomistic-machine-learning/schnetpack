@@ -22,7 +22,6 @@ def todict(config: Union[DictConfig, Dict]):
 def log_hyperparameters(
     config: DictConfig,
     model: pl.LightningModule,
-    datamodule: pl.LightningDataModule,
     trainer: pl.Trainer,
 ) -> None:
     """
@@ -42,15 +41,6 @@ def log_hyperparameters(
     hparams["data"] = todict(config["data"])
     if "callbacks" in config:
         hparams["callbacks"] = todict(config["callbacks"])
-
-    # save sizes of each dataset
-    datamodule.setup()
-    if hasattr(datamodule, "data_train") and datamodule.data_train:
-        hparams["data"]["train_size"] = len(datamodule.data_train)
-    if hasattr(datamodule, "data_val") and datamodule.data_val:
-        hparams["data"]["val_size"] = len(datamodule.data_val)
-    if hasattr(datamodule, "data_test") and datamodule.data_test:
-        hparams["data"]["test_size"] = len(datamodule.data_test)
 
     # save number of model parameters
     hparams["model"]["params_total"] = sum(p.numel() for p in model.parameters())

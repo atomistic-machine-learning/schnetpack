@@ -20,7 +20,7 @@ __all__ = ["convert_units"]
 
 
 def _conversion_factor(unit: str):
-    """ Get units by string """
+    """Get units by string"""
     return getattr(aseunits, unit)
 
 
@@ -50,5 +50,5 @@ def _parse_unit(unit):
 
 
 def convert_units(src_unit: Union[str, float], tgt_unit: Union[str, float]):
-    """ Return conversion factor for given units """
+    """Return conversion factor for given units"""
     return _parse_unit(src_unit) / _parse_unit(tgt_unit)

@@ -1,3 +1,11 @@
+"""
+Transforms are before and/or after the model. They can be used, e.g., for calculating neighbor lists,
+casting, unit conversion or data augmentation. Some can applied before batching, i.e. to single systems,
+when loading the data. This is necessary for pre-processing and includes neighbor lists, for example.
+On the other hand, transforms need to be able to handle batches for post-processing.
+The flags `is_postprocessor` and `is_preprocessor` indicate how the tranforms may be used.
+"""
+
 from typing import Dict, Optional
 
 import torch
@@ -25,16 +33,37 @@ class TransformException(Exception):
 
 class Transform(nn.Module):
     """
-    Base class for all transforms
+    Base class for all transforms. Only applied to single structures, not batches.
 
-    Currently, this only ensures that the reference to the data attributeis initialized.
+    Currently, the base class only ensures that the reference to the data attribute is initialized.
     """
 
     data: Optional["spk.data.BaseAtomsData"]
+    datamodule: Optional["spk.data.AtomsDataModule"]
+
+    is_preprocessor: bool = False
+    is_postprocessor: bool = False
 
     def __init__(self):
-        self.data = None
+        self._datamodule = None
+        self._data = None
         super().__init__()
+
+    @property
+    def data(self):
+        return self._data
+
+    @data.setter
+    def data(self, value):
+        self._data = value
+
+    @property
+    def datamodule(self):
+        return self._datamodule
+
+    @datamodule.setter
+    def datamodule(self, value):
+        self._datamodule = value
 
 
 class ASENeighborList(Transform):
@@ -43,6 +72,9 @@ class ASENeighborList(Transform):
 
     Note: This is quite slow and should only used as a baseline for faster implementations!
     """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
 
     def __init__(self, cutoff):
         """
@@ -61,6 +93,7 @@ class ASENeighborList(Transform):
         idx_i, idx_j, idx_S, Rij = neighbor_list(
             "ijSD", at, self.cutoff, self_interaction=False
         )
+
         inputs[structure.idx_i] = torch.tensor(idx_i)
         inputs[structure.idx_j] = torch.tensor(idx_j)
         inputs[structure.Rij] = torch.tensor(Rij)
@@ -77,6 +110,9 @@ class TorchNeighborList(Transform):
     Args:
         cutoff: cutoff radius for neighbor search
     """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
 
     def __init__(self, cutoff):
         super(TorchNeighborList, self).__init__()
@@ -210,13 +246,13 @@ class TorchNeighborList(Transform):
         )
 
 
-## casting
-
-
 class CastMap(Transform):
     """
     Cast all inputs according to type map.
     """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = True
 
     def __init__(self, type_map: Dict[torch.dtype, torch.dtype]):
         """
@@ -234,20 +270,26 @@ class CastMap(Transform):
 
 
 class CastTo32(CastMap):
-    """ Cast all float64 tensors to float32 """
+    """Cast all float64 tensors to float32"""
 
     def __init__(self):
         super().__init__(type_map={torch.float64: torch.float32})
 
 
-## centering
+class CastTo64(CastMap):
+    """Cast all float64 tensors to float32"""
+
+    def __init__(self):
+        super().__init__(type_map={torch.float32: torch.float64})
 
 
 class SubtractCenterOfMass(Transform):
     """
-    Subtract center of mass from positions. Can only be used for single structures. Batches of structures are not supported.
-
+    Subtract center of mass from positions.
     """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
 
     def __init__(self):
         super().__init__()
@@ -262,9 +304,11 @@ class SubtractCenterOfMass(Transform):
 
 class SubtractCenterOfGeometry(Transform):
     """
-    Subtract center of geometry from positions. Can only be used for single structures. Batches of structures are not supported.
-
+    Subtract center of geometry from positions.
     """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
 
     def forward(self, inputs):
         inputs[structure.position] -= inputs[structure.position].mean(0)
@@ -272,8 +316,20 @@ class SubtractCenterOfGeometry(Transform):
 
 
 class UnitConversion(Transform):
-    def __init__(self, property_unit_map: Dict[str, str]):
-        self.property_unit_map = property_unit_map
+    """
+    Convert units of selected properties.
+    """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = True
+
+    def __init__(self, property_unit_dict: Dict[str, str]):
+        """
+        Args:
+            property_unit_dict: mapping property name to target unit,
+                specified as a string (.e.g. 'kcal/mol').
+        """
+        self.property_unit_dict = property_unit_dict
         self.src_units = None
         super().__init__()
 
@@ -281,8 +337,127 @@ class UnitConversion(Transform):
         # initialize
         if not self.src_units:
             units = self.data.units
-            self.src_units = {p: units[p] for p in self.property_unit_map}
+            self.src_units = {p: units[p] for p in self.property_unit_dict}
 
-        for prop, tgt_unit in self.property_unit_map.items():
+        for prop, tgt_unit in self.property_unit_dict.items():
             inputs[prop] *= spk.units.convert_units(self.src_units[prop], tgt_unit)
+        return inputs
+
+
+class RemoveOffsets(Transform):
+    """
+    Remove offsets from property based on the mean of the training data and/or the single atom reference calculations.
+    """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
+
+    def __init__(
+        self,
+        property,
+        remove_mean: bool = False,
+        remove_atomrefs: bool = False,
+        is_extensive: bool = True,
+        zmax: int = 100,
+    ):
+        super().__init__()
+        self._property = property
+        self.remove_mean = remove_mean
+        self.remove_atomrefs = remove_atomrefs
+        self.is_extensive = is_extensive
+
+        assert (
+            remove_atomrefs or remove_mean
+        ), "You should set at least one of `remove_mean` and `remove_atomrefs` to true!"
+
+        if self.remove_atomrefs:
+            self.register_buffer("atomref", torch.zeros((zmax,)))
+        if self.remove_mean:
+            self.register_buffer("mean", torch.zeros((1,)))
+
+    @Transform.datamodule.setter
+    def datamodule(self, value):
+        self._datamodule = value
+
+        if self.remove_atomrefs:
+            atrefs = self._datamodule.train_dataset.atomrefs
+            self.atomref.copy_(torch.tensor(atrefs[self._property]))
+
+        if self.remove_mean:
+            stats = self._datamodule.get_stats(
+                self._property, self.is_extensive, self.remove_atomrefs
+            )
+            self.mean.copy_(stats[0])
+
+    def forward(self, inputs):
+        if self.remove_mean:
+            inputs[self._property] -= self.mean * inputs[structure.n_atoms]
+
+        if self.remove_atomrefs:
+            inputs[self._property] -= torch.sum(self.atomref[inputs[structure.Z]])
+
+        return inputs
+
+
+class AddOffsets(Transform):
+    """
+    Add offsets to property based on the mean of the training data and/or the single atom reference calculations.
+    """
+
+    is_preprocessor: bool = False
+    is_postprocessor: bool = True
+
+    def __init__(
+        self,
+        property,
+        add_mean: bool = False,
+        add_atomrefs: bool = False,
+        is_extensive: bool = True,
+        zmax: int = 100,
+    ):
+        super().__init__()
+        self._property = property
+        self.add_mean = add_mean
+        self.add_atomrefs = add_atomrefs
+        self.is_extensive = is_extensive
+        self._aggregation = "sum" if self.is_extensive else "mean"
+
+        assert (
+            add_mean or add_atomrefs
+        ), "You should set at least one of `add_mean` and `add_atomrefs` to true!"
+
+        if self.add_atomrefs:
+            self.register_buffer("atomref", torch.zeros((zmax,)))
+        if self.add_mean:
+            self.register_buffer("mean", torch.zeros((1,)))
+
+    @Transform.datamodule.setter
+    def datamodule(self, value):
+        self._datamodule = value
+
+        if self.add_atomrefs:
+            atrefs = self._datamodule.train_dataset.atomrefs
+            self.atomref.copy_(torch.tensor(atrefs[self._property]))
+
+        if self.add_mean:
+            stats = self._datamodule.get_stats(
+                self._property, self.is_extensive, self.remove_atomrefs
+            )
+            self.mean.copy_(stats[0])
+
+    def forward(self, inputs):
+        if self.add_mean:
+            inputs[self._property] += self.mean * inputs[structure.n_atoms]
+
+        if self.remove_atomrefs:
+            idx_m = inputs[structure.idx_m]
+            y0i = self.atomref[inputs[structure.Z]]
+            tmp = torch.zeros(
+                (idx_m[-1] + 1, self.n_out), dtype=y0i.dtype, device=y0i.device
+            )
+            y0 = tmp.index_add(0, idx_m, y0i)
+            if not self.is_extensive:
+                y0 /= input[structure.n_atoms]
+            inputs[self._property] -= y0
+
         return inputs

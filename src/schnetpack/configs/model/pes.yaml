@@ -1,0 +1,53 @@
+defaults:
+  - representation: schnet
+
+_target_: schnetpack.model.PESModel
+_recursive_: False
+
+optimizer:
+  _target_: torch.optim.Adam
+  lr: ${lr}
+
+schedule:
+  monitor: val_loss
+  scheduler:
+    _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+    mode: min
+    factor: 0.5
+    patience: 150
+    min_lr: 1e-6
+
+output:
+  module:
+    _target_: schnetpack.atomistic.Atomwise
+    n_in: ${model.representation.n_atom_basis}
+
+  normalization:
+    # TODO: trainable: True
+    initialize_with_stats: True
+    requires_atomref: False
+    # TODO: element_specific: False
+
+  energy:
+    property: energy
+
+    loss:
+      _target_: torch.nn.MSELoss
+    loss_weight: 0.05
+    metrics:
+      mae:
+        _target_: pytorch_lightning.metrics.MeanAbsoluteError
+      mse:
+        _target_: pytorch_lightning.metrics.MeanSquaredError
+
+  forces:
+    property: forces
+    loss:
+      _target_: torch.nn.MSELoss
+    loss_weight: 0.95
+    metrics:
+      mae:
+        _target_: pytorch_lightning.metrics.MeanAbsoluteError
+      mse:
+        _target_: pytorch_lightning.metrics.MeanSquaredError
+
