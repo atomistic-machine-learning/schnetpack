@@ -1,7 +1,7 @@
+from typing import Sequence, Union, Callable, Dict
+
 import torch
 import torch.nn as nn
-from torch_scatter import segment_csr
-from typing import Sequence, Union, Optional, Callable, Dict
 
 import schnetpack as spk
 import schnetpack.structure as structure
