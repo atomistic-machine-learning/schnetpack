@@ -43,9 +43,9 @@ class Atomwise(nn.Module):
         stress (str or None): Name of stress property. Compute the derivative with
             respect to the cell parameters if not None. (default: None)
         create_graph (bool): If False, the graph used to compute the grad will be
-            freed. Note that in nearly all cases setting this option to True is not nee
-            ded and often can be worked around in a much more efficient way. Defaults to
-            the value of create_graph. (default: False)
+            freed. Note that in nearly all cases setting this option to True is not
+            needed and often can be worked around in a much more efficient way.
+            Defaults to the value of create_graph. (default: False)
         mean (torch.Tensor or None): mean of property
         stddev (torch.Tensor or None): standard deviation of property (default: None)
         atomref (torch.Tensor or None): reference single-atom properties. Expects
@@ -78,7 +78,7 @@ class Atomwise(nn.Module):
         derivative=None,
         negative_dr=False,
         stress=None,
-        create_graph=True,
+        create_graph=False,
         mean=None,
         stddev=None,
         atomref=None,
@@ -154,7 +154,7 @@ class Atomwise(nn.Module):
         if self.contributions is not None:
             result[self.contributions] = yi
 
-        create_graph = self.create_graph if self.training else False
+        create_graph = True if self.training else self.create_graph
 
         if self.derivative is not None:
             sign = -1.0 if self.negative_dr else 1.0
