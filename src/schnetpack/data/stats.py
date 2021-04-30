@@ -6,6 +6,8 @@ from tqdm import tqdm
 import schnetpack.structure as structure
 from schnetpack.data import AtomsLoader
 
+__all__ = ["calculate_stats"]
+
 
 def calculate_stats(
     dataloader: AtomsLoader,

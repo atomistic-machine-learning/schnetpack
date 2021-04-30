@@ -7,6 +7,8 @@ from torch.utils.data.dataloader import _collate_fn_t, T_co
 
 import schnetpack.structure as structure
 
+__all__ = ["AtomsLoader"]
+
 
 def _atoms_collate_fn(batch):
     """

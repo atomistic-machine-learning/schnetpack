@@ -2,15 +2,16 @@ import logging
 import os
 import shutil
 import tempfile
-from typing import List
+from typing import List, Optional, Dict
 from urllib import request as request
 
 import numpy as np
 from ase import Atoms
 
+import torch
 import schnetpack.structure as structure
+
 from schnetpack.data import *
-from schnetpack.data import AtomsDataModuleError, AtomsDataModule
 
 
 class MD17(AtomsDataModule):
