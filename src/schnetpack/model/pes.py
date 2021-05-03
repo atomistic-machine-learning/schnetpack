@@ -147,7 +147,7 @@ class PESModel(AtomisticModel):
 
     def test_step(self, batch, batch_idx):
         torch.set_grad_enabled(True)
-        pred = self(batch)
+        pred = self.eval()(batch)
         loss = self.loss_fn(pred, batch)
 
         self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
@@ -170,11 +170,11 @@ class PESModel(AtomisticModel):
             self._schedule_cfg.scheduler, optimizer=optimizer
         )
         optimconf = {
-            "optimizer": optimizer,
-            "lr_scheduler": schedule,
+            "scheduler": schedule,
+            "name": "lr_schedule",
         }
         if self._schedule_cfg.monitor:
             optimconf["monitor"] = self._schedule_cfg.monitor
-        return optimconf
+        return [optimizer], [optimconf]
 
     # TODO: add eval mode post-processing

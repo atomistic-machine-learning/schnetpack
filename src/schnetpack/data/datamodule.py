@@ -116,18 +116,6 @@ class AtomsDataModule(pl.LightningDataModule):
             distance_unit=self.distance_unit,
         )
 
-    def setup_transforms(self):
-        # setup transforms
-        for t in self.train_transforms:
-            t.datamodule = self
-        for t in self.val_transforms:
-            t.datamodule = self
-        for t in self.test_transforms:
-            t.datamodule = self
-        self._train_dataset.transforms = self.train_transforms
-        self._val_dataset.transforms = self.val_transforms
-        self._test_dataset.transforms = self.test_transforms
-
     def partition(self):
         # split dataset
         # TODO: handle IterDatasets
@@ -170,6 +158,18 @@ class AtomsDataModule(pl.LightningDataModule):
         self._train_dataset = self.dataset.subset(train_idx)
         self._val_dataset = self.dataset.subset(val_idx)
         self._test_dataset = self.dataset.subset(test_idx)
+
+    def setup_transforms(self):
+        # setup transforms
+        for t in self.train_transforms:
+            t.datamodule = self
+        for t in self.val_transforms:
+            t.datamodule = self
+        for t in self.test_transforms:
+            t.datamodule = self
+        self._train_dataset.transforms = self.train_transforms
+        self._val_dataset.transforms = self.val_transforms
+        self._test_dataset.transforms = self.test_transforms
 
     def get_stats(
         self, property: str, divide_by_atoms: bool, remove_atomref: bool
