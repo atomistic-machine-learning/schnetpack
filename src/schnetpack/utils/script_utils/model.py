@@ -12,16 +12,21 @@ def get_representation(args, train_loader=None):
     if args.model == "schnet":
 
         cutoff_network = spk.nn.cutoff.get_cutoff_by_string(args.cutoff_function)
-
-        return spk.representation.SchNet(
-            n_atom_basis=args.features,
-            n_filters=args.features,
+        return spk.representation.PaiNN(
             n_interactions=args.interactions,
+            n_atom_basis=args.features,
+            n_rbf=args.num_gaussians,
             cutoff=args.cutoff,
-            n_gaussians=args.num_gaussians,
-            cutoff_network=cutoff_network,
-            normalize_filter=args.normalize_filter,
         )
+        # return spk.representation.SchNet(
+        #    n_atom_basis=args.features,
+        #    n_filters=args.features,
+        #    n_interactions=args.interactions,
+        #    cutoff=args.cutoff,
+        #    n_gaussians=args.num_gaussians,
+        #    cutoff_network=cutoff_network,
+        #    normalize_filter=args.normalize_filter,
+        # )
 
     elif args.model == "wacsf":
         sfmode = ("weighted", "Behler")[args.behler]

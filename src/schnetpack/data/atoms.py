@@ -13,6 +13,7 @@ References
 
 import logging
 import os
+import time
 import warnings
 import bisect
 
@@ -106,6 +107,7 @@ class AtomsData(Dataset):
         environment_provider=SimpleEnvironmentProvider(),
         collect_triples=False,
         centering_function=get_center_of_mass,
+        cacheing=True,
     ):
         # checks
         if not dbpath.endswith(".db"):
@@ -145,6 +147,10 @@ class AtomsData(Dataset):
         self.environment_provider = environment_provider
         self.collect_triples = collect_triples
         self.centering_function = centering_function
+
+        # cacheing
+        self.use_cacheing = cacheing
+        self.cache = {}
 
     @property
     def available_properties(self):
@@ -252,7 +258,6 @@ class AtomsData(Dataset):
             centering_function=self.centering_function,
             output=properties,
         )
-
         return at, properties
 
     def get_atoms(self, idx):
@@ -326,10 +331,17 @@ class AtomsData(Dataset):
             return conn.count()
 
     def __getitem__(self, idx):
+        if idx in self.cache.keys():
+            return self.cache[idx]
         _, properties = self.get_properties(idx, self.load_only)
         properties["_idx"] = np.array([idx], dtype=np.int)
 
-        return torchify_dict(properties)
+        properties = torchify_dict(properties)
+
+        if self.use_cacheing:
+            self.cache[idx] = properties
+
+        return properties
 
     def __add__(self, other):
         return ConcatAtomsData([self, other])

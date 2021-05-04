@@ -3,6 +3,7 @@ import logging
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ def _collate_aseatoms(examples):
     Returns:
         dict[str->torch.Tensor]: mini-batch of atomistic systems
     """
+    t_0 = time.time()
     properties = examples[0]
 
     # initialize maximum sizes
@@ -43,6 +45,8 @@ def _collate_aseatoms(examples):
         )
         for p, size in max_size.items()
     }
+    t_shape = time.time()
+
     has_atom_mask = Properties.atom_mask in batch.keys()
     has_neighbor_mask = Properties.neighbor_mask in batch.keys()
 
@@ -91,7 +95,6 @@ def _collate_aseatoms(examples):
             shape = nbh_idx_j.size()
             s = (k,) + tuple([slice(0, d) for d in shape])
             batch[Properties.neighbor_pairs_mask][s] = nbh_idx_j >= 0
-
     return batch
 
 

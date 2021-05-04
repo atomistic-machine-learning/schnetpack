@@ -17,3 +17,4 @@ References
 
 from schnetpack.representation.schnet import *
 from schnetpack.representation.hdnn import *
+from schnetpack.representation.painn.painn import PaiNN
