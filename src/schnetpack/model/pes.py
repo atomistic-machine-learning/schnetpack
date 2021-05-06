@@ -170,11 +170,11 @@ class PESModel(AtomisticModel):
             self._schedule_cfg.scheduler, optimizer=optimizer
         )
         optimconf = {
-            "optimizer": optimizer,
-            "lr_scheduler": schedule,
+            "scheduler": schedule,
+            "name": "lr_schedule",
         }
         if self._schedule_cfg.monitor:
             optimconf["monitor"] = self._schedule_cfg.monitor
-        return optimconf
+        return [optimizer], [optimconf]
 
     # TODO: add eval mode post-processing

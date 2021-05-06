@@ -2,7 +2,6 @@
 
 defaults:
   - override /model: pes
-  - override /model/representation: schnet
   - override /data: md17
   - override /logger: tensorboard
 

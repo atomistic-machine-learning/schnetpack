@@ -32,7 +32,6 @@ def train(config: DictConfig):
 /____/\___/_/ /_/_/ |_/\___/\__/_/    \__,_/\___/_/|_|                                                          
     """
     )
-
     if config.get("print_config"):
         print_config(config, resolve=True)
 

@@ -1,6 +1,5 @@
 # SchNetPack - Deep Neural Networks for Atomistic Systems
 [![Build Status](https://travis-ci.com/atomistic-machine-learning/schnetpack.svg?branch=master)](https://travis-ci.com/atomistic-machine-learning/schnetpack)
-[![codecov](https://codecov.io/gh/atomistic-machine-learning/schnetpack/branch/master/graph/badge.svg)](https://codecov.io/gh/atomistic-machine-learning/schnetpack)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/python/black)
 [![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
 
@@ -82,7 +81,7 @@ J. Chem. Theory Comput.
 
 ## Acknowledgements
 
-CLI and hydra configs for PyTorch lightning are adapted from this template: [![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
+CLI and hydra configs for PyTorch Lightning are adapted from this template: [![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
 
 
 ## References
