@@ -6,8 +6,8 @@ precision: 32
 amp_backend: native
 
 
-min_epochs: 500
-max_epochs: 1500
+min_epochs: null
+max_epochs: 100000
 
 weights_summary: top
 progress_bar_refresh_rate: 10

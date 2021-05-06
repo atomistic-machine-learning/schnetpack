@@ -147,7 +147,7 @@ class PESModel(AtomisticModel):
 
     def test_step(self, batch, batch_idx):
         torch.set_grad_enabled(True)
-        pred = self.eval()(batch)
+        pred = self(batch)
         loss = self.loss_fn(pred, batch)
 
         self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=False)

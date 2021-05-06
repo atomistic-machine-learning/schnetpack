@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 import schnetpack.structure as structure
-from schnetpack.nn import Dense, CFConv
+from schnetpack.nn import Dense, scatter_add
 from schnetpack.nn.activations import shifted_softplus
 
 
@@ -27,7 +27,6 @@ class SchNetInteraction(nn.Module):
         """
         super(SchNetInteraction, self).__init__()
         self.in2f = Dense(n_atom_basis, n_filters, bias=False, activation=None)
-        self.cfconv = CFConv()
         self.f2out = nn.Sequential(
             Dense(n_filters, n_atom_basis, activation=activation),
             Dense(n_atom_basis, n_atom_basis, activation=None),
@@ -59,7 +58,12 @@ class SchNetInteraction(nn.Module):
         x = self.in2f(x)
         Wij = self.filter_network(f_ij)
         Wij = Wij * rcut_ij[:, None]
-        x = self.cfconv(x, Wij, idx_i, idx_j)
+
+        # continuous-filter convolution
+        x_j = x[idx_j]
+        x_ij = x_j * Wij
+        x = scatter_add(x_ij, idx_i, dim_size=x.shape[0])
+
         x = self.f2out(x)
         return x
 
@@ -88,7 +92,7 @@ class SchNet(nn.Module):
         radial_basis: nn.Module,
         cutoff_fn: Callable,
         n_filters: int = None,
-        coupled_interactions: bool = False,
+        shared_interactions: bool = False,
         return_intermediate: bool = False,
         max_z: int = 100,
         charged_systems: bool = False,
@@ -102,7 +106,7 @@ class SchNet(nn.Module):
             radial_basis: layer for expanding interatomic distances in a basis set
             cutoff_fn: cutoff function
             n_filters: number of filters used in continuous-filter convolution
-            coupled_interactions: if True, share the weights across
+            shared_interactions: if True, share the weights across
                 interaction blocks and filter-generating networks.
             return_intermediate:
             max_z:
@@ -125,7 +129,7 @@ class SchNet(nn.Module):
         # layers
         self.embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
 
-        if coupled_interactions:
+        if shared_interactions:
             # use the same SchNetInteraction instance (hence the same weights)
             self.interactions = nn.ModuleList(
                 [
