@@ -171,6 +171,49 @@ class AtomsDataModule(pl.LightningDataModule):
         self._val_dataset.transforms = self.val_transforms
         self._test_dataset.transforms = self.test_transforms
 
+    def partition(self):
+        # split dataset
+        # TODO: handle IterDatasets
+        if self.split_file is not None and os.path.exists(self.split_file):
+            S = np.load(self.split_file)
+            train_idx = S["train_idx"].tolist()
+            val_idx = S["val_idx"].tolist()
+            test_idx = S["test_idx"].tolist()
+            if self.num_train and self.num_train != len(train_idx):
+                raise AtomsDataModuleError(
+                    f"Split file was given, but `num_train ({self.num_train}) != len(train_idx)` ({len(train_idx)})!"
+                )
+            if self.num_val and self.num_val != len(val_idx):
+                raise AtomsDataModuleError(
+                    f"Split file was given, but `num_val ({self.num_val}) != len(val_idx)` ({len(val_idx)})!"
+                )
+            if self.num_test and self.num_test != len(test_idx):
+                raise AtomsDataModuleError(
+                    f"Split file was given, but `num_test ({self.num_test}) != len(test_idx)` ({len(test_idx)})!"
+                )
+        else:
+            if not self.num_train or not self.num_val:
+                raise AtomsDataModuleError(
+                    "If no `split_file` is given, "
+                    + "the sizes of the training and validation partitions need to be set!"
+                )
+
+            if self.num_test is None:
+                self.num_test = len(self.dataset) - self.num_train - self.num_val
+            lengths = [self.num_train, self.num_val, self.num_test]
+            offsets = torch.cumsum(torch.tensor(lengths), dim=0)
+            indices = torch.randperm(sum(lengths)).tolist()
+            train_idx, val_idx, test_idx = [
+                indices[offset - length : offset]
+                for offset, length in zip(offsets, lengths)
+            ]
+            np.savez(
+                self.split_file, train_idx=train_idx, val_idx=val_idx, test_idx=test_idx
+            )
+        self._train_dataset = self.dataset.subset(train_idx)
+        self._val_dataset = self.dataset.subset(val_idx)
+        self._test_dataset = self.dataset.subset(test_idx)
+
     def get_stats(
         self, property: str, divide_by_atoms: bool, remove_atomref: bool
     ) -> Tuple[torch.Tensor, torch.Tensor]:
