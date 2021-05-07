@@ -26,30 +26,25 @@ class Transform(nn.Module):
     use the `mode` attribute to process and return the respective arguments.
     """
 
-    data: Optional["spk.data.BaseAtomsData"]
-    datamodule: Optional["spk.data.AtomsDataModule"]
-
     def __init__(self):
-        self._datamodule = None
-        self._data = None
-        self.mode = None
+        self.mode: str = ""
         super().__init__()
 
-    @property
-    def data(self):
-        return self._data
+    # def dataset(self, value):
+    #     """
+    #     Extract all required information from dataset.
+    #
+    #     Do not store the datamodule, as this does not work with torchscript conversion!
+    #     """
+    #     pass
 
-    @data.setter
-    def data(self, value):
-        self._data = value
-
-    @property
-    def datamodule(self):
-        return self._datamodule
-
-    @datamodule.setter
     def datamodule(self, value):
-        self._datamodule = value
+        """
+        Extract all required information from data module.
+
+        Do not store the datamodule, as this does not work with torchscript conversion!
+        """
+        pass
 
     def preprocessor(self):
         if not self.is_preprocessor:

@@ -159,11 +159,11 @@ class AtomsDataModule(pl.LightningDataModule):
     def setup_transforms(self):
         # setup transforms
         for t in self.train_transforms:
-            t.datamodule = self
+            t.datamodule(self)
         for t in self.val_transforms:
-            t.datamodule = self
+            t.datamodule(self)
         for t in self.test_transforms:
-            t.datamodule = self
+            t.datamodule(self)
         self._train_dataset.transforms = self.train_transforms
         self._val_dataset.transforms = self.val_transforms
         self._test_dataset.transforms = self.test_transforms

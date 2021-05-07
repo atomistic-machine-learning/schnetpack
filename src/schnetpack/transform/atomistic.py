@@ -50,7 +50,7 @@ class SubtractCenterOfGeometry(Transform):
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
-        results: Optional[Dict[str, torch.Tensor]] = None,
+        results: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
         inputs[structure.position] -= inputs[structure.position].mean(0)
         return inputs
@@ -121,7 +121,6 @@ class RemoveOffsets(Transform):
         if self.remove_mean:
             self.register_buffer("mean", torch.zeros((1,)))
 
-    @Transform.datamodule.setter
     def datamodule(self, value):
         self._datamodule = value
 
@@ -158,6 +157,7 @@ class AddOffsets(Transform):
 
     is_preprocessor: bool = True
     is_postprocessor: bool = True
+    atomref: torch.Tensor
 
     def __init__(
         self,
@@ -178,12 +178,9 @@ class AddOffsets(Transform):
             add_mean or add_atomrefs
         ), "You should set at least one of `add_mean` and `add_atomrefs` to true!"
 
-        if self.add_atomrefs:
-            self.register_buffer("atomref", torch.zeros((zmax,)))
-        if self.add_mean:
-            self.register_buffer("mean", torch.zeros((1,)))
+        self.register_buffer("atomref", torch.zeros((zmax,)))
+        self.register_buffer("mean", torch.zeros((1,)))
 
-    @Transform.datamodule.setter
     def datamodule(self, value):
         self._datamodule = value
 
@@ -193,7 +190,7 @@ class AddOffsets(Transform):
 
         if self.add_mean:
             stats = self._datamodule.get_stats(
-                self._property, self.is_extensive, self.remove_atomrefs
+                self._property, self.is_extensive, self.add_atomrefs
             )
             self.mean.copy_(stats[0])
 
@@ -202,6 +199,8 @@ class AddOffsets(Transform):
         inputs: Dict[str, torch.Tensor],
         results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
+        if results is None:
+            results = {}
         x = inputs if self.mode == "pre" else results
 
         if self.add_mean:
@@ -210,12 +209,11 @@ class AddOffsets(Transform):
         if self.add_atomrefs:
             idx_m = inputs[structure.idx_m]
             y0i = self.atomref[inputs[structure.Z]]
-            tmp = torch.zeros(
-                (idx_m[-1] + 1, self.n_out), dtype=y0i.dtype, device=y0i.device
-            )
+            maxm = int(idx_m[-1]) + 1
+            tmp = torch.zeros((maxm, y0i.shape[1]), dtype=y0i.dtype, device=y0i.device)
             y0 = tmp.index_add(0, idx_m, y0i)
             if not self.is_extensive:
-                y0 /= input[structure.n_atoms]
+                y0 /= inputs[structure.n_atoms]
             x[self._property] -= y0
 
         return x

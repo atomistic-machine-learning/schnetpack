@@ -27,6 +27,8 @@ class CastMap(Transform):
         inputs: Dict[str, torch.Tensor],
         results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
+        if results is None:
+            results = {}
         x = inputs if self.mode == "pre" else results
         for k, v in x.items():
             if v.dtype in self.type_map:

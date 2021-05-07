@@ -3,9 +3,12 @@ import logging
 import hydra
 import torch
 from torch.autograd import grad
+from typing import Dict, Optional, List
 
 from schnetpack import structure
 from schnetpack.model.base import AtomisticModel
+
+import schnetpack as spk
 
 log = logging.getLogger(__name__)
 
@@ -15,9 +18,7 @@ class PESModel(AtomisticModel):
     AtomisticModel for potential energy surfaces
     """
 
-    def build_model(
-        self,
-    ):
+    def build_model(self):
         self.representation = hydra.utils.instantiate(self._representation_cfg)
 
         self.props = {}
@@ -70,20 +71,26 @@ class PESModel(AtomisticModel):
             self.stress_metrics = torch.nn.ModuleDict(stress_metrics)
             self.metrics["stress"] = stress_metrics
 
-    def forward(self, inputs):
+    def forward(
+        self,
+        inputs: Dict[str, torch.Tensor],
+    ):
         R = inputs[structure.R]
         inputs[structure.Rij].requires_grad_()
         inputs.update(self.representation(inputs))
         Epred = self.output(inputs)
-        result = {"energy": Epred}
+        results = {"energy": Epred}
 
         if self.predict_forces:
+            go: List[Optional[torch.Tensor]] = [torch.ones_like(Epred)]
             dEdRij = grad(
-                Epred,
-                inputs[structure.Rij],
-                grad_outputs=torch.ones_like(Epred),
+                [Epred],
+                [inputs[structure.Rij]],
+                grad_outputs=go,
                 create_graph=self.training,
             )[0]
+            if dEdRij is None:
+                dEdRij = torch.zeros_like(inputs[structure.Rij])
 
             Fpred_i = torch.zeros_like(R)
             Fpred_i = Fpred_i.index_add(
@@ -99,9 +106,11 @@ class PESModel(AtomisticModel):
                 dEdRij,
             )
             Fpred = Fpred_i - Fpred_j
-            result["forces"] = Fpred
+            results["forces"] = Fpred
 
-        return result
+        results = self.postprocess(inputs, results)
+
+        return results
 
     def loss_fn(self, pred, batch):
         loss = 0.0
@@ -143,9 +152,6 @@ class PESModel(AtomisticModel):
                     on_epoch=True,
                     prog_bar=False,
                 )
-
-        print(batch)
-        print(self.predict(batch))
 
         return {"val_loss": loss}
 
