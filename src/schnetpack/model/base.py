@@ -1,9 +1,12 @@
 from abc import abstractmethod
+from typing import Optional
 
+import hydra.utils
 from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
 
 import schnetpack as spk
+import torch
 
 
 class AtomisticModel(LightningModule):
@@ -22,16 +25,21 @@ class AtomisticModel(LightningModule):
         output: DictConfig,
         schedule: DictConfig,
         optimizer: DictConfig,
+        postprocess: Optional[DictConfig] = None,
     ):
         super().__init__()
-        self.save_hyperparameters("representation", "output", "optimizer", "schedule")
+        self.save_hyperparameters(
+            "representation", "output", "optimizer", "schedule", "postprocess"
+        )
         self.datamodule = datamodule
         self._representation_cfg = representation
         self._output_cfg = output
         self._schedule_cfg = schedule
         self._optimizer_cfg = optimizer
+        self._postproc_cfg = postprocess or []
 
         self.build_model()
+        self.build_postprocess()
 
     @abstractmethod
     def build_model(
@@ -39,3 +47,18 @@ class AtomisticModel(LightningModule):
     ):
         """Parser dict configs and instantiate the model"""
         pass
+
+    def build_postprocess(
+        self,
+    ):
+        self.postprocessors = torch.nn.ModuleList()
+        for pp in self._postproc_cfg:
+            pp = hydra.utils.instantiate(pp)
+            pp.postprocessor()
+            self.postprocessors.append(pp)
+
+    def predict(self, inputs):
+        result = self(inputs)
+        for pp in self.postprocessors:
+            result = pp(result, inputs)
+        return result

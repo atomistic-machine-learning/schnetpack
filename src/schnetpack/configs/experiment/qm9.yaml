@@ -20,12 +20,12 @@ data:
   property_units:
     energy_U0: eV
   transforms:
-    - _target_: schnetpack.transforms.SubtractCenterOfMass
-    - _target_: schnetpack.transforms.RemoveOffsets
+    - _target_: schnetpack.transform.SubtractCenterOfMass
+    - _target_: schnetpack.transform.RemoveOffsets
       property: ${property}
       remove_atomrefs: True
       remove_mean: True
-    - _target_: schnetpack.transforms.TorchNeighborList
+    - _target_: schnetpack.transform.TorchNeighborList
       cutoff: ${cutoff}
-    - _target_: schnetpack.transforms.CastTo32
+    - _target_: schnetpack.transform.CastTo32
 

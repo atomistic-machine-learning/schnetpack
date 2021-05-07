@@ -143,6 +143,10 @@ class PESModel(AtomisticModel):
                     on_epoch=True,
                     prog_bar=False,
                 )
+
+        print(batch)
+        print(self.predict(batch))
+
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_idx):

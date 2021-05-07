@@ -10,7 +10,6 @@ n_rbf: 20
 lr: 1e-4
 
 name: md17_${data.molecule}
-seed: 1234
 
 data:
   distance_unit: Ang
@@ -18,11 +17,19 @@ data:
     energy: kcal/mol
     forces: kcal/mol/Ang
   transforms:
-    - _target_: schnetpack.transforms.SubtractCenterOfMass
-    - _target_: schnetpack.transforms.RemoveOffsets
+    - _target_: schnetpack.transform.SubtractCenterOfMass
+    - _target_: schnetpack.transform.RemoveOffsets
       property: energy
       remove_mean: True
-    - _target_: schnetpack.transforms.TorchNeighborList
+    - _target_: schnetpack.transform.TorchNeighborList
       cutoff: ${cutoff}
-    - _target_: schnetpack.transforms.CastTo32
+    - _target_: schnetpack.transform.CastTo32
+
+
+model:
+  postprocess:
+    - _target_: schnetpack.transform.CastTo64
+    - _target_: schnetpack.transform.AddOffsets
+      property: energy
+      add_mean: True
 
