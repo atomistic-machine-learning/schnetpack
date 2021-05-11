@@ -1,6 +1,6 @@
 import torch
 
-from schnetpack.transforms import ASENeighborList
+from schnetpack.transform import ASENeighborList
 from schnetpack.data.loader import _atoms_collate_fn
 import schnetpack.structure as structure
 

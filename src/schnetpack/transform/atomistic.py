@@ -50,7 +50,7 @@ class SubtractCenterOfGeometry(Transform):
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
-        results: Dict[str, torch.Tensor],
+        results: Dict[str, torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         inputs[structure.position] -= inputs[structure.position].mean(0)
         return inputs
