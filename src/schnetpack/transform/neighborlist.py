@@ -2,13 +2,11 @@ import torch
 from ase import Atoms
 from ase.neighborlist import neighbor_list
 from typing import Dict, Optional
-import schnetpack.structure as structure
 from .transform import Transform
 
-__all__ = [
-    "ASENeighborList",
-    "TorchNeighborList",
-]
+__all__ = ["ASENeighborList", "TorchNeighborList"]
+
+from .. import structure as structure
 
 
 class ASENeighborList(Transform):
@@ -197,3 +195,43 @@ class TorchNeighborList(Transform):
                 torch.cartesian_prod(o, o, r3),
             ]
         )
+
+
+class CollectAtomTriples(Transform):
+    """
+    Convert units of selected properties.
+    """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
+
+    def forward(
+        self,
+        inputs: Dict[str, torch.Tensor],
+        results: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> Dict[str, torch.Tensor]:
+        idx_i = inputs[structure.idx_i]
+
+        _, n_neighbors = torch.unique_consecutive(idx_i, return_counts=True)
+
+        offset = 0
+        idx_i_triples = ()
+        idx_jk_triples = ()
+        for idx in range(n_neighbors.shape[0]):
+            triples = torch.combinations(
+                torch.arange(offset, offset + n_neighbors[idx]), r=2
+            )
+            idx_i_triples += (torch.ones(triples.shape[0], dtype=torch.long) * idx,)
+            idx_jk_triples += (triples,)
+            offset += n_neighbors[idx]
+
+        idx_i_triples = torch.cat(idx_i_triples)
+
+        idx_jk_triples = torch.cat(idx_jk_triples)
+        idx_j_triples, idx_k_triples = idx_jk_triples.split(1, dim=-1)
+
+        inputs[structure.idx_i_triples] = idx_i_triples
+        inputs[structure.idx_j_triples] = idx_j_triples.squeeze(-1)
+        inputs[structure.idx_k_triples] = idx_k_triples.squeeze(-1)
+
+        return inputs
