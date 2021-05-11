@@ -76,9 +76,9 @@ class AtomsDataModule(pl.LightningDataModule):
             val_transforms=val_transforms or copy(transforms) or [],
             test_transforms=test_transforms or copy(transforms) or [],
         )
-        self._check_transforms(self.train_transforms)
-        self._check_transforms(self.val_transforms)
-        self._check_transforms(self.test_transforms)
+        self._init_transforms(self.train_transforms)
+        self._init_transforms(self.val_transforms)
+        self._init_transforms(self.test_transforms)
 
         self.batch_size = batch_size
         self.val_batch_size = val_batch_size or test_batch_size or batch_size
@@ -96,12 +96,9 @@ class AtomsDataModule(pl.LightningDataModule):
         self.distance_unit = distance_unit
         self._stats = {}
 
-    def _check_transforms(self, transforms):
+    def _init_transforms(self, transforms):
         for t in transforms:
-            if not t.is_preprocessor:
-                raise AtomsDataModuleError(
-                    f"Transform of type {t} is not a preprocessor (is_preprocessor=False)!"
-                )
+            t.preprocessor()
 
     def setup(self, stage: Optional[str] = None):
         self.load_data()
@@ -162,11 +159,11 @@ class AtomsDataModule(pl.LightningDataModule):
     def setup_transforms(self):
         # setup transforms
         for t in self.train_transforms:
-            t.datamodule = self
+            t.datamodule(self)
         for t in self.val_transforms:
-            t.datamodule = self
+            t.datamodule(self)
         for t in self.test_transforms:
-            t.datamodule = self
+            t.datamodule(self)
         self._train_dataset.transforms = self.train_transforms
         self._val_dataset.transforms = self.val_transforms
         self._test_dataset.transforms = self.test_transforms
