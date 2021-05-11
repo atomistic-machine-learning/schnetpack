@@ -2,11 +2,8 @@ import logging
 
 import hydra
 import schnetpack
-import torch
-from torch.autograd import grad
 
-from schnetpack import structure
-from schnetpack.utils.script import requires_atom_triples
+import schnetpack.transform.neighborlist
 
 from schnetpack.model import PESModel
 
@@ -18,7 +15,7 @@ class PESModelSF(PESModel):
     AtomisticModel for potential energy surfaces
     """
 
-    def build_model(self,):
+    def build_model(self, datamodule):
 
         self.representation = hydra.utils.instantiate(self._representation_cfg)
 
@@ -29,20 +26,19 @@ class PESModelSF(PESModel):
             # Turn on collection of atom triples if representation requires angles
             if self.representation.n_basis_angular > 0:
                 log.info("Enabling collection of atom triples for angular functions...")
-                self.datamodule.train_transforms.append(
-                    schnetpack.transforms.CollectAtomTriples()
+                datamodule.train_transforms.append(
+                    schnetpack.transform.neighborlist.CollectAtomTriples()
                 )
-                self.datamodule.val_transforms.append(
-                    schnetpack.transforms.CollectAtomTriples()
+                datamodule.val_transforms.append(
+                    schnetpack.transform.neighborlist.CollectAtomTriples()
                 )
-                self.datamodule.test_transforms.append(
-                    schnetpack.transforms.CollectAtomTriples()
+                datamodule.test_transforms.append(
+                    schnetpack.transform.neighborlist.CollectAtomTriples()
                 )
-                print(self.datamodule.train_transforms)
 
             # Standardize symmetry functions
             log.info("Standardizing symmetry functions...")
-            self.representation.standardize(self.datamodule.train_dataloader())
+            self.representation.standardize(datamodule.train_dataloader())
 
         self.props = {}
         if "energy" in self._output_cfg:
@@ -57,7 +53,6 @@ class PESModelSF(PESModel):
             self.props["stress"] = self._output_cfg.stress.property
 
         # Determine shape of the representation
-        # TODO: generalize for scalars and vectors
         log.info(
             "Overall representation length: {:d}".format(
                 self.representation.n_atom_basis
@@ -65,10 +60,11 @@ class PESModelSF(PESModel):
         )
         self._output_cfg.module["n_in"] = self.representation.n_atom_basis
         # Also set shape for custom outnets
-        if self._output_cfg.module.custom_outnet is not None:
-            self._output_cfg.module.custom_outnet[
-                "n_in"
-            ] = self.representation.n_atom_basis
+        if "custom_outnet" in self._output_cfg.module:
+            if self._output_cfg.module.custom_outnet is not None:
+                self._output_cfg.module.custom_outnet[
+                    "n_in"
+                ] = self.representation.n_atom_basis
 
         self.output = hydra.utils.instantiate(self._output_cfg.module)
 
