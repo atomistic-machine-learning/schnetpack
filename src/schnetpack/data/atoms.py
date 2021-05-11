@@ -23,7 +23,7 @@ from ase.db import connect
 
 import schnetpack as spk
 import schnetpack.structure as structure
-from schnetpack.transforms import Transform
+from schnetpack.transform import Transform
 
 logger = logging.getLogger(__name__)
 
@@ -86,9 +86,6 @@ class BaseAtomsData(ABC):
 
         if value is not None:
             for tf in value:
-                if tf.data is not None:
-                    tf = copy.copy(tf)
-                tf.data = self
                 self._transforms.append(tf)
             self._transform_module = torch.nn.Sequential(*self._transforms)
 

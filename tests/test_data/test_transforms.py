@@ -1,8 +1,8 @@
 import schnetpack.structure as structure
-from schnetpack.transforms import *
 import pytest
 import torch
 from ase.data import atomic_masses
+from schnetpack.transform import *
 
 
 def assert_consistent(orig, transformed):
