@@ -199,7 +199,7 @@ class TorchNeighborList(Transform):
 
 class CollectAtomTriples(Transform):
     """
-    Convert units of selected properties.
+    Generate the index tensors for all triples between atoms within the cutoff shell.
     """
 
     is_preprocessor: bool = True
@@ -210,6 +210,17 @@ class CollectAtomTriples(Transform):
         inputs: Dict[str, torch.Tensor],
         results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
+        """
+        Using the neighbors contained within the cutoff shell, generate all unique pairs of neighbors and convert
+        them to index arrays. Applied to the neighbor arrays, these arrays generate the indices involved in the atom
+        triples.
+
+        E.g.:
+            idx_j[idx_j_triples] -> j atom in triple
+            idx_j[idx_k_triples] -> k atom in triple
+            Rij[idx_j_triples] -> Rij vector in triple
+            Rij[idx_k_triples] -> Rik vector in triple
+        """
         idx_i = inputs[structure.idx_i]
 
         _, n_neighbors = torch.unique_consecutive(idx_i, return_counts=True)

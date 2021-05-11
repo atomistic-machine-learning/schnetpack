@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 class PESModelSF(PESModel):
     """
-    AtomisticModel for potential energy surfaces
+    AtomisticModel for potential energy surfaces using symmetry functions.
     """
 
     def build_model(self, datamodule):

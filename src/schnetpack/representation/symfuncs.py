@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 from typing import Callable, Dict
+
+import schnetpack.data.loader
 from schnetpack import structure
 from schnetpack.nn import scatter_add
 from tqdm import tqdm
@@ -9,7 +11,29 @@ __all__ = ["SymmetryFunctions", "RadialSF", "AngularSF", "AngularSFANI"]
 
 
 class SymmetryFunctions(nn.Module):
+    """
+    Base class for different types of atom-centered symmetry functions [#acsf1]_. Different variants (e.g.
+    wACSF [#wacsf1]_ and  Justin-Smith symmetry functions [#ani1]_) can be obtained by combining the corresponding
+    radial and angular basis components.
+
+    References
+    .. [#acsf1] Behler:
+       Atom-centered symmetry functions for constructing high-dimensional neural network potentials.
+       The Journal of Chemical Physics 134. 074106. 2011.
+    .. [#wacsf1] Gastegger, Schwiedrzik, Bittermann, Berzsenyi, Marquetand:
+       wACSF -- Weighted atom-centered symmetry functions as descriptors in machine learning potentials.
+       The Journal of Chemical Physics 148 (24), 241709. 2018.
+    .. [#ani1] Smith, Isayev, Roitberg:
+       ANI-1: an extensible neural network potential with DFT accuracy at force field computational cost.
+       Chemical science 8(4). 3192--3203. 2017.
+    """
+
     def __init__(self, radial: nn.Module, angular: nn.Module):
+        """
+        Args:
+            radial: radial symmetry function representation.
+            angular: angular symmetry function representation.
+        """
         super(SymmetryFunctions, self).__init__()
 
         if radial is not None:
@@ -30,6 +54,15 @@ class SymmetryFunctions(nn.Module):
         self.register_buffer("symfunc_mean", torch.zeros(1, self.n_atom_basis))
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
+        """
+        Construct the full symmetry function representation from the components.
+
+        Args:
+            inputs: batch inputs.
+
+        Returns:
+            torch.Tensor: symmetry function vectors
+        """
         atomic_numbers = inputs[structure.Z]
         target_shape = atomic_numbers.shape[0]
 
@@ -84,8 +117,17 @@ class SymmetryFunctions(nn.Module):
 
         return {"scalar_representation": x}
 
-    def standardize(self, data_loader, eps=1e-6):
+    def standardize(
+        self, data_loader: schnetpack.data.loader.AtomsLoader, eps: float = 1e-6
+    ):
+        """
+        Standardize the symmetry functions by removing the average and dividing by the standard deviation vector
+        computed over a dataset.
 
+        Args:
+            data_loader: data loader for the molecular structures used to compute mean and standard deviation.
+            eps (optional): small offset to catch numerical issues due to division by 0 standard deviation.
+        """
         with torch.no_grad():
             symfunc_values = []
             for batch in tqdm(data_loader):
@@ -105,9 +147,20 @@ class SymmetryFunctions(nn.Module):
 
 
 class RadialSF(nn.Module):
+    """
+    Base class for radial symmetry functions. By combining different radial and elemental components, different
+    types of radial functions can be obtained.
+    """
+
     def __init__(
         self, radial_basis: nn.Module, elemental_basis: nn.Module, cutoff_fn: Callable
     ):
+        """
+        Args:
+            radial_basis: radials basis functions.
+            elemental_basis: elemental basis function.
+            cutoff_fn: cutoff function used to localize the atomic environments.
+        """
         super(RadialSF, self).__init__()
         self.n_atom_basis = radial_basis.n_rbf * elemental_basis.n_ebf
 
@@ -116,6 +169,17 @@ class RadialSF(nn.Module):
         self.cutoff_fn = cutoff_fn
 
     def forward(self, rij: torch.Tensor, Zj: torch.Tensor):
+        """
+        Compute the radial symmetry function vectors. The sum over all neighbor components is performed in
+        the `SymmetryFunctions` masterclass.
+
+        Args:
+            rij: distances between atoms i and j
+            Zj: atomic numbers of neighbors j
+
+        Returns:
+            torch.Tensor: radial symmetry function vectors
+        """
         elemental_weights = self.elemental_basis(Zj)
 
         radial = self.radial_basis(rij)
@@ -129,6 +193,16 @@ class RadialSF(nn.Module):
 
 
 class AngularSF(nn.Module):
+    """
+    Base class of angular symmetry functions of the Behler type. By combining different radial, elemental and angular
+    components, different types of angular functions can be obtained.
+
+    References
+    .. [#acsf1] Behler:
+       Atom-centered symmetry functions for constructing high-dimensional neural network potentials.
+       The Journal of Chemical Physics 134. 074106. 2011.
+    """
+
     def __init__(
         self,
         radial_basis: nn.Module,
@@ -137,6 +211,14 @@ class AngularSF(nn.Module):
         cutoff_fn: Callable,
         crossterms: bool = True,
     ):
+        """
+        Args:
+            radial_basis: radials basis functions.
+            elemental_basis: elemental basis function.
+            angular_basis: angular basis function.
+            cutoff_fn: cutoff function used to localize the atomic environments.
+            crossterms: if true, also include interactions between atoms j and k.
+        """
         super(AngularSF, self).__init__()
         self.n_atom_basis = (
             radial_basis.n_rbf * elemental_basis.n_ebf_combined * angular_basis.n_abf
@@ -152,6 +234,17 @@ class AngularSF(nn.Module):
     def _radial_part(
         self, rij: torch.Tensor, rik: torch.Tensor, cos_theta_ijk: torch.Tensor
     ):
+        """
+        Compute the radial part of the angular symmetry function.
+
+        Args:
+            rij: distances between atoms i and j
+            rik: distances between atoms i and k
+            cos_theta_ijk: cosine of angles spanned by atoms i, j and k
+
+        Returns:
+            torch.Tensor: radial component of angular symmetry functions.
+        """
         # Compute radial contributions (using rjk terms if requested)
         rij_sq = rij * rij
         rik_sq = rik * rik
@@ -177,6 +270,20 @@ class AngularSF(nn.Module):
         Zk: torch.Tensor,
         cos_theta_ijk: torch.Tensor,
     ):
+        """
+        Compute the angular symmetry function vectors. The sum over all neighbor components is performed in
+        the `SymmetryFunctions` masterclass.
+
+        Args:
+            rij: distances between atoms i and j
+            rik: distances between atoms i and k
+            Zj: atomic numbers of neighbors j
+            Zk: atomic numbers of neighbors k
+            cos_theta_ijk: cosine of angles spanned by atoms i, j and k
+
+        Returns:
+            torch.Tensor: angular symmetry function vectors
+        """
         # Compute the elemental contributions
         elemental_weights_jk = self.elemental_basis.combine_elements(
             self.elemental_basis(Zj), self.elemental_basis(Zk)
@@ -200,6 +307,16 @@ class AngularSF(nn.Module):
 
 
 class AngularSFANI(AngularSF):
+    """
+    Base class of angular Justin-Smith symmetry functions. By combining different radial, elemental and angular
+    components, different modifications of the angular function can be obtained.
+
+    References
+    .. [#ani1] Smith, Isayev, Roitberg:
+       ANI-1: an extensible neural network potential with DFT accuracy at force field computational cost.
+       Chemical science 8(4). 3192--3203. 2017.
+    """
+
     def __init__(
         self,
         radial_basis: nn.Module,
@@ -207,6 +324,13 @@ class AngularSFANI(AngularSF):
         angular_basis: nn.Module,
         cutoff_fn: Callable,
     ):
+        """
+        Args:
+            radial_basis: radials basis functions.
+            elemental_basis: elemental basis function.
+            angular_basis: angular basis function.
+            cutoff_fn: cutoff function used to localize the atomic environments.
+        """
         super(AngularSFANI, self).__init__(
             radial_basis=radial_basis,
             elemental_basis=elemental_basis,
@@ -218,6 +342,17 @@ class AngularSFANI(AngularSF):
     def _radial_part(
         self, rij: torch.Tensor, rik: torch.Tensor, cos_theta_ijk: torch.Tensor
     ):
+        """
+        Compute the radial part of the angular Justin-Smith symmetry function.
+
+        Args:
+            rij: distances between atoms i and j
+            rik: distances between atoms i and k
+            cos_theta_ijk: cosine of angles spanned by atoms i, j and k
+
+        Returns:
+            torch.Tensor: radial component of angular symmetry functions.
+        """
         cutoff_ijk = self.cutoff_fn(rij) * self.cutoff_fn(rik)
 
         radial = self.radial_basis(0.5 * (rij + rik))
