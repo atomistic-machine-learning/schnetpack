@@ -18,7 +18,7 @@ class PESModel(AtomisticModel):
     AtomisticModel for potential energy surfaces
     """
 
-    def build_model(self):
+    def build_model(self, datamodule):
         self.representation = hydra.utils.instantiate(self._representation_cfg)
 
         self.props = {}
@@ -71,10 +71,7 @@ class PESModel(AtomisticModel):
             self.stress_metrics = torch.nn.ModuleDict(stress_metrics)
             self.metrics["stress"] = stress_metrics
 
-    def forward(
-        self,
-        inputs: Dict[str, torch.Tensor],
-    ):
+    def forward(self, inputs: Dict[str, torch.Tensor]):
         R = inputs[structure.R]
         inputs[structure.Rij].requires_grad_()
         inputs.update(self.representation(inputs))
@@ -93,18 +90,10 @@ class PESModel(AtomisticModel):
                 dEdRij = torch.zeros_like(inputs[structure.Rij])
 
             Fpred_i = torch.zeros_like(R)
-            Fpred_i = Fpred_i.index_add(
-                0,
-                inputs[structure.idx_i],
-                dEdRij,
-            )
+            Fpred_i = Fpred_i.index_add(0, inputs[structure.idx_i], dEdRij)
 
             Fpred_j = torch.zeros_like(R)
-            Fpred_j = Fpred_j.index_add(
-                0,
-                inputs[structure.idx_j],
-                dEdRij,
-            )
+            Fpred_j = Fpred_j.index_add(0, inputs[structure.idx_j], dEdRij)
             Fpred = Fpred_i - Fpred_j
             results["forces"] = Fpred
 
@@ -179,10 +168,7 @@ class PESModel(AtomisticModel):
         schedule = hydra.utils.instantiate(
             self._schedule_cfg.scheduler, optimizer=optimizer
         )
-        optimconf = {
-            "scheduler": schedule,
-            "name": "lr_schedule",
-        }
+        optimconf = {"scheduler": schedule, "name": "lr_schedule"}
         if self._schedule_cfg.monitor:
             optimconf["monitor"] = self._schedule_cfg.monitor
         return [optimizer], [optimconf]
