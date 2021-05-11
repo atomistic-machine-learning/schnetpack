@@ -4,13 +4,10 @@ radial:
   radial_basis:
     _target_: schnetpack.nn.radial.GaussianRBFCentered
     n_rbf: 5
-    cutoff: 5.0
+    cutoff: ${cutoff}
   elemental_basis:
     _target_: schnetpack.nn.symmetry_functions.OneHotElements
-    elements:
-      - 1
-      - 6
-      - 8
+    elements: ${model.output.module.elements}
   cutoff_fn:
     _target_: schnetpack.nn.cutoff.CosineCutoff
     cutoff: ${model.representation.radial.radial_basis.cutoff}
@@ -19,13 +16,10 @@ angular:
   radial_basis:
     _target_: schnetpack.nn.radial.GaussianRBFCentered
     n_rbf: 3
-    cutoff: 5.0
+    cutoff: ${cutoff}
   elemental_basis:
     _target_: schnetpack.nn.symmetry_functions.OneHotElements
-    elements:
-      - 1
-      - 6
-      - 8
+    elements: ${model.output.module.elements}
   angular_basis:
     _target_: schnetpack.nn.symmetry_functions.AngularBasis
     zetas:

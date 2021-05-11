@@ -4,7 +4,7 @@ radial:
   radial_basis:
     _target_: schnetpack.nn.radial.GaussianRBFCentered
     n_rbf: 20
-    cutoff: 5.0
+    cutoff: ${cutoff}
   elemental_basis:
     _target_: schnetpack.nn.symmetry_functions.WeightedElements
   cutoff_fn:
@@ -15,7 +15,7 @@ angular:
   radial_basis:
     _target_: schnetpack.nn.radial.GaussianRBFCentered
     n_rbf: 5
-    cutoff: 5.0
+    cutoff: ${cutoff}
   elemental_basis:
     _target_: schnetpack.nn.symmetry_functions.WeightedElements
   angular_basis:

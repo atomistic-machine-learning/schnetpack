@@ -20,20 +20,14 @@ schedule:
 
 output:
   module:
-    _target_: schnetpack.atomistic.Atomwise
-    custom_outnet:
-      _target_: schnetpack.nn.ElementwiseMLP
-      n_out: 1
-      n_hidden:
-        - 100
-        - 100
-      elements:
-        - 1
-        - 6
-        - 8
-    outnet_inputs:
-      - "_atomic_numbers"
-      - "scalar_representation"
+    _target_: schnetpack.atomistic.ElementalAtomwise
+    elements:
+      - 1
+      - 6
+      - 8
+    n_hidden:
+      - 100
+      - 100
 
   normalization:
     # TODO: trainable: True
@@ -46,7 +40,7 @@ output:
 
     loss:
       _target_: pytorch_lightning.metrics.MeanSquaredError
-    loss_weight: 0.10
+    loss_weight: 0.05
     metrics:
       mae:
         _target_: pytorch_lightning.metrics.MeanAbsoluteError
@@ -57,10 +51,11 @@ output:
     property: forces
     loss:
       _target_: pytorch_lightning.metrics.MeanSquaredError
-    loss_weight: 0.90
+    loss_weight: 0.95
     metrics:
       mae:
         _target_: pytorch_lightning.metrics.MeanAbsoluteError
       mse:
         _target_: pytorch_lightning.metrics.MeanSquaredError
 
+postprocess: null
