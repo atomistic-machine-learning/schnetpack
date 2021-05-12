@@ -15,7 +15,7 @@ class PESModelSF(PESModel):
     AtomisticModel for potential energy surfaces using symmetry functions.
     """
 
-    def build_model(self, datamodule):
+    def build_model(self, datamodule: schnetpack.data.AtomsDataModule):
 
         self.representation = hydra.utils.instantiate(self._representation_cfg)
 

@@ -18,7 +18,7 @@ class PESModel(AtomisticModel):
     AtomisticModel for potential energy surfaces
     """
 
-    def build_model(self, datamodule):
+    def build_model(self, datamodule: spk.data.AtomsDataModule):
         self.representation = hydra.utils.instantiate(self._representation_cfg)
 
         self.props = {}
