@@ -86,20 +86,20 @@ class ElementwiseMLP(nn.Module):
         trainable: bool = False,
     ):
         """
-          Args:
-              n_in: number of input nodes.
-              n_out: number of output nodes.
-              elements: list of atomic numbers of the elements present in the data.
-              n_hidden: number hidden layer nodes.
-                  If an integer, same number of node is used for all hidden layers resulting
-                  in a rectangular network.
-                  If None, the number of neurons is divided by two after each layer starting
-                  n_in resulting in a pyramidal network.
-              n_layers: number of layers.
-              activation: activation function. All hidden layers would
-                  the same activation function except the output layer that does not apply
-                  any activation function.
-          """
+        Args:
+            n_in: number of input nodes.
+            n_out: number of output nodes.
+            elements: list of atomic numbers of the elements present in the data.
+            n_hidden: number hidden layer nodes.
+                If an integer, same number of node is used for all hidden layers resulting
+                in a rectangular network.
+                If None, the number of neurons is divided by two after each layer starting
+                n_in resulting in a pyramidal network.
+            n_layers: number of layers.
+            activation: activation function. All hidden layers would
+                the same activation function except the output layer that does not apply
+                any activation function.
+        """
         super(ElementwiseMLP, self).__init__()
 
         self.n_elements = len(elements)
