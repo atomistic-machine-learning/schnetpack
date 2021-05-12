@@ -39,11 +39,11 @@ class AtomisticModel(LightningModule):
         self._postproc_cfg = postprocess or []
         self.inference_mode = False
 
-        self.build_model()
+        self.build_model(datamodule)
         self.build_postprocess(datamodule)
 
     @abstractmethod
-    def build_model(self):
+    def build_model(self, datamodule: spk.data.AtomsDataModule):
         """Parser dict configs and instantiate the model"""
         pass
 
