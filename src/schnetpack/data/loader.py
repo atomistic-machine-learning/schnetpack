@@ -27,7 +27,7 @@ def _atoms_collate_fn(batch):
 
     coll_batch = {}
     for key in elem:
-        if key not in idx_keys:
+        if (key not in idx_keys) and (key not in idx_triple_keys):
             coll_batch[key] = torch.cat([d[key] for d in batch], 0)
 
     seg_m = torch.cumsum(coll_batch[structure.n_atoms], dim=0)
