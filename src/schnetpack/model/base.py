@@ -43,7 +43,7 @@ class AtomisticModel(LightningModule):
         self.build_postprocess(datamodule)
 
     @abstractmethod
-    def build_model(self, datamodule):
+    def build_model(self, datamodule: spk.data.AtomsDataModule):
         """Parser dict configs and instantiate the model"""
         pass
 
