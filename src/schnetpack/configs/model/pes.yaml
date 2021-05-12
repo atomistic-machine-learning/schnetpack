@@ -24,10 +24,8 @@ output:
     n_in: ${model.representation.n_atom_basis}
 
   normalization:
-    # TODO: trainable: True
     initialize_with_stats: True
     requires_atomref: False
-    # TODO: element_specific: False
 
   energy:
     property: energy

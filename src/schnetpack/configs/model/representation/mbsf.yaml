@@ -24,8 +24,7 @@ angular:
     _target_: schnetpack.nn.symmetry_functions.AngularBasisANI
     n_abf:
       5
-    zetas:
-      - 1
+    zetas: [ 1, ]
   cutoff_fn:
     _target_: schnetpack.nn.cutoff.CosineCutoff
     cutoff: ${model.representation.radial.radial_basis.cutoff}

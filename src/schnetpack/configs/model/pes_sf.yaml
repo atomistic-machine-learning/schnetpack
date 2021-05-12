@@ -21,19 +21,12 @@ schedule:
 output:
   module:
     _target_: schnetpack.atomistic.ElementalAtomwise
-    elements:
-      - 1
-      - 6
-      - 8
-    n_hidden:
-      - 100
-      - 100
+    elements: [ 1, 6, 8 ]
+    n_hidden: [ 100, 100 ]
 
   normalization:
-    # TODO: trainable: True
     initialize_with_stats: True
     requires_atomref: False
-    # TODO: element_specific: False
 
   energy:
     property: energy

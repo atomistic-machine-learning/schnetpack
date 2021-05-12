@@ -20,10 +20,7 @@ angular:
     _target_: schnetpack.nn.symmetry_functions.WeightedElements
   angular_basis:
     _target_: schnetpack.nn.symmetry_functions.AngularBasis
-    zetas:
-      - 1
-      - 4
-      - 8
+    zetas: [ 1, 4, 8 ]
   cutoff_fn:
     _target_: schnetpack.nn.cutoff.CosineCutoff
     cutoff: ${model.representation.radial.radial_basis.cutoff}
