@@ -249,11 +249,11 @@ class ReduceLROnPlateauHook(Hook):
 
     @property
     def state_dict(self):
-        return {"scheduler": self.scheduler}
+        return {"scheduler": self.scheduler.state_dict()}
 
     @state_dict.setter
     def state_dict(self, state_dict):
-        self.scheduler = state_dict["scheduler"]
+        self.scheduler.load_state_dict(state_dict["scheduler"])
 
     def on_validation_end(self, trainer, val_loss):
         self.window.append(val_loss)
