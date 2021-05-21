@@ -7,6 +7,8 @@ import schnetpack.structure as structure
 from schnetpack.nn import Dense, scatter_add
 from schnetpack.nn.activations import shifted_softplus
 
+__all__ = ["SchNet"]
+
 
 class SchNetInteraction(nn.Module):
     r"""SchNet interaction block for modeling interactions of atomistic systems."""

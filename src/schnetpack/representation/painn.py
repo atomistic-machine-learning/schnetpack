@@ -8,6 +8,8 @@ import torch.nn.functional as F
 import schnetpack.structure as structure
 import schnetpack.nn as snn
 
+__all__ = ["PaiNN"]
+
 
 def replicate_module(
     module_factory: Callable[[], nn.Module], n: int, share_params: bool

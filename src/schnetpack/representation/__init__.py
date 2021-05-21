@@ -1,2 +1,2 @@
-from .schnet import SchNet
-from .painn import PaiNN
+from .schnet import *
+from .painn import *

@@ -5,6 +5,8 @@ import torch
 
 from .transform import Transform
 
+__all__ = ["CastMap", "CastTo32", "CastTo64"]
+
 
 class CastMap(Transform):
     """
