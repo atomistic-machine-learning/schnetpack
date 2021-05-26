@@ -2,7 +2,7 @@ _target_: schnetpack.data.AtomsDataModule
 
 datapath: ${data_dir}/custom.db  # data_dir is specified in train.yaml
 batch_size: 2
-num_train: 1000
-num_val: 100
+num_train: 10000
+num_val: 1000
 num_test: null
 num_workers: 8

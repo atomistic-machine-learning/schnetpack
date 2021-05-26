@@ -117,11 +117,16 @@ class PESModel(AtomisticModel):
 
             # TODO: remove reshapes?
             cell_33 = inputs[structure.cell].view(maxm, 3, 3)
-            volume = torch.sum(
-                cell_33[:, 0, :] * torch.cross(cell_33[:, 1, :], cell_33[:, 2, :], dim=1),
-                dim=1,
-                keepdim=True,
-            ).expand(maxm, 3).reshape(maxm * 3, 1)
+            volume = (
+                torch.sum(
+                    cell_33[:, 0, :]
+                    * torch.cross(cell_33[:, 1, :], cell_33[:, 2, :], dim=1),
+                    dim=1,
+                    keepdim=True,
+                )
+                .expand(maxm, 3)
+                .reshape(maxm * 3, 1)
+            )
             results = self.postprocess(inputs, results)
             results["stress"] = stress.reshape(maxm * 3, 3) / volume
 
