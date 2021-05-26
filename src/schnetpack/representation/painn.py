@@ -22,6 +22,16 @@ def replicate_module(
 
 
 class PaiNN(nn.Module):
+    """PaiNN - polarizable interaction neural network
+
+    References:
+
+    .. [#painn1] Schütt, Unke, Gastegger:
+       Equivariant message passing for the prediction of tensorial properties and molecular spectra.
+       ICML 2021 (to appear)
+
+    """
+
     def __init__(
         self,
         n_atom_basis: int,
@@ -33,6 +43,19 @@ class PaiNN(nn.Module):
         shared_interactions: bool = False,
         shared_filters: bool = False,
     ):
+        """
+        Args:
+            n_atom_basis: number of features to describe atomic environments.
+                This determines the size of each embedding vector; i.e. embeddings_dim.
+            n_interactions: number of interaction blocks.
+            radial_basis: layer for expanding interatomic distances in a basis set
+            cutoff_fn: cutoff function
+            activation: activation function
+            shared_interactions: if True, share the weights across
+                interaction blocks.
+            shared_interactions: if True, share the weights across
+                filter-generating networks.
+        """
         super(PaiNN, self).__init__()
 
         self.n_atom_basis = n_atom_basis

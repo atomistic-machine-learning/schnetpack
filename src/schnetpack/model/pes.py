@@ -83,7 +83,7 @@ class PESModel(AtomisticModel):
         Epred = self.output(inputs)
         results = {"energy": Epred}
 
-        if self.predict_forces:
+        if self.predict_forces or self.predict_stress:
             go: List[Optional[torch.Tensor]] = [torch.ones_like(Epred)]
             dEdRij = grad(
                 [Epred],
@@ -91,9 +91,8 @@ class PESModel(AtomisticModel):
                 grad_outputs=go,
                 create_graph=self.training,
             )[0]
-            if dEdRij is None:
-                dEdRij = torch.zeros_like(inputs[structure.Rij])
 
+        if self.predict_forces:
             Fpred_i = torch.zeros_like(R)
             Fpred_i = Fpred_i.index_add(
                 0,
@@ -109,6 +108,29 @@ class PESModel(AtomisticModel):
             )
             Fpred = Fpred_i - Fpred_j
             results["forces"] = Fpred
+
+        if self.predict_stress:
+            cell_offset = inputs[structure.cell_offset]
+            offset_ij = cell_offset[structure.idx_j] - cell_offset
+            stress_i = torch.zeros_like(R)
+
+            # sum over j
+            stress_i = stress_i.index_add(
+                0,
+                inputs[structure.idx_i],
+                dEdRij * offset_ij,
+            )
+
+            # sum over i
+            idx_m = inputs[structure.idx_m]
+            maxm = int(idx_m[-1]) + 1
+            stress = torch.zeros(
+                (maxm, 3), dtype=stress_i.dtype, device=stress_i.device
+            )
+            stress = stress.index_add(0, idx_m, stress_i)
+
+            # TODO: normalize by volume
+            results["stress"] = stress
 
         results = self.postprocess(inputs, results)
 

@@ -1,6 +1,3 @@
-.. role:: hidden
-    :class: hidden-section
-
 schnetpack.nn
 =============
 .. currentmodule:: schnetpack.nn
@@ -10,10 +7,6 @@ schnetpack.nn
     :local:
     :backlinks: top
 
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
-    :template: classtemplate.rst
 
 Basic layers
 ------------

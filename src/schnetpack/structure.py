@@ -2,21 +2,22 @@
 Keys to access structure properties.
 
 Note: Had to be moved out of Structure class for TorchScript compatibility
+
 """
 from typing import Final
 
 
 idx: Final[str] = "_idx"
-Z: Final[str] = "_atomic_numbers"
-position: Final[str] = "_positions"
-R: Final[str] = position
 
-cell: Final[str] = "_cell"
-cell_offset: Final[str] = "_cell_offset"
-pbc: Final[str] = "_pbc"
+Z: Final[str] = "_atomic_numbers"  #: nuclear charge
+position: Final[str] = "_positions"  #: atom positions
+R: Final[str] = position  #: atom positions
 
-idx_m: Final[str] = "_seg_m"
-idx_i: Final[str] = "_idx_i"
-idx_j: Final[str] = "_idx_j"
-Rij: Final[str] = "_Rij"
-n_atoms: Final[str] = "_n_atoms"
+cell: Final[str] = "_cell"  #: unit cell
+pbc: Final[str] = "_pbc"  #: periodic boundary conditions
+
+idx_m: Final[str] = "_idx_m"  #: indices of systems
+idx_i: Final[str] = "_idx_i"  #: indices of center atoms
+idx_j: Final[str] = "_idx_j"  #: indices of neighboring atoms
+Rij: Final[str] = "_Rij"  #: indices of atom pairs
+n_atoms: Final[str] = "_n_atoms"  #: number of atoms

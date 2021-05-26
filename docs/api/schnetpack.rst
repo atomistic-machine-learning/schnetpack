@@ -1,9 +1,6 @@
-.. role:: hidden
-    :class: hidden-section
 
 schnetpack
 ==========
-
 .. currentmodule:: schnetpack
 
 .. contents:: schnetpack
@@ -11,18 +8,27 @@ schnetpack
     :local:
     :backlinks: top
 
+
+Structure attributes
+--------------------
 .. autosummary::
     :toctree: generated
     :nosignatures:
-    :template: classtemplate.rst
 
+    structure.Z
+    structure.R
+    structure.cell
+    structure.pbc
+    structure.idx_m
+    structure.idx_i
+    structure.idx_j
+    structure.Rij
+    structure.n_atoms
 
+Units
+-----
 .. autosummary::
     :toctree: generated
     :nosignatures:
-    :template: classtemplate.rst
 
-
-    structure/*
-    units
-
+    convert_units

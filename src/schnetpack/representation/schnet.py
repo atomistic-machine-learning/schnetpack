@@ -71,9 +71,10 @@ class SchNetInteraction(nn.Module):
 
 
 class SchNet(nn.Module):
-    """SchNet architecture for learning representations of atomistic systems.
+    """SchNet architecture for learning representations of atomistic systems
 
     References:
+
     .. [#schnet1] Schütt, Arbabzadah, Chmiela, Müller, Tkatchenko:
        Quantum-chemical insights from deep tensor neural networks.
        Nature Communications, 8, 13890. 2017.

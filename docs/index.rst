@@ -38,4 +38,10 @@ Contents
    :maxdepth: 1
 
    api/schnetpack
+   api/data
+   api/datasets
+   api/model
+   api/representation
+   api/atomistic
    api/nn
+   api/train
