@@ -32,15 +32,10 @@ class ModelCheckpoint(ModelCheckpoint):
         super().on_validation_end(trainer, pl_module)
 
     def _update_best_and_save(
-        self,
-        current: torch.Tensor,
-        epoch: int,
-        step: int,
-        trainer,
-        monitor_candidates: Dict[str, Any],
+        self, current: torch.Tensor, trainer, monitor_candidates: Dict[str, Any]
     ):
         # save model checkpoint
-        super()._update_best_and_save(current, epoch, step, trainer, monitor_candidates)
+        super()._update_best_and_save(current, trainer, monitor_candidates)
 
         # save best inference model
         if isinstance(current, torch.Tensor) and torch.isnan(current):
