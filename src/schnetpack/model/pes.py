@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 __all__ = ["PESModel"]
 
 
-class git(AtomisticModel):
+class PESModel(AtomisticModel):
     """
     AtomisticModel for potential energy surfaces
     """
