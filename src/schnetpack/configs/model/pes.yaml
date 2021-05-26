@@ -43,7 +43,18 @@ output:
     property: forces
     loss:
       _target_: pytorch_lightning.metrics.MeanSquaredError
-    loss_weight: 0.95
+    loss_weight: 0.90
+    metrics:
+      mae:
+        _target_: pytorch_lightning.metrics.MeanAbsoluteError
+      mse:
+        _target_: pytorch_lightning.metrics.MeanSquaredError
+
+  stress:
+    property: stress
+    loss:
+      _target_: pytorch_lightning.metrics.MeanSquaredError
+    loss_weight: 0.05
     metrics:
       mae:
         _target_: pytorch_lightning.metrics.MeanAbsoluteError

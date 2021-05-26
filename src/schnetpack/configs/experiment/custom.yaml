@@ -1,0 +1,27 @@
+# @package _global_
+
+defaults:
+  - override /model: pes
+  - override /data: custom
+  - override /logger: tensorboard
+
+cutoff: 5.0
+n_rbf: 20
+lr: 1e-4
+
+name: custom_data
+seed: 1234
+
+data:
+  distance_unit: Ang
+  property_units:
+    energy: eV
+    forces: eV/Ang
+  transforms:
+    - _target_: schnetpack.transform.SubtractCenterOfMass
+    - _target_: schnetpack.transform.RemoveOffsets
+      property: energy
+      remove_mean: True
+    - _target_: schnetpack.transform.TorchNeighborList
+      cutoff: ${cutoff}
+    - _target_: schnetpack.transform.CastTo32
