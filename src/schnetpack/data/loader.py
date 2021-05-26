@@ -21,11 +21,13 @@ def _atoms_collate_fn(batch):
         dict[str->torch.Tensor]: mini-batch of atomistic systems
     """
     elem = batch[0]
-    idx_keys = {structure.idx_i, structure.idx_j}
+    idx_keys = {structure.idx_i, structure.idx_j, structure.idx_i_triples}
+    # Atom triple indices must be treated separately
+    idx_triple_keys = {structure.idx_j_triples, structure.idx_k_triples}
 
     coll_batch = {}
     for key in elem:
-        if key not in idx_keys:
+        if (key not in idx_keys) and (key not in idx_triple_keys):
             coll_batch[key] = torch.cat([d[key] for d in batch], 0)
 
     seg_m = torch.cumsum(coll_batch[structure.n_atoms], dim=0)
@@ -40,6 +42,16 @@ def _atoms_collate_fn(batch):
             coll_batch[key] = torch.cat(
                 [d[key] + off for d, off in zip(batch, seg_m)], 0
             )
+
+    # Shift the indices for the atom triples
+    for key in idx_triple_keys:
+        if key in elem.keys():
+            indices = []
+            offset = 0
+            for idx, d in enumerate(batch):
+                indices.append(d[key] + offset)
+                offset += d[structure.idx_j].shape[0]
+            coll_batch[key] = torch.cat(indices, 0)
 
     return coll_batch
 

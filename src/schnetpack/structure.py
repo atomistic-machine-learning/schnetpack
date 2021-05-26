@@ -6,7 +6,6 @@ Note: Had to be moved out of Structure class for TorchScript compatibility
 """
 from typing import Final
 
-
 idx: Final[str] = "_idx"
 
 Z: Final[str] = "_atomic_numbers"  #: nuclear charge
@@ -21,3 +20,12 @@ idx_i: Final[str] = "_idx_i"  #: indices of center atoms
 idx_j: Final[str] = "_idx_j"  #: indices of neighboring atoms
 Rij: Final[str] = "_Rij"  #: indices of atom pairs
 n_atoms: Final[str] = "_n_atoms"  #: number of atoms
+
+#: indices of center atom triples
+idx_i_triples: Final[str] = "_idx_i_triples"
+
+#: indices of first neighboring atom triples
+idx_j_triples: Final[str] = "_idx_j_triples"
+
+#: indices of second neighboring atom triples
+idx_k_triples: Final[str] = "_idx_k_triples"

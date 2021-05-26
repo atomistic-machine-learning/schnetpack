@@ -17,9 +17,7 @@ class SinglePropertyModel(AtomisticModel):
     AtomisticModel for models that predict single chemical properties, e.g. for QM9 benchmarks.
     """
 
-    def build_model(
-        self,
-    ):
+    def build_model(self, datamodule: spk.data.AtomsDataModule):
         self.representation = hydra.utils.instantiate(self._representation_cfg)
         self.output = hydra.utils.instantiate(self._output_cfg.module)
 
@@ -91,10 +89,7 @@ class SinglePropertyModel(AtomisticModel):
             self._schedule_cfg.scheduler, optimizer=optimizer
         )
 
-        optimconf = {
-            "optimizer": optimizer,
-            "lr_scheduler": schedule,
-        }
+        optimconf = {"optimizer": optimizer, "lr_scheduler": schedule}
 
         if self._schedule_cfg.monitor:
             optimconf["monitor"] = self._schedule_cfg.monitor
