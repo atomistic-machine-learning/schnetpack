@@ -50,11 +50,10 @@ class TestNeighborLists:
         idx_i = neighbors[structure.idx_i]
         idx_j = neighbors[structure.idx_j]
         Rij = neighbors[structure.Rij]
-        cell_offset = Rij  # neighbors[structure.cell_offset]
 
-        sort_idx = self._get_unique_idx(idx_i, idx_j, cell_offset)
+        sort_idx = self._get_unique_idx(idx_i, idx_j, Rij)
 
-        return (idx_i[sort_idx], idx_j[sort_idx], cell_offset[sort_idx], Rij[sort_idx])
+        return (idx_i[sort_idx], idx_j[sort_idx], Rij[sort_idx])
 
     @staticmethod
     def _get_unique_idx(
