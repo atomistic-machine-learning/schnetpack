@@ -18,6 +18,8 @@ from schnetpack.data import *
 import schnetpack.structure as structure
 from schnetpack.data import AtomsDataModuleError, AtomsDataModule
 
+__all__ = ["QM9"]
+
 
 class QM9(AtomsDataModule):
     """QM9 benchmark database for organic molecules.

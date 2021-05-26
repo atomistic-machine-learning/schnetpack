@@ -37,14 +37,13 @@ class ASENeighborList(Transform):
         cell = inputs[structure.cell]
         pbc = inputs[structure.pbc]
         at = Atoms(numbers=Z, positions=R, cell=cell, pbc=pbc)
-        idx_i, idx_j, idx_S, Rij = neighbor_list(
-            "ijSD", at, self.cutoff, self_interaction=False
+        idx_i, idx_j, Rij = neighbor_list(
+            "ijD", at, self.cutoff, self_interaction=False
         )
 
         inputs[structure.idx_i] = torch.tensor(idx_i)
         inputs[structure.idx_j] = torch.tensor(idx_j)
         inputs[structure.Rij] = torch.tensor(Rij)
-        inputs[structure.cell_offset] = torch.tensor(idx_S)
         return inputs
 
 
@@ -80,12 +79,11 @@ class TorchNeighborList(Transform):
         else:
             shifts = self._get_shifts(cell, pbc)
 
-        idx_i, idx_j, idx_S, Rij = self._get_neighbor_pairs(positions, cell, shifts)
+        idx_i, idx_j, Rij = self._get_neighbor_pairs(positions, cell, shifts)
 
         # Create bidirectional id arrays, similar to what the ASE neighbor_list returns
         bi_idx_i = torch.cat((idx_i, idx_j), dim=0)
         bi_idx_j = torch.cat((idx_j, idx_i), dim=0)
-        bi_idx_S = torch.cat((-idx_S, idx_S), dim=0)
         bi_Rij = torch.cat((-Rij, Rij), dim=0)
 
         # Sort along first dimension (necessary for atom-wise pooling)
@@ -94,7 +92,6 @@ class TorchNeighborList(Transform):
         inputs[structure.idx_i] = bi_idx_i[sorted_idx]
         inputs[structure.idx_j] = bi_idx_j[sorted_idx]
         inputs[structure.Rij] = bi_Rij[sorted_idx]
-        inputs[structure.cell_offset] = bi_idx_S[sorted_idx]
 
         return inputs
 
@@ -143,10 +140,9 @@ class TorchNeighborList(Transform):
         pair_index = in_cutoff.squeeze()
         atom_index_i = pi_all[pair_index]
         atom_index_j = pj_all[pair_index]
-        shifts = shifts_all.index_select(0, pair_index)
         Rij = Rij_all.index_select(0, pair_index)
 
-        return atom_index_i, atom_index_j, shifts, Rij
+        return atom_index_i, atom_index_j, Rij
 
     def _get_shifts(self, cell, pbc):
         """Compute the shifts of unit cell along the given cell vectors to make it

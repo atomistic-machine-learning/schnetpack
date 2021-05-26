@@ -1,3 +1,3 @@
-from .schnet import SchNet
-from .painn import PaiNN
-from .symfuncs import SymmetryFunctions
+from .schnet import *
+from .painn import *
+from .symfuncs import *

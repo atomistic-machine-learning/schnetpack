@@ -14,7 +14,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Optional, List, Dict, Any, Iterable, Union
+from typing import Optional, List, Dict, Any, Iterable, Union, Tuple
 
 import torch
 import copy
@@ -38,6 +38,8 @@ __all__ = [
 
 
 class AtomsDataFormat(Enum):
+    """Enumeration of data formats"""
+
     ASE = "ase"
 
 
@@ -482,6 +484,19 @@ def create_dataset(
     property_unit_dict: Dict[str, str],
     **kwargs,
 ) -> BaseAtomsData:
+    """
+    Create a new atoms dataset.
+
+    Args:
+        datapath: file path
+        format: atoms data format
+        distance_unit: unit of atom positiona etc. as string
+        property_unit_dict: dictionary that maps properties to units, e.g. {"energy": "kcal/mol"}
+        **kwargs: arguments for passed to AtomsData init
+
+    Returns:
+
+    """
     if format is AtomsDataFormat.ASE:
         dataset = ASEAtomsData.create(
             datapath=datapath,
@@ -495,6 +510,15 @@ def create_dataset(
 
 
 def load_dataset(datapath: str, format: AtomsDataFormat, **kwargs) -> BaseAtomsData:
+    """
+    Load dataset.
+
+    Args:
+        datapath: file path
+        format: atoms data format
+        **kwargs: arguments for passed to AtomsData init
+
+    """
     if format is AtomsDataFormat.ASE:
         dataset = ASEAtomsData(datapath=datapath, **kwargs)
     else:
@@ -502,7 +526,18 @@ def load_dataset(datapath: str, format: AtomsDataFormat, **kwargs) -> BaseAtomsD
     return dataset
 
 
-def resolve_format(datapath: str, format: Optional[AtomsDataFormat]):
+def resolve_format(
+    datapath: str, format: Optional[AtomsDataFormat] = None
+) -> Tuple[str, AtomsDataFormat]:
+    """
+    Extract data format from file suffix, check for consistency with (optional) given format,
+    or append suffix to file path.
+
+    Args:
+        datapath: path to atoms data
+        format: atoms data format
+
+    """
     file, suffix = os.path.splitext(datapath)
     if suffix == ".db":
         if format is None:

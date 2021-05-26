@@ -63,37 +63,12 @@ def indexed_data(example_data, batch_size):
         structure.idx_j: torch.tensor(ind_j),
         structure.idx_i: torch.tensor(ind_i),
         structure.Rij: torch.tensor(Rij),
-        structure.cell_offset: torch.tensor(ind_S),
     }
 
     return inputs
 
 
-# def test_cfconv(indexed_data, benchmark):
-#     Z, R, seg_m, idx_i, idx_j, ind_S = (
-#         indexed_data[structure.Z],
-#         indexed_data[structure.R],
-#         indexed_data["seg_m"],
-#         indexed_data["idx_i"],
-#         indexed_data["idx_j"],
-#         indexed_data[structure.cell_offset],
-#     )
-#
-#     benchmark(cfconv, R, R[idx_j], idx_i, idx_j)
-
-
 def test_schnet_new_coo(indexed_data, benchmark):
-    Z, R, seg_m, idx_i, idx_j, C, ind_S, r_ij = (
-        indexed_data[structure.Z],
-        indexed_data[structure.R],
-        indexed_data[structure.idx_m],
-        indexed_data[structure.idx_i],
-        indexed_data[structure.idx_j],
-        indexed_data[structure.cell],
-        indexed_data[structure.cell_offset],
-        indexed_data[structure.Rij],
-    )
-
     radial_basis = spk.nn.GaussianRBF(n_rbf=20, cutoff=5.0)
     cutoff_fn = spk.nn.CosineCutoff(5.0)
     schnet = SchNet(
@@ -107,16 +82,6 @@ def test_schnet_new_coo(indexed_data, benchmark):
 
 
 def test_schnet_new_script(indexed_data, benchmark):
-    Z, R, seg_m, idx_i, idx_j, C, ind_S, r_ij = (
-        indexed_data[structure.Z],
-        indexed_data[structure.R],
-        indexed_data[structure.idx_m],
-        indexed_data[structure.idx_i],
-        indexed_data[structure.idx_j],
-        indexed_data[structure.cell],
-        indexed_data[structure.cell_offset],
-        indexed_data[structure.Rij],
-    )
 
     radial_basis = spk.nn.GaussianRBF(n_rbf=20, cutoff=5.0)
     cutoff_fn = spk.nn.CosineCutoff(5.0)
@@ -126,10 +91,8 @@ def test_schnet_new_script(indexed_data, benchmark):
         radial_basis=radial_basis,
         cutoff_fn=cutoff_fn,
     )
-    # output = spk.outputs.Atomwise(schnet.size)
 
     schnet = torch.jit.script(schnet)
     schnet(indexed_data)
 
     benchmark(schnet, indexed_data)
-    # benchmark(schnet, Z, r_ij, idx_i, idx_j)

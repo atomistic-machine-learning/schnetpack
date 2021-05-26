@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 
-__all__ = ["CosineCutoff", "MollifierCutoff"]
+__all__ = ["CosineCutoff", "MollifierCutoff", "mollifier_cutoff", "cosine_cutoff"]
 
 
 def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):

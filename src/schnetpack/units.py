@@ -1,20 +1,7 @@
-"""
-Basic conversion factors to atomic units used internally:
-    fs2atu (time): femtoseconds to atomic time units
-    eV2Ha (energy): electron Volt to Hartree
-    d2amu (mass): Dalton to atomic mass units
-    angs2bohr (length): Angstrom to Bohr
-    auforces2aseforces (forces): Hartee per Bohr to electron Volt per Angstrom
-
-Definitions for constants:
-    kB: Boltzmann constant in units of Hartree per Kelvin.
-    hbar: Reduced Planck constant in atomic units.
-"""
-from typing import Union
-from ase import units as aseunits
-import numpy as np
 import re
-import warnings
+from typing import Union
+
+from ase import units as aseunits
 
 __all__ = ["convert_units"]
 

@@ -9,6 +9,9 @@ from rich.syntax import Syntax
 from rich.tree import Tree
 
 
+__all__ = ["log_hyperparameters", "print_config"]
+
+
 def empty(*args, **kwargs):
     pass
 

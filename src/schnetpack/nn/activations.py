@@ -2,6 +2,8 @@ import math
 
 from torch.nn import functional
 
+__all__ = ["shifted_softplus"]
+
 
 def shifted_softplus(x):
     r"""Compute shifted soft-plus activation function.

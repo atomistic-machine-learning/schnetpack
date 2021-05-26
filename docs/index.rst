@@ -6,10 +6,10 @@
 SchNetPack documentation
 ========================
 
-SchNetPack is a toolbox for the development and application of deep neural networks to the prediction of potential energy surfaces and other quantum-chemical properties of molecules and materials.
-It contains basic building blocks of atomistic neural networks, manages their training and provides simple access to common benchmark datasets.
-This allows for an easy implementation and evaluation of new models.
-
+SchNetPack is a toolbox for the development and application of deep neural networks to the prediction of
+potential energy surfaces and other quantum-chemical properties of molecules and materials. It contains
+basic building blocks of atomistic neural networks, manages their training and provides simple access
+to common benchmark datasets. This allows for an easy implementation and evaluation of new models.
 
 Contents
 ========
@@ -32,12 +32,17 @@ Contents
    tutorials/tutorial_03_force_models
    tutorials/tutorial_04_molecular_dynamics
 
-
 .. toctree::
    :glob:
-   :caption: Modules
+   :caption: Reference
    :maxdepth: 1
 
-   modules/index
-
-
+   api/schnetpack
+   api/data
+   api/datasets
+   api/model
+   api/representation
+   api/atomistic
+   api/nn
+   api/train
+   api/transform
