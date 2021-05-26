@@ -12,3 +12,15 @@ schnetpack.representation
 
     SchNet
     PaiNN
+
+.. rubric:: Atom-centered symmetry functions
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+    :template: classtemplate.rst
+
+    SymmetryFunctions
+    RadialSF
+    AngularSF
+    AngularSFANI
