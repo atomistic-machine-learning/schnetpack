@@ -3,11 +3,6 @@ schnetpack
 ==========
 .. currentmodule:: schnetpack
 
-.. contents:: schnetpack
-    :depth: 2
-    :local:
-    :backlinks: top
-
 
 Structure attributes
 --------------------

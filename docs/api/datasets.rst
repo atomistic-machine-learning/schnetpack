@@ -2,11 +2,6 @@ schnetpack.datasets
 ===================
 .. currentmodule:: schnetpack.datasets
 
-.. contents:: schnetpack.datasets
-    :depth: 2
-    :local:
-    :backlinks: top
-
 Molecules
 ------------
 .. autosummary::

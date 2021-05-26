@@ -2,12 +2,6 @@ schnetpack.model
 ================
 .. currentmodule:: schnetpack.model
 
-.. contents:: schnetpack.model
-    :depth: 2
-    :local:
-    :backlinks: top
-
-
 .. rubric:: Base model
 
 .. autosummary::

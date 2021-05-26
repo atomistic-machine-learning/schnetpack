@@ -2,10 +2,6 @@ schnetpack.atomistic
 ====================
 .. currentmodule:: schnetpack.atomistic
 
-.. contents:: schnetpack.atomistic
-    :depth: 2
-    :local:
-    :backlinks: top
 
 Molecules
 ------------

@@ -2,11 +2,6 @@ schnetpack.train
 ================
 .. currentmodule:: schnetpack.train
 
-.. contents:: schnetpack.train
-    :depth: 2
-    :local:
-    :backlinks: top
-
 
 Callbacks
 ---------

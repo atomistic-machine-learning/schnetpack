@@ -2,11 +2,6 @@ schnetpack.data
 ===============
 .. currentmodule:: schnetpack.data
 
-.. contents:: schnetpack.data
-    :depth: 2
-    :local:
-    :backlinks: top
-
 Data classes
 ------------
 .. autosummary::

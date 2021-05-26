@@ -2,11 +2,6 @@ schnetpack.nn
 =============
 .. currentmodule:: schnetpack.nn
 
-.. contents:: schnetpack.nn
-    :depth: 2
-    :local:
-    :backlinks: top
-
 
 Basic layers
 ------------
