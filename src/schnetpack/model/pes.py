@@ -89,37 +89,37 @@ class PESModel(AtomisticModel):
                 create_graph=self.training,
             )[0]
 
-        if self.predict_forces:
-            Fpred_i = torch.zeros_like(R)
-            Fpred_i = Fpred_i.index_add(0, inputs[structure.idx_i], dEdRij)
+            if self.predict_forces and dEdRij is not None:
+                Fpred_i = torch.zeros_like(R)
+                Fpred_i = Fpred_i.index_add(0, inputs[structure.idx_i], dEdRij)
 
-            Fpred_j = torch.zeros_like(R)
-            Fpred_j = Fpred_j.index_add(0, inputs[structure.idx_j], dEdRij)
-            Fpred = Fpred_i - Fpred_j
-            results["forces"] = Fpred
+                Fpred_j = torch.zeros_like(R)
+                Fpred_j = Fpred_j.index_add(0, inputs[structure.idx_j], dEdRij)
+                Fpred = Fpred_i - Fpred_j
+                results["forces"] = Fpred
 
-        if self.predict_stress:
-            cell_offset = inputs[structure.cell_offset]
-            offset_ij = cell_offset[structure.idx_j] - cell_offset
-            stress_i = torch.zeros_like(R)
-
-            # sum over j
-            stress_i = stress_i.index_add(
-                0,
-                inputs[structure.idx_i],
-                dEdRij * offset_ij,
-            )
-
-            # sum over i
-            idx_m = inputs[structure.idx_m]
-            maxm = int(idx_m[-1]) + 1
-            stress = torch.zeros(
-                (maxm, 3), dtype=stress_i.dtype, device=stress_i.device
-            )
-            stress = stress.index_add(0, idx_m, stress_i)
-
-            # TODO: normalize by volume
-            results["stress"] = stress
+            # if self.predict_stress:
+            #     cell_offset = inputs[structure.cell_offset]
+            #     offset_ij = cell_offset[structure.idx_j] - cell_offset
+            #     stress_i = torch.zeros_like(R)
+            #
+            #     # sum over j
+            #     stress_i = stress_i.index_add(
+            #         0,
+            #         inputs[structure.idx_i],
+            #         dEdRij * offset_ij,
+            #     )
+            #
+            #     # sum over i
+            #     idx_m = inputs[structure.idx_m]
+            #     maxm = int(idx_m[-1]) + 1
+            #     stress = torch.zeros(
+            #         (maxm, 3), dtype=stress_i.dtype, device=stress_i.device
+            #     )
+            #     stress = stress.index_add(0, idx_m, stress_i)
+            #
+            #     # TODO: normalize by volume
+            #     results["stress"] = stress
 
         results = self.postprocess(inputs, results)
 
