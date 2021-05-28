@@ -121,7 +121,39 @@ class PESModel(AtomisticModel):
             #     # TODO: normalize by volume
             #     results["stress"] = stress
 
-        results = self.postprocess(inputs, results)
+        if self.predict_stress:
+            stress_i = torch.zeros((R.shape[0], 3, 3), dtype=R.dtype, device=R.device)
+
+            # sum over j
+            stress_i = stress_i.index_add(
+                0,
+                inputs[structure.idx_i],
+                dEdRij[:, None, :] * inputs[structure.Rij][:, :, None],
+            )
+
+            # sum over i
+            idx_m = inputs[structure.idx_m]
+            maxm = int(idx_m[-1]) + 1
+            stress = torch.zeros(
+                (maxm, 3, 3), dtype=stress_i.dtype, device=stress_i.device
+            )
+            stress = stress.index_add(0, idx_m, stress_i)
+
+            # TODO: remove reshapes?
+            cell_33 = inputs[structure.cell].view(maxm, 3, 3)
+            volume = (
+                torch.sum(
+                    cell_33[:, 0, :]
+                    * torch.cross(cell_33[:, 1, :], cell_33[:, 2, :], dim=1),
+                    dim=1,
+                    keepdim=True,
+                )
+                .expand(maxm, 3)
+                .reshape(maxm * 3, 1)
+            )
+            results = self.postprocess(inputs, results)
+
+        results["stress"] = stress.reshape(maxm * 3, 3) / volume
 
         return results
 
