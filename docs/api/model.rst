@@ -2,14 +2,8 @@ schnetpack.model
 ================
 .. currentmodule:: schnetpack.model
 
-.. rubric:: Base model
-
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
-    :template: classtemplate.rst
-
-    AtomisticModel
+.. autoclass:: AtomisticModel
+    :members:
 
 
 .. rubric:: Models

@@ -73,7 +73,7 @@ author = "Kristof T. Schütt, Michael Gastegger, Pan Kessel, Kim Nicoli"
 # built documents.
 #
 # The short X.Y version.
-version = "1.0"
+version = "1.0-dev0"
 # The full version, including alpha/beta/rc tags.
 release = "1.0-dev0"
 

@@ -12,7 +12,7 @@ Requirements
 ^^^^^^^^^^^^
 
 * `Python <http://www.python.org/>`_ (>=3.6)
-* `PyTorch <https://pytorch.org/docs/stable/index.html>`_ (>=1.6)
+* `PyTorch <https://pytorch.org/docs/stable/index.html>`_ (>=1.7)
 * `PyTorchLightning <https://www.pytorchlightning.ai/>`_ (>=1.3.3)
 * `Hydra <https://hydra.cc/>`_ (>=1.1.0)
 * `ASE <https://wiki.fysik.dtu.dk/ase/index.html>`_ (>=3.21)
@@ -73,6 +73,9 @@ The CLI is based on `Hydra <https://hydra.cc/>`_ and oriented on the PyTorch Lig
 This enables a flexible configuration of the model, data and training process.
 To fully take advantage of these features, it might be helpful for have a look at the Hydra and PyTorch Lightning docs.
 
+Example 1: QM9
+^^^^^^^^^^^^^^
+
 In the following, we focus on using the CLI to train on the QM9 dataset, but the same
 procedure applies for the other benchmark datasets as well. The training can be
 started using::
@@ -106,71 +109,34 @@ For more details on config groups, have a look at the
 `Hydra docs <https://hydra.cc/docs/next/tutorials/basic/your_first_app/config_groups>`_.
 
 
-==================================
-Using scripts with custom datasets
-==================================
+Example 2: Potential energy surfaces
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The example above uses the :class:`SinglePropertyModel` internally, which is a
-:class:`pytorch_lightning.LightningModule`.
+:class:`pytorch_lightning.LightningModule` for predicting single properties.
+The following example will use the PESModel, which can be used for predicting potential energy surfaces,
+in particular energies with the appropriate derivates to obtain forces and stress tensors.
+For more details on the available models, see :ref:`here<schnetpack.model>`
 
-The script for benchmark data can also train a model on custom data sets, by using::
+The ``spktrain`` script can be used to train a model for a molecule from the MD17 datasets::
 
-   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property your_property [--cuda]
+   $ spktrain data_dir=<path> +experiment=md17 data.molecule=uracil
 
-Depending on your data you will need to define some settings that have already been
-pre-selected for the benchmark data. In order to show how to use the script
-on arbitrary data sets, we will use the MD17 data set and treat it as a custom data
-set. First of all we need to define the property that we want to use for training.
-In this example we will train the model on the *energy* labels. If we want to use the
-*forces* during training, we need to add the ``--derivative`` argument and also set
-``--negative_dr``, because the gradient of the energy predictions corresponds to the
-negative forces.
+In the case of MD17, reference calculations of energies and forces are available.
+Therefore, one needs to set weights for the losses of those properties.
+For a training on *energies* and *forces*, we recommend to put a stronger
+weight on the loss of the force prediction during training.
+By default, the loss weights are set to 0.05 for the energy and 0.95 for forces.
+This can be changed as follow::
 
-Defining Output Modules
-^^^^^^^^^^^^^^^^^^^^^^^
-
-Since energy is a property that depends on the total number of atoms
-we select ``--aggregation_mode sum``. Other properties (e.g. homo, lumo, ...) do not
-depend on the total number of atoms and will therefore use the mean aggregation mode.
-While most properties should be trained with the ``spk.nn.Atomwise`` output module
-which is selected by default, some properties require special output modules.
-Models using the ``spk.SchNet`` representation support ``dipole_moment``,
-``electronic_spatial_extent``, ``ploarizability`` and ``isotropic_polarizability``.
-Note that if your model is based on the ``spk.BehlerSFBlock`` representation you need
-to select between ``elemental_atomwise`` and ``elemental_dipole_moment``. The output
-module selection is defined with ``--output_module
-<atomwise/elemental_atomwise/dipole_moment/...>``.
-
-Loss Tradeoff
-^^^^^^^^^^^^^
-
-It can be useful to define a tradeoff between multiple properties of an output
-module. For a training on *energies* and *forces*, we recommend to put a stronger
-weight on the loss of the force prediction during training. Therefore one can add the
-tradeoff parameter ``--rho`` with its arguments as ``key=value``. If no weight is
-selected for a key, it gets the weight 1. Afterwards all weights are divided by the
-total weight. For including 90% of the force loss and 10% of the energy loss, the
-command is ``--rho property=0.1 derivative=0.9``. You can also use the *stress* and
-the *contributions* properties during training.
-
-Summary
-^^^^^^^
-
-The final command for the MD17 example would be::
-
-   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property energy --derivative forces --negative_dr --rho property=0.1 derivative=0.9 --aggregation_mode sum [--cuda]
-
-The command for training a QM9-like data set on dipole moments would be::
-
-   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property dipole_moment --output_module dipole_moment --aggregation_mode sum [--cuda]
-
-The evaluation of the trained model uses the same commands as any pre-implemented
-data set.
+    $ spktrain data_dir=<path> +experiment=md17 data.molecule=uracil model.output.energy.loss_weight=0.01 \
+        model.output.forces.loss_weight=0.99
 
 
-=========================
-Supported Representations
-=========================
+
+===============
+Representations
+===============
 
 SchNetPack currently supports SchNet, PaiNN and (w)ACSF.
 
@@ -182,6 +148,12 @@ It follows the deep tensor neural network framework, i.e. atom-wise representati
 embedding vectors that characterize the atom type before introducing the configuration of the system by a series of
 interaction blocks.
 
+PaiNN
+^^^^^
+
+PaiNN [#painn1]_ is the successor to SchNet, overcoming limitations of invariant representations
+by using equivariant representations.
+It improves over previous networks in terms of accuracy and/or data efficiency.
 
 ACSF & (w)ACSF
 ^^^^^^^^^^^^^^
@@ -196,7 +168,7 @@ features before training.
 Benchmark Datasets
 ==================
 
-SchNetPack provides convenient interfaces to popular benchmark datasets in order to train and test its model.
+SchNetPack provides convenient interfaces to popular benchmark datasets in order to train and test models.
 
 QM9
 ^^^
@@ -242,6 +214,10 @@ References
 .. [#schnet3] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.
    `SchNet - a deep learning architecture for molecules and materials <https://aip.scitation.org/doi/10.1063/1.5019779>`_
    The Journal of Chemical Physics **148** (24), 241722, 2018.
+
+.. [#painn1] Schütt, Unke, Gastegger:
+   Equivariant message passing for the prediction of tensorial properties and molecular spectra.
+   ICML 2021 (to appear)
 
 .. [#wacsf1] M. Gastegger, L. Schwiedrzik, M. Bittermann, F. Berzsenyi, P. Marquetand.
    `wACSF—Weighted atom-centered symmetry functions as descriptors in machine learning potentials <https://aip.scitation.org/doi/10.1063/1.5019667>`_
