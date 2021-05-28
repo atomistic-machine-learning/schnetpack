@@ -8,6 +8,7 @@ import schnetpack.transform.neighborlist
 from schnetpack.model import PESModel
 
 log = logging.getLogger(__name__)
+__all__ = ["PESModelSF"]
 
 
 class PESModelSF(PESModel):

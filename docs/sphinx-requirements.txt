@@ -7,4 +7,5 @@ pyyaml
 tqdm
 ipykernel
 nbsphinx
+sphinx-autoapi
 pytest-datadir

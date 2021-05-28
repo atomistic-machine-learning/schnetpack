@@ -7,6 +7,8 @@ import schnetpack.structure as structure
 from schnetpack.nn import Dense, scatter_add
 from schnetpack.nn.activations import shifted_softplus
 
+__all__ = ["SchNet"]
+
 
 class SchNetInteraction(nn.Module):
     r"""SchNet interaction block for modeling interactions of atomistic systems."""
@@ -69,9 +71,10 @@ class SchNetInteraction(nn.Module):
 
 
 class SchNet(nn.Module):
-    """SchNet architecture for learning representations of atomistic systems.
+    """SchNet architecture for learning representations of atomistic systems
 
     References:
+
     .. [#schnet1] Schütt, Arbabzadah, Chmiela, Müller, Tkatchenko:
        Quantum-chemical insights from deep tensor neural networks.
        Nature Communications, 8, 13890. 2017.

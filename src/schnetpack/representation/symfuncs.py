@@ -16,7 +16,8 @@ class SymmetryFunctions(nn.Module):
     wACSF [#wacsf1]_ and  Justin-Smith symmetry functions [#ani1]_) can be obtained by combining the corresponding
     radial and angular basis components.
 
-    References
+    References:
+
     .. [#acsf1] Behler:
        Atom-centered symmetry functions for constructing high-dimensional neural network potentials.
        The Journal of Chemical Physics 134. 074106. 2011.
@@ -26,6 +27,7 @@ class SymmetryFunctions(nn.Module):
     .. [#ani1] Smith, Isayev, Roitberg:
        ANI-1: an extensible neural network potential with DFT accuracy at force field computational cost.
        Chemical science 8(4). 3192--3203. 2017.
+
     """
 
     def __init__(self, radial: nn.Module, angular: nn.Module):
@@ -197,10 +199,12 @@ class AngularSF(nn.Module):
     Base class of angular symmetry functions of the Behler type. By combining different radial, elemental and angular
     components, different types of angular functions can be obtained.
 
-    References
+    References:
+
     .. [#acsf1] Behler:
        Atom-centered symmetry functions for constructing high-dimensional neural network potentials.
        The Journal of Chemical Physics 134. 074106. 2011.
+
     """
 
     def __init__(
@@ -312,9 +316,11 @@ class AngularSFANI(AngularSF):
     components, different modifications of the angular function can be obtained.
 
     References
+
     .. [#ani1] Smith, Isayev, Roitberg:
        ANI-1: an extensible neural network potential with DFT accuracy at force field computational cost.
        Chemical science 8(4). 3192--3203. 2017.
+
     """
 
     def __init__(

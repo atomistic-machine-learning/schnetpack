@@ -13,6 +13,8 @@ import schnetpack.structure as structure
 
 from schnetpack.data import *
 
+__all__ = ["MD17"]
+
 
 class MD17(AtomsDataModule):
     """

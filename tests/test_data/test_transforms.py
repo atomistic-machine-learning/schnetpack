@@ -49,12 +49,11 @@ class TestNeighborLists:
         """
         idx_i = neighbors[structure.idx_i]
         idx_j = neighbors[structure.idx_j]
-        cell_offset = neighbors[structure.cell_offset]
         Rij = neighbors[structure.Rij]
 
-        sort_idx = self._get_unique_idx(idx_i, idx_j, cell_offset)
+        sort_idx = self._get_unique_idx(idx_i, idx_j, Rij)
 
-        return (idx_i[sort_idx], idx_j[sort_idx], cell_offset[sort_idx], Rij[sort_idx])
+        return (idx_i[sort_idx], idx_j[sort_idx], Rij[sort_idx])
 
     @staticmethod
     def _get_unique_idx(
@@ -95,7 +94,6 @@ def test_single_atom(single_atom, neighbor_list, cutoff):
     assert len(props_after[structure.Rij]) == 0
     assert len(props_after[structure.idx_i]) == 0
     assert len(props_after[structure.idx_j]) == 0
-    assert len(props_after[structure.cell_offset]) == 0
 
 
 def test_cast(single_atom):

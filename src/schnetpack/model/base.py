@@ -9,6 +9,8 @@ from pytorch_lightning import LightningModule
 
 import schnetpack as spk
 
+__all__ = ["AtomisticModel"]
+
 
 class AtomisticModel(LightningModule):
     """
