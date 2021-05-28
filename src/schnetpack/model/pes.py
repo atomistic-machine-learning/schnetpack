@@ -128,7 +128,7 @@ class PESModel(AtomisticModel):
                 .reshape(maxm * 3, 1)
             )
             results = self.postprocess(inputs, results)
-        
+
         results["stress"] = stress.reshape(maxm * 3, 3) / volume
 
         return results
