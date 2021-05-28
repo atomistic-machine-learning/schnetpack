@@ -90,12 +90,9 @@ class PESModel(AtomisticModel):
             )[0]
 
             if self.predict_forces and dEdRij is not None:
-                Fpred_i = torch.zeros_like(R)
-                Fpred_i = Fpred_i.index_add(0, inputs[structure.idx_i], dEdRij)
-
-                Fpred_j = torch.zeros_like(R)
-                Fpred_j = Fpred_j.index_add(0, inputs[structure.idx_j], dEdRij)
-                Fpred = Fpred_i - Fpred_j
+                Fpred = torch.zeros_like(R)
+                Fpred = Fpred.index_add(0, inputs[structure.idx_i], dEdRij)
+                Fpred = Fpred.index_add(0, inputs[structure.idx_j], -dEdRij)
                 results["forces"] = Fpred
 
             # if self.predict_stress:

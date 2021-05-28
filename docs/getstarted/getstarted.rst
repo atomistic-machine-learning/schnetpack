@@ -11,24 +11,11 @@ Installation
 Requirements
 ^^^^^^^^^^^^
 
-* Python_ (>=3.6)
-* NumPy_
-* Pytorch_ (>=1.1)
-* ASE_ (>=3.16)
-* TensorboardX_ (For improved training visualization)
-* h5py_
-* tqdm_
-* PyYaml_
-
-.. _Python: http://www.python.org/
-.. _NumPy: http://docs.scipy.org/doc/numpy/reference/
-.. _Pytorch: https://pytorch.org/docs/stable/index.html#
-.. _TensorboardX: https://github.com/lanpa/tensorboardX
-.. _h5py: https://www.h5py.org
-.. _ASE: https://wiki.fysik.dtu.dk/ase/index.html
-.. _tqdm: https://github.com/tqdm/tqdm
-.. _PyYaml: https://pyyaml.org/
-
+* `Python <http://www.python.org/>`_ (>=3.6)
+* `PyTorch <https://pytorch.org/docs/stable/index.html>`_ (>=1.6)
+* `PyTorchLightning <https://www.pytorchlightning.ai/>`_ (>=1.3.3)
+* `Hydra <https://hydra.cc/>`_ (>=1.1.0)
+* `ASE <https://wiki.fysik.dtu.dk/ase/index.html>`_ (>=3.21)
 
 ..
     Installing using pip
@@ -66,69 +53,65 @@ and run tests to be sure everything runs as expected::
 Once that's done, you are ready to go!
 
 
-.. note::
-
-   If your OS doesn't have ``numpy``, ``pytorch``, and ``ase`` packages
-   installed, and the previous command didn't work for you, you can install those requirements through::
-
-        $ pip install --upgrade --user numpy torch ase
-
 Visualization with Tensorboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-While SchNetPack is based on PyTorch, it is possible to use Tensorboard, which comes with TensorFlow,
-to visualize the learning progress.
-While this is more convenient for visualization, you need to install TensorBoard
-in order to view the event files SchNetPack produces.
-Even though there is a standalone version, the easiest way to get Tensorboard is by installing TensorFlow, e.g. using pip::
+SchNetPack supports multiple logging backends over PyTorch Lightning.
+The default logger is Tensorboard, which can be installed via::
 
-   $ pip install tensorflow
+   $ pip install tensorboard
 
-===============================
-Scripts for benchmark data sets
-===============================
 
- The best place to start is training a SchNetPack model on a common benchmark dataset.
- Scripts for common datasets are provided by SchNetPack and inserted into your PATH during installation.
+======================
+Command line interface
+======================
 
-The example script allows to train and evaluate both SchNet and wACSF neural networks.
-In the following, we focus on using the script for the QM9 dataset, but the same
+The best place to get started is training a SchNetPack model on a common benchmark dataset via the command line
+interface (CLI).
+When installing SchNetPack, the training script ``spktrain`` is added to your PATH.
+The CLI is based on `Hydra <https://hydra.cc/>`_ and oriented on the PyTorch Lightning/Hydra template that can be found
+`here <https://github.com/ashleve/lightning-hydra-template>`_.
+This enables a flexible configuration of the model, data and training process.
+To fully take advantage of these features, it might be helpful for have a look at the Hydra and PyTorch Lightning docs.
+
+In the following, we focus on using the CLI to train on the QM9 dataset, but the same
 procedure applies for the other benchmark datasets as well. The training can be
 started using::
 
-   $ spk_run.py train <schnet/wacsf> <qm9/ani1/...> <dbpath> <modeldir> --split num_train num_val [--cuda]
+   $ spktrain +experiment=qm9 data_dir=<path>
 
-where num_train and num_val need to be replaced by the number of training and validation datapoints respectively.
-You can choose between SchNet and wACSF networks and have to provide a directory to store the model and the location
-of the dataset, which has to be a ASE DB file (``.db`` or ``.json``). It will be downloaded automatically
-if it does not exist.
+This will print the defaults for the experiment config ``qm9`` and set the data directory to the chosen location.
+The dataset will be downloaded automatically if it does not exist there.
+Then, the training will be started.
 
-.. note::
-   Please be warned that the ANI-1 dataset is huge (more than 20gb).
+All values of the config can be changed from the command line.
+For example, the model will be stored in a directory with a unique run id as a subdirectory of the
+current working directory which is by default called ``runs``.
+This can be changed as follows::
 
+   $ spktrain +experiment=qm9 data_dir=<path> run_dir=~/all_my_runs run_id=this_run
 
-With the ``--cuda`` flag, you can activate GPU training.
-The default hyper-parameters should work fine, however, you can change them through command-line arguments.
-Please refer to the help at the command line::
+If you call ``spktrain +experiment=qm9 --help``, you can see the full config with all the parameters
+that can be changed.
+Nested parameters can be changed as follows::
 
-   $ spk_run.py train <schnet/wacsf> --help
+   $ spktrain +experiment=qm9 data_dir=<path> data.batch_size=64
 
-The training progress will be logged in ``<modeldir>/log``. The default is a basic logging with **CSV** files.
-Advanced logging with **TensorBoard** event files can be activated using ``--logger tensorboard`` (see `above <#visualization-with-tensorboard>`_).
+Hydra organizes parameters in config groups which allows hierarchical configurations consisting of multiple
+yaml files. This allows to easily change the whole dataset, model or representation.
+For instance, changing from the default SchNet representation to PaiNN, use::
 
-To evaluate the trained model that showed the best validation error during training (i.e., early stopping), call::
+   $ spktrain +experiment=qm9 data_dir=<path> model/representation=painn
 
-   $ spk_run.py eval <datapath> <modeldir> [--split train val test] [--cuda]
+For more details on config groups, have a look at the
+`Hydra docs <https://hydra.cc/docs/next/tutorials/basic/your_first_app/config_groups>`_.
 
-which will write a result file ``evaluation.txt`` into the model directory.
-
-.. tip::
-
-   ``<modeldir>`` should point to a directory in which a pre-trained model is stored. As an argument for the --split
-   flag for evaluation you should choose among one of training, validation or test subsets.
 
 ==================================
-Using Scripts with custom Datasets
+Using scripts with custom datasets
 ==================================
+
+The example above uses the :class:`SinglePropertyModel` internally, which is a
+:class:`pytorch_lightning.LightningModule`.
 
 The script for benchmark data can also train a model on custom data sets, by using::
 
@@ -184,28 +167,12 @@ The command for training a QM9-like data set on dipole moments would be::
 The evaluation of the trained model uses the same commands as any pre-implemented
 data set.
 
-=================================
-Using Argument Files for Training
-=================================
 
-An argument file with all training arguments is created at the beginning of every
-training session and can be found at *<modeldir>/args.json*. These argument
-files can be modified and used for new training sessions. In order to build a file
-with default settings run::
+=========================
+Supported Representations
+=========================
 
-   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir>
-
-This will create the <modeldir> which contains the argument file, while the training
-session will fail because ``--split`` is not selected. You can now modify the
-arguments and use them for training::
-
-   $ spk_run.py from_json <modeldir>/args.json
-
-================
-Supported Models
-================
-
-SchNetPack currently supports SchNet and (w)ACSF.
+SchNetPack currently supports SchNet, PaiNN and (w)ACSF.
 
 SchNet
 ^^^^^^
