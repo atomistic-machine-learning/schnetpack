@@ -10,7 +10,6 @@ n_rbf: 20
 lr: 1e-4
 
 name: custom_data
-seed: 1234
 
 data:
   distance_unit: Ang
