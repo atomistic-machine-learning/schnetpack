@@ -133,6 +133,19 @@ This can be changed as follow::
         model.output.forces.loss_weight=0.99
 
 
+Logging
+^^^^^^^
+Beyond the output of the command line, SchNetPack supports multiple logging backends over PyTorch Lightning.
+By default, the Tensosboard logger is activated.
+If TensorBoard is installed, the results can be shown by calling::
+
+    $ tensorboard --logdir=<rundir>
+
+Furthermore, SchNetPack comes with configs for a CSV logger and `Aim <https://github.com/aimhubio/aim>`_.
+These can be selected as follows::
+
+   $ spktrain data_dir=<path> +experiment=md17 logger=csv/aim
+
 
 ===============
 Representations
