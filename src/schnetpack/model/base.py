@@ -62,7 +62,7 @@ class AtomisticModel(LightningModule):
     ) -> Dict[str, torch.Tensor]:
         if self.inference_mode:
             for pp in self.postprocessors:
-                results = pp(results, inputs)
+                results = pp(inputs, results)
         return results
 
     def to_torchscript(
