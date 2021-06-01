@@ -15,7 +15,7 @@ setup(
     author="Kristof T. Schuett, Michael Gastegger, Pan Kessel, Kim Nicoli",
     url="https://github.com/atomistic-machine-learning/schnetpack",
     packages=find_packages("src"),
-    scripts=["src/scripts/spktrain", "src/scripts/spkparse"],
+    scripts=["src/scripts/spktrain"],
     package_dir={"": "src"},
     python_requires=">=3.6",
     install_requires=[
