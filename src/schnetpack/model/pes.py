@@ -90,71 +90,46 @@ class PESModel(AtomisticModel):
             )[0]
 
             if self.predict_forces and dEdRij is not None:
-                Fpred_i = torch.zeros_like(R)
-                Fpred_i = Fpred_i.index_add(0, inputs[structure.idx_i], dEdRij)
-
-                Fpred_j = torch.zeros_like(R)
-                Fpred_j = Fpred_j.index_add(0, inputs[structure.idx_j], dEdRij)
-                Fpred = Fpred_i - Fpred_j
+                Fpred = torch.zeros_like(R)
+                Fpred = Fpred.index_add(0, inputs[structure.idx_i], dEdRij)
+                Fpred = Fpred.index_add(0, inputs[structure.idx_j], -dEdRij)
                 results["forces"] = Fpred
 
-            # if self.predict_stress:
-            #     cell_offset = inputs[structure.cell_offset]
-            #     offset_ij = cell_offset[structure.idx_j] - cell_offset
-            #     stress_i = torch.zeros_like(R)
-            #
-            #     # sum over j
-            #     stress_i = stress_i.index_add(
-            #         0,
-            #         inputs[structure.idx_i],
-            #         dEdRij * offset_ij,
-            #     )
-            #
-            #     # sum over i
-            #     idx_m = inputs[structure.idx_m]
-            #     maxm = int(idx_m[-1]) + 1
-            #     stress = torch.zeros(
-            #         (maxm, 3), dtype=stress_i.dtype, device=stress_i.device
-            #     )
-            #     stress = stress.index_add(0, idx_m, stress_i)
-            #
-            #     # TODO: normalize by volume
-            #     results["stress"] = stress
-
-        if self.predict_stress:
-            stress_i = torch.zeros((R.shape[0], 3, 3), dtype=R.dtype, device=R.device)
-
-            # sum over j
-            stress_i = stress_i.index_add(
-                0,
-                inputs[structure.idx_i],
-                dEdRij[:, None, :] * inputs[structure.Rij][:, :, None],
-            )
-
-            # sum over i
-            idx_m = inputs[structure.idx_m]
-            maxm = int(idx_m[-1]) + 1
-            stress = torch.zeros(
-                (maxm, 3, 3), dtype=stress_i.dtype, device=stress_i.device
-            )
-            stress = stress.index_add(0, idx_m, stress_i)
-
-            # TODO: remove reshapes?
-            cell_33 = inputs[structure.cell].view(maxm, 3, 3)
-            volume = (
-                torch.sum(
-                    cell_33[:, 0, :]
-                    * torch.cross(cell_33[:, 1, :], cell_33[:, 2, :], dim=1),
-                    dim=1,
-                    keepdim=True,
+            if self.predict_stress:
+                stress_i = torch.zeros(
+                    (R.shape[0], 3, 3), dtype=R.dtype, device=R.device
                 )
-                .expand(maxm, 3)
-                .reshape(maxm * 3, 1)
-            )
-            results = self.postprocess(inputs, results)
 
-        results["stress"] = stress.reshape(maxm * 3, 3) / volume
+                # sum over j
+                stress_i = stress_i.index_add(
+                    0,
+                    inputs[structure.idx_i],
+                    dEdRij[:, None, :] * inputs[structure.Rij][:, :, None],
+                )
 
+                # sum over i
+                idx_m = inputs[structure.idx_m]
+                maxm = int(idx_m[-1]) + 1
+                stress = torch.zeros(
+                    (maxm, 3, 3), dtype=stress_i.dtype, device=stress_i.device
+                )
+                stress = stress.index_add(0, idx_m, stress_i)
+
+                # TODO: remove reshapes?
+                cell_33 = inputs[structure.cell].view(maxm, 3, 3)
+                volume = (
+                    torch.sum(
+                        cell_33[:, 0, :]
+                        * torch.cross(cell_33[:, 1, :], cell_33[:, 2, :], dim=1),
+                        dim=1,
+                        keepdim=True,
+                    )
+                    .expand(maxm, 3)
+                    .reshape(maxm * 3, 1)
+                )
+                results["stress"] = stress.reshape(maxm * 3, 3) / volume
+
+        results = self.postprocess(inputs, results)
         return results
 
     def loss_fn(self, pred, batch):

@@ -42,19 +42,19 @@ class AtomisticModel(LightningModule):
         self.inference_mode = False
 
         self.build_model(datamodule)
-        self.build_postprocess(datamodule)
+        self.datamodule = datamodule
 
     @abstractmethod
     def build_model(self, datamodule: spk.data.AtomsDataModule):
         """Parser dict configs and instantiate the model"""
         pass
 
-    def build_postprocess(self, datamodule: spk.data.AtomsDataModule):
+    def setup(self, stage=None):
         self.postprocessors = torch.nn.ModuleList()
         for pp in self._postproc_cfg:
             pp = hydra.utils.instantiate(pp)
             pp.postprocessor()
-            pp.datamodule(datamodule)
+            pp.datamodule(self.datamodule)
             self.postprocessors.append(pp)
 
     def postprocess(
@@ -62,7 +62,7 @@ class AtomisticModel(LightningModule):
     ) -> Dict[str, torch.Tensor]:
         if self.inference_mode:
             for pp in self.postprocessors:
-                results = pp(results, inputs)
+                results = pp(inputs, results)
         return results
 
     def to_torchscript(

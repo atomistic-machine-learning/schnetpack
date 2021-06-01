@@ -10,7 +10,6 @@ from .transform import Transform
 __all__ = [
     "SubtractCenterOfMass",
     "SubtractCenterOfGeometry",
-    "UnitConversion",
     "AddOffsets",
     "RemoveOffsets",
 ]
@@ -54,40 +53,6 @@ class SubtractCenterOfGeometry(Transform):
     ) -> Dict[str, torch.Tensor]:
         inputs[structure.position] -= inputs[structure.position].mean(0)
         return inputs
-
-
-class UnitConversion(Transform):
-    """
-    Convert units of selected properties.
-    """
-
-    is_preprocessor: bool = True
-    is_postprocessor: bool = True
-
-    def __init__(self, property_unit_dict: Dict[str, str]):
-        """
-        Args:
-            property_unit_dict: mapping property name to target unit,
-                specified as a string (.e.g. 'kcal/mol').
-        """
-        self.property_unit_dict = property_unit_dict
-        self.src_units = None
-        super().__init__()
-
-    def forward(
-        self,
-        inputs: Dict[str, torch.Tensor],
-        results: Optional[Dict[str, torch.Tensor]] = None,
-    ) -> Dict[str, torch.Tensor]:
-        x = inputs if self.mode == "pre" else results
-
-        if not self.src_units:
-            units = self.data.units
-            self.src_units = {p: units[p] for p in self.property_unit_dict}
-
-        for prop, tgt_unit in self.property_unit_dict.items():
-            x[prop] *= spk.units.convert_units(self.src_units[prop], tgt_unit)
-        return x
 
 
 class RemoveOffsets(Transform):
