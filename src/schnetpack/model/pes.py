@@ -3,10 +3,12 @@ import logging
 import hydra
 import torch
 from torch.autograd import grad
-from typing import Dict, Optional, List
-
+from typing import Dict, Optional, List, Callable
+import torch.nn as nn
+from functools import partial
 from schnetpack import structure
-from schnetpack.model.base import AtomisticModel
+from schnetpack.model.base import AtomisticModel, optimizer_factory, scheduler_factory, Properties
+from omegaconf import DictConfig
 
 import schnetpack as spk
 
@@ -20,67 +22,76 @@ class PESModel(AtomisticModel):
     AtomisticModel for potential energy surfaces
     """
 
-    def build_model(self, datamodule: spk.data.AtomsDataModule):
-        self.representation = hydra.utils.instantiate(self._representation_cfg)
+    def __init__(
+        self,
+        datamodule: spk.data.AtomsDataModule,
+        representation: nn.Module,
+        output: nn.Module,
+        energy_property: str = "energy",
+        energy_loss_fn: Optional[Callable] = None,
+        energy_weight: Optional[float] = None,
+        energy_metrics: Optional[List[Callable]] = None,
+        forces_property: str = None,
+        forces_loss_fn: Optional[Callable] = None,
+        forces_weight: Optional[float] = None,
+        forces_metrics: Optional[List[Callable]] = None,
+        stress_property: str = None,
+        stress_loss_fn: Optional[Callable] = None,
+        stress_weight: Optional[float] = None,
+        stress_metrics: Optional[List[Callable]] = None,
+        optimizer: Optional = None,
+        scheduler: Optional = None,
+        scheduler_monitor: Optional[str] = None,
+        postprocess: Optional[list[spk.transform.Transform]] = None,
+    ):
+        super(PESModel, self).__init__(
+            datamodule=datamodule,
+            representation=representation,
+            output=output,
+            postprocess=postprocess,
+        )
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.schedule_monitor = scheduler_monitor
 
-        self.props = {}
-        if "energy" in self._output_cfg:
-            self.props["energy"] = self._output_cfg.energy.property
+        self.targets = {
+            Properties.energy: energy_property,
+            Properties.forces: forces_property,
+            Properties.stress: stress_property,
+        }
 
-        self.predict_forces = "forces" in self._output_cfg
-        if self.predict_forces:
-            self.props["forces"] = self._output_cfg.forces.property
+        self.losses = {Properties.energy: (energy_weight, energy_loss_fn)}
+        if forces_loss_fn is not None:
+            self.losses[Properties.forces] = (forces_weight, forces_loss_fn)
+        if stress_loss_fn is not None:
+            self.losses[Properties.stress] = (stress_weight, stress_loss_fn)
 
-        self.predict_stress = "stress" in self._output_cfg
-        if self.predict_stress:
-            self.props["stress"] = self._output_cfg.stress.property
+        self._collect_metrics(energy_metrics, forces_metrics, stress_metrics)
 
-        self.output = hydra.utils.instantiate(self._output_cfg.module)
-
-        self.losses = {}
-        for prop in ["energy", "forces", "stress"]:
-            try:
-                loss_fn = hydra.utils.instantiate(self._output_cfg[prop].loss)
-                loss_weight = self._output_cfg[prop].loss_weight
-                self.losses[prop] = (loss_fn, loss_weight)
-            except Exception as e:
-                print(e)
-
-        self._collect_metrics()
-
-    def _collect_metrics(self):
+    def _collect_metrics(self, energy_metrics, forces_metrics, stress_metrics):
         self.metrics = {}
-        if "metrics" in self._output_cfg.energy:
-            energy_metrics = {
-                "energy_" + name: hydra.utils.instantiate(metric)
-                for name, metric in self._output_cfg.energy.metrics.items()
-            }
-            self.energy_metrics = torch.nn.ModuleDict(energy_metrics)
-            self.metrics["energy"] = energy_metrics
+        if energy_metrics is not None:
+            self.metrics[Properties.energy] = nn.ModuleDict({
+                Properties.energy + "_" + name: metric for name, metric in energy_metrics.items()
+            })
 
-        if self.predict_forces:
-            force_metrics = {
-                "force_" + name: hydra.utils.instantiate(metric)
-                for name, metric in self._output_cfg.forces.metrics.items()
-            }
-            self.force_metrics = torch.nn.ModuleDict(force_metrics)
-            self.metrics["forces"] = force_metrics
-        if self.predict_stress:
-            stress_metrics = {
-                "stress_" + name: hydra.utils.instantiate(metric)
-                for name, metric in self._output_cfg.stress.metrics.items()
-            }
-            self.stress_metrics = torch.nn.ModuleDict(stress_metrics)
-            self.metrics["stress"] = stress_metrics
+        if forces_metrics is not None:
+            self.metrics[Properties.forces] = nn.ModuleDict({
+                Properties.forces + "_" + name: metric for name, metric in forces_metrics.items()
+            })
+        if stress_metrics is not None:
+            self.metrics[Properties.stress] = nn.ModuleDict({
+                Properties.stress + "_" + name: metric for name, metric in stress_metrics.items()
+            })
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
         R = inputs[structure.R]
         inputs[structure.Rij].requires_grad_()
         inputs.update(self.representation(inputs))
         Epred = self.output(inputs)
-        results = {"energy": Epred}
+        results = {Properties.energy: Epred}
 
-        if self.predict_forces or self.predict_stress:
+        if self.targets[Properties.forces] is not None or self.targets[Properties.stress] is not None:
             go: List[Optional[torch.Tensor]] = [torch.ones_like(Epred)]
             dEdRij = grad(
                 [Epred],
@@ -89,39 +100,16 @@ class PESModel(AtomisticModel):
                 create_graph=self.training,
             )[0]
 
-            if self.predict_forces and dEdRij is not None:
+            if self.targets[Properties.forces] is not None and dEdRij is not None:
                 Fpred_i = torch.zeros_like(R)
                 Fpred_i = Fpred_i.index_add(0, inputs[structure.idx_i], dEdRij)
 
                 Fpred_j = torch.zeros_like(R)
                 Fpred_j = Fpred_j.index_add(0, inputs[structure.idx_j], dEdRij)
                 Fpred = Fpred_i - Fpred_j
-                results["forces"] = Fpred
+                results[Properties.forces] = Fpred
 
-            # if self.predict_stress:
-            #     cell_offset = inputs[structure.cell_offset]
-            #     offset_ij = cell_offset[structure.idx_j] - cell_offset
-            #     stress_i = torch.zeros_like(R)
-            #
-            #     # sum over j
-            #     stress_i = stress_i.index_add(
-            #         0,
-            #         inputs[structure.idx_i],
-            #         dEdRij * offset_ij,
-            #     )
-            #
-            #     # sum over i
-            #     idx_m = inputs[structure.idx_m]
-            #     maxm = int(idx_m[-1]) + 1
-            #     stress = torch.zeros(
-            #         (maxm, 3), dtype=stress_i.dtype, device=stress_i.device
-            #     )
-            #     stress = stress.index_add(0, idx_m, stress_i)
-            #
-            #     # TODO: normalize by volume
-            #     results["stress"] = stress
-
-        if self.predict_stress:
+        if self.targets[Properties.stress] is not None:
             stress_i = torch.zeros((R.shape[0], 3, 3), dtype=R.dtype, device=R.device)
 
             # sum over j
@@ -139,7 +127,6 @@ class PESModel(AtomisticModel):
             )
             stress = stress.index_add(0, idx_m, stress_i)
 
-            # TODO: remove reshapes?
             cell_33 = inputs[structure.cell].view(maxm, 3, 3)
             volume = (
                 torch.sum(
@@ -151,17 +138,18 @@ class PESModel(AtomisticModel):
                 .expand(maxm, 3)
                 .reshape(maxm * 3, 1)
             )
-            results = self.postprocess(inputs, results)
 
-        results["stress"] = stress.reshape(maxm * 3, 3) / volume
+            results[Properties.stress] = stress.reshape(maxm * 3, 3) / volume
+
+        results = self.postprocess(inputs, results)
 
         return results
 
     def loss_fn(self, pred, batch):
         loss = 0.0
-        for k, v in self.losses.items():
-            fn, weight = v
-            loss_p = weight * torch.mean((pred[k] - batch[self.props[k]]) ** 2)
+        for pname, v in self.losses.items():
+            weight, fn = v
+            loss_p = weight * fn(pred[pname], batch[self.targets[pname]])
             loss += loss_p
         return loss
 
@@ -174,7 +162,7 @@ class PESModel(AtomisticModel):
             for name, pmetric in pmetrics.items():
                 self.log(
                     f"train_{name}",
-                    pmetric(pred[prop], batch[self.props[prop]]),
+                    pmetric(pred[prop], batch[self.targets[prop]]),
                     on_step=False,
                     on_epoch=True,
                     prog_bar=False,
@@ -192,7 +180,7 @@ class PESModel(AtomisticModel):
             for name, pmetric in pmetrics.items():
                 self.log(
                     f"val_{name}",
-                    pmetric(pred[prop], batch[self.props[prop]]),
+                    pmetric(pred[prop], batch[self.targets[prop]]),
                     on_step=False,
                     on_epoch=True,
                     prog_bar=False,
@@ -210,7 +198,7 @@ class PESModel(AtomisticModel):
             for name, pmetric in pmetrics.items():
                 self.log(
                     f"test_{name}",
-                    pmetric(pred[prop], batch[self.props[prop]]),
+                    pmetric(pred[prop], batch[self.targets[prop]]),
                     on_step=False,
                     on_epoch=True,
                     prog_bar=False,
@@ -218,15 +206,12 @@ class PESModel(AtomisticModel):
         return {"test_loss": loss}
 
     def configure_optimizers(self):
-        optimizer = hydra.utils.instantiate(
-            self._optimizer_cfg, params=self.parameters()
-        )
-        schedule = hydra.utils.instantiate(
-            self._schedule_cfg.scheduler, optimizer=optimizer
-        )
+        optimizer = self.optimizer(params=self.parameters())
+        schedule = self.scheduler(optimizer=optimizer)
+
         optimconf = {"scheduler": schedule, "name": "lr_schedule"}
-        if self._schedule_cfg.monitor:
-            optimconf["monitor"] = self._schedule_cfg.monitor
+        if self.schedule_monitor:
+            optimconf["monitor"] = self.schedule_monitor
         return [optimizer], [optimconf]
 
     # TODO: add eval mode post-processing

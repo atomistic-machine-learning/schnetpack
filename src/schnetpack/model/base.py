@@ -1,15 +1,43 @@
 from abc import abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, Callable
 
 import hydra.utils
 import torch
 from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
+import torch.nn as nn
 
 import schnetpack as spk
 
-__all__ = ["AtomisticModel"]
+__all__ = ["AtomisticModel", "Properties"]
+
+
+class Properties:
+    energy = "energy"
+    forces = "forces"
+    stress = "stress"
+    dipole_moments = "dipole_moments"
+
+
+class ModelTarget:
+    def __init__(self, name, loss_fn, loss_weight, metrics=None):
+        self.name = name
+        self.loss_fn = loss_fn
+        self.loss_weight = loss_weight
+        self.metrics = metrics or []
+
+
+def optimizer_factory(optimizer, **kwargs):
+    def factory(params):
+        return optimizer(params=params, **kwargs)
+    return factory
+
+
+def scheduler_factory(scheduler, **kwargs):
+    def factory(optimizer):
+        return scheduler(optimizer, **kwargs)
+    return factory
 
 
 class AtomisticModel(LightningModule):
@@ -24,37 +52,25 @@ class AtomisticModel(LightningModule):
     def __init__(
         self,
         datamodule: spk.data.AtomsDataModule,
-        representation: DictConfig,
-        output: DictConfig,
-        schedule: DictConfig,
-        optimizer: DictConfig,
-        postprocess: Optional[DictConfig] = None,
+        representation: nn.Module,
+        output: nn.Module,
+        postprocess: Optional[list[spk.transform.Transform]] = None,
     ):
         super().__init__()
         self.save_hyperparameters(
-            "representation", "output", "optimizer", "schedule", "postprocess"
+            "representation", "output", "postprocess"
         )
-        self._representation_cfg = representation
-        self._output_cfg = output
-        self._schedule_cfg = schedule
-        self._optimizer_cfg = optimizer
-        self._postproc_cfg = postprocess or []
+        self.representation = representation
+        self.output = output
+        self.pp = postprocess or []
+
         self.inference_mode = False
 
-        self.build_model(datamodule)
-        self.build_postprocess(datamodule)
-
-    @abstractmethod
-    def build_model(self, datamodule: spk.data.AtomsDataModule):
-        """Parser dict configs and instantiate the model"""
-        pass
-
-    def build_postprocess(self, datamodule: spk.data.AtomsDataModule):
+    def setup(self, stage=None):
         self.postprocessors = torch.nn.ModuleList()
-        for pp in self._postproc_cfg:
-            pp = hydra.utils.instantiate(pp)
+        for pp in self.pp:
             pp.postprocessor()
-            pp.datamodule(datamodule)
+            pp.datamodule(self.datamodule)
             self.postprocessors.append(pp)
 
     def postprocess(
@@ -62,7 +78,7 @@ class AtomisticModel(LightningModule):
     ) -> Dict[str, torch.Tensor]:
         if self.inference_mode:
             for pp in self.postprocessors:
-                results = pp(results, inputs)
+                results = pp(inputs, results)
         return results
 
     def to_torchscript(

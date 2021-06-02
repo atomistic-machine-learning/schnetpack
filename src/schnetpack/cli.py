@@ -1,14 +1,18 @@
 import os
 import hydra
 import logging
+
+import sys
 from omegaconf import DictConfig, OmegaConf
 from typing import List
 from schnetpack.utils.script import log_hyperparameters, print_config
+from functools import partial
 
 from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
 from pytorch_lightning.loggers import LightningLoggerBase
 from pytorch_lightning import seed_everything
-
+import torch
+import schnetpack
 import uuid
 
 log = logging.getLogger(__name__)
@@ -59,7 +63,11 @@ def train(config: DictConfig):
     # Init Lightning model
     log.info(f"Instantiating model <{config.model._target_}>")
     model: LightningModule = hydra.utils.instantiate(
-        config.model, datamodule=datamodule
+        config.model,
+        datamodule=datamodule,
+        optimizer=partial(eval(config.model.optimizer._target_), **config.model.optimizer.args),
+        scheduler=partial(eval(config.model.scheduler._target_), **config.model.scheduler.args),
+        scheduler_monitor=config.model.scheduler.monitor,
     )
 
     # Init Lightning callbacks

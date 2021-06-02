@@ -2,16 +2,16 @@ defaults:
   - representation: schnet
 
 _target_: schnetpack.model.PESModel
-_recursive_: False
 
 optimizer:
   _target_: torch.optim.Adam
-  lr: ${lr}
+  args:
+    lr: ${lr}
 
-schedule:
-  monitor: val_loss
-  scheduler:
-    _target_: schnetpack.train.ReduceLROnPlateau
+scheduler:
+  monitor: val_loss_fn
+  _target_: schnetpack.train.ReduceLROnPlateau
+  args:
     mode: min
     factor: 0.5
     patience: 50
@@ -19,35 +19,32 @@ schedule:
     smoothing_factor: 0.8
 
 output:
-  module:
-    _target_: schnetpack.atomistic.Atomwise
-    n_in: ${model.representation.n_atom_basis}
+  _target_: schnetpack.atomistic.Atomwise
+  n_in: ${model.representation.n_atom_basis}
 
-  normalization:
-    initialize_with_stats: True
-    requires_atomref: False
+#  normalization:
+#    initialize_with_stats: True
+#    requires_atomref: False
 
-  energy:
-    property: energy
+energy_property: energy
+energy_loss_fn:
+  _target_: pytorch_lightning.metrics.MeanSquaredError
+energy_weight: 0.05
+energy_metrics:
+  mae:
+    _target_: pytorch_lightning.metrics.MeanAbsoluteError
+  mse:
+    _target_: pytorch_lightning.metrics.MeanSquaredError
 
-    loss:
-      _target_: pytorch_lightning.metrics.MeanSquaredError
-    loss_weight: 0.05
-    metrics:
-      mae:
-        _target_: pytorch_lightning.metrics.MeanAbsoluteError
-      mse:
-        _target_: pytorch_lightning.metrics.MeanSquaredError
-
-  forces:
-    property: forces
-    loss:
-      _target_: pytorch_lightning.metrics.MeanSquaredError
-    loss_weight: 0.95
-    metrics:
-      mae:
-        _target_: pytorch_lightning.metrics.MeanAbsoluteError
-      mse:
-        _target_: pytorch_lightning.metrics.MeanSquaredError
+forces_property: forces
+forces_loss_fn:
+  _target_: pytorch_lightning.metrics.MeanSquaredError
+forces_weight: 0.95
+forces_metrics:
+  mae:
+    _target_: pytorch_lightning.metrics.MeanAbsoluteError
+  mse:
+    _target_: pytorch_lightning.metrics.MeanSquaredError
 
 postprocess: null
+
