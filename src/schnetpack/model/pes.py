@@ -1,14 +1,14 @@
 import logging
 
-import hydra
 import torch
 from torch.autograd import grad
 from typing import Dict, Optional, List, Callable
 import torch.nn as nn
-from functools import partial
 from schnetpack import structure
-from schnetpack.model.base import AtomisticModel, optimizer_factory, scheduler_factory, Properties
-from omegaconf import DictConfig
+from schnetpack.model.base import (
+    AtomisticModel,
+    Properties,
+)
 
 import schnetpack as spk
 
@@ -19,7 +19,8 @@ __all__ = ["PESModel"]
 
 class PESModel(AtomisticModel):
     """
-    AtomisticModel for potential energy surfaces
+    AtomisticModel for potential energy surfaces.
+
     """
 
     def __init__(
@@ -30,30 +31,55 @@ class PESModel(AtomisticModel):
         energy_property: str = "energy",
         energy_loss_fn: Optional[Callable] = None,
         energy_weight: Optional[float] = None,
-        energy_metrics: Optional[List[Callable]] = None,
-        forces_property: str = None,
+        energy_metrics: Optional[Dict] = None,
+        forces_property: Optional[str] = None,
         forces_loss_fn: Optional[Callable] = None,
         forces_weight: Optional[float] = None,
-        forces_metrics: Optional[List[Callable]] = None,
-        stress_property: str = None,
+        forces_metrics: Optional[Dict] = None,
+        stress_property: Optional[str] = None,
         stress_loss_fn: Optional[Callable] = None,
         stress_weight: Optional[float] = None,
-        stress_metrics: Optional[List[Callable]] = None,
-        optimizer: Optional = None,
-        scheduler: Optional = None,
-        scheduler_monitor: Optional[str] = None,
-        postprocess: Optional[list[spk.transform.Transform]] = None,
+        stress_metrics: Optional[Dict] = None,
+        optimizer: Optional[Callable] = None,
+        scheduler: Optional[Callable] = None,
+        scheduler_monitor: Optional[str] = "val_loss",
+        postprocess: Optional[List[spk.transform.Transform]] = None,
     ):
+        """
+        Args:
+            datamodule: pytorch_lightning module for dataset
+            representation: nn.Module for atomistic representation
+            output: nn.Module for computation of physical properties from atomistic representation
+            energy_property: name of energy property in datamodule
+            energy_loss_fn: loss function for computation of energy loss
+            energy_weight: weighting of energy loss
+            energy_metrics: dict of metrics for energy predictions with metric name as keys and callable as values
+            forces_property: name of forces property in datamodule
+            forces_loss_fn: loss function for computation of forces loss
+            forces_weight: weighting of forces loss
+            forces_metrics: dict of metrics for forces predictions with metric name as keys and callable as values
+            stress_property: name of stress property in datamodule
+            stress_loss_fn: loss function for computation of stress loss
+            stress_weight: weighting of stress loss
+            stress_metrics: dict of metrics for stress predictions with metric name as keys and callable as values
+            optimizer: functools.partial-function with torch optimizer and args for creation of optimizer with
+                optimizer(params=self.parameters())
+            scheduler: functools.partial-function with scheduler and args for creation of scheduler with
+                scheduler(optimizer=optimizer)
+            scheduler_monitor: name of metric to be observed and used for lr drops of scheduler
+            postprocess: list of postprocessors to be applied to model for predictions
+
+        """
         super(PESModel, self).__init__(
             datamodule=datamodule,
             representation=representation,
             output=output,
             postprocess=postprocess,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            scheduler_monitor=scheduler_monitor,
         )
-        self.optimizer = optimizer
-        self.scheduler = scheduler
-        self.schedule_monitor = scheduler_monitor
-
+        # todo: datamodule optional?
         self.targets = {
             Properties.energy: energy_property,
             Properties.forces: forces_property,
@@ -71,18 +97,27 @@ class PESModel(AtomisticModel):
     def _collect_metrics(self, energy_metrics, forces_metrics, stress_metrics):
         self.metrics = {}
         if energy_metrics is not None:
-            self.metrics[Properties.energy] = nn.ModuleDict({
-                Properties.energy + "_" + name: metric for name, metric in energy_metrics.items()
-            })
+            self.metrics[Properties.energy] = nn.ModuleDict(
+                {
+                    Properties.energy + "_" + name: metric
+                    for name, metric in energy_metrics.items()
+                }
+            )
 
         if forces_metrics is not None:
-            self.metrics[Properties.forces] = nn.ModuleDict({
-                Properties.forces + "_" + name: metric for name, metric in forces_metrics.items()
-            })
+            self.metrics[Properties.forces] = nn.ModuleDict(
+                {
+                    Properties.forces + "_" + name: metric
+                    for name, metric in forces_metrics.items()
+                }
+            )
         if stress_metrics is not None:
-            self.metrics[Properties.stress] = nn.ModuleDict({
-                Properties.stress + "_" + name: metric for name, metric in stress_metrics.items()
-            })
+            self.metrics[Properties.stress] = nn.ModuleDict(
+                {
+                    Properties.stress + "_" + name: metric
+                    for name, metric in stress_metrics.items()
+                }
+            )
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
         R = inputs[structure.R]
@@ -91,7 +126,10 @@ class PESModel(AtomisticModel):
         Epred = self.output(inputs)
         results = {Properties.energy: Epred}
 
-        if self.targets[Properties.forces] is not None or self.targets[Properties.stress] is not None:
+        if (
+            self.targets[Properties.forces] is not None
+            or self.targets[Properties.stress] is not None
+        ):
             go: List[Optional[torch.Tensor]] = [torch.ones_like(Epred)]
             dEdRij = grad(
                 [Epred],
@@ -204,14 +242,3 @@ class PESModel(AtomisticModel):
                     prog_bar=False,
                 )
         return {"test_loss": loss}
-
-    def configure_optimizers(self):
-        optimizer = self.optimizer(params=self.parameters())
-        schedule = self.scheduler(optimizer=optimizer)
-
-        optimconf = {"scheduler": schedule, "name": "lr_schedule"}
-        if self.schedule_monitor:
-            optimconf["monitor"] = self.schedule_monitor
-        return [optimizer], [optimconf]
-
-    # TODO: add eval mode post-processing

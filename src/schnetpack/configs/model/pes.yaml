@@ -21,6 +21,7 @@ scheduler:
 output:
   _target_: schnetpack.atomistic.Atomwise
   n_in: ${model.representation.n_atom_basis}
+  aggregation_mode: sum
 
 #  normalization:
 #    initialize_with_stats: True

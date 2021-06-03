@@ -1,10 +1,7 @@
-from abc import abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional, Union, Callable
 
-import hydra.utils
 import torch
-from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
 import torch.nn as nn
 
@@ -18,26 +15,6 @@ class Properties:
     forces = "forces"
     stress = "stress"
     dipole_moments = "dipole_moments"
-
-
-class ModelTarget:
-    def __init__(self, name, loss_fn, loss_weight, metrics=None):
-        self.name = name
-        self.loss_fn = loss_fn
-        self.loss_weight = loss_weight
-        self.metrics = metrics or []
-
-
-def optimizer_factory(optimizer, **kwargs):
-    def factory(params):
-        return optimizer(params=params, **kwargs)
-    return factory
-
-
-def scheduler_factory(scheduler, **kwargs):
-    def factory(optimizer):
-        return scheduler(optimizer, **kwargs)
-    return factory
 
 
 class AtomisticModel(LightningModule):
@@ -55,11 +32,30 @@ class AtomisticModel(LightningModule):
         representation: nn.Module,
         output: nn.Module,
         postprocess: Optional[list[spk.transform.Transform]] = None,
+        optimizer: Optional[Callable] = None,
+        scheduler: Optional[Callable] = None,
+        scheduler_monitor: Optional[str] = None,
     ):
+        """
+        Args:
+            datamodule: pytorch_lightning module for dataset
+            representation: nn.Module for atomistic representation
+            output: nn.Module for computation of physical properties from atomistic representation
+            postprocess: list of postprocessors to be applied to model for predictions
+            optimizer: functools.partial-function with torch optimizer and args for creation of optimizer with
+                optimizer(params=self.parameters())
+            scheduler: functools.partial-function with scheduler and args for creation of scheduler with
+                scheduler(optimizer=optimizer)
+            scheduler_monitor: name of metric to be observed and used for lr drops of scheduler
+            postprocess: list of postprocessors to be applied to model for predictions
+        """
         super().__init__()
-        self.save_hyperparameters(
-            "representation", "output", "postprocess"
-        )
+        self.datamodule = datamodule
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.schedule_monitor = scheduler_monitor
+
+        self.save_hyperparameters("representation", "output", "postprocess")
         self.representation = representation
         self.output = output
         self.pp = postprocess or []
@@ -93,3 +89,14 @@ class AtomisticModel(LightningModule):
         script = super().to_torchscript(file_path, method, example_inputs, **kwargs)
         self.inference_mode = imode
         return script
+
+    def configure_optimizers(self):
+        optimizer = self.optimizer(params=self.parameters())
+        schedule = self.scheduler(optimizer=optimizer)
+
+        optimconf = {"scheduler": schedule, "name": "lr_schedule"}
+        if self.schedule_monitor:
+            optimconf["monitor"] = self.schedule_monitor
+        return [optimizer], [optimconf]
+
+    # TODO: add eval mode post-processing

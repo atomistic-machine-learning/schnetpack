@@ -65,8 +65,12 @@ def train(config: DictConfig):
     model: LightningModule = hydra.utils.instantiate(
         config.model,
         datamodule=datamodule,
-        optimizer=partial(eval(config.model.optimizer._target_), **config.model.optimizer.args),
-        scheduler=partial(eval(config.model.scheduler._target_), **config.model.scheduler.args),
+        optimizer=partial(
+            eval(config.model.optimizer._target_), **config.model.optimizer.args
+        ),
+        scheduler=partial(
+            eval(config.model.scheduler._target_), **config.model.scheduler.args
+        ),
         scheduler_monitor=config.model.scheduler.monitor,
     )
 
