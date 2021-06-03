@@ -1,8 +1,8 @@
 import logging
 
-import hydra
-import pytorch_lightning.metrics
 import torch
+import torch.nn as nn
+from typing import Dict, Optional, List, Callable, Any, Type
 
 import schnetpack as spk
 from schnetpack.model.base import AtomisticModel
@@ -15,30 +15,68 @@ __all__ = ["SinglePropertyModel"]
 class SinglePropertyModel(AtomisticModel):
     """
     AtomisticModel for models that predict single chemical properties, e.g. for QM9 benchmarks.
+
     """
 
-    def build_model(self, datamodule: spk.data.AtomsDataModule):
-        self.representation = hydra.utils.instantiate(self._representation_cfg)
-        self.output = hydra.utils.instantiate(self._output_cfg.module)
-
-        self.loss_fn = hydra.utils.instantiate(self._output_cfg.loss)
-        self.pred_property = self._output_cfg.property
-
-        self.metrics = torch.nn.ModuleDict(
-            {
-                name: hydra.utils.instantiate(metric)
-                for name, metric in self._output_cfg.metrics.items()
-            }
+    def __init__(
+        self,
+        datamodule: spk.data.AtomsDataModule,
+        representation: nn.Module,
+        output: nn.Module,
+        target_property: str,
+        optimizer_cls: Type[torch.optim.Optimizer],
+        optimizer_args: Optional[Dict[str, Any]] = None,
+        loss_fn: Optional[Callable] = None,
+        metrics: Optional[List[Dict]] = None,
+        scheduler_cls: Type = None,
+        scheduler_args: Dict[str, Any] = None,
+        scheduler_monitor: Optional[str] = None,
+        postprocess: Optional[List[spk.transform.Transform]] = None,
+    ):
+        """
+        Args:
+            datamodule: pytorch_lightning module for dataset
+            representation: nn.Module for atomistic representation
+            output: nn.Module for computation of physical properties from atomistic representation
+            target_property: name of targeted property in datamodule
+            optimizer_cls: type of torch optimizer,e.g. torch.optim.Adam
+            optimizer_args: dict of optimizer keyword arguments
+            loss_fn: function for computation of loss
+            metrics: dict of metrics for predictions of the target property with metric name as keys and callable as values
+            scheduler_cls: type of torch learning rate scheduler
+            scheduler_args: dict of scheduler keyword arguments
+            scheduler_monitor: name of metric to be observed for ReduceLROnPlateau
+            postprocess: list of postprocessors to be applied to model for predictions
+        """
+        super(SinglePropertyModel, self).__init__(
+            datamodule=datamodule,
+            representation=representation,
+            output=output,
+            optimizer_cls=optimizer_cls,
+            optimizer_args=optimizer_args,
+            scheduler_cls=scheduler_cls,
+            scheduler_args=scheduler_args,
+            scheduler_monitor=scheduler_monitor,
+            postprocess=postprocess,
         )
 
-    def forward(self, inputs):
+        self.target_property = target_property
+        self.loss_fn = loss_fn
+
+        self.metrics = nn.ModuleDict(
+            {target_property + "_" + name: metric for name, metric in metrics.items()}
+        )
+
+    def forward(self, inputs: Dict[str, torch.Tensor]):
         inputs.update(self.representation(inputs))
-        pred = self.output(inputs)
-        return pred
+        results = {self.target_property: self.output(inputs)}
+        results = self.postprocess(inputs, results)
+        return results
 
     def training_step(self, batch, batch_idx):
-        pred = self(batch)
-        target = batch[self.pred_property]
+        results = self(batch)
+        pred = results[self.target_property]
+        target = batch[self.target_property]
         loss = self.loss_fn(pred, target)
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
         for name, metric in self.metrics.items():
@@ -52,8 +90,9 @@ class SinglePropertyModel(AtomisticModel):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        pred = self(batch)
-        target = batch[self.pred_property]
+        results = self(batch)
+        pred = results[self.target_property]
+        target = batch[self.target_property]
         loss = self.loss_fn(pred, target)
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         for name, metric in self.metrics.items():
@@ -67,8 +106,9 @@ class SinglePropertyModel(AtomisticModel):
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_idx):
-        pred = self(batch)
-        target = batch[self.pred_property]
+        results = self(batch)
+        pred = results[self.target_property]
+        target = batch[self.target_property]
         loss = self.loss_fn(pred, target)
         self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         for name, metric in self.metrics.items():
@@ -80,19 +120,3 @@ class SinglePropertyModel(AtomisticModel):
                 prog_bar=False,
             )
         return {"test_loss": loss}
-
-    def configure_optimizers(self):
-        optimizer = hydra.utils.instantiate(
-            self._optimizer_cfg, params=self.parameters()
-        )
-        schedule = hydra.utils.instantiate(
-            self._schedule_cfg.scheduler, optimizer=optimizer
-        )
-
-        optimconf = {"optimizer": optimizer, "lr_scheduler": schedule}
-
-        if self._schedule_cfg.monitor:
-            optimconf["monitor"] = self._schedule_cfg.monitor
-        return optimconf
-
-    # TODO: add eval mode post-processing

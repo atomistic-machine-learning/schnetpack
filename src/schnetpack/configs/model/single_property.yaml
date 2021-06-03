@@ -2,40 +2,31 @@ defaults:
   - representation: schnet
 
 _target_: schnetpack.model.SinglePropertyModel
-_recursive_: False
 
-optimizer:
-  _target_: torch.optim.AdamW
+optimizer_cls: torch.optim.Adam
+optimizer_args:
   lr: ${lr}
-  eps: 1e-08
-  weight_decay: 0.0
 
-schedule:
-  monitor: val_loss
-  scheduler:
-    _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
-    mode: min
-    factor: 0.5
-    patience: 25
-    threshold: 0.0001
-    threshold_mode: rel
-    cooldown: 0
-    min_lr: 1e-6
-    eps: 1e-08
+scheduler_cls: schnetpack.train.ReduceLROnPlateau
+scheduler_monitor: val_loss
+scheduler_args:
+  mode: min
+  factor: 0.5
+  patience: 50
+  min_lr: 1e-6
+  smoothing_factor: 0.8
 
 output:
-  property: ${property}
-  requires_atomref: False
-  requires_stats: False
-  divide_stats_by_atoms: True
+  _target_: schnetpack.atomistic.Atomwise
+  n_in: ${model.representation.n_atom_basis}
+  aggregation_mode: sum
 
-  module:
-    _target_: schnetpack.atomistic.Atomwise
-    n_in: ${model.representation.n_atom_basis}
-  loss:
-    _target_: torch.nn.MSELoss
-  metrics:
-    mae:
-      _target_: pytorch_lightning.metrics.MeanAbsoluteError
-    mse:
-      _target_: pytorch_lightning.metrics.MeanSquaredError
+loss_fn:
+  _target_: torch.nn.MSELoss
+metrics:
+  mae:
+    _target_: pytorch_lightning.metrics.MeanAbsoluteError
+  mse:
+    _target_: pytorch_lightning.metrics.MeanSquaredError
+
+target_property: ${property}

@@ -8,6 +8,7 @@ from typing import Final
 
 idx: Final[str] = "_idx"
 
+## structure
 Z: Final[str] = "_atomic_numbers"  #: nuclear charge
 position: Final[str] = "_positions"  #: atom positions
 R: Final[str] = position  #: atom positions
@@ -29,3 +30,10 @@ idx_j_triples: Final[str] = "_idx_j_triples"
 
 #: indices of second neighboring atom triples
 idx_k_triples: Final[str] = "_idx_k_triples"
+
+
+## chemical properties
+energy: Final[str] = "energy"
+forces: Final[str] = "forces"
+stress: Final[str] = "stress"
+dipole_moments: Final[str] = "dipole_moments"

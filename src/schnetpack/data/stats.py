@@ -3,7 +3,7 @@ from typing import Dict, Tuple
 import torch
 from tqdm import tqdm
 
-import schnetpack.structure as structure
+import schnetpack.properties as structure
 from schnetpack.data import AtomsLoader
 
 __all__ = ["calculate_stats"]

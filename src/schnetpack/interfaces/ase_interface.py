@@ -31,7 +31,7 @@ import torch
 import schnetpack
 import logging
 
-from schnetpack import structure
+from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.transform import CastTo32, ASENeighborList, CastTo64
 from schnetpack.units import convert_units
@@ -143,11 +143,11 @@ class SpkCalculator(Calculator):
             dict[str, torch.Tensor]: input batch for model.
         """
         inputs = {
-            structure.n_atoms: torch.tensor([atoms.get_global_number_of_atoms()]),
-            structure.Z: torch.from_numpy(atoms.get_atomic_numbers()),
-            structure.R: torch.from_numpy(atoms.get_positions()),
-            structure.cell: torch.from_numpy(atoms.get_cell().array),
-            structure.pbc: torch.from_numpy(atoms.get_pbc()),
+            properties.n_atoms: torch.tensor([atoms.get_global_number_of_atoms()]),
+            properties.Z: torch.from_numpy(atoms.get_atomic_numbers()),
+            properties.R: torch.from_numpy(atoms.get_positions()),
+            properties.cell: torch.from_numpy(atoms.get_cell().array),
+            properties.pbc: torch.from_numpy(atoms.get_pbc()),
         }
 
         for transform in self.transforms:

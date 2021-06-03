@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-import schnetpack.structure as structure
+import schnetpack.properties as structure
 import schnetpack as spk
 import numpy as np
 from ase.neighborlist import neighbor_list

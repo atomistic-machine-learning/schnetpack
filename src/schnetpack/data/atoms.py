@@ -22,7 +22,7 @@ from ase import Atoms
 from ase.db import connect
 
 import schnetpack as spk
-import schnetpack.structure as structure
+import schnetpack.properties as structure
 from schnetpack.transform import Transform
 
 logger = logging.getLogger(__name__)

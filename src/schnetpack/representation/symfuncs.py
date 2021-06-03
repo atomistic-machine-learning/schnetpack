@@ -3,7 +3,7 @@ from torch import nn
 from typing import Callable, Dict
 
 import schnetpack.data.loader
-from schnetpack import structure
+from schnetpack import properties
 from schnetpack.nn import scatter_add
 from tqdm import tqdm
 
@@ -65,12 +65,12 @@ class SymmetryFunctions(nn.Module):
         Returns:
             torch.Tensor: symmetry function vectors
         """
-        atomic_numbers = inputs[structure.Z]
+        atomic_numbers = inputs[properties.Z]
         target_shape = atomic_numbers.shape[0]
 
-        r_ij = inputs[structure.Rij]
-        idx_i = inputs[structure.idx_i]
-        idx_j = inputs[structure.idx_j]
+        r_ij = inputs[properties.Rij]
+        idx_i = inputs[properties.idx_i]
+        idx_j = inputs[properties.idx_j]
 
         # Get the neighboring elements
         Zj = atomic_numbers[idx_j]
@@ -88,9 +88,9 @@ class SymmetryFunctions(nn.Module):
 
         if self.n_basis_angular != 0:
             # Construct everything for computing the angular symmetry functions
-            idx_i_triples = inputs[structure.idx_i_triples]
-            idx_j_triples = inputs[structure.idx_j_triples]
-            idx_k_triples = inputs[structure.idx_k_triples]
+            idx_i_triples = inputs[properties.idx_i_triples]
+            idx_j_triples = inputs[properties.idx_j_triples]
+            idx_k_triples = inputs[properties.idx_k_triples]
 
             r_ij_angle = r_ij[idx_j_triples]
             r_ik_angle = r_ij[idx_k_triples]

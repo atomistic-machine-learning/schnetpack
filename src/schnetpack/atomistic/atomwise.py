@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 import schnetpack as spk
-import schnetpack.structure as structure
+import schnetpack.properties as structure
 
 
 class Atomwise(nn.Module):

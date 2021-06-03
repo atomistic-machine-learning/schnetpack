@@ -6,7 +6,7 @@ from .transform import Transform
 
 __all__ = ["ASENeighborList", "TorchNeighborList"]
 
-from .. import structure as structure
+from .. import properties as structure
 
 
 class ASENeighborList(Transform):
