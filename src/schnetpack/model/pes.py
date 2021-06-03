@@ -76,7 +76,8 @@ class PESModel(AtomisticModel):
     def forward(self, inputs: Dict[str, torch.Tensor]):
         R = inputs[structure.R]
         inputs[structure.Rij].requires_grad_()
-        inputs.update(self.representation(inputs))
+        x = self.representation(inputs)
+        inputs.update(x)
         Epred = self.output(inputs)
         results = {"energy": Epred}
 
@@ -88,6 +89,10 @@ class PESModel(AtomisticModel):
                 grad_outputs=go,
                 create_graph=self.training,
             )[0]
+
+            # TorchScript needs Tensor instead of Optional[Tensor]
+            if dEdRij is None:
+                dEdRij = torch.zeros_like(inputs[structure.Rij])
 
             if self.predict_forces and dEdRij is not None:
                 Fpred = torch.zeros_like(R)

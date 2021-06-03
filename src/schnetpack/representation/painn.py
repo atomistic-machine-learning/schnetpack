@@ -74,17 +74,17 @@ class PaiNN(nn.Module):
         else:
             self.filter_net = snn.Dense(
                 self.radial_basis.n_rbf,
-                self.n_interactions * 3 * n_atom_basis,
+                self.n_interactions * n_atom_basis * 3,
                 activation=None,
             )
 
-        self.interatomic_context_net = replicate_module(
-            lambda: nn.Sequential(
-                snn.Dense(n_atom_basis, n_atom_basis, activation=activation),
-                snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
-            ),
-            self.n_interactions,
-            shared_interactions,
+        self.interatomic_context_net = nn.ModuleList(
+            [
+                nn.Sequential(
+                    snn.Dense(n_atom_basis, n_atom_basis, activation=activation),
+                    snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
+                )
+            ]
         )
 
         self.intraatomic_context_net = replicate_module(
@@ -154,7 +154,13 @@ class PaiNN(nn.Module):
             muj = mu[idx_j]
 
             x = filter_list[i] * xj
-            dq, dmuR, dmumu = torch.split(x, self.n_atom_basis, dim=-1)
+
+            # TochScript does not like this split in grad:
+            # dq, dmuR, dmumu = torch.split(x, 128, dim=-1)
+            dq = x[..., : self.n_atom_basis]
+            dmuR = x[..., self.n_atom_basis : 2 * self.n_atom_basis]
+            dmumu = x[..., 2 * self.n_atom_basis :]
+
             dq = snn.scatter_add(dq, idx_i, dim_size=n_atoms)
             dmu = dmuR * dir_ij[..., None] + dmumu * muj
             dmu = snn.scatter_add(dmu, idx_i, dim_size=n_atoms)

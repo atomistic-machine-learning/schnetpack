@@ -28,8 +28,7 @@ if __name__ == "__main__":
 
     atoms = Atoms(Z, R)
 
-    model = torch.jit.load(args.model)
-    # model = torch.jit.freeze(model)
+    model = torch.jit.load(args.model, map_location="cuda")
 
     # Initialize the calculator
     calc = SpkCalculator(model, 5.0)

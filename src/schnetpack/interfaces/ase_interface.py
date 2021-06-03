@@ -216,6 +216,7 @@ class SpkCalculator(Calculator):
             print(model_results, "A")
             print(model_results["energy"], "<- THIS IS MY ENERGY")
 
+            model_inputs = self._atoms2input(atoms)
             print("-------------------------------")
             print("Performing second model call")
             model_results = self.model(model_inputs)
