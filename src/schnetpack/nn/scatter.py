@@ -4,6 +4,7 @@ from torch import nn
 __all__ = ["scatter_add"]
 
 
+@torch.jit.script
 def scatter_add(
     x: torch.Tensor, idx_i: torch.Tensor, dim_size: int, dim: int = 0
 ) -> torch.Tensor:

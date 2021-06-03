@@ -1,6 +1,5 @@
 from typing import Callable, Dict
 
-import hydra
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,14 +10,84 @@ import schnetpack.nn as snn
 __all__ = ["PaiNN"]
 
 
-def replicate_module(
-    module_factory: Callable[[], nn.Module], n: int, share_params: bool
-):
-    if share_params:
-        module_list = nn.ModuleList([module_factory()] * n)
-    else:
-        module_list = nn.ModuleList([module_factory() for i in range(n)])
-    return module_list
+class PaiNNInteraction(nn.Module):
+    r"""PaiNN interaction block for modeling equivariant interactions of atomistic systems."""
+
+    def __init__(
+        self,
+        n_atom_basis: int,
+        activation: Callable,
+    ):
+        """
+        Args:
+            n_atom_basis: number of features to describe atomic environments.
+            activation: if None, no activation function is used.
+        """
+        super(PaiNNInteraction, self).__init__()
+        self.n_atom_basis = n_atom_basis
+
+        self.interatomic_context_net = nn.Sequential(
+            snn.Dense(n_atom_basis, n_atom_basis, activation=activation),
+            snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
+        )
+        self.intraatomic_context_net = nn.Sequential(
+            snn.Dense(2 * n_atom_basis, n_atom_basis, activation=activation),
+            snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
+        )
+        self.mu_channel_mix = snn.Dense(n_atom_basis, 2 * n_atom_basis, activation=None)
+
+    def forward(
+        self,
+        q: torch.Tensor,
+        mu: torch.Tensor,
+        Wij: torch.Tensor,
+        dir_ij: torch.Tensor,
+        idx_i: torch.Tensor,
+        idx_j: torch.Tensor,
+        n_atoms: int,
+    ):
+        """Compute interaction output.
+
+        Args:
+            q: scalar input values
+            mu: vector input values
+            Wij: filter
+            idx_i: index of center atom i
+            idx_j: index of neighbors j
+
+        Returns:
+            atom features after interaction
+        """
+        # inter-atomic
+        x = self.interatomic_context_net(q)
+        xj = x[idx_j]
+        muj = mu[idx_j]
+        x = Wij * xj
+
+        dq, dmuR, dmumu = torch.split(x, self.n_atom_basis, dim=-1)
+        dq = snn.scatter_add(dq, idx_i, dim_size=n_atoms)
+        dmu = dmuR * dir_ij[..., None] + dmumu * muj
+        dmu = snn.scatter_add(dmu, idx_i, dim_size=n_atoms)
+
+        q = q + dq
+        mu = mu + dmu
+
+        ## intra-atomic
+        mu_mix = self.mu_channel_mix(mu)
+        mu_V, mu_W = torch.split(mu_mix, self.n_atom_basis, dim=-1)
+        mu_Vn = torch.norm(mu_V, dim=-2, keepdim=True)
+
+        ctx = torch.cat([q, mu_Vn], dim=-1)
+        x = self.intraatomic_context_net(ctx)
+
+        dq_intra, dmu_intra, dqmu_intra = torch.split(x, self.n_atom_basis, dim=-1)
+        dmu_intra = dmu_intra * mu_W
+
+        dqmu_intra = dqmu_intra * torch.sum(mu_V * mu_W, dim=1, keepdim=True)
+
+        q = dq_intra + dqmu_intra
+        mu = dmu_intra
+        return q, mu
 
 
 class PaiNN(nn.Module):
@@ -78,26 +147,11 @@ class PaiNN(nn.Module):
                 activation=None,
             )
 
-        self.interatomic_context_net = replicate_module(
-            lambda: nn.Sequential(
-                snn.Dense(n_atom_basis, n_atom_basis, activation=activation),
-                snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
+        self.interactions = snn.replicate_module(
+            lambda: PaiNNInteraction(
+                n_atom_basis=self.n_atom_basis,
+                activation=activation,
             ),
-            self.n_interactions,
-            shared_interactions,
-        )
-
-        self.intraatomic_context_net = replicate_module(
-            lambda: nn.Sequential(
-                snn.Dense(2 * n_atom_basis, n_atom_basis, activation=activation),
-                snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
-            ),
-            self.n_interactions,
-            shared_interactions,
-        )
-
-        self.mu_channel_mix = replicate_module(
-            lambda: snn.Dense(n_atom_basis, 2 * n_atom_basis, activation=None),
             self.n_interactions,
             shared_interactions,
         )
@@ -137,52 +191,8 @@ class PaiNN(nn.Module):
         qs = q.shape
         mu = torch.zeros((qs[0], 3, qs[2]), device=q.device)
 
-        for i, (
-            interatomic_context_net,
-            mu_channel_mix,
-            intraatomic_context_net,
-        ) in enumerate(
-            zip(
-                self.interatomic_context_net,
-                self.mu_channel_mix,
-                self.intraatomic_context_net,
-            )
-        ):
-            ## inter-atomic
-            x = interatomic_context_net(q)
-            xj = x[idx_j]
-            muj = mu[idx_j]
-
-            x = filter_list[i] * xj
-
-            # TochScript does not like this split in grad:
-            # dq, dmuR, dmumu = torch.split(x, 128, dim=-1)
-            dq = x[..., : self.n_atom_basis]
-            dmuR = x[..., self.n_atom_basis : 2 * self.n_atom_basis]
-            dmumu = x[..., 2 * self.n_atom_basis :]
-
-            dq = snn.scatter_add(dq, idx_i, dim_size=n_atoms)
-            dmu = dmuR * dir_ij[..., None] + dmumu * muj
-            dmu = snn.scatter_add(dmu, idx_i, dim_size=n_atoms)
-
-            q = q + dq
-            mu = mu + dmu
-
-            ## intra-atomic
-            mu_mix = mu_channel_mix(mu)
-            mu_V, mu_W = torch.split(mu_mix, self.n_atom_basis, dim=-1)
-            mu_Vn = torch.norm(mu_V, dim=-2, keepdim=True)
-
-            ctx = torch.cat([q, mu_Vn], dim=-1)
-            x = intraatomic_context_net(ctx)
-
-            dq_intra, dmu_intra, dqmu_intra = torch.split(x, self.n_atom_basis, dim=-1)
-            dmu_intra = dmu_intra * mu_W
-
-            dqmu_intra = dqmu_intra * torch.sum(mu_V * mu_W, dim=1, keepdim=True)
-
-            q = q + dq_intra + dqmu_intra
-            mu = mu + dmu_intra
+        for i, interaction in enumerate(self.interactions):
+            q, mu = interaction(q, mu, filter_list[i], dir_ij, idx_i, idx_j, n_atoms)
 
         q = q.squeeze(1)
 
