@@ -26,7 +26,6 @@ from ase.md.velocitydistribution import (
 )
 from ase.optimize import QuasiNewton
 from ase.vibrations import Vibrations
-import copy
 
 import torch
 import schnetpack
@@ -41,10 +40,7 @@ from typing import Optional, List, Union
 
 log = logging.getLogger(__name__)
 
-__all__ = [
-    "SpkCalculator",
-    # "AseInterface"
-]
+__all__ = ["SpkCalculator", "AseInterface"]
 
 
 class SpkCalculatorError(Exception):
@@ -80,7 +76,7 @@ class SpkCalculator(Calculator):
         model: schnetpack.model.AtomisticModel,
         cutoff: float,
         neighbor_list: schnetpack.transform.Transform = ASENeighborList,
-        device: Union[str, torch.device] = torch.device("cuda"),
+        device: Union[str, torch.device] = "cpu",
         energy: str = "energy",
         forces: str = "forces",
         stress: str = "stress",
@@ -88,34 +84,28 @@ class SpkCalculator(Calculator):
         forces_units: Union[str, float] = "kcal/mol/Angstrom",
         stress_units: Union[str, float] = "kcal/mol/Angstrom/Angstrom/Angstrom",
         precision: str = "float64",
-        **kwargs
+        **kwargs,
     ):
         Calculator.__init__(self, **kwargs)
 
         self.device = device
         self.model = model
-        # self.model.to(device)
+        self.model.to(device)
 
         # get transforms and initialize neighbor list
         self.transforms: List[schnetpack.transform.Transform] = [neighbor_list(cutoff)]
         # check if triple indices for angles need to be computed
-        # self._check_for_triples()
-
-        self.transforms.append(CastTo32())
+        self._check_for_triples()
 
         # Set numerical precision
-        # if precision == "float32":
-        #     self.model.to(torch.float32)
-        #     self.transforms.append(
-        #         CastTo32()
-        #     )
-        # elif precision == "float64":
-        #     self.model.to(torch.float64)
-        #     self.transforms.append(
-        #         CastTo64()
-        #     )
-        # else:
-        #     raise SpkCalculatorError(f"Unrecognized precision {precision}")
+        if precision == "float32":
+            self.model.to(torch.float32)
+            self.transforms.append(CastTo32())
+        elif precision == "float64":
+            self.model.to(torch.float64)
+            self.transforms.append(CastTo64())
+        else:
+            raise SpkCalculatorError(f"Unrecognized precision {precision}")
 
         # Set transforms to pre mode
         self._set_pre_mode_transforms()
@@ -201,30 +191,12 @@ class SpkCalculator(Calculator):
 
         if self.calculation_required(atoms, properties):
             Calculator.calculate(self, atoms)
+
             # Convert to schnetpack input format
             model_inputs = self._atoms2input(atoms)
-
-            print("=============================")
-            print("Input batch shapes:")
-            for p in model_inputs:
-                print(p, model_inputs[p].shape)
-
-            # Call model
-            print("-------------------------------")
-            print("Performing first model call")
             model_results = self.model(model_inputs)
-            print(model_results, "A")
-            print(model_results["energy"], "<- THIS IS MY ENERGY")
-
-            model_inputs = self._atoms2input(atoms)
-            print("-------------------------------")
-            print("Performing second model call")
-            model_results = self.model(model_inputs)
-            print(model_results, "B")
-            print(model_results["energy"], "<- THIS IS MY ENERGY")
 
             results = {}
-
             # TODO: use index information to slice everything properly
             for prop in properties:
                 model_prop = self.property_map[prop]
@@ -250,255 +222,236 @@ class SpkCalculator(Calculator):
             self.results = results
 
 
-# class AseInterface:
-#     """
-#     Interface for ASE calculations (optimization and molecular dynamics)
-#     """
-#
-#     def __init__(
-#             self,
-#             molecule_path: str,
-#             working_dir: str,
-#             model: schnetpack.model.AtomisticModel,
-#             cutoff: float,
-#             neighbor_list: schnetpack.transform.Transform = ASENeighborList,
-#             device: Union[str, torch.device] = torch.device("cuda"),
-#             energy: str = "energy",
-#             forces: str = "forces",
-#             stress: str = "stress",
-#             energy_units: Union[str, float] = "kcal/mol",
-#             forces_units: Union[str, float] = "kcal/mol/Angstrom",
-#             stress_units: Union[str, float] = "kcal/mol/Angstrom/Angstrom/Angstrom",
-#             precision: str = "float64",
-#     ):
-#         """
-#         Args:
-#             molecule_path (str): Path to initial geometry
-#             working_dir (str): Path to directory where files should be stored
-#             model (schnetpack.model.AtomisticModel): Trained model
-#             cutoff (float): environment cutoff used in calculator
-#             neighbor_list (schnetpack.transform.Transform, optional): neighbor list for computing interatomic distances.
-#             device (str, optional): select to run calculations on 'cuda' or 'cpu'
-#             energy (str, optional): name of energy property in provided model.
-#             forces (str, optional): name of forces in provided model.
-#             stress (str, optional): name of stress property in provided model.
-#             energy_units (str, optional): energy units used by model
-#             forces_units (str, optional): force units used by model
-#             stress_units (str, optional): stress units used by model
-#             precision (str): toggle model precision
-#         """
-#         # Setup directory
-#         self.working_dir = working_dir
-#         if not os.path.exists(self.working_dir):
-#             os.makedirs(self.working_dir)
-#
-#         # Load the molecule
-#         self.molecule = read(molecule_path)
-#
-#         # Set up calculator
-#         calculator = SpkCalculator(
-#             model,
-#             cutoff,
-#             neighbor_list=neighbor_list,
-#             device=device,
-#             energy=energy,
-#             forces=forces,
-#             stress=stress,
-#             energy_units=energy_units,
-#             forces_units=forces_units,
-#             stress_units=stress_units,
-#             precision=precision
-#         )
-#
-#         self.molecule.set_calculator(calculator)
-#
-#         self.dynamics = None
-#
-#     def save_molecule(
-#             self,
-#             name: str,
-#             file_format: str = "xyz",
-#             append: bool = False
-#     ):
-#         """
-#         Save the current molecular geometry.
-#
-#         Args:
-#             name (str): Name of save-file.
-#             file_format (str): Format to store geometry (default xyz).
-#             append (bool): If set to true, geometry is added to end of file
-#                 (default False).
-#         """
-#         molecule_path = os.path.join(self.working_dir, "{:s}.{:s}".format(name, file_format))
-#         write(molecule_path, self.molecule, format=file_format, append=append)
-#
-#     def calculate_single_point(self):
-#         """
-#         Perform a single point computation of the energies and forces and
-#         store them to the working directory. The format used is the extended
-#         xyz format. This functionality is mainly intended to be used for
-#         interfaces.
-#         """
-#         energy = self.molecule.get_potential_energy()
-#         print(energy)
-#         energy = self.molecule.get_potential_energy()
-#         self.molecule.positions *= 1.02
-#         energy = self.molecule.get_potential_energy()
-#         print("XX")
-#         forces = self.molecule.get_forces()
-#         print(forces)
-#         self.molecule.energy = energy
-#         self.molecule.forces = forces
-#
-#         self.save_molecule("single_point", file_format="xyz")
-#
-#     def init_md(
-#             self,
-#             name: str,
-#             time_step: float = 0.5,
-#             temp_init: float = 300,
-#             temp_bath: Optional[float] = None,
-#             reset: bool = False,
-#             interval: int = 1,
-#     ):
-#         """
-#         Initialize an ase molecular dynamics trajectory. The logfile needs to
-#         be specifies, so that old trajectories are not overwritten. This
-#         functionality can be used to subsequently carry out equilibration and
-#         production.
-#
-#         Args:
-#             name (str): Basic name of logfile and trajectory
-#             time_step (float): Time step in fs (default=0.5)
-#             temp_init (float): Initial temperature of the system in K
-#                 (default is 300)
-#             temp_bath (float): Carry out Langevin NVT dynamics at the specified
-#                 temperature. If set to None, NVE dynamics are performed
-#                 instead (default=None)
-#             reset (bool): Whether dynamics should be restarted with new initial
-#                 conditions (default=False)
-#             interval (int): Data is stored every interval steps (default=1)
-#         """
-#
-#         # If a previous dynamics run has been performed, don't reinitialize
-#         # velocities unless explicitly requested via restart=True
-#         if self.dynamics is None or reset:
-#             self._init_velocities(temp_init=temp_init)
-#
-#         # Set up dynamics
-#         if temp_bath is None:
-#             self.dynamics = VelocityVerlet(self.molecule, time_step * units.fs)
-#         else:
-#             self.dynamics = Langevin(
-#                 self.molecule,
-#                 time_step * units.fs,
-#                 temp_bath * units.kB,
-#                 1.0 / (100.0 * units.fs),
-#             )
-#
-#         # Create monitors for logfile and a trajectory file
-#         logfile = os.path.join(self.working_dir, "{:s}.log".format(name))
-#         trajfile = os.path.join(self.working_dir, "{:s}.traj".format(name))
-#         logger = MDLogger(
-#             self.dynamics,
-#             self.molecule,
-#             logfile,
-#             stress=False,
-#             peratom=False,
-#             header=True,
-#             mode="a",
-#         )
-#         trajectory = Trajectory(trajfile, "w", self.molecule)
-#
-#         # Attach monitors to trajectory
-#         self.dynamics.attach(logger, interval=interval)
-#         self.dynamics.attach(trajectory.write, interval=interval)
-#
-#     def _init_velocities(
-#             self,
-#             temp_init: float = 300,
-#             remove_translation: bool = True,
-#             remove_rotation: bool = True
-#     ):
-#         """
-#         Initialize velocities for molecular dynamics
-#
-#         Args:
-#             temp_init (float): Initial temperature in Kelvin (default 300)
-#             remove_translation (bool): Remove translation components of
-#                 velocity (default True)
-#             remove_rotation (bool): Remove rotation components of velocity
-#                 (default True)
-#         """
-#         MaxwellBoltzmannDistribution(self.molecule, temp_init * units.kB)
-#         if remove_translation:
-#             Stationary(self.molecule)
-#         if remove_rotation:
-#             ZeroRotation(self.molecule)
-#
-#     def run_md(
-#             self,
-#             steps: int
-#     ):
-#         """
-#         Perform a molecular dynamics simulation using the settings specified
-#         upon initializing the class.
-#
-#         Args:
-#             steps (int): Number of simulation steps performed
-#         """
-#         if not self.dynamics:
-#             raise AttributeError(
-#                 "Dynamics need to be initialized using the" " 'setup_md' function"
-#             )
-#
-#         self.dynamics.run(steps)
-#
-#     def optimize(
-#             self,
-#             fmax: float = 1.0e-2,
-#             steps: int = 1000
-#     ):
-#         """
-#         Optimize a molecular geometry using the Quasi Newton optimizer in ase
-#         (BFGS + line search)
-#
-#         Args:
-#             fmax (float): Maximum residual force change (default 1.e-2)
-#             steps (int): Maximum number of steps (default 1000)
-#         """
-#         name = "optimization"
-#         optimize_file = os.path.join(self.working_dir, name)
-#         optimizer = QuasiNewton(
-#             self.molecule,
-#             trajectory="{:s}.traj".format(optimize_file),
-#             restart="{:s}.pkl".format(optimize_file),
-#         )
-#         optimizer.run(fmax, steps)
-#
-#         # Save final geometry in xyz format
-#         self.save_molecule(name)
-#
-#     def compute_normal_modes(
-#             self,
-#             write_jmol: bool = True
-#     ):
-#         """
-#         Use ase calculator to compute numerical frequencies for the molecule
-#
-#         Args:
-#             write_jmol (bool): Write frequencies to input file for
-#                 visualization in jmol (default=True)
-#         """
-#         freq_file = os.path.join(self.working_dir, "normal_modes")
-#
-#         # Compute frequencies
-#         frequencies = Vibrations(self.molecule, name=freq_file)
-#         frequencies.run()
-#
-#         # Print a summary
-#         frequencies.summary()
-#
-#         # Write jmol file if requested
-#         if write_jmol:
-#             frequencies.write_jmol()
+class AseInterface:
+    """
+    Interface for ASE calculations (optimization and molecular dynamics)
+    """
+
+    def __init__(
+        self,
+        molecule_path: str,
+        working_dir: str,
+        model: schnetpack.model.AtomisticModel,
+        cutoff: float,
+        neighbor_list: schnetpack.transform.Transform = ASENeighborList,
+        device: Union[str, torch.device] = torch.device("cuda"),
+        energy: str = "energy",
+        forces: str = "forces",
+        stress: str = "stress",
+        energy_units: Union[str, float] = "kcal/mol",
+        forces_units: Union[str, float] = "kcal/mol/Angstrom",
+        stress_units: Union[str, float] = "kcal/mol/Angstrom/Angstrom/Angstrom",
+        precision: str = "float64",
+    ):
+        """
+        Args:
+            molecule_path (str): Path to initial geometry
+            working_dir (str): Path to directory where files should be stored
+            model (schnetpack.model.AtomisticModel): Trained model
+            cutoff (float): environment cutoff used in calculator
+            neighbor_list (schnetpack.transform.Transform, optional): neighbor list for computing interatomic distances.
+            device (str, optional): select to run calculations on 'cuda' or 'cpu'
+            energy (str, optional): name of energy property in provided model.
+            forces (str, optional): name of forces in provided model.
+            stress (str, optional): name of stress property in provided model.
+            energy_units (str, optional): energy units used by model
+            forces_units (str, optional): force units used by model
+            stress_units (str, optional): stress units used by model
+            precision (str): toggle model precision
+        """
+        # Setup directory
+        self.working_dir = working_dir
+        if not os.path.exists(self.working_dir):
+            os.makedirs(self.working_dir)
+
+        # Load the molecule
+        self.molecule = read(molecule_path)
+
+        # Set up calculator
+        calculator = SpkCalculator(
+            model,
+            cutoff,
+            neighbor_list=neighbor_list,
+            device=device,
+            energy=energy,
+            forces=forces,
+            stress=stress,
+            energy_units=energy_units,
+            forces_units=forces_units,
+            stress_units=stress_units,
+            precision=precision,
+        )
+
+        self.molecule.set_calculator(calculator)
+
+        self.dynamics = None
+
+    def save_molecule(self, name: str, file_format: str = "xyz", append: bool = False):
+        """
+        Save the current molecular geometry.
+
+        Args:
+            name (str): Name of save-file.
+            file_format (str): Format to store geometry (default xyz).
+            append (bool): If set to true, geometry is added to end of file
+                (default False).
+        """
+        molecule_path = os.path.join(
+            self.working_dir, "{:s}.{:s}".format(name, file_format)
+        )
+        write(molecule_path, self.molecule, format=file_format, append=append)
+
+    def calculate_single_point(self):
+        """
+        Perform a single point computation of the energies and forces and
+        store them to the working directory. The format used is the extended
+        xyz format. This functionality is mainly intended to be used for
+        interfaces.
+        """
+        energy = self.molecule.get_potential_energy()
+        forces = self.molecule.get_forces()
+        self.molecule.energy = energy
+        self.molecule.forces = forces
+
+        self.save_molecule("single_point", file_format="xyz")
+
+    def init_md(
+        self,
+        name: str,
+        time_step: float = 0.5,
+        temp_init: float = 300,
+        temp_bath: Optional[float] = None,
+        reset: bool = False,
+        interval: int = 1,
+    ):
+        """
+        Initialize an ase molecular dynamics trajectory. The logfile needs to
+        be specifies, so that old trajectories are not overwritten. This
+        functionality can be used to subsequently carry out equilibration and
+        production.
+
+        Args:
+            name (str): Basic name of logfile and trajectory
+            time_step (float): Time step in fs (default=0.5)
+            temp_init (float): Initial temperature of the system in K
+                (default is 300)
+            temp_bath (float): Carry out Langevin NVT dynamics at the specified
+                temperature. If set to None, NVE dynamics are performed
+                instead (default=None)
+            reset (bool): Whether dynamics should be restarted with new initial
+                conditions (default=False)
+            interval (int): Data is stored every interval steps (default=1)
+        """
+
+        # If a previous dynamics run has been performed, don't reinitialize
+        # velocities unless explicitly requested via restart=True
+        if self.dynamics is None or reset:
+            self._init_velocities(temp_init=temp_init)
+
+        # Set up dynamics
+        if temp_bath is None:
+            self.dynamics = VelocityVerlet(self.molecule, time_step * units.fs)
+        else:
+            self.dynamics = Langevin(
+                self.molecule,
+                time_step * units.fs,
+                temp_bath * units.kB,
+                1.0 / (100.0 * units.fs),
+            )
+
+        # Create monitors for logfile and a trajectory file
+        logfile = os.path.join(self.working_dir, "{:s}.log".format(name))
+        trajfile = os.path.join(self.working_dir, "{:s}.traj".format(name))
+        logger = MDLogger(
+            self.dynamics,
+            self.molecule,
+            logfile,
+            stress=False,
+            peratom=False,
+            header=True,
+            mode="a",
+        )
+        trajectory = Trajectory(trajfile, "w", self.molecule)
+
+        # Attach monitors to trajectory
+        self.dynamics.attach(logger, interval=interval)
+        self.dynamics.attach(trajectory.write, interval=interval)
+
+    def _init_velocities(
+        self,
+        temp_init: float = 300,
+        remove_translation: bool = True,
+        remove_rotation: bool = True,
+    ):
+        """
+        Initialize velocities for molecular dynamics
+
+        Args:
+            temp_init (float): Initial temperature in Kelvin (default 300)
+            remove_translation (bool): Remove translation components of
+                velocity (default True)
+            remove_rotation (bool): Remove rotation components of velocity
+                (default True)
+        """
+        MaxwellBoltzmannDistribution(self.molecule, temp_init * units.kB)
+        if remove_translation:
+            Stationary(self.molecule)
+        if remove_rotation:
+            ZeroRotation(self.molecule)
+
+    def run_md(self, steps: int):
+        """
+        Perform a molecular dynamics simulation using the settings specified
+        upon initializing the class.
+
+        Args:
+            steps (int): Number of simulation steps performed
+        """
+        if not self.dynamics:
+            raise AttributeError(
+                "Dynamics need to be initialized using the" " 'setup_md' function"
+            )
+
+        self.dynamics.run(steps)
+
+    def optimize(self, fmax: float = 1.0e-2, steps: int = 1000):
+        """
+        Optimize a molecular geometry using the Quasi Newton optimizer in ase
+        (BFGS + line search)
+
+        Args:
+            fmax (float): Maximum residual force change (default 1.e-2)
+            steps (int): Maximum number of steps (default 1000)
+        """
+        name = "optimization"
+        optimize_file = os.path.join(self.working_dir, name)
+        optimizer = QuasiNewton(
+            self.molecule,
+            trajectory="{:s}.traj".format(optimize_file),
+            restart="{:s}.pkl".format(optimize_file),
+        )
+        optimizer.run(fmax, steps)
+
+        # Save final geometry in xyz format
+        self.save_molecule(name)
+
+    def compute_normal_modes(self, write_jmol: bool = True):
+        """
+        Use ase calculator to compute numerical frequencies for the molecule
+
+        Args:
+            write_jmol (bool): Write frequencies to input file for
+                visualization in jmol (default=True)
+        """
+        freq_file = os.path.join(self.working_dir, "normal_modes")
+
+        # Compute frequencies
+        frequencies = Vibrations(self.molecule, name=freq_file)
+        frequencies.run()
+
+        # Print a summary
+        frequencies.summary()
+
+        # Write jmol file if requested
+        if write_jmol:
+            frequencies.write_jmol()
