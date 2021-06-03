@@ -28,16 +28,8 @@ class Transform(nn.Module):
     """
 
     def __init__(self):
-        self.mode: str = ""
+        self.mode: str = "pre"
         super().__init__()
-
-    # def dataset(self, value):
-    #     """
-    #     Extract all required information from dataset.
-    #
-    #     Do not store the datamodule, as this does not work with torchscript conversion!
-    #     """
-    #     pass
 
     def datamodule(self, value):
         """

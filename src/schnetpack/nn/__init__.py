@@ -9,3 +9,4 @@ from schnetpack.nn.blocks import *
 from schnetpack.nn.scatter import *
 from schnetpack.nn.cutoff import *
 from schnetpack.nn.radial import *
+from schnetpack.nn.utils import *

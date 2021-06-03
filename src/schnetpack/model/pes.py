@@ -138,13 +138,14 @@ class PESModel(AtomisticModel):
                 create_graph=self.training,
             )[0]
 
-            if self.targets[Properties.forces] is not None and dEdRij is not None:
-                Fpred_i = torch.zeros_like(R)
-                Fpred_i = Fpred_i.index_add(0, inputs[structure.idx_i], dEdRij)
+            # TorchScript needs Tensor instead of Optional[Tensor]
+            if dEdRij is None:
+                dEdRij = torch.zeros_like(inputs[structure.Rij])
 
-                Fpred_j = torch.zeros_like(R)
-                Fpred_j = Fpred_j.index_add(0, inputs[structure.idx_j], dEdRij)
-                Fpred = Fpred_i - Fpred_j
+            if self.targets[Properties.forces] is not None and dEdRij is not None:
+                Fpred = torch.zeros_like(R)
+                Fpred = Fpred.index_add(0, inputs[structure.idx_i], dEdRij)
+                Fpred = Fpred.index_add(0, inputs[structure.idx_j], -dEdRij)
                 results[Properties.forces] = Fpred
 
         if self.targets[Properties.stress] is not None:
@@ -180,7 +181,6 @@ class PESModel(AtomisticModel):
             results[Properties.stress] = stress.reshape(maxm * 3, 3) / volume
 
         results = self.postprocess(inputs, results)
-
         return results
 
     def loss_fn(self, pred, batch):

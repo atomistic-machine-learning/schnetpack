@@ -73,7 +73,7 @@ author = "Kristof T. Schütt, Michael Gastegger, Pan Kessel, Kim Nicoli"
 # built documents.
 #
 # The short X.Y version.
-version = "1.0"
+version = "1.0-dev0"
 # The full version, including alpha/beta/rc tags.
 release = "1.0-dev0"
 
@@ -205,4 +205,7 @@ texinfo_documents = [
 
 
 # Example configuration for intersphinx: refer to the Python standard library.
-intersphinx_mapping = {"https://docs.python.org/": None}
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/", None),
+    "pytorch_lightning": ("https://pytorch-lightning.readthedocs.io/en/stable/", None),
+}

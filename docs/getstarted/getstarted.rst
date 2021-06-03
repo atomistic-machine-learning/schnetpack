@@ -11,24 +11,11 @@ Installation
 Requirements
 ^^^^^^^^^^^^
 
-* Python_ (>=3.6)
-* NumPy_
-* Pytorch_ (>=1.1)
-* ASE_ (>=3.16)
-* TensorboardX_ (For improved training visualization)
-* h5py_
-* tqdm_
-* PyYaml_
-
-.. _Python: http://www.python.org/
-.. _NumPy: http://docs.scipy.org/doc/numpy/reference/
-.. _Pytorch: https://pytorch.org/docs/stable/index.html#
-.. _TensorboardX: https://github.com/lanpa/tensorboardX
-.. _h5py: https://www.h5py.org
-.. _ASE: https://wiki.fysik.dtu.dk/ase/index.html
-.. _tqdm: https://github.com/tqdm/tqdm
-.. _PyYaml: https://pyyaml.org/
-
+* `Python <http://www.python.org/>`_ (>=3.6)
+* `PyTorch <https://pytorch.org/docs/stable/index.html>`_ (>=1.7)
+* `PyTorchLightning <https://www.pytorchlightning.ai/>`_ (>=1.3.3)
+* `Hydra <https://hydra.cc/>`_ (>=1.1.0)
+* `ASE <https://wiki.fysik.dtu.dk/ase/index.html>`_ (>=3.21)
 
 ..
     Installing using pip
@@ -66,146 +53,105 @@ and run tests to be sure everything runs as expected::
 Once that's done, you are ready to go!
 
 
-.. note::
-
-   If your OS doesn't have ``numpy``, ``pytorch``, and ``ase`` packages
-   installed, and the previous command didn't work for you, you can install those requirements through::
-
-        $ pip install --upgrade --user numpy torch ase
-
 Visualization with Tensorboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-While SchNetPack is based on PyTorch, it is possible to use Tensorboard, which comes with TensorFlow,
-to visualize the learning progress.
-While this is more convenient for visualization, you need to install TensorBoard
-in order to view the event files SchNetPack produces.
-Even though there is a standalone version, the easiest way to get Tensorboard is by installing TensorFlow, e.g. using pip::
+SchNetPack supports multiple logging backends over PyTorch Lightning.
+The default logger is Tensorboard, which can be installed via::
 
-   $ pip install tensorflow
+   $ pip install tensorboard
 
-===============================
-Scripts for benchmark data sets
-===============================
 
- The best place to start is training a SchNetPack model on a common benchmark dataset.
- Scripts for common datasets are provided by SchNetPack and inserted into your PATH during installation.
+======================
+Command line interface
+======================
 
-The example script allows to train and evaluate both SchNet and wACSF neural networks.
-In the following, we focus on using the script for the QM9 dataset, but the same
+The best place to get started is training a SchNetPack model on a common benchmark dataset via the command line
+interface (CLI).
+When installing SchNetPack, the training script ``spktrain`` is added to your PATH.
+The CLI is based on `Hydra <https://hydra.cc/>`_ and oriented on the PyTorch Lightning/Hydra template that can be found
+`here <https://github.com/ashleve/lightning-hydra-template>`_.
+This enables a flexible configuration of the model, data and training process.
+To fully take advantage of these features, it might be helpful for have a look at the Hydra and PyTorch Lightning docs.
+
+Example 1: QM9
+^^^^^^^^^^^^^^
+
+In the following, we focus on using the CLI to train on the QM9 dataset, but the same
 procedure applies for the other benchmark datasets as well. The training can be
 started using::
 
-   $ spk_run.py train <schnet/wacsf> <qm9/ani1/...> <dbpath> <modeldir> --split num_train num_val [--cuda]
+   $ spktrain +experiment=qm9 data_dir=<path>
 
-where num_train and num_val need to be replaced by the number of training and validation datapoints respectively.
-You can choose between SchNet and wACSF networks and have to provide a directory to store the model and the location
-of the dataset, which has to be a ASE DB file (``.db`` or ``.json``). It will be downloaded automatically
-if it does not exist.
+This will print the defaults for the experiment config ``qm9`` and set the data directory to the chosen location.
+The dataset will be downloaded automatically if it does not exist there.
+Then, the training will be started.
 
-.. note::
-   Please be warned that the ANI-1 dataset is huge (more than 20gb).
+All values of the config can be changed from the command line.
+For example, the model will be stored in a directory with a unique run id as a subdirectory of the
+current working directory which is by default called ``runs``.
+This can be changed as follows::
+
+   $ spktrain +experiment=qm9 data_dir=<path> run_dir=~/all_my_runs run_id=this_run
+
+If you call ``spktrain +experiment=qm9 --help``, you can see the full config with all the parameters
+that can be changed.
+Nested parameters can be changed as follows::
+
+   $ spktrain +experiment=qm9 data_dir=<path> data.batch_size=64
+
+Hydra organizes parameters in config groups which allows hierarchical configurations consisting of multiple
+yaml files. This allows to easily change the whole dataset, model or representation.
+For instance, changing from the default SchNet representation to PaiNN, use::
+
+   $ spktrain +experiment=qm9 data_dir=<path> model/representation=painn
+
+For more details on config groups, have a look at the
+`Hydra docs <https://hydra.cc/docs/next/tutorials/basic/your_first_app/config_groups>`_.
 
 
-With the ``--cuda`` flag, you can activate GPU training.
-The default hyper-parameters should work fine, however, you can change them through command-line arguments.
-Please refer to the help at the command line::
+Example 2: Potential energy surfaces
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-   $ spk_run.py train <schnet/wacsf> --help
+The example above uses the :class:`SinglePropertyModel` internally, which is a
+:class:`pytorch_lightning.LightningModule` for predicting single properties.
+The following example will use the PESModel, which can be used for predicting potential energy surfaces,
+in particular energies with the appropriate derivates to obtain forces and stress tensors.
+For more details on the available models, see :ref:`here<schnetpack.model>`
 
-The training progress will be logged in ``<modeldir>/log``. The default is a basic logging with **CSV** files.
-Advanced logging with **TensorBoard** event files can be activated using ``--logger tensorboard`` (see `above <#visualization-with-tensorboard>`_).
+The ``spktrain`` script can be used to train a model for a molecule from the MD17 datasets::
 
-To evaluate the trained model that showed the best validation error during training (i.e., early stopping), call::
+   $ spktrain data_dir=<path> +experiment=md17 data.molecule=uracil
 
-   $ spk_run.py eval <datapath> <modeldir> [--split train val test] [--cuda]
+In the case of MD17, reference calculations of energies and forces are available.
+Therefore, one needs to set weights for the losses of those properties.
+For a training on *energies* and *forces*, we recommend to put a stronger
+weight on the loss of the force prediction during training.
+By default, the loss weights are set to 0.05 for the energy and 0.95 for forces.
+This can be changed as follow::
 
-which will write a result file ``evaluation.txt`` into the model directory.
+    $ spktrain data_dir=<path> +experiment=md17 data.molecule=uracil model.output.energy.loss_weight=0.01 \
+        model.output.forces.loss_weight=0.99
 
-.. tip::
 
-   ``<modeldir>`` should point to a directory in which a pre-trained model is stored. As an argument for the --split
-   flag for evaluation you should choose among one of training, validation or test subsets.
-
-==================================
-Using Scripts with custom Datasets
-==================================
-
-The script for benchmark data can also train a model on custom data sets, by using::
-
-   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property your_property [--cuda]
-
-Depending on your data you will need to define some settings that have already been
-pre-selected for the benchmark data. In order to show how to use the script
-on arbitrary data sets, we will use the MD17 data set and treat it as a custom data
-set. First of all we need to define the property that we want to use for training.
-In this example we will train the model on the *energy* labels. If we want to use the
-*forces* during training, we need to add the ``--derivative`` argument and also set
-``--negative_dr``, because the gradient of the energy predictions corresponds to the
-negative forces.
-
-Defining Output Modules
-^^^^^^^^^^^^^^^^^^^^^^^
-
-Since energy is a property that depends on the total number of atoms
-we select ``--aggregation_mode sum``. Other properties (e.g. homo, lumo, ...) do not
-depend on the total number of atoms and will therefore use the mean aggregation mode.
-While most properties should be trained with the ``spk.nn.Atomwise`` output module
-which is selected by default, some properties require special output modules.
-Models using the ``spk.SchNet`` representation support ``dipole_moment``,
-``electronic_spatial_extent``, ``ploarizability`` and ``isotropic_polarizability``.
-Note that if your model is based on the ``spk.BehlerSFBlock`` representation you need
-to select between ``elemental_atomwise`` and ``elemental_dipole_moment``. The output
-module selection is defined with ``--output_module
-<atomwise/elemental_atomwise/dipole_moment/...>``.
-
-Loss Tradeoff
-^^^^^^^^^^^^^
-
-It can be useful to define a tradeoff between multiple properties of an output
-module. For a training on *energies* and *forces*, we recommend to put a stronger
-weight on the loss of the force prediction during training. Therefore one can add the
-tradeoff parameter ``--rho`` with its arguments as ``key=value``. If no weight is
-selected for a key, it gets the weight 1. Afterwards all weights are divided by the
-total weight. For including 90% of the force loss and 10% of the energy loss, the
-command is ``--rho property=0.1 derivative=0.9``. You can also use the *stress* and
-the *contributions* properties during training.
-
-Summary
+Logging
 ^^^^^^^
+Beyond the output of the command line, SchNetPack supports multiple logging backends over PyTorch Lightning.
+By default, the Tensosboard logger is activated.
+If TensorBoard is installed, the results can be shown by calling::
 
-The final command for the MD17 example would be::
+    $ tensorboard --logdir=<rundir>
 
-   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property energy --derivative forces --negative_dr --rho property=0.1 derivative=0.9 --aggregation_mode sum [--cuda]
+Furthermore, SchNetPack comes with configs for a CSV logger and `Aim <https://github.com/aimhubio/aim>`_.
+These can be selected as follows::
 
-The command for training a QM9-like data set on dipole moments would be::
+   $ spktrain data_dir=<path> +experiment=md17 logger=csv/aim
 
-   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir> --split num_train num_val --property dipole_moment --output_module dipole_moment --aggregation_mode sum [--cuda]
 
-The evaluation of the trained model uses the same commands as any pre-implemented
-data set.
+===============
+Representations
+===============
 
-=================================
-Using Argument Files for Training
-=================================
-
-An argument file with all training arguments is created at the beginning of every
-training session and can be found at *<modeldir>/args.json*. These argument
-files can be modified and used for new training sessions. In order to build a file
-with default settings run::
-
-   $ spk_run.py train <schnet/wacsf> custom <dbpath> <modeldir>
-
-This will create the <modeldir> which contains the argument file, while the training
-session will fail because ``--split`` is not selected. You can now modify the
-arguments and use them for training::
-
-   $ spk_run.py from_json <modeldir>/args.json
-
-================
-Supported Models
-================
-
-SchNetPack currently supports SchNet and (w)ACSF.
+SchNetPack currently supports SchNet, PaiNN and (w)ACSF.
 
 SchNet
 ^^^^^^
@@ -215,6 +161,12 @@ It follows the deep tensor neural network framework, i.e. atom-wise representati
 embedding vectors that characterize the atom type before introducing the configuration of the system by a series of
 interaction blocks.
 
+PaiNN
+^^^^^
+
+PaiNN [#painn1]_ is the successor to SchNet, overcoming limitations of invariant representations
+by using equivariant representations.
+It improves over previous networks in terms of accuracy and/or data efficiency.
 
 ACSF & (w)ACSF
 ^^^^^^^^^^^^^^
@@ -229,7 +181,7 @@ features before training.
 Benchmark Datasets
 ==================
 
-SchNetPack provides convenient interfaces to popular benchmark datasets in order to train and test its model.
+SchNetPack provides convenient interfaces to popular benchmark datasets in order to train and test models.
 
 QM9
 ^^^
@@ -275,6 +227,10 @@ References
 .. [#schnet3] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.
    `SchNet - a deep learning architecture for molecules and materials <https://aip.scitation.org/doi/10.1063/1.5019779>`_
    The Journal of Chemical Physics **148** (24), 241722, 2018.
+
+.. [#painn1] Schütt, Unke, Gastegger:
+   Equivariant message passing for the prediction of tensorial properties and molecular spectra.
+   ICML 2021 (to appear)
 
 .. [#wacsf1] M. Gastegger, L. Schwiedrzik, M. Bittermann, F. Berzsenyi, P. Marquetand.
    `wACSF—Weighted atom-centered symmetry functions as descriptors in machine learning potentials <https://aip.scitation.org/doi/10.1063/1.5019667>`_
