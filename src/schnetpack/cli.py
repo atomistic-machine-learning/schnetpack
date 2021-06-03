@@ -1,19 +1,16 @@
-import os
-import hydra
 import logging
-
-import sys
-from omegaconf import DictConfig, OmegaConf
-from typing import List
-from schnetpack.utils.script import log_hyperparameters, print_config
-from functools import partial
-
-from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
-from pytorch_lightning.loggers import LightningLoggerBase
-from pytorch_lightning import seed_everything
-import torch
-import schnetpack
+import os
 import uuid
+from typing import List
+
+import hydra
+from omegaconf import DictConfig, OmegaConf
+from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
+from pytorch_lightning import seed_everything
+from pytorch_lightning.loggers import LightningLoggerBase
+
+from schnetpack.utils.script import log_hyperparameters, print_config
+from schnetpack.utils import str2class
 
 log = logging.getLogger(__name__)
 
@@ -62,16 +59,14 @@ def train(config: DictConfig):
 
     # Init Lightning model
     log.info(f"Instantiating model <{config.model._target_}>")
+    scheduler_cls = (
+        str2class(config.model.scheduler_cls) if config.model.scheduler_cls else None
+    )
     model: LightningModule = hydra.utils.instantiate(
         config.model,
         datamodule=datamodule,
-        optimizer=partial(
-            eval(config.model.optimizer._target_), **config.model.optimizer.args
-        ),
-        scheduler=partial(
-            eval(config.model.scheduler._target_), **config.model.scheduler.args
-        ),
-        scheduler_monitor=config.model.scheduler.monitor,
+        optimizer_cls=str2class(config.model.optimizer_cls),
+        scheduler_cls=scheduler_cls,
     )
 
     # Init Lightning callbacks

@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from schnetpack.data import *
 import os
-import schnetpack.structure as structure
+import schnetpack.properties as structure
 from schnetpack.data import calculate_stats, AtomsLoader
 
 

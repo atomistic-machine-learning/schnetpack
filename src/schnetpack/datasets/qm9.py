@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 import torch
 from schnetpack.data import *
-import schnetpack.structure as structure
+import schnetpack.properties as structure
 from schnetpack.data import AtomsDataModuleError, AtomsDataModule
 
 __all__ = ["QM9"]

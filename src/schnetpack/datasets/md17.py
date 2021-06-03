@@ -9,7 +9,7 @@ import numpy as np
 from ase import Atoms
 
 import torch
-import schnetpack.structure as structure
+import schnetpack.properties as structure
 
 from schnetpack.data import *
 

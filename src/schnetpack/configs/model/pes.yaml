@@ -3,29 +3,23 @@ defaults:
 
 _target_: schnetpack.model.PESModel
 
-optimizer:
-  _target_: torch.optim.Adam
-  args:
-    lr: ${lr}
+optimizer_cls: torch.optim.Adam
+optimizer_args:
+  lr: ${lr}
 
-scheduler:
-  monitor: val_loss_fn
-  _target_: schnetpack.train.ReduceLROnPlateau
-  args:
-    mode: min
-    factor: 0.5
-    patience: 50
-    min_lr: 1e-6
-    smoothing_factor: 0.8
+scheduler_cls: schnetpack.train.ReduceLROnPlateau
+scheduler_monitor: val_loss
+scheduler_args:
+  mode: min
+  factor: 0.5
+  patience: 50
+  min_lr: 1e-6
+  smoothing_factor: 0.8
 
 output:
   _target_: schnetpack.atomistic.Atomwise
   n_in: ${model.representation.n_atom_basis}
   aggregation_mode: sum
-
-#  normalization:
-#    initialize_with_stats: True
-#    requires_atomref: False
 
 energy_property: energy
 energy_loss_fn:

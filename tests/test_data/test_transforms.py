@@ -1,4 +1,4 @@
-import schnetpack.structure as structure
+import schnetpack.properties as structure
 import pytest
 import torch
 from ase.data import atomic_masses

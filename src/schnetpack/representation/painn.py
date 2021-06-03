@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import schnetpack.structure as structure
+import schnetpack.properties as structure
 import schnetpack.nn as snn
 
 __all__ = ["PaiNN"]

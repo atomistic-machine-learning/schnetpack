@@ -4,7 +4,7 @@ import torch
 from ase.data import atomic_masses
 
 import schnetpack as spk
-import schnetpack.structure as structure
+import schnetpack.properties as structure
 from .transform import Transform
 
 __all__ = [

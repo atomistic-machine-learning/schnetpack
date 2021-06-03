@@ -2,7 +2,7 @@ import logging
 
 import torch
 import torch.nn as nn
-from typing import Dict, Optional, List, Callable
+from typing import Dict, Optional, List, Callable, Any, Type
 
 import schnetpack as spk
 from schnetpack.model.base import AtomisticModel
@@ -23,11 +23,13 @@ class SinglePropertyModel(AtomisticModel):
         datamodule: spk.data.AtomsDataModule,
         representation: nn.Module,
         output: nn.Module,
-        target_property: str = "energy",
+        target_property: str,
+        optimizer_cls: Type[torch.optim.Optimizer],
+        optimizer_args: Optional[Dict[str, Any]] = None,
         loss_fn: Optional[Callable] = None,
         metrics: Optional[List[Dict]] = None,
-        optimizer: Optional[torch.optim.Optimizer] = None,
-        scheduler: Optional = None,
+        scheduler_cls: Type = None,
+        scheduler_args: Dict[str, Any] = None,
         scheduler_monitor: Optional[str] = None,
         postprocess: Optional[List[spk.transform.Transform]] = None,
     ):
@@ -36,24 +38,26 @@ class SinglePropertyModel(AtomisticModel):
             datamodule: pytorch_lightning module for dataset
             representation: nn.Module for atomistic representation
             output: nn.Module for computation of physical properties from atomistic representation
-            target_property: name of targeted property in datamodule, e.g. energy/gap/...
+            target_property: name of targeted property in datamodule
+            optimizer_cls: type of torch optimizer,e.g. torch.optim.Adam
+            optimizer_args: dict of optimizer keyword arguments
             loss_fn: function for computation of loss
             metrics: dict of metrics for predictions of the target property with metric name as keys and callable as values
-            optimizer: functools.partial-function with torch optimizer and args for creation of optimizer with
-                optimizer(params=self.parameters())
-            scheduler: functools.partial-function with scheduler and args for creation of scheduler with
-                scheduler(optimizer=optimizer)
-            scheduler_monitor: name of metric to be observed and used for lr drops of scheduler
+            scheduler_cls: type of torch learning rate scheduler
+            scheduler_args: dict of scheduler keyword arguments
+            scheduler_monitor: name of metric to be observed for ReduceLROnPlateau
             postprocess: list of postprocessors to be applied to model for predictions
         """
         super(SinglePropertyModel, self).__init__(
             datamodule=datamodule,
             representation=representation,
             output=output,
-            postprocess=postprocess,
-            optimizer=optimizer,
-            scheduler=scheduler,
+            optimizer_cls=optimizer_cls,
+            optimizer_args=optimizer_args,
+            scheduler_cls=scheduler_cls,
+            scheduler_args=scheduler_args,
             scheduler_monitor=scheduler_monitor,
+            postprocess=postprocess,
         )
 
         self.target_property = target_property
@@ -63,15 +67,15 @@ class SinglePropertyModel(AtomisticModel):
             {target_property + "_" + name: metric for name, metric in metrics.items()}
         )
 
-    def forward(self, inputs):
+    def forward(self, inputs: Dict[str, torch.Tensor]):
         inputs.update(self.representation(inputs))
-        pred = self.output(inputs)
-
-        # todo: missing postprocessor?
-        return pred
+        results = {self.target_property: self.output(inputs)}
+        results = self.postprocess(inputs, results)
+        return results
 
     def training_step(self, batch, batch_idx):
-        pred = self(batch)
+        results = self(batch)
+        pred = results[self.target_property]
         target = batch[self.target_property]
         loss = self.loss_fn(pred, target)
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
@@ -86,7 +90,8 @@ class SinglePropertyModel(AtomisticModel):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        pred = self(batch)
+        results = self(batch)
+        pred = results[self.target_property]
         target = batch[self.target_property]
         loss = self.loss_fn(pred, target)
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
@@ -101,7 +106,8 @@ class SinglePropertyModel(AtomisticModel):
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_idx):
-        pred = self(batch)
+        results = self(batch)
+        pred = results[self.target_property]
         target = batch[self.target_property]
         loss = self.loss_fn(pred, target)
         self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
