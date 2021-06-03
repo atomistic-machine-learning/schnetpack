@@ -7,6 +7,8 @@ import schnetpack.structure as structure
 from schnetpack.nn import Dense, scatter_add
 from schnetpack.nn.activations import shifted_softplus
 
+import schnetpack.nn as snn
+
 __all__ = ["SchNet"]
 
 
@@ -96,9 +98,7 @@ class SchNet(nn.Module):
         cutoff_fn: Callable,
         n_filters: int = None,
         shared_interactions: bool = False,
-        return_intermediate: bool = False,
         max_z: int = 100,
-        charged_systems: bool = False,
         activation: Callable = shifted_softplus,
     ):
         """
@@ -111,10 +111,8 @@ class SchNet(nn.Module):
             n_filters: number of filters used in continuous-filter convolution
             shared_interactions: if True, share the weights across
                 interaction blocks and filter-generating networks.
-            return_intermediate:
-            max_z:
-            charged_systems:
-            activation:
+            max_z: maximal nuclear charge
+            activation: activation function
         """
         super().__init__()
         self.n_atom_basis = n_atom_basis
@@ -123,41 +121,19 @@ class SchNet(nn.Module):
         self.radial_basis = radial_basis
         self.cutoff_fn = cutoff_fn
 
-        self.return_intermediate = return_intermediate
-        self.charged_systems = charged_systems
-        if charged_systems:
-            self.charge = nn.Parameter(torch.Tensor(1, self.n_atom_basis))
-            self.charge.data.normal_(0, 1.0 / self.n_atom_basis ** 0.5)
-
         # layers
         self.embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
 
-        if shared_interactions:
-            # use the same SchNetInteraction instance (hence the same weights)
-            self.interactions = nn.ModuleList(
-                [
-                    SchNetInteraction(
-                        n_atom_basis=self.n_atom_basis,
-                        n_rbf=self.radial_basis.n_rbf,
-                        n_filters=self.n_filters,
-                        activation=activation,
-                    )
-                ]
-                * n_interactions
-            )
-        else:
-            # use one SchNetInteraction instance for each interaction
-            self.interactions = nn.ModuleList(
-                [
-                    SchNetInteraction(
-                        n_atom_basis=self.n_atom_basis,
-                        n_rbf=self.radial_basis.n_rbf,
-                        n_filters=self.n_filters,
-                        activation=activation,
-                    )
-                    for _ in range(n_interactions)
-                ]
-            )
+        self.interactions = snn.replicate_module(
+            lambda: SchNetInteraction(
+                n_atom_basis=self.n_atom_basis,
+                n_rbf=self.radial_basis.n_rbf,
+                n_filters=self.n_filters,
+                activation=activation,
+            ),
+            n_interactions,
+            shared_interactions,
+        )
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
 

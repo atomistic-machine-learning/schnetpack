@@ -89,6 +89,10 @@ class PESModel(AtomisticModel):
                 create_graph=self.training,
             )[0]
 
+            # TorchScript needs Tensor instead of Optional[Tensor]
+            if dEdRij is None:
+                dEdRij = torch.zeros_like(inputs[structure.Rij])
+
             if self.predict_forces and dEdRij is not None:
                 Fpred = torch.zeros_like(R)
                 Fpred = Fpred.index_add(0, inputs[structure.idx_i], dEdRij)
