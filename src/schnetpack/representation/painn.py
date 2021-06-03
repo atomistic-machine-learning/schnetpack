@@ -78,13 +78,13 @@ class PaiNN(nn.Module):
                 activation=None,
             )
 
-        self.interatomic_context_net = nn.ModuleList(
-            [
-                nn.Sequential(
-                    snn.Dense(n_atom_basis, n_atom_basis, activation=activation),
-                    snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
-                )
-            ]
+        self.interatomic_context_net = replicate_module(
+            lambda: nn.Sequential(
+                snn.Dense(n_atom_basis, n_atom_basis, activation=activation),
+                snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
+            ),
+            self.n_interactions,
+            shared_interactions,
         )
 
         self.intraatomic_context_net = replicate_module(

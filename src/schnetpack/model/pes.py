@@ -76,8 +76,7 @@ class PESModel(AtomisticModel):
     def forward(self, inputs: Dict[str, torch.Tensor]):
         R = inputs[structure.R]
         inputs[structure.Rij].requires_grad_()
-        x = self.representation(inputs)
-        inputs.update(x)
+        inputs.update(self.representation(inputs))
         Epred = self.output(inputs)
         results = {"energy": Epred}
 
