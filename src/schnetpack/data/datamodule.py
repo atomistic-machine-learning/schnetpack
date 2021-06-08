@@ -152,9 +152,10 @@ class AtomsDataModule(pl.LightningDataModule):
                 indices[offset - length : offset]
                 for offset, length in zip(offsets, lengths)
             ]
-            np.savez(
-                self.split_file, train_idx=train_idx, val_idx=val_idx, test_idx=test_idx
-            )
+            if self.split_file is not None:
+                np.savez(
+                    self.split_file, train_idx=train_idx, val_idx=val_idx, test_idx=test_idx
+                )
         self._train_dataset = self.dataset.subset(train_idx)
         self._val_dataset = self.dataset.subset(val_idx)
         self._test_dataset = self.dataset.subset(test_idx)
