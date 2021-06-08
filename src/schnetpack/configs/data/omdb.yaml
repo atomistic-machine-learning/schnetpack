@@ -1,9 +1,9 @@
-_target_: schnetpack.datasets.MaterialsProject
+_target_: schnetpack.datasets.OrganicMaterialsDatabase
 
-datapath: ${data_dir}/materials_project.db  # data_dir is specified in train.yaml
+datapath: ${data_dir}/omdb.db  # data_dir is specified in train.yaml
 batch_size: 32
 num_train: 110000
 num_val: 10000
 num_test: null
 num_workers: 8
-apikey: null
+raw_path: null

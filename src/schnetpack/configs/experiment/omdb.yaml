@@ -3,7 +3,7 @@
 defaults:
   - override /model: single_property
   - override /model/representation: schnet
-  - override /data: materials_project
+  - override /data: omdb
   - override /logger: tensorboard
 
 cutoff: 5.0
@@ -11,7 +11,7 @@ n_rbf: 20
 
 lr: 1e-3
 
-property: formation_energy_per_atom
+property: band_gap
 name: mp_${property}
 
 
