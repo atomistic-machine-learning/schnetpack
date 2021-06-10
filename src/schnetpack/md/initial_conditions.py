@@ -73,14 +73,14 @@ class Initializer:
         temperature. To be implemented.
 
         Args:
-            system (object): System class containing all molecules and their replicas.
+            system (schnetpack.md.System): System class containing all molecules and their replicas.
         """
         raise NotImplementedError
 
 
 class UniformInit(Initializer):
     """
-    Initializes the system momenta according to a Maxwell--Boltzmann distribution at the given temperature.
+    Initializes the system momenta according to a uniform distribution scaled to the given temperature.
 
     Args:
         temperature (float): Target temperature in Kelvin.
@@ -112,7 +112,7 @@ class UniformInit(Initializer):
         temperature afterwards. In addition, the system is centered at its center of mass.
 
         Args:
-            system (object): System class containing all molecules and their replicas.
+            system (schnetpack.md.System): System class containing all molecules and their replicas.
         """
         # Set initial system momenta and apply atom masks
         system.momenta = (
@@ -158,11 +158,11 @@ class MaxwellBoltzmannInit(Initializer):
 
     def _setup_momenta(self, system: System):
         """
-        Initialize the momenta, by drawing from a random normal distribution and rescaling the momenta to the desired
-        temperature afterwards. In addition, the system is centered at its center of mass.
+        Initialize the momenta, by drawing from a random normal distribution and rescaling them according to
+        Maxwell--Boltzmann statistics.
 
         Args:
-            system (object): System class containing all molecules and their replicas.
+            system (schnetpack.md.System): System class containing all molecules and their replicas.
         """
         if self.temperature.shape[0] == 1:
             temp = self.temperature
