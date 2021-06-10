@@ -11,3 +11,4 @@ from schnetpack import train
 from schnetpack.units import *
 from schnetpack import atomistic
 from schnetpack import transform
+from schnetpack import md
