@@ -66,7 +66,7 @@ class MultiPropertyModel(AtomisticModel):
         if type(loss_fn) not in [list, ListConfig]:
             loss_fn = [loss_fn]
         if loss_weights is None:
-            loss_weights = [1. for _ in properties]
+            loss_weights = [1.0 for _ in properties]
         if type(loss_weights) not in [list, ListConfig]:
             loss_weights = [loss_weights]
         if type(output) not in [list, ListConfig]:
@@ -95,10 +95,7 @@ class MultiPropertyModel(AtomisticModel):
         self.metrics = nn.ModuleDict()
         for pname, pmetrics in zip(properties, metrics):
             self.metrics.update(
-                {
-                    pname + ":" + name: metric
-                    for name, metric in pmetrics.items()
-                }
+                {pname + ":" + name: metric for name, metric in pmetrics.items()}
             )
 
     def loss_fn(self, pred, batch):
