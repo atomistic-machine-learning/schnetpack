@@ -22,12 +22,12 @@ class SystemException(Exception):
 class System:
     """
     Container for all properties associated with the simulated molecular system
-    (masses, positions, momenta, ...). Uses atomic units internally.
+    (masses, positions, momenta, ...). Uses MD unit system defined in `schnetpack.units` internally.
 
     In order to simulate multiple systems efficiently dynamics properties
     (positions, momenta, forces) are torch tensors with the following
     dimensions:
-        n_replicas x n_molecules x n_atoms x 3
+        n_replicas x (n_molecules * n_atoms) x 3
 
     Here n_replicas is the number of copies for every molecule. In a normal
     simulation, these are treated as independent molecules e.g. for sampling
@@ -35,31 +35,25 @@ class System:
     RingPolymer integrator), these replicas correspond to the beads of the
     polymer. n_molecules is the number of different molecules constituting
     the system, these can e.g. be different initial configurations of the
-    same system (once again for sampling) or completely different molecules. In
-    the latter case, the maximum number of atoms n_atoms (3rd dimension) is
-    determined automatically and all arrays padded with zeros.
+    same system (once again for sampling) or completely different molecules.
+    Atoms of multiple molecules are concatenated.
 
-    Static properties (n_atoms, masses, atom_types and atom_masks) are stored in
-    tensors of the shape:
-        n_atoms : 1 x n_molecules (the same for all replicas)
-        masses : 1 x n_molecules x n_atoms x 1 (the same for all replicas)
-        atom_types : n_replicas x n_molecules x n_atoms x 1 (are brought to this
-                     shape in order to avoid reshapes during every calculator
-                     call)
-        atom_masks : n_replicas x n_molecules x n_atoms x 1 (can change if
-                     neighbor lists change for the replicas)
+    Static properties are stored in tensors of the shape:
+        n_atoms : n_molecules (the same for all replicas)
+        masses : 1 x (n_molecules * n_atoms) x 1 (the same for all replicas)
+        atom_types : (n_molecules * n_atoms)
+        index_m : (n_molecules * n_atoms)
 
-    n_atoms contains the number of atoms present in every molecule, masses
-    and atom_types contain the molcular masses and nuclear charges.
-    atom_masks is a binary array used to mask superfluous entries introduced
-    by the zero-padding for differently sized molecules.
+    `n_atoms` contains the number of atoms present in every molecule, `masses`
+    and `atom_types` contain the molcular masses and nuclear charges.
+    `index_m` is an index for mapping atoms to individual molecules.
 
     Finally a dictionary properties stores the results of every calculator
     call for easy access of e.g. energies and dipole moments.
 
     Args:
-        n_replicas (int): Number of replicas generated for each molecule.
-        device (str): Computation device (default='cuda').
+        device (str, torch.device): Computation device (default='cuda').
+        precision (int, torch.dtype): Precision used for floating point numbers (default=32).
     """
 
     # Index for aggregation
@@ -109,8 +103,11 @@ class System:
         atoms objects.
 
         Args:
-            molecules list(ase.Atoms): List of ASE atoms objects containing
-            molecular structures and chemical elements.
+            molecules (ase.Atoms, list(ase.Atoms)): List of ASE atoms objects containing
+                molecular structures and chemical elements.
+            n_replicas (int): Number of replicas (e.g. for RPMD)
+            position_unit_input (str, float): Position units of the input structures (default="Angstrom")
+            mass_unit_input (str, float): Units of masses passed in the ASE atoms. Assumed to be Dalton.
         """
         self.n_replicas = n_replicas
 
@@ -200,7 +197,16 @@ class System:
         self.device = self.device
         self.precision = self.precision
 
-    def _sum_atoms(self, x):
+    def _sum_atoms(self, x: torch.Tensor):
+        """
+        Auxiliary routine for summing atomic contributions for each molecule.
+
+        Args:
+            x (torch.Tensor): Input tensor of the shape ( : x (n_molecules * n_atoms) x ...)
+
+        Returns:
+            torch.Tensor: Aggregated tensor of the shape ( : x n_molecules x ...)
+        """
         x_tmp = torch.zeros(
             self.n_replicas,
             self.n_molecules,
@@ -210,10 +216,28 @@ class System:
         )
         return x_tmp.index_add(1, self.index_m, x)
 
-    def _mean_atoms(self, x):
+    def _mean_atoms(self, x: torch.Tensor):
+        """
+        Auxiliary routine for computing mean over atomic contributions for each molecule.
+
+        Args:
+            x (torch.Tensor): Input tensor of the shape ( : x (n_molecules * n_atoms) x ...)
+
+        Returns:
+            torch.Tensor: Aggregated tensor of the shape ( : x n_molecules x ...)
+        """
         return self._sum_atoms(x) / self.n_atoms[None, :, None]
 
-    def _expand_atoms(self, x):
+    def _expand_atoms(self, x: torch.Tensor):
+        """
+        Auxiliary routine for expanding molecular contributions over the corresponding atoms.
+
+        Args:
+            x (torch.Tensor): Tensor of the shape ( : x n_molecules x ...)
+
+        Returns:
+            torch.Tensor: Tensor of the shape ( : x (n_molecules * n_atoms) x ...)
+        """
         return x[:, self.index_m, ...]
 
     @property
@@ -222,7 +246,7 @@ class System:
         Compute the center of mass for each replica and molecule
 
         Returns:
-            torch.Tensor: n_replicas x n_molecules x 1 x 3 tensor holding the
+            torch.Tensor: n_replicas x n_molecules x 3 tensor holding the
                           center of mass.
         """
         # Compute center of mass
@@ -247,11 +271,7 @@ class System:
     def remove_com_rotation(self):
         """
         Remove all components in the current momenta associated with rotational
-        motion using Eckart conditons.
-
-        Args:
-            detach (bool): Whether computational graph should be detached in
-                           order to accelerated the simulation (default=True).
+        motion using Eckart conditions.
         """
         # Compute the moment of inertia tensor
         moment_of_inertia = (
@@ -280,20 +300,20 @@ class System:
         # Subtract rotation from overall motion (apply atom mask)
         self.momenta -= rotational_velocities * self.masses
 
-    def get_ase_atoms(self, position_unit_ouput="Angstrom"):
+    def get_ase_atoms(self, position_unit_output="Angstrom"):
+        # TODO: make sensible unit conversion and update docs
         """
         Convert the stored molecular configurations into ASE Atoms objects. This is e.g. used for the
         neighbor lists based on environment providers. All units are atomic units by default, as used in the calculator
 
         Args:
-            internal_units (bool): Whether atomic units or Angstrom should be returned (default=True). This should
-                                 always be True when used with an EnvironmentProviderNeighborList.
+            position_unit_output (str, float): Target units for position output.
 
         Returns:
             list(ase.Atoms): List of ASE Atoms objects, with the replica and molecule dimension flattened.
         """
         internal2positions = spk_units.convert_units(
-            spk_units.length, position_unit_ouput
+            spk_units.length, position_unit_output
         )
 
         atoms = []
@@ -349,7 +369,7 @@ class System:
 
         Returns:
             torch.Tensor: Tensor of the kinetic energies (in Hartree) with
-                          the shape n_replicas x n_molecules
+                          the shape n_replicas x n_molecules x 1
         """
         kinetic_energy = 0.5 * self._sum_atoms(
             torch.sum(self.momenta ** 2, dim=2, keepdim=True) / self.masses
@@ -363,7 +383,7 @@ class System:
         The standard kinetic energy is the trace of this tensor.
 
         Returns:
-            torch.tensor: n_replicas x n_molecules x 3 x 3 tensor containg kinetic energy components.
+            torch.tensor: n_replicas x n_molecules x 3 x 3 tensor containing kinetic energy components.
 
         """
         # Apply atom mask
@@ -382,7 +402,7 @@ class System:
 
         Returns:
             torch.Tensor: Tensor of the instantaneous temperatures (in
-                          Kelvin) with the shape n_replicas x n_molecules
+                          Kelvin) with the shape n_replicas x n_molecules x 1
         """
         temperature = (
             2.0
@@ -399,7 +419,7 @@ class System:
         standard dynamics setup.
 
         Returns:
-            torch.Tensor: Tensor of the shape 1 x n_molecules x n_atoms x 3
+            torch.Tensor: Tensor of the shape 1 x (n_molecules * n_atoms) x 3
             holding the centroid positions.
         """
         return torch.mean(self.positions, dim=0, keepdim=True)
@@ -412,7 +432,7 @@ class System:
         dynamics setup.
 
         Returns:
-            torch.Tensor: Tensor of the shape 1 x n_molecules x n_atoms x 3
+            torch.Tensor: Tensor of the shape 1 x (n_molecules * n_atoms) x 3
                           holding the centroid momenta.
         """
         return torch.mean(self.momenta, dim=0, keepdim=True)
@@ -425,7 +445,7 @@ class System:
         Does not make sense during a standard dynamics setup.
 
         Returns:
-            torch.Tensor: Tensor of the shape 1 x n_molecules x n_atoms x 3
+            torch.Tensor: Tensor of the shape (1 x n_molecules * n_atoms) x 3
             holding the centroid velocities.
         """
         return self.centroid_momenta / self.masses
@@ -439,7 +459,7 @@ class System:
 
         Returns:
             torch.Tensor: Tensor of the centroid kinetic energies (in
-                          Hartree) with the shape 1 x n_molecules
+                          Hartree) with the shape 1 x n_molecules x 1
         """
         kinetic_energy = 0.5 * self._sum_atoms(
             torch.sum(self.centroid_momenta ** 2, dim=2, keepdim=True) / self.masses
@@ -455,7 +475,7 @@ class System:
 
         Returns:
             torch.Tensor: Tensor of the instantaneous centroid temperatures (
-                          in Kelvin) with the shape 1 x n_molecules
+                          in Kelvin) with the shape 1 x n_molecules x 1
         """
         temperature = (
             2.0
@@ -470,7 +490,7 @@ class System:
         Compute the cell volumes if cells are present.
 
         Returns:
-            torch.tensor: n_replicas x n_molecules containing the volumes.
+            torch.tensor: n_replicas x n_molecules x 1 containing the volumes.
         """
         if self.cells is None:
             return None
@@ -495,7 +515,7 @@ class System:
 
         Returns:
             torch.Tensor: Depending on the tensor-flag, returns a tensor containing the pressure with dimensions
-                          n_replicas x n_molecules (False) or n_replicas x n_molecules x 3 x 3 (True).
+                          n_replicas x n_molecules x 1 (False) or n_replicas x n_molecules x 3 x 3 (True).
         """
         if self.cells is None:
             raise SystemError(
@@ -554,6 +574,13 @@ class System:
 
     @precision.setter
     def precision(self, precision):
+        """
+        Setter function for precision. This automatically converts integers to their `torch.dtype` counterparts and
+        converts all float tensors to the target precision.
+
+        Args:
+            precision (int, torch.dtype: Either integer (e.g. 32) or `torch.dtype` (e.g. `torch.float32`)
+        """
         self._precision = int2precision(precision)
 
         self.atom_types = self.atom_types.to(self._precision)
@@ -573,6 +600,12 @@ class System:
 
     @device.setter
     def device(self, device):
+        """
+        Setter function for device. This automatically moves all relevant tensors to the target device.
+
+        Args:
+            device (str, torch.device): Target device
+        """
         self._device = device
 
         self.index_m = self.index_m.to(self._device)
