@@ -6,6 +6,7 @@ from typing import Dict, Optional, List, Callable, Any, Type, Union
 
 import schnetpack as spk
 from schnetpack.model.base import AtomisticModel
+from omegaconf.listconfig import ListConfig
 
 log = logging.getLogger(__name__)
 
@@ -62,15 +63,15 @@ class MultiPropertyModel(AtomisticModel):
             properties = [properties]
         if type(targets) == str:
             targets = [targets]
-        if type(loss_fn) != list:
+        if type(loss_fn) not in [list, ListConfig]:
             loss_fn = [loss_fn]
         if loss_weights is None:
             loss_weights = [1. for _ in properties]
-        if type(loss_weights) != list:
+        if type(loss_weights) not in [list, ListConfig]:
             loss_weights = [loss_weights]
-        if type(output) != list:
+        if type(output) not in [list, ListConfig]:
             output = [output]
-        if type(metrics) != list:
+        if type(metrics) not in [list, ListConfig]:
             metrics = [metrics]
 
         super(MultiPropertyModel, self).__init__(
