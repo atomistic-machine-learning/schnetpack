@@ -18,11 +18,10 @@ __all__ = ["ISO17"]
 
 class ISO17(AtomsDataModule):
     """
-    MD17 benchmark data set for molecular dynamics of small molecules
+    ISO17 benchmark data set for molecular dynamics of C7O2H10 isomers
     containing molecular forces.
 
-    References:
-        .. [#md17_1] http://quantum-machine.org/gdml/#datasets
+    See: http://quantum-machine.org/datasets/
 
     """
 
@@ -64,6 +63,7 @@ class ISO17(AtomsDataModule):
         """
         Args:
             datapath: path to dataset
+            fold: select a specific dataset of iso17
             batch_size: (train) batch size
             num_train: number of training examples
             num_val: number of validation examples
