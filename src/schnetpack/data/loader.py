@@ -29,6 +29,8 @@ def _atoms_collate_fn(batch):
     for key in elem:
         if (key not in idx_keys) and (key not in idx_triple_keys):
             coll_batch[key] = torch.cat([d[key] for d in batch], 0)
+        elif key in idx_keys:
+            coll_batch[key + "_local"] = torch.cat([d[key] for d in batch], 0)
 
     seg_m = torch.cumsum(coll_batch[structure.n_atoms], dim=0)
     seg_m = torch.cat([torch.zeros((1,), dtype=seg_m.dtype), seg_m], dim=0)
