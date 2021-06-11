@@ -119,9 +119,7 @@ class MaterialsProject(AtomsDataModule):
         else:
             dataset = load_dataset(self.datapath, self.format)
 
-    def _download_data(
-        self, dataset: BaseAtomsData
-    ):
+    def _download_data(self, dataset: BaseAtomsData):
         """
         Downloads dataset provided it does not exist in self.path
         Returns:
@@ -168,7 +166,10 @@ class MaterialsProject(AtomsDataModule):
                         ],
                     )
                     for k, q in enumerate(query):
-                        if self.timestamp is not None and q["created_at"] > self.timestamp:
+                        if (
+                            self.timestamp is not None
+                            and q["created_at"] > self.timestamp
+                        ):
                             continue
                         s = q["structure"]
                         if type(s) is Structure:

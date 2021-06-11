@@ -13,7 +13,9 @@ import tarfile
 import h5py
 
 from schnetpack.data import *
+
 log = logging.getLogger(__name__)
+
 
 class ANI1(AtomsDataModule):
     """
@@ -25,6 +27,7 @@ class ANI1(AtomsDataModule):
         .. [#ani1] https://arxiv.org/abs/1708.04987
 
     """
+
     energy = "energy"
 
     self_energies = {
@@ -130,10 +133,7 @@ class ANI1(AtomsDataModule):
         else:
             dataset = load_dataset(self.datapath, self.format)
 
-
-    def _download_data(
-        self, tmpdir, dataset: BaseAtomsData
-    ):
+    def _download_data(self, tmpdir, dataset: BaseAtomsData):
         logging.info("downloading ANI-1 data...")
         tar_path = os.path.join(tmpdir, "ANI1_release.tar.gz")
         raw_path = os.path.join(tmpdir, "data")
