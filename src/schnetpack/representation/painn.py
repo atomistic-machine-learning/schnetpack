@@ -17,11 +17,13 @@ class PaiNNInteraction(nn.Module):
         self,
         n_atom_basis: int,
         activation: Callable,
+        epsilon: float = 1e-8,
     ):
         """
         Args:
             n_atom_basis: number of features to describe atomic environments.
             activation: if None, no activation function is used.
+            epsilon: stability constant added in norm to prevent numerical instabilities
         """
         super(PaiNNInteraction, self).__init__()
         self.n_atom_basis = n_atom_basis
@@ -35,6 +37,7 @@ class PaiNNInteraction(nn.Module):
             snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
         )
         self.mu_channel_mix = snn.Dense(n_atom_basis, 2 * n_atom_basis, activation=None)
+        self.epsilon = epsilon
 
     def forward(
         self,
@@ -75,7 +78,7 @@ class PaiNNInteraction(nn.Module):
         ## intra-atomic
         mu_mix = self.mu_channel_mix(mu)
         mu_V, mu_W = torch.split(mu_mix, self.n_atom_basis, dim=-1)
-        mu_Vn = torch.norm(mu_V, dim=-2, keepdim=True)
+        mu_Vn = torch.sqrt(torch.sum(mu_V ** 2, dim=-2, keepdim=True) + self.epsilon)
 
         ctx = torch.cat([q, mu_Vn], dim=-1)
         x = self.intraatomic_context_net(ctx)
@@ -111,6 +114,7 @@ class PaiNN(nn.Module):
         max_z: int = 100,
         shared_interactions: bool = False,
         shared_filters: bool = False,
+        epsilon: float = 1e-8,
     ):
         """
         Args:
@@ -124,6 +128,7 @@ class PaiNN(nn.Module):
                 interaction blocks.
             shared_interactions: if True, share the weights across
                 filter-generating networks.
+            epsilon: stability constant added in norm to prevent numerical instabilities
         """
         super(PaiNN, self).__init__()
 
@@ -151,6 +156,7 @@ class PaiNN(nn.Module):
             lambda: PaiNNInteraction(
                 n_atom_basis=self.n_atom_basis,
                 activation=activation,
+                epsilon=epsilon,
             ),
             self.n_interactions,
             shared_interactions,
