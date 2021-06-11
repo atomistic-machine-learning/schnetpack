@@ -1,0 +1,31 @@
+# @package _global_
+
+defaults:
+  - override /model: single_property
+  - override /model/representation: schnet
+  - override /data: materials_project
+  - override /logger: tensorboard
+
+cutoff: 5.0
+n_rbf: 20
+
+lr: 1e-3
+
+property: formation_energy_per_atom
+name: mp_${property}
+
+
+data:
+  distance_unit: Ang
+  property_units:
+    energy: eV
+  transforms:
+    - _target_: schnetpack.transform.SubtractCenterOfMass
+    - _target_: schnetpack.transform.RemoveOffsets
+      property: ${property}
+      remove_atomrefs: True
+      remove_mean: True
+    - _target_: schnetpack.transform.TorchNeighborList
+      cutoff: ${cutoff}
+    - _target_: schnetpack.transform.CastTo32
+

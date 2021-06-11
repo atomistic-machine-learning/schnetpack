@@ -1,0 +1,37 @@
+# @package _global_
+
+defaults:
+  - override /model: pes
+  - override /data: iso17
+  - override /logger: tensorboard
+
+cutoff: 5.0
+n_rbf: 20
+lr: 1e-4
+
+name: md17_${data.molecule}
+
+data:
+  distance_unit: Ang
+  property_units:
+    energy: eV
+    forces: eV/Ang
+  transforms:
+    - _target_: schnetpack.transform.SubtractCenterOfMass
+    - _target_: schnetpack.transform.RemoveOffsets
+      property: total_energy
+      remove_mean: True
+    - _target_: schnetpack.transform.TorchNeighborList
+      cutoff: ${cutoff}
+    - _target_: schnetpack.transform.CastTo32
+
+
+model:
+  energy_property: total_energy
+  forces_property: atomic_forces
+  postprocess:
+    - _target_: schnetpack.transform.CastTo64
+    - _target_: schnetpack.transform.AddOffsets
+      property: total_energy
+      add_mean: True
+
