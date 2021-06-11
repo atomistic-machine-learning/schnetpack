@@ -201,7 +201,8 @@ class PESModel(AtomisticModel):
         for metric_name, pmetric in self.metrics.items():
             prop, name = metric_name.split(":")
             self.log(
-                f"{subset}_{name}".replace(":", "_"),
+                f"{subset}_{metric_name}".replace(":", "_"),
+
                 pmetric(pred[prop], batch[self.targets[prop]]),
                 on_step=False,
                 on_epoch=True,
