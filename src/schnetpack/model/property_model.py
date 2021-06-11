@@ -128,7 +128,7 @@ class PropertyModel(AtomisticModel):
     def training_step(self, batch, batch_idx):
         pred = self(batch)
         loss = self.loss_fn(pred, batch)
-        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
+        self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
         self.log_metrics(pred, batch, "train")
 
         return loss
