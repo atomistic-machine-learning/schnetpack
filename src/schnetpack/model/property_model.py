@@ -10,13 +10,17 @@ from omegaconf.listconfig import ListConfig
 
 log = logging.getLogger(__name__)
 
-__all__ = ["MultiPropertyModel"]
+__all__ = ["PropertyModel"]
 
 
-class MultiPropertyModel(AtomisticModel):
+class PropertyModel(AtomisticModel):
     """
     AtomisticModel for models that predict single chemical properties, e.g. for QM9 benchmarks.
 
+    This Module can be used for single property prediction, as well as for the prediction of multiple properties.
+    For multi-property prediction the following arguments need to be passed as list: 'properties', 'targets',
+    'loss_fn', 'loss_weights' and 'metrics'. The length of these lists must match in order to find the correct
+    mapping of the list items by id!
     """
 
     def __init__(
@@ -37,11 +41,6 @@ class MultiPropertyModel(AtomisticModel):
         postprocess: Optional[List[spk.transform.Transform]] = None,
     ):
         """
-        This Module can be used for single property prediction, as well as for the prediction of multiple properties.
-        For multi-property prediction the following arguments need to be passed as list: 'properties', 'targets',
-        'loss_fn', 'loss_weights' and 'metrics'. The length of these lists must match in order to find the correct
-        mapping of the list items by id!
-
         Args:
             datamodule: pytorch_lightning module for dataset
             representation: nn.Module for atomistic representation
@@ -74,7 +73,7 @@ class MultiPropertyModel(AtomisticModel):
         if type(metrics) not in [list, ListConfig]:
             metrics = [metrics]
 
-        super(MultiPropertyModel, self).__init__(
+        super(PropertyModel, self).__init__(
             datamodule=datamodule,
             representation=representation,
             output=nn.ModuleDict({p: o for p, o in zip(properties, output)}),
@@ -119,7 +118,7 @@ class MultiPropertyModel(AtomisticModel):
         for metric_name, pmetric in self.metrics.items():
             prop, name = metric_name.split(":")
             self.log(
-                f"{subset}_{metric_name}",
+                f"{subset}_{metric_name}".replace(":", "_"),
                 pmetric(pred[prop], batch[self.targets[prop]]),
                 on_step=False,
                 on_epoch=True,
