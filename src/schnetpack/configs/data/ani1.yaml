@@ -2,8 +2,8 @@ _target_: schnetpack.datasets.ANI1
 
 datapath: ${data_dir}/ani1.db  # data_dir is specified in train.yaml
 batch_size: 32
-num_train: 110000
-num_val: 10000
+num_train: 10000000
+num_val: 100000
 num_test: null
 num_heavy_atoms: 8
 high_energies: False

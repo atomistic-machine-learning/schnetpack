@@ -2,7 +2,7 @@
 
 defaults:
   - override /model: pes
-  - override /data: md17
+  - override /data: iso17
   - override /logger: tensorboard
 
 cutoff: 5.0
@@ -27,6 +27,8 @@ data:
 
 
 model:
+  energy_property: total_energy
+  forces_property: atomic_forces
   postprocess:
     - _target_: schnetpack.transform.CastTo64
     - _target_: schnetpack.transform.AddOffsets
