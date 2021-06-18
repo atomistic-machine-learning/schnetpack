@@ -10,7 +10,7 @@ __all__ = ["convert_units"]
 # Internal units (MD internal -> ASE internal)
 __md_base_units__ = {
     "energy": "kJ / mol",
-    "length": "Angstrom",
+    "length": "nm",
     "mass": 1.0,  # 1 Dalton in ASE reference frame
 }
 
@@ -34,6 +34,7 @@ def setup_md_units(md_base_units: Dict[str, Union[str, float]]):
 
     # Derived units (MD internal -> ASE internal)
     units["time"] = units["length"] * np.sqrt(units["mass"] / units["energy"])
+    units["pressure"] = units["energy"] / units["length"] ** 3
 
     # Constants (internal frame)
     units["kB"] = aseunits.kB / units["energy"]  # Always uses Kelvin
@@ -44,8 +45,6 @@ def setup_md_units(md_base_units: Dict[str, Union[str, float]]):
     # For spectra
     units["hbar2icm"] = units["hbar"] * 100.0 * aseunits._c * aseunits._aut
 
-    # TODO: pressure !
-
     return units
 
 
@@ -54,6 +53,7 @@ energy = 0.0
 length = 0.0
 mass = 0.0
 time = 0.0
+pressure = 0.0
 kB = 0.0
 hbar = 0.0
 hbar2icm = 0.0
