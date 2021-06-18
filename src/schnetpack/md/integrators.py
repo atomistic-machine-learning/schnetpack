@@ -10,6 +10,8 @@ import torch.nn as nn
 import numpy as np
 
 import schnetpack as spk
+from schnetpack.md import System
+from schnetpack.md.simulation_hooks import BarostatHook
 
 from ase import units as ase_units
 from schnetpack import units as spk_units
@@ -38,7 +40,7 @@ class Integrator(nn.Module):
             ase_units.fs, spk_units.time
         )
 
-    def main_step(self, system: spk.md.System):
+    def main_step(self, system: System):
         """
         Main integration step wrapper routine to make a default detach
         behavior possible. Calls upon _main_step to perform the actual
@@ -50,7 +52,7 @@ class Integrator(nn.Module):
         """
         self._main_step(system)
 
-    def half_step(self, system: spk.md.System):
+    def half_step(self, system: System):
         """
         Half steps propagating the system momenta according to:
 
@@ -63,7 +65,7 @@ class Integrator(nn.Module):
         """
         system.momenta = system.momenta + 0.5 * system.forces * self.time_step
 
-    def _main_step(self, system: spk.md.System):
+    def _main_step(self, system: System):
         """
         Main integration step to be implemented in derived routines.
 
@@ -85,7 +87,7 @@ class VelocityVerlet(Integrator):
     def __init__(self, time_step: float):
         super(VelocityVerlet, self).__init__(time_step)
 
-    def _main_step(self, system: spk.md.System):
+    def _main_step(self, system: System):
         """
         Propagate the positions of the system according to:
 
@@ -171,7 +173,7 @@ class RingPolymer(Integrator):
         sin_dt = torch.sin(omega_dt)
 
         # Initialize the propagator
-        propagator = torch.zeros(self.n_beads, 2, 2, device=self.device)
+        propagator = torch.zeros(self.n_beads, 2, 2)
 
         # Define the propagator elements, the central normal mode is treated
         # special
@@ -189,7 +191,7 @@ class RingPolymer(Integrator):
 
         return omega_normal, propagator
 
-    def _main_step(self, system: spk.md.System):
+    def _main_step(self, system: System):
         """
         Main propagation step for ring polymer dynamics. First transforms
         positions and momenta to their normal mode representations,
@@ -227,11 +229,11 @@ class NPTVelocityVerlet(VelocityVerlet):
         barostat (schnetpack.md.simulation_hooks.BarostatHook): Barostat used for constant pressure dynamics.
     """
 
-    def __init__(self, time_step: float, barostat: spk.md.BarostatHook):
+    def __init__(self, time_step: float, barostat: BarostatHook):
         super(NPTVelocityVerlet, self).__init__(time_step)
         self.barostat = barostat
 
-    def _main_step(self, system: spk.md.System):
+    def _main_step(self, system: System):
         """
         Main integrator step, where the barostat routine is used to propagate the system positions and cells.
         """
@@ -251,16 +253,12 @@ class NPTRingPolymer(RingPolymer):
     """
 
     def __init__(
-        self,
-        time_step: float,
-        n_beads: int,
-        temperature: float,
-        barostat: spk.md.BarostatHook,
+        self, time_step: float, n_beads: int, temperature: float, barostat: BarostatHook
     ):
         super(NPTRingPolymer, self).__init__(time_step, n_beads, temperature)
         self.barostat = barostat
 
-    def half_step(self, system: spk.md.System):
+    def half_step(self, system: System):
         """
         Half steps propagating the system and barostat momenta.
 
@@ -272,7 +270,7 @@ class NPTRingPolymer(RingPolymer):
         # TODO: recheck this
         system.momenta = system.momenta + 0.5 * system.forces * self.time_step
 
-    def _main_step(self, system: spk.md.System):
+    def _main_step(self, system: System):
         """
         Perform the main update using the barostat routine.
 
