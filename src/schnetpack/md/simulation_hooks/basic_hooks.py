@@ -1,7 +1,7 @@
-__all__ = ["RemoveCOMMotion", "SimulationHook"]
-
 import torch.nn as nn
-import schnetpack as spk
+import schnetpack.md as spkmd
+
+__all__ = ["RemoveCOMMotion", "SimulationHook"]
 
 
 class SimulationHook(nn.Module):
@@ -42,7 +42,7 @@ class RemoveCOMMotion(SimulationHook):
         self.every_n_steps = every_n_steps
         self.remove_rotation = remove_rotation
 
-    def on_step_end(self, simulator: spk.md.Simulator):
+    def on_step_end(self, simulator: spkmd.Simulator):
         if simulator.step % self.every_n_steps == 0:
             simulator.system.remove_center_of_mass()
             simulator.system.remove_translation()
