@@ -11,6 +11,9 @@ import numpy as np
 
 import schnetpack as spk
 
+from ase import units as ase_units
+from schnetpack import units as spk_units
+
 __all__ = ["VelocityVerlet", "RingPolymer", "NPTVelocityVerlet", "NPTRingPolymer"]
 
 
@@ -30,7 +33,10 @@ class Integrator(nn.Module):
 
     def __init__(self, time_step: float):
         super(Integrator, self).__init__()
-        self.time_step = time_step  # TODO: convert time step to internal units?
+        # Convert fs to internal time units.
+        self.time_step = time_step * spk.units.convert_units(
+            ase_units.fs, spk_units.time
+        )
 
     def main_step(self, system: spk.md.System):
         """
@@ -126,7 +132,7 @@ class RingPolymer(Integrator):
         self.n_beads = n_beads
 
         # Compute the ring polymer frequency
-        self.omega = spk.units.kB * n_beads * temperature / spk.units.hbar
+        self.omega = spk_units.kB * n_beads * temperature / spk_units.hbar
 
         # Initialize the propagator matrices and normal mode frequencies
         omega_normal, propagator = self._init_propagator()
