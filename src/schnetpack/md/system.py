@@ -6,6 +6,7 @@ All this functionality is encoded in the :obj:`schnetpack.md.System` class.
 import torch
 
 from schnetpack.utils import int2precision
+from schnetpack.md.utils import NormalModeTransformer
 from ase import Atoms
 
 from typing import Union, List
@@ -84,12 +85,20 @@ class System:
     # Property dictionary, updated during simulation
     properties = {}
 
-    def __init__(self, device="cuda", precision=32):
+    def __init__(
+        self,
+        device: Union[str, torch.device] = "cuda",
+        precision: Union[int, torch.dtype] = 32,
+        normal_mode_transform: NormalModeTransformer = NormalModeTransformer,
+    ):
         # Specify device
         self._device = device
 
         # specify numerical precision
         self._precision = int2precision(precision)
+
+        self._nm_transformer = normal_mode_transform
+        self.nm_transform = None
 
     def load_molecules(
         self,
@@ -193,6 +202,9 @@ class System:
             else:
                 self.cells = None
 
+        # Set normal mode transformer
+        self.nm_transform = self._nm_transformer(n_replicas)
+
         # Move everything to device and precision
         self.device = self.device
         self.precision = self.precision
@@ -207,10 +219,11 @@ class System:
         Returns:
             torch.Tensor: Aggregated tensor of the shape ( : x n_molecules x ...)
         """
+        x_shape = x.shape
         x_tmp = torch.zeros(
-            self.n_replicas,
+            x_shape[0],
             self.n_molecules,
-            *x.shape[2:],
+            *x_shape[2:],
             device=self._device,
             dtype=self._precision
         )
@@ -412,6 +425,46 @@ class System:
         return temperature
 
     @property
+    def momenta_normal(self):
+        """
+        Property for normal mode representation of momenta (e.g. for RPMD)
+
+        Returns:
+            torch.tensor: momenta in normal mode representation.
+        """
+        return self.nm_transform.beads2normal(self.momenta)
+
+    @momenta_normal.setter
+    def momenta_normal(self, momenta_normal):
+        """
+        Use momenta in normal mode representation to set system momenta.
+
+        Args:
+            momenta_normal (torch.tensor): momenta in normal mode representation
+        """
+        self.momenta = self.nm_transform.normal2beads(momenta_normal)
+
+    @property
+    def positions_normal(self):
+        """
+        Property for normal mode representation of positions (e.g. for RPMD)
+
+        Returns:
+            torch.tensor: positions in normal mode representation.
+        """
+        return self.nm_transform.beads2normal(self.positions)
+
+    @positions_normal.setter
+    def positions_normal(self, positions_normal):
+        """
+        Use positions in normal mode representation to set system positions.
+
+        Args:
+            positions_normal (torch.tensor): positions in normal mode representation
+        """
+        self.positions = self.nm_transform.normal2beads(positions_normal)
+
+    @property
     def centroid_positions(self):
         """
         Convenience property to access the positions of the centroid during
@@ -590,6 +643,7 @@ class System:
         self.forces = self.forces.to(self._precision)
         self.energies = self.energies.to(self._precision)
         self.stress = self.stress.to(self._precision)
+        self.nm_transform = self.nm_transform.to(self._precision)
 
         if self.cells is not None:
             self.cells = self.cells.to(self._precision)
@@ -618,6 +672,7 @@ class System:
         self.energies = self.energies.to(self._device)
         self.pbc = self.pbc.to(self._device)
         self.stress = self.stress.to(self._device)
+        self.nm_transform = self.nm_transform.to(self._device)
 
         if self.cells is not None:
             self.cells = self.cells.to(self._device)
