@@ -187,7 +187,7 @@ class RingPolymer(Integrator):
         propagator[0, 1, 0] = self.time_step
 
         # Expand dimensions to avoid broadcasting in main_step
-        propagator = propagator[..., None, None, None]
+        propagator = propagator[..., None, None]
 
         return omega_normal, propagator
 
