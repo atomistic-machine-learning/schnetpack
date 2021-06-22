@@ -36,8 +36,7 @@ class SchNetInteraction(nn.Module):
             Dense(n_atom_basis, n_atom_basis, activation=None),
         )
         self.filter_network = nn.Sequential(
-            Dense(n_rbf, n_filters, activation=activation),
-            Dense(n_filters, n_filters),
+            Dense(n_rbf, n_filters, activation=activation), Dense(n_filters, n_filters)
         )
 
     def forward(
@@ -120,6 +119,7 @@ class SchNet(nn.Module):
         self.n_filters = n_filters or self.n_atom_basis
         self.radial_basis = radial_basis
         self.cutoff_fn = cutoff_fn
+        self.cutoff = cutoff_fn.cutoff
 
         # layers
         self.embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)

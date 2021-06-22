@@ -54,6 +54,7 @@ class AtomisticModel(LightningModule):
 
         self.save_hyperparameters("representation", "output", "postprocess")
         self.representation = representation
+        self.cutoff = representation.cutoff
         self.output = output
         self.pp = postprocess or []
 

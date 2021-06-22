@@ -13,11 +13,7 @@ __all__ = ["PaiNN"]
 class PaiNNInteraction(nn.Module):
     r"""PaiNN interaction block for modeling equivariant interactions of atomistic systems."""
 
-    def __init__(
-        self,
-        n_atom_basis: int,
-        activation: Callable,
-    ):
+    def __init__(self, n_atom_basis: int, activation: Callable):
         """
         Args:
             n_atom_basis: number of features to describe atomic environments.
@@ -130,6 +126,7 @@ class PaiNN(nn.Module):
         self.n_atom_basis = n_atom_basis
         self.n_interactions = n_interactions
         self.cutoff_fn = cutoff_fn
+        self.cutoff = cutoff_fn.cutoff
         self.radial_basis = radial_basis
 
         self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
@@ -149,8 +146,7 @@ class PaiNN(nn.Module):
 
         self.interactions = snn.replicate_module(
             lambda: PaiNNInteraction(
-                n_atom_basis=self.n_atom_basis,
-                activation=activation,
+                n_atom_basis=self.n_atom_basis, activation=activation
             ),
             self.n_interactions,
             shared_interactions,

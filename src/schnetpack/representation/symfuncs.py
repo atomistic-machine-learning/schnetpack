@@ -51,9 +51,21 @@ class SymmetryFunctions(nn.Module):
         self.radial = radial
         self.angular = angular
         self.n_atom_basis = self.n_basis_radial + self.n_basis_angular
+        self.cutoff = self._get_cutoff()
 
         self.register_buffer("symfunc_stddev", torch.ones(1, self.n_atom_basis))
         self.register_buffer("symfunc_mean", torch.zeros(1, self.n_atom_basis))
+
+    def _get_cutoff(self):
+        _cutoff = False
+        if self.radial is not None:
+            _cutoff = self.radial.cutoff
+        if self.angular is not None:
+            if _cutoff:
+                _cutoff = torch.max(_cutoff, self.angular.cutoff)
+            else:
+                _cutoff = self.angular.cutoff
+        return _cutoff
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
         """
@@ -169,6 +181,7 @@ class RadialSF(nn.Module):
         self.radial_basis = radial_basis
         self.elemental_basis = elemental_basis
         self.cutoff_fn = cutoff_fn
+        self.cutoff = cutoff_fn.cutoff
 
     def forward(self, rij: torch.Tensor, Zj: torch.Tensor):
         """
@@ -232,6 +245,7 @@ class AngularSF(nn.Module):
         self.elemental_basis = elemental_basis
         self.angular_basis = angular_basis
         self.cutoff_fn = cutoff_fn
+        self.cutoff = cutoff_fn.cutoff
 
         self.crossterms = crossterms
 
