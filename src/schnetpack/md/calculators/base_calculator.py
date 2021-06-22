@@ -6,7 +6,7 @@ from schnetpack import units as spk_units
 from schnetpack import properties
 from schnetpack.md import System
 
-__all__ = ["MDCalculator"]
+__all__ = ["MDCalculator", "MDCalculatorError"]
 
 
 class MDCalculatorError(Exception):
@@ -47,7 +47,9 @@ class MDCalculator(nn.Module):
         property_conversion: Dict[str, Union[str, float]] = {},
     ):
         super(MDCalculator, self).__init__()
-        self.required_properties = required_properties
+        # Get required properties and filer Nones for easier init in derived classes
+        self.required_properties = [rp for rp in required_properties if rp is not None]
+        print(self.required_properties, required_properties, "PPP")
 
         self.results = {}
 
@@ -59,10 +61,10 @@ class MDCalculator(nn.Module):
         self.property_conversion = {p: 1.0 for p in self.required_properties}
 
         # Set requested conversion factors to internal unit system
-        self.property_conversion = {
-            p: spk_units.unit2internal(property_conversion[p])
-            for p in property_conversion
-        }
+        for p in property_conversion:
+            self.property_conversion[p] = spk_units.unit2internal(
+                property_conversion[p]
+            )
 
         # Special unit conversions
         self.energy_conversion = spk_units.convert_units(energy_units, spk_units.energy)
@@ -106,6 +108,7 @@ class MDCalculator(nn.Module):
                 )
             else:
                 dim = self.results[p].shape
+                print(p, self.property_conversion)
                 # Bring to general structure of MD code. Second dimension can be n_mol or n_mol x n_atoms.
                 system.properties[p] = (
                     self.results[p].view(system.n_replicas, -1, *dim[1:])
