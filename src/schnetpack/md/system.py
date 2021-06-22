@@ -598,6 +598,8 @@ class System:
         Args:
             eps (float): Small offset for numerical stability
         """
+        if self.cells is None:
+            raise SystemError("Simulation cell required for wrapping of positions.")
         pbc_atomic = self._expand_atoms(self.pbc)
 
         # Compute fractional coordinates
