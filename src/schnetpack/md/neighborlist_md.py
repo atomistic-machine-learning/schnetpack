@@ -11,7 +11,7 @@ from schnetpack.data.loader import _atoms_collate_fn
 from typing import List, Dict
 from schnetpack import properties
 
-__all__ = ["ASENeighborListMD", "TorchNeighborListMD"]
+__all__ = ["NeighborListMD", "ASENeighborListMD", "TorchNeighborListMD"]
 
 
 class NeighborListMD:
@@ -72,16 +72,14 @@ class NeighborListMD:
 
         return update_required
 
-    def get_neighbors(
-        self,
-        atom_types: torch.Tensor,
-        positions: torch.Tensor,
-        n_atoms: torch.Tensor,
-        idx_m: torch.Tensor,
-        cells: torch.Tensor,
-        pbc: torch.Tensor,
-    ):
+    def get_neighbors(self, inputs: Dict[str, torch.Tensor]):
         # TODO: check if this is better or building Rij after the full indices have been generated
+        atom_types = inputs[properties.Z]
+        positions = inputs[properties.R]
+        n_atoms = inputs[properties.n_atoms]
+        idx_m = inputs[properties.idx_m]
+        cells = inputs[properties.cell]
+        pbc = inputs[properties.pbc]
 
         n_molecules = n_atoms.shape[0]
 

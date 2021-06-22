@@ -87,7 +87,7 @@ class System:
 
     def __init__(
         self,
-        device: Union[str, torch.device] = "cuda",
+        device: Union[str, torch.device] = "cpu",
         precision: Union[int, torch.dtype] = 32,
         normal_mode_transform: NormalModeTransformer = NormalModeTransformer,
     ):
@@ -174,7 +174,7 @@ class System:
             # Static properties
             self.atom_types[idx_c : idx_c + n_atoms] = torch.from_numpy(
                 molecules[i].get_atomic_numbers()
-            )
+            ).long()
             self.masses[0, idx_c : idx_c + n_atoms, 0] = torch.from_numpy(
                 molecules[i].get_masses() * mass2internal
             )
@@ -638,7 +638,6 @@ class System:
         """
         self._precision = int2precision(precision)
 
-        self.atom_types = self.atom_types.to(self._precision)
         self.masses = self.masses.to(self._precision)
         self.positions = self.positions.to(self._precision)
         self.momenta = self.momenta.to(self._precision)
