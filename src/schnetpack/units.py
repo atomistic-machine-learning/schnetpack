@@ -12,6 +12,7 @@ __md_base_units__ = {
     "energy": "kJ / mol",
     "length": "nm",
     "mass": 1.0,  # 1 Dalton in ASE reference frame
+    "charge": 1.0,  # Electron charge
 }
 
 
@@ -34,7 +35,9 @@ def setup_md_units(md_base_units: Dict[str, Union[str, float]]):
 
     # Derived units (MD internal -> ASE internal)
     units["time"] = units["length"] * np.sqrt(units["mass"] / units["energy"])
-    units["pressure"] = units["energy"] / units["length"] ** 3
+    units["force"] = units["energy"] / units["length"]
+    units["stress"] = units["energy"] / units["length"] ** 3
+    units["pressure"] = units["stress"]
 
     # Constants (internal frame)
     units["kB"] = aseunits.kB / units["energy"]  # Always uses Kelvin
@@ -45,26 +48,84 @@ def setup_md_units(md_base_units: Dict[str, Union[str, float]]):
     # For spectra
     units["hbar2icm"] = units["hbar"] * 100.0 * aseunits._c * aseunits._aut
 
+    # Conversion of length units
+    units["A"] = aseunits.Angstrom / units["length"]
+    units["Angs"] = units["A"]
+    units["Angstrom"] = units["A"]
+    units["nm"] = aseunits.nm / units["length"]
+    units["a0"] = aseunits.Bohr / units["length"]
+    units["Bohr"] = units["a0"]
+
+    # Conversion of energy units
+    units["kcal"] = aseunits.kcal / units["energy"]
+    units["kJ"] = aseunits.kJ / units["energy"]
+    units["eV"] = aseunits.eV / units["energy"]
+    units["Hartree"] = aseunits.Hartree / units["energy"]
+    units["Ha"] = units["Hartree"]
+
+    # Time units
+    units["fs"] = aseunits.fs / units["time"]
+    units["s"] = aseunits.s / units["time"]
+    units["aut"] = aseunits._aut * aseunits.s / units["time"]
+
+    # Mol
+    units["mol"] = aseunits.mol
+
+    # Mass
+    units["Dalton"] = 1.0 / units["mass"]
+    units["amu"] = aseunits._amu / units["mass"]
+
+    # Charge distributions
+    units["Debye"] = aseunits.Debye / (units["charge"] * units["length"])
+
     return units
 
 
 # Placeholders for expected unit entries
-energy = 0.0
-length = 0.0
-mass = 0.0
-time = 0.0
-pressure = 0.0
-kB = 0.0
-hbar = 0.0
-hbar2icm = 0.0
+(
+    energy,
+    length,
+    mass,
+    charge,
+    time,
+    force,
+    stress,
+    pressure,
+    kB,
+    hbar,
+    hbar2icm,
+    A,
+    Angs,
+    Angstrom,
+    nm,
+    a0,
+    Bohr,
+    kcal,
+    kJ,
+    eV,
+    Hartree,
+    Ha,
+    fs,
+    s,
+    aut,
+    mol,
+    Dalton,
+    amu,
+    Debye,
+) = [0.0] * 29
 
 
-def _conversion_factor(unit: str):
-    """Get units by string"""
+def _conversion_factor_ase(unit: str):
+    """Get units by string and convert to ase unit system."""
     return getattr(aseunits, unit)
 
 
-def _parse_unit(unit):
+def _conversion_factor_internal(unit: str):
+    """Get units by string and convert to internal unit system."""
+    return globals()[unit]
+
+
+def _parse_unit(unit, conversion_factor=_conversion_factor_ase):
     if type(unit) == str:
         # If a string is given, split into parts.
         parts = re.split("(\W)", unit)
@@ -77,7 +138,7 @@ def _parse_unit(unit):
             elif part == "" or part == " ":
                 pass
             else:
-                p = _conversion_factor(part)
+                p = conversion_factor(part)
                 if divide:
                     conversion /= p
                     divide = False
@@ -87,6 +148,19 @@ def _parse_unit(unit):
     else:
         # If unit is given as number, return number
         return unit
+
+
+def unit2internal(src_unit):
+    """
+    Convert unit to internal unit system defined above.
+
+    Args:
+        src_unit (str, float): Name of unit
+
+    Returns:
+        float: conversion factor from external to internal unit system.
+    """
+    return _parse_unit(src_unit, conversion_factor=_conversion_factor_internal)
 
 
 def convert_units(src_unit: Union[str, float], tgt_unit: Union[str, float]):
