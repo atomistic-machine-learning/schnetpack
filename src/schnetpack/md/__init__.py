@@ -9,4 +9,4 @@ from .simulator import *
 from . import integrators
 from . import simulation_hooks
 from . import calculators
-from . import neighbor_list_md
+from . import neighborlist_md
