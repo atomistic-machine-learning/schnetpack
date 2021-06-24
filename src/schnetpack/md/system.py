@@ -123,10 +123,8 @@ class System:
         # TODO: make cells/PBC False if not set?
 
         # Set up unit conversion
-        positions2internal = spk_units.convert_units(
-            position_unit_input, spk_units.length
-        )
-        mass2internal = spk_units.convert_units(mass_unit_input, spk_units.mass)
+        positions2internal = spk_units.unit2internal(position_unit_input)
+        mass2internal = spk_units.unit2internal(mass_unit_input)
 
         # 0) Check if molecules is a single ase.Atoms object and wrap it in list.
         if isinstance(molecules, Atoms):
