@@ -1,6 +1,27 @@
 device: cuda
-seed: 1234
-simulation_dir:
+precision: 32
+seed: null
+simulation_dir: ???
 overwrite: false
 retart: null
-load_system_state: null
+
+defaults:
+  - calculator: schnetpack
+  - system: system
+  - dynamics: nve
+#  - callbacks: default_callbacks
+#  - model: null
+#  - data: null
+#  - logger: null
+
+
+hydra:
+  run:
+    dir: ${simulation_dir}
+  job:
+    config:
+      override_dirname:
+        exclude_keys:
+          - basename
+        kv_sep: '='
+        item_sep: '_'

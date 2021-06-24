@@ -1,0 +1,12 @@
+# @package _group_
+molecule_file: ???
+load_system_state: null
+n_replicas: 1
+position_unit_input: Angstrom
+mass_unit_input: 1.0
+initializer:
+  _target_: uniform
+  temperature: 300
+  remove_center_of_mass: true
+  remove_translation: true
+  remove_rotation: false
