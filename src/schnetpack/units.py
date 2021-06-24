@@ -43,7 +43,7 @@ def setup_md_units(md_base_units: Dict[str, Union[str, float]]):
     units["kB"] = aseunits.kB / units["energy"]  # Always uses Kelvin
     units["hbar"] = (
         aseunits._hbar * (aseunits.J * aseunits.s) / (units["energy"] * units["time"])
-    )  # hbar is given in J/s by ASE
+    )  # hbar is given in J*s by ASE
 
     # For spectra
     units["hbar2icm"] = units["hbar"] * 100.0 * aseunits._c * aseunits._aut
@@ -150,7 +150,7 @@ def _parse_unit(unit, conversion_factor=_conversion_factor_ase):
         return unit
 
 
-def unit2internal(src_unit):
+def unit2internal(src_unit: Union[str, float]):
     """
     Convert unit to internal unit system defined above.
 
