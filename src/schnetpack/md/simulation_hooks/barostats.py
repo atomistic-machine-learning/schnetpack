@@ -21,6 +21,8 @@ class BarostatError(Exception):
 
 
 class BarostatHook(SimulationHook):
+    ring_polymer = False
+    temperature_control = False
     """
     Basic barostat hook for simulator class. This class is initialized based on the simulator and system
     specifications during the first MD step. Barostats are applied before and after each MD step. In addition,

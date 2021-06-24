@@ -21,6 +21,7 @@ class ThermostatError(Exception):
 
 
 class ThermostatHook(SimulationHook):
+    ring_polymer = False
     """
     Basic thermostat hook for simulator class. This class is initialized based on the simulator and system
     specifications during the first MD step. Thermostats are applied before and after each MD step.
@@ -106,6 +107,7 @@ class ThermostatHook(SimulationHook):
 
 
 class BerendsenThermostat(ThermostatHook):
+    ring_polymer = False
     """
     Berendsen velocity rescaling thermostat, as described in [#berendsen1]_. Simple thermostat for e.g. equilibrating
     the system, does not sample the canonical ensemble.
@@ -142,3 +144,6 @@ class BerendsenThermostat(ThermostatHook):
             * (self.temperature_bath / simulator.system.temperature - 1)
         )
         simulator.system.momenta = scaling * simulator.system.momenta
+
+
+# TODO: decide on multiple thermostat temperatures after implementing RPMD thermos
