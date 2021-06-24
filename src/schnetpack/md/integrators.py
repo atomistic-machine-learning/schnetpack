@@ -20,6 +20,8 @@ __all__ = ["VelocityVerlet", "RingPolymer", "NPTVelocityVerlet", "NPTRingPolymer
 
 
 class Integrator(nn.Module):
+    ring_polymer = False
+    pressure_control = False
     """
     Basic integrator class template. Uses the typical scheme of propagating
     system momenta in two half steps and system positions in one main step.
@@ -77,6 +79,8 @@ class Integrator(nn.Module):
 
 
 class VelocityVerlet(Integrator):
+    ring_polymer = False
+    pressure_control = False
     """
     Standard velocity Verlet integrator for non ring-polymer simulations.
 
@@ -104,6 +108,8 @@ class VelocityVerlet(Integrator):
 
 
 class RingPolymer(Integrator):
+    ring_polymer = True
+    pressure_control = False
     """
     Integrator for ring polymer molecular dynamics, as e.g. described in
     [#rpmd1]_
@@ -220,6 +226,8 @@ class RingPolymer(Integrator):
 
 
 class NPTVelocityVerlet(VelocityVerlet):
+    ring_polymer = False
+    pressure_control = True
     """
     Verlet integrator for constant pressure dynamics (NPT). Since barostats modify the position update,
     a routine defined in the respectve barostat class is called every main step.
@@ -241,6 +249,8 @@ class NPTVelocityVerlet(VelocityVerlet):
 
 
 class NPTRingPolymer(RingPolymer):
+    ring_polymer = True
+    pressure_control = True
     """
     Ring polymer integrator for constant pressure dynamics (NPT). Here, the barostat modifies the main and the
     half steps.

@@ -1,0 +1,9 @@
+dynamics:
+  n_steps: 1000000
+  integrator:
+    type: verlet
+    time_step: 0.50
+  thermostat:
+    type: langevin
+    temperature: 300
+    time_constant: 100
