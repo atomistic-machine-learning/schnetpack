@@ -1,19 +1,15 @@
 device: cuda
-precision: 32
+precision: 64
 seed: null
 simulation_dir: ???
 overwrite: false
-retart: null
+restart: null
 
 defaults:
   - calculator: schnetpack
   - system: system
   - dynamics: nve
-#  - callbacks: default_callbacks
-#  - model: null
-#  - data: null
-#  - logger: null
-
+  - logging: basic
 
 hydra:
   run:
