@@ -337,7 +337,9 @@ class PropertyStream(DataStream):
         for p in self.properties_slices:
             self.buffer[
                 buffer_position : buffer_position + 1, :, self.properties_slices[p]
-            ] = (simulator.system.properties[p].contiguous().view(self.n_replicas, -1))
+            ] = (
+                simulator.system.properties[p].contiguous().view(self.n_replicas, -1)
+            ).detach()
 
     def _get_properties_structures(self, property_dict: Dict[str, torch.tensor]):
         """
