@@ -1,0 +1,12 @@
+logging:
+  - _target_ : checkpoint
+    checkpoint_file: checkpoint.chk
+    every_n_steps: 100
+  - _target_: file_logger
+    filename: test_log.hdf5
+    buffer_size: 100
+    data_streams:
+      - _target_: molecules
+        store_velocities: true
+    every_n_steps: 2
+    precision: 32

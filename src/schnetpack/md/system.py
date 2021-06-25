@@ -4,12 +4,13 @@ It includes functionality for loading molecules from files.
 All this functionality is encoded in the :obj:`schnetpack.md.System` class.
 """
 import torch
+import torch.nn as nn
 
 from schnetpack.utils import int2precision
 from schnetpack.md.utils import NormalModeTransformer
 from ase import Atoms
 
-from typing import Union, List
+from typing import Union, List, OrderedDict
 
 from schnetpack import units as spk_units
 
@@ -20,7 +21,7 @@ class SystemException(Exception):
     pass
 
 
-class System:
+class System(nn.Module):
     """
     Container for all properties associated with the simulated molecular system
     (masses, positions, momenta, ...). Uses MD unit system defined in `schnetpack.units` internally.
@@ -57,48 +58,54 @@ class System:
         precision (int, torch.dtype): Precision used for floating point numbers (default=32).
     """
 
-    # Index for aggregation
-    total_n_atoms = None
-    index_m = None
-
-    # number of molecules, replicas of each and vector with the number of
-    # atoms in each molecule
-    n_replicas = None
-    n_molecules = None
-    n_atoms = None
-
-    # General static molecular properties
-    atom_types = None
-    masses = None
-
-    # Dynamic properties updated during simulation
-    positions = None
-    momenta = None
-    forces = None
-    energies = None
-
-    # Properties for periodic boundary conditions and crystal cells
-    cells = None
-    pbc = None
-    stress = None  # Used for the computation of the pressure
-
     # Property dictionary, updated during simulation
     properties = {}
 
     def __init__(
-        self,
-        device: Union[str, torch.device] = "cpu",
-        precision: Union[int, torch.dtype] = 32,
-        normal_mode_transform: NormalModeTransformer = NormalModeTransformer,
+        self, normal_mode_transform: NormalModeTransformer = NormalModeTransformer
     ):
-        # Specify device
-        self._device = device
-
-        # specify numerical precision
-        self._precision = int2precision(precision)
+        super(System, self).__init__()
 
         self._nm_transformer = normal_mode_transform
+        # For initialized nm transform
         self.nm_transform = None
+
+        # Index for aggregation
+        self.register_buffer("index_m", None)
+
+        # number of molecules, replicas of each and vector with the number of
+        # atoms in each molecule
+        self.n_replicas = None
+        self.n_molecules = None
+        self.total_n_atoms = None
+
+        self.register_buffer("n_atoms", None)
+
+        # General static molecular properties
+        self.register_buffer("atom_types", None)
+        self.register_buffer("masses", None)
+
+        # Dynamic properties updated during simulation
+        self.register_buffer("positions", None)
+        self.register_buffer("momenta", None)
+        self.register_buffer("forces", None)
+        self.register_buffer("energies", None)
+
+        # Properties for periodic boundary conditions and crystal cells
+        self.register_buffer("cells", None)
+        self.register_buffer("pbc", None)
+        self.register_buffer("stress", None)  # Used for the computation of the pressure
+
+        # Dummy tensor for device and dtype
+        self.register_buffer("_dd_dummy", torch.zeros(1))
+
+    @property
+    def device(self):
+        return self._dd_dummy.device
+
+    @property
+    def dtype(self):
+        return self._dd_dummy.dtype
 
     def load_molecules(
         self,
@@ -197,15 +204,9 @@ class System:
         if torch.sum(torch.abs(self.cells)) == 0.0:
             if torch.sum(self.pbc) > 0.0:
                 raise SystemException("Found periodic boundary conditions but no cell.")
-            else:
-                self.cells = None
 
         # Set normal mode transformer
         self.nm_transform = self._nm_transformer(n_replicas)
-
-        # Move everything to device and precision
-        self.device = self.device
-        self.precision = self.precision
 
     def _sum_atoms(self, x: torch.Tensor):
         """
@@ -219,11 +220,7 @@ class System:
         """
         x_shape = x.shape
         x_tmp = torch.zeros(
-            x_shape[0],
-            self.n_molecules,
-            *x_shape[2:],
-            device=self._device,
-            dtype=self._precision
+            x_shape[0], self.n_molecules, *x_shape[2:], device=x.device, dtype=x.dtype
         )
         return x_tmp.index_add(1, self.index_m, x)
 
@@ -344,15 +341,10 @@ class System:
                     self.atom_types[idx_c : idx_c + n_atoms].cpu().detach().numpy()
                 )
 
-                if self.cells is not None:
-                    cell = (
-                        self.cells[idx_r, idx_m].cpu().detach().numpy()
-                        * internal2positions
-                    )
-                    pbc = self.pbc[0, idx_m].cpu().detach().numpy()
-                else:
-                    cell = None
-                    pbc = None
+                cell = (
+                    self.cells[idx_r, idx_m].cpu().detach().numpy() * internal2positions
+                )
+                pbc = self.pbc[0, idx_m].cpu().detach().numpy()
 
                 mol = Atoms(atom_types, positions, cell=cell, pbc=pbc)
                 atoms.append(mol)
@@ -543,16 +535,13 @@ class System:
         Returns:
             torch.tensor: n_replicas x n_molecules x 1 containing the volumes.
         """
-        if self.cells is None:
-            return None
-        else:
-            volume = torch.sum(
-                self.cells[:, :, 0]
-                * torch.cross(self.cells[:, :, 1], self.cells[:, :, 2], dim=2),
-                dim=2,
-                keepdim=True,
-            )
-            return volume
+        volume = torch.sum(
+            self.cells[:, :, 0]
+            * torch.cross(self.cells[:, :, 1], self.cells[:, :, 2], dim=2),
+            dim=2,
+            keepdim=True,
+        )
+        return volume
 
     def compute_pressure(self, tensor=False, kinetic_component=False):
         """
@@ -568,13 +557,12 @@ class System:
             torch.Tensor: Depending on the tensor-flag, returns a tensor containing the pressure with dimensions
                           n_replicas x n_molecules x 1 (False) or n_replicas x n_molecules x 3 x 3 (True).
         """
-        if self.cells is None:
-            raise SystemError(
-                "Simulation cell and stress required for computation of the instantaneous pressure."
-            )
+        volume = self.volume
 
-        # TODO: check how often kinetic component is actually required
-        # TODO: is kinetic energy tensor actually needed elsewhere?
+        if torch.any(volume == 0.0):
+            raise SystemError(
+                "Non-zero volume simulation cell required for computation of the instantaneous pressure."
+            )
 
         pressure = -self.stress
 
@@ -596,8 +584,9 @@ class System:
         Args:
             eps (float): Small offset for numerical stability
         """
-        if self.cells is None:
+        if torch.any(self.volume == 0.0):
             raise SystemError("Simulation cell required for wrapping of positions.")
+
         pbc_atomic = self._expand_atoms(self.pbc)
 
         # Compute fractional coordinates
@@ -621,87 +610,7 @@ class System:
             inv_positions[..., None] * self._expand_atoms(self.cells), dim=2
         )
 
-    @property
-    def precision(self):
-        return self._precision
-
-    @precision.setter
-    def precision(self, precision):
-        """
-        Setter function for precision. This automatically converts integers to their `torch.dtype` counterparts and
-        converts all float tensors to the target precision.
-
-        Args:
-            precision (int, torch.dtype: Either integer (e.g. 32) or `torch.dtype` (e.g. `torch.float32`)
-        """
-        self._precision = int2precision(precision)
-
-        self.masses = self.masses.to(self._precision)
-        self.positions = self.positions.to(self._precision)
-        self.momenta = self.momenta.to(self._precision)
-        self.forces = self.forces.to(self._precision)
-        self.energies = self.energies.to(self._precision)
-        self.stress = self.stress.to(self._precision)
-        self.nm_transform = self.nm_transform.to(self._precision)
-
-        if self.cells is not None:
-            self.cells = self.cells.to(self._precision)
-
-    @property
-    def device(self):
-        return self._device
-
-    @device.setter
-    def device(self, device):
-        """
-        Setter function for device. This automatically moves all relevant tensors to the target device.
-
-        Args:
-            device (str, torch.device): Target device
-        """
-        self._device = device
-
-        self.index_m = self.index_m.to(self._device)
-        self.n_atoms = self.n_atoms.to(self._device)
-        self.atom_types = self.atom_types.to(self._device)
-        self.masses = self.masses.to(self._device)
-        self.positions = self.positions.to(self._device)
-        self.momenta = self.momenta.to(self._device)
-        self.forces = self.forces.to(self._device)
-        self.energies = self.energies.to(self._device)
-        self.pbc = self.pbc.to(self._device)
-        self.stress = self.stress.to(self._device)
-        self.nm_transform = self.nm_transform.to(self._device)
-
-        if self.cells is not None:
-            self.cells = self.cells.to(self._device)
-
-    @property
-    def state_dict(self):
-        """
-        State dict for storing the system state.
-
-        Returns:
-            dict: Dictionary containing all properties for restoring the
-                  current state of the system during simulation.
-        """
-        state_dict = {
-            "index_m": self.index_m,
-            "positions": self.positions,
-            "momenta": self.momenta,
-            "forces": self.forces,
-            "properties": self.properties,
-            "n_atoms": self.n_atoms,
-            "atom_types": self.atom_types,
-            "masses": self.masses,
-            "cells": self.cells,
-            "pbc": self.pbc,
-            "stress": self.stress,
-        }
-        return state_dict
-
-    @state_dict.setter
-    def state_dict(self, state_dict):
+    def load_system_state(self, state_dict: OrderedDict[str, torch.Tensor]):
         """
         Routine for restoring the state of a system specified in a previously
         stored state dict. Used to restart molecular dynamics simulations.
@@ -709,19 +618,9 @@ class System:
         Args:
             state_dict (dict): State dict of the system state.
         """
-        self.index_m = state_dict["index_m"]
-        self.positions = state_dict["positions"]
-        self.momenta = state_dict["momenta"]
-        self.forces = state_dict["forces"]
-        self.energies = state_dict["energies"]
-        self.properties = state_dict["properties"]
-        self.n_atoms = state_dict["n_atoms"]
-        self.atom_types = state_dict["atom_types"]
-        self.masses = state_dict["masses"]
-        self.cells = state_dict["cells"]
-        self.pbc = state_dict["pbc"]
-        self.stress = state_dict["stress"]
+        self.load_state_dict(state_dict)
 
+        # Set derived properties for restarting
         self.n_replicas = self.positions.shape[0]
         self.total_n_atoms = self.positions.shape[1]
         self.n_molecules = self.n_atoms.shape[0]
