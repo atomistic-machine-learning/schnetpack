@@ -5,13 +5,17 @@ integrators (:obj:`schnetpack.md.integrators`) and various simulation hooks (:ob
 and performs the time integration.
 """
 import torch
-from tqdm import tqdm
+import torch.nn as nn
 from contextlib import nullcontext
 
-import schnetpack.md as md
+from tqdm import tqdm
+
+from schnetpack.md import System
+
+__all__ = ["Simulator"]
 
 
-class Simulator:
+class Simulator(nn.Module):
     """
     Main driver of the molecular dynamics simulation. Uses an integrator to
     propagate the molecular system defined in the system class according to
@@ -51,8 +55,9 @@ class Simulator:
     """
 
     def __init__(
+        # TODO: fix precision, device, print and typings
         self,
-        system: md.System,
+        system: System,
         integrator,
         calculator,
         simulator_hooks: list = [],
@@ -60,6 +65,7 @@ class Simulator:
         restart: bool = False,
         gradients_required: bool = False,
     ):
+        super(Simulator, self).__init__()
 
         self.system = system
         self.integrator = integrator
@@ -92,14 +98,17 @@ class Simulator:
 
         with grad_context:
             # Perform initial computation of forces
-            if self.system.forces is None:
-                self.calculator.calculate(self.system)
+            # TODO !!!
+            # if self.system.forces is None:
+            #     print("~~~~~~~~~~~~~~~~~~++++")
+            self.calculator.calculate(self.system)
 
             # Call hooks at the simulation start
             for hook in self.simulator_hooks:
                 hook.on_simulation_start(self)
 
-            for _ in tqdm(range(n_steps), ncols=120):
+            # for _ in tqdm(range(n_steps), ncols=120):
+            for _ in range(n_steps):
 
                 # Call hook before first half step
                 for hook in self.simulator_hooks:
@@ -114,6 +123,8 @@ class Simulator:
                 # Compute new forces
                 self.calculator.calculate(self.system)
 
+                print(self.state_dict)
+
                 # Call hook after forces
                 for hook in self.simulator_hooks:
                     hook.on_step_middle(self)
@@ -126,6 +137,8 @@ class Simulator:
                 # the propagator when using thermostats and barostats
                 for hook in self.simulator_hooks[::-1]:
                     hook.on_step_end(self)
+
+                # TODO: separate logging
 
                 self.step += 1
                 self.effective_steps += 1
@@ -154,9 +167,9 @@ class Simulator:
         """
         state_dict = {
             "step": self.step,
-            "system": self.system.state_dict,
+            "system": self.system.state_dict(),
             "simulator_hooks": {
-                hook.__class__: hook.state_dict for hook in self.simulator_hooks
+                hook.__class__: hook.state_dict() for hook in self.simulator_hooks
             },
         }
         return state_dict
@@ -232,4 +245,5 @@ class Simulator:
         Args:
             state_dict (dict): State dict of the current simulation
         """
+        # TODO: ???
         self.system.state_dict = state_dict["system"]
