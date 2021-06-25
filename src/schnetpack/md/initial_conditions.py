@@ -117,13 +117,16 @@ class UniformInit(Initializer):
         # Set initial system momenta and apply atom masks
         system.momenta = (
             torch.randn(
-                system.momenta.shape, device=system.device, dtype=system.precision
+                system.momenta.shape,
+                device=system.momenta.device,
+                dtype=system.momenta.dtype,
             )
             * system.masses
         )
         # Scale velocities to desired temperature
         scaling = torch.sqrt(
-            self.temperature.to(system.device)[None, :, None] / system.temperature
+            self.temperature.to(system.momenta.device)[None, :, None]
+            / system.temperature
         )
         system.momenta *= system._expand_atoms(scaling)
 
@@ -176,5 +179,7 @@ class MaxwellBoltzmannInit(Initializer):
 
         # Set initial system momenta
         system.momenta = stddev * torch.randn(
-            system.momenta.shape, device=system.device, dtype=system.precision
+            system.momenta.shape,
+            device=system.momenta.device,
+            dtype=system.momenta.dtype,
         )

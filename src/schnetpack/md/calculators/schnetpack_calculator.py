@@ -1,17 +1,23 @@
+from __future__ import annotations
 from typing import Union, List, Dict
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from schnetpack.md import System
+    from schnetpack.model import PESModel
+    from schnetpack.md.neighborlist_md import NeighborListMD
 
 import schnetpack as spk
+import torch
 from schnetpack import properties
-from schnetpack.model import PESModel
-from schnetpack.md import System
-
 from schnetpack.md.calculators import MDCalculator, MDCalculatorError
-from schnetpack.md.neighborlist_md import NeighborListMD, ASENeighborListMD
+from schnetpack.md.neighborlist_md import ASENeighborListMD
 import logging
 
 log = logging.getLogger(__name__)
 
-# ===========
+__all__ = ["SchnetPackCalculator"]
+
 
 # from schnetpack.md.calculators.ensemble_calculator import EnsembleCalculator
 
@@ -44,7 +50,7 @@ class SchnetPackCalculator(MDCalculator):
 
     def __init__(
         self,
-        model: PESModel,
+        model_file: str,
         force_label: str,
         energy_units: Union[str, float],
         position_units: Union[str, float],
@@ -64,9 +70,8 @@ class SchnetPackCalculator(MDCalculator):
             stress_label=stress_label,
             property_conversion=property_conversion,
         )
+        self.model = self._load_model(model_file)
         # TODO: property handling is terrible in spk dev
-        model.targets[properties.stress] = stress_label
-        self.model = model
         # Activate properties if required
         self.model.targets[properties.energy] = energy_label
         self.model.targets[properties.forces] = force_label
@@ -77,6 +82,11 @@ class SchnetPackCalculator(MDCalculator):
         self.neighbor_list = self._init_neighbor_list(
             neighbor_list, cutoff, cutoff_shell
         )
+
+    def _load_model(self, model_file: str) -> PESModel:
+        log.info("Loading model from {:s}".format(model_file))
+        model = torch.jit.load(model_file)
+        return model
 
     def _init_neighbor_list(
         self, neighbor_list: NeighborListMD, cutoff: float, cutoff_shell: float
@@ -128,6 +138,8 @@ class SchnetPackCalculator(MDCalculator):
 
         # Check if atom triples need to be computed (e.g. for Behler functions)
         triples_required = self._check_triples_required()
+        if triples_required:
+            log.info("Enabling computation of atom triples")
 
         # Initialize the neighbor list
         neighbor_list = neighbor_list(
@@ -157,9 +169,20 @@ class SchnetPackCalculator(MDCalculator):
         """
         inputs = self._generate_input(system)
         self.results = self.model(inputs)
+
+        Epot = (self.results["energy"] * self.energy_conversion).item()
+        Ekin = system.kinetic_energy.item()
+        Etot = Epot + Ekin
+        T = system.temperature.item()
+        print(
+            "Epot {:15.5f} Ekin {:15.5f} Etot {:15.5f} T {:15.5f}".format(
+                Epot, Ekin, Etot, T
+            )
+        )
+
         self._update_system(system)
 
-    def _generate_input(self, system: System):
+    def _generate_input(self, system: System) -> Dict[str, torch.Tensor]:
         """
         Function to extracts neighbor lists, atom_types, positions e.t.c. from the system and generate a properly
         formatted input for the schnetpack model.

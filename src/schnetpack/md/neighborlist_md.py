@@ -63,12 +63,9 @@ class NeighborListMD:
                 0, idx_m, update_positions
             ).bool()
 
-            # If cells are present, check for changes
-            if cells is not None:
-                update_cells = torch.any(
-                    (self.previous_cells != cells).view(-1, 9), dim=1
-                )
-                update_required = torch.logical_or(update_required, update_cells)
+            # Check for cell changes (is no cells are required, this will always be zero)
+            update_cells = torch.any((self.previous_cells != cells).view(-1, 9), dim=1)
+            update_required = torch.logical_or(update_required, update_cells)
 
         return update_required
 

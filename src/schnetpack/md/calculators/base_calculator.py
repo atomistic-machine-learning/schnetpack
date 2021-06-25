@@ -1,10 +1,16 @@
+from __future__ import annotations
 from typing import List, Union, Dict
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from schnetpack.md import System
 
 import torch
 import torch.nn as nn
 from schnetpack import units as spk_units
 from schnetpack import properties
-from schnetpack.md import System
+
 
 __all__ = ["MDCalculator", "MDCalculatorError"]
 
@@ -49,7 +55,6 @@ class MDCalculator(nn.Module):
         super(MDCalculator, self).__init__()
         # Get required properties and filer Nones for easier init in derived classes
         self.required_properties = [rp for rp in required_properties if rp is not None]
-        print(self.required_properties, required_properties, "PPP")
 
         self.results = {}
 
@@ -72,6 +77,7 @@ class MDCalculator(nn.Module):
             position_units, spk_units.length
         )
 
+        # TODO: use property conversion for all properties
         # Derived conversions
         self.force_conversion = self.energy_conversion / self.position_conversion
         self.stress_conversion = self.energy_conversion / self.position_conversion ** 3
@@ -108,7 +114,6 @@ class MDCalculator(nn.Module):
                 )
             else:
                 dim = self.results[p].shape
-                print(p, self.property_conversion)
                 # Bring to general structure of MD code. Second dimension can be n_mol or n_mol x n_atoms.
                 system.properties[p] = (
                     self.results[p].view(system.n_replicas, -1, *dim[1:])
@@ -152,12 +157,8 @@ class MDCalculator(nn.Module):
         ).view(-1)
 
         # Get cells and PBC
-        cells = system.cells
-        pbc = system.pbc
-
-        if system.cells is not None:
-            cells = cells.view(-1, 3, 3) / self.position_conversion
-            pbc = pbc.repeat(system.n_replicas, 1, 1).view(-1, 3)
+        cells = system.cells.view(-1, 3, 3) / self.position_conversion
+        pbc = system.pbc.repeat(system.n_replicas, 1, 1).view(-1, 3)
 
         inputs = {
             properties.Z: atom_types,
