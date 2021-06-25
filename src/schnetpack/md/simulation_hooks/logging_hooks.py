@@ -333,6 +333,7 @@ class PropertyStream(DataStream):
             buffer_position (int): Current position in the buffer.
             simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
+        # TODO: see why this detach is needed. Properties in model no buffer?
         # These are already detached in the calculator by default.
         for p in self.properties_slices:
             self.buffer[
