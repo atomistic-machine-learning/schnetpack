@@ -6,7 +6,6 @@ All this functionality is encoded in the :obj:`schnetpack.md.System` class.
 import torch
 import torch.nn as nn
 
-from schnetpack.utils import int2precision
 from schnetpack.md.utils import NormalModeTransformer
 from ase import Atoms
 
