@@ -1,4 +1,3 @@
-# @package _group_
 molecule_file: ???
 load_system_state: null
 n_replicas: 1
