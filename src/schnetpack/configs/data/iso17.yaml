@@ -1,0 +1,9 @@
+_target_: schnetpack.datasets.ISO17
+
+datapath: ${data_dir}/${data.folder}.db  # data_dir is specified in train.yaml
+folder: reference
+batch_size: 32
+num_train: 0.9
+num_val: 0.1
+num_test: null
+num_workers: 8

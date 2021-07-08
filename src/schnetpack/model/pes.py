@@ -104,22 +104,21 @@ class PESModel(AtomisticModel):
         if energy_metrics is not None:
             self.metrics.update(
                 {
-                    properties.energy + "_" + name: metric
+                    properties.energy + ":" + name: metric
                     for name, metric in energy_metrics.items()
                 }
             )
-
         if forces_metrics is not None:
             self.metrics.update(
                 {
-                    properties.forces + "_" + name: metric
+                    properties.forces + ":" + name: metric
                     for name, metric in forces_metrics.items()
                 }
             )
         if stress_metrics is not None:
             self.metrics.update(
                 {
-                    properties.stress + "_" + name: metric
+                    properties.stress + ":" + name: metric
                     for name, metric in stress_metrics.items()
                 }
             )
@@ -200,9 +199,9 @@ class PESModel(AtomisticModel):
 
     def log_metrics(self, batch, pred, subset):
         for metric_name, pmetric in self.metrics.items():
-            prop, name = metric_name.split("_")
+            prop, name = metric_name.split(":")
             self.log(
-                f"{subset}_{name}",
+                f"{subset}_{metric_name}".replace(":", "_"),
                 pmetric(pred[prop], batch[self.targets[prop]]),
                 on_step=False,
                 on_epoch=True,
