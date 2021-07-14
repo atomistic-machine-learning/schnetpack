@@ -9,6 +9,17 @@ __all__ = ["GatedEquivariantBlock"]
 
 
 class GatedEquivariantBlock(nn.Module):
+    """
+    Gated equivariant block as used for the prediction of tensorial properties by PaiNN.
+    Transforms scalar and vector representation using gated nonlinearities.
+
+    References:
+    .. [#painn1] Schütt, Unke, Gastegger:
+       Equivariant message passing for the prediction of tensorial properties and molecular spectra.
+       ICML 2021 (to appear)
+
+    """
+
     def __init__(
         self,
         n_sin,
@@ -19,6 +30,16 @@ class GatedEquivariantBlock(nn.Module):
         activation=F.silu,
         sactivation=None,
     ):
+        """
+        Args:
+            n_sin: number of input scalar features
+            n_vin: number of input vector features
+            n_sout: number of output scalar features
+            n_vout: number of output vector features
+            n_hidden: number of hidden units
+            activation: interal activation function
+            sactivation: activation function for scalar outputs
+        """
         super().__init__()
         self.n_sin = n_sin
         self.n_vin = n_vin
