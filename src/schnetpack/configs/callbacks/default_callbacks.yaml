@@ -8,7 +8,7 @@ model_checkpoint:
     dirpath: 'checkpoints/'
     filename: '{epoch:02d}'
     inference_path: 'best_inference_model'
-    save_as_torch_script: True
+    save_as_torch_script: False
 
 
 early_stopping:

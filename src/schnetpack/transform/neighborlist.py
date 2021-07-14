@@ -4,7 +4,12 @@ from ase.neighborlist import neighbor_list
 from typing import Dict, Optional
 from .transform import Transform
 
-__all__ = ["ASENeighborList", "TorchNeighborList"]
+__all__ = [
+    "ASENeighborList",
+    "TorchNeighborList",
+    "CountNeighbors",
+    "CollectAtomTriples",
+]
 
 from .. import properties as structure
 
@@ -241,4 +246,36 @@ class CollectAtomTriples(Transform):
         inputs[structure.idx_j_triples] = idx_j_triples.squeeze(-1)
         inputs[structure.idx_k_triples] = idx_k_triples.squeeze(-1)
 
+        return inputs
+
+
+class CountNeighbors(Transform):
+    """
+    Store the number of neighbors for each atom
+    """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
+
+    def __init__(self, sorted: bool = True):
+        """
+        Args:
+            sorted: Set to false if chosen neighbor list yields unsorted center indices (idx_i).
+        """
+        super(CountNeighbors, self).__init__()
+        self.sorted = sorted
+
+    def forward(
+        self,
+        inputs: Dict[str, torch.Tensor],
+        results: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> Dict[str, torch.Tensor]:
+        idx_i = inputs[structure.idx_i]
+
+        if self.sorted:
+            _, n_nbh = torch.unique_consecutive(idx_i, return_counts=True)
+        else:
+            _, n_nbh = torch.unique(idx_i, return_counts=True)
+
+        inputs[structure.n_nbh] = n_nbh
         return inputs

@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import schnetpack.properties as structure
+import schnetpack.properties as properties
 import schnetpack.nn as snn
 
 __all__ = ["PaiNN"]
@@ -175,10 +175,10 @@ class PaiNN(nn.Module):
             return_intermediate=True was used.
         """
         # get tensors from input dictionary
-        atomic_numbers = inputs[structure.Z]
-        r_ij = inputs[structure.Rij]
-        idx_i = inputs[structure.idx_i]
-        idx_j = inputs[structure.idx_j]
+        atomic_numbers = inputs[properties.Z]
+        r_ij = inputs[properties.Rij]
+        idx_i = inputs[properties.idx_i]
+        idx_j = inputs[properties.idx_j]
         n_atoms = atomic_numbers.shape[0]
 
         # compute atom and pair features
