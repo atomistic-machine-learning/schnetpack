@@ -20,7 +20,7 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath("../src"))
+sys.path.insert(0, os.path.abspath("../src/schnetpack"))
 
 
 # -- General configuration ------------------------------------------------
@@ -46,7 +46,7 @@ extensions = [
     "nbsphinx",
 ]
 
-autodoc_mock_imports = ["torch"]
+autodoc_mock_imports = ["torch", "pytorch_lightning"]
 autoclass_content = "both"
 autosummary_generate = True
 

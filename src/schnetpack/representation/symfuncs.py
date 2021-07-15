@@ -1,8 +1,12 @@
+from __future__ import annotations
 import torch
 from torch import nn
-from typing import Callable, Dict
+from typing import Callable, Dict, TYPE_CHECKING
 
-import schnetpack.data.loader
+if TYPE_CHECKING:
+    from schnetpack.data import AtomsLoader
+
+
 from schnetpack import properties
 from schnetpack.nn import scatter_add
 from tqdm import tqdm
@@ -12,8 +16,8 @@ __all__ = ["SymmetryFunctions", "RadialSF", "AngularSF", "AngularSFANI"]
 
 class SymmetryFunctions(nn.Module):
     """
-    Base class for different types of atom-centered symmetry functions [#acsf1]_. Different variants (e.g.
-    wACSF [#wacsf1]_ and  Justin-Smith symmetry functions [#ani1]_) can be obtained by combining the corresponding
+    Base class for different types of atom-centered symmetry functions [#acsf1]_ . Different variants (e.g.
+    wACSF [#wacsf1]_ and  Justin-Smith symmetry functions [#ani1]_ ) can be obtained by combining the corresponding
     radial and angular basis components.
 
     References:
@@ -119,9 +123,7 @@ class SymmetryFunctions(nn.Module):
 
         return {"scalar_representation": x}
 
-    def standardize(
-        self, data_loader: schnetpack.data.loader.AtomsLoader, eps: float = 1e-6
-    ):
+    def standardize(self, data_loader: AtomsLoader, eps: float = 1e-6):
         """
         Standardize the symmetry functions by removing the average and dividing by the standard deviation vector
         computed over a dataset.

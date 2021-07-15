@@ -35,7 +35,6 @@ def indexed_data(example_data, batch_size):
             "ijSD", atoms, 5.0, self_interaction=False
         )
         _, seg_im = np.unique(idx_i, return_counts=True)
-        seg_im = np.cumsum(np.hstack((np.zeros((1,), dtype=np.int), seg_im)))
         ind_i.append(idx_i + n_atoms)
         ind_j.append(idx_j + n_atoms)
         ind_S.append(idx_S)
@@ -91,7 +90,6 @@ def test_schnet_new_script(indexed_data, benchmark):
         radial_basis=radial_basis,
         cutoff_fn=cutoff_fn,
     )
-
     schnet = torch.jit.script(schnet)
     schnet(indexed_data)
 

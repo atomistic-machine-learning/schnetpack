@@ -11,7 +11,7 @@ __all__ = [
     "CollectAtomTriples",
 ]
 
-from .. import properties as structure
+from schnetpack import properties as structure
 
 
 class ASENeighborList(Transform):

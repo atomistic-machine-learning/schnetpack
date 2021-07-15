@@ -1,5 +1,9 @@
+from __future__ import annotations
 import logging
-from typing import Dict, Optional, List, Type, Any
+from typing import Dict, Optional, List, Type, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from schnetpack.transform import Transform
 
 import torch
 import torch.nn as nn
@@ -42,7 +46,7 @@ class PESModel(AtomisticModel):
         scheduler_cls: Type = None,
         scheduler_args: Dict[str, Any] = None,
         scheduler_monitor: Optional[str] = None,
-        postprocess: Optional[List[spk.transform.Transform]] = None,
+        postprocess: Optional[List[Transform]] = None,
     ):
         """
         Args:

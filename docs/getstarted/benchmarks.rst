@@ -5,8 +5,8 @@
 Benchmarks and Trained Models
 =============================
 
-QM9
----
+QM9 benchmarks
+--------------
 The QM9 benchmarks use a SchNet model with 128 features, 6 interaction blocks, 50
 gaussians and a cosine cutoff-function with a cutoff at 10. The model is trained with
 a batch size of 100 and an initial learning rate of 1e-4. The learning rate is
@@ -33,8 +33,8 @@ dipole_moment              0.021  Debye
 =========================  =====  ========
 
 
-MD17
-----
+MD17 benchmarks
+---------------
 The MD17 benchmarks use a SchNet model with 64 features, 6 interaction blocks, 25
 gaussians and a cosine cutoff-function with a cutoff at 5. The model is trained with
 a batch size of 100 and an initial learning rate of 1e-3. The learning rate is

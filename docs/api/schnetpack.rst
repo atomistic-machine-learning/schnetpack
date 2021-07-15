@@ -1,7 +1,5 @@
-
 schnetpack
 ==========
-.. currentmodule:: schnetpack
 
 
 Structure attributes
@@ -10,15 +8,15 @@ Structure attributes
     :toctree: generated
     :nosignatures:
 
-    structure.Z
-    structure.R
-    structure.cell
-    structure.pbc
-    structure.idx_m
-    structure.idx_i
-    structure.idx_j
-    structure.Rij
-    structure.n_atoms
+    properties.Z
+    properties.R
+    properties.cell
+    properties.pbc
+    properties.idx_m
+    properties.idx_i
+    properties.idx_j
+    properties.Rij
+    properties.n_atoms
 
 Units
 -----
@@ -26,4 +24,4 @@ Units
     :toctree: generated
     :nosignatures:
 
-    convert_units
+    units.convert_units
