@@ -1,9 +1,10 @@
 schnetpack.model
 ================
-.. currentmodule:: schnetpack.model
+.. currentmodule:: model
 
 .. autoclass:: AtomisticModel
     :members:
+    :no-inherited-members:
 
 
 .. rubric:: Models
@@ -14,4 +15,4 @@ schnetpack.model
     :template: classtemplate.rst
 
     PESModel
-    SinglePropertyModel
+    PropertyModel

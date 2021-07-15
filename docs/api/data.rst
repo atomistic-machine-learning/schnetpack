@@ -1,12 +1,13 @@
 schnetpack.data
 ===============
-.. currentmodule:: schnetpack.data
+.. currentmodule:: data
 
 Data classes
 ------------
 .. autosummary::
     :toctree: generated
     :nosignatures:
+    :recursive:
     :template: classtemplate.rst
 
     BaseAtomsData

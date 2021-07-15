@@ -1,8 +1,12 @@
+from __future__ import annotations
 import logging
 
 import torch
 import torch.nn as nn
-from typing import Dict, Optional, List, Callable, Any, Type, Union
+from typing import Dict, Optional, List, Callable, Any, Type, Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from schnetpack.transform import Transform
 
 import schnetpack as spk
 from schnetpack.model.base import AtomisticModel
@@ -38,7 +42,7 @@ class PropertyModel(AtomisticModel):
         scheduler_cls: Type = None,
         scheduler_args: Dict[str, Any] = None,
         scheduler_monitor: Optional[str] = None,
-        postprocess: Optional[List[spk.transform.Transform]] = None,
+        postprocess: Optional[List[Transform]] = None,
     ):
         """
         Args:

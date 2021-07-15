@@ -185,7 +185,7 @@ SchNetPack provides convenient interfaces to popular benchmark datasets in order
 
 QM9
 ^^^
-The ``qm9`` dataset contains 133,885 organic molecules with up to nine heavy atoms from C, O, N and F [#qm9]_.
+The ``qm9`` dataset contains 133,885 organic molecules with up to nine heavy atoms from C, O, N and F [#gsqm9]_.
 
 MD17
 ^^^^
@@ -240,7 +240,7 @@ References
    `Generalized neural-network representation of high-dimensional potential-energy surfaces <https://link.aps.org/doi/10.1103/PhysRevLett.98.146401>`_
    Physical Review Letters **98** (14), 146401. 2007.
 
-.. [#qm9] R. Ramakrishnan, P.O. Dral, M. Rupp, O. A. von Lilienfeld.
+.. [#gsqm9] R. Ramakrishnan, P.O. Dral, M. Rupp, O. A. von Lilienfeld.
    `Quantum chemistry structures and properties of 134 kilo molecules <https://doi.org/10.1038/sdata.2014.22>`_
    Scientific Data **1** (140022). 2014.
 

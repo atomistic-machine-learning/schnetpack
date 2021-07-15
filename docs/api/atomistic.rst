@@ -1,6 +1,6 @@
 schnetpack.atomistic
 ====================
-.. currentmodule:: schnetpack.atomistic
+.. currentmodule:: atomistic
 
 
 Molecules
