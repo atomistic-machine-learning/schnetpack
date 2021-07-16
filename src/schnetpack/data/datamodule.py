@@ -4,7 +4,7 @@ from typing import Optional, List, Dict, Tuple, Union
 
 import numpy as np
 
-# import pytorch_lightning as pl
+import pytorch_lightning as pl
 import torch
 
 from schnetpack.data import (
@@ -23,7 +23,7 @@ class AtomsDataModuleError(Exception):
     pass
 
 
-class AtomsDataModule:  # (pl.LightningDataModule):
+class AtomsDataModule(pl.LightningDataModule):
     """
     Base class for atoms datamodules.
     """
