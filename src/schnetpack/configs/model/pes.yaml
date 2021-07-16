@@ -1,7 +1,7 @@
 defaults:
   - representation: schnet
 
-_target_: schnetpack.model.PESModel
+_target_: schnetpack.model.AtomisticModel
 
 optimizer_cls: torch.optim.Adam
 optimizer_args:
@@ -16,30 +16,33 @@ scheduler_args:
   min_lr: 1e-6
   smoothing_factor: 0.8
 
-output:
-  _target_: schnetpack.atomistic.Atomwise
-  n_in: ${model.representation.n_atom_basis}
-  aggregation_mode: sum
+output_modules:
+  - _target_: schnetpack.output.Atomwise
+    output: energy
+    n_in: ${model.representation.n_atom_basis}
+    aggregation_mode: sum
+  - _target_: schnetpack.output.Forces
+    energy_key: energy
+    force_key: forces
 
-energy_property: energy
-energy_loss_fn:
-  _target_: pytorch_lightning.metrics.MeanSquaredError
-energy_weight: 0.05
-energy_metrics:
-  mae:
-    _target_: pytorch_lightning.metrics.MeanAbsoluteError
-  mse:
-    _target_: pytorch_lightning.metrics.MeanSquaredError
-
-forces_property: forces
-forces_loss_fn:
-  _target_: pytorch_lightning.metrics.MeanSquaredError
-forces_weight: 0.95
-forces_metrics:
-  mae:
-    _target_: pytorch_lightning.metrics.MeanAbsoluteError
-  mse:
-    _target_: pytorch_lightning.metrics.MeanSquaredError
-
-postprocess: null
-
+outputs:
+  - _target_: schnetpack.model.ModelOutput
+    name: energy
+    loss_fn:
+      _target_: torch.nn.MSELoss
+    metrics:
+      mae:
+        _target_: pytorch_lightning.metrics.MeanAbsoluteError
+      mse:
+        _target_: pytorch_lightning.metrics.MeanSquaredError
+    loss_weight: 0.05
+  - _target_: schnetpack.model.ModelOutput
+    name: forces
+    loss_fn:
+      _target_: torch.nn.MSELoss
+    metrics:
+      mae:
+        _target_: pytorch_lightning.metrics.MeanAbsoluteError
+      mse:
+        _target_: pytorch_lightning.metrics.MeanSquaredError
+    loss_weight: 0.95

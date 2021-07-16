@@ -9,7 +9,7 @@ defaults:
 cutoff: 5.0
 n_rbf: 20
 
-lr: 1e-3
+lr: 5e-4
 
 property: energy_U0
 name: qm9_${property}

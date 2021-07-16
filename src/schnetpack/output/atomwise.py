@@ -14,6 +14,7 @@ class Atomwise(nn.Module):
 
     def __init__(
         self,
+        output: str,
         n_in: int,
         n_out: int = 1,
         aggregation_mode: str = "sum",
@@ -22,6 +23,7 @@ class Atomwise(nn.Module):
     ):
         """
         Args:
+            output: the key under which the result should be stored
             n_in: input dimension of representation
             n_out: output dimension of target property (default: 1)
             aggregation_mode: one of {sum, avg} (default: sum)
@@ -31,6 +33,7 @@ class Atomwise(nn.Module):
             outnet_inputs: input dict entries to pass to outnet.
         """
         super(Atomwise, self).__init__()
+        self.output = output
         self.n_out = n_out
 
         # build output network
@@ -41,7 +44,7 @@ class Atomwise(nn.Module):
 
         self.aggregation_mode = aggregation_mode
 
-    def forward(self, inputs: Dict[str, torch.Tensor]):
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # predict atomwise contributions
         yi = self.outnet(inputs[self.outnet_input])
 
@@ -54,7 +57,8 @@ class Atomwise(nn.Module):
         tmp = torch.zeros((maxm, self.n_out), dtype=yi.dtype, device=yi.device)
         y = tmp.index_add(0, idx_m, yi)
         y = torch.squeeze(y, -1)
-        return y
+
+        return {self.output: y}
 
 
 class ElementalAtomwise(nn.Module):
