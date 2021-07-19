@@ -28,6 +28,7 @@ class NeighborListTransform(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
         results: Optional[Dict[str, torch.Tensor]] = None,
+        wrap: Optional[bool] = False,
     ) -> Dict[str, torch.Tensor]:
         return self._build_neighbor_list(inputs)
 
