@@ -4,6 +4,8 @@ from shutil import rmtree
 import uuid
 import torch
 
+from datetime import datetime
+
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
@@ -214,7 +216,7 @@ def simulate(config: DictConfig):
     # Check for RPMD and set number of replicas
     if is_rpmd_integrator(integrator_config["_target_"]):
         log.info("Setting up ring polymer molecular dynamics...")
-        integrator_config["n_replicas"] = system.n_replicas
+        integrator_config["n_beads"] = system.n_replicas
 
         # Check if thermostat can be used
         if thermostat_hook is not None:
@@ -283,4 +285,11 @@ def simulate(config: DictConfig):
     # ===========================================
     #   Finally run simulation
     # ===========================================
+
+    start = datetime.now()
+
     simulator.simulate(config.dynamics.n_steps)
+
+    stop = datetime.now()
+
+    log.info("Finished after: {:s}".format(str(stop - start)))
