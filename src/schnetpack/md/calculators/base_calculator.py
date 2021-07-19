@@ -139,21 +139,19 @@ class MDCalculator(nn.Module):
             dict(str, torch.Tensor): Input batch for schnetpack models without neighbor information.
         """
         # Get atom types
-        atom_types = system.atom_types.repeat(system.n_molecules)
+        atom_types = system.atom_types.repeat(system.n_replicas)
 
         # Get n_atoms
-        n_atoms = system.n_atoms.repeat(system.n_molecules)
+        n_atoms = system.n_atoms.repeat(system.n_replicas)
 
         # Get positions
         positions = system.positions.view(-1, 3) / self.position_conversion
 
         # Construct index vector for all replicas and molecules
         index_m = (
-            system.index_m.repeat(system.n_molecules, 1)
+            system.index_m.repeat(system.n_replicas, 1)
             + system.n_molecules
-            * torch.arange(system.n_molecules, device=system.device)
-            .long()
-            .unsqueeze(-1)
+            * torch.arange(system.n_replicas, device=system.device).long().unsqueeze(-1)
         ).view(-1)
 
         # Get cells and PBC
