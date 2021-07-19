@@ -70,7 +70,7 @@ class Simulator(nn.Module):
         self.system = system
         self.integrator = integrator
         self.calculator = calculator
-        self.simulator_hooks = simulator_hooks
+        self.simulator_hooks = torch.nn.ModuleList(simulator_hooks)
         self.step = step
         self.n_steps = None
         self.restart = restart
@@ -107,8 +107,8 @@ class Simulator(nn.Module):
             for hook in self.simulator_hooks:
                 hook.on_simulation_start(self)
 
-            # for _ in tqdm(range(n_steps), ncols=120):
-            for _ in range(n_steps):
+            for _ in tqdm(range(n_steps), ncols=120):
+                # for _ in range(n_steps):
 
                 # Call hook before first half step
                 for hook in self.simulator_hooks:
@@ -122,8 +122,6 @@ class Simulator(nn.Module):
 
                 # Compute new forces
                 self.calculator.calculate(self.system)
-
-                print(self.state_dict)
 
                 # Call hook after forces
                 for hook in self.simulator_hooks:
