@@ -235,7 +235,7 @@ class System(nn.Module):
         """
         return self._sum_atoms(x) / self.n_atoms[None, :, None]
 
-    def _expand_atoms(self, x: torch.Tensor):
+    def expand_atoms(self, x: torch.Tensor):
         """
         Auxiliary routine for expanding molecular contributions over the corresponding atoms.
 
@@ -266,14 +266,14 @@ class System(nn.Module):
         """
         Move all structures to their respective center of mass.
         """
-        self.positions -= self._expand_atoms(self.center_of_mass)
+        self.positions -= self.expand_atoms(self.center_of_mass)
 
     def remove_translation(self):
         """
         Remove all components in the current momenta associated with
         translational motion.
         """
-        self.momenta -= self._expand_atoms(self._mean_atoms(self.momenta))
+        self.momenta -= self.expand_atoms(self._mean_atoms(self.momenta))
 
     def remove_com_rotation(self):
         """
@@ -283,7 +283,9 @@ class System(nn.Module):
         # Compute the moment of inertia tensor
         moment_of_inertia = (
             torch.sum(self.positions ** 2, dim=2, keepdim=True)[..., None]
-            * torch.eye(3, device=self._device, dtype=self._precision)[None, None, :, :]
+            * torch.eye(3, dtype=self.positions.dtype, device=self.positions.device)[
+                None, None, :, :
+            ]
             - self.positions[..., :, None] * self.positions[..., None, :]
         )
 
@@ -301,7 +303,7 @@ class System(nn.Module):
 
         # Compute individual atomic contributions
         rotational_velocities = torch.cross(
-            self._expand_atoms(angular_velocities), self.positions, -1
+            self.expand_atoms(angular_velocities), self.positions, -1
         )
 
         # Subtract rotation from overall motion (apply atom mask)
@@ -586,11 +588,11 @@ class System(nn.Module):
         if torch.any(self.volume == 0.0):
             raise SystemError("Simulation cell required for wrapping of positions.")
 
-        pbc_atomic = self._expand_atoms(self.pbc)
+        pbc_atomic = self.expand_atoms(self.pbc)
 
         # Compute fractional coordinates
         inverse_cell = torch.inverse(self.cells)
-        inverse_cell = self._expand_atoms(inverse_cell)
+        inverse_cell = self.expand_atoms(inverse_cell)
         inv_positions = torch.sum(self.positions[..., None] * inverse_cell, dim=2)
 
         # Get periodic coordinates
@@ -606,7 +608,7 @@ class System(nn.Module):
 
         # Convert to positions
         self.positions = torch.sum(
-            inv_positions[..., None] * self._expand_atoms(self.cells), dim=2
+            inv_positions[..., None] * self.expand_atoms(self.cells), dim=2
         )
 
     def load_system_state(self, state_dict: OrderedDict[str, torch.Tensor]):

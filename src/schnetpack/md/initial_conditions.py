@@ -128,7 +128,7 @@ class UniformInit(Initializer):
             self.temperature.to(system.momenta.device)[None, :, None]
             / system.temperature
         )
-        system.momenta *= system._expand_atoms(scaling)
+        system.momenta *= system.expand_atoms(scaling)
 
 
 class MaxwellBoltzmannInit(Initializer):
@@ -170,7 +170,7 @@ class MaxwellBoltzmannInit(Initializer):
         if self.temperature.shape[0] == 1:
             temp = self.temperature
         else:
-            temp = system._expand_atoms(self.temperature)
+            temp = system.expand_atoms(self.temperature)
 
         temp = temp.to(system.device)
 
