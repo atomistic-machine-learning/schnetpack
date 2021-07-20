@@ -233,7 +233,9 @@ class MoleculeStream(DataStream):
             self.data_group.attrs["n_atoms"] = simulator.system.n_atoms.cpu()
             self.data_group.attrs["atom_types"] = simulator.system.atom_types.cpu()
             self.data_group.attrs["masses"] = simulator.system.masses.cpu()
-            self.data_group.attrs["pbc"] = simulator.system.pbc.cpu()
+            self.data_group.attrs["pbc"] = simulator.system.pbc.cpu()[
+                0
+            ]  # Remove training broadcast dimension
             self.data_group.attrs["has_cells"] = self.cells
             self.data_group.attrs["has_velocities"] = self.store_velocities
 
@@ -256,14 +258,17 @@ class MoleculeStream(DataStream):
             buffer_position : buffer_position + 1, :, :n_entries
         ] = simulator.system.positions.view(simulator.system.n_replicas, -1)
 
+        current = n_entries
+
         if self.store_velocities:
             self.buffer[
-                buffer_position : buffer_position + 1, :, n_entries : 2 * n_entries
+                buffer_position : buffer_position + 1, :, current : current + n_entries
             ] = simulator.system.velocities.view(simulator.system.n_replicas, -1)
+            current += n_entries
 
         if self.cells:
             self.buffer[
-                buffer_position : buffer_position + 1, :, 2 * n_entries :
+                buffer_position : buffer_position + 1, :, current:
             ] = simulator.system.cells.view(simulator.system.n_replicas, -1)
 
 
