@@ -32,7 +32,7 @@ class ThermostatHook(SimulationHook):
 
     def __init__(self, temperature_bath: float):
         super(ThermostatHook, self).__init__()
-        self.temperature_bath = temperature_bath
+        self.register_buffer("temperature_bath", torch.tensor([temperature_bath]))
         self.initialized = False
 
     def on_simulation_start(self, simulator: Simulator):
@@ -47,9 +47,6 @@ class ThermostatHook(SimulationHook):
             simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on
                                                                          the time step, system, etc.
         """
-        # TODO: check interaction with nn.Module
-        self.device = simulator.system.device
-
         if not self.initialized:
             self._init_thermostat(simulator)
             self.initialized = True
@@ -126,7 +123,9 @@ class BerendsenThermostat(ThermostatHook):
     def __init__(self, temperature_bath: float, time_constant: float):
         super(BerendsenThermostat, self).__init__(temperature_bath)
         # Convert from fs to internal time units
-        self.time_constant = time_constant * spk_units.fs
+        self.register_buffer(
+            "time_constant", torch.tensor([time_constant * spk_units.fs])
+        )
 
     def _apply_thermostat(self, simulator):
         """
@@ -143,7 +142,9 @@ class BerendsenThermostat(ThermostatHook):
             / self.time_constant
             * (self.temperature_bath / simulator.system.temperature - 1)
         )
-        simulator.system.momenta = scaling * simulator.system.momenta
+        simulator.system.momenta = (
+            simulator.system.expand_atoms(scaling) * simulator.system.momenta
+        )
 
 
 # TODO: decide on multiple thermostat temperatures after implementing RPMD thermos
