@@ -3,12 +3,12 @@ logging:
     checkpoint_file: checkpoint.chk
     every_n_steps: 100
   - _target_: file_logger
-    filename: test_log.hdf5
+    filename: simulation.hdf5
     buffer_size: 100
     data_streams:
       - _target_: molecules
         store_velocities: true
       - _target_: properties
         target_properties: [ energy ]
-    every_n_steps: 2
+    every_n_steps: 1
     precision: ${precision}

@@ -8,4 +8,4 @@ initializer:
   temperature: 300
   remove_center_of_mass: true
   remove_translation: true
-  remove_rotation: false
+  remove_rotation: true
