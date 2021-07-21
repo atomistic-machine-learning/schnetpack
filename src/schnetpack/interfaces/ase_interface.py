@@ -73,7 +73,7 @@ class SpkCalculator(Calculator):
 
     def __init__(
         self,
-        model: schnetpack.model.AtomisticModel,
+        model: schnetpack.atomistic.model.AtomisticModel,
         cutoff: float,
         neighbor_list: schnetpack.transform.Transform = ASENeighborList,
         device: Union[str, torch.device] = "cpu",
@@ -231,7 +231,7 @@ class AseInterface:
         self,
         molecule_path: str,
         working_dir: str,
-        model: schnetpack.model.AtomisticModel,
+        model: schnetpack.atomistic.model.AtomisticModel,
         cutoff: float,
         neighbor_list: schnetpack.transform.Transform = ASENeighborList,
         device: Union[str, torch.device] = torch.device("cuda"),

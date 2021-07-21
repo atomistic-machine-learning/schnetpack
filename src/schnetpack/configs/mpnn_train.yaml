@@ -1,0 +1,9 @@
+# @package _global_
+
+defaults:
+  - base_train
+
+cutoff: ???
+n_rbf: ???
+
+lr: 5e-4

@@ -3,8 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional, Union, Callable, List, Type, TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from schnetpack.transform import Transform
+from schnetpack.transform import Transform
 
 import torch
 import pytorch_lightning as pl

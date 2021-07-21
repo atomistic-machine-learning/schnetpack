@@ -1,14 +1,14 @@
 # @package _global_
 
 defaults:
-  - trainer: default
+  - trainer: default_trainer
   - callbacks: default_callbacks
-  - model: null
-  - data: null
-  - logger: null
+  - model: ???
+  - data: ???
+  - logger: tensorboard
 
 work_dir: ${hydra:runtime.cwd}
-data_dir: ${work_dir}/data
+data_dir: ???
 name: default
 
 print_config: True
@@ -20,9 +20,6 @@ hydra:
     # output paths for hydra logs
     run:
         dir: ${run_dir}/${name}/${run_id}
-
-#    searchpath:
-#      - file://${oc.env:PWD}
 
     help:
       app_name: SchNetPack Train

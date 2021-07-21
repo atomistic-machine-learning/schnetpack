@@ -1,35 +1,31 @@
 # @package _global_
 
 defaults:
-  - override /model: pes
-  - override /data: md17
-  - override /logger: tensorboard
+  - mpnn_train
+  - override /model: single_property
+  - override /data: qm9
+  - override /model/representation: painn
 
 cutoff: 5.0
 n_rbf: 20
-lr: 1e-4
 
-name: md17_${data.molecule}
+lr: 5e-4
+
+property: energy_U0
+name: qm9_${property}
+
 
 data:
   distance_unit: Ang
   property_units:
-    energy: kcal/mol
-    forces: kcal/mol/Ang
+    energy_U0: eV
   transforms:
     - _target_: schnetpack.transform.SubtractCenterOfMass
     - _target_: schnetpack.transform.RemoveOffsets
-      property: energy
+      property: ${property}
+      remove_atomrefs: True
       remove_mean: True
     - _target_: schnetpack.transform.TorchNeighborList
       cutoff: ${cutoff}
     - _target_: schnetpack.transform.CastTo32
-
-
-model:
-  postprocess:
-    - _target_: schnetpack.transform.CastTo64
-    - _target_: schnetpack.transform.AddOffsets
-      property: energy
-      add_mean: True
 

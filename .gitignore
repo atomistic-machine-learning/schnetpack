@@ -20,6 +20,7 @@ docs/tutorials/qm9tut
 # hydra stuff
 outputs
 logs
+generated
 
 # C extensions
 *.so

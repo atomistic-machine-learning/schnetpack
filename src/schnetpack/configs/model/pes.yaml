@@ -1,27 +1,12 @@
 defaults:
-  - representation: schnet
-
-_target_: schnetpack.model.AtomisticModel
-
-optimizer_cls: torch.optim.Adam
-optimizer_args:
-  lr: ${lr}
-
-scheduler_cls: schnetpack.train.ReduceLROnPlateau
-scheduler_monitor: val_loss
-scheduler_args:
-  mode: min
-  factor: 0.5
-  patience: 50
-  min_lr: 1e-6
-  smoothing_factor: 0.8
+  - base_model
 
 output_modules:
-  - _target_: schnetpack.output.Atomwise
+  - _target_: schnetpack.atomistic.Atomwise
     output: energy
     n_in: ${model.representation.n_atom_basis}
     aggregation_mode: sum
-  - _target_: schnetpack.output.Forces
+  - _target_: schnetpack.atomistic.Forces
     energy_key: energy
     force_key: forces
 

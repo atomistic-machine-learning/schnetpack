@@ -1,17 +1,21 @@
 import logging
 import os
+import uuid
 from typing import List
 
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf, MISSING
 from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
 from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import LightningLoggerBase
 
-from schnetpack.utils import str2class
 from schnetpack.utils.script import log_hyperparameters, print_config
+from schnetpack.utils import str2class
 
 log = logging.getLogger(__name__)
+
+
+OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()))
 
 
 @hydra.main(config_path="configs", config_name="train")
@@ -29,6 +33,12 @@ def train(config: DictConfig):
 /____/\___/_/ /_/_/ |_/\___/\__/_/    \__,_/\___/_/|_|                                                          
     """
     )
+    if OmegaConf.is_missing(config, "data_dir"):
+        log.error(
+            f"Config incomplete! You need to specify the data directory `data_dir`."
+        )
+        return
+
     if config.get("print_config"):
         print_config(config, resolve=True)
 
@@ -77,25 +87,25 @@ def train(config: DictConfig):
     logger: List[LightningLoggerBase] = []
 
     if "logger" in config:
-        lg_conf = config["logger"]
-        if "_target_" in lg_conf:
-            log.info(f"Instantiating logger <{lg_conf._target_}>")
-            l = hydra.utils.instantiate(lg_conf)
+        for _, lg_conf in config["logger"].items():
+            if "_target_" in lg_conf:
+                log.info(f"Instantiating logger <{lg_conf._target_}>")
+                l = hydra.utils.instantiate(lg_conf)
 
-            # set run_id for AimLogger
-            if lg_conf["_target_"] == "aim.pytorch_lightning.AimLogger":
-                from aim import Session
+                # set run_id for AimLogger
+                if lg_conf["_target_"] == "aim.pytorch_lightning.AimLogger":
+                    from aim import Session
 
-                sess = Session(
-                    repo=l._repo_path,
-                    experiment=l._experiment_name,
-                    # flush_frequency=l._flush_frequency,
-                    # system_tracking_interval=l._system_tracking_interval,
-                    run=config.run_id,
-                )
-                l._aim_session = sess
+                    sess = Session(
+                        repo=l._repo_path,
+                        experiment=l._experiment_name,
+                        flush_frequency=l._flush_frequency,
+                        system_tracking_interval=l._system_tracking_interval,
+                        run=config.run_id,
+                    )
+                    l._aim_session = sess
 
-            logger.append(l)
+                logger.append(l)
 
     # Init Lightning trainer
     log.info(f"Instantiating trainer <{config.trainer._target_}>")

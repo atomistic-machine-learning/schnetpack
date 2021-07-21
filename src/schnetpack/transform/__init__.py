@@ -10,4 +10,4 @@ may be used. The attribute `mode` of a transform is set automatically to either 
 from .atomistic import *
 from .casting import *
 from .neighborlist import *
-from .transform import *
+from .base import *
