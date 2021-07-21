@@ -1,0 +1,4 @@
+thermostat:
+  _target_: langevin
+  temperature_bath: 300.0 # K
+  time_constant: 100.0 # fs

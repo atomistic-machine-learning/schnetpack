@@ -1,0 +1,10 @@
+n_steps: 1000000
+integrator:
+  _target_: verlet
+  time_step: 0.50 # fs
+thermostat:
+  _target_: berendsen
+  temperature_bath: 300.0 # K
+  time_constant: 100.0 # fs
+barostat: null
+simulation_hooks: [ ]
