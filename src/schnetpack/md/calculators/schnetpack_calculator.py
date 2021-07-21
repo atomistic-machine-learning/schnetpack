@@ -14,6 +14,8 @@ from schnetpack.md.calculators import MDCalculator, MDCalculatorError
 from schnetpack.md.neighborlist_md import ASENeighborListMD
 import logging
 
+import time
+
 log = logging.getLogger(__name__)
 
 __all__ = ["SchnetPackCalculator"]
@@ -71,11 +73,11 @@ class SchnetPackCalculator(MDCalculator):
             property_conversion=property_conversion,
         )
         self.model = self._load_model(model_file)
-        # TODO: property handling is terrible in spk dev
+        # TODO: ?????????
         # Activate properties if required
-        self.model.targets[properties.energy] = energy_label
-        self.model.targets[properties.forces] = force_label
-        self.model.targets[properties.stress] = stress_label
+        # self.model.targets[properties.energy] = energy_label
+        # self.model.targets[properties.forces] = force_label
+        # self.model.targets[properties.stress] = stress_label
         self.model.eval()
 
         # Set up the neighbor list:
@@ -86,6 +88,9 @@ class SchnetPackCalculator(MDCalculator):
     def _load_model(self, model_file: str) -> PESModel:
         log.info("Loading model from {:s}".format(model_file))
         model = torch.jit.load(model_file)
+        model.inference_mode = False
+        # TODO !
+        #    -> CASTING TO PRECISION IS PROBLEMATIC
         return model
 
     def _init_neighbor_list(
@@ -117,7 +122,7 @@ class SchnetPackCalculator(MDCalculator):
         if cutoff < 0.0:
             if not model_cutoff:
                 raise MDCalculatorError(
-                    "No cutoff found in model, please specify calculator cutoff."
+                    "No cutoff found in model, please specify calculator cutoff via calculator.cutoff= ..."
                 )
             else:
                 log.info(
@@ -169,17 +174,6 @@ class SchnetPackCalculator(MDCalculator):
         """
         inputs = self._generate_input(system)
         self.results = self.model(inputs)
-
-        Epot = (self.results["energy"] * self.energy_conversion).item()
-        Ekin = system.kinetic_energy.item()
-        Etot = Epot + Ekin
-        T = system.temperature.item()
-        print(
-            "Epot {:15.5f} Ekin {:15.5f} Etot {:15.5f} T {:15.5f}".format(
-                Epot, Ekin, Etot, T
-            )
-        )
-
         self._update_system(system)
 
     def _generate_input(self, system: System) -> Dict[str, torch.Tensor]:
@@ -194,7 +188,10 @@ class SchnetPackCalculator(MDCalculator):
             dict(torch.Tensor): Schnetpack inputs in dictionary format.
         """
         inputs = self._get_system_molecules(system)
+        a = time.time()
         neighbors = self.neighbor_list.get_neighbors(inputs)
+        b = time.time()
+        print(b - a, "NBL")
         inputs.update(neighbors)
         return inputs
 
