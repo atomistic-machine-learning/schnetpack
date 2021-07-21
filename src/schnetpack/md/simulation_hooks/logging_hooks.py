@@ -533,3 +533,114 @@ class FileLogger(SimulationHook):
 
         self.file_position += self.buffer_size
         self.buffer_position = 0
+
+
+class TensorboardLogger(SimulationHook):
+    """
+    Class for logging scalar information of the system replicas and molecules collected during the simulation to
+    TensorBoard. An individual scalar is created for every molecule, replica and property.
+
+    Args:
+        log_file (str): Path to the TensorBoard file.
+        every_n_steps (int): Frequency with which data is logged to TensorBoard.
+    """
+
+    def __init__(self, log_file, every_n_steps=100):
+        super(TensorboardLogger, self).__init__()
+        from tensorboardX import SummaryWriter
+
+        self.log_file = log_file
+        self.every_n_steps = every_n_steps
+        self.writer = SummaryWriter(self.log_file)
+
+        self.n_replicas = None
+        self.n_molecules = None
+
+    def on_simulation_start(self, simulator):
+        """
+        Extract the number of molecules and replicas from simulator.system upon simulation start.
+
+        Args:
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
+        """
+        self.n_replicas = simulator.system.n_replicas
+        self.n_molecules = simulator.system.n_molecules
+
+    def on_step_end(self, simulator):
+        """
+        Routine for collecting and storing scalar properties of replicas and molecules during the simulation. Needs to
+        be adapted based on the properties.
+        In the easiest case, information on group names, etc. is passed to the self._log_group auxiliary function.
+
+        Args:
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
+        """
+        raise NotImplementedError
+
+    def _log_group(self, group_name, step, property, property_centroid=None):
+        """
+        Auxiliary routine for logging the scalar data associated with the target property. An individual entry is
+        created for every replica and molecule. If requested, an entry corresponding to the systems centroid is also
+        created.
+
+        Args:
+            group_name (str): Base name of the property group to log.
+            step (int): Current simulation step.
+            property (torch.Tensor): Tensor of the shape (n_replicas x n_molecules) holding the scalar properties of
+                                     each replica and molecule.
+            property_centroid (torch.Tensor): Also store the centroid of the monitored property if provided
+                                              (default=None).
+        """
+        logger_dict = {}
+
+        for molecule in range(self.n_molecules):
+            mol_name = "{:s}/molecule_{:02d}".format(group_name, molecule + 1)
+
+            if property_centroid is not None:
+                logger_dict["centroid"] = property_centroid[0, molecule]
+
+            for replica in range(self.n_replicas):
+                rep_name = "r{:02d}".format(replica + 1)
+                logger_dict[rep_name] = property[replica, molecule]
+
+            self.writer.add_scalars(mol_name, logger_dict, step)
+
+    def on_simulation_end(self, simulator):
+        """
+        Close the TensorBoard logger.
+
+        Args:
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
+        """
+        self.writer.close()
+
+
+class TemperatureLogger(TensorboardLogger):
+    """
+    TensorBoard logging hook for the temperatures of the replicas, as well as of the corresponding centroids for each
+    molecule in the system container.
+
+    Args:
+        log_file (str): Path to the TensorBoard file.
+        every_n_steps (int): Frequency with which data is logged to TensorBoard.
+    """
+
+    def __init__(self, log_file, every_n_steps=100):
+        super(TemperatureLogger, self).__init__(log_file, every_n_steps=every_n_steps)
+        self.initial_value = None
+
+    def on_step_end(self, simulator):
+        """
+        Log the systems temperatures at the given intervals.
+
+        Args:
+            simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
+        """
+        if simulator.step % self.every_n_steps == 0:
+            # Use the _log_group routine to log the systems temperatures
+            self._log_group(
+                "temperature",
+                simulator.step,
+                simulator.system.temperature,
+                property_centroid=simulator.system.centroid_temperature,
+            )
