@@ -396,7 +396,7 @@ class System(nn.Module):
             * self.momenta[:, :, None, :]
             / self.masses[..., None]
         )
-        return kinetic_energy_tensor.detach()
+        return kinetic_energy_tensor
 
     @property
     def temperature(self):
@@ -410,7 +410,7 @@ class System(nn.Module):
         """
         temperature = (
             2.0
-            / (3.0 * spk_units.kB * self.n_atoms[None, :, None])
+            / (3.0 * self.n_atoms[None, :, None] * spk_units.kB)
             * self.kinetic_energy
         )
         return temperature
