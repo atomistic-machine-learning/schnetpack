@@ -12,3 +12,6 @@ logging:
         target_properties: [ energy ]
     every_n_steps: 1
     precision: ${precision}
+  - _target_: temperature_logger
+    log_file: temperature
+    every_n_steps: 10

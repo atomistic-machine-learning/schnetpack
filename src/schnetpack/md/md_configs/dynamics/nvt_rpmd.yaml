@@ -1,9 +1,10 @@
 n_steps: 1000000
 integrator:
-  _target_: verlet
+  _target_: ring_polymer
   time_step: 0.50 # fs
+  temperature: 300.0
 thermostat:
-  _target_: berendsen
+  _target_: pile_local
   temperature_bath: 300.0 # K
   time_constant: 100.0 # fs
 barostat: null
