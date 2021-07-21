@@ -22,10 +22,10 @@ class Initializer:
         temperature (float):  Target initialization temperature in Kelvin.
         remove_translation (bool): Remove the translational components of the momenta after initialization. Will stop
                                    molecular drift for NVE simulations and NVT simulations with deterministic
-                                   thermostats (default=False).
+                                   thermostat (default=False).
         remove_rotation (bool): Remove the rotational components of the momenta after initialization. Will reduce
                                 molecular rotation for NVE simulations and NVT simulations with deterministic
-                                thermostats (default=False).
+                                thermostat (default=False).
     """
 
     def __init__(
@@ -86,10 +86,10 @@ class UniformInit(Initializer):
         temperature (float): Target temperature in Kelvin.
         remove_translation (bool): Remove the translational components of the momenta after initialization. Will stop
                                    molecular drift for NVE simulations and NVT simulations with deterministic
-                                   thermostats (default=False).
+                                   thermostat (default=False).
         remove_rotation (bool): Remove the rotational components of the momenta after initialization. Will reduce
                                 molecular rotation for NVE simulations and NVT simulations with deterministic
-                                thermostats (default=False).
+                                thermostat (default=False).
     """
 
     def __init__(
@@ -115,14 +115,8 @@ class UniformInit(Initializer):
             system (schnetpack.md.System): System class containing all molecules and their replicas.
         """
         # Set initial system momenta and apply atom masks
-        system.momenta = (
-            torch.randn(
-                system.momenta.shape,
-                device=system.momenta.device,
-                dtype=system.momenta.dtype,
-            )
-            * system.masses
-        )
+        system.momenta = torch.randn_like(system.momenta) * system.masses
+
         # Scale velocities to desired temperature
         scaling = torch.sqrt(
             self.temperature.to(system.momenta.device)[None, :, None]
@@ -139,10 +133,10 @@ class MaxwellBoltzmannInit(Initializer):
         temperature (float): Target temperature in Kelvin.
         remove_translation (bool): Remove the translational components of the momenta after initialization. Will stop
                                    molecular drift for NVE simulations and NVT simulations with deterministic
-                                   thermostats (default=False).
+                                   thermostat (default=False).
         remove_rotation (bool): Remove the rotational components of the momenta after initialization. Will reduce
                                 molecular rotation for NVE simulations and NVT simulations with deterministic
-                                thermostats (default=False).
+                                thermostat (default=False).
     """
 
     def __init__(
@@ -178,8 +172,4 @@ class MaxwellBoltzmannInit(Initializer):
         stddev = torch.sqrt(system.masses * spk_units.kB * temp)
 
         # Set initial system momenta
-        system.momenta = stddev * torch.randn(
-            system.momenta.shape,
-            device=system.momenta.device,
-            dtype=system.momenta.dtype,
-        )
+        system.momenta = stddev * torch.randn_like(system.momenta)
