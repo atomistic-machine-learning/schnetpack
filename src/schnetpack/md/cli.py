@@ -49,7 +49,7 @@ def simulate(config: DictConfig):
     )
 
     # Confound hydra
-    os.chdir(hydra.utils.get_original_cwd())
+    # os.chdir(hydra.utils.get_original_cwd())
 
     # Load custom config and use to update defaults
     if "load_config" in config:
@@ -59,7 +59,7 @@ def simulate(config: DictConfig):
         config = OmegaConf.merge(config, loaded_config)
 
     if config.get("print_config"):
-        print_config(config, resolve=True)
+        print_config(config, fields=["calculator"], resolve=True)
 
     # ===========================================
     #   Initialize seed and simulation directory
@@ -73,18 +73,20 @@ def simulate(config: DictConfig):
     set_random_seed(config.seed)
 
     # Set up directories
-    log.info("Setting up simulation directory...")
-    if os.path.exists(config.simulation_dir) and not config.overwrite:
-        log.warning(
-            "Simulation directory {:s} already exists (set overwrite flag?)".format(
-                config.simulation_dir
-            )
-        )
-    elif os.path.exists(config.simulation_dir) and config.overwrite:
-        rmtree(config.simulation_dir)
-        os.makedirs(config.simulation_dir)
-    else:
-        os.makedirs(config.simulation_dir)
+    # TODO: recheck
+    # log.info("Setting up simulation directory...")
+    # simulation_dir = hydra.utils.to_absolute_path(config.simulation_dir)
+    # if os.path.exists(simulation_dir) and not config.overwrite:
+    #     log.warning(
+    #         "Simulation directory {:s} already exists (set overwrite flag?)".format(
+    #             simulation_dir
+    #         )
+    #     )
+    # elif os.path.exists(simulation_dir) and config.overwrite:
+    #     rmtree(simulation_dir)
+    #     os.makedirs(simulation_dir)
+    # else:
+    #     os.makedirs(simulation_dir)
 
     # ===========================================
     #   Initialize the system
@@ -132,12 +134,17 @@ def simulate(config: DictConfig):
     #   Set up the calculator
     # ===========================================
 
-    # TODO: check paths and default dir
     config.calculator = config_alias(config.calculator)
     # Change everything to dict for convenience
     calculator_config = dict(config.calculator)
 
     log.info("Setting up {:s} calculator...".format(calculator_config["_target_"]))
+
+    # Check for model_file entry and resolve hydra path schmafu...
+    if "model_file" in calculator_config:
+        calculator_config["model_file"] = hydra.utils.to_absolute_path(
+            calculator_config["model_file"]
+        )
 
     # Check for neighbor lists
     if "neighbor_list" in calculator_config:
@@ -277,6 +284,12 @@ def simulate(config: DictConfig):
         simulator_hooks=simulation_hooks + logging_hooks,
         gradients_required=False,
     )
+
+    if config.restart is not None:
+        checkpoint = hydra.utils.to_absolute_path(config.restart)
+        logging.info("Restarting simulation from checkpoint {:s}...".format(checkpoint))
+        state_dict = torch.load(checkpoint)
+        simulator.restart_simulation(state_dict)
 
     # Set devices and precision
     simulator = simulator.to(device)
