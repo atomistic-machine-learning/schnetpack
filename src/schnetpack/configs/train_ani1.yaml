@@ -1,24 +1,21 @@
 # @package _global_
 
 defaults:
-  - mpnn_train
+  - train_base
   - override /model: single_property
-  - override /data: qm9
-  - override /model/representation: painn
+  - override /data: ani1
 
 cutoff: 5.0
 n_rbf: 20
+lr: 1e-3
 
-lr: 5e-4
-
-property: energy_U0
-name: qm9_${property}
-
+property: energy
+name: ani1_${property}
 
 data:
   distance_unit: Ang
   property_units:
-    energy_U0: eV
+    energy: eV
   transforms:
     - _target_: schnetpack.transform.SubtractCenterOfMass
     - _target_: schnetpack.transform.RemoveOffsets
@@ -28,4 +25,12 @@ data:
     - _target_: schnetpack.transform.TorchNeighborList
       cutoff: ${cutoff}
     - _target_: schnetpack.transform.CastTo32
+
+model:
+  postprocess:
+    - _target_: schnetpack.transform.CastTo64
+    - _target_: schnetpack.transform.AddOffsets
+      property: ${property}
+      add_mean: True
+      add_atomrefs: True
 

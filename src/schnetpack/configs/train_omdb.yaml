@@ -1,26 +1,37 @@
 # @package _global_
 
 defaults:
-  - override /model: pes
-  - override /data: custom
-  - override /logger: tensorboard
+  - train_base
+  - override /model: single_property
+  - override /data: omdb
 
 cutoff: 5.0
 n_rbf: 20
-lr: 1e-4
 
-name: custom_data
+lr: 1e-3
+
+property: band_gap
+name: mp_${property}
+
 
 data:
   distance_unit: Ang
   property_units:
     energy: eV
-    forces: eV/Ang
   transforms:
     - _target_: schnetpack.transform.SubtractCenterOfMass
     - _target_: schnetpack.transform.RemoveOffsets
-      property: energy
+      property: ${property}
+      remove_atomrefs: True
       remove_mean: True
     - _target_: schnetpack.transform.TorchNeighborList
       cutoff: ${cutoff}
     - _target_: schnetpack.transform.CastTo32
+
+model:
+  postprocess:
+    - _target_: schnetpack.transform.CastTo64
+    - _target_: schnetpack.transform.AddOffsets
+      property: ${property}
+      add_mean: True
+      add_atomrefs: True

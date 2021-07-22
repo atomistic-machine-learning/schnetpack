@@ -5,5 +5,5 @@ batch_size: 100
 num_train: 110000
 num_val: 10000
 num_test: null
-remove_uncharacterized: False
-num_workers: 8
+remove_uncharacterized: True
+num_workers: 4

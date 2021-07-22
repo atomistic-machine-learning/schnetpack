@@ -1,17 +1,17 @@
 # @package _global_
 
 defaults:
-  - mpnn_train
+  - train_base
   - override /model: pes
   - override /data: md17
-  - override /model/representation: painn
 
 cutoff: 5.0
 n_rbf: 20
-
 lr: 5e-4
 
 name: md17_${data.molecule}
+energy_key: energy
+forces_key: forces
 
 data:
   distance_unit: Ang

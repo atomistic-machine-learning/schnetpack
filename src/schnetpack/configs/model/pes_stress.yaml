@@ -3,17 +3,17 @@ defaults:
 
 output_modules:
   - _target_: schnetpack.atomistic.Atomwise
-    output: energy
+    output: ${energy_key}
     n_in: ${model.representation.n_atom_basis}
     aggregation_mode: sum
   - _target_: schnetpack.atomistic.Forces
-    energy_key: energy
-    force_key: forces
-    stress_key: stress
+    energy_key: ${energy_key}
+    force_key: ${forces_key}
+    stress_key: ${stress_key}
 
 outputs:
   - _target_: schnetpack.model.ModelOutput
-    name: energy
+    name: ${energy_key}
     loss_fn:
       _target_: torch.nn.MSELoss
     metrics:
@@ -23,7 +23,7 @@ outputs:
         _target_: pytorch_lightning.metrics.MeanSquaredError
     loss_weight: 0.05
   - _target_: schnetpack.model.ModelOutput
-    name: forces
+    name: ${forces_key}
     loss_fn:
       _target_: torch.nn.MSELoss
     metrics:
@@ -33,7 +33,7 @@ outputs:
         _target_: pytorch_lightning.metrics.MeanSquaredError
     loss_weight: 0.90
   - _target_: schnetpack.model.ModelOutput
-    name: stress
+    name: ${stress_key}
     loss_fn:
       _target_: torch.nn.MSELoss
     metrics:

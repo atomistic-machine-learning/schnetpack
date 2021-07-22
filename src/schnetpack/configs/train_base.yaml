@@ -3,8 +3,8 @@
 defaults:
   - trainer: default_trainer
   - callbacks: default_callbacks
-  - model: ???
-  - data: ???
+  - model: null
+  - data: null
   - logger: tensorboard
 
 work_dir: ${hydra:runtime.cwd}
@@ -14,6 +14,10 @@ name: default
 print_config: True
 run_dir: runs
 run_id: ${uuid:1}
+
+cutoff: ???
+n_rbf: ???
+lr: ???
 
 # hydra configuration
 hydra:
@@ -25,9 +29,7 @@ hydra:
       app_name: SchNetPack Train
 
       template: |-
-        ${hydra.help.header}
-
-        This is ${hydra.help.app_name}!
+        SchNetPack
 
         == Configuration groups ==
         Compose your configuration from those groups (db=mysql)
@@ -36,8 +38,15 @@ hydra:
 
         == Config ==
         This is the config generated for this run.
+        You can change the config file to be loaded to a predefined one
+        > spktrain --config-name=train_qm9
+
+        or your own:
+        > spktrain --config-dir=./my_configs --config-name=my_config
+
         You can override everything, for example:
-        spktrain +experiment=qm9 data_dir=/path/to/datadir
+        > spktrain --config-name=train_qm9 data_dir=/path/to/datadir data.batch_size=50 --help
+
         -------
         $CONFIG
         -------

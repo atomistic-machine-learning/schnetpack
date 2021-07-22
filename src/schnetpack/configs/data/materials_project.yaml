@@ -5,5 +5,5 @@ batch_size: 32
 num_train: 60000
 num_val: 2000
 num_test: null
-num_workers: 8
+num_workers: 4
 apikey: null

@@ -5,5 +5,5 @@ batch_size: 32
 num_train: 0.8
 num_val: 0.1
 num_test: null
-num_workers: 8
+num_workers: 4
 raw_path: null

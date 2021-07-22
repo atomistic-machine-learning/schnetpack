@@ -1,15 +1,17 @@
 # @package _global_
 
 defaults:
+  - train_base
   - override /model: pes
   - override /data: iso17
-  - override /logger: tensorboard
 
 cutoff: 5.0
 n_rbf: 20
 lr: 1e-4
 
-name: md17_${data.molecule}
+name: iso17
+energy_key: total_energy
+forces_key: atomic_forces
 
 data:
   distance_unit: Ang
@@ -27,8 +29,6 @@ data:
 
 
 model:
-  energy_property: total_energy
-  forces_property: atomic_forces
   postprocess:
     - _target_: schnetpack.transform.CastTo64
     - _target_: schnetpack.transform.AddOffsets
