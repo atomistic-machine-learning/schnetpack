@@ -7,4 +7,4 @@ num_val: 100000
 num_test: null
 num_heavy_atoms: 8
 high_energies: False
-num_workers: 8
+num_workers: 4

@@ -4,7 +4,7 @@ import uuid
 from typing import List
 
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, MISSING
 from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
 from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import LightningLoggerBase
@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()))
 
 
-@hydra.main(config_path="configs", config_name="train")
+@hydra.main(config_path="configs", config_name="train_base")
 def train(config: DictConfig):
     """
     General training routine for all models defined by the provided hydra configs.
@@ -33,6 +33,13 @@ def train(config: DictConfig):
 /____/\___/_/ /_/_/ |_/\___/\__/_/    \__,_/\___/_/|_|                                                          
     """
     )
+
+    if OmegaConf.is_missing(config, "data_dir"):
+        log.error(
+            f"Config incomplete! You need to specify the data directory `data_dir`."
+        )
+        return
+
     if config.get("print_config"):
         print_config(config, resolve=True)
 

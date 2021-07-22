@@ -1,0 +1,20 @@
+defaults:
+  - base_model
+
+output_modules:
+  - _target_: schnetpack.atomistic.Atomwise
+    output: ${property}
+    n_in: ${model.representation.n_atom_basis}
+    aggregation_mode: sum
+
+outputs:
+  - _target_: schnetpack.model.ModelOutput
+    name: ${property}
+    loss_fn:
+      _target_: torch.nn.MSELoss
+    metrics:
+      mae:
+        _target_: pytorch_lightning.metrics.MeanAbsoluteError
+      mse:
+        _target_: pytorch_lightning.metrics.MeanSquaredError
+    loss_weight: 1

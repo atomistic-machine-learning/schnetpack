@@ -1,19 +1,16 @@
 # @package _global_
 
 defaults:
-  - override /model: property
-  - override /model/representation: schnet
+  - train_base
+  - override /model: single_property
   - override /data: materials_project
-  - override /logger: tensorboard
 
 cutoff: 5.0
 n_rbf: 20
-
 lr: 1e-3
 
 property: formation_energy_per_atom
 name: mp_${property}
-
 
 data:
   distance_unit: Ang
@@ -29,3 +26,10 @@ data:
       cutoff: ${cutoff}
     - _target_: schnetpack.transform.CastTo32
 
+model:
+  postprocess:
+    - _target_: schnetpack.transform.CastTo64
+    - _target_: schnetpack.transform.AddOffsets
+      property: ${property}
+      add_mean: True
+      add_atomrefs: True

@@ -2,8 +2,8 @@ from typing import Dict, Any
 
 import torch
 
-import schnetpack as spk
 from pytorch_lightning.callbacks import ModelCheckpoint
+import schnetpack as spk
 
 __all__ = ["ModelCheckpoint"]
 
@@ -45,13 +45,13 @@ class ModelCheckpoint(ModelCheckpoint):
             if self.save_as_torch_script:
                 self.pl_module.to_torchscript(self.inference_path, method=self.method)
             else:
-                if isinstance(self.pl_module, spk.model.AtomisticModel):
+                if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
                     imode = self.pl_module.inference_mode
                     self.pl_module.inference_mode = True
                 mode = self.pl_module.training
 
                 torch.save(self.pl_module, self.inference_path)
 
-                if isinstance(self.pl_module, spk.model.AtomisticModel):
+                if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
                     self.pl_module.inference_mode = imode
                 self.pl_module.train(mode)
