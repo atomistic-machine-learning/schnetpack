@@ -20,7 +20,7 @@ outputs:
         _target_: torchmetrics.regression.MeanAbsoluteError
       mse:
         _target_: torchmetrics.regression.MeanSquaredError
-    loss_weight: 1.
+    loss_weight: 0.05
   - _target_: schnetpack.atomistic.ModelOutput
     name: ${forces_key}
     loss_fn:
@@ -30,4 +30,4 @@ outputs:
         _target_: torchmetrics.regression.MeanAbsoluteError
       mse:
         _target_: torchmetrics.regression.MeanSquaredError
-    loss_weight: 0.
+    loss_weight: 0.95
