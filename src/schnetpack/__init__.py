@@ -5,7 +5,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorboa
 from schnetpack import transform
 from schnetpack import properties
 from schnetpack import data
-from schnetpack.atomistic import model
+from schnetpack import atomistic
 from schnetpack import representation
 from schnetpack import nn
 from schnetpack import train
