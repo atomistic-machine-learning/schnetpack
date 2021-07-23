@@ -207,7 +207,7 @@ class System(nn.Module):
         # Set normal mode transformer
         self.nm_transform = self._nm_transformer(n_replicas)
 
-    def _sum_atoms(self, x: torch.Tensor):
+    def sum_atoms(self, x: torch.Tensor):
         """
         Auxiliary routine for summing atomic contributions for each molecule.
 
@@ -233,7 +233,7 @@ class System(nn.Module):
         Returns:
             torch.Tensor: Aggregated tensor of the shape ( : x n_molecules x ...)
         """
-        return self._sum_atoms(x) / self.n_atoms[None, :, None]
+        return self.sum_atoms(x) / self.n_atoms[None, :, None]
 
     def expand_atoms(self, x: torch.Tensor):
         """
@@ -257,9 +257,9 @@ class System(nn.Module):
                           center of mass.
         """
         # Compute center of mass
-        center_of_mass = self._sum_atoms(
-            self.positions * self.masses
-        ) / self._sum_atoms(self.masses)
+        center_of_mass = self.sum_atoms(self.positions * self.masses) / self.sum_atoms(
+            self.masses
+        )
         return center_of_mass
 
     def remove_center_of_mass(self):
@@ -289,12 +289,10 @@ class System(nn.Module):
             - self.positions[..., :, None] * self.positions[..., None, :]
         )
 
-        moment_of_inertia = self._sum_atoms(moment_of_inertia * self.masses[..., None])
+        moment_of_inertia = self.sum_atoms(moment_of_inertia * self.masses[..., None])
 
         # Compute the angular momentum
-        angular_momentum = self._sum_atoms(
-            torch.cross(self.positions, self.momenta, -1)
-        )
+        angular_momentum = self.sum_atoms(torch.cross(self.positions, self.momenta, -1))
 
         # Compute the angular velocities
         angular_velocities = torch.matmul(
@@ -375,7 +373,7 @@ class System(nn.Module):
             torch.Tensor: Tensor of the kinetic energies (in Hartree) with
                           the shape n_replicas x n_molecules x 1
         """
-        kinetic_energy = 0.5 * self._sum_atoms(
+        kinetic_energy = 0.5 * self.sum_atoms(
             torch.sum(self.momenta ** 2, dim=2, keepdim=True) / self.masses
         )
         return kinetic_energy
@@ -391,7 +389,7 @@ class System(nn.Module):
 
         """
         # Apply atom mask
-        kinetic_energy_tensor = 0.5 * self._sum_atoms(
+        kinetic_energy_tensor = 0.5 * self.sum_atoms(
             self.momenta[..., None]
             * self.momenta[:, :, None, :]
             / self.masses[..., None]
@@ -505,7 +503,7 @@ class System(nn.Module):
             torch.Tensor: Tensor of the centroid kinetic energies (in
                           Hartree) with the shape 1 x n_molecules x 1
         """
-        kinetic_energy = 0.5 * self._sum_atoms(
+        kinetic_energy = 0.5 * self.sum_atoms(
             torch.sum(self.centroid_momenta ** 2, dim=2, keepdim=True) / self.masses
         )
         return kinetic_energy
