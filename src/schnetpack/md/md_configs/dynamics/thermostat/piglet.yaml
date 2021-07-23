@@ -1,4 +1,3 @@
-_target_: pi_gle
+_target_: piglet
 temperature_bath: 300.0
 gle_file: ???
-free_particle_limit: true

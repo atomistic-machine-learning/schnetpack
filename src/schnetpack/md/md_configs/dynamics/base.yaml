@@ -1,0 +1,7 @@
+defaults:
+  - integrator: md
+
+n_steps: 1000000
+thermostat: null
+barostat: null
+simulation_hooks: [ ]
