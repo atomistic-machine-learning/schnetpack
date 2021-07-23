@@ -6,22 +6,34 @@ from schnetpack.utils import str2class
 log = logging.getLogger(__name__)
 
 config_aliases = {
+    # Initial conditions
     "uniform": "schnetpack.md.UniformInit",
     "maxwell-boltzmann": "schnetpack.md.MaxwellBoltzmannInit",
+    # Calculators
     "schnetpack": "schnetpack.md.calculators.SchnetPackCalculator",
+    # Neighbor lists
     "ase": "schnetpack.md.neighborlist_md.ASENeighborListMD",
     "torch": "schnetpack.md.neighborlist_md.TorchNeighborListMD",
+    # Thermostats
     "berendsen": "schnetpack.md.simulation_hooks.BerendsenThermostat",
     "langevin": "schnetpack.md.simulation_hooks.LangevinThermostat",
     "nhc": "schnetpack.md.simulation_hooks.NHCThermostat",
     "pile_local": "schnetpack.md.simulation_hooks.PILELocalThermostat",
+    "pile_global": "schnetpack.md.simulation_hooks.PILEGlobalThermostat",
+    "trpmd": "schnetpack.md.simulation_hooks.TRPMDThermostat",
+    "gle": "schnetpack.md.simulation_hooks.GLEThermostat",
+    "pi_gle": "schnetpack.md.simulation_hooks.RPMDGLEThermostat",
+    "piglet": "schnetpack.md.simulation_hooks.PIGLETThermostat",
+    "pi_nhc": "schnetpack.md.simulation_hooks.NHCRingPolymerThermostat",
+    # Integrators
     "verlet": "schnetpack.md.integrators.VelocityVerlet",
     "verlet_npt": "schnetpack.md.integrators.NPTVelocityVerlet",
     "rpmd": "schnetpack.md.integrators.RingPolymer",
     "rpmd_npt": "schnetpack.md.integrators.NPTRingPolymer",
+    # Logging
     "checkpoint": "schnetpack.md.simulation_hooks.Checkpoint",
     "file_logger": "schnetpack.md.simulation_hooks.FileLogger",
-    "temperatur_logger": "schnetpack.md.simulation_hooks.TemperatureLogger",
+    "temperature_logger": "schnetpack.md.simulation_hooks.TemperatureLogger",
     "molecules": "schnetpack.md.simulation_hooks.MoleculeStream",
     "properties": "schnetpack.md.simulation_hooks.PropertyStream",
 }
@@ -36,6 +48,7 @@ def get_alias(name: str):
     if name in config_aliases:
         return config_aliases[name]
     else:
+        log.warning(f"{name} not found in aliases, assuming class")
         return name
 
 
