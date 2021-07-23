@@ -4,19 +4,26 @@ molecular dynamics simulations. Apart from standard thermostat for convetional s
 a series of special thermostat developed for ring polymer molecular dynamics is also provided.
 """
 import torch
-from typing import Optional, Sequence
+import numpy as np
+import scipy.linalg as linalg
+from typing import Optional, List
+import logging
 
 from schnetpack import units as spk_units
 from schnetpack.md.simulation_hooks.basic_hooks import SimulationHook
 from schnetpack.md.simulator import Simulator, System
 
-from schnetpack.md.utils import YSWeights
+from schnetpack.md.utils import YSWeights, load_gle_matrices
+
+log = logging.getLogger(__name__)
 
 __all__ = [
+    "ThermostatError",
     "ThermostatHook",
     "BerendsenThermostat",
     "LangevinThermostat",
     "NHCThermostat",
+    "GLEThermostat",
 ]
 
 
@@ -282,7 +289,7 @@ class NHCThermostat(ThermostatHook):
         time_constant: float,
         chain_length: Optional[int] = 3,
         massive: Optional[bool] = False,
-        multi_step: Optional[int] = 1,
+        multi_step: Optional[int] = 2,
         integration_order: Optional[int] = 3,
     ):
         super(NHCThermostat, self).__init__(
@@ -362,15 +369,15 @@ class NHCThermostat(ThermostatHook):
             state_dimension, device=simulator.device, dtype=simulator.dtype
         )
 
-    def _init_masses(self, state_dimension: Sequence[int], simulator: Simulator):
+    def _init_masses(self, state_dimension: List[int], simulator: Simulator):
         """
         Auxiliary routine for initializing the thermostat masses.
 
         Args:
             state_dimension (tuple): Size of the thermostat states. This is used to differentiate between the massive
                                      and the standard algorithm
-            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
-                                                                 time step, system, etc.
+            simulator (schnetpack.simulator.Simulator): Main simulator class containing information on the time step,
+                                                        system, etc.
         """
         self.masses = torch.ones(
             state_dimension, device=simulator.device, dtype=simulator.dtype
@@ -383,7 +390,7 @@ class NHCThermostat(ThermostatHook):
         # Set masses of remaining thermostats
         self.masses[..., 1:] = self.kb_temperature / self.frequency ** 2
 
-    def _propagate_thermostat(self, kinetic_energy):
+    def _propagate_thermostat(self, kinetic_energy: torch.tensor) -> torch.tensor:
         """
         Propagation step of the NHC thermostat. Please refer to [#nhc_thermostat2]_ for more detail on the algorithm.
 
@@ -483,8 +490,8 @@ class NHCThermostat(ThermostatHook):
         polymer.
 
         Args:
-            simulator (schnetpack.simulation_hooks.simulator.Simulator): Main simulator class containing information on the
-                                                                 time step, system, etc.
+            simulator (schnetpack.simulator.Simulator): Main simulator class containing information on the time step,
+                                                        system, etc.
         """
         # Get kinetic energy (either for massive or normal degrees of freedom)
         kinetic_energy = self._compute_kinetic_energy(simulator.system)
@@ -510,3 +517,207 @@ class NHCThermostat(ThermostatHook):
             + self.kb_temperature * torch.sum(self.positions[..., 1:], 4)
         )
         return conserved
+
+
+class GLEThermostat(ThermostatHook):
+    ring_polymer = False
+    """
+    Stochastic generalized Langevin colored noise thermostat by Ceriotti et. al. as described in [#gle_thermostat1]_.
+    This thermostat requires specially parametrized matrices, which can be obtained online from:
+    http://gle4md.org/index.html?page=matrix
+
+    The additional degrees of freedom added to the system are defined via the matrix dimensions. This could in principle
+    be used for ring polymer dynamics by providing a normal mode transformation.
+
+    Args:
+        temperature_bath (float): Temperature of the external heat bath in Kelvin.
+        gle_file (str): File containing the GLE matrices
+        free_particle_limit (bool): Initialize momenta according to free particle limit instead of a zero matrix
+                                    (default=True).
+
+    References
+    ----------
+    .. [#gle_thermostat1] Ceriotti, Bussi, Parrinello:
+       Colored-noise thermostats à la carte.
+       Journal of Chemical Theory and Computation 6 (4), 1170-1180. 2010.
+    """
+
+    def __init__(
+        self,
+        temperature_bath: float,
+        gle_file: str,
+        free_particle_limit: Optional[bool] = True,
+    ):
+        super(GLEThermostat, self).__init__(
+            temperature_bath=temperature_bath, time_constant=0.0
+        )
+
+        self.gle_file = gle_file
+
+        # To be initialized on beginning of the simulation, once system and
+        # integrator are known
+        self.register_buffer("free_particle_limit", torch.tensor(free_particle_limit))
+        self.register_buffer("thermostat_factor", None)
+        self.register_buffer("thermostat_momenta", None)
+        self.register_buffer("c1", None)
+        self.register_buffer("c2", None)
+
+    def _init_thermostat(self, simulator: Simulator):
+        """
+        Initialize the GLE thermostat by reading in the the required matrices and setting up the initial random
+        thermostat momenta and the mass factor.
+
+        Args:
+            simulator (schnetpack.simulator.Simulator): Main simulator class containing information on the time step,
+                                                        system, etc.
+        """
+        # Generate main matrices
+        self.c1, self.c2 = self._init_gle_matrices(simulator)
+
+        # Get particle masses
+        self.thermostat_factor = torch.sqrt(simulator.system.masses)[..., None]
+
+        # Get initial thermostat momenta
+        self.thermostat_momenta = self._init_thermostat_momenta(simulator)
+
+    def _init_gle_matrices(self, simulator: Simulator):
+        """
+        Read all GLE matrices from a file and check, whether they have the right dimensions.
+
+        Args:
+            simulator (schnetpack.simulator.Simulator): Main simulator class containing information on the time step,
+                                                        system, etc.
+        """
+        a_matrix, c_matrix = load_gle_matrices(self.gle_file)
+
+        if a_matrix is None:
+            raise ThermostatError(
+                "Error reading GLE matrices from {:s}".format(self.gle_file)
+            )
+        elif a_matrix.shape[0] > 1:
+            raise ThermostatError(
+                "More than one A matrix found. Could be PIGLET input."
+            )
+        else:
+            # Remove leading dimension (for normal modes)
+            a_matrix = a_matrix.squeeze()
+
+        c1, c2 = self._init_single_gle_matrix(a_matrix, c_matrix, simulator)
+        return c1, c2
+
+    def _init_single_gle_matrix(
+        self, a_matrix: np.array, c_matrix: np.array, simulator: Simulator
+    ):
+        """
+        Based on the matrices found in the GLE file, initialize the GLE matrices required for a simulation with the
+        thermostat. See [#stochastic_thermostats1]_ for more detail. The dimensions of all matrices are:
+        degrees_of_freedom x degrees_of_freedom,
+        where degrees_of_freedom are the degrees of freedom of the extended system.
+
+        Args:
+            a_matrix (np.array): Raw matrices containing friction friction acting on system (drift matrix).
+            c_matrix (np.array): Raw matrices modulating the intensity of the random force (diffusion matrix).
+            simulator (schnetpack.simulator.Simulator): Main simulator class containing information on the time step,
+                                                        system, etc.
+
+        Returns:
+            torch.Tensor: Drift matrix for simulation.
+            torch.Tensor: Diffusion matrix initialized for simulation.
+
+        References
+        ----------
+        .. [#stochastic_thermostats1]_Ceriotti, Parrinello, Markland, Manolopoulos:
+           Efficient stochastic thermostatting of path integral molecular dynamics.
+           The Journal of Chemical Physics, 133 (12), 124104. 2010.
+        """
+        if c_matrix is None:
+            c_matrix = (
+                np.eye(a_matrix.shape[-1])
+                * self.temperature_bath.cpu().numpy()
+                * spk_units.kB
+            )
+            # Check if normal GLE or GLE for ring polymers is needed:
+            if simulator.integrator.ring_polymer:
+                log.info("RingPolymer integrator detected, initializing C accordingly.")
+                c_matrix *= simulator.system.n_replicas
+        else:
+            c_matrix = c_matrix.squeeze()
+            log.info("C matrix for GLE loaded, provided temperature will be ignored.")
+
+        # A does not need to be transposed, else c2 is imaginary
+        c1 = linalg.expm(-0.5 * simulator.integrator.time_step * a_matrix)
+
+        # c2 is symmetric
+        c2 = linalg.sqrtm(c_matrix - np.dot(c1, np.dot(c_matrix, c1.T)))
+
+        # To myself: original expression is c1 = exp(-dt/2 * a.T)
+        # the C1 here is c1.T, since exp(-dt/2*a.T).T = exp(-dt/2*a)
+        # The formula for c2 is c2 = sqrtm(1-c1.T*c1)
+        # In our case, this becomes sqrtm(1-C1*C1.T)
+        # For the propagation we have the original expression c1*p, where
+        # p is a column vector (ndegrees x something)
+        # In our case P is (something x ndegrees), hence p.T
+        # The propagation then becomes P*C1 = p.T*c1.T = (c1*p).T
+        # c2 is symmetric by construction, hence C2=c2
+        c1 = torch.from_numpy(c1).to(simulator.device, simulator.dtype)
+        c2 = torch.from_numpy(c2).to(simulator.device, simulator.dtype)
+        return c1, c2
+
+    def _init_thermostat_momenta(self, simulator: Simulator):
+        """
+        Initialize the thermostat momenta tensor based on the system specifications. This tensor is then updated
+        during the GLE dynamics.
+
+        Args:
+            simulator (schnetpack.simulator.Simulator): Main simulator class containing information on the time step,
+                                                        system, etc.
+
+        Returns:
+            torch.Tensor: Initialized random momenta of the extended system with the dimension:
+                          n_replicas x n_molecules x n_atoms x 3 x degrees_of_freedom
+        """
+        degrees_of_freedom = self.c1.shape[-1]
+
+        if self.free_particle_limit:
+            initial_momenta = torch.randn(
+                *simulator.system.momenta.shape,
+                degrees_of_freedom,
+                device=simulator.device,
+                dtype=simulator.dtype
+            )
+            initial_momenta = torch.matmul(initial_momenta, self.c2)
+        else:
+            initial_momenta = torch.zeros(
+                *simulator.system.momenta.shape,
+                degrees_of_freedom,
+                device=simulator.device,
+                dtype=simulator.dtype
+            )
+
+        return initial_momenta
+
+    def _apply_thermostat(self, simulator):
+        """
+        Perform the update of the system momenta according to the GLE thermostat.
+
+        Args:
+            simulator (schnetpack.simulator.Simulator): Main simulator class containing information on the time step,
+                                                        system, etc.
+        """
+        # Generate random noise
+        thermostat_noise = torch.randn_like(self.thermostat_momenta)
+
+        # Get current momenta
+        momenta = simulator.system.momenta
+
+        # Set current momenta
+        self.thermostat_momenta[:, :, :, 0] = momenta
+
+        # Apply thermostat
+        self.thermostat_momenta = (
+            torch.matmul(self.thermostat_momenta, self.c1)
+            + torch.matmul(thermostat_noise, self.c2) * self.thermostat_factor
+        )
+
+        # Extract and set momenta
+        simulator.system.momenta = self.thermostat_momenta[:, :, :, 0]
