@@ -3,7 +3,7 @@
 defaults:
   - override /model: property
   - override /model/representation: schnet
-  - override /data: qm9
+  - override /data: materials_project
   - override /logger: tensorboard
 
 cutoff: 5.0
@@ -11,14 +11,14 @@ n_rbf: 20
 
 lr: 1e-3
 
-property: energy_U0
-name: qm9_${property}
+property: formation_energy_per_atom
+name: mp_${property}
 
 
 data:
   distance_unit: Ang
   property_units:
-    energy_U0: eV
+    energy: eV
   transforms:
     - _target_: schnetpack.transform.SubtractCenterOfMass
     - _target_: schnetpack.transform.RemoveOffsets

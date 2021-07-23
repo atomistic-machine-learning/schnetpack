@@ -1,7 +1,8 @@
 schnetpack.transform
 ====================
-.. currentmodule:: schnetpack.transform
+.. automodule:: transform
 
+.. currentmodule:: transform
 .. autoclass:: Transform
 
 

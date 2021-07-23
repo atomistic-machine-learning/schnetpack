@@ -1,17 +1,21 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, Callable, List, Type
+from typing import Any, Dict, Optional, Union, Callable, List, Type, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from schnetpack.transform import Transform
 
 import torch
-from pytorch_lightning import LightningModule
+import pytorch_lightning as pl
 import torch.nn as nn
-
 
 import schnetpack as spk
 
 __all__ = ["AtomisticModel"]
 
 
-class AtomisticModel(LightningModule):
+class AtomisticModel(pl.LightningModule):
     """
     Base class for all SchNetPack models.
 
@@ -30,7 +34,7 @@ class AtomisticModel(LightningModule):
         scheduler_cls: Optional[Type] = None,
         scheduler_args: Optional[Dict[str, Any]] = None,
         scheduler_monitor: Optional[str] = None,
-        postprocess: Optional[List[spk.transform.Transform]] = None,
+        postprocess: Optional[List[Transform]] = None,
     ):
         """
         Args:

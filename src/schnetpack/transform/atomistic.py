@@ -3,7 +3,6 @@ from typing import Dict, Optional
 import torch
 from ase.data import atomic_masses
 
-import schnetpack as spk
 import schnetpack.properties as structure
 from .transform import Transform
 

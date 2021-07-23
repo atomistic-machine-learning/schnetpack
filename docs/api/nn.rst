@@ -1,6 +1,6 @@
 schnetpack.nn
 =============
-.. currentmodule:: schnetpack.nn
+.. currentmodule:: nn
 
 
 Basic layers

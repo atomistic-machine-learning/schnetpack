@@ -1,8 +1,9 @@
 import os
 from copy import copy
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Union
 
 import numpy as np
+
 import pytorch_lightning as pl
 import torch
 
@@ -31,9 +32,9 @@ class AtomsDataModule(pl.LightningDataModule):
         self,
         datapath: str,
         batch_size: int,
-        num_train: int = None,
-        num_val: int = None,
-        num_test: int = None,
+        num_train: Union[int, float] = None,
+        num_val: Union[int, float] = None,
+        num_test: Optional[Union[int, float]] = None,
         split_file: Optional[str] = "split.npz",
         format: Optional[AtomsDataFormat] = None,
         load_properties: Optional[List[str]] = None,
@@ -53,9 +54,9 @@ class AtomsDataModule(pl.LightningDataModule):
         Args:
             datapath: path to dataset
             batch_size: (train) batch size
-            num_train: number of training examples
-            num_val: number of validation examples
-            num_test: number of test examples
+            num_train: number of training examples (absolute or relative)
+            num_val: number of validation examples (absolute or relative)
+            num_test: number of test examples (absolute or relative)
             split_file: path to npz file with data partitions
             format: dataset format
             load_properties: subset of properties to load
@@ -117,8 +118,22 @@ class AtomsDataModule(pl.LightningDataModule):
         )
 
     def partition(self):
-        # split dataset
         # TODO: handle IterDatasets
+        # handle relative dataset sizes
+        if self.num_train is not None and self.num_train <= 1.0:
+            self.num_train = round(self.num_train * len(self.dataset))
+        if self.num_val is not None and self.num_val <= 1.0:
+            self.num_val = min(
+                round(self.num_val * len(self.dataset)),
+                len(self.dataset) - self.num_train,
+            )
+        if self.num_test is not None and self.num_test <= 1.0:
+            self.num_test = min(
+                round(self.num_test * len(self.dataset)),
+                len(self.dataset) - self.num_train - self.num_val,
+            )
+
+        # split dataset
         if self.split_file is not None and os.path.exists(self.split_file):
             S = np.load(self.split_file)
             train_idx = S["train_idx"].tolist()
@@ -152,9 +167,13 @@ class AtomsDataModule(pl.LightningDataModule):
                 indices[offset - length : offset]
                 for offset, length in zip(offsets, lengths)
             ]
-            np.savez(
-                self.split_file, train_idx=train_idx, val_idx=val_idx, test_idx=test_idx
-            )
+            if self.split_file is not None:
+                np.savez(
+                    self.split_file,
+                    train_idx=train_idx,
+                    val_idx=val_idx,
+                    test_idx=test_idx,
+                )
         self._train_dataset = self.dataset.subset(train_idx)
         self._val_dataset = self.dataset.subset(val_idx)
         self._test_dataset = self.dataset.subset(test_idx)

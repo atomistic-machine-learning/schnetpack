@@ -1,6 +1,6 @@
 schnetpack.datasets
 ===================
-.. currentmodule:: schnetpack.datasets
+.. currentmodule:: datasets
 
 Molecules
 ------------
