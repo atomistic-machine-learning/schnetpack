@@ -2,7 +2,7 @@ import torch
 from ase import Atoms
 from ase.neighborlist import neighbor_list
 from typing import Dict, Optional
-from .transform import Transform
+from .base import Transform
 
 __all__ = [
     "NeighborListTransform",

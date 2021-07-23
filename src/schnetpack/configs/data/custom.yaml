@@ -1,8 +1,8 @@
 _target_: schnetpack.data.AtomsDataModule
 
-datapath: null  # data_dir is specified in train.yaml
-batch_size: 32
+datapath: ???
+batch_size: 10
 num_train: 0.8
 num_val: 0.1
 num_test: null
-num_workers: 8
+num_workers: 4

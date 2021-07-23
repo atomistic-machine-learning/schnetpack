@@ -117,6 +117,7 @@ class OrganicMaterialsDatabase(AtomsDataModule):
         Converts .tar.gz to a .db file
         """
         if self.raw_path is None or not os.path.exists(self.raw_path):
+            # TODO: can we download here automatically like QM9?
             raise AtomsDataModuleError(
                 "The path to the raw dataset is not provided or invalid and the db-file does "
                 "not exist!"

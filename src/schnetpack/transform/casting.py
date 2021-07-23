@@ -3,7 +3,7 @@ from typing import Dict, Optional
 
 import torch
 
-from .transform import Transform
+from .base import Transform
 
 __all__ = ["CastMap", "CastTo32", "CastTo64"]
 

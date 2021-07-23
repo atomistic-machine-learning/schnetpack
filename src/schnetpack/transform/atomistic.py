@@ -4,7 +4,7 @@ import torch
 from ase.data import atomic_masses
 
 import schnetpack.properties as structure
-from .transform import Transform
+from .base import Transform
 
 __all__ = [
     "SubtractCenterOfMass",

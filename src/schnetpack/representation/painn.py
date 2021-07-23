@@ -1,4 +1,4 @@
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -104,8 +104,8 @@ class PaiNN(nn.Module):
         n_atom_basis: int,
         n_interactions: int,
         radial_basis: nn.Module,
-        cutoff_fn: Callable,
-        activation=F.silu,
+        cutoff_fn: Optional[Callable] = None,
+        activation: Optional[Callable] = F.silu,
         max_z: int = 100,
         shared_interactions: bool = False,
         shared_filters: bool = False,
