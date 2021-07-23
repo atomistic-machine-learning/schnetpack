@@ -1,7 +1,0 @@
-n_steps: 1000000
-integrator:
-  _target_: verlet
-  time_step: 0.5 # fs
-thermostat: null
-barostat: null
-simulation_hooks: [ ]
