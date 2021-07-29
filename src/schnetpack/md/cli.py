@@ -193,6 +193,8 @@ def simulate(config: DictConfig):
                     "check for double thermostatting."
                 )
                 simulation_hooks.append(thermostat_hook)
+
+        simulation_hooks.append(barostat_hook)
     else:
         if thermostat_hook is not None:
             simulation_hooks.append(thermostat_hook)
