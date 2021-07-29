@@ -25,6 +25,8 @@ config_aliases = {
     "pi_gle": "schnetpack.md.simulation_hooks.RPMDGLEThermostat",
     "piglet": "schnetpack.md.simulation_hooks.PIGLETThermostat",
     "pi_nhc": "schnetpack.md.simulation_hooks.NHCRingPolymerThermostat",
+    # Barostats:
+    "nhc_barostat_iso": "schnetpack.md.simulation_hooks.NHCBarostatIsotropic",
     # Integrators
     "verlet": "schnetpack.md.integrators.VelocityVerlet",
     "verlet_npt": "schnetpack.md.integrators.NPTVelocityVerlet",

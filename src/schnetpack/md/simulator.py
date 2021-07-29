@@ -106,6 +106,7 @@ class Simulator(nn.Module):
 
         with grad_context:
             # Perform initial computation of forces
+            self.system.wrap_positions()
             self.calculator.calculate(self.system)
 
             # Call hooks at the simulation start
@@ -115,6 +116,7 @@ class Simulator(nn.Module):
             for _ in tqdm(range(n_steps), ncols=120):
                 # for _ in range(n_steps):
 
+                print("====== A ======")
                 # Call hook before first half step
                 for hook in self.simulator_hooks:
                     hook.on_step_begin(self)
@@ -122,19 +124,23 @@ class Simulator(nn.Module):
                 # Do half step momenta
                 self.integrator.half_step(self.system)
 
+                print("====== B ======")
                 # Do propagation MD/PIMD
                 self.integrator.main_step(self.system)
 
                 # Compute new forces
                 self.calculator.calculate(self.system)
 
+                print("====== C ======")
                 # Call hook after forces
                 for hook in self.simulator_hooks:
                     hook.on_step_middle(self)
+                self.system.wrap_positions()
 
                 # Do half step momenta
                 self.integrator.half_step(self.system)
 
+                print("====== A ======")
                 # Call hooks after second half step
                 # Hooks are called in reverse order to guarantee symmetry of
                 # the propagator when using thermostat and barostats
