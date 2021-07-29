@@ -60,6 +60,7 @@ class SchnetPackCalculator(MDCalculator):
         stress_label: str = None,
         property_conversion: Dict[str, Union[str, float]] = {},
         neighbor_list: NeighborListMD = ASENeighborListMD,
+        # TODO: what happend to required properties
         cutoff: float = -1.0,
         cutoff_shell: float = 1.0,
     ):
@@ -141,28 +142,28 @@ class SchnetPackCalculator(MDCalculator):
             else:
                 log.info("Using cutoff of {:.2f} (model units)...".format(cutoff))
 
-        # Check if atom triples need to be computed (e.g. for Behler functions)
-        triples_required = self._check_triples_required()
-        if triples_required:
-            log.info("Enabling computation of atom triples")
+        # Check if atom triples need to be computed (e.g. for Behler functions) TODO: NO LONGER NEEDED
+        # triples_required = self._check_triples_required()
+        # if triples_required:
+        #     log.info("Enabling computation of atom triples")
 
         # Initialize the neighbor list
         neighbor_list = neighbor_list(
-            cutoff=cutoff, cutoff_shell=cutoff_shell, requires_triples=triples_required
+            cutoff=cutoff, cutoff_shell=cutoff_shell, requires_triples=False
         )
 
         return neighbor_list
 
-    def _check_triples_required(self):
-        # Turn on collection of atom triples if representation requires angles
-        if isinstance(self.model.representation, spk.representation.SymmetryFunctions):
-            if self.model.representation.n_basis_angular > 0:
-                log.info("Enabling collection of atom triples for angular functions...")
-                return True
-            else:
-                return False
-        else:
-            return False
+    # def _check_triples_required(self):
+    #     # Turn on collection of atom triples if representation requires angles
+    #     if isinstance(self.model.representation, spk.representation.SymmetryFunctions):
+    #         if self.model.representation.n_basis_angular > 0:
+    #             log.info("Enabling collection of atom triples for angular functions...")
+    #             return True
+    #         else:
+    #             return False
+    #     else:
+    #         return False
 
     def calculate(self, system: System):
         """
