@@ -196,7 +196,7 @@ class HDF5Loader:
             return None
         elif property_name == properties.Z or property_name == properties.masses:
             # Special case for atom types and masses
-            return self.properties[properties.Z][mol_idx]
+            return self.properties[property_name][mol_idx]
         else:
             # Standard properties
             target_property = self.properties[property_name][:, :, mol_idx, ...]
@@ -341,13 +341,10 @@ class HDF5Loader:
 
         log.info("Extracting structures...")
         for idx in trange(self.entries):
-            all_atoms.append(
-                Atoms(
-                    atomic_numbers,
-                    positions[idx],
-                    cell=cells[idx],
-                    pbc=self.pbc[mol_idx],
-                )
+            atoms = Atoms(
+                atomic_numbers, positions[idx], cell=cells[idx], pbc=self.pbc[mol_idx]
             )
+            atoms.wrap()
+            all_atoms.append(atoms)
 
         return all_atoms
