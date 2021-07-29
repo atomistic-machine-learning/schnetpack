@@ -232,7 +232,9 @@ class MoleculeStream(DataStream):
             self.data_group.attrs["total_n_atoms"] = simulator.system.total_n_atoms
             self.data_group.attrs["n_atoms"] = simulator.system.n_atoms.cpu()
             self.data_group.attrs["atom_types"] = simulator.system.atom_types.cpu()
-            self.data_group.attrs["masses"] = simulator.system.masses.cpu()
+            self.data_group.attrs["masses"] = simulator.system.masses.cpu()[
+                0, :, 0
+            ]  # Squeeze to shape of Z
             self.data_group.attrs["pbc"] = simulator.system.pbc.cpu()[
                 0
             ]  # Remove training broadcast dimension
