@@ -542,7 +542,7 @@ class System(nn.Module):
         )
         return volume
 
-    def compute_pressure(self, tensor=False, kinetic_component=False):
+    def compute_pressure(self, tensor: bool = False, kinetic_component: bool = False):
         """
         Compute the pressure (tensor) based on the stress tensor of the systems.
 
