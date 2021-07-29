@@ -6,7 +6,7 @@ a series of special thermostat developed for ring polymer molecular dynamics is 
 import torch
 import numpy as np
 import scipy.linalg as linalg
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import logging
 
 from schnetpack import units as spk_units
@@ -349,7 +349,6 @@ class NHCThermostat(ThermostatHook):
                 dtype=simulator.dtype,
             )
         else:
-            # TODO: check if tricks could be applied here
             state_dimension = (n_replicas, n_molecules, 1, self.chain_length)
             self.degrees_of_freedom = (3 * simulator.system.n_atoms[None, :, None]).to(
                 simulator.dtype
@@ -369,7 +368,9 @@ class NHCThermostat(ThermostatHook):
             state_dimension, device=simulator.device, dtype=simulator.dtype
         )
 
-    def _init_masses(self, state_dimension: List[int], simulator: Simulator):
+    def _init_masses(
+        self, state_dimension: Tuple[int, int, int, int], simulator: Simulator
+    ):
         """
         Auxiliary routine for initializing the thermostat masses.
 
@@ -439,9 +440,9 @@ class NHCThermostat(ThermostatHook):
                 ) / self.masses[..., 0]
 
                 # Update thermostat positions
-                # TODO: Only required if one is interested in the conserved
-                #  quanity of the NHC.
-                self.positions += 0.5 * self.velocities * time_step
+                # Only required if one is interested in the conserved
+                # quantity of the NHC.
+                # self.positions += 0.5 * self.velocities * time_step
 
                 # Update the thermostat velocities
                 for chain in range(self.chain_length - 1):
@@ -508,15 +509,15 @@ class NHCThermostat(ThermostatHook):
         # self.compute_conserved(simulator.system)
 
     # TODO: check with logger
-    def compute_conserved(self, system):
-        conserved = (
-            system.kinetic_energy[..., None, None]
-            + 0.5 * torch.sum(self.velocities ** 2 * self.masses, 4)
-            + system.properties["energy"][..., None, None]
-            + self.degrees_of_freedom * self.kb_temperature * self.positions[..., 0]
-            + self.kb_temperature * torch.sum(self.positions[..., 1:], 4)
-        )
-        return conserved
+    # def compute_conserved(self, system):
+    #     conserved = (
+    #         system.kinetic_energy[..., None, None]
+    #         + 0.5 * torch.sum(self.velocities ** 2 * self.masses, 4)
+    #         + system.properties["energy"][..., None, None]
+    #         + self.degrees_of_freedom * self.kb_temperature * self.positions[..., 0]
+    #         + self.kb_temperature * torch.sum(self.positions[..., 1:], 4)
+    #     )
+    #     return conserved
 
 
 class GLEThermostat(ThermostatHook):
