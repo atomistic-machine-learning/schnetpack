@@ -2,7 +2,9 @@ import torch
 import numpy as np
 import schnetpack.units as spk_units
 
-__all__ = ["YSWeights", "load_gle_matrices"]
+from typing import Optional
+
+__all__ = ["YSWeights", "load_gle_matrices", "StableSinhDiv"]
 
 
 class YSWeights:
@@ -174,3 +176,26 @@ def load_gle_matrices(filename: str):
         )
 
     return a_matrix.matrix, c_matrix.matrix
+
+
+class StableSinhDiv:
+    """
+    McLaurin series of sinh(x)/x around zero to avoid numerical instabilities
+    """
+
+    def __init__(self, eps: Optional[float] = 1e-4):
+        self.e0 = 1.0
+        self.e2 = self.e0 / 6.0
+        self.e4 = self.e2 / 20.0
+        self.e6 = self.e4 / 42.0
+        self.e8 = self.e6 / 72.0
+        self.eps = eps
+
+    def f(self, x: torch.tensor):
+        x2 = x * x
+        sinh_div = torch.where(
+            x < self.eps,
+            (((self.e8 * x2 + self.e6) * x2 + self.e4) * x + self.e2) * x2 + self.e0,
+            torch.sinh(x) / x,
+        )
+        return sinh_div
