@@ -68,6 +68,10 @@ def setup_md_units(md_base_units: Dict[str, Union[str, float]]):
     units["s"] = aseunits.s / units["time"]
     units["aut"] = aseunits._aut * aseunits.s / units["time"]
 
+    # Pressure units
+    units["Pascal"] = aseunits.Pascal / units["pressure"]
+    units["bar"] = 1e5 * units["Pascal"]
+
     # Mol
     units["mol"] = aseunits.mol
 
@@ -112,7 +116,9 @@ def setup_md_units(md_base_units: Dict[str, Union[str, float]]):
     Dalton,
     amu,
     Debye,
-) = [0.0] * 29
+    bar,
+    Pascal,
+) = [0.0] * 31
 
 
 def _conversion_factor_ase(unit: str):
