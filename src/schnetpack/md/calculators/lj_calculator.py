@@ -31,12 +31,14 @@ class LJCalculator(SchnetPackCalculator):
         property_conversion: Dict[str, Union[str, float]] = {},
         neighbor_list: NeighborListMD = ASENeighborListMD,
         cutoff: float = 5.0,
+        healing_length: float = 3.0,
         cutoff_shell: float = 1.0,
     ):
         model = LJModel(
             r_equilibrium=r_equilibrium,
             well_depth=well_depth,
             cutoff=cutoff,
+            healing_length=healing_length,
             calc_forces=True,
             calc_stress=(stress_label is not None),
             energy_key=energy_label,
@@ -75,6 +77,7 @@ class LJModel(nn.Module):
         r_equilibrium: float,
         well_depth: float,
         cutoff: float,
+        healing_length: float,
         calc_forces: bool = True,
         calc_stress: bool = True,
         energy_key: str = properties.energy,
@@ -92,7 +95,7 @@ class LJModel(nn.Module):
         self.force_key = force_key
         self.stress_key = stress_key
 
-        self.cutoff = CustomCutoff(cutoff)
+        self.cutoff = CustomCutoff(cutoff_radius=cutoff, healing_length=healing_length)
 
         self.force_layer = Forces(
             calc_forces=calc_forces,
@@ -145,13 +148,11 @@ class LJModel(nn.Module):
         if self.calc_stress:
             results[self.stress_key] = inputs[self.stress_key].detach()
 
-        print(results)
-
         return results
 
 
 class CustomCutoff(nn.Module):
-    def __init__(self, cutoff_radius, healing_length=0.3405):
+    def __init__(self, cutoff_radius: float, healing_length: float):
         super(CustomCutoff, self).__init__()
         self.register_buffer("cutoff_radius", torch.Tensor([cutoff_radius]))
         self.register_buffer("healing_length", torch.Tensor([healing_length]))
