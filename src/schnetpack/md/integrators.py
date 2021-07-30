@@ -241,11 +241,21 @@ class NPTVelocityVerlet(VelocityVerlet):
         super(NPTVelocityVerlet, self).__init__(time_step)
         self.barostat = barostat
 
+    def half_step(self, system: System):
+        """
+        Half steps propagating the system and barostat momenta.
+
+        Args:
+            system (object): System class containing all molecules and their
+                             replicas.
+        """
+        self.barostat.propagate_half_step(system)
+
     def _main_step(self, system: System):
         """
         Main integrator step, where the barostat routine is used to propagate the system positions and cells.
         """
-        self.barostat.propagate_system(system)
+        self.barostat.propagate_main_step(system)
 
 
 class NPTRingPolymer(RingPolymer):
@@ -288,4 +298,4 @@ class NPTRingPolymer(RingPolymer):
             system (object): System class containing all molecules and their
                              replicas.
         """
-        self.barostat.propagate_system(system)
+        self.barostat.propagate_main_step(system)
