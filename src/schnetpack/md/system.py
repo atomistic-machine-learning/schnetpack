@@ -364,7 +364,7 @@ class System(nn.Module):
         return self.momenta / self.masses
 
     @property
-    def kinetic_energy(self):
+    def kinetic_energy(self) -> torch.tensor:
         """
         Convenience property for computing the kinetic energy associated with
         each replica and molecule.
