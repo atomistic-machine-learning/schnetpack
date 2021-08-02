@@ -1,8 +1,9 @@
 from __future__ import annotations
 import torch
-import schnetpack
+
 from abc import ABC
 from typing import TYPE_CHECKING, List, Dict, Optional
+from schnetpack.md.calculators import MDCalculator
 
 if TYPE_CHECKING:
     from schnetpack.md import System
@@ -10,7 +11,7 @@ if TYPE_CHECKING:
 __all__ = ["EnsembleCalculator"]
 
 
-class EnsembleCalculator(ABC, schnetpack.md.calculators.MDCalculator):
+class EnsembleCalculator(ABC, MDCalculator):
     """
     Mixin for creating ensemble calculators from the standard `schnetpack.md.calculators` classes. Accumulates
     property predictions as the average over all models and uncertainties as the variance of model predictions.

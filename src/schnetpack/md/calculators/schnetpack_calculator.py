@@ -9,11 +9,8 @@ if TYPE_CHECKING:
 import torch
 import logging
 
-from schnetpack.md.calculators import (
-    MDCalculator,
-    MDCalculatorError,
-    EnsembleCalculator,
-)
+from schnetpack.md.calculators.base_calculator import MDCalculator, MDCalculatorError
+from schnetpack.md.calculators.ensemble_calculator import EnsembleCalculator
 from schnetpack.md.neighborlist_md import ASENeighborListMD
 
 import time

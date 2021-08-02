@@ -278,7 +278,7 @@ class OrcaParser:
         return main_properties
 
 
-def format_dipole_derivatives(target_property: numpy.array):
+def format_dipole_derivatives(target_property: np.array):
     """
     Reshape the extracted dipole derivatives to the correct
     format. Format is Natoms x (dx dy dz) x (property x y z)
@@ -314,53 +314,6 @@ def format_polarizability_derivatives(target_property: np.array):
     reshaped[:, :, triu_idx[0], triu_idx[1]] = target_property
     reshaped[:, :, triu_idx[1], triu_idx[0]] = target_property
     return reshaped
-
-
-class OrcaOutputParser:
-    """
-    Basic ORCA output parser class. Parses an Orca output file according to the parsers specified in the 'parsers'
-    dictionary. Parsed data is stored in an dictionary, using the same keys as the parsers. If a list of formatters is
-    provided to a parser, a list of the parsed entries is stored in the output dictionary.
-
-    Args:
-        parsers (dict[str->callable]): dictionary of :obj:`OrcaPropertyParser`,
-                                       each with their own :obj:`OrcaFormatter`.
-    """
-
-    def __init__(self, parsers: Dict[str, OrcaPropertyParser]):
-        self.parsers = parsers
-        self.parsed = None
-
-    def parse_file(self, path: str):
-        """
-        Open the file and iterate over its lines, applying all parsers. In the end, all data is collected in a
-        dictionary.
-
-        Args:
-            path (str): path to Orca output file.
-        """
-        # Reset for new file
-        for parser in self.parsers:
-            self.parsers[parser].reset()
-
-        with open(path, "r") as f:
-            for line in f:
-                for parser in self.parsers:
-                    self.parsers[parser].parse_line(line)
-
-        self.parsed = {}
-
-        for parser in self.parsers:
-            self.parsed[parser] = self.parsers[parser].get_parsed()
-
-    def get_parsed(self):
-        """
-        Auxiliary routine to collect the data from the parser.
-
-        Returns:
-            dict[str->list]: Dictionary of data entries according to parser keys.
-        """
-        return self.parsed
 
 
 class OrcaFormatter:
@@ -623,6 +576,53 @@ class OrcaPropertyParser:
         """
         self.read = False
         self.parsed = None
+
+
+class OrcaOutputParser:
+    """
+    Basic ORCA output parser class. Parses an Orca output file according to the parsers specified in the 'parsers'
+    dictionary. Parsed data is stored in an dictionary, using the same keys as the parsers. If a list of formatters is
+    provided to a parser, a list of the parsed entries is stored in the output dictionary.
+
+    Args:
+        parsers (dict[str->callable]): dictionary of :obj:`OrcaPropertyParser`,
+                                       each with their own :obj:`OrcaFormatter`.
+    """
+
+    def __init__(self, parsers: Dict[str, OrcaPropertyParser]):
+        self.parsers = parsers
+        self.parsed = None
+
+    def parse_file(self, path: str):
+        """
+        Open the file and iterate over its lines, applying all parsers. In the end, all data is collected in a
+        dictionary.
+
+        Args:
+            path (str): path to Orca output file.
+        """
+        # Reset for new file
+        for parser in self.parsers:
+            self.parsers[parser].reset()
+
+        with open(path, "r") as f:
+            for line in f:
+                for parser in self.parsers:
+                    self.parsers[parser].parse_line(line)
+
+        self.parsed = {}
+
+        for parser in self.parsers:
+            self.parsed[parser] = self.parsers[parser].get_parsed()
+
+    def get_parsed(self):
+        """
+        Auxiliary routine to collect the data from the parser.
+
+        Returns:
+            dict[str->list]: Dictionary of data entries according to parser keys.
+        """
+        return self.parsed
 
 
 class OrcaMainFileParser(OrcaOutputParser):
