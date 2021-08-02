@@ -1,7 +1,9 @@
 from __future__ import annotations
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Optional, Tuple
 
 from typing import TYPE_CHECKING
+
+import numpy as np
 
 if TYPE_CHECKING:
     from schnetpack.md import System
@@ -11,8 +13,9 @@ import torch.nn as nn
 from schnetpack import units as spk_units
 from schnetpack import properties
 
+import os
 
-__all__ = ["MDCalculator", "MDCalculatorError"]
+__all__ = ["MDCalculator", "MDCalculatorError", "QMCalculator", "QMCalculatorError"]
 
 
 class MDCalculatorError(Exception):
@@ -48,8 +51,8 @@ class MDCalculator(nn.Module):
         force_label: str,
         energy_units: Union[str, float],
         position_units: Union[str, float],
-        energy_label: str = None,
-        stress_label: str = None,
+        energy_label: Optional[str] = None,
+        stress_label: Optional[str] = None,
         property_conversion: Dict[str, Union[str, float]] = {},
     ):
         super(MDCalculator, self).__init__()
@@ -203,182 +206,200 @@ class MDCalculator(nn.Module):
         )
 
 
-# class QMCalculator(MDCalculator):
-#     """
-#     Basic calculator for interfacing quantum chemistry codes with SchNetPack molecular dynamics.
-#
-#
-#
-#     Calculator for interfacing the ORCA code package with SchNetPack molecular dynamics.
-#     Requires ORCA to be installed and an input file template.
-#     This template is a standard ORCA input file, with everything past the specification of coordinate
-#     format, charge and multiplicity removed (coordinates and final *).
-#     If desired, a Queuer can be give, which will attempt to send all jobs to a grid engine queue.
-#
-#     In general, the calculator will take the current System to generate inputs, perform the calculation
-#     with ORCA, extract data from the ouput file (useing the OrcaParser class) and update the System.
-#
-#     Args:
-#         required_properties (list): List of properties which should be extracted from output.
-#         force_handle (str): Indicator for molecular forces.
-#         compdir (str): Directory in which computations are performed.
-#         qm_executable (str): Path to the ORCA executable.
-#         position_conversion (str/float, optional): Conversion of positions from atomic units.
-#         force_conversion (str/float, optional): Conversion of forces to atomic units.
-#         property_conversion (dict, optional): Convert properties to requested units. If left empty, no conversion
-#                                               is performed.
-#         adaptive (bool, optional): Specify, whether the calculator should be used for adaptive sampling.
-#     """
-#
-#     is_atomistic = []
-#
-#     def __init__(
-#             self,
-#             required_properties,
-#             force_handle,
-#             compdir,
-#             qm_executable,
-#             position_conversion="Angstrom",
-#             force_conversion=1.0,
-#             property_conversion={},
-#             adaptive=False,
-#     ):
-#
-#         super(QMCalculator, self).__init__(
-#             required_properties,
-#             force_handle,
-#             position_conversion=position_conversion,
-#             force_conversion=force_conversion,
-#             property_conversion=property_conversion,
-#         )
-#
-#         self.qm_executable = qm_executable
-#
-#         self.compdir = compdir
-#         if not os.path.exists(self.compdir):
-#             os.makedirs(compdir)
-#
-#         # Set the force handle to be an atomistic property
-#         self.is_atomistic = force_handle
-#
-#         self.adaptive = adaptive
-#         self.step = 0
-#
-#     def calculate(self, system, samples=None):
-#         """
-#         Perform the calculation with a quantum chemistry code.
-#         If samples is given, only a subset of molecules is selected.
-#
-#         Args:
-#             system (schnetpack.md.System): System from the molecular dynamics simulation.
-#             samples (np.array, optional): Integer array specifying whether only particular
-#                                           replicas and molecules in the system should be used for
-#                                           computations. Only works with adaptive sampling.
-#
-#         Returns:
-#             (list,list):
-#                 atom_buffer:
-#                     List of ASE atoms objects of every computed molecule.
-#                     Only returned if adaptive sampling is activated.
-#
-#                 property_buffer:
-#                     List of property dictionaries for every computation.
-#                     Only returned if adaptive sampling is activated.
-#         """
-#         # Use of samples only makes sense in conjunction with adaptive sampling
-#         if not self.adaptive and samples is not None:
-#             raise QMCalculatorError(
-#                 "Usage of subsamples only allowed during adaptive sampling."
-#             )
-#
-#         # Generate director for current step
-#         # current_compdir = os.path.join(self.compdir, 'step_{:06d}'.format(self.step))
-#         current_compdir = os.path.join(self.compdir, "step_X")
-#         if not os.path.exists(current_compdir):
-#             os.makedirs(current_compdir)
-#
-#         # Get molecules (select samples if requested)
-#         molecules = self._extract_molecules(system, samples=samples)
-#
-#         # Run computation
-#         outputs = self._run_computation(molecules, current_compdir)
-#
-#         # Increment internal step
-#         self.step += 1
-#
-#         # Prepare output
-#         # a) either parse to update system properties
-#         if not self.adaptive:
-#             self.results = self._format_calc(outputs, system)
-#             self._update_system(system)
-#         # b) or append to the database (just return everything as molecules/atoms objects)
-#         else:
-#             atom_buffer, property_buffer = self._format_ase(molecules, outputs)
-#             return atom_buffer, property_buffer
-#
-#     def _extract_molecules(self, system, samples=None):
-#         """
-#         Extract atom types and molecular structures from the system. and convert to
-#         appropriate units.
-#
-#         Args:
-#             system (schnetpack.md.System): System from the molecular dynamics simulation.
-#             samples (np.array, optional): Integer array specifying whether only particular
-#                                           replicas and molecules in the system should be used for
-#                                           computations. Only works with adaptive sampling.
-#
-#         Returns:
-#             list: List of tuples containing the atom types (integer numpy.array) and positions
-#                   (float numpy.array).
-#         """
-#         molecules = []
-#         for rep_idx in range(system.n_replicas):
-#             for mol_idx in range(system.n_molecules):
-#                 # Check which geometries need samples in adaptive setup
-#                 if samples is not None:
-#                     if not samples[rep_idx, mol_idx]:
-#                         continue
-#                 atom_types = system.atom_types[
-#                              rep_idx, mol_idx, : system.n_atoms[mol_idx]
-#                              ]
-#                 # Convert Bohr to Angstrom
-#                 positions = (
-#                         system.positions[rep_idx, mol_idx, : system.n_atoms[mol_idx], ...]
-#                         * self.position_conversion
-#                 )
-#                 # Store atom types and positions for ase db during sampling
-#                 molecules.append((atom_types, positions))
-#
-#         return molecules
-#
-#     def _run_computation(self, molecules, current_compdir):
-#         """
-#         Placeholder performing the computation.
-#
-#         Args:
-#             molecules (list): List of tuples containing the atom types (integer numpy.array)
-#                       and positions (float numpy.array).
-#             current_compdir (str): Path to the current computation directory.
-#         """
-#         raise NotImplementedError
-#
-#     def _format_calc(self, outputs, system):
-#         """
-#         Placeholder to format the computation output if no adaptive sampling is used.
-#
-#         Args:
-#             outputs (list): Paths to output files.
-#             system (schnetpack.md.System): System from the molecular dynamics simulation.
-#         """
-#         raise NotImplementedError
-#
-#     def _format_ase(self, molecules, outputs):
-#         """
-#         Placeholder to format the ouput for storage in an ASE database (for adaptive sampling).
-#
-#         Args:
-#             molecules (list): List of tuples containing the atom types (integer numpy.array)
-#                       and positions (float numpy.array).
-#             outputs (list): Paths to output files.
-#         """
-#         raise NotImplementedError
+class QMCalculatorError(Exception):
+    """
+    Exception for the QM calculator base class
+    """
+
+    pass
+
+
+class QMCalculator(MDCalculator):
+    """
+    Basic calculator for interfacing quantum chemistry codes with SchNetPack molecular dynamics.
+
+
+
+    Calculator for interfacing the ORCA code package with SchNetPack molecular dynamics.
+    Requires ORCA to be installed and an input file template.
+    This template is a standard ORCA input file, with everything past the specification of coordinate
+    format, charge and multiplicity removed (coordinates and final *).
+    If desired, a Queuer can be give, which will attempt to send all jobs to a grid engine queue.
+
+    In general, the calculator will take the current System to generate inputs, perform the calculation
+    with ORCA, extract data from the ouput file (useing the OrcaParser class) and update the System.
+
+    Args:
+        required_properties (list): List of the property names which will be passed to the simulator
+        force_label (str): Name of the property corresponding to the forces.
+        compdir (str): Directory in which computations are performed.
+        qm_executable (str): Path to the ORCA executable.
+        energy_units (str, float): Energy units returned by the internal computation model.
+        position_units (str, float): Unit conversion for the length used in the model computing all properties. E.g. if
+                             the model needs Angstrom, one has to provide the conversion factor converting from the
+                             atomic units used internally (Bohr) to Angstrom: 0.529177.
+                             Is used together with `energy_units` to determine units of force and stress.
+        energy_label (str, optional): Name of the property corresponding to the energy.
+        stress_label (str, optional): Name of the property corresponding to the stress.
+        property_conversion (dict(float, str)): Optional dictionary of conversion factors for other properties predicted
+                             by the model. Only changes the units used for logging the various outputs.
+        adaptive (bool): Flag for adaptive sampling.
+    """
+
+    is_atomistic = []
+
+    def __init__(
+        self,
+        required_properties: List,
+        force_label: str,
+        compdir: str,
+        qm_executable: str,
+        energy_units: Union[str, float],
+        position_units: Union[str, float],
+        energy_label: Optional[str] = None,
+        stress_label: Optional[str] = None,
+        property_conversion: Dict[str, Union[str, float]] = {},
+        adaptive: bool = False,
+    ):
+        super(QMCalculator, self).__init__(
+            required_properties=required_properties
+            + [energy_label, force_label, stress_label],
+            force_label=force_label,
+            energy_units=energy_units,
+            position_units=position_units,
+            energy_label=energy_label,
+            stress_label=stress_label,
+            property_conversion=property_conversion,
+        )
+
+        self.qm_executable = qm_executable
+
+        self.compdir = compdir
+        if not os.path.exists(self.compdir):
+            os.makedirs(compdir)
+
+        self.adaptive = adaptive
+
+    def calculate(self, system: System, samples: Optional[np.array] = None):
+        """
+        Perform the calculation with a quantum chemistry code.
+        If samples is given, only a subset of molecules is selected.
+
+        Args:
+            system (schnetpack.md.System): System from the molecular dynamics simulation.
+            samples (np.array, optional): Integer array specifying whether only particular
+                                          replicas and molecules in the system should be used for
+                                          computations. Only works with adaptive sampling.
+
+        Returns:
+            (list,list):
+                atom_buffer:
+                    List of ASE atoms objects of every computed molecule.
+                    Only returned if adaptive sampling is activated.
+
+                property_buffer:
+                    List of property dictionaries for every computation.
+                    Only returned if adaptive sampling is activated.
+        """
+        # Use of samples only makes sense in conjunction with adaptive sampling
+        if not self.adaptive and samples is not None:
+            raise QMCalculatorError(
+                "Usage of subsamples only allowed during adaptive sampling."
+            )
+
+        # Generate director for current step
+        # current_compdir = os.path.join(self.compdir, 'step_{:06d}'.format(self.step))
+        current_compdir = os.path.join(self.compdir, "step_X")
+        if not os.path.exists(current_compdir):
+            os.makedirs(current_compdir)
+
+        # Get molecules (select samples if requested)
+        molecules = self._extract_molecules(system, samples=samples)
+
+        # Run computation
+        outputs = self._run_computation(molecules, current_compdir)
+
+        # Increment internal step
+        self.step += 1
+
+        # Prepare output
+        # a) either parse to update system properties
+        if not self.adaptive:
+            self.results = self._format_calc(outputs, system)
+            self._update_system(system)
+        # b) or append to the database (just return everything as molecules/atoms objects)
+        else:
+            atom_buffer, property_buffer = self._format_ase(molecules, outputs)
+            return atom_buffer, property_buffer
+
+    def _extract_molecules(self, system: System, samples: Optional[np.array] = None):
+        """
+        Extract atom types and molecular structures from the system. and convert to
+        appropriate units.
+
+        Args:
+            system (schnetpack.md.System): System from the molecular dynamics simulation.
+            samples (np.array, optional): Integer array specifying whether only particular
+                                          replicas and molecules in the system should be used for
+                                          computations. Only works with adaptive sampling.
+
+        Returns:
+            list: List of tuples containing the atom types (integer numpy.array) and positions
+                  (float numpy.array).
+        """
+        all_molecules = system.get_ase_atoms(position_unit_output=spk_units.length)
+
+        molecules = []
+
+        # flatten samples
+        if samples is not None:
+            samples = samples.flatten()
+
+        for idx, mol in enumerate(all_molecules):
+            if samples is not None:
+                if not samples[idx]:
+                    continue
+
+            atom_types = mol.get_atomic_numbers()
+            positions = mol.get_positions() * self.position_conversion
+
+            # Store atom types and positions for ase db during sampling
+            molecules.append((atom_types, positions))
+
+        return molecules
+
+    def _run_computation(
+        self, molecules: List[Tuple[np.array, np.array]], current_compdir: str
+    ):
+        """
+        Placeholder performing the computation.
+
+        Args:
+            molecules (list): List of tuples containing the atom types (integer numpy.array)
+                      and positions (float numpy.array).
+            current_compdir (str): Path to the current computation directory.
+        """
+        raise NotImplementedError
+
+    def _format_calc(self, outputs: List[str], system: System):
+        """
+        Placeholder to format the computation output if no adaptive sampling is used.
+
+        Args:
+            outputs (list): Paths to output files.
+            system (schnetpack.md.System): System from the molecular dynamics simulation.
+        """
+        raise NotImplementedError
+
+    def _format_ase(
+        self, molecules: List[Tuple[np.array, np.array]], outputs: List[str]
+    ):
+        """
+        Placeholder to format the ouput for storage in an ASE database (for adaptive sampling).
+
+        Args:
+            molecules (list): List of tuples containing the atom types (integer numpy.array)
+                      and positions (float numpy.array).
+            outputs (list): Paths to output files.
+        """
+        raise NotImplementedError
