@@ -123,6 +123,10 @@ class MDCalculator(nn.Module):
         # Set the forces for the system (at this point, already detached)
         self._set_system_forces(system)
 
+        # Store potential energy to system if requested:
+        if self.energy_label is not None:
+            self._set_system_energy(system)
+
         # Set stress of the system if requested:
         if self.stress_label is not None:
             self._set_system_stress(system)
@@ -182,6 +186,13 @@ class MDCalculator(nn.Module):
         system.forces = (
             forces.view(system.n_replicas, system.total_n_atoms, 3)
             * self.force_conversion
+        )
+
+    def _set_system_energy(self, system: System):
+        energy = self.results[self.energy_label]
+        system.energy = (
+            energy.view(system.n_replicas, system.n_molecules, 1)
+            * self.energy_conversion
         )
 
     def _set_system_stress(self, system: System):

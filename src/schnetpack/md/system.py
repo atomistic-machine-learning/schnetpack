@@ -88,7 +88,7 @@ class System(nn.Module):
         self.register_buffer("positions", None)
         self.register_buffer("momenta", None)
         self.register_buffer("forces", None)
-        self.register_buffer("energies", None)
+        self.register_buffer("energy", None)
 
         # Properties for periodic boundary conditions and crystal cells
         self.register_buffer("cells", None)
@@ -160,7 +160,7 @@ class System(nn.Module):
         self.momenta = torch.zeros(self.n_replicas, self.total_n_atoms, 3)
         self.forces = torch.zeros(self.n_replicas, self.total_n_atoms, 3)
 
-        self.energies = torch.zeros(self.n_replicas, self.n_molecules, 1)
+        self.energy = torch.zeros(self.n_replicas, self.n_molecules, 1)
 
         # Relevant for periodic boundary conditions and simulation cells
         self.cells = torch.zeros(self.n_replicas, self.n_molecules, 3, 3)
@@ -414,6 +414,27 @@ class System(nn.Module):
         return temperature
 
     @property
+    def potential_energy(self):
+        """
+        Property for accessing potential energy pf system. The energy array is only populated if a `energy_label` is
+        given in the calculator, energies will be 0 otherwise.
+
+        Returns:
+            torch.tensor: Potential energy, if requested in the calculator
+        """
+        return self.energy
+
+    @potential_energy.setter
+    def potential_energy(self, energy: torch.tensor):
+        """
+        Setter for the potential energy.
+
+        Args:
+            energy (torch.tensor): Potential energy.
+        """
+        self.energy = energy
+
+    @property
     def momenta_normal(self):
         """
         Property for normal mode representation of momenta (e.g. for RPMD)
@@ -525,6 +546,16 @@ class System(nn.Module):
             * self.centroid_kinetic_energy
         )
         return temperature
+
+    @property
+    def centroid_potential_energy(self):
+        """
+        Get the centroid potential energy.
+
+        Returns:
+            torch.tensor: Centroid potential energy
+        """
+        return torch.mean(self.energy, dim=0, keepdim=True)
 
     @property
     def volume(self):
