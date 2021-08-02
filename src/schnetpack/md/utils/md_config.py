@@ -37,7 +37,7 @@ config_aliases = {
     # Logging
     "checkpoint": "schnetpack.md.simulation_hooks.Checkpoint",
     "file_logger": "schnetpack.md.simulation_hooks.FileLogger",
-    "temperature_logger": "schnetpack.md.simulation_hooks.TemperatureLogger",
+    "tensorboard_logger": "schnetpack.md.simulation_hooks.TensorBoardLogger",
     "molecules": "schnetpack.md.simulation_hooks.MoleculeStream",
     "properties": "schnetpack.md.simulation_hooks.PropertyStream",
 }

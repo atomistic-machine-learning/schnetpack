@@ -2,6 +2,8 @@ from __future__ import annotations
 from typing import Union, List, Dict, Tuple, Any
 from typing import TYPE_CHECKING
 
+import schnetpack.units
+
 if TYPE_CHECKING:
     from schnetpack.md import System
     from schnetpack.md import Simulator
@@ -537,9 +539,13 @@ class FileLogger(SimulationHook):
         self.buffer_position = 0
 
 
-class TensorboardLogger(SimulationHook):
+class TensorBoardLoggerError(Exception):
+    pass
+
+
+class BasicTensorboardLogger(SimulationHook):
     """
-    Class for logging scalar information of the system replicas and molecules collected during the simulation to
+    Base class for logging scalar information of the system replicas and molecules collected during the simulation to
     TensorBoard. An individual scalar is created for every molecule, replica and property.
 
     Args:
@@ -548,7 +554,7 @@ class TensorboardLogger(SimulationHook):
     """
 
     def __init__(self, log_file, every_n_steps=100):
-        super(TensorboardLogger, self).__init__()
+        super(BasicTensorboardLogger, self).__init__()
         from tensorboardX import SummaryWriter
 
         self.log_file = log_file
@@ -617,9 +623,9 @@ class TensorboardLogger(SimulationHook):
         self.writer.close()
 
 
-class TemperatureLogger(TensorboardLogger):
+class TensorBoardLogger(BasicTensorboardLogger):
     """
-    TensorBoard logging hook for the temperatures of the replicas, as well as of the corresponding centroids for each
+    TensorBoard logging hook for the properties of the replicas, as well as of the corresponding centroids for each
     molecule in the system container.
 
     Args:
@@ -627,22 +633,120 @@ class TemperatureLogger(TensorboardLogger):
         every_n_steps (int): Frequency with which data is logged to TensorBoard.
     """
 
-    def __init__(self, log_file, every_n_steps=100):
-        super(TemperatureLogger, self).__init__(log_file, every_n_steps=every_n_steps)
-        self.initial_value = None
+    def __init__(self, log_file: str, properties: List, every_n_steps: int = 100):
+        super(TensorBoardLogger, self).__init__(log_file, every_n_steps=every_n_steps)
+        # Instructions of how to compute properties
+        self.get_properties = {
+            "energy": self._get_energies,
+            "temperature": self._get_temperature,
+            "pressure": self._get_pressure,
+            "volume": self._get_volume,
+        }
+        for p in properties:
+            if p not in self.get_properties:
+                raise TensorBoardLoggerError("Property '{:s}' not available.".format(p))
+
+        self.properties = properties
 
     def on_step_end(self, simulator):
         """
-        Log the systems temperatures at the given intervals.
+        Log the systems properties the given intervals.
 
         Args:
             simulator (schnetpack.simulation_hooks.Simulator): Simulator class used in the molecular dynamics simulation.
         """
         if simulator.step % self.every_n_steps == 0:
             # Use the _log_group routine to log the systems temperatures
-            self._log_group(
-                "temperature",
-                simulator.step,
-                simulator.system.temperature,
-                property_centroid=simulator.system.centroid_temperature,
-            )
+            log = {}
+
+            for p in self.properties:
+                log.update(self.get_properties[p](simulator.system))
+
+            for group in log:
+                self._log_group(
+                    group,
+                    simulator.step,
+                    log[group][0],
+                    property_centroid=log[group][1],
+                )
+
+    @staticmethod
+    def _get_temperature(system: System):
+        """
+        Instructions for obtaining temperature and centroid temperature.
+
+        Args:
+            system (schnetpack.md.System): System class.
+
+        Returns:
+            Dict[Tuple[torch.tensor, torch.tensor]]: Dictionary containing tuples of property and centroid.
+        """
+        temperature = system.temperature
+        temperature_centroid = system.centroid_temperature
+        log = {"temperature": (temperature, temperature_centroid)}
+        return log
+
+    @staticmethod
+    def _get_energies(system: System):
+        """
+        Instructions for obtaining kinetic, potential and total energy. If the potential energy has not been requested
+        explicitly in the calculator (`energy_label`) it will be constantly 0.
+
+        Args:
+            system (schnetpack.md.System): System class.
+
+        Returns:
+            Dict[Tuple[torch.tensor, torch.tensor]]: Dictionary containing tuples of property and centroid.
+        """
+        kinetic_energy = system.kinetic_energy
+        kinetic_energy_centroid = system.centroid_kinetic_energy
+
+        potential_energy = system.potential_energy
+        potential_energy_centroid = system.centroid_potential_energy
+
+        log = {
+            "kinetic_energy": (kinetic_energy, kinetic_energy_centroid),
+            "potential_energy": (potential_energy, potential_energy_centroid),
+            "total_energy": (
+                kinetic_energy + potential_energy,
+                kinetic_energy_centroid + potential_energy_centroid,
+            ),
+        }
+
+        return log
+
+    @staticmethod
+    def _get_volume(system: System):
+        """
+        Instructions for obtaining the volume.
+
+        Args:
+            system (schnetpack.md.System): System class.
+
+        Returns:
+            Dict[Tuple[torch.tensor, torch.tensor]]: Dictionary containing tuples of property and centroid.
+        """
+        volume = system.volume
+        log = {"volume": (volume, None)}
+        return log
+
+    @staticmethod
+    def _get_pressure(system: System):
+        """
+        Instructions for obtaining pressure.
+
+        Args:
+            system (schnetpack.md.System): System class.
+
+        Returns:
+            Dict[Tuple[torch.tensor, torch.tensor]]: Dictionary containing tuples of property and centroid.
+        """
+        pressure = (
+            system.compute_pressure(kinetic_component=True) / schnetpack.units.bar
+        )
+        pressure_centroid = (
+            system.compute_centroid_pressure(kinetic_component=True)
+            / schnetpack.units.bar
+        )
+        log = {"pressure": (pressure, pressure_centroid)}
+        return log
