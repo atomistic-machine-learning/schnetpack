@@ -1,6 +1,4 @@
 import logging
-import os
-from shutil import rmtree
 import uuid
 import torch
 
@@ -48,9 +46,6 @@ def simulate(config: DictConfig):
         """
     )
 
-    # Confound hydra
-    # os.chdir(hydra.utils.get_original_cwd())
-
     # Load custom config and use to update defaults
     if "load_config" in config:
         config_path = hydra.utils.to_absolute_path(config.load_config)
@@ -58,8 +53,9 @@ def simulate(config: DictConfig):
         loaded_config = OmegaConf.load(config_path)
         config = OmegaConf.merge(config, loaded_config)
 
-    if config.get("print_config"):
-        print_config(config, fields=["calculator"], resolve=True)
+    print_config(
+        config, fields=["calculator", "system", "dynamics", "logging"], resolve=True
+    )
 
     # ===========================================
     #   Initialize seed and simulation directory
@@ -71,22 +67,6 @@ def simulate(config: DictConfig):
 
     # Set up random seed
     set_random_seed(config.seed)
-
-    # Set up directories
-    # TODO: recheck
-    # log.info("Setting up simulation directory...")
-    # simulation_dir = hydra.utils.to_absolute_path(config.simulation_dir)
-    # if os.path.exists(simulation_dir) and not config.overwrite:
-    #     log.warning(
-    #         "Simulation directory {:s} already exists (set overwrite flag?)".format(
-    #             simulation_dir
-    #         )
-    #     )
-    # elif os.path.exists(simulation_dir) and config.overwrite:
-    #     rmtree(simulation_dir)
-    #     os.makedirs(simulation_dir)
-    # else:
-    #     os.makedirs(simulation_dir)
 
     # ===========================================
     #   Initialize the system
@@ -167,17 +147,17 @@ def simulate(config: DictConfig):
     # Temperature and pressure control should be treated differently (e.g. to avoid double thermostating with
     # NHC barostat and since npt integrators rely on the barostat for system propagation routines)
     if config.dynamics.thermostat is not None:
-        log.info("Found {:s} thermostat...".format(config.dynamics.thermostat._target_))
         thermostat_hook = hydra.utils.instantiate(
             config_alias(config.dynamics.thermostat)
         )
+        log.info("Found {:s} thermostat...".format(config.dynamics.thermostat._target_))
     else:
         thermostat_hook = None
 
     # Check for barostat hook and whether thermostat is required
     if config.dynamics.barostat is not None:
-        log.info("Found {:s} barostat...".format(config.dynamics.barostat._target_))
         barostat_hook = hydra.utils.instantiate(config_alias(config.dynamics.barostat))
+        log.info("Found {:s} barostat...".format(config.dynamics.barostat._target_))
 
         if thermostat_hook is not None:
             if hasattr(barostat_hook, "temperature_control"):

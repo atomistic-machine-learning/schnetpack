@@ -49,6 +49,15 @@ integrator_to_npt = {
 
 
 def get_alias(name: str):
+    """
+    Find original class bases on aliases defined in `schnetpack.md.utils.md_config.config_aliases`.
+
+    Args:
+        name (str): alias of class.
+
+    Returns:
+        str: full name of class.
+    """
     if name in config_aliases:
         return config_aliases[name]
     else:
@@ -57,13 +66,30 @@ def get_alias(name: str):
 
 
 def config_alias(config: Union[Dict, DictConfig]):
+    """
+    Resolve aliases in hydra `_target_` entries for automatic instantiation.
+
+    Args:
+        config (DictConfig): config dictionary.
+
+    Returns:
+        DictConfig: config disctionary with resolved alias.
+    """
     if "_target_" in config:
         config._target_ = get_alias(config._target_)
     return config
 
 
 def is_rpmd_integrator(integrator_type: str):
-    integrator_type = get_alias(integrator_type)
+    """
+    Check if an integrator is suitable for ring polymer molecular dynamics.
+
+    Args:
+        integrator_type (str): integrator class name
+
+    Returns:
+        bool: True if integrator is suitable, False otherwise.
+    """
     integrator_class = str2class(integrator_type)
 
     if hasattr(integrator_class, "ring_polymer"):
@@ -76,38 +102,41 @@ def is_rpmd_integrator(integrator_type: str):
 
 
 def get_npt_integrator(integrator_type: str):
-    integrator_type = get_alias(integrator_type)
+    """
+    Check if integrator is suitable for constant pressure dynamics and determine the constant pressure equivalent if
+    this is not the case.
+
+    Args:
+        integrator_type (str): name of the integrator class.
+
+    Returns:
+        str: class of suitable constant pressure integrator.
+    """
     integrator_class = str2class(integrator_type)
 
     if hasattr(integrator_class, "pressure_control"):
-
         if integrator_class.pressure_control:
             return integrator_type
         else:
-            # Integrator is already constant pressure integrator
-            if integrator_type in integrator_to_npt.values():
-                return integrator_type
-            else:
-                # Look for constant pressure equivalent
-                if integrator_type in integrator_to_npt:
-                    log.info(
-                        "Switching integrator from {:s} to {:s} for constant pressure simulation...".format(
-                            integrator_type, integrator_to_npt[integrator_type]
-                        )
+            # Look for constant pressure equivalent
+            if integrator_type in integrator_to_npt:
+                log.info(
+                    "Switching integrator from {:s} to {:s} for constant pressure simulation...".format(
+                        integrator_type, integrator_to_npt[integrator_type]
                     )
-                    return integrator_to_npt[integrator_type]
+                )
+                return integrator_to_npt[integrator_type]
                 # If NPT suitability can not be determined automatically, good luck
-                else:
-                    log.warning(
-                        "Please check whether integrator {:s} is suitable for constant pressure simulations.".format(
-                            integrator_type
-                        )
+            else:
+                log.warning(
+                    "No constant pressure equivalent for integrator {:s} could be found.".format(
+                        integrator_type
                     )
-                    return integrator_type
+                )
+            return integrator_type
     else:
         log.warning(
-            "Please check whether integrator {:s} is suitable for constant pressure simulations.".format(
-                integrator_type
-            )
+            "Please check whether integrator {:s} is suitable for constant pressure"
+            " simulations (`pressure control` attribute).".format(integrator_type)
         )
         return integrator_type
