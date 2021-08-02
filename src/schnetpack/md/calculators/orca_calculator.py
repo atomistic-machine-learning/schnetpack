@@ -220,8 +220,8 @@ class OrcaCalculator(QMCalculator):
             atom_types, positions = molecule
             atoms = Atoms(atom_types.cpu(), positions.cpu())
 
-            properties = outputs[idx]
+            props = outputs[idx]
 
             atom_buffer.append(atoms)
-            property_buffer.append(properties)
+            property_buffer.append(props)
         return atom_buffer, property_buffer
