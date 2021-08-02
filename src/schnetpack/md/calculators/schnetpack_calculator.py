@@ -1,18 +1,20 @@
 from __future__ import annotations
-from typing import Union, List, Dict
-from typing import TYPE_CHECKING
+from typing import Union, List, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from schnetpack.md import System
-    from schnetpack.model import PESModel
+    from schnetpack.atomistic.model import AtomisticModel
     from schnetpack.md.neighborlist_md import NeighborListMD
 
-import schnetpack as spk
 import torch
-from schnetpack import properties
-from schnetpack.md.calculators import MDCalculator, MDCalculatorError
-from schnetpack.md.neighborlist_md import ASENeighborListMD
 import logging
+
+from schnetpack.md.calculators import (
+    MDCalculator,
+    MDCalculatorError,
+    EnsembleCalculator,
+)
+from schnetpack.md.neighborlist_md import ASENeighborListMD
 
 import time
 
@@ -21,34 +23,31 @@ log = logging.getLogger(__name__)
 __all__ = ["SchnetPackCalculator"]
 
 
-# from schnetpack.md.calculators.ensemble_calculator import EnsembleCalculator
-
-
 class SchnetPackCalculator(MDCalculator):
     """
     MD calculator for schnetpack models.
 
     Args:
-        model (schnetpack.atomistic.AtomisticModel): Loaded schnetpack model.
+        model_file (str): Path to stored schnetpack model.
+        force_label (str): String indicating the entry corresponding to the molecular forces
+        energy_units (float, float): Conversion factor converting the energies returned by the used model back to
+                                     internal MD units.
+        position_units (float, float): Conversion factor for converting the system positions to the units required by
+                                       the model.
+        energy_label (str, optional): If provided, label is used to store the energies returned by the model to the
+                                      system.
+        stress_label (str, optional): If provided, label is used to store the stress returned by the model to the
+                                      system (required for constant pressure simulations).
         required_properties (list): List of properties to be computed by the calculator
-        force_handle (str): String indicating the entry corresponding to the molecular forces
-        position_conversion (float): Unit conversion for the length used in the model computing all properties. E.g. if
-                             the model needs Angstrom, one has to provide the conversion factor converting from the
-                             atomic units used internally (Bohr) to Angstrom: 0.529177...
-        force_conversion (float): Conversion factor converting the forces returned by the used model back to atomic
-                                  units (Hartree/Bohr).
-        required_properties (list): List of the property names which will be passed to the simulator.
         property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
                                            the model. Only changes the units used for logging the various outputs.
-        detach (bool): Detach property computation graph after every calculator call. Enabled by default. Should only
-                       be disabled if one wants to e.g. compute derivatives over short trajectory snippets.
         neighbor_list (schnetpack.md.neighbor_list.MDNeighborList): Neighbor list object for determining which
                                                                     interatomic distances should be computed.
         cutoff (float): Cutoff radius for computing the neighbor interactions. If this is set to a negative number,
                         the cutoff is determined automatically based on the model (default=-1.0). Units are the distance
                         units used in the model.
-        cutoff_shell (float): Second shell around the cutoff region. The neighbor lists only are recomputed when atoms move
-                              a distance further than this shell (default=1 Angstrom).
+        cutoff_shell (float): Second shell around the cutoff region. The neighbor lists only are recomputed when atoms
+                              move a distance further than this shell (default=1 model unit).
     """
 
     def __init__(
@@ -88,7 +87,7 @@ class SchnetPackCalculator(MDCalculator):
             neighbor_list, cutoff, cutoff_shell
         )
 
-    def _load_model(self, model_file: str) -> PESModel:
+    def _load_model(self, model_file: str) -> AtomisticModel:
         log.info("Loading model from {:s}".format(model_file))
         model = torch.jit.load(model_file)
         model.inference_mode = False
@@ -150,7 +149,7 @@ class SchnetPackCalculator(MDCalculator):
         #     log.info("Enabling computation of atom triples")
 
         # Initialize the neighbor list
-        neighbor_list = neighbor_list(
+        neighbor_list = neighbor_list.__init__(
             cutoff=cutoff, cutoff_shell=cutoff_shell, requires_triples=False
         )
 
@@ -199,38 +198,95 @@ class SchnetPackCalculator(MDCalculator):
         return inputs
 
 
-# class EnsembleSchnetPackCalculator(EnsembleCalculator, SchnetPackCalculator):
-#     def __init__(
-#         self,
-#         models,
-#         required_properties,
-#         force_handle,
-#         position_conversion="Angstrom",
-#         force_conversion="eV / Angstrom",
-#         property_conversion={},
-#         stress_handle=None,
-#         stress_conversion="eV / Angstrom / Angstrom / Angstrom",
-#         detach=True,
-#         neighbor_list=SimpleNeighborList,
-#         cutoff=-1.0,
-#         cutoff_shell=1.0,
-#         cutoff_lr=None,
-#     ):
-#         self.models = models
-#         required_properties = self._update_required_properties(required_properties)
-#
-#         super(EnsembleSchnetPackCalculator, self).__init__(
-#             models[0],
-#             required_properties=required_properties,
-#             force_handle=force_handle,
-#             position_conversion=position_conversion,
-#             force_conversion=force_conversion,
-#             property_conversion=property_conversion,
-#             stress_handle=stress_handle,
-#             stress_conversion=stress_conversion,
-#             detach=detach,
-#             neighbor_list=neighbor_list,
-#             cutoff=cutoff,
-#             cutoff_shell=cutoff_shell,
-#             cutoff_lr=cutoff_lr,
-#         )
+class EnsembleSchnetPackCalculator(EnsembleCalculator, SchnetPackCalculator):
+    """
+    Ensemble calculator using schnetpack models. Uncertainties are computed as the variance of all model predictions.
+    """
+
+    def __init__(
+        self,
+        model_files: List[str],
+        force_label: str,
+        energy_units: Union[str, float],
+        position_units: Union[str, float],
+        energy_label: str = None,
+        stress_label: str = None,
+        required_properties: List = [],
+        property_conversion: Dict[str, Union[str, float]] = {},
+        neighbor_list: NeighborListMD = ASENeighborListMD,
+        cutoff: float = -1.0,
+        cutoff_shell: float = 1.0,
+    ):
+        """
+        Args:
+            model_files (list(str)): List of paths to stored schnetpack model to be used in ensemble.
+            force_label (str): String indicating the entry corresponding to the molecular forces
+            energy_units (float, float): Conversion factor converting the energies returned by the used model back to
+                                         internal MD units.
+            position_units (float, float): Conversion factor for converting the system positions to the units required by
+                                           the model.
+            energy_label (str, optional): If provided, label is used to store the energies returned by the model to the
+                                          system.
+            stress_label (str, optional): If provided, label is used to store the stress returned by the model to the
+                                          system (required for constant pressure simulations).
+            required_properties (list): List of properties to be computed by the calculator
+            property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
+                                               the model. Only changes the units used for logging the various outputs.
+            neighbor_list (schnetpack.md.neighbor_list.MDNeighborList): Neighbor list object for determining which
+                                                                        interatomic distances should be computed.
+            cutoff (float): Cutoff radius for computing the neighbor interactions. If this is set to a negative number,
+                            the cutoff is determined automatically based on the model (default=-1.0). Units are the distance
+                            units used in the model.
+            cutoff_shell (float): Second shell around the cutoff region. The neighbor lists only are recomputed when atoms
+                                  move a distance further than this shell (default=1 model unit).
+        """
+        required_properties = required_properties + [
+            energy_label,
+            force_label,
+            stress_label,
+        ]
+        self._update_required_properties(required_properties)
+        self.models = self._load_models(model_files)
+        super(EnsembleCalculator, self).__init__(
+            required_properties=required_properties
+            + [energy_label, force_label, stress_label],
+            force_label=force_label,
+            energy_units=energy_units,
+            position_units=position_units,
+            energy_label=energy_label,
+            stress_label=stress_label,
+            property_conversion=property_conversion,
+            neighbor_list=neighbor_list,
+            cutoff=cutoff,
+            cutoff_shell=cutoff_shell,
+        )
+
+    def _load_models(self, model_files: List[str]):
+        """
+        Load models for ensemble.
+
+        Args:
+            model_files (list(str)): List of paths to models used in ensemble.
+
+        Returns:
+             list(schnetpack.atomistic.model.AtomisticModel): Loaded models.
+        """
+        models = []
+        for model_file in model_files:
+            log.info("Loading model from {:s}".format(model_file))
+            model = torch.jit.load(model_file)
+            model.inference_mode = False
+            models.append(model)
+        return models
+
+    def _load_model(self, model: AtomisticModel) -> AtomisticModel:
+        """
+        Dummy model loading routine.
+
+        Args:
+            model (schnetpack.atomistic.model.AtomisticModel): loaded schnetpack model.
+
+        Returns:
+            schnetpack.atomistic.model.AtomisticModel: Loaded model
+        """
+        return model
