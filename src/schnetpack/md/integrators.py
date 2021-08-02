@@ -286,9 +286,7 @@ class NPTRingPolymer(RingPolymer):
             system (object): System class containing all molecules and their
                              replicas.
         """
-        self.barostat.propagate_barostat_half_step(system)
-        # TODO: recheck this
-        system.momenta = system.momenta + 0.5 * system.forces * self.time_step
+        self.barostat.propagate_half_step(system)
 
     def _main_step(self, system: System):
         """
