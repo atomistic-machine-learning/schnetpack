@@ -28,6 +28,7 @@ config_aliases = {
     # Barostats:
     "nhc_barostat_iso": "schnetpack.md.simulation_hooks.NHCBarostatIsotropic",
     "nhc_barostat_aniso": "schnetpack.md.simulation_hooks.NHCBarostatAnisotropic",
+    "pile_barostat": "schnetpack.md.simulation_hooks.PILEBarostat",
     # Integrators
     "verlet": "schnetpack.md.integrators.VelocityVerlet",
     "verlet_npt": "schnetpack.md.integrators.NPTVelocityVerlet",
