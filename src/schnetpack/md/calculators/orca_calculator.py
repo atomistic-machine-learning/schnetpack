@@ -14,9 +14,6 @@ if TYPE_CHECKING:
 from schnetpack.md.calculators.base_calculator import QMCalculatorError, QMCalculator
 from schnetpack.md.parsers.orca_parser import OrcaMainFileParser
 
-from schnetpack import properties
-from schnetpack import units as spk_units
-
 
 class OrcaCalculator(QMCalculator):
     """
