@@ -37,6 +37,7 @@ class SchnetPackCalculator(MDCalculator):
                              atomic units used internally (Bohr) to Angstrom: 0.529177...
         force_conversion (float): Conversion factor converting the forces returned by the used model back to atomic
                                   units (Hartree/Bohr).
+        required_properties (list): List of the property names which will be passed to the simulator.
         property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
                                            the model. Only changes the units used for logging the various outputs.
         detach (bool): Detach property computation graph after every calculator call. Enabled by default. Should only
@@ -58,14 +59,15 @@ class SchnetPackCalculator(MDCalculator):
         position_units: Union[str, float],
         energy_label: str = None,
         stress_label: str = None,
+        required_properties: List = [],
         property_conversion: Dict[str, Union[str, float]] = {},
         neighbor_list: NeighborListMD = ASENeighborListMD,
-        # TODO: what happend to required properties
         cutoff: float = -1.0,
         cutoff_shell: float = 1.0,
     ):
         super(SchnetPackCalculator, self).__init__(
-            required_properties=[energy_label, force_label, stress_label],
+            required_properties=required_properties
+            + [energy_label, force_label, stress_label],
             force_label=force_label,
             energy_units=energy_units,
             position_units=position_units,
@@ -90,7 +92,7 @@ class SchnetPackCalculator(MDCalculator):
         log.info("Loading model from {:s}".format(model_file))
         model = torch.jit.load(model_file)
         model.inference_mode = False
-        # TODO !
+        # TODO:
         #    -> CASTING TO PRECISION IS PROBLEMATIC
         return model
 
