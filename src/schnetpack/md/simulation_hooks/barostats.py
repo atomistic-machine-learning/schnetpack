@@ -466,6 +466,16 @@ class NHCBarostatIsotropic(BarostatHook):
         )
 
         # Update cell momenta
+        self._scale_cell(scaling_thermostat_cell)
+
+    def _scale_cell(self, scaling_thermostat_cell: torch.tensor):
+        """
+        Auxiliary routine for scaling the cell, since the scaling factor will be missing one dimension in the
+        anisotropic barostat
+
+        Args:
+            scaling_thermostat_cell (torch.tensor): Accumulated scaling for cell velocities
+        """
         self.b_velocities_cell = self.b_velocities_cell * scaling_thermostat_cell
 
     def _compute_kinetic_energy_particles(self, system: System):
@@ -493,7 +503,6 @@ class NHCBarostatIsotropic(BarostatHook):
         Returns:
             torch.tensor: Kinetic energy associated with the cells.
         """
-        # TODO: check factor 1/2
         return self.b_masses_cell * self.b_velocities_cell ** 2
 
     def _update_inner_t_forces(self, kinetic_energy_particles: torch.tensor):
@@ -522,6 +531,8 @@ class NHCBarostatIsotropic(BarostatHook):
     def _chain_forward(self, time_step: float):
         """
         Forward propagation of the two Nose-Hoover chains attached to particles and cells.
+        Force updates are not required here, as long as the innermost force is precomputed, since forces are effectively
+        taken from the previous step and everything gets gets overwritten by the force update in the backward chain.
 
         Args:
             time_step (float): Current timestep considering YS and multi-timestep integration.
@@ -626,7 +637,6 @@ class NHCBarostatIsotropic(BarostatHook):
             system (schnetpack.md.System): System class containing all molecules and their
                              replicas.
         """
-        print("I AM HERE AND TERRIFIED")
         scaled_velocity = self.time_step * self.b_velocities_cell
         # Compute exponential coefficient
         a_coeff = torch.exp(0.5 * scaled_velocity)
@@ -644,9 +654,7 @@ class NHCBarostatIsotropic(BarostatHook):
 
         # Scale the cells (propagation is in logarithmic space)
         cell_coeff = torch.exp(scaled_velocity)[..., None]
-        print(system.cells)
         system.cells = system.cells * cell_coeff
-        print(system.cells)
 
     def propagate_half_step(self, system: System):
         """
@@ -760,6 +768,18 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
             6, dtype=simulator.dtype, device=simulator.device
         )
 
+    def _scale_cell(self, scaling_thermostat_cell: torch.tensor):
+        """
+        Auxiliary routine for scaling the cell, here the scaling factor needs one additional dimension compared to the
+        isotropic case.
+
+        Args:
+            scaling_thermostat_cell (torch.tensor): Accumulated scaling for cell velocities
+        """
+        self.b_velocities_cell = (
+            self.b_velocities_cell * scaling_thermostat_cell[..., None]
+        )
+
     def _compute_kinetic_energy_cell(self):
         """
         Compute the kinetic energy of the cells.
@@ -770,9 +790,6 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         b_velocities_cell_sq = torch.sum(
             self.b_velocities_cell ** 2, dim=(2, 3), keepdim=True
         ).squeeze(-1)
-        # TODO: does shape mess with update?
-        print(b_velocities_cell_sq.shape)
-        exit()
         return self.b_masses_cell * b_velocities_cell_sq
 
     def _update_b_forces(self, system: System):
@@ -791,11 +808,11 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         kinetic_energy = 2.0 * system.kinetic_energy
 
         self.b_forces_cell = (
-            volume * (pressure - self.aux_eye * self.target_pressure)
+            volume[..., None] * (pressure - self.aux_eye * self.target_pressure)
             + kinetic_energy[..., None]
             / self.degrees_of_freedom[..., None]
             * self.aux_eye
-        ) / self.b_masses_cell
+        ) / self.b_masses_cell[..., None]
 
     def propagate_main_step(self, system: System):
         """
@@ -836,9 +853,7 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         system.positions = update_positions + update_momenta * self.time_step
 
         # Update cells using first operator
-        print(system.cells)
         system.cells = torch.matmul(system.cells, operator_a)
-        print(system.cells)
 
     def propagate_half_step(self, system: System):
         """
