@@ -575,6 +575,42 @@ class System(nn.Module):
 
         return pressure
 
+    def compute_centroid_pressure(
+        self, tensor: bool = False, kinetic_component: bool = False
+    ):
+        """
+        Compute the pressure (tensor) of the ring polymer centroid based on the stress tensor of the systems.
+
+        Args:
+            tensor (bool): Instead of a scalar pressure, return the full pressure tensor. (Required for
+                           anisotropic cell deformation.)
+            kinetic_component (bool): Include the kinetic energy component during the computation of the
+                                      pressure (default=False).
+
+        Returns:
+            torch.Tensor: Depending on the tensor-flag, returns a tensor containing the pressure with dimensions
+                          n_replicas x n_molecules x 1 (False) or n_replicas x n_molecules x 3 x 3 (True).
+        """
+        volume = torch.mean(self.volume, dim=0, keepdim=True)
+
+        if torch.any(volume == 0.0):
+            raise SystemError(
+                "Non-zero volume simulation cell required for computation of the instantaneous pressure."
+            )
+
+        # Compute centroid pressure
+        pressure = -torch.mean(self.stress, dim=0, keepdim=True)
+
+        if tensor:
+            if kinetic_component:
+                pressure += 2 * self._mean_atoms(self.kinetic_energy_tensor) / volume
+        else:
+            pressure = torch.einsum("abii->ab", pressure)[..., None] / 3.0
+            if kinetic_component:
+                pressure += 2.0 * self.centroid_kinetic_energy / volume / 3.0
+
+        return pressure
+
     def wrap_positions(self, eps=1e-6):
         """
         Move atoms outside the box back into the box for all dimensions with periodic boundary
