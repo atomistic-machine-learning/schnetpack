@@ -7,7 +7,6 @@ In addition to loading structures, velocities, etc., various postprocessing func
 import json
 import logging
 import h5py
-import warnings
 import numpy as np
 from ase import Atoms
 from typing import Optional
