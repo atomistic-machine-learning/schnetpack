@@ -87,7 +87,8 @@ class SchnetPackCalculator(MDCalculator):
             neighbor_list, cutoff, cutoff_shell
         )
 
-    def _load_model(self, model_file: str) -> AtomisticModel:
+    @staticmethod
+    def _load_model(model_file: str) -> AtomisticModel:
         log.info("Loading model from {:s}".format(model_file))
         model = torch.jit.load(model_file)
         model.inference_mode = False
@@ -143,28 +144,12 @@ class SchnetPackCalculator(MDCalculator):
             else:
                 log.info("Using cutoff of {:.2f} (model units)...".format(cutoff))
 
-        # Check if atom triples need to be computed (e.g. for Behler functions) TODO: NO LONGER NEEDED
-        # triples_required = self._check_triples_required()
-        # if triples_required:
-        #     log.info("Enabling computation of atom triples")
-
         # Initialize the neighbor list
-        neighbor_list = neighbor_list.__init__(
+        neighbor_list = neighbor_list(
             cutoff=cutoff, cutoff_shell=cutoff_shell, requires_triples=False
         )
 
         return neighbor_list
-
-    # def _check_triples_required(self):
-    #     # Turn on collection of atom triples if representation requires angles
-    #     if isinstance(self.model.representation, spk.representation.SymmetryFunctions):
-    #         if self.model.representation.n_basis_angular > 0:
-    #             log.info("Enabling collection of atom triples for angular functions...")
-    #             return True
-    #         else:
-    #             return False
-    #     else:
-    #         return False
 
     def calculate(self, system: System):
         """
@@ -261,7 +246,8 @@ class EnsembleSchnetPackCalculator(EnsembleCalculator, SchnetPackCalculator):
             cutoff_shell=cutoff_shell,
         )
 
-    def _load_models(self, model_files: List[str]):
+    @staticmethod
+    def _load_models(model_files: List[str]):
         """
         Load models for ensemble.
 
@@ -279,7 +265,8 @@ class EnsembleSchnetPackCalculator(EnsembleCalculator, SchnetPackCalculator):
             models.append(model)
         return models
 
-    def _load_model(self, model: AtomisticModel) -> AtomisticModel:
+    @staticmethod
+    def _load_model(model: AtomisticModel) -> AtomisticModel:
         """
         Dummy model loading routine.
 
