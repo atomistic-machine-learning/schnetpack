@@ -56,8 +56,17 @@ class MDCalculator(nn.Module):
         property_conversion: Dict[str, Union[str, float]] = {},
     ):
         super(MDCalculator, self).__init__()
-        # Get required properties and filer Nones for easier init in derived classes
-        self.required_properties = [rp for rp in required_properties if rp is not None]
+        # Get required properties and filter non-unique entries
+        self.required_properties = list(set(required_properties))
+
+        if force_label not in self.required_properties:
+            self.required_properties.append(force_label)
+
+        if energy_label is not None and energy_label not in self.required_properties:
+            self.required_properties.append(energy_label)
+
+        if stress_label is not None and stress_label not in self.required_properties:
+            self.required_properties.append(stress_label)
 
         self.results = {}
 
@@ -80,7 +89,6 @@ class MDCalculator(nn.Module):
             position_units, spk_units.length
         )
 
-        # TODO: use property conversion for all properties
         # Derived conversions
         self.force_conversion = self.energy_conversion / self.position_conversion
         self.stress_conversion = self.energy_conversion / self.position_conversion ** 3
@@ -243,6 +251,7 @@ class QMCalculator(MDCalculator):
         stress_label (str, optional): Name of the property corresponding to the stress.
         property_conversion (dict(float, str)): Optional dictionary of conversion factors for other properties predicted
                              by the model. Only changes the units used for logging the various outputs.
+        overwrite (bool): Overwrite previous computation results. Default is true.
         adaptive (bool): Flag for adaptive sampling.
     """
 
@@ -259,11 +268,11 @@ class QMCalculator(MDCalculator):
         energy_label: Optional[str] = None,
         stress_label: Optional[str] = None,
         property_conversion: Dict[str, Union[str, float]] = {},
+        overwrite: bool = True,
         adaptive: bool = False,
     ):
         super(QMCalculator, self).__init__(
-            required_properties=required_properties
-            + [energy_label, force_label, stress_label],
+            required_properties=required_properties,
             force_label=force_label,
             energy_units=energy_units,
             position_units=position_units,
@@ -272,12 +281,18 @@ class QMCalculator(MDCalculator):
             property_conversion=property_conversion,
         )
 
-        self.qm_executable = qm_executable
+        from os import path
 
-        self.compdir = compdir
+        self.qm_executable = os.path.abspath(qm_executable)
+
+        self.compdir = os.path.abspath(compdir)
         if not os.path.exists(self.compdir):
             os.makedirs(compdir)
 
+        # Initialize computation counter
+        self.step = 0
+
+        self.overwrite = overwrite
         self.adaptive = adaptive
 
     def calculate(self, system: System, samples: Optional[np.array] = None):
@@ -308,8 +323,13 @@ class QMCalculator(MDCalculator):
             )
 
         # Generate director for current step
-        # current_compdir = os.path.join(self.compdir, 'step_{:06d}'.format(self.step))
-        current_compdir = os.path.join(self.compdir, "step_X")
+        if self.overwrite:
+            current_compdir = os.path.join(self.compdir)
+        else:
+            current_compdir = os.path.join(
+                self.compdir, "step_{:06d}".format(self.step)
+            )
+
         if not os.path.exists(current_compdir):
             os.makedirs(current_compdir)
 
@@ -361,7 +381,7 @@ class QMCalculator(MDCalculator):
                     continue
 
             atom_types = mol.get_atomic_numbers()
-            positions = mol.get_positions() * self.position_conversion
+            positions = mol.get_positions() / self.position_conversion
 
             # Store atom types and positions for ase db during sampling
             molecules.append((atom_types, positions))
