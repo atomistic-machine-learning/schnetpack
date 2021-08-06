@@ -1,6 +1,7 @@
 import logging
 import uuid
 import torch
+import os
 
 from datetime import datetime
 
@@ -45,6 +46,10 @@ def simulate(config: DictConfig):
                                                                 "`-0--0-'"`-0--0-'
         """
     )
+
+    original_wd = hydra.utils.get_original_cwd()
+    hydra_wd = os.getcwd()
+    os.chdir(original_wd)
 
     # Load custom config and use to update defaults
     if "load_config" in config:
@@ -121,10 +126,11 @@ def simulate(config: DictConfig):
     log.info("Setting up {:s} calculator...".format(calculator_config["_target_"]))
 
     # Check for model_file entry and resolve hydra path schmafu...
-    if "model_file" in calculator_config:
-        calculator_config["model_file"] = hydra.utils.to_absolute_path(
-            calculator_config["model_file"]
-        )
+    # TODO: get rid of abspath here
+    # if "model_file" in calculator_config:
+    #     calculator_config["model_file"] = hydra.utils.to_absolute_path(
+    #         calculator_config["model_file"]
+    #     )
 
     # Check for neighbor lists
     if "neighbor_list" in calculator_config:
@@ -237,6 +243,8 @@ def simulate(config: DictConfig):
     # ===========================================
     #   Set up logging
     # ===========================================
+
+    os.chdir(hydra_wd)
 
     logging_hooks = []
 
