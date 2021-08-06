@@ -62,8 +62,7 @@ class SchnetPackCalculator(MDCalculator):
         cutoff_shell: float = 1.0,
     ):
         super(SchnetPackCalculator, self).__init__(
-            required_properties=required_properties
-            + [energy_label, force_label, stress_label],
+            required_properties=required_properties,
             force_label=force_label,
             energy_units=energy_units,
             position_units=position_units,
@@ -222,12 +221,6 @@ class SchnetPackEnsembleCalculator(EnsembleCalculator, SchnetPackCalculator):
             cutoff_shell (float): Second shell around the cutoff region. The neighbor lists only are recomputed when atoms
                                   move a distance further than this shell (default=1 model unit).
         """
-        required_properties = required_properties + [
-            energy_label,
-            force_label,
-            stress_label,
-        ]
-        self._update_required_properties(required_properties)
         self.models = self._load_models(model_files)
         super(SchnetPackEnsembleCalculator, self).__init__(
             model_file=self.models[0],
@@ -242,6 +235,9 @@ class SchnetPackEnsembleCalculator(EnsembleCalculator, SchnetPackCalculator):
             cutoff=cutoff,
             cutoff_shell=cutoff_shell,
         )
+        # Update the required properties
+        self._update_required_properties()
+        # Convert list of models to module list
         self.models = torch.nn.ModuleList(self.models)
 
     @staticmethod
