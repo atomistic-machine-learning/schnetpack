@@ -58,8 +58,7 @@ class EnsembleCalculator(ABC, MDCalculator):
         """
         raise NotImplementedError
 
-    @staticmethod
-    def _update_required_properties(required_properties: List[str]) -> List[str]:
+    def _update_required_properties(self):
         """
         Update required properties to also contain predictive variances.
 
@@ -67,8 +66,10 @@ class EnsembleCalculator(ABC, MDCalculator):
             required_properties (list(str)): List of basic required properties.
         """
         new_required = []
-        for p in required_properties:
-            if p is not None:
-                prop_string = "{:s}_var".format(p)
-                new_required += [p, prop_string]
-        return new_required
+        for p in self.required_properties:
+            prop_string = "{:s}_var".format(p)
+            new_required += [p, prop_string]
+            # Update property conversion
+            self.property_conversion[prop_string] = self.property_conversion[p]
+
+        self.required_properties = new_required
