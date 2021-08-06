@@ -10,7 +10,9 @@ config_aliases = {
     "uniform": "schnetpack.md.UniformInit",
     "maxwell-boltzmann": "schnetpack.md.MaxwellBoltzmannInit",
     # Calculators
+    "orca": "schnetpack.md.calculators.OrcaCalculator",
     "schnetpack": "schnetpack.md.calculators.SchnetPackCalculator",
+    "schnetpack_ensemble": "schnetpack.md.calculators.SchnetPackEnsembleCalculator",
     # Neighbor lists
     "ase": "schnetpack.md.neighborlist_md.ASENeighborListMD",
     "torch": "schnetpack.md.neighborlist_md.TorchNeighborListMD",
