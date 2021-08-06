@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 from schnetpack.md.calculators.base_calculator import QMCalculatorError, QMCalculator
 from schnetpack.md.parsers.orca_parser import OrcaMainFileParser
+from schnetpack import units as spk_units
 
 __all__ = ["OrcaCalculator"]
 
@@ -29,19 +30,26 @@ class OrcaCalculator(QMCalculator):
     with ORCA, extract data from the ouput file (using the OrcaParser class) and update the System.
 
     Args:
-        required_properties (list): List of properties which should be extracted from output.
-        force_handle (str): Indicator for molecular forces.
+        required_properties (list): List of the property names which will be passed to the simulator
+        force_label (str): Name of the property corresponding to the forces.
         compdir (str): Directory in which computations are performed.
         qm_executable (str): Path to the ORCA executable.
-        orca_template (str): Path to an ORCA template which will be used to generate input files.
-        orca_parser (schnetpack.md.parsers.OrcaParser, optional): Parser used to extract data from output files.
-        position_conversion (str/float, optional): Conversion of positions from atomic units.
-        force_conversion (str/float, optional): Conversion of forces to atomic units.
+        orca_template (str): Path to an ORCA template which will be used to generate input files. This should be a full
+                             ORCA input, where the geometry section between *xyz and * is replaced by the string
+                             `{geometry}`.
+        energy_units (str, float): Energy units returned by the internal computation model.
+        position_units (str, float): Unit conversion for the length used in the model computing all properties. E.g. if
+                             the model needs Angstrom, one has to provide the conversion factor converting from the
+                             atomic units used internally (Bohr) to Angstrom: 0.529177.
+                             Is used together with `energy_units` to determine units of force and stress.
+        energy_label (str, optional): Name of the property corresponding to the energy.
+        stress_label (str, optional): Name of the property corresponding to the stress.
         property_conversion (dict, optional): Convert properties to requested units. If left empty, no conversion
                                               is performed.
-        queuer (schnetpack.md.calculator.Queuer, optional): If given, jobs will be submitted to a grid engine queue.
+        overwrite (bool): Overwrite previous computation results. Default is true.
         adaptive (bool, optional): Specify, whether the calculator should be used for adaptive sampling.
         basename (str, optional): Basename of the generated input files.
+        orca_parser (schnetpack.md.parsers.OrcaParser, optional): Parser used to extract data from output files.
 
     References
     ----------
@@ -62,6 +70,7 @@ class OrcaCalculator(QMCalculator):
         energy_label: Optional[str] = None,
         stress_label: Optional[str] = None,
         property_conversion: Dict[str, Union[str, float]] = {},
+        overwrite: bool = True,
         adaptive: bool = False,
         basename: str = "input",
         orca_parser=OrcaMainFileParser,
@@ -76,6 +85,7 @@ class OrcaCalculator(QMCalculator):
             energy_label=energy_label,
             stress_label=stress_label,
             property_conversion=property_conversion,
+            overwrite=overwrite,
             adaptive=adaptive,
         )
 
@@ -101,6 +111,10 @@ class OrcaCalculator(QMCalculator):
         for idx, molecule in enumerate(molecules):
             # Convert data and generate input files
             atom_types, positions = molecule
+            # Convert inputs to Angstrom for input file, since this is the default length unit there
+            positions *= spk_units.convert_units(
+                self.position_conversion * spk_units.length, "Angstrom"
+            )
             input_file_name = os.path.join(
                 current_compdir, "{:s}_{:06d}.oinp".format(self.basename, idx + 1)
             )
@@ -121,14 +135,14 @@ class OrcaCalculator(QMCalculator):
             positions (numpy.array): Array of all atom positions in Angstrom.
         """
         input_file = open(input_file_name, "w")
-        input_file.write(self.orca_template)
+        geometry_block = []
         for idx in range(len(atom_types)):
-            input_file.write(
-                "{:2s} {:15.8f} {:15.8f} {:15.8f}\n".format(
+            geometry_block.append(
+                "{:2s} {:15.8f} {:15.8f} {:15.8f}".format(
                     chemical_symbols[atom_types[idx]], *positions[idx]
                 )
             )
-        input_file.write("*")
+        input_file.write(self.orca_template.format(geometry="\n".join(geometry_block)))
         input_file.close()
 
     def _run_computation(
@@ -198,7 +212,6 @@ class OrcaCalculator(QMCalculator):
 
                 results[p].append(torch.from_numpy(output[p]))
 
-        # TODO: check if stacking is done properly
         for p in self.required_properties:
             results[p] = torch.stack(results[p]).to(system.device, system.dtype)
 
