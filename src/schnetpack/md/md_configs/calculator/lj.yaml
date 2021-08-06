@@ -6,7 +6,7 @@ energy_units: kJ/mol
 position_units: Angstrom
 energy_label: energy
 stress_label: stress
-cutoff: 8.5125 # 2.5 * r_equilibrium
-healing_length: 0.3405
-cutoff_shell: 2.0
+cutoff:  14.0 #8.5125 # 2.5 * r_equilibrium
+healing_length: 4.0 #0.3405
+cutoff_shell: 1.0
 neighbor_list: ase

@@ -1,4 +1,7 @@
 _target_: schnetpack_ensemble
+required_properties:
+  - energy
+  - forces
 model_files:
   - ???
 force_label: forces

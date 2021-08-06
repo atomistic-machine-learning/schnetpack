@@ -1,4 +1,7 @@
 _target_: schnetpack
+required_properties:
+  - energy
+  - forces
 model_file: ???
 force_label: forces
 energy_units: kcal / mol
