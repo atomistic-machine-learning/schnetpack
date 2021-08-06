@@ -17,7 +17,7 @@ import time
 
 log = logging.getLogger(__name__)
 
-__all__ = ["SchnetPackCalculator"]
+__all__ = ["SchnetPackCalculator", "SchnetPackEnsembleCalculator"]
 
 
 class SchnetPackCalculator(MDCalculator):
@@ -180,7 +180,7 @@ class SchnetPackCalculator(MDCalculator):
         return inputs
 
 
-class EnsembleSchnetPackCalculator(EnsembleCalculator, SchnetPackCalculator):
+class SchnetPackEnsembleCalculator(EnsembleCalculator, SchnetPackCalculator):
     """
     Ensemble calculator using schnetpack models. Uncertainties are computed as the variance of all model predictions.
     """
@@ -229,9 +229,9 @@ class EnsembleSchnetPackCalculator(EnsembleCalculator, SchnetPackCalculator):
         ]
         self._update_required_properties(required_properties)
         self.models = self._load_models(model_files)
-        super(EnsembleCalculator, self).__init__(
-            required_properties=required_properties
-            + [energy_label, force_label, stress_label],
+        super(SchnetPackEnsembleCalculator, self).__init__(
+            model_file=self.models[0],
+            required_properties=required_properties,
             force_label=force_label,
             energy_units=energy_units,
             position_units=position_units,
@@ -242,6 +242,7 @@ class EnsembleSchnetPackCalculator(EnsembleCalculator, SchnetPackCalculator):
             cutoff=cutoff,
             cutoff_shell=cutoff_shell,
         )
+        self.models = torch.nn.ModuleList(self.models)
 
     @staticmethod
     def _load_models(model_files: List[str]):

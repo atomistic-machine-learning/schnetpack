@@ -1,0 +1,11 @@
+_target_: schnetpack_ensemble
+model_files:
+  - ???
+force_label: forces
+energy_units: kcal / mol
+position_units: Angstrom
+energy_label: energy
+stress_label: null
+cutoff: -1.0
+cutoff_shell: 1.0
+neighbor_list: ase

@@ -68,6 +68,7 @@ class EnsembleCalculator(ABC, MDCalculator):
         """
         new_required = []
         for p in required_properties:
-            prop_string = "{:s}_var".format(p)
-            new_required += [p, prop_string]
+            if p is not None:
+                prop_string = "{:s}_var".format(p)
+                new_required += [p, prop_string]
         return new_required
