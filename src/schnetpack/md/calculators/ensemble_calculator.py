@@ -39,6 +39,15 @@ class EnsembleCalculator(ABC, MDCalculator):
     def _accumulate_results(
         results: List[Dict[str, torch.tensor]]
     ) -> Dict[str, torch.tensor]:
+        """
+        Accumulate results and compute average predictions and uncertainties.
+
+        Args:
+            results (list(dict(str, torch.tensor)):  List of output dictionaries of individual models.
+
+        Returns:
+            dict(str, torch.tensor): output dictionary with averaged predictions and uncertainties.
+        """
         # Get the keys
         accumulated = {p: [] for p in results[0]}
         ensemble_results = {p: [] for p in results[0]}
@@ -61,9 +70,6 @@ class EnsembleCalculator(ABC, MDCalculator):
     def _update_required_properties(self):
         """
         Update required properties to also contain predictive variances.
-
-        Args:
-            required_properties (list(str)): List of basic required properties.
         """
         new_required = []
         for p in self.required_properties:
