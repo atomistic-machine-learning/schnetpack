@@ -25,7 +25,7 @@ data:
       property: ${property}
       remove_atomrefs: True
       remove_mean: True
-    - _target_: schnetpack.transform.TorchNeighborList
+    - _target_: schnetpack.transform.CachingASENeighborList
       cutoff: ${cutoff}
     - _target_: schnetpack.transform.CastTo32
 
