@@ -1,0 +1,10 @@
+_target_: schnetpack.representation.PhysNet
+n_atom_basis: 128
+n_interactions: 3
+radial_basis:
+  _target_: schnetpack.nn.radial.RBF_PhysNet
+  n_rbf: ${n_rbf}
+  cutoff: ${cutoff}
+cutoff_fn:
+  _target_: schnetpack.nn.cutoff.PhysNetCutOff
+  cutoff: ${cutoff}
