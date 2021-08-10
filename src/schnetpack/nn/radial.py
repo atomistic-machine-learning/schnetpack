@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
-
-__all__ = ["gaussian_rbf", "GaussianRBF", "GaussianRBFCentered"]
+import numpy as np
+import schnetpack.nn as snn
+__all__ = ["gaussian_rbf", "GaussianRBF", "GaussianRBFCentered", "RBF_PhysNet"]
 
 
 def gaussian_rbf(inputs: torch.Tensor, offsets: torch.Tensor, widths: torch.Tensor):
@@ -73,3 +74,31 @@ class GaussianRBFCentered(nn.Module):
 
     def forward(self, inputs: torch.Tensor):
         return gaussian_rbf(inputs, self.offsets, self.widths)
+
+    
+def softplus_inverse(x):
+    return x + np.log(-np.expm1(-x))
+
+class RBF_PhysNet(nn.Module):
+    
+    def __init__(self, n_rbf, cutoff = 10.0):
+        
+        super(RBF_PhysNet,self).__init__()
+        
+        self.n_rbf = n_rbf
+        self.cutoff = cutoff
+        centers = softplus_inverse(torch.linspace(1.0,np.exp(-cutoff),n_rbf))
+        centers = snn.activations.shifted_softplus(((centers)))
+        
+        widths = [softplus_inverse((0.5/((1.0-np.exp(-cutoff))/n_rbf))**2)]*n_rbf
+        widths = snn.activations.shifted_softplus(torch.Tensor(widths))
+        
+        self.register_buffer("centers", centers)
+        self.register_buffer("widths", widths)
+        
+        
+    def forward(self, r_ij):
+        r_ij = r_ij.unsqueeze(-1)
+        g_ij = torch.exp(-self.widths*(torch.exp(-r_ij)-self.centers)**2)
+        
+        return g_ij

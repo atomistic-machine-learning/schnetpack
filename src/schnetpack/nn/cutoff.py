@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 
-__all__ = ["CosineCutoff", "MollifierCutoff", "mollifier_cutoff", "cosine_cutoff"]
+__all__ = ["CosineCutoff", "MollifierCutoff", "mollifier_cutoff", "cosine_cutoff", "PhysNetCutOff"]
 
 
 def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
@@ -26,6 +26,23 @@ def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
     # Remove contributions beyond the cutoff radius
     input_cut *= (input < cutoff).float()
     return input_cut
+
+
+class PhysNetCutOff(nn.Module):
+    '''Cutoff Function from Physnet'''
+    
+    def __init__(self, cutoff: float):
+        super(PhysNetCutOff, self).__init__()
+        self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
+
+    def forward(self, d_ij: torch.Tensor):
+
+
+        # Compute values of cutoff function
+        input_cut = 1 - 6*(d_ij/self.cutoff)**5 + 15*(d_ij/self.cutoff)**4 - 10*(d_ij/self.cutoff)**3
+        # Remove contributions beyond the cutoff radius
+        input_cut *= (d_ij < self.cutoff).float()
+        return input_cut
 
 
 class CosineCutoff(nn.Module):
