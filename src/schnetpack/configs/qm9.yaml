@@ -1,0 +1,35 @@
+# @package _global_
+
+defaults:
+  - override /model: property
+  - override /model/representation: physnet
+  - override /data: qm9
+  - override /logger: tensorboard
+  
+cutoff: 10.0
+n_rbf: 64
+
+lr: 1e-3
+
+property: energy_U0
+name: qm9_${property}
+
+model:
+    output: 
+        module_dim: True
+    
+
+data:
+  distance_unit: Ang
+  property_units:
+    energy_U0: eV
+  transforms:
+    - _target_: schnetpack.transform.SubtractCenterOfMass
+    - _target_: schnetpack.transform.RemoveOffsets
+      property: ${property}
+      remove_atomrefs: True
+      remove_mean: True
+    - _target_: schnetpack.transform.TorchNeighborList
+      cutoff: ${cutoff}
+    - _target_: schnetpack.transform.CastTo32
+
