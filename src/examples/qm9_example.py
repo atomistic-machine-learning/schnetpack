@@ -33,7 +33,7 @@ transforms = [
 
 # the pytorch lightning datamodule handles downloading, partitioning and loading of data
 dataset = QM9(
-    "../data/qm9.db",
+    "./data/qm9.db",
     batch_size=batch_size,
     num_train=10000,
     num_val=1000,

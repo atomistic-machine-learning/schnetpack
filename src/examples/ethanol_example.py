@@ -39,7 +39,7 @@ dataset = MD17(
     num_train=950,
     num_val=50,
     distance_unit="Ang",
-    property_units={MD17.energy: "eV", MD17.forces: "eV/A"},
+    property_units={MD17.energy: "eV", MD17.forces: "eV/Ang"},
     transforms=transforms,
 )
 
@@ -57,23 +57,33 @@ representation = spk.representation.SchNet(
 )
 output_modules = [
     spk.atomistic.Atomwise(
-        output=QM9.U0,
+        output=MD17.energy,
         n_in=representation.n_atom_basis,
-    )
+    ),
+    spk.atomistic.Forces(energy_key=MD17.energy, force_key=MD17.forces),
 ]
 
 # To put thing togethre, we define model outputs including corresponding loss functions
 # and metrics to log.
 outputs = [
     spk.atomistic.ModelOutput(
-        name=QM9.U0,
+        name=MD17.energy,
         loss_fn=torchmetrics.regression.MeanSquaredError(),
-        loss_weight=1.0,
+        loss_weight=0.05,
         metrics={
             "mse": torchmetrics.regression.MeanSquaredError(),
             "mae": torchmetrics.regression.MeanAbsoluteError(),
         },
-    )
+    ),
+    spk.atomistic.ModelOutput(
+        name=MD17.forces,
+        loss_fn=torchmetrics.regression.MeanSquaredError(),
+        loss_weight=0.95,
+        metrics={
+            "mse": torchmetrics.regression.MeanSquaredError(),
+            "mae": torchmetrics.regression.MeanAbsoluteError(),
+        },
+    ),
 ]
 
 # put the model together
