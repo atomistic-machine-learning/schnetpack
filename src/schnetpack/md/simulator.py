@@ -106,7 +106,6 @@ class Simulator(nn.Module):
 
         with grad_context:
             # Perform initial computation of forces
-            self.system.wrap_positions()
             self.calculator.calculate(self.system)
 
             # Call hooks at the simulation start

@@ -20,6 +20,10 @@ class SystemException(Exception):
     pass
 
 
+class SystemWarning(Warning):
+    pass
+
+
 class System(nn.Module):
     """
     Container for all properties associated with the simulated molecular system
@@ -651,30 +655,31 @@ class System(nn.Module):
             eps (float): Small offset for numerical stability
         """
         if torch.any(self.volume == 0.0):
-            raise SystemError("Simulation cell required for wrapping of positions.")
+            raise SystemWarning("Simulation cell required for wrapping of positions.")
+        else:
 
-        pbc_atomic = self.expand_atoms(self.pbc)
+            pbc_atomic = self.expand_atoms(self.pbc)
 
-        # Compute fractional coordinates
-        inverse_cell = torch.inverse(self.cells)
-        inverse_cell = self.expand_atoms(inverse_cell)
-        inv_positions = torch.sum(self.positions[..., None] * inverse_cell, dim=2)
+            # Compute fractional coordinates
+            inverse_cell = torch.inverse(self.cells)
+            inverse_cell = self.expand_atoms(inverse_cell)
+            inv_positions = torch.sum(self.positions[..., None] * inverse_cell, dim=2)
 
-        # Get periodic coordinates
-        periodic = torch.masked_select(inv_positions, pbc_atomic)
+            # Get periodic coordinates
+            periodic = torch.masked_select(inv_positions, pbc_atomic)
 
-        # Apply periodic boundary conditions (with small buffer)
-        periodic = periodic + eps
-        periodic = periodic % 1.0
-        periodic = periodic - eps
+            # Apply periodic boundary conditions (with small buffer)
+            periodic = periodic + eps
+            periodic = periodic % 1.0
+            periodic = periodic - eps
 
-        # Update fractional coordinates
-        inv_positions.masked_scatter_(pbc_atomic, periodic)
+            # Update fractional coordinates
+            inv_positions.masked_scatter_(pbc_atomic, periodic)
 
-        # Convert to positions
-        self.positions = torch.sum(
-            inv_positions[..., None] * self.expand_atoms(self.cells), dim=2
-        )
+            # Convert to positions
+            self.positions = torch.sum(
+                inv_positions[..., None] * self.expand_atoms(self.cells), dim=2
+            )
 
     def load_system_state(self, state_dict: OrderedDict[str, torch.Tensor]):
         """

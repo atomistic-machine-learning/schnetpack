@@ -26,6 +26,7 @@ class Initializer:
         remove_rotation (bool): Remove the rotational components of the momenta after initialization. Will reduce
                                 molecular rotation for NVE simulations and NVT simulations with deterministic
                                 thermostat (default=False).
+        wrap_positions (bool): Wrap atom positions back to box when using periodic boundary conditions.
     """
 
     def __init__(
@@ -34,6 +35,7 @@ class Initializer:
         remove_center_of_mass: bool = True,
         remove_translation: bool = True,
         remove_rotation: bool = False,
+        wrap_positions: bool = False,
     ):
         if not isinstance(temperature, list):
             temperature = [temperature]
@@ -42,6 +44,7 @@ class Initializer:
         self.remove_com = remove_center_of_mass
         self.remove_translation = remove_translation
         self.remove_rotation = remove_rotation
+        self.wrap_positions = wrap_positions
 
     def initialize_system(self, system: System):
         """
@@ -58,6 +61,9 @@ class Initializer:
 
         if self.remove_com:
             system.remove_center_of_mass()
+
+        if self.wrap_positions:
+            system.wrap_positions()
 
         self._setup_momenta(system)
 
@@ -90,6 +96,7 @@ class UniformInit(Initializer):
         remove_rotation (bool): Remove the rotational components of the momenta after initialization. Will reduce
                                 molecular rotation for NVE simulations and NVT simulations with deterministic
                                 thermostat (default=False).
+        wrap_positions (bool): Wrap atom positions back to box when using periodic boundary conditions.
     """
 
     def __init__(
@@ -98,12 +105,14 @@ class UniformInit(Initializer):
         remove_center_of_mass: bool = True,
         remove_translation: bool = True,
         remove_rotation: bool = False,
+        wrap_positions: bool = False,
     ):
         super(UniformInit, self).__init__(
             temperature,
             remove_center_of_mass=remove_center_of_mass,
             remove_translation=remove_translation,
             remove_rotation=remove_rotation,
+            wrap_positions=wrap_positions,
         )
 
     def _setup_momenta(self, system: System):
@@ -137,6 +146,7 @@ class MaxwellBoltzmannInit(Initializer):
         remove_rotation (bool): Remove the rotational components of the momenta after initialization. Will reduce
                                 molecular rotation for NVE simulations and NVT simulations with deterministic
                                 thermostat (default=False).
+        wrap_positions (bool): Wrap atom positions back to box when using periodic boundary conditions.
     """
 
     def __init__(
@@ -145,12 +155,14 @@ class MaxwellBoltzmannInit(Initializer):
         remove_center_of_mass: bool = True,
         remove_translation: bool = True,
         remove_rotation: bool = False,
+        wrap_positions: bool = False,
     ):
         super(MaxwellBoltzmannInit, self).__init__(
             temperature,
             remove_center_of_mass=remove_center_of_mass,
             remove_translation=remove_translation,
             remove_rotation=remove_rotation,
+            wrap_positions=wrap_positions,
         )
 
     def _setup_momenta(self, system: System):
