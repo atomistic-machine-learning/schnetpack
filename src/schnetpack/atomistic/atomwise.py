@@ -37,14 +37,13 @@ class Atomwise(nn.Module):
         self.n_out = n_out
 
         #build output network
-#         self.outnet = custom_outnet or spk.nn.MLP(
-#             n_in=n_in, n_out=n_out, n_layers=2, activation=spk.nn.shifted_softplus
-#         )
-        #############################
-        self.outnet = nn.Linear(n_in, 2)
-        self.outnet.weight.data = torch.nn.Parameter(torch.zeros(2,n_in))
-        self.outnet.bias.data.fill_(0.)
-        ##############################
+        self.outnet = custom_outnet or spk.nn.MLP(
+            n_in=n_in, n_out=n_out, n_layers=2, activation=spk.nn.shifted_softplus
+        )
+        
+        if module_dim:
+            self.outnet.weight.data = torch.nn.Parameter(torch.zeros(2,n_in))
+            self.outnet.bias.data.fill_(0.)
         
         self.outnet_input = outnet_input
 
@@ -64,6 +63,7 @@ class Atomwise(nn.Module):
         yi = inputs[self.outnet_input]
         yi = self.outnet(inputs[self.outnet_input])
         yi = self.physnet_energy(yi, inputs)
+        
         if self.aggregation_mode == "avg":
             yi = yi / inputs[structure.n_atoms][:, None]
 
@@ -71,7 +71,8 @@ class Atomwise(nn.Module):
         idx_m = inputs[structure.idx_m]
         maxm = int(idx_m[-1]) + 1
         tmp = torch.zeros((maxm, self.n_out), dtype=yi.dtype, device=yi.device)
-        y = tmp.index_add(0, idx_m, yi).squeeze(-1)
+        y = tmp.index_add(0, idx_m, yi)
+        y = torch.squeeze(y, -1)
         return y
 
 
