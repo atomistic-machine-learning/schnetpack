@@ -21,7 +21,7 @@ output:
   _target_: schnetpack.atomistic.Atomwise
   n_in: ${model.representation.n_atom_basis}
   aggregation_mode: sum
-  module_dim: True
+  module_dim: False
 
 loss_fn:
   _target_: torch.nn.MSELoss
