@@ -4,7 +4,7 @@ import uuid
 from typing import List
 
 import hydra
-from omegaconf import DictConfig, OmegaConf, MISSING
+from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
 from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import LightningLoggerBase

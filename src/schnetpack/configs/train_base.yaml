@@ -8,7 +8,7 @@ defaults:
   - logger: tensorboard
 
 work_dir: ${hydra:runtime.cwd}
-data_dir: ???
+data_dir: ${hydra:runtime.cwd}/data
 name: default
 
 print_config: True
