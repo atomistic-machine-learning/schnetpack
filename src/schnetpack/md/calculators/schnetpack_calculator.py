@@ -71,7 +71,7 @@ class SchnetPackCalculator(MDCalculator):
             property_conversion=property_conversion,
         )
         self.model = self._load_model(model_file)
-        # TODO: ?????????
+        # TODO: activate all properties needed
         # Activate properties if required
         # self.model.targets[properties.energy] = energy_label
         # self.model.targets[properties.forces] = force_label

@@ -657,7 +657,6 @@ class System(nn.Module):
         if torch.any(self.volume == 0.0):
             raise SystemWarning("Simulation cell required for wrapping of positions.")
         else:
-
             pbc_atomic = self.expand_atoms(self.pbc)
 
             # Compute fractional coordinates
