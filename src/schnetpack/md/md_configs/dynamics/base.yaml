@@ -4,4 +4,5 @@ defaults:
 n_steps: 1000000
 thermostat: null
 barostat: null
+progress: true
 simulation_hooks: [ ]

@@ -273,6 +273,7 @@ def simulate(config: DictConfig):
         calculator,
         simulator_hooks=simulation_hooks + logging_hooks,
         gradients_required=False,
+        progress=config.dynamics.progress,
     )
 
     if config.restart is not None:
@@ -289,10 +290,10 @@ def simulate(config: DictConfig):
     #   Finally run simulation
     # ===========================================
 
+    log.info("Running simulation...")
+
     start = datetime.now()
-
     simulator.simulate(config.dynamics.n_steps)
-
     stop = datetime.now()
 
     log.info("Finished after: {:s}".format(str(stop - start)))

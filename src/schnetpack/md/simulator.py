@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from contextlib import nullcontext
 
-from tqdm import tqdm
+from tqdm import trange
 
 from schnetpack.md import System
 
@@ -52,10 +52,10 @@ class Simulator(nn.Module):
                         continue logging in the previously created dataset. (default=False)
                         This is set automatically by the restart_simulation function. Enabling it without the function
                         currently only makes sense if independent simulations should be written to the same file.
+        progress (bool): show progress bar during simulation. Can be deactivated e.g. for cluster runs.
     """
 
     def __init__(
-        # TODO: fix precision, device, print and typings
         self,
         system: System,
         integrator,
@@ -64,6 +64,7 @@ class Simulator(nn.Module):
         step: int = 0,
         restart: bool = False,
         gradients_required: bool = False,
+        progress: bool = True,
     ):
         super(Simulator, self).__init__()
 
@@ -75,6 +76,7 @@ class Simulator(nn.Module):
         self.n_steps = None
         self.restart = restart
         self.gradients_required = gradients_required
+        self.progress = progress
 
         # Keep track of the actual simulation steps performed with simulate calls
         self.effective_steps = 0
@@ -98,6 +100,12 @@ class Simulator(nn.Module):
 
         self.n_steps = n_steps
 
+        # Determine iterator
+        if self.progress:
+            iterator = trange
+        else:
+            iterator = range
+
         # Check, if computational graph should be built
         if self.gradients_required:
             grad_context = torch.no_grad()
@@ -112,8 +120,7 @@ class Simulator(nn.Module):
             for hook in self.simulator_hooks:
                 hook.on_simulation_start(self)
 
-            for _ in tqdm(range(n_steps), ncols=120):
-                # for _ in range(n_steps):
+            for _ in iterator(n_steps):
 
                 # Call hook before first half step
                 for hook in self.simulator_hooks:
@@ -142,10 +149,7 @@ class Simulator(nn.Module):
                 for hook in self.simulator_hooks[::-1]:
                     hook.on_step_end(self)
 
-                # TODO: separate logging
-
                 self.step += 1
-                # TODO: steps vs effective steps in restart
                 self.effective_steps += 1
 
             # Call hooks at the simulation end
