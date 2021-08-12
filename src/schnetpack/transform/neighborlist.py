@@ -16,6 +16,10 @@ from schnetpack import properties as structure
 
 
 class NeighborListTransform(Transform):
+    """
+    Base method for neighbor list transforms.
+    """
+
     is_preprocessor: bool = True
     is_postprocessor: bool = False
 
@@ -38,6 +42,10 @@ class NeighborListTransform(Transform):
 
 
 class ASENeighborList(NeighborListTransform):
+    """
+    Calculate neighbor list using ASE.
+    """
+
     def __init__(self, cutoff, return_offset=False):
         super(ASENeighborList, self).__init__(
             cutoff=cutoff, return_offset=return_offset
@@ -67,6 +75,11 @@ class ASENeighborList(NeighborListTransform):
 
 
 class TorchNeighborList(NeighborListTransform):
+    """
+    Calculate neighbors using neighbor lists as implemented in TorchAni
+    (https://github.com/aiqm/torchani/blob/master/torchani/aev.py).
+    """
+
     def __init__(self, cutoff, return_offset=False):
         super(TorchNeighborList, self).__init__(
             cutoff=cutoff, return_offset=return_offset

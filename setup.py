@@ -19,7 +19,6 @@ setup(
     package_dir={"": "src"},
     python_requires=">=3.6",
     install_requires=[
-        "torch>=1.8",
         "numpy",
         "ase>=3.21",
         "h5py",
@@ -29,8 +28,6 @@ setup(
         "torchmetrics",
         "hydra-colorlog>=1.1.0",
         "rich",
-        "hydra-configs-pytorch-lightning",
-        "hydra-torch @ git+https://github.com/pytorch/hydra-torch.git",
     ],
     include_package_data=True,
     extras_require={"test": ["pytest", "pytest-datadir", "pytest-benchmark"]},
