@@ -13,8 +13,6 @@ from schnetpack.md.calculators.base_calculator import MDCalculator, MDCalculator
 from schnetpack.md.calculators.ensemble_calculator import EnsembleCalculator
 from schnetpack.md.neighborlist_md import ASENeighborListMD
 
-import time
-
 log = logging.getLogger(__name__)
 
 __all__ = ["SchnetPackCalculator", "SchnetPackEnsembleCalculator"]
