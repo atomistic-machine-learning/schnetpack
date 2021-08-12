@@ -1,3 +1,6 @@
+defaults:
+  - custom
+
 _target_: schnetpack.datasets.MD17
 
 datapath: ${data_dir}/${data.molecule}.db  # data_dir is specified in train.yaml
@@ -5,5 +8,3 @@ molecule: aspirin
 batch_size: 10
 num_train: 950
 num_val: 50
-num_test: null
-num_workers: 4

@@ -1,8 +1,11 @@
 _target_: schnetpack.data.AtomsDataModule
 
 datapath: ???
+data_workdir: null
 batch_size: 10
-num_train: 0.8
-num_val: 0.1
+num_train: ???
+num_val: ???
 num_test: null
 num_workers: 4
+num_val_workers: 1
+num_test_workers: 1

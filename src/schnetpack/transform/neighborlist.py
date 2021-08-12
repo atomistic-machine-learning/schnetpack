@@ -17,8 +17,6 @@ from schnetpack import properties as structure
 class ASENeighborList(Transform):
     """
     Calculate neighbor list using ASE.
-
-    Note: This is quite slow and should only used as a baseline for faster implementations!
     """
 
     is_preprocessor: bool = True
