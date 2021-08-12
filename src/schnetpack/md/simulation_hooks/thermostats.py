@@ -3,15 +3,18 @@ This module contains various thermostat for regulating the temperature of the sy
 molecular dynamics simulations. Apart from standard thermostat for convetional simulations,
 a series of special thermostat developed for ring polymer molecular dynamics is also provided.
 """
+from __future__ import annotations
 import torch
 import numpy as np
 import scipy.linalg as linalg
-from typing import Optional, List, Tuple
+from typing import Optional, Tuple, TYPE_CHECKING
 import logging
+
+if TYPE_CHECKING:
+    from schnetpack.md.simulator import Simulator, System
 
 from schnetpack import units as spk_units
 from schnetpack.md.simulation_hooks.basic_hooks import SimulationHook
-from schnetpack.md.simulator import Simulator, System
 
 from schnetpack.md.utils import YSWeights, load_gle_matrices
 

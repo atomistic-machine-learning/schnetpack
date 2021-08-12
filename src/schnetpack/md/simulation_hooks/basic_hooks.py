@@ -1,5 +1,10 @@
+from __future__ import annotations
 import torch.nn as nn
-import schnetpack.md as spkmd
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from schnetpack.md import Simulator
 
 __all__ = ["RemoveCOMMotion", "SimulationHook"]
 
@@ -9,22 +14,22 @@ class SimulationHook(nn.Module):
     Basic class for simulator hooks
     """
 
-    def on_step_begin(self, simulator):
+    def on_step_begin(self, simulator: Simulator):
         pass
 
-    def on_step_middle(self, simulator):
+    def on_step_middle(self, simulator: Simulator):
         pass
 
-    def on_step_end(self, simulator):
+    def on_step_end(self, simulator: Simulator):
         pass
 
-    def on_step_failed(self, simulator):
+    def on_step_failed(self, simulator: Simulator):
         pass
 
-    def on_simulation_start(self, simulator):
+    def on_simulation_start(self, simulator: Simulator):
         pass
 
-    def on_simulation_end(self, simulator):
+    def on_simulation_end(self, simulator: Simulator):
         pass
 
 
@@ -44,7 +49,7 @@ class RemoveCOMMotion(SimulationHook):
         self.remove_rotation = remove_rotation
         self.wrap_positions = wrap_positions
 
-    def on_step_end(self, simulator: spkmd.Simulator):
+    def on_step_end(self, simulator: Simulator):
         if simulator.step % self.every_n_steps == 0:
             simulator.system.remove_center_of_mass()
             simulator.system.remove_translation()

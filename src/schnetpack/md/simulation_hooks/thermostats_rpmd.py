@@ -1,6 +1,10 @@
+from __future__ import annotations
 import torch
 
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from schnetpack.md.simulator import Simulator, System
 
 from schnetpack.md.simulation_hooks.thermostats import (
     LangevinThermostat,
@@ -8,7 +12,6 @@ from schnetpack.md.simulation_hooks.thermostats import (
     ThermostatError,
     NHCThermostat,
 )
-from schnetpack.md import System, Simulator
 from schnetpack.md.utils import load_gle_matrices
 from schnetpack import units as spk_units
 
