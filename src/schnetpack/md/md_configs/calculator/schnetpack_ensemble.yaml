@@ -12,3 +12,4 @@ stress_label: null
 cutoff: -1.0
 cutoff_shell: 1.0
 neighbor_list: ase
+script_model: true
