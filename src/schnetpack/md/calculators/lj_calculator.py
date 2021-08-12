@@ -85,7 +85,7 @@ class LJCalculator(SchnetPackCalculator):
             cutoff_shell=cutoff_shell,
         )
 
-    def _load_model(self, model_file: LJModel):
+    def _prepare_model(self, model_file: LJModel):
         """
         Dummy routine, since no model has to be loaded.
 

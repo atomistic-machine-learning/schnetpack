@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import Union, List, Dict, TYPE_CHECKING
 
+import schnetpack.atomistic.response
+
 if TYPE_CHECKING:
     from schnetpack.md import System
     from schnetpack.atomistic.model import AtomisticModel
@@ -43,6 +45,7 @@ class SchnetPackCalculator(MDCalculator):
                         units used in the model.
         cutoff_shell (float): Second shell around the cutoff region. The neighbor lists only are recomputed when atoms
                               move a distance further than this shell (default=1 model unit).
+        script_model (bool): convert loaded model to torchscript.
     """
 
     def __init__(
@@ -58,6 +61,7 @@ class SchnetPackCalculator(MDCalculator):
         neighbor_list: NeighborListMD = ASENeighborListMD,
         cutoff: float = -1.0,
         cutoff_shell: float = 1.0,
+        script_model: bool = False,
     ):
         super(SchnetPackCalculator, self).__init__(
             required_properties=required_properties,
@@ -68,26 +72,91 @@ class SchnetPackCalculator(MDCalculator):
             stress_label=stress_label,
             property_conversion=property_conversion,
         )
-        self.model = self._load_model(model_file)
-        # TODO: activate all properties needed
-        # Activate properties if required
-        # self.model.targets[properties.energy] = energy_label
-        # self.model.targets[properties.forces] = force_label
-        # self.model.targets[properties.stress] = stress_label
-        self.model.eval()
+        self.script_model = script_model
+        self.model = self._prepare_model(model_file)
 
         # Set up the neighbor list:
         self.neighbor_list = self._init_neighbor_list(
             neighbor_list, cutoff, cutoff_shell
         )
 
-    @staticmethod
-    def _load_model(model_file: str) -> AtomisticModel:
+    def _prepare_model(self, model_file: str) -> AtomisticModel:
+        """
+        Load an individual model.
+
+        Args:
+            model_file (str): path to model.
+
+        Returns:
+           AtomisticModel: loaded schnetpack model
+        """
+        return self._load_model(model_file)
+
+    def _load_model(self, model_file: str) -> AtomisticModel:
+        """
+        Load an individual model, activate stress computation and convert to torch script if requested.
+
+        Args:
+            model_file (str): path to model.
+
+        Returns:
+           AtomisticModel: loaded schnetpack model
+        """
+
         log.info("Loading model from {:s}".format(model_file))
-        model = torch.jit.load(model_file)
+        model = torch.load(model_file).to(torch.float32)
+        model = model.eval()
+
+        if self.stress_label is not None:
+            log.info("Activating stress computation...")
+            model = self._activate_stress(model)
+
+        if self.script_model:
+            log.info("Converting model to torch script...")
+            model = model.to_torchscript(None, "script")
+
+        log.info("Deactivating inference mode for simulation...")
+        self._deactivate_inference_mode(model)
+
+        return model
+
+    @staticmethod
+    def _deactivate_inference_mode(model: AtomisticModel) -> AtomisticModel:
+        if hasattr(model, "postprocessors"):
+            for pp in model.postprocessors:
+                if isinstance(pp, schnetpack.transform.AddOffsets):
+                    log.info("Found `AddOffsets` postprocessing module...")
+                    log.info(
+                        "Constant offset of {:20.11f} will be removed...".format(
+                            pp.mean.detach().cpu().numpy()[0]
+                        )
+                    )
         model.inference_mode = False
-        # TODO:
-        #    -> CASTING TO PRECISION IS PROBLEMATIC
+        return model
+
+    @staticmethod
+    def _activate_stress(model: AtomisticModel) -> AtomisticModel:
+        """
+        Activate stress computations for simulations in cells.
+
+        Args:
+            model (AtomisticModel): loaded schnetpack model for which stress computation should be activated.
+
+        Returns:
+
+        """
+        print(model.output_modules[1].calc_stress)
+        # model.output_modules[1].calc_stress = True
+        stress = False
+        for module in model.output_modules:
+            if isinstance(module, schnetpack.atomistic.response.Forces):
+                if hasattr(module, "calc_stress"):
+                    module.calc_stress = True
+                    stress = True
+        if not stress:
+            raise MDCalculatorError("Failed to activate stress computation")
+
+        print(model.output_modules[1].calc_stress)
         return model
 
     def _init_neighbor_list(
@@ -192,6 +261,7 @@ class SchnetPackEnsembleCalculator(EnsembleCalculator, SchnetPackCalculator):
         neighbor_list: NeighborListMD = ASENeighborListMD,
         cutoff: float = -1.0,
         cutoff_shell: float = 1.0,
+        script_model: bool = True,
     ):
         """
         Args:
@@ -215,10 +285,10 @@ class SchnetPackEnsembleCalculator(EnsembleCalculator, SchnetPackCalculator):
                             units used in the model.
             cutoff_shell (float): Second shell around the cutoff region. The neighbor lists only are recomputed when atoms
                                   move a distance further than this shell (default=1 model unit).
+            script_model (bool): convert loaded model to torchscript.
         """
-        self.models = self._load_models(model_files)
         super(SchnetPackEnsembleCalculator, self).__init__(
-            model_file=self.models[0],
+            model_file=model_files,
             required_properties=required_properties,
             force_label=force_label,
             energy_units=energy_units,
@@ -229,40 +299,21 @@ class SchnetPackEnsembleCalculator(EnsembleCalculator, SchnetPackCalculator):
             neighbor_list=neighbor_list,
             cutoff=cutoff,
             cutoff_shell=cutoff_shell,
+            script_model=script_model,
         )
         # Update the required properties
         self._update_required_properties()
         # Convert list of models to module list
-        self.models = torch.nn.ModuleList(self.models)
+        self.models = torch.nn.ModuleList(self.model)
 
-    @staticmethod
-    def _load_models(model_files: List[str]):
+    def _prepare_model(self, model_files: List[str]) -> List[AtomisticModel]:
         """
-        Load models for ensemble.
+        Load multiple models.
 
         Args:
-            model_files (list(str)): List of paths to models used in ensemble.
+            model_files (list(str)): List of stored models.
 
         Returns:
-             list(schnetpack.atomistic.model.AtomisticModel): Loaded models.
+            list(AtomisticModel): list of loaded models.
         """
-        models = []
-        for model_file in model_files:
-            log.info("Loading model from {:s}".format(model_file))
-            model = torch.jit.load(model_file)
-            model.inference_mode = False
-            models.append(model)
-        return models
-
-    @staticmethod
-    def _load_model(model: AtomisticModel) -> AtomisticModel:
-        """
-        Dummy model loading routine.
-
-        Args:
-            model (schnetpack.atomistic.model.AtomisticModel): loaded schnetpack model.
-
-        Returns:
-            schnetpack.atomistic.model.AtomisticModel: Loaded model
-        """
-        return model
+        return [self._load_model(model_file) for model_file in model_files]

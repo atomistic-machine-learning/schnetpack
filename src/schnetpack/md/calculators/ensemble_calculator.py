@@ -27,7 +27,7 @@ class EnsembleCalculator(ABC, MDCalculator):
         inputs = self._generate_input(system)
 
         results = []
-        for model in self.models:
+        for model in self.model:
             prediction = model(inputs)
             results.append(prediction)
 
