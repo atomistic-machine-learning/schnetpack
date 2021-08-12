@@ -1,6 +1,5 @@
 from __future__ import annotations
-from typing import Union, Dict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union, Dict
 
 if TYPE_CHECKING:
     from schnetpack.md.neighborlist_md import NeighborListMD
@@ -19,6 +18,33 @@ __all__ = ["LJCalculator", "LJModel"]
 
 
 class LJCalculator(SchnetPackCalculator):
+    """
+    Lennard Jones potential calculator. Primarily used for testing barostats and thermostats.
+
+    Args:
+        r_equilibrium (float): equilibrium distance in position units
+        well_depth (float): depth of the Lennard-Jones potential in energy units.
+        force_label (str): String indicating the entry corresponding to the molecular forces
+        energy_units (float, float): Conversion factor converting the energies returned by the used model back to
+                                     internal MD units.
+        position_units (float, float): Conversion factor for converting the system positions to the units required by
+                                       the model.
+        energy_label (str, optional): If provided, label is used to store the energies returned by the model to the
+                                      system.
+        stress_label (str, optional): If provided, label is used to store the stress returned by the model to the
+                                      system (required for constant pressure simulations).
+        property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
+                                           the model. Only changes the units used for logging the various outputs.
+        neighbor_list (schnetpack.md.neighbor_list.MDNeighborList): Neighbor list object for determining which
+                                                                    interatomic distances should be computed.
+        cutoff (float): Cutoff radius for computing the neighbor interactions. If this is set to a negative number,
+                        the cutoff is determined automatically based on the model (default=-1.0). Units are the distance
+                        units used in the model.
+        healing_length (float): Healing length used for the cutoff potential.
+        cutoff_shell (float): Second shell around the cutoff region. The neighbor lists only are recomputed when atoms
+                              move a distance further than this shell (default=1 model unit).
+    """
+
     def __init__(
         self,
         r_equilibrium: float,
@@ -59,12 +85,36 @@ class LJCalculator(SchnetPackCalculator):
             cutoff_shell=cutoff_shell,
         )
 
-    def _load_model(self, model_file):
+    def _load_model(self, model_file: LJModel):
+        """
+        Dummy routine, since no model has to be loaded.
+
+        Args:
+            model_file (LJModel): Initialized Lennard-Jones model.
+
+        Returns:
+            LJModel: input model.
+        """
         return model_file
 
     def _init_neighbor_list(
         self, neighbor_list: NeighborListMD, cutoff: float, cutoff_shell: float
     ):
+        """
+        Function for properly setting up the neighbor list. Here no model cutoff has to be checked, as the model is
+        defined in the calculator.
+
+        Args:
+            neighbor_list (schnetpack.md.neighbor_lists.MDNeighborList.__init__): Uninitialized neighbor list class.
+            cutoff (float): Cutoff radius for computing the neighbor interactions. If this is set to a negative number,
+                            the cutoff is determined automatically based on the model (default=-1.0). Units are the
+                            distance units used in the model.
+            cutoff_shell (float): Second shell around the cutoff region. The neighbor lists only are recomputed when
+                                  atoms move a distance further than this shell (default=1 Angstrom).
+
+        Returns:
+            schnetpack.md.neighbor_lists.MDNeighborList: Initialized neighbor list.
+        """
         # Check if atom triples need to be computed (e.g. for Behler functions)
         return neighbor_list(
             cutoff=cutoff, cutoff_shell=cutoff_shell, requires_triples=False
@@ -72,6 +122,23 @@ class LJCalculator(SchnetPackCalculator):
 
 
 class LJModel(nn.Module):
+    """
+    Lennard Jones potential calculator. Primarily used for testing barostats and thermostats.
+
+    Args:
+        r_equilibrium (float): equilibrium distance in position units
+        well_depth (float): depth of the Lennard-Jones potential in energy units.
+        cutoff (float): Cutoff radius for computing the neighbor interactions. If this is set to a negative number,
+                        the cutoff is determined automatically based on the model (default=-1.0). Units are the distance
+                        units used in the model.
+        healing_length (float): Healing length used for the cutoff potential.
+        calc_forces (bool): toggle force computation.
+        calc_stress (bool): toggle stress computation.
+        energy_key (str): Key used for storing energies.
+        force_key (str): Key used for storing forces.
+        stress_key (str): Key used for storing stress.
+    """
+
     def __init__(
         self,
         r_equilibrium: float,
@@ -95,7 +162,9 @@ class LJModel(nn.Module):
         self.force_key = force_key
         self.stress_key = stress_key
 
-        self.cutoff = CustomCutoff(cutoff_radius=cutoff, healing_length=healing_length)
+        self.cutoff_function = CustomCutoff(
+            cutoff_radius=cutoff, healing_length=healing_length
+        )
 
         self.force_layer = Forces(
             calc_forces=calc_forces,
@@ -105,7 +174,16 @@ class LJModel(nn.Module):
             stress_key=stress_key,
         )
 
-    def forward(self, inputs):
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Compute the Lennard-Jones energy and forces if requested.
+
+        Args:
+            inputs (dict(str, torch.Tensor)):  Input dictionary.
+
+        Returns:
+            dict(str, torch.Tensor):  Dictionary of model outputs.
+        """
         # Activate gradient for force/stress computations
         if self.calc_forces or self.calc_stress:
             inputs[properties.Rij].requires_grad_()
@@ -114,7 +192,7 @@ class LJModel(nn.Module):
         positions = inputs[properties.R]
         idx_i = inputs[properties.idx_i]
         r_ij = torch.norm(vec_ij, dim=1, keepdim=True)
-        r_cut = self.cutoff(r_ij)
+        r_cut = self.cutoff_function(r_ij)
 
         # Compute lennard jones potential
         power_6 = torch.pow(self.r_equilibrium / r_ij, 6)
@@ -153,21 +231,40 @@ class LJModel(nn.Module):
 
 class CustomCutoff(nn.Module):
     def __init__(self, cutoff_radius: float, healing_length: float):
+        """
+        Custom cutoff for Lennard-Jones potentials using a healing length.
+
+        Args:
+            cutoff_radius (float): cutoff radius.
+            healing_length (float): healing length.
+        """
         super(CustomCutoff, self).__init__()
         self.register_buffer("cutoff_radius", torch.Tensor([cutoff_radius]))
         self.register_buffer("healing_length", torch.Tensor([healing_length]))
 
-    def forward(self, distances):
+    def forward(self, distances: torch.Tensor) -> torch.Tensor:
+        """
+        Compute cutoff based on the input distances.
+
+        Args:
+            distances (torch.tensor):
+
+        Returns:
+            torch.tensor: cutoff function applied to the distances.
+        """
+        # Compute basic component
         r = (
             distances - (self.cutoff_radius - self.healing_length)
         ) / self.healing_length
         r_function = 1.0 + r ** 2 * (2.0 * r - 3.0)
 
+        # Compute second part of cutoff
         switch = torch.where(
             distances > self.cutoff_radius - self.healing_length,
             r_function,
             torch.ones_like(distances),
         )
+        # Compute third component
         switch = torch.where(
             distances > self.cutoff_radius, torch.zeros_like(distances), switch
         )
