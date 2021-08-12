@@ -171,10 +171,7 @@ class SchnetPackCalculator(MDCalculator):
             dict(torch.Tensor): Schnetpack inputs in dictionary format.
         """
         inputs = self._get_system_molecules(system)
-        a = time.time()
         neighbors = self.neighbor_list.get_neighbors(inputs)
-        b = time.time()
-        print(b - a, "NBL")
         inputs.update(neighbors)
         return inputs
 
