@@ -16,8 +16,9 @@ from schnetpack.md.utils import (
     get_alias,
     get_npt_integrator,
     is_rpmd_integrator,
-    set_random_seed,
 )
+
+from pytorch_lightning import seed_everything
 
 from ase.io import read
 
@@ -70,8 +71,9 @@ def simulate(config: DictConfig):
     device = config.device
     precision = int2precision(config.precision)
 
-    # Set up random seed
-    set_random_seed(config.seed)
+    # Set seed for random number generators in pytorch, numpy and python.random
+    seed = seed_everything(config.seed)
+    log.info("Using random seed {:d}".format(seed))
 
     # ===========================================
     #   Initialize the system
