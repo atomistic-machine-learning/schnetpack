@@ -95,7 +95,7 @@ class AtomisticModel(pl.LightningModule):
         self.output_modules = nn.ModuleList(output_modules)
         self.pp = postprocess or []
 
-        self.required_derivatives = []  # set()
+        self.required_derivatives = []
         for m in self.output_modules:
             if hasattr(m, "required_derivatives"):
                 for p in m.required_derivatives:
