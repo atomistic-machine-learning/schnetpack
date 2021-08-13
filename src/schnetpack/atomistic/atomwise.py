@@ -29,7 +29,6 @@ class Atomwise(nn.Module):
     ):
         """
         Args:
-            output_key: the key under which the result will be stored
             n_in: input dimension of representation
             n_out: output dimension of target property (default: 1)
             n_hidden: size of hidden layers.
@@ -39,6 +38,7 @@ class Atomwise(nn.Module):
                 n_in resulting in a pyramidal network.
             n_layers: number of layers.
             aggregation_mode: one of {sum, avg} (default: sum)
+            output_key: the key under which the result will be stored
             per_atom_output_key: If not None, the key under which the per-atom result will be stored
         """
         super(Atomwise, self).__init__()
@@ -51,7 +51,7 @@ class Atomwise(nn.Module):
                 + " since no accumulated output will be returned!"
             )
 
-        self.outnet = spk.nn.MLP(
+        self.outnet = spk.nn.build_mlp(
             n_in=n_in,
             n_out=n_out,
             n_hidden=n_hidden,
@@ -82,6 +82,17 @@ class DipoleMoment(nn.Module):
     """
     Predicts dipole moments from latent partial charges and (optionally) local, atomic dipoles.
     The latter requires a representation supplying (equivariant) vector features.
+
+    References:
+    .. [#painn1] Schütt, Unke, Gastegger:
+       Equivariant message passing for the prediction of tensorial properties and molecular spectra.
+       ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
+    .. [#irspec] Gastegger, Behler, Marquetand.
+       Machine learning molecular dynamics for the simulation of infrared spectra.
+       Chemical science 8.10 (2017): 6924-6935.
+    .. [#dipole] Veit et al.
+       Predicting molecular dipole moments by combining atomic partial charges and atomic dipoles.
+       The Journal of Chemical Physics 153.2 (2020): 024113.
     """
 
     def __init__(
@@ -92,7 +103,7 @@ class DipoleMoment(nn.Module):
         activation: Callable = F.silu,
         predict_magnitude: bool = False,
         return_charges: bool = False,
-        dipole_key: str = properties.dipole_moments,
+        dipole_key: str = properties.dipole_moment,
         charges_key: str = properties.partial_charges,
         use_vector_representation: bool = False,
     ):
@@ -108,6 +119,9 @@ class DipoleMoment(nn.Module):
             n_layers: number of layers.
             activation: activation function
             predict_magnitude: If true, calculate magnitude of dipole
+            return_charges: If true, return latent partial charges
+            dipole_key: the key under which the dipoles will be stored
+            charges_key: the key under which partial charges will be stored
             use_vector_representation: If true, use vector representation to predict local,
                 atomic dipoles
         """
@@ -120,31 +134,16 @@ class DipoleMoment(nn.Module):
         self.use_vector_representation = use_vector_representation
 
         if use_vector_representation:
-            layers = [
-                snn.GatedEquivariantBlock(
-                    n_sin=n_in,
-                    n_vin=n_in,
-                    n_sout=n_in,
-                    n_vout=n_hidden,
-                    n_hidden=n_hidden,
-                    activation=activation,
-                    sactivation=activation,
-                )
-                for _ in range(n_layers - 1)
-            ]
-            layers.append(
-                snn.GatedEquivariantBlock(
-                    n_sin=n_hidden,
-                    n_vin=n_hidden,
-                    n_sout=1,
-                    n_vout=1,
-                    n_hidden=n_hidden,
-                    activation=activation,
-                )
+            self.outnet = spk.nn.build_gated_equivariant_mlp(
+                n_in=n_in,
+                n_out=1,
+                n_hidden=n_hidden,
+                n_layers=n_layers,
+                activation=activation,
+                sactivation=activation,
             )
-            self.outnet = nn.Sequential(*layers)
         else:
-            self.outnet = spk.nn.MLP(
+            self.outnet = spk.nn.build_mlp(
                 n_in=n_in,
                 n_out=1,
                 n_hidden=n_hidden,
@@ -154,7 +153,7 @@ class DipoleMoment(nn.Module):
 
     def forward(self, inputs):
         positions = inputs[properties.R]
-        l0 = inputs["representation"]
+        l0 = inputs["scalar_representation"]
         result = {}
 
         if self.use_vector_representation:
@@ -175,12 +174,99 @@ class DipoleMoment(nn.Module):
         # sum over atoms
         idx_m = inputs[properties.idx_m]
         maxm = int(idx_m[-1]) + 1
-        tmp = torch.zeros((maxm, self.n_out), dtype=y.dtype, device=y.device)
+        tmp = torch.zeros((maxm, 3), dtype=y.dtype, device=y.device)
         y = tmp.index_add(0, idx_m, y)
         y = torch.squeeze(y, -1)
 
         if self.predict_magnitude:
-            y = torch.norm(y, dim=1, keepdim=True)
+            y = torch.norm(y, dim=1, keepdim=False)
 
         result[self.dipole_key] = y
+        return result
+
+
+class Polarizability(nn.Module):
+    """
+    Predicts polarizability tensor using tensor rank factorization.
+    This requires an equivariant representation, e.g. PaiNN, that provides both scalar and vectorial features.
+
+    References:
+    .. [#painn1] Schütt, Unke, Gastegger:
+       Equivariant message passing for the prediction of tensorial properties and molecular spectra.
+       ICML 2021
+    """
+
+    def __init__(
+        self,
+        n_in: int,
+        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_layers: int = 2,
+        activation: Callable = F.silu,
+        predict_isotropic: bool = False,
+        polarizability_key: str = properties.polarizability,
+    ):
+        """
+        Args:
+            n_in: input dimension of atomwise features
+            n_hidden: size of hidden layers
+            activation: activation function
+            polarizability_key: name of property to be predicted
+        """
+        super(Polarizability, self).__init__()
+        self.n_in = n_in
+        self.n_layers = n_layers
+        self.n_hidden = n_hidden
+        self.property = property
+
+        self.equivariant_layers = nn.ModuleList(
+            [
+                GatedEquivariantBlock(
+                    n_sin=n_in,
+                    n_vin=n_in,
+                    n_sout=n_hidden,
+                    n_vout=n_hidden,
+                    n_hidden=n_hidden,
+                    activation=activation,
+                    sactivation=activation,
+                ),
+                GatedEquivariantBlock(
+                    n_sin=n_in,
+                    n_vin=n_hidden,
+                    n_sout=1,
+                    n_vout=1,
+                    n_hidden=n_hidden,
+                    activation=activation,
+                    sactivation=None,
+                ),
+            ]
+        )
+
+        self.requires_dr = False
+        self.requires_stress = False
+
+    def forward(self, inputs):
+        atom_mask = inputs[Properties.atom_mask]
+        positions = inputs[Properties.R]
+        l0 = inputs["representation"]
+        l1 = inputs["vector_representation"]
+        dim = l1.shape[-2]
+
+        for eqlayer in self.equivariant_layers:
+            l0, l1 = eqlayer(l0, l1)
+
+        # isotropic on diagonal
+        alpha = l0[..., 0:1]
+        size = list(alpha.shape)
+        size[-1] = dim
+        alpha = alpha.expand(*size)
+        alpha = torch.diag_embed(alpha)
+
+        # add anisotropic components
+        mur = l1[..., None, 0] * positions[..., None, :]
+        alpha_c = mur + mur.transpose(-2, -1)
+        alpha = alpha + alpha_c
+        alpha = alpha * atom_mask[..., None, None]
+        alpha = torch.sum(alpha, dim=1)
+
+        result = {self.property: alpha}
         return result
