@@ -22,11 +22,11 @@ class GatedEquivariantBlock(nn.Module):
 
     def __init__(
         self,
-        n_sin,
-        n_vin,
-        n_sout,
-        n_vout,
-        n_hidden,
+        n_sin: int,
+        n_vin: int,
+        n_sout: int,
+        n_vout: int,
+        n_hidden: int,
         activation=F.silu,
         sactivation=None,
     ):
