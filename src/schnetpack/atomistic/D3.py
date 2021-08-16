@@ -136,7 +136,7 @@ class D4DispersionEnergy(nn.Module):
         result = {}
         # N: int, Z: torch.Tensor, qa: torch.Tensor, rij: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor
         Z = inputs[structure.Z]
-        qa = inputs[structure.charge]
+        qa = inputs[structure.partial_charges]
         r_ij = inputs[structure.Rij]
         r_ij = torch.norm(r_ij, dim=1).cuda()
         idx_i = inputs[structure.idx_i]

@@ -38,8 +38,17 @@ class ElectrostaticEnergy(nn.Module):
             self.cut_rconstant = lr_cutoff**15/(lr_cutoff**16+cuton**16)**(17/16)
             self.cut_constant = 1/(cuton**16+lr_cutoff**16)**(1/16) + lr_cutoff**16/(lr_cutoff**16 + cuton**16)**(17/16)
 
-    def forward(self, N: int, q:torch.Tensor, rij: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor):
+    def forward(self, inputs: Dict[str, torch.Tensor]):
+        #N: int, q:torch.Tensor, rij: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor
         result = {}
+        atomic_numbers = inputs[structure.Z]
+        q = inputs[structure.partial_charges]
+        r_ij = inputs[structure.Rij]
+        r_ij = torch.norm(r_ij, dim=1).cuda()
+        idx_i = inputs[structure.idx_i]
+        idx_j = inputs[structure.idx_j]
+        N = atomic_numbers.size(0)
+        
         fac = self.kehalf*torch.gather(q, 0, idx_i)*torch.gather(q, 0, idx_j)
         f = switch_function(rij, self.cuton, self.cutoff)
         if self.lr_cutoff is None:
@@ -50,6 +59,6 @@ class ElectrostaticEnergy(nn.Module):
             damped  = 1/(rij**16 + self.cuton16)**(1/16) + (1-f)*self.cut_rconstant*rij - self.cut_constant
         electrostatic_energy = q.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, (fac*(f*damped + (1-f)*coulomb)).float())
         result["electrostatic"] = electrostatic_energy
-        return  result
+        return result
 
 
