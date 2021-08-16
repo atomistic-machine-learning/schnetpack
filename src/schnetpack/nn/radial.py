@@ -1,8 +1,12 @@
+from math import pi
+
 import torch
 import torch.nn as nn
 import numpy as np
 import schnetpack.nn as snn
 __all__ = ["gaussian_rbf", "GaussianRBF", "GaussianRBFCentered", "RBF_PhysNet"]
+
+from torch import nn as nn
 
 
 def gaussian_rbf(inputs: torch.Tensor, offsets: torch.Tensor, widths: torch.Tensor):
@@ -75,6 +79,7 @@ class GaussianRBFCentered(nn.Module):
     def forward(self, inputs: torch.Tensor):
         return gaussian_rbf(inputs, self.offsets, self.widths)
 
+<<<<<<< HEAD
     
 def softplus_inverse(x):
     return x + np.log(-np.expm1(-x))
@@ -102,3 +107,35 @@ class RBF_PhysNet(nn.Module):
         g_ij = torch.exp(-self.widths*(torch.exp(-r_ij)-self.centers)**2)
         
         return g_ij
+=======
+
+class BesselRBF(nn.Module):
+    """
+    Sine for radial basis functions with coulomb decay (0th order bessel).
+
+    References:
+
+    .. [#dimenet] Klicpera, Groß, Günnemann:
+       Directional message passing for molecular graphs.
+       ICLR 2020
+    """
+
+    def __init__(self, n_rbf: int, cutoff: float):
+        """
+        Args:
+            cutoff: radial cutoff
+            n_rbf: number of basis functions.
+        """
+        super(BesselRBF, self).__init__()
+        self.n_rbf = n_rbf
+
+        freqs = torch.arange(1, n_rbf + 1) * pi / cutoff
+        self.register_buffer("freqs", freqs)
+
+    def forward(self, inputs):
+        ax = inputs[..., None] * self.freqs
+        sinax = torch.sin(ax)
+        norm = torch.where(inputs == 0, torch.tensor(1.0, device=inputs.device), inputs)
+        y = sinax / norm[..., None]
+        return y
+>>>>>>> kts/outmods

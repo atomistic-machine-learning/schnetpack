@@ -3,7 +3,7 @@ defaults:
 
 output_modules:
   - _target_: schnetpack.atomistic.Atomwise
-    output: ${energy_key}
+    output_key: ${energy_key}
     n_in: ${model.representation.n_atom_basis}
     aggregation_mode: sum
   - _target_: schnetpack.atomistic.Forces

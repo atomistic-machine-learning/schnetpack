@@ -24,7 +24,7 @@ data:
     - _target_: schnetpack.transform.RemoveOffsets
       property: energy
       remove_mean: True
-    - _target_: schnetpack.transform.TorchNeighborList
+    - _target_: schnetpack.transform.ASENeighborList
       cutoff: ${cutoff}
     - _target_: schnetpack.transform.CastTo32
 

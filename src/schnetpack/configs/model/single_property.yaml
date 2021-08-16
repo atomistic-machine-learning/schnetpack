@@ -3,7 +3,7 @@ defaults:
 
 output_modules:
   - _target_: schnetpack.atomistic.Atomwise
-    output: ${property}
+    output_key: ${property}
     n_in: ${model.representation.n_atom_basis}
     aggregation_mode: sum
     module_dim: True

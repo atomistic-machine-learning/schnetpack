@@ -63,15 +63,16 @@ class QM9(AtomsDataModule):
         remove_uncharacterized: bool = False,
         val_batch_size: Optional[int] = None,
         test_batch_size: Optional[int] = None,
-        transforms: Optional[torch.nn.Module] = None,
-        train_transforms: Optional[torch.nn.Module] = None,
-        val_transforms: Optional[torch.nn.Module] = None,
-        test_transforms: Optional[torch.nn.Module] = None,
+        transforms: Optional[List[torch.nn.Module]] = None,
+        train_transforms: Optional[List[torch.nn.Module]] = None,
+        val_transforms: Optional[List[torch.nn.Module]] = None,
+        test_transforms: Optional[List[torch.nn.Module]] = None,
         num_workers: int = 2,
         num_val_workers: Optional[int] = None,
         num_test_workers: Optional[int] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
+        data_workdir: Optional[str] = None,
     ):
         """
 
@@ -96,6 +97,7 @@ class QM9(AtomsDataModule):
             num_test_workers: Number of test data loader workers (overrides num_workers).
             property_units: Dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
             distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
+            data_workdir: Copy data here as part of setup, e.g. cluster scratch for faster performance.
         """
         super().__init__(
             datapath=datapath,
@@ -117,6 +119,7 @@ class QM9(AtomsDataModule):
             num_test_workers=num_test_workers,
             property_units=property_units,
             distance_unit=distance_unit,
+            data_workdir=data_workdir,
         )
 
         self.remove_uncharacterized = remove_uncharacterized

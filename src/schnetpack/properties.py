@@ -43,4 +43,7 @@ idx_k_triples: Final[str] = "_idx_k_triples"
 energy: Final[str] = "energy"
 forces: Final[str] = "forces"
 stress: Final[str] = "stress"
-dipole_moments: Final[str] = "dipole_moments"
+
+partial_charges: Final[str] = "partial_charges"
+dipole_moment: Final[str] = "dipole_moment"
+polarizability: Final[str] = "polarizability"
