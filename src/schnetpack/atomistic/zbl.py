@@ -38,8 +38,20 @@ class ZBLRepulsionEnergy(nn.Module):
 #         nn.init.constant_(self._a3,   softplus_inverse(0.40280))
 #         nn.init.constant_(self._a4,   softplus_inverse(0.20160))
 
-    def forward(self, N: int, Zf: torch.Tensor, rij: torch.Tensor, cutoff_values: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor):
+    def forward(self, inputs: Dict[str, torch.Tensor]):
         #calculate parameters
+        #N: int, Zf: torch.Tensor, rij: torch.Tensor, cutoff_values: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor
+        
+        Zf = inputs[structure.Z]
+        r_ij = inputs[structure.Rij]
+        r_ij = torch.norm(r_ij, dim=1).cuda()
+        idx_i = inputs[structure.idx_i]
+        idx_j = inputs[structure.idx_j]
+        N = Zf.size(0)
+        cutoff_values = self.cutoff_fn(r_ij)
+        
+        
+        
         z  = Zf**F.softplus(self._apow)
         a  = (z[idx_i] + z[idx_j])*F.softplus(self._adiv)
         a1 = F.softplus(self._a1)*a

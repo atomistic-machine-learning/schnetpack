@@ -132,7 +132,15 @@ class D4DispersionEnergy(nn.Module):
             alpha_expanded = alpha.view(alpha.size(0),1,alpha.size(1),1,-1)*alpha.view(1,alpha.size(0),1,alpha.size(1),-1)
             self._refc6 = 3/self.pi*torch.sum(alpha_expanded*self.casimir_polder_weights.view(1,1,1,1,-1),-1)
 
-    def forward(self, N: int, Z: torch.Tensor, qa: torch.Tensor, rij: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor, compute_atomic_quantities: bool = False):
+    def forward(self, inputs: Dict[str, torch.Tensor], compute_atomic_quantities: bool = False):
+        
+        # N: int, Z: torch.Tensor, qa: torch.Tensor, rij: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor
+        Z = inputs[structure.Z]
+        qa = inputs[structure.charge]
+        r_ij = inputs[structure.Rij]
+        r_ij = torch.norm(r_ij, dim=1).cuda()
+        idx_i = inputs[structure.idx_i]
+        idx_j = inputs[structure.idx_j]
         
         if idx_i.numel() == 0:
             zeros = rij.new_zeros(N)
