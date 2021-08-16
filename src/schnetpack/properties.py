@@ -21,9 +21,7 @@ idx_m: Final[str] = "_idx_m"  #: indices of systems
 idx_i: Final[str] = "_idx_i"  #: indices of center atoms
 idx_j: Final[str] = "_idx_j"  #: indices of neighboring atoms
 lidx_i: Final[str] = "_idx_i_local"  #: local indices of center atoms (within system)
-lidx_j: Final[
-    str
-] = "_idx_j_local"  #: local indices of neighboring atoms (within system)
+lidx_j: Final[str] = "_idx_j_local"  #: local indices of neighboring atoms (within system)
 Rij: Final[str] = "_Rij"  #: indices of atom pairs
 n_atoms: Final[str] = "_n_atoms"  #: number of atoms
 
@@ -47,3 +45,8 @@ stress: Final[str] = "stress"
 partial_charges: Final[str] = "partial_charges"
 dipole_moment: Final[str] = "dipole_moment"
 polarizability: Final[str] = "polarizability"
+
+    
+electorstatic: Final[str] = "electrostatic"
+zbl: Final[str] = "zbl"
+dispersion: Final[str] = "dispersion"

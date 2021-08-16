@@ -5,14 +5,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import schnetpack as spk
-<<<<<<< HEAD
 import schnetpack.properties as structure
 from schnetpack.atomistic.physnet_energy import PhysNetEnergy
 import schnetpack.nn as snn
-=======
+
 import schnetpack.nn as snn
 import schnetpack.properties as properties
->>>>>>> kts/outmods
+
 
 
 class Atomwise(nn.Module):
@@ -30,7 +29,6 @@ class Atomwise(nn.Module):
         n_layers: int = 2,
         activation: Callable = F.silu,
         aggregation_mode: str = "sum",
-<<<<<<< HEAD
         custom_outnet: Callable = None,
         module_dim = False,
         calc_electrostatic: bool = False
@@ -40,10 +38,9 @@ class Atomwise(nn.Module):
         electrostatic_key: str = structure.electrostatic,
         zbl_key: str = structure.zbl,
         dispersion_key = structure.dispersion   
-=======
+
         output_key: str = "y",
         per_atom_output_key: Optional[str] = None,
->>>>>>> kts/outmods
     ):
         """
         Args:
@@ -60,7 +57,6 @@ class Atomwise(nn.Module):
             per_atom_output_key: If not None, the key under which the per-atom result will be stored
         """
         super(Atomwise, self).__init__()
-<<<<<<< HEAD
         self.output = output
         self.n_out = n_out
         
@@ -85,7 +81,6 @@ class Atomwise(nn.Module):
             self.outnet.bias.data.fill_(0.)
         
         self.outnet_input = outnet_input
-=======
         self.output_key = output_key
         self.per_atom_output_key = per_atom_output_key
 
@@ -94,7 +89,6 @@ class Atomwise(nn.Module):
                 "If `aggregation_mode` is None, `per_atom_output_key` needs to be set,"
                 + " since no accumulated output will be returned!"
             )
->>>>>>> kts/outmods
 
         self.outnet = spk.nn.build_mlp(
             n_in=n_in,
@@ -107,6 +101,11 @@ class Atomwise(nn.Module):
         
         self.module_dim = module_dim
         
+        if module_dim:
+            self.outnet.weight.data = torch.nn.Parameter(torch.zeros(2,n_in))
+            self.outnet.bias.data.fill_(0.)
+            
+        
         #self.physnet_energy = PhysNetEnergy()
             
 
@@ -116,7 +115,6 @@ class Atomwise(nn.Module):
             inputs[self.outnet_input] = inputs[self.outnet_input].sum(0)
 
         # predict atomwise contributions
-<<<<<<< HEAD
         yi = inputs[self.outnet_input]
         yi = self.outnet(inputs[self.outnet_input])
         
@@ -130,9 +128,8 @@ class Atomwise(nn.Module):
         
         if self.aggregation_mode == "avg":
             yi = yi / inputs[structure.n_atoms][:, None]
-=======
+
         y = self.outnet(inputs["scalar_representation"])
->>>>>>> kts/outmods
 
         # aggregate
         if self.aggregation_mode is not None:
