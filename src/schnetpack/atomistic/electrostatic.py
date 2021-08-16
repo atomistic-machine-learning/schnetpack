@@ -39,6 +39,7 @@ class ElectrostaticEnergy(nn.Module):
             self.cut_constant = 1/(cuton**16+lr_cutoff**16)**(1/16) + lr_cutoff**16/(lr_cutoff**16 + cuton**16)**(17/16)
 
     def forward(self, N: int, q:torch.Tensor, rij: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor):
+        result = {}
         fac = self.kehalf*torch.gather(q, 0, idx_i)*torch.gather(q, 0, idx_j)
         f = switch_function(rij, self.cuton, self.cutoff)
         if self.lr_cutoff is None:
@@ -47,6 +48,8 @@ class ElectrostaticEnergy(nn.Module):
         else:
             coulomb = torch.where(rij < self.lr_cutoff, 1.0/rij + rij/self.lr_cutoff**2 - 2.0/self.lr_cutoff, torch.zeros_like(rij))
             damped  = 1/(rij**16 + self.cuton16)**(1/16) + (1-f)*self.cut_rconstant*rij - self.cut_constant
-        return q.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, (fac*(f*damped + (1-f)*coulomb)).float()) # .type(torch.float32)
+        electrostatic_energy = q.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, (fac*(f*damped + (1-f)*coulomb)).float())
+        result["electrostatic"] = electrostatic_energy
+        return  result
 
 

@@ -39,7 +39,7 @@ class ZBLRepulsionEnergy(nn.Module):
 #         nn.init.constant_(self._a4,   softplus_inverse(0.20160))
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
-        #calculate parameters
+        result = {}
         #N: int, Zf: torch.Tensor, rij: torch.Tensor, cutoff_values: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor
         
         Zf = inputs[structure.Z]
@@ -71,6 +71,8 @@ class ZBLRepulsionEnergy(nn.Module):
         #actual interactions
         zizj = Zf[idx_i]*Zf[idx_j]
         f = (c1*torch.exp(-a1*rij) + c2*torch.exp(-a2*rij) + c3*torch.exp(-a3*rij) + c4*torch.exp(-a4*rij))*cutoff_values
-        return Zf.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, (self.kehalf*f*zizj/rij).float())
+        zbl_energy = Zf.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, (self.kehalf*f*zizj/rij).float())
+        result["zbl"] = zbl_energy
+        return result
 
 

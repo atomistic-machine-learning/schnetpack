@@ -133,7 +133,7 @@ class D4DispersionEnergy(nn.Module):
             self._refc6 = 3/self.pi*torch.sum(alpha_expanded*self.casimir_polder_weights.view(1,1,1,1,-1),-1)
 
     def forward(self, inputs: Dict[str, torch.Tensor], compute_atomic_quantities: bool = False):
-        
+        result = {}
         # N: int, Z: torch.Tensor, qa: torch.Tensor, rij: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor
         Z = inputs[structure.Z]
         qa = inputs[structure.charge]
@@ -210,5 +210,7 @@ class D4DispersionEnergy(nn.Module):
         else:
             polarizabilities = rij.new_zeros(N)
             c6_coefficients  = rij.new_zeros(N)
-        return rij.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, edisp.float()), polarizabilities, c6_coefficients
+        dispersion_energy = rij.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, edisp.float()), polarizabilities, c6_coefficients
+        result["dispersion"] = dispersion_energy
+        return result
         
