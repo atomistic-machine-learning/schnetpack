@@ -72,8 +72,7 @@ class Atomwise(nn.Module):
 
             idx_m = inputs[properties.idx_m]
             maxm = int(idx_m[-1]) + 1
-            tmp = torch.zeros((maxm, self.n_out), dtype=y.dtype, device=y.device)
-            y = tmp.index_add(0, idx_m, y)
+            y = snn.scatter_add(y, idx_m, dim_size=maxm)
             y = torch.squeeze(y, -1)
 
         return {self.output_key: y}
@@ -275,8 +274,7 @@ class Polarizability(nn.Module):
         # sum over atoms
         idx_m = inputs[properties.idx_m]
         maxm = int(idx_m[-1]) + 1
-        tmp = torch.zeros((maxm, 3, 3), dtype=alpha.dtype, device=alpha.device)
-        alpha = tmp.index_add(0, idx_m, alpha)
+        alpha = snn.scatter_add(alpha, idx_m, dim_size=maxm)
 
         result = {self.polarizability_key: alpha}
         return result
