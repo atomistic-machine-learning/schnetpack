@@ -44,6 +44,7 @@ class Atomwise(nn.Module):
         super(Atomwise, self).__init__()
         self.output_key = output_key
         self.per_atom_output_key = per_atom_output_key
+        self.n_out = n_out
 
         if aggregation_mode is None and self.per_atom_output_key is None:
             raise ValueError(
@@ -105,6 +106,7 @@ class DipoleMoment(nn.Module):
         return_charges: bool = False,
         dipole_key: str = properties.dipole_moment,
         charges_key: str = properties.partial_charges,
+        correct_charges: bool = True,
         use_vector_representation: bool = False,
     ):
         """
@@ -122,8 +124,10 @@ class DipoleMoment(nn.Module):
             return_charges: If true, return latent partial charges
             dipole_key: the key under which the dipoles will be stored
             charges_key: the key under which partial charges will be stored
+            correct_charges: If true, forces the sum of partial charges to be the the total charge, if provided,
+                and zero otherwise.
             use_vector_representation: If true, use vector representation to predict local,
-                atomic dipoles
+                atomic dipoles.
         """
         super().__init__()
 
@@ -132,6 +136,7 @@ class DipoleMoment(nn.Module):
         self.return_charges = return_charges
         self.predict_magnitude = predict_magnitude
         self.use_vector_representation = use_vector_representation
+        self.correct_charges = correct_charges
 
         if use_vector_representation:
             self.outnet = spk.nn.build_gated_equivariant_mlp(
@@ -154,6 +159,9 @@ class DipoleMoment(nn.Module):
     def forward(self, inputs):
         positions = inputs[properties.R]
         l0 = inputs["scalar_representation"]
+        natoms = inputs[properties.n_atoms]
+        idx_m = inputs[properties.idx_m]
+        maxm = int(idx_m[-1]) + 1
         result = {}
 
         if self.use_vector_representation:
@@ -164,6 +172,19 @@ class DipoleMoment(nn.Module):
             charges = self.outnet(l0)
             atomic_dipoles = 0.0
 
+        if self.correct_charges:
+            if properties.total_charge in inputs:
+                total_charge = inputs[properties.total_charge]
+            else:
+                total_charge = 0.0
+
+            sum_charge = snn.scatter_add(charges, idx_m, dim_size=maxm)
+            charge_correction = (total_charge - sum_charge) / natoms.unsqueeze(-1)
+            charge_correction = torch.repeat_interleave(
+                charge_correction, natoms, dim=0
+            )
+            charges = charges + charge_correction
+
         if self.return_charges:
             result[self.charges_key] = charges
 
@@ -172,10 +193,7 @@ class DipoleMoment(nn.Module):
             y = y + atomic_dipoles
 
         # sum over atoms
-        idx_m = inputs[properties.idx_m]
-        maxm = int(idx_m[-1]) + 1
-        tmp = torch.zeros((maxm, 3), dtype=y.dtype, device=y.device)
-        y = tmp.index_add(0, idx_m, y)
+        y = snn.scatter_add(y, idx_m, dim_size=maxm)
 
         if self.predict_magnitude:
             y = torch.norm(y, dim=1, keepdim=False)
@@ -201,7 +219,6 @@ class Polarizability(nn.Module):
         n_hidden: Optional[Union[int, Sequence[int]]] = None,
         n_layers: int = 2,
         activation: Callable = F.silu,
-        predict_isotropic: bool = False,
         polarizability_key: str = properties.polarizability,
     ):
         """
@@ -215,7 +232,6 @@ class Polarizability(nn.Module):
                 n_in resulting in a pyramidal network.
             n_layers: number of layers.
             activation: activation function
-            predict_isotropic: If true, return isotropic polarizability
             polarizability_key: the key under which the predicted polarizability will be stored
         """
         super(Polarizability, self).__init__()
@@ -223,7 +239,6 @@ class Polarizability(nn.Module):
         self.n_layers = n_layers
         self.n_hidden = n_hidden
         self.polarizability_key = polarizability_key
-        self.predict_isotropic = predict_isotropic
 
         self.outnet = spk.nn.build_gated_equivariant_mlp(
             n_in=n_in,
@@ -262,9 +277,6 @@ class Polarizability(nn.Module):
         maxm = int(idx_m[-1]) + 1
         tmp = torch.zeros((maxm, 3, 3), dtype=alpha.dtype, device=alpha.device)
         alpha = tmp.index_add(0, idx_m, alpha)
-
-        if self.predict_isotropic:
-            alpha = torch.einsum("bii->b", alpha) / 3.0
 
         result = {self.polarizability_key: alpha}
         return result

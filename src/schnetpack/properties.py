@@ -44,6 +44,7 @@ energy: Final[str] = "energy"
 forces: Final[str] = "forces"
 stress: Final[str] = "stress"
 
+total_charge: Final[str] = "total_charge"
 partial_charges: Final[str] = "partial_charges"
 dipole_moment: Final[str] = "dipole_moment"
 polarizability: Final[str] = "polarizability"
