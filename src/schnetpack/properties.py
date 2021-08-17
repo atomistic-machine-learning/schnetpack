@@ -44,7 +44,8 @@ stress: Final[str] = "stress"
 
 partial_charges: Final[str] = "partial_charges"
 dipole_moment: Final[str] = "dipole_moment"
-polarizability: Final[str] = "polarizability"
+polarizability: Final[str] = "polarizability"  
+total_charge: Final[str] = "total_charge"
 
     
 electrostatic: Final[str] = "electrostatic"

@@ -2,7 +2,7 @@
 
 defaults:
   - train_base
-  - override /model: single_property
+  - override /model: single_property_physnet
   - override /data: qm9
 
 cutoff: 10.0

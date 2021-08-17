@@ -136,6 +136,7 @@ class DipoleMoment(nn.Module):
         dipole_key: str = properties.dipole_moment,
         charges_key: str = properties.partial_charges,
         use_vector_representation: bool = False,
+        correct_charges: bool = True,
         module_dim = False,
     ):
         """
@@ -163,7 +164,9 @@ class DipoleMoment(nn.Module):
         self.return_charges = return_charges
         self.predict_magnitude = predict_magnitude
         self.use_vector_representation = use_vector_representation
-
+        self.correct_charges = correct_charges
+        self.module_dim = module_dim
+        
         if use_vector_representation:
             self.outnet = spk.nn.build_gated_equivariant_mlp(
                 n_in=n_in,
@@ -182,11 +185,15 @@ class DipoleMoment(nn.Module):
                 activation=activation,
                 weight_init=True
             )
-        self.module_dim = module_dim
+        
 
     def forward(self, inputs):
+        
         positions = inputs[properties.R]
         l0 = inputs["scalar_representation"]
+        natoms = inputs[properties.n_atoms]
+        idx_m = inputs[properties.idx_m]
+        maxm = int(idx_m[-1]) + 1
         result = {}
         
         if self.module_dim:
@@ -199,6 +206,19 @@ class DipoleMoment(nn.Module):
         else:
             charges = self.outnet(l0)
             atomic_dipoles = 0.0
+            
+        if self.correct_charges:
+            if properties.total_charge in inputs:
+                total_charge = inputs[properties.total_charge]
+            else:
+                total_charge = 0.0
+
+            sum_charge = snn.scatter_add(charges, idx_m, dim_size=maxm)
+            charge_correction = (total_charge - sum_charge) / natoms.unsqueeze(-1)
+            charge_correction = torch.repeat_interleave(
+                charge_correction, natoms, dim=0
+            )
+            charges = charges + charge_correction
 
         if self.return_charges:
             result[self.charges_key] = charges
@@ -208,10 +228,7 @@ class DipoleMoment(nn.Module):
             y = y + atomic_dipoles
 
         # sum over atoms
-        idx_m = inputs[properties.idx_m]
-        maxm = int(idx_m[-1]) + 1
-        tmp = torch.zeros((maxm, 3), dtype=y.dtype, device=y.device)
-        y = tmp.index_add(0, idx_m, y)
+        y = snn.scatter_add(y, idx_m, dim_size=maxm)
 
         if self.predict_magnitude:
             y = torch.norm(y, dim=1, keepdim=False)
