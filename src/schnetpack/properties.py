@@ -47,6 +47,6 @@ dipole_moment: Final[str] = "dipole_moment"
 polarizability: Final[str] = "polarizability"
 
     
-electorstatic: Final[str] = "electrostatic"
+electrostatic: Final[str] = "electrostatic"
 zbl: Final[str] = "zbl"
 dispersion: Final[str] = "dispersion"

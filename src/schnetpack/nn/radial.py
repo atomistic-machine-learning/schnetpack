@@ -78,8 +78,6 @@ class GaussianRBFCentered(nn.Module):
 
     def forward(self, inputs: torch.Tensor):
         return gaussian_rbf(inputs, self.offsets, self.widths)
-
-<<<<<<< HEAD
     
 def softplus_inverse(x):
     return x + np.log(-np.expm1(-x))
@@ -107,7 +105,6 @@ class RBF_PhysNet(nn.Module):
         g_ij = torch.exp(-self.widths*(torch.exp(-r_ij)-self.centers)**2)
         
         return g_ij
-=======
 
 class BesselRBF(nn.Module):
     """
@@ -138,4 +135,4 @@ class BesselRBF(nn.Module):
         norm = torch.where(inputs == 0, torch.tensor(1.0, device=inputs.device), inputs)
         y = sinax / norm[..., None]
         return y
->>>>>>> kts/outmods
+

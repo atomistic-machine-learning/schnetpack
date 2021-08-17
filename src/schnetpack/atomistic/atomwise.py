@@ -31,16 +31,15 @@ class Atomwise(nn.Module):
         aggregation_mode: str = "sum",
         custom_outnet: Callable = None,
         module_dim = False,
-        calc_electrostatic: bool = False
-        calc_zbl: bool = False
-        calc_dispersion: bool = False
+        calc_electrostatic: bool = False,
+        calc_zbl: bool = False,
+        calc_dispersion: bool = False,
         outnet_input: Union[str, Sequence[str]] = "scalar_representation",
         electrostatic_key: str = structure.electrostatic,
         zbl_key: str = structure.zbl,
-        dispersion_key = structure.dispersion   
-
+        dispersion_key = structure.dispersion,  
         output_key: str = "y",
-        per_atom_output_key: Optional[str] = None,
+        per_atom_output_key: Optional[str] = None
     ):
         """
         Args:
@@ -57,7 +56,6 @@ class Atomwise(nn.Module):
             per_atom_output_key: If not None, the key under which the per-atom result will be stored
         """
         super(Atomwise, self).__init__()
-        self.output = output
         self.n_out = n_out
         
         self.electrostatic_key = electrostatic_key
@@ -68,17 +66,6 @@ class Atomwise(nn.Module):
         self.calc_zbl = calc_zbl
         self.calc_dispersion = calc_dispersion
         
-        
-
-        #build output network
-        self.outnet = custom_outnet or spk.nn.MLP(
-            n_in=n_in, n_out=n_out, n_layers=2, activation=spk.nn.shifted_softplus
-        )
-        
-#         # Getting moved to config
-        if module_dim:
-            self.outnet.weight.data = torch.nn.Parameter(torch.zeros(2,n_in))
-            self.outnet.bias.data.fill_(0.)
         
         self.outnet_input = outnet_input
         self.output_key = output_key
@@ -95,15 +82,16 @@ class Atomwise(nn.Module):
             n_out=n_out,
             n_hidden=n_hidden,
             n_layers=n_layers,
-            activation=activation,
+            activation=activation
         )
+        print(self.outnet)
         self.aggregation_mode = aggregation_mode
         
         self.module_dim = module_dim
         
-        if module_dim:
-            self.outnet.weight.data = torch.nn.Parameter(torch.zeros(2,n_in))
-            self.outnet.bias.data.fill_(0.)
+#         if module_dim:
+#             self.outnet.weight.data = torch.nn.Parameter(torch.zeros(n_out,n_in))
+#             self.outnet.bias.data.fill_(0.)
             
         
         #self.physnet_energy = PhysNetEnergy()
@@ -113,10 +101,7 @@ class Atomwise(nn.Module):
         
         if self.module_dim:
             inputs[self.outnet_input] = inputs[self.outnet_input].sum(0)
-
-        # predict atomwise contributions
-        yi = inputs[self.outnet_input]
-        yi = self.outnet(inputs[self.outnet_input])
+        
         
         if self.calc_electrostatic:
             yi += inputs[self.electrostatic_key]

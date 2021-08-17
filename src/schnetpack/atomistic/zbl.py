@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Sequence, Union, Callable, Dict, Optional
 
 def softplus_inverse(x):
     return x + (torch.log(-torch.expm1(torch.tensor(-x)))).item()
