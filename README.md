@@ -63,7 +63,7 @@ You're ready to go!
 Under construction. For a first test, use:
 
 ```
-spktrain +experiment=qm9 data_dir=/path/to/data logger=[csv/aim/tensorboard]
+spktrain --config-name=train_qm9 data_dir=/home/maxh/Documents/schnetpack model/representation=physnet
 ```
 
 ## Documentation
