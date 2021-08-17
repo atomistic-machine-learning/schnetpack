@@ -6,6 +6,7 @@ output_modules:
     n_in: ${model.representation.n_atom_basis}
     return_charges: True
     n_layers: 1
+    init_zero: True
     module_dim : True
   - _target_: schnetpack.atomistic.ElectrostaticEnergy
   - _target_: schnetpack.atomistic.D4DispersionEnergy
@@ -18,6 +19,7 @@ output_modules:
     module_dim: True
     physnet_energy: True
     n_layers: 1
+    init_zero: True
 
 outputs:
   - _target_: schnetpack.atomistic.ModelOutput

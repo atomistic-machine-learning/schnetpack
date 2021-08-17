@@ -33,7 +33,8 @@ class Atomwise(nn.Module):
         outnet_input: Union[str, Sequence[str]] = "scalar_representation",
         output_key: str = "y",
         per_atom_output_key: Optional[str] = None,
-        physnet_energy: bool = False
+        physnet_energy: bool = False,
+        init_zero: bool = False
     ):
         """
         Args:
@@ -68,18 +69,13 @@ class Atomwise(nn.Module):
             n_hidden=n_hidden,
             n_layers=n_layers,
             activation=activation,
-            weight_init = True
+            weight_init = init_zero
         )
         
         self.aggregation_mode = aggregation_mode
         
         self.module_dim = module_dim
-        self.physnet_energy = physnet_energy
-        
-#         if module_dim:
-#             self.outnet.weight.data = torch.nn.Parameter(torch.zeros(n_out,n_in))
-#             self.outnet.bias.data.fill_(0.)
-            
+        self.physnet_energy = physnet_energy            
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         
@@ -137,7 +133,8 @@ class DipoleMoment(nn.Module):
         charges_key: str = properties.partial_charges,
         use_vector_representation: bool = False,
         correct_charges: bool = True,
-        module_dim = False,
+        module_dim: bool = False,
+        init_zero: bool = False
     ):
         """
         Args:
@@ -183,7 +180,7 @@ class DipoleMoment(nn.Module):
                 n_hidden=n_hidden,
                 n_layers=n_layers,
                 activation=activation,
-                weight_init=True
+                weight_init=init_zero
             )
         
 
@@ -241,7 +238,6 @@ class Polarizability(nn.Module):
     """
     Predicts polarizability tensor using tensor rank factorization.
     This requires an equivariant representation, e.g. PaiNN, that provides both scalar and vectorial features.
-
     References:
     .. [#painn1] Schütt, Unke, Gastegger:
        Equivariant message passing for the prediction of tensorial properties and molecular spectra.
@@ -254,7 +250,6 @@ class Polarizability(nn.Module):
         n_hidden: Optional[Union[int, Sequence[int]]] = None,
         n_layers: int = 2,
         activation: Callable = F.silu,
-        predict_isotropic: bool = False,
         polarizability_key: str = properties.polarizability,
     ):
         """
@@ -268,7 +263,6 @@ class Polarizability(nn.Module):
                 n_in resulting in a pyramidal network.
             n_layers: number of layers.
             activation: activation function
-            predict_isotropic: If true, return isotropic polarizability
             polarizability_key: the key under which the predicted polarizability will be stored
         """
         super(Polarizability, self).__init__()
@@ -276,7 +270,6 @@ class Polarizability(nn.Module):
         self.n_layers = n_layers
         self.n_hidden = n_hidden
         self.polarizability_key = polarizability_key
-        self.predict_isotropic = predict_isotropic
 
         self.outnet = spk.nn.build_gated_equivariant_mlp(
             n_in=n_in,
@@ -313,11 +306,7 @@ class Polarizability(nn.Module):
         # sum over atoms
         idx_m = inputs[properties.idx_m]
         maxm = int(idx_m[-1]) + 1
-        tmp = torch.zeros((maxm, 3, 3), dtype=alpha.dtype, device=alpha.device)
-        alpha = tmp.index_add(0, idx_m, alpha)
-
-        if self.predict_isotropic:
-            alpha = torch.einsum("bii->b", alpha) / 3.0
+        alpha = snn.scatter_add(alpha, idx_m, dim_size=maxm)
 
         result = {self.polarizability_key: alpha}
         return result
