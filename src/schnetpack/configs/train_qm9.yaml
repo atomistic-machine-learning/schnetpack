@@ -5,9 +5,9 @@ defaults:
   - override /model: single_property
   - override /data: qm9
 
-cutoff: 5.0
-n_rbf: 20
-lr: 5e-4
+cutoff: 10.0
+n_rbf: 64
+lr: 1e-3
 
 property: energy_U0
 name: qm9_${property}

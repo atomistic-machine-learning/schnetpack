@@ -14,6 +14,7 @@ def build_mlp(
     n_hidden: Optional[Union[int, Sequence[int]]] = None,
     n_layers: int = 2,
     activation: Callable = F.silu,
+    weight_init: bool = False
 ):
     """
     Build multiple layer fully connected perceptron neural network.
@@ -56,6 +57,10 @@ def build_mlp(
     layers.append(snn.Dense(n_neurons[-2], n_neurons[-1], activation=None))
     # put all layers together to make the network
     out_net = nn.Sequential(*layers)
+    
+    if weight_init:
+        nn.init.zeros_(out_net[-1].weight)
+        
     return out_net
 
 

@@ -67,7 +67,8 @@ class Atomwise(nn.Module):
             n_out=n_out,
             n_hidden=n_hidden,
             n_layers=n_layers,
-            activation=activation
+            activation=activation,
+            weight_init = True
         )
         
         self.aggregation_mode = aggregation_mode
@@ -179,6 +180,7 @@ class DipoleMoment(nn.Module):
                 n_hidden=n_hidden,
                 n_layers=n_layers,
                 activation=activation,
+                weight_init=True
             )
         self.module_dim = module_dim
 

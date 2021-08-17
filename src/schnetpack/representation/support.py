@@ -26,7 +26,6 @@ class Residual(nn.Module):
         
         self.sequential = nn.Sequential(
             activation(),
-            nn.Dropout(p=0.1),
             self.linear,
             activation(),
             self.linear
