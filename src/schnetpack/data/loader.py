@@ -12,6 +12,31 @@ from .stats import StatisticsAccumulator
 __all__ = ["AtomsLoader"]
 
 
+
+def get_size(val):
+    if type(val) == np.ndarray:
+        return torch.Size(val.shape)
+    elif type(val) == torch.Tensor:
+        return val.size()
+    else:
+        raise ValueError("Not a supported array type!")
+
+def is_array(val):
+    if type(val) == np.ndarray or type(val) == torch.Tensor:
+        return True
+    return False
+
+def to_tensor(val):
+    if type(val) == list:
+        return torch.tensor(np.array(val))
+    if type(val) == np.ndarray:
+        return torch.tensor(val)
+    elif type(val) == torch.Tensor:
+        return val
+    else:
+        raise ValueError("Not a supported array type!")
+
+
 def _collate_aseatoms(examples):
     """
     Build batch from systems and properties & apply padding
@@ -25,21 +50,23 @@ def _collate_aseatoms(examples):
     properties = examples[0]
 
     # initialize maximum sizes
-    max_size = {
-        prop: np.array(val.size(), dtype=np.int) for prop, val in properties.items()
-    }
+    max_size = {}
+    for prop, val in properties.items():
+        if is_array(val):
+            max_size[prop] = np.array(get_size(val), dtype=np.int)
 
     # get maximum sizes
     for properties in examples[1:]:
         for prop, val in properties.items():
-            max_size[prop] = np.maximum(
-                max_size[prop], np.array(val.size(), dtype=np.int)
-            )
+            if is_array(val):
+                max_size[prop] = np.maximum(
+                    max_size[prop], np.array(get_size(val), dtype=np.int)
+                )
 
     # initialize batch
     batch = {
         p: torch.zeros(len(examples), *[int(ss) for ss in size]).type(
-            examples[0][p].type()
+            to_tensor(examples[0][p]).type()
         )
         for p, size in max_size.items()
     }
@@ -64,33 +91,34 @@ def _collate_aseatoms(examples):
     # build batch and pad
     for k, properties in enumerate(examples):
         for prop, val in properties.items():
-            shape = val.size()
-            s = (k,) + tuple([slice(0, d) for d in shape])
-            batch[prop][s] = val
+            if is_array(val):
+                shape = get_size(val)
+                s = (k,) + tuple([slice(0, d) for d in shape])
+                batch[prop][s] = to_tensor(val)
 
         # add mask
         if not has_neighbor_mask:
             nbh = properties[Properties.neighbors]
-            shape = nbh.size()
+            shape = get_size(nbh)
             s = (k,) + tuple([slice(0, d) for d in shape])
-            mask = nbh >= 0
+            mask = to_tensor(nbh >= 0)
             batch[Properties.neighbor_mask][s] = mask
-            batch[Properties.neighbors][s] = nbh * mask.long()
+            batch[Properties.neighbors][s] = to_tensor(to_tensor(nbh) * mask.long())
 
         if not has_atom_mask:
             z = properties[Properties.Z]
-            shape = z.size()
+            shape = get_size(z)
             s = (k,) + tuple([slice(0, d) for d in shape])
-            batch[Properties.atom_mask][s] = z > 0
+            batch[Properties.atom_mask][s] = to_tensor(z > 0)
 
         # Check if neighbor pair indices are present
         # Since the structure of both idx_j and idx_k is identical
         # (not the values), only one cutoff mask has to be generated
         if Properties.neighbor_pairs_j in properties:
             nbh_idx_j = properties[Properties.neighbor_pairs_j]
-            shape = nbh_idx_j.size()
+            shape = get_size(nbh_idx_j)
             s = (k,) + tuple([slice(0, d) for d in shape])
-            batch[Properties.neighbor_pairs_mask][s] = nbh_idx_j >= 0
+            batch[Properties.neighbor_pairs_mask][s] = to_tensor(nbh_idx_j >= 0)
 
     return batch
 
