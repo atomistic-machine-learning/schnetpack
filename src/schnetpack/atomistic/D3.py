@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import schnetpack.properties as structure
 
 from typing import Callable, Dict
 
@@ -28,7 +29,7 @@ HF      s6=1.00000000, s8=1.61679827, a1=0.44959224, a2=3.35743605
 '''
 class D4DispersionEnergy(nn.Module):
     def __init__(self, 
-            cutoff=None, 
+            cutoff=7.5, 
             s6=1.00000000, 
             s8=1.61679827, 
             a1=0.44959224, 
@@ -136,11 +137,12 @@ class D4DispersionEnergy(nn.Module):
         result = {}
         # N: int, Z: torch.Tensor, qa: torch.Tensor, rij: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor
         Z = inputs[structure.Z]
-        qa = inputs[structure.partial_charges]
+        qa = inputs[structure.partial_charges].squeeze(-1)
         r_ij = inputs[structure.Rij]
-        r_ij = torch.norm(r_ij, dim=1).cuda()
+        rij = torch.norm(r_ij, dim=1).cuda()
         idx_i = inputs[structure.idx_i]
         idx_j = inputs[structure.idx_j]
+        N = Z.size(0)
         
         if idx_i.numel() == 0:
             zeros = rij.new_zeros(N)

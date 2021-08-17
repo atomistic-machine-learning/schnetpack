@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import schnetpack.properties as structure
 from typing import Callable, Dict
 
 def _switch_component(x, ones, zeros):
@@ -42,13 +42,13 @@ class ElectrostaticEnergy(nn.Module):
         #N: int, q:torch.Tensor, rij: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor
         result = {}
         atomic_numbers = inputs[structure.Z]
-        q = inputs[structure.partial_charges]
+        q = inputs[structure.partial_charges].squeeze(-1)
         r_ij = inputs[structure.Rij]
-        r_ij = torch.norm(r_ij, dim=1).cuda()
+        rij = torch.norm(r_ij, dim=1).cuda()
         idx_i = inputs[structure.idx_i]
         idx_j = inputs[structure.idx_j]
         N = atomic_numbers.size(0)
-        
+        print(q.shape)
         fac = self.kehalf*torch.gather(q, 0, idx_i)*torch.gather(q, 0, idx_j)
         f = switch_function(rij, self.cuton, self.cutoff)
         if self.lr_cutoff is None:

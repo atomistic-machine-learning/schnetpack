@@ -2,6 +2,13 @@ defaults:
   - base_model
 
 output_modules:
+  - _target_: schnetpack.atomistic.DipoleMoment
+    n_in: ${model.representation.n_atom_basis}
+    return_charges: True
+    module_dim : True
+  - _target_: schnetpack.atomistic.ElectrostaticEnergy
+  - _target_: schnetpack.atomistic.D4DispersionEnergy
+  - _target_: schnetpack.atomistic.ZBLRepulsionEnergy
   - _target_: schnetpack.atomistic.Atomwise
     output_key: ${property}
     n_in: ${model.representation.n_atom_basis}

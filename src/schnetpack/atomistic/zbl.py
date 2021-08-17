@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Sequence, Union, Callable, Dict, Optional
+from schnetpack.nn.cutoff import PhysNetCutOff
+import schnetpack.properties as structure
 
 def softplus_inverse(x):
     return x + (torch.log(-torch.expm1(torch.tensor(-x)))).item()
@@ -26,7 +28,7 @@ class ZBLRepulsionEnergy(nn.Module):
         self.register_parameter('_a3', nn.Parameter(torch.tensor(1.)))
         self.register_parameter('_a4', nn.Parameter(torch.tensor(1.)))
         #self.reset_parameters()
-
+        self.cutoff_fn = PhysNetCutOff(10.0)
 #     def reset_parameters(self):
 #         nn.init.constant_(self._adiv, softplus_inverse(1/(0.8854*self.a0)))
 #         nn.init.constant_(self._apow, softplus_inverse(0.23))
@@ -45,11 +47,11 @@ class ZBLRepulsionEnergy(nn.Module):
         
         Zf = inputs[structure.Z]
         r_ij = inputs[structure.Rij]
-        r_ij = torch.norm(r_ij, dim=1).cuda()
+        rij = torch.norm(r_ij, dim=1).cuda()
         idx_i = inputs[structure.idx_i]
         idx_j = inputs[structure.idx_j]
         N = Zf.size(0)
-        cutoff_values = self.cutoff_fn(r_ij)
+        cutoff_values = self.cutoff_fn(rij)
         
         
         

@@ -102,14 +102,14 @@ class Atomwise(nn.Module):
         if self.module_dim:
             inputs[self.outnet_input] = inputs[self.outnet_input].sum(0)
         
-        
-        if self.calc_electrostatic:
-            yi += inputs[self.electrostatic_key]
-        if self.calc_zbl:
-            yi += inputs[self.zbl_key]
-        if self.calc_dispersion:
-            yi += inputs[self.dispersion_key]
-        #yi = self.physnet_energy(yi, inputs)
+    
+#         if self.calc_electrostatic:
+#             yi += inputs[self.electrostatic_key]
+#         if self.calc_zbl:
+#             yi += inputs[self.zbl_key]
+#         if self.calc_dispersion:
+#             yi += inputs[self.dispersion_key]
+#         #yi = self.physnet_energy(yi, inputs)
         
         if self.aggregation_mode == "avg":
             yi = yi / inputs[structure.n_atoms][:, None]
@@ -158,6 +158,7 @@ class DipoleMoment(nn.Module):
         dipole_key: str = properties.dipole_moment,
         charges_key: str = properties.partial_charges,
         use_vector_representation: bool = False,
+        module_dim = False,
     ):
         """
         Args:
@@ -202,11 +203,15 @@ class DipoleMoment(nn.Module):
                 n_layers=n_layers,
                 activation=activation,
             )
+        self.module_dim = module_dim
 
     def forward(self, inputs):
         positions = inputs[properties.R]
         l0 = inputs["scalar_representation"]
         result = {}
+        
+        if self.module_dim:
+            l0 = l0.sum(0)
 
         if self.use_vector_representation:
             l1 = inputs["vector_representation"]
