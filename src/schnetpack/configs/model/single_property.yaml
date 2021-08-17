@@ -5,8 +5,6 @@ output_modules:
   - _target_: schnetpack.atomistic.Atomwise
     output: ${property}
     n_in: ${model.representation.n_atom_basis}
-    aggregation_mode: sum
-    module_dim: True
 
 outputs:
   - _target_: schnetpack.atomistic.ModelOutput
