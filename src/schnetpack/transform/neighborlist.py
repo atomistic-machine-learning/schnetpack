@@ -1,3 +1,5 @@
+import os
+import numpy as np
 import torch
 from ase import Atoms
 from ase.neighborlist import neighbor_list
@@ -9,9 +11,64 @@ __all__ = [
     "TorchNeighborList",
     "CountNeighbors",
     "CollectAtomTriples",
+    "CachedNeighborList",
 ]
 
 from schnetpack import properties as structure
+
+
+class CachedNeighborList(Transform):
+    """
+    Calculate neighbor list using ASE.
+
+    Note: This is quite slow and should only used as a baseline for faster implementations!
+    """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
+
+    def __init__(self, cutoff):
+        """
+        Args:
+            cutoff: cutoff radius for neighbor search
+        """
+        super().__init__()
+        self.cutoff = cutoff
+
+        # create environment directory
+        self.env_dir = os.path.join(os.getcwd(), "environments")
+        os.mkdir(self.env_dir)
+
+    def forward(
+        self,
+        inputs: Dict[str, torch.Tensor],
+        results: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> Dict[str, torch.Tensor]:
+        Z = inputs[structure.Z]
+        R = inputs[structure.R]
+        cell = inputs[structure.cell]
+        pbc = inputs[structure.pbc]
+        at = Atoms(numbers=Z, positions=R, cell=cell, pbc=pbc)
+
+        # get environments
+        env_path = os.path.join(self.env_dir, "{}.npz".format(inputs["_idx"].item()))
+        if os.path.isfile(env_path):
+            # load environments
+            environment = np.load(env_path)
+            idx_i = environment["idx_i"]
+            idx_j = environment["idx_j"]
+            Rij = environment["Rij"]
+        else:
+            # calculate and store environments
+            idx_i, idx_j, Rij = neighbor_list(
+                "ijD", at, self.cutoff, self_interaction=False
+            )
+            np.savez(env_path, idx_i=idx_i, idx_j=idx_j, Rij=Rij)
+
+        inputs[structure.idx_i] = torch.tensor(idx_i)
+        inputs[structure.idx_j] = torch.tensor(idx_j)
+        inputs[structure.Rij] = torch.tensor(Rij)
+        return inputs
 
 
 class ASENeighborList(Transform):
