@@ -75,7 +75,7 @@ class ZBLRepulsionEnergy(nn.Module):
         zizj = Zf[idx_i]*Zf[idx_j]
         f = (c1*torch.exp(-a1*rij) + c2*torch.exp(-a2*rij) + c3*torch.exp(-a3*rij) + c4*torch.exp(-a4*rij))*cutoff_values
         zbl_energy = Zf.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, (self.kehalf*f*zizj/rij).float())
-        result["zbl"] = zbl_energy
+        result[structure.zbl] = zbl_energy
         return result
 
 

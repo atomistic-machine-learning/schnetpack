@@ -6,7 +6,6 @@ import torch.nn.functional as F
 
 import schnetpack as spk
 import schnetpack.properties as structure
-from schnetpack.atomistic.physnet_energy import PhysNetEnergy
 import schnetpack.nn as snn
 
 import schnetpack.nn as snn
@@ -31,15 +30,10 @@ class Atomwise(nn.Module):
         aggregation_mode: str = "sum",
         custom_outnet: Callable = None,
         module_dim = False,
-        calc_electrostatic: bool = False,
-        calc_zbl: bool = False,
-        calc_dispersion: bool = False,
         outnet_input: Union[str, Sequence[str]] = "scalar_representation",
-        electrostatic_key: str = structure.electrostatic,
-        zbl_key: str = structure.zbl,
-        dispersion_key = structure.dispersion,  
         output_key: str = "y",
-        per_atom_output_key: Optional[str] = None
+        per_atom_output_key: Optional[str] = None,
+        physnet_energy: bool = False
     ):
         """
         Args:
@@ -58,15 +52,6 @@ class Atomwise(nn.Module):
         super(Atomwise, self).__init__()
         self.n_out = n_out
         
-        self.electrostatic_key = electrostatic_key
-        self.zbl_key = zbl_key
-        self.dispersion_key = dispersion_key
-        
-        self.calc_electrostatic = calc_electrostatic
-        self.calc_zbl = calc_zbl
-        self.calc_dispersion = calc_dispersion
-        
-        
         self.outnet_input = outnet_input
         self.output_key = output_key
         self.per_atom_output_key = per_atom_output_key
@@ -84,17 +69,15 @@ class Atomwise(nn.Module):
             n_layers=n_layers,
             activation=activation
         )
-        print(self.outnet)
+        
         self.aggregation_mode = aggregation_mode
         
         self.module_dim = module_dim
+        self.physnet_energy = physnet_energy
         
 #         if module_dim:
 #             self.outnet.weight.data = torch.nn.Parameter(torch.zeros(n_out,n_in))
 #             self.outnet.bias.data.fill_(0.)
-            
-        
-        #self.physnet_energy = PhysNetEnergy()
             
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -102,19 +85,13 @@ class Atomwise(nn.Module):
         if self.module_dim:
             inputs[self.outnet_input] = inputs[self.outnet_input].sum(0)
         
-    
-#         if self.calc_electrostatic:
-#             yi += inputs[self.electrostatic_key]
-#         if self.calc_zbl:
-#             yi += inputs[self.zbl_key]
-#         if self.calc_dispersion:
-#             yi += inputs[self.dispersion_key]
-#         #yi = self.physnet_energy(yi, inputs)
-        
         if self.aggregation_mode == "avg":
             yi = yi / inputs[structure.n_atoms][:, None]
 
         y = self.outnet(inputs["scalar_representation"])
+        
+        if self.physnet_energy:
+            y += inputs[properties.physnet_aggregate]
 
         # aggregate
         if self.aggregation_mode is not None:

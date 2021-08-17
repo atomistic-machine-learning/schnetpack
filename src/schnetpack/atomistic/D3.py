@@ -106,7 +106,7 @@ class D4DispersionEnergy(nn.Module):
         self.max_nref = self.refsys.size(-1)
         self.pi = 3.141592653589793
         self._compute_refc6()
-        print(self._refc6.shape)
+       
     #the refc6 tensor is rather large and is therefore not stored as a buffer
     #this is used as a workaround
 #     def refc6(self):
@@ -203,7 +203,6 @@ class D4DispersionEnergy(nn.Module):
         s8 = F.softplus(self._s8)
         edisp = -c6ij*(s6*oor6 + s8*sqrt_r4r2ij**2*oor8)*self.convert2eV
         if compute_atomic_quantities:
-            print('CAARE!!!!')
             alpha   = self.alpha[Z,:,0]
             polarizabilities = torch.sum(zeta * alpha,-1)*self.convert2Angstrom3
             refc6ii = refc6[Z,Z,:,:]
@@ -212,7 +211,7 @@ class D4DispersionEnergy(nn.Module):
         else:
             polarizabilities = rij.new_zeros(N)
             c6_coefficients  = rij.new_zeros(N)
-        dispersion_energy = rij.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, edisp.float()), polarizabilities, c6_coefficients
-        result["dispersion"] = dispersion_energy
+        dispersion_energy = rij.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, edisp.float()) #, polarizabilities, c6_coefficients
+        result[structure.dispersion] = dispersion_energy
         return result
         

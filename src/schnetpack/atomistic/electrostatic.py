@@ -48,7 +48,7 @@ class ElectrostaticEnergy(nn.Module):
         idx_i = inputs[structure.idx_i]
         idx_j = inputs[structure.idx_j]
         N = atomic_numbers.size(0)
-        print(q.shape)
+        
         fac = self.kehalf*torch.gather(q, 0, idx_i)*torch.gather(q, 0, idx_j)
         f = switch_function(rij, self.cuton, self.cutoff)
         if self.lr_cutoff is None:
@@ -58,7 +58,7 @@ class ElectrostaticEnergy(nn.Module):
             coulomb = torch.where(rij < self.lr_cutoff, 1.0/rij + rij/self.lr_cutoff**2 - 2.0/self.lr_cutoff, torch.zeros_like(rij))
             damped  = 1/(rij**16 + self.cuton16)**(1/16) + (1-f)*self.cut_rconstant*rij - self.cut_constant
         electrostatic_energy = q.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, (fac*(f*damped + (1-f)*coulomb)).float())
-        result["electrostatic"] = electrostatic_energy
+        result[structure.electrostatic] = electrostatic_energy
         return result
 
 
