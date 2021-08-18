@@ -4,9 +4,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import schnetpack.properties as structure
-
+import math
 from typing import Callable, Dict
 
+__all__ = ["D4DispersionEnergy"]
 
 def _switch_component(x, ones, zeros):
     x_ = torch.where(x <= 0, ones, x)
@@ -104,7 +105,7 @@ class D4DispersionEnergy(nn.Module):
         self.register_buffer('sqrt_r4r2',torch.load(os.path.join(directory,'sqrt_r4r2.pth'))[:Zmax]) #[Zmax]
         self.register_buffer('alpha',torch.load(os.path.join(directory,'alpha.pth'))[:Zmax]) #[Zmax,max_nref,23]
         self.max_nref = self.refsys.size(-1)
-        self.pi = 3.141592653589793
+        self.pi = math.pi
         self._compute_refc6()
        
     #the refc6 tensor is rather large and is therefore not stored as a buffer

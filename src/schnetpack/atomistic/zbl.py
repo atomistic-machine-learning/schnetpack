@@ -5,6 +5,8 @@ from typing import Sequence, Union, Callable, Dict, Optional
 from schnetpack.nn.cutoff import PhysNetCutOff
 import schnetpack.properties as structure
 
+__all__ = ["ZBLRepulsionEnergy"]
+
 def softplus_inverse(x):
     return x + (torch.log(-torch.expm1(torch.tensor(-x)))).item()
 

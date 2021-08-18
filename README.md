@@ -63,7 +63,7 @@ You're ready to go!
 Under construction. For a first test, use:
 
 ```
-spktrain --config-name=train_qm9_physnet data_dir=/home/maxh/Documents/schnetpack model/representation=physnet
+spktrain --config-name=train_qm9_physnet data_dir=path_to_dir model/representation=physnet
 ```
 
 ## Documentation

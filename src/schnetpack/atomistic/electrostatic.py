@@ -4,6 +4,9 @@ import torch.nn.functional as F
 import schnetpack.properties as structure
 from typing import Callable, Dict
 
+__all__ = ["ElectrostaticEnergy"]
+
+
 def _switch_component(x, ones, zeros):
     x_ = torch.where(x <= 0, ones, x)
     return torch.where(x <= 0, zeros, torch.exp(-ones/x_))

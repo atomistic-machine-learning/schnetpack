@@ -4,6 +4,8 @@ import schnetpack.properties as structure
 
 from typing import Sequence, Union, Callable, Dict, Optional
 
+__all__ = ["Aggregation"]
+
 class Aggregation(nn.Module):
     
     def __init__(
