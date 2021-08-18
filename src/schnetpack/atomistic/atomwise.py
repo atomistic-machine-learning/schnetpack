@@ -5,9 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import schnetpack as spk
-import schnetpack.properties as structure
-import schnetpack.nn as snn
-
 import schnetpack.nn as snn
 import schnetpack.properties as properties
 
@@ -28,9 +25,7 @@ class Atomwise(nn.Module):
         n_layers: int = 2,
         activation: Callable = F.silu,
         aggregation_mode: str = "sum",
-        custom_outnet: Callable = None,
         module_dim = False,
-        outnet_input: Union[str, Sequence[str]] = "scalar_representation",
         output_key: str = "y",
         per_atom_output_key: Optional[str] = None,
         physnet_energy: bool = False,
@@ -51,11 +46,10 @@ class Atomwise(nn.Module):
             per_atom_output_key: If not None, the key under which the per-atom result will be stored
         """
         super(Atomwise, self).__init__()
-        self.n_out = n_out
         
-        self.outnet_input = outnet_input
         self.output_key = output_key
         self.per_atom_output_key = per_atom_output_key
+        self.n_out = n_out
 
         if aggregation_mode is None and self.per_atom_output_key is None:
             raise ValueError(
@@ -80,11 +74,8 @@ class Atomwise(nn.Module):
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         
         if self.module_dim:
-            inputs[self.outnet_input] = inputs[self.outnet_input].sum(0)
+            inputs["scalar_representation"] = inputs["scalar_representation"].sum(0)
         
-        if self.aggregation_mode == "avg":
-            yi = yi / inputs[structure.n_atoms][:, None]
-
         y = self.outnet(inputs["scalar_representation"])
         
         if self.physnet_energy:
@@ -97,8 +88,7 @@ class Atomwise(nn.Module):
 
             idx_m = inputs[properties.idx_m]
             maxm = int(idx_m[-1]) + 1
-            tmp = torch.zeros((maxm, self.n_out), dtype=y.dtype, device=y.device)
-            y = tmp.index_add(0, idx_m, y)
+            y = snn.scatter_add(y, idx_m, dim_size=maxm)
             y = torch.squeeze(y, -1)
 
         return {self.output_key: y}
