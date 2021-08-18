@@ -25,11 +25,11 @@ class Atomwise(nn.Module):
         n_layers: int = 2,
         activation: Callable = F.silu,
         aggregation_mode: str = "sum",
-        module_dim = False,
+        sum_module_dim = False,
         output_key: str = "y",
         per_atom_output_key: Optional[str] = None,
         physnet_energy: bool = False,
-        init_zero: bool = False
+        output_init_zero: bool = False
     ):
         """
         Args:
@@ -44,6 +44,8 @@ class Atomwise(nn.Module):
             aggregation_mode: one of {sum, avg} (default: sum)
             output_key: the key under which the result will be stored
             per_atom_output_key: If not None, the key under which the per-atom result will be stored
+            sum_module_dim: Allows for the summation over multiple output layers if available
+            output_init_zero: Initializes the weights of the final output layer to zero
         """
         super(Atomwise, self).__init__()
         
@@ -63,17 +65,17 @@ class Atomwise(nn.Module):
             n_hidden=n_hidden,
             n_layers=n_layers,
             activation=activation,
-            weight_init = init_zero
+            weight_init = output_init_zero
         )
         
         self.aggregation_mode = aggregation_mode
         
-        self.module_dim = module_dim
+        self.sum_module_dim = sum_module_dim
         self.physnet_energy = physnet_energy            
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         
-        if self.module_dim:
+        if self.sum_module_dim:
             inputs["scalar_representation"] = inputs["scalar_representation"].sum(0)
         
         y = self.outnet(inputs["scalar_representation"])
@@ -123,8 +125,8 @@ class DipoleMoment(nn.Module):
         charges_key: str = properties.partial_charges,
         use_vector_representation: bool = False,
         correct_charges: bool = True,
-        module_dim: bool = False,
-        init_zero: bool = False
+        sum_module_dim: bool = False,
+        output_init_zero: bool = False
     ):
         """
         Args:
@@ -143,6 +145,8 @@ class DipoleMoment(nn.Module):
             charges_key: the key under which partial charges will be stored
             use_vector_representation: If true, use vector representation to predict local,
                 atomic dipoles
+            sum_module_dim: Allows for the summation over multiple output layers if available
+            output_init_zero: Initializes the weights of the final output layer to zero
         """
         super().__init__()
 
@@ -152,7 +156,7 @@ class DipoleMoment(nn.Module):
         self.predict_magnitude = predict_magnitude
         self.use_vector_representation = use_vector_representation
         self.correct_charges = correct_charges
-        self.module_dim = module_dim
+        self.sum_module_dim = sum_module_dim
         
         if use_vector_representation:
             self.outnet = spk.nn.build_gated_equivariant_mlp(
@@ -170,7 +174,7 @@ class DipoleMoment(nn.Module):
                 n_hidden=n_hidden,
                 n_layers=n_layers,
                 activation=activation,
-                weight_init=init_zero
+                weight_init=output_init_zero
             )
         
 
@@ -183,7 +187,7 @@ class DipoleMoment(nn.Module):
         maxm = int(idx_m[-1]) + 1
         result = {}
         
-        if self.module_dim:
+        if self.sum_module_dim:
             l0 = l0.sum(0)
 
         if self.use_vector_representation:
