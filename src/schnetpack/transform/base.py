@@ -62,3 +62,6 @@ class Transform(nn.Module):
             return results
         else:
             return inputs
+
+    def teardown(self):
+        pass
