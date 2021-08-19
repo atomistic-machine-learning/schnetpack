@@ -131,10 +131,5 @@ def train(config: DictConfig):
     log.info("Starting testing.")
     trainer.test()
 
-    # Remove temporary files if existing
-    env_dir = Path(os.path.join(os.getcwd(), "environments"))
-    if env_dir.exists() and env_dir.is_dir():
-        shutil.rmtree(env_dir)
-
     # Print path to best checkpoint
     log.info(f"Best checkpoint path:\n{trainer.checkpoint_callback.best_model_path}")
