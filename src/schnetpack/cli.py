@@ -2,8 +2,6 @@ import logging
 import os
 import uuid
 from typing import List
-from pathlib import Path
-import shutil
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
@@ -11,8 +9,8 @@ from pytorch_lightning import LightningModule, LightningDataModule, Callback, Tr
 from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import LightningLoggerBase
 
-from schnetpack.utils.script import log_hyperparameters, print_config
 from schnetpack.utils import str2class
+from schnetpack.utils.script import log_hyperparameters, print_config
 
 log = logging.getLogger(__name__)
 
