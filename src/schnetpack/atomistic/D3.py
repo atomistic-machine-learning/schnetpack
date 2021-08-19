@@ -3,32 +3,24 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import schnetpack.properties as structure
+import schnetpack.properties as properties
 import math
 from typing import Callable, Dict
+from schnetpack.nn.activations import _switch_component, switch_function, softplus_inverse
+import schnetpack.nn as snn
 
 __all__ = ["D4DispersionEnergy"]
 
-def _switch_component(x, ones, zeros):
-    x_ = torch.where(x <= 0, ones, x)
-    return torch.where(x <= 0, zeros, torch.exp(-ones/x_))
 
-def switch_function(x, cuton: float ,cutoff:float):
-    x = (x-cuton)/(cutoff-cuton)
-    ones  = torch.ones_like(x)
-    zeros = torch.zeros_like(x)
-    fp = _switch_component(x, ones, zeros)
-    fm = _switch_component(1-x, ones, zeros)
-    return torch.where(x <= 0, ones, torch.where(x >= 1, zeros, fm/(fp+fm)))
 
-def softplus_inverse(x):
-    return x + (torch.log(-torch.expm1(torch.tensor(-x)))).item()
 
-'''
-computes D4 dispersion energy
-HF      s6=1.00000000, s8=1.61679827, a1=0.44959224, a2=3.35743605
-'''
 class D4DispersionEnergy(nn.Module):
+    
+    '''
+    Computes D4 dispersion energy with parameters:
+    HF      s6=1.00000000, s8=1.61679827, a1=0.44959224, a2=3.35743605
+    '''
+    
     def __init__(self, 
             cutoff=7.5, 
             s6=1.00000000, 
@@ -46,22 +38,18 @@ class D4DispersionEnergy(nn.Module):
             Zmax=87,
             Bohr=0.5291772105638411,
             Hartree=27.211386024367243,
-            dtype=torch.float32):
+            dtype=torch.float32,
+            output_key = "dispersion"
+        ):
         super(D4DispersionEnergy, self).__init__()
         assert Zmax <= 87
         
-        #parameters
-#         self.register_parameter('_s6',     nn.Parameter(torch.Tensor([softplus_inverse(s6)]),  requires_grad=False)) #s6 is usually not fitted (correct long-range)
-#         self.register_parameter('_s8',     nn.Parameter(torch.Tensor([softplus_inverse(s8)]),  requires_grad=True))
-#         self.register_parameter('_a1',     nn.Parameter(torch.Tensor([softplus_inverse(a1)]),  requires_grad=True))
-#         self.register_parameter('_a2',     nn.Parameter(torch.Tensor([softplus_inverse(a2)]),  requires_grad=True))
-#         self.register_parameter('_scaleq', nn.Parameter(torch.Tensor([softplus_inverse(1.0)]), requires_grad=True)) #parameter to scale charges of reference systems
-        
-        self._s6 = nn.Parameter(torch.Tensor([softplus_inverse(s6)]))
-        self._s8 = nn.Parameter(torch.Tensor([softplus_inverse(s8)]))
-        self._a1 = nn.Parameter(torch.Tensor([softplus_inverse(a1)]))
-        self._a2 = nn.Parameter(torch.Tensor([softplus_inverse(a2)]))
-        self._scaleq = nn.Parameter(torch.Tensor([softplus_inverse(1.0)]))
+        self.output_key = output_key
+        self._s6 = nn.Parameter(torch.tensor([softplus_inverse(s6)]))
+        self._s8 = nn.Parameter(torch.tensor([softplus_inverse(s8)]))
+        self._a1 = nn.Parameter(torch.tensor([softplus_inverse(a1)]))
+        self._a2 = nn.Parameter(torch.tensor([softplus_inverse(a2)]))
+        self._scaleq = nn.Parameter(torch.tensor([softplus_inverse(1.0)]))
 
         #D4 constants
         self.Zmax = Zmax
@@ -107,13 +95,6 @@ class D4DispersionEnergy(nn.Module):
         self.max_nref = self.refsys.size(-1)
         self.pi = math.pi
         self._compute_refc6()
-       
-    #the refc6 tensor is rather large and is therefore not stored as a buffer
-    #this is used as a workaround
-#     def refc6(self):
-#         if self._refc6.dtype != self.cn.dtype or self._refc6.device != self.cn.device:
-#             self._refc6 = self._refc6.to(dtype=self.cn.dtype, device=self.cn.device)
-#         return self._refc6
 
     #important! If reference charges are scaled, this needs to be recomputed every time the parameters change!
     def _compute_refc6(self):
@@ -136,29 +117,30 @@ class D4DispersionEnergy(nn.Module):
 
     def forward(self, inputs: Dict[str, torch.Tensor], compute_atomic_quantities: bool = False):
         result = {}
-        # N: int, Z: torch.Tensor, qa: torch.Tensor, rij: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor
-        Z = inputs[structure.Z]
-        qa = inputs[structure.partial_charges].squeeze(-1)
-        r_ij = inputs[structure.Rij]
-        rij = torch.norm(r_ij, dim=1).cuda()
-        idx_i = inputs[structure.idx_i]
-        idx_j = inputs[structure.idx_j]
+        Z = inputs[properties.Z]
+        qa = inputs[properties.partial_charges].squeeze(-1)
+        r_ij = inputs[properties.Rij]
+        d_ij = torch.norm(r_ij, dim=1).cuda()
+        idx_i = inputs[properties.idx_i]
+        idx_j = inputs[properties.idx_j]
         N = Z.size(0)
+        idx_m = inputs[properties.idx_m]
+        maxm = int(idx_m[-1]) + 1
         
         if idx_i.numel() == 0:
-            zeros = rij.new_zeros(N)
+            zeros = d_ij.new_zeros(N)
             return zeros, zeros, zeros
         #convert distances to Bohr
-        #rij = rij*self.convert2Bohr 
+        #d_ij = d_ij*self.convert2Bohr 
         Zi = Z[idx_i]
         Zj = Z[idx_j]
         #calculate coordination numbers
         rco = self.k2*(self.rcov[Zi] + self.rcov[Zj])
         den = self.k4*torch.exp(-(torch.abs(self.en[Zi]-self.en[Zj])+ self.k5)**2/self.k6)
-        tmp = den*0.5*(1.0 + torch.erf(-self.kn*(rij-rco)/rco)) 
+        tmp = den*0.5*(1.0 + torch.erf(-self.kn*(d_ij-rco)/rco)) 
         if self.cutoff is not None:
-            tmp = tmp*switch_function(rij, self.cuton, self.cutoff)
-        covcn = rij.new_zeros(N,dtype=torch.float).index_add_(0, idx_i, tmp.float())
+            tmp = tmp*switch_function(d_ij, self.cuton, self.cutoff)
+        covcn = d_ij.new_zeros(N,dtype=torch.float).index_add_(0, idx_i, tmp.float())
 
         #calculate gaussian weights
         gweights = torch.sum(self.ncount_mask[Z]*torch.exp(-self.wf*self.ncount_weight[Z]*
@@ -186,8 +168,8 @@ class D4DispersionEnergy(nn.Module):
         a2 = F.softplus(self._a2)
         r0 = a1*sqrt_r4r2ij + a2
         if self.cutoff is None:
-            oor6 = 1/(rij**6+r0**6)
-            oor8 = 1/(rij**8+r0**8)
+            oor6 = 1/(d_ij**6+r0**6)
+            oor8 = 1/(d_ij**8+r0**8)
         else:
             cut2 = self.cutoff**2
             cut6 = cut2**3
@@ -196,10 +178,10 @@ class D4DispersionEnergy(nn.Module):
             tmp8 = r0**8
             cut6tmp6 = cut6 + tmp6
             cut8tmp8 = cut8 + tmp8
-            oor6 = 1/(rij**6+tmp6) - 1/cut6tmp6 + 6*cut6/cut6tmp6**2 * (rij/self.cutoff-1)
-            oor8 = 1/(rij**8+tmp8) - 1/cut8tmp8 + 8*cut8/cut8tmp8**2 * (rij/self.cutoff-1)
-            oor6 = torch.where(rij < self.cutoff, oor6, torch.zeros_like(oor6))
-            oor8 = torch.where(rij < self.cutoff, oor8, torch.zeros_like(oor8))
+            oor6 = 1/(d_ij**6+tmp6) - 1/cut6tmp6 + 6*cut6/cut6tmp6**2 * (d_ij/self.cutoff-1)
+            oor8 = 1/(d_ij**8+tmp8) - 1/cut8tmp8 + 8*cut8/cut8tmp8**2 * (d_ij/self.cutoff-1)
+            oor6 = torch.where(d_ij < self.cutoff, oor6, torch.zeros_like(oor6))
+            oor8 = torch.where(d_ij < self.cutoff, oor8, torch.zeros_like(oor8))
         s6 = F.softplus(self._s6)
         s8 = F.softplus(self._s8)
         edisp = -c6ij*(s6*oor6 + s8*sqrt_r4r2ij**2*oor8)*self.convert2eV
@@ -210,9 +192,14 @@ class D4DispersionEnergy(nn.Module):
             zetaii = zeta.view(zeta.size(0),zeta.size(1),1)*zeta.view(zeta.size(0),1,zeta.size(1))
             c6_coefficients  = torch.sum((refc6ii*zetaii).view(refc6ii.size(0),-1),-1)*self.convert2eVAngstrom6
         else:
-            polarizabilities = rij.new_zeros(N)
-            c6_coefficients  = rij.new_zeros(N)
-        dispersion_energy = rij.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, edisp.float()) #, polarizabilities, c6_coefficients
-        result[structure.dispersion] = dispersion_energy
+            polarizabilities = d_ij.new_zeros(N)
+            c6_coefficients  = d_ij.new_zeros(N)
+        
+        y = d_ij.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, edisp.float()) #snn.scatter_add(edisp, idx_i, dim_size=N)
+        y = snn.scatter_add(y, idx_m, dim_size=maxm)
+        y = torch.squeeze(y, -1)
+        
+        result[self.output_key] = y
+        
         return result
         

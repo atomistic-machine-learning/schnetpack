@@ -26,9 +26,8 @@ class Atomwise(nn.Module):
         activation: Callable = F.silu,
         aggregation_mode: str = "sum",
         sum_module_dim = False,
-        output_key: str = "y",
+        output_key: str = "short_range",
         per_atom_output_key: Optional[str] = None,
-        physnet_energy: bool = False,
         output_init_zero: bool = False
     ):
         """
@@ -65,13 +64,12 @@ class Atomwise(nn.Module):
             n_hidden=n_hidden,
             n_layers=n_layers,
             activation=activation,
-            weight_init = output_init_zero
+            last_init_zeros = output_init_zero
         )
         
         self.aggregation_mode = aggregation_mode
         
-        self.sum_module_dim = sum_module_dim
-        self.physnet_energy = physnet_energy            
+        self.sum_module_dim = sum_module_dim          
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         
@@ -80,9 +78,6 @@ class Atomwise(nn.Module):
         
         y = self.outnet(inputs["scalar_representation"])
         
-        if self.physnet_energy:
-            y += inputs[properties.physnet_aggregate]
-
         # aggregate
         if self.aggregation_mode is not None:
             if self.aggregation_mode == "avg":
@@ -90,6 +85,7 @@ class Atomwise(nn.Module):
 
             idx_m = inputs[properties.idx_m]
             maxm = int(idx_m[-1]) + 1
+           
             y = snn.scatter_add(y, idx_m, dim_size=maxm)
             y = torch.squeeze(y, -1)
 
@@ -174,7 +170,7 @@ class DipoleMoment(nn.Module):
                 n_hidden=n_hidden,
                 n_layers=n_layers,
                 activation=activation,
-                weight_init=output_init_zero
+                last_init_zeros=output_init_zero
             )
         
 

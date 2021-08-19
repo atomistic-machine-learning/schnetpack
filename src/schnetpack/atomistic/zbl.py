@@ -3,81 +3,99 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Sequence, Union, Callable, Dict, Optional
 from schnetpack.nn.cutoff import PhysNetCutOff
-import schnetpack.properties as structure
+from schnetpack.nn.activations import softplus_inverse
+import schnetpack.properties as properties
+import schnetpack.nn as snn
 
 __all__ = ["ZBLRepulsionEnergy"]
 
-def softplus_inverse(x):
-    return x + (torch.log(-torch.expm1(torch.tensor(-x)))).item()
 
-'''
-computes a Ziegler-Biersack-Littmark style repulsion energy
-'''
 class ZBLRepulsionEnergy(nn.Module):
-    def __init__(self, a0: float = 0.5291772105638411, ke: float =14.399645351950548):
+    
+    '''
+    Computes a Ziegler-Biersack-Littmark style repulsion energy
+    '''
+    
+    def __init__(self, 
+                 a0: float = 0.5291772105638411, 
+                 ke: float =14.399645351950548, 
+                 output_key : str = "zbl",
+                 trainable : bool = True,
+                 reset_param : bool = False
+        ):
         super(ZBLRepulsionEnergy, self).__init__()
+        self.output_key = output_key
         self.a0 = a0
         self.ke = ke
         self.kehalf = ke/2
-        self.register_parameter('_adiv', nn.Parameter(torch.tensor(1.)))
-        self.register_parameter('_apow', nn.Parameter(torch.tensor(1.)))
-        self.register_parameter('_c1', nn.Parameter(torch.tensor(1.)))
-        self.register_parameter('_c2', nn.Parameter(torch.tensor(1.)))
-        self.register_parameter('_c3', nn.Parameter(torch.tensor(1.)))
-        self.register_parameter('_c4', nn.Parameter(torch.tensor(1.)))
-        self.register_parameter('_a1', nn.Parameter(torch.tensor(1.)))
-        self.register_parameter('_a2', nn.Parameter(torch.tensor(1.)))
-        self.register_parameter('_a3', nn.Parameter(torch.tensor(1.)))
-        self.register_parameter('_a4', nn.Parameter(torch.tensor(1.)))
-        #self.reset_parameters()
         self.cutoff_fn = PhysNetCutOff(10.0)
-#     def reset_parameters(self):
-#         nn.init.constant_(self._adiv, softplus_inverse(1/(0.8854*self.a0)))
-#         nn.init.constant_(self._apow, softplus_inverse(0.23))
-#         nn.init.constant_(self._c1,   softplus_inverse(0.18180))
-#         nn.init.constant_(self._c2,   softplus_inverse(0.50990))
-#         nn.init.constant_(self._c3,   softplus_inverse(0.28020))
-#         nn.init.constant_(self._c4,   softplus_inverse(0.02817))
-#         nn.init.constant_(self._a1,   softplus_inverse(3.20000))
-#         nn.init.constant_(self._a2,   softplus_inverse(0.94230))
-#         nn.init.constant_(self._a3,   softplus_inverse(0.40280))
-#         nn.init.constant_(self._a4,   softplus_inverse(0.20160))
+        
+        if trainable:
+            self.register_parameter('_adiv', nn.Parameter(torch.tensor(1.)))
+            self.register_parameter('_apow', nn.Parameter(torch.tensor(1.)))
+            self.register_parameter('a_vector', nn.Parameter(torch.tensor([1.,1.,1.,1.])))
+            self.register_parameter('c_vector', nn.Parameter(torch.tensor([1.,1.,1.,1.])))
+        else:
+            self.register_buffer('_adiv', nn.Parameter(torch.tensor(1.)))
+            self.register_buffer('_apow', nn.Parameter(torch.tensor(1.)))
+            self.register_buffer('a_vector', nn.Parameter(torch.tensor([1.,1.,1.,1.])))
+            self.register_buffer('c_vector', nn.Parameter(torch.tensor([1.,1.,1.,1.])))
+            
+        if reset_param:
+            self.a_vector = nn.Parameter(torch.tensor([3.19980, 0.94229, 0.40290, 0.20162]))
+            self.c_vector = nn.Parameter(torch.tensor([0.18175, 0.50986, 0.28022, 0.02817]))
+            self.reset_parameters
+        
+    def reset_parameters(self):
+        nn.init.constant_(self._adiv, softplus_inverse(1/(0.8854*self.a0)))
+        nn.init.constant_(self._apow, softplus_inverse(0.23))
+        
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
+        
         result = {}
-        #N: int, Zf: torch.Tensor, rij: torch.Tensor, cutoff_values: torch.Tensor, idx_i: torch.Tensor, idx_j: torch.Tensor
-        
-        Zf = inputs[structure.Z]
-        r_ij = inputs[structure.Rij]
-        rij = torch.norm(r_ij, dim=1).cuda()
-        idx_i = inputs[structure.idx_i]
-        idx_j = inputs[structure.idx_j]
+        Zf = inputs[properties.Z]
+        r_ij = inputs[properties.Rij]
+        d_ij = torch.norm(r_ij, dim=1).cuda()
+        idx_i = inputs[properties.idx_i]
+        idx_j = inputs[properties.idx_j]
         N = Zf.size(0)
-        cutoff_values = self.cutoff_fn(rij)
-        
-        
+        idx_m = inputs[properties.idx_m]
+        maxm = int(idx_m[-1]) + 1
+        cutoff_values = self.cutoff_fn(d_ij)
         
         z  = Zf**F.softplus(self._apow)
         a  = (z[idx_i] + z[idx_j])*F.softplus(self._adiv)
-        a1 = F.softplus(self._a1)*a
-        a2 = F.softplus(self._a2)*a
-        a3 = F.softplus(self._a3)*a
-        a4 = F.softplus(self._a4)*a
-        c1 = F.softplus(self._c1)
-        c2 = F.softplus(self._c2)
-        c3 = F.softplus(self._c3)
-        c4 = F.softplus(self._c4)
+        a_components = F.softplus(self.a_vector[..., None])*a
+        c_components = F.softplus(self.c_vector[..., None])
+#         a1 = F.softplus(self._a1)*a
+#         a2 = F.softplus(self._a2)*a
+#         a3 = F.softplus(self._a3)*a
+#         a4 = F.softplus(self._a4)*a
+#         c1 = F.softplus(self._c1)
+#         c2 = F.softplus(self._c2)
+#         c3 = F.softplus(self._c3)
+#         c4 = F.softplus(self._c4)
         #normalize c coefficients (to get asymptotically correct behaviour for r -> 0)
-        csum = c1 + c2 + c3 + c4
-        c1 = c1/csum
-        c2 = c2/csum
-        c3 = c3/csum
-        c4 = c4/csum
+        #csum = c1 + c2 + c3 + c4
+        c_normed = F.normalize(c_components, p=1, dim=0)
+#         c1 = c1/csum
+#         c2 = c2/csum
+#         c3 = c3/csum
+#         c4 = c4/csum
         #actual interactions
         zizj = Zf[idx_i]*Zf[idx_j]
-        f = (c1*torch.exp(-a1*rij) + c2*torch.exp(-a2*rij) + c3*torch.exp(-a3*rij) + c4*torch.exp(-a4*rij))*cutoff_values
-        zbl_energy = Zf.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, (self.kehalf*f*zizj/rij).float())
-        result[structure.zbl] = zbl_energy
+        f_temp = (c_normed*torch.exp(-a_components*d_ij)).sum(0)
+        f = f_temp*cutoff_values
+        #f = (c1*torch.exp(-a1*d_ij) + c2*torch.exp(-a2*d_ij) + c3*torch.exp(-a3*d_ij) + c4*torch.exp(-a4*d_ij))*cutoff_values
+        
+        y = snn.scatter_add(self.kehalf*f*zizj/d_ij, idx_i, dim_size=N)
+        y = snn.scatter_add(y, idx_m, dim_size=maxm)
+        y = torch.squeeze(y, -1)
+        
+        result[self.output_key] = y
+    
         return result
+    
 
 

@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import schnetpack.nn as snn
-__all__ = ["gaussian_rbf", "GaussianRBF", "GaussianRBFCentered", "RBF_PhysNet"]
+__all__ = ["gaussian_rbf", "GaussianRBF", "GaussianRBFCentered", "PhysNetRBF"]
 
 from torch import nn as nn
 
@@ -82,11 +82,20 @@ class GaussianRBFCentered(nn.Module):
 def softplus_inverse(x):
     return x + np.log(-np.expm1(-x))
 
-class RBF_PhysNet(nn.Module):
+class PhysNetRBF(nn.Module):
+    
+    """
+    Radial basis function as defined in Eq.8 of PhysNet publication.
+    
+    Reference:
+    .. [#RBF] O.Unke, M.Meuwly
+        PhysNet: A Neural Network for Predicting Energies, Forces, Dipole Moments and Partial Charges
+        https://arxiv.org/abs/1902.08408
+    """
     
     def __init__(self, n_rbf, cutoff = 10.0):
         
-        super(RBF_PhysNet,self).__init__()
+        super(PhysNetRBF,self).__init__()
         
         self.n_rbf = n_rbf
         self.cutoff = cutoff

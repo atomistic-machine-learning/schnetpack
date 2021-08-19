@@ -14,7 +14,7 @@ def build_mlp(
     n_hidden: Optional[Union[int, Sequence[int]]] = None,
     n_layers: int = 2,
     activation: Callable = F.silu,
-    weight_init: bool = False
+    last_init_zeros: bool = False
 ):
     """
     Build multiple layer fully connected perceptron neural network.
@@ -58,7 +58,7 @@ def build_mlp(
     # put all layers together to make the network
     out_net = nn.Sequential(*layers)
     
-    if weight_init:
+    if last_init_zeros:
         nn.init.zeros_(out_net[-1].weight)
         
     return out_net

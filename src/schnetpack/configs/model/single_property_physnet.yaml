@@ -6,20 +6,24 @@ output_modules:
     n_in: ${model.representation.n_atom_basis}
     return_charges: True
     n_layers: 1
-    init_zero: True
-    module_dim : True
+    output_init_zero: True
+    sum_module_dim : True
   - _target_: schnetpack.atomistic.ElectrostaticEnergy
+    output_key: electrostatic
   - _target_: schnetpack.atomistic.D4DispersionEnergy
+    output_key: dispersion
   - _target_: schnetpack.atomistic.ZBLRepulsionEnergy
-  - _target_: schnetpack.atomistic.Aggregation
+    output_key: zbl
   - _target_: schnetpack.atomistic.Atomwise
-    output_key: ${property}
+    output_key: short_range
     n_in: ${model.representation.n_atom_basis}
     aggregation_mode: sum
-    module_dim: True
-    physnet_energy: True
+    sum_module_dim: True
     n_layers: 1
-    init_zero: True
+    output_init_zero: True
+  - _target_: schnetpack.atomistic.Aggregation
+    output_key: ${property}
+    keys: [dispersion, electrostatic, zbl, short_range]
 
 outputs:
   - _target_: schnetpack.atomistic.ModelOutput
