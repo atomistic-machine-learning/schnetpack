@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import torch
+import shutil
 from ase import Atoms
 from ase.neighborlist import neighbor_list
 from typing import Dict, Optional
@@ -14,61 +15,93 @@ __all__ = [
     "CachedNeighborList",
 ]
 
-from schnetpack import properties as structure
+from schnetpack import properties
+import fasteners
 
 
 class CachedNeighborList(Transform):
     """
-    Calculate neighbor list using ASE.
+    Dynamic caching of neighbor lists.
 
-    Note: This is quite slow and should only used as a baseline for faster implementations!
+    This wraps a neighbor list and stores the results the first time it is called
+    for a dataset entry with the pid provided by AtomsDataset. Particularly,
+    for large systems, this speeds up training significantly.
+
+    Note:
+        The provided cache location should be unique to the used dataset. Otherwise,
+        wrong neighborhoods will be provided. The caching location can be reused
+        across multiple runs, by setting `cleanup_cache=False`.
     """
 
     is_preprocessor: bool = True
     is_postprocessor: bool = False
 
-    def __init__(self, cutoff):
+    def __init__(
+        self, cache_location: str, neighbor_list: Transform, cleanup_cache: bool = True
+    ):
         """
         Args:
-            cutoff: cutoff radius for neighbor search
+            cache_location: Path of caching directory. If `cleanup_cache=True`,
+                this must not exist yet, but will be created and removed automatically.
+            neighbor_list: the neighbor list to use
+            cleanup_cache: If true, remove `cache_location` at the end of training.
         """
         super().__init__()
-        self.cutoff = cutoff
+        self.cache_location = cache_location
+        self.neighbor_list = neighbor_list
+        self.cleanup_cache = cleanup_cache
 
-        # create environment directory
-        self.env_dir = os.path.join(os.getcwd(), "environments")
-        os.mkdir(self.env_dir)
+        if self.cleanup_cache and os.path.exists(cache_location):
+            raise ValueError(
+                "Directory `cache_location` must not exists when `cleanup_cache==True`!"
+            )
+        os.makedirs(cache_location, exist_ok=True)
 
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
         results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
-        Z = inputs[structure.Z]
-        R = inputs[structure.R]
-        cell = inputs[structure.cell]
-        pbc = inputs[structure.pbc]
-        at = Atoms(numbers=Z, positions=R, cell=cell, pbc=pbc)
+        cache_file = os.path.join(
+            self.cache_location, f"cache_{inputs[properties.idx][0]}.pt"
+        )
 
-        # get environments
-        env_path = os.path.join(self.env_dir, "{}.npz".format(inputs["_idx"].item()))
-        if os.path.isfile(env_path):
-            # load environments
-            environment = np.load(env_path)
-            idx_i = environment["idx_i"]
-            idx_j = environment["idx_j"]
-            Rij = environment["Rij"]
-        else:
-            # calculate and store environments
-            idx_i, idx_j, Rij = neighbor_list(
-                "ijD", at, self.cutoff, self_interaction=False
+        # try to read cached NBL
+        try:
+            data = torch.load(cache_file)
+            inputs.update(data)
+        except IOError:
+            # acquire lock for caching
+            lock = fasteners.InterProcessLock(
+                os.path.join(
+                    self.cache_location, f"cache_{inputs[properties.idx][0]}.lock"
+                )
             )
-            np.savez(env_path, idx_i=idx_i, idx_j=idx_j, Rij=Rij)
+            with lock:
+                # retry reading, in case other process finished in the meantime
+                try:
+                    data = torch.load(cache_file)
+                    inputs.update(data)
+                except IOError:
+                    # now it is save to calculate and cache
+                    inputs = self.neighbor_list(inputs, results)
+                    data = {
+                        properties.idx_i: inputs[properties.idx_i],
+                        properties.idx_j: inputs[properties.idx_j],
+                        properties.Rij: inputs[properties.Rij],
+                    }
+                    torch.save(data, cache_file)
+                except Exception as e:
+                    print(e)
 
-        inputs[structure.idx_i] = torch.tensor(idx_i)
-        inputs[structure.idx_j] = torch.tensor(idx_j)
-        inputs[structure.Rij] = torch.tensor(Rij)
         return inputs
+
+    def teardown(self):
+        if self.cleanup_cache:
+            try:
+                shutil.rmtree(self.cache_location)
+            except:
+                pass
 
 
 class ASENeighborList(Transform):
@@ -92,18 +125,18 @@ class ASENeighborList(Transform):
         inputs: Dict[str, torch.Tensor],
         results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
-        Z = inputs[structure.Z]
-        R = inputs[structure.R]
-        cell = inputs[structure.cell]
-        pbc = inputs[structure.pbc]
+        Z = inputs[properties.Z]
+        R = inputs[properties.R]
+        cell = inputs[properties.cell]
+        pbc = inputs[properties.pbc]
         at = Atoms(numbers=Z, positions=R, cell=cell, pbc=pbc)
         idx_i, idx_j, Rij = neighbor_list(
             "ijD", at, self.cutoff, self_interaction=False
         )
 
-        inputs[structure.idx_i] = torch.tensor(idx_i)
-        inputs[structure.idx_j] = torch.tensor(idx_j)
-        inputs[structure.Rij] = torch.tensor(Rij)
+        inputs[properties.idx_i] = torch.tensor(idx_i)
+        inputs[properties.idx_j] = torch.tensor(idx_j)
+        inputs[properties.Rij] = torch.tensor(Rij)
         return inputs
 
 
@@ -129,13 +162,13 @@ class TorchNeighborList(Transform):
         inputs: Dict[str, torch.Tensor],
         results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
-        positions = inputs[structure.R]
-        pbc = inputs[structure.pbc]
-        cell = inputs[structure.cell]
+        positions = inputs[properties.R]
+        pbc = inputs[properties.pbc]
+        cell = inputs[properties.cell]
 
         # Check if shifts are needed for periodic boundary conditions
         if torch.all(pbc == 0):
-            shifts = torch.zeros(0, 3, device=cell.device).long()
+            shifts = torch.zeros(0, 3, device=cell.device, dtype=torch.long)
         else:
             shifts = self._get_shifts(cell, pbc)
 
@@ -149,9 +182,9 @@ class TorchNeighborList(Transform):
         # Sort along first dimension (necessary for atom-wise pooling)
         sorted_idx = torch.argsort(bi_idx_i)
 
-        inputs[structure.idx_i] = bi_idx_i[sorted_idx]
-        inputs[structure.idx_j] = bi_idx_j[sorted_idx]
-        inputs[structure.Rij] = bi_Rij[sorted_idx]
+        inputs[properties.idx_i] = bi_idx_i[sorted_idx]
+        inputs[properties.idx_j] = bi_idx_j[sorted_idx]
+        inputs[properties.Rij] = bi_Rij[sorted_idx]
 
         return inputs
 
@@ -277,7 +310,7 @@ class CollectAtomTriples(Transform):
             Rij[idx_j_triples] -> Rij vector in triple
             Rij[idx_k_triples] -> Rik vector in triple
         """
-        idx_i = inputs[structure.idx_i]
+        idx_i = inputs[properties.idx_i]
 
         _, n_neighbors = torch.unique_consecutive(idx_i, return_counts=True)
 
@@ -297,9 +330,9 @@ class CollectAtomTriples(Transform):
         idx_jk_triples = torch.cat(idx_jk_triples)
         idx_j_triples, idx_k_triples = idx_jk_triples.split(1, dim=-1)
 
-        inputs[structure.idx_i_triples] = idx_i_triples
-        inputs[structure.idx_j_triples] = idx_j_triples.squeeze(-1)
-        inputs[structure.idx_k_triples] = idx_k_triples.squeeze(-1)
+        inputs[properties.idx_i_triples] = idx_i_triples
+        inputs[properties.idx_j_triples] = idx_j_triples.squeeze(-1)
+        inputs[properties.idx_k_triples] = idx_k_triples.squeeze(-1)
 
         return inputs
 
@@ -325,12 +358,12 @@ class CountNeighbors(Transform):
         inputs: Dict[str, torch.Tensor],
         results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
-        idx_i = inputs[structure.idx_i]
+        idx_i = inputs[properties.idx_i]
 
         if self.sorted:
             _, n_nbh = torch.unique_consecutive(idx_i, return_counts=True)
         else:
             _, n_nbh = torch.unique(idx_i, return_counts=True)
 
-        inputs[structure.n_nbh] = n_nbh
+        inputs[properties.n_nbh] = n_nbh
         return inputs

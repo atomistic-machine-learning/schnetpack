@@ -170,6 +170,14 @@ class AtomsDataModule(pl.LightningDataModule):
                 self._has_setup_val = False
                 self._has_setup_test = False
 
+        # setup transforms
+        for t in self.train_transforms:
+            t.teardown(self)
+        for t in self.val_transforms:
+            t.teardown(self)
+        for t in self.test_transforms:
+            t.teardown(self)
+
     def load_partitions(self):
         # TODO: handle IterDatasets
         # handle relative dataset sizes
