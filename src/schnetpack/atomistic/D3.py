@@ -71,6 +71,7 @@ class D4DispersionEnergy(nn.Module):
         self.kn = kn
         self.wf = wf
         
+        self.dtype = dtype
         #load D4 data 
         directory = os.path.join(os.path.dirname(os.path.abspath(__file__)),'d4data')
         self.register_buffer('refsys',torch.load(os.path.join(directory,'refsys.pth'))[:Zmax]) #[Zmax,max_nref]
@@ -95,7 +96,34 @@ class D4DispersionEnergy(nn.Module):
         self.max_nref = self.refsys.size(-1)
         self.pi = math.pi
         self._compute_refc6()
-
+        self._cast_to_type()
+        
+        
+    def _cast_to_type(self):
+        self.refsys = self.refsys.type(self.dtype)
+        self.zeff = self.zeff.type(self.dtype)
+        self.refh = self.refh.type(self.dtype)
+        self.sscale = self.sscale.type(self.dtype)
+        self.secaiw = self.secaiw.type(self.dtype)
+        self.gam = self.gam.type(self.dtype)
+        self.ascale = self.ascale.type(self.dtype)
+        self.alphaiw = self.alphaiw.type(self.dtype)
+        self.hcount = self.hcount.type(self.dtype)
+        self.casimir_polder_weights = self.casimir_polder_weights.type(self.dtype)
+        self.en = self.en.type(self.dtype)
+        self.rcov = self.rcov.type(self.dtype)
+        self.ncount_mask = self.ncount_mask.type(self.dtype)
+        self.ncount_weight = self.ncount_weight.type(self.dtype)
+        self.cn = self.cn.type(self.dtype)
+        self.fixgweights = self.fixgweights.type(self.dtype)
+        self.refq = self.refq.type(self.dtype)
+        self.sqrt_r4r2 = self.sqrt_r4r2.type(self.dtype)
+        self.alpha = self.alpha.type(self.dtype)
+        self._refc6 = self._refc6.type(self.dtype)
+        
+        
+        
+        
     #important! If reference charges are scaled, this needs to be recomputed every time the parameters change!
     def _compute_refc6(self):
         with torch.no_grad():
@@ -116,11 +144,12 @@ class D4DispersionEnergy(nn.Module):
             self._refc6 = 3/self.pi*torch.sum(alpha_expanded*self.casimir_polder_weights.view(1,1,1,1,-1),-1)
 
     def forward(self, inputs: Dict[str, torch.Tensor], compute_atomic_quantities: bool = False):
+        
         result = {}
         Z = inputs[properties.Z]
         qa = inputs[properties.partial_charges].squeeze(-1)
         r_ij = inputs[properties.Rij]
-        d_ij = torch.norm(r_ij, dim=1).cuda()
+        d_ij = torch.norm(r_ij, dim=1)
         idx_i = inputs[properties.idx_i]
         idx_j = inputs[properties.idx_j]
         N = Z.size(0)
@@ -134,13 +163,15 @@ class D4DispersionEnergy(nn.Module):
         #d_ij = d_ij*self.convert2Bohr 
         Zi = Z[idx_i]
         Zj = Z[idx_j]
+        
+        
         #calculate coordination numbers
         rco = self.k2*(self.rcov[Zi] + self.rcov[Zj])
         den = self.k4*torch.exp(-(torch.abs(self.en[Zi]-self.en[Zj])+ self.k5)**2/self.k6)
         tmp = den*0.5*(1.0 + torch.erf(-self.kn*(d_ij-rco)/rco)) 
         if self.cutoff is not None:
             tmp = tmp*switch_function(d_ij, self.cuton, self.cutoff)
-        covcn = d_ij.new_zeros(N,dtype=torch.float).index_add_(0, idx_i, tmp.float())
+        covcn = d_ij.new_zeros(N).index_add_(0, idx_i, tmp)
 
         #calculate gaussian weights
         gweights = torch.sum(self.ncount_mask[Z]*torch.exp(-self.wf*self.ncount_weight[Z]*
@@ -156,14 +187,14 @@ class D4DispersionEnergy(nn.Module):
         qmod = iz + qa.view(-1,1).repeat(1,self.refq.size(1))
         ones_like_qmod = torch.ones_like(qmod)
         qmod_ = torch.where(qmod > 1e-8, qmod, ones_like_qmod)
-        zeta = torch.where(qmod > 1e-8, torch.exp(self.g_a*(1-torch.exp(self.gam[Z].view(-1,1)*self.g_c*(1-qref/qmod_)))), torch.exp(torch.tensor(self.g_a)).cuda()*ones_like_qmod) * gweights
+        zeta = torch.where(qmod > 1e-8, torch.exp(self.g_a*(1-torch.exp(self.gam[Z].view(-1,1)*self.g_c*(1-qref/qmod_)))), torch.exp(torch.tensor(self.g_a))*ones_like_qmod) * gweights 
         zetai = torch.gather(zeta, 0, idx_i.view(-1,1).repeat(1,zeta.size(1)))
         zetaj = torch.gather(zeta, 0, idx_j.view(-1,1).repeat(1,zeta.size(1)))
         refc6 = self._refc6.cuda()
         refc6ij = refc6[Zi,Zj,:,:]
         zetaij = zetai.view(zetai.size(0),zetai.size(1),1)*zetaj.view(zetaj.size(0),1,zetaj.size(1))
         c6ij = torch.sum((refc6ij*zetaij).view(refc6ij.size(0),-1),-1)
-        sqrt_r4r2ij = torch.sqrt(torch.tensor(3).cuda())*self.sqrt_r4r2[Zi]*self.sqrt_r4r2[Zj]
+        sqrt_r4r2ij = torch.sqrt(torch.tensor(3.))*self.sqrt_r4r2[Zi]*self.sqrt_r4r2[Zj]
         a1 = F.softplus(self._a1)
         a2 = F.softplus(self._a2)
         r0 = a1*sqrt_r4r2ij + a2
@@ -185,6 +216,7 @@ class D4DispersionEnergy(nn.Module):
         s6 = F.softplus(self._s6)
         s8 = F.softplus(self._s8)
         edisp = -c6ij*(s6*oor6 + s8*sqrt_r4r2ij**2*oor8)*self.convert2eV
+        
         if compute_atomic_quantities:
             alpha   = self.alpha[Z,:,0]
             polarizabilities = torch.sum(zeta * alpha,-1)*self.convert2Angstrom3
@@ -195,10 +227,9 @@ class D4DispersionEnergy(nn.Module):
             polarizabilities = d_ij.new_zeros(N)
             c6_coefficients  = d_ij.new_zeros(N)
         
-        y = d_ij.new_zeros(N, dtype=torch.float).index_add_(0, idx_i, edisp.float()) #snn.scatter_add(edisp, idx_i, dim_size=N)
+        y = snn.scatter_add(edisp, idx_i, dim_size=N) 
         y = snn.scatter_add(y, idx_m, dim_size=maxm)
         y = torch.squeeze(y, -1)
-        
         result[self.output_key] = y
         
         return result

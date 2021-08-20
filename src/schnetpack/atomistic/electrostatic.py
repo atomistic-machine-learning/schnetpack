@@ -5,6 +5,7 @@ import schnetpack.properties as properties
 from schnetpack.nn.activations import _switch_component, switch_function
 from typing import Callable, Dict
 import schnetpack.nn as snn
+from schnetpack.units import *
 
 __all__ = ["ElectrostaticEnergy"]
 
@@ -16,19 +17,53 @@ class ElectrostaticEnergy(nn.Module):
     (this is done so that a lr_cutoff does not affect covalent interactions)
     '''
     
-    def __init__(self, ke: float = 14.399645351950548, cuton:float =2.5, cutoff: float=7.5, lr_cutoff: float =10.0, output_key='electrostatic'):
+    def __init__(self, 
+                 ke: float = 1.0, 
+                 cuton:float = 2.5, 
+                 cutoff: float= 7.5, 
+                 lr_cutoff: float = 10.0, 
+                 output_key='electrostatic',
+                 energy_unit = "eV",
+                 length_unit = "Ang"
+                ):
         super(ElectrostaticEnergy, self).__init__()
-        self.ke = ke
+        
+        self.energy_unit = convert_units("Ha", energy_unit)
+        self.length_unit = convert_units("Bohr", length_unit)
+        self.conversion_factor = self.energy_unit*self.length_unit
+        
+        self.ke = ke*self.conversion_factor
         self.kehalf = ke/2
         self.cuton  = cuton
         self.cutoff = cutoff
         self.cuton16 = cuton**16
         self.lr_cutoff = lr_cutoff
         self.output_key = output_key
+        
         #these are constants for when a lr_cutoff is used
         if lr_cutoff is not None:
             self.cut_rconstant = lr_cutoff**15/(lr_cutoff**16+cuton**16)**(17/16)
             self.cut_constant = 1/(cuton**16+lr_cutoff**16)**(1/16) + lr_cutoff**16/(lr_cutoff**16 + cuton**16)**(17/16)
+        
+        """ 
+        Args:
+            
+            energy_unit: Sets the unit of energy given by the user. Default is Hartree
+            length_unit: Sets the unit of length given by the user. Default is Bohr
+            conversion_factor: Conversion factor between atomic units and user-defined units
+            ke: Coulomb constant converted to desired units. The default is given in atomic units (Ha and Bohr)
+            kehalf: Coulomb constant divided by two
+            cuton: Minimum distance from the charge where interaction is computed
+            cutoff: Maximum distance from the charge where interaction is computed
+            cuton16: Cuton raised to the 16th power
+            lr_cutoff: Long range cutoff
+            output_key: Key under which the resulting energy is stored
+        
+        References:
+        .. [#Electrostatic Energy] O.Unke, M.Meuwly
+        PhysNet: A Neural Network for Predicting Energies, Forces, Dipole Moments and Partial Charges
+        https://arxiv.org/abs/1902.08408
+        """
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
         
@@ -36,7 +71,7 @@ class ElectrostaticEnergy(nn.Module):
         atomic_numbers = inputs[properties.Z]
         q = inputs[properties.partial_charges].squeeze(-1)
         r_ij = inputs[properties.Rij]
-        d_ij = torch.norm(r_ij, dim=1).cuda()
+        d_ij = torch.norm(r_ij, dim=1)
         idx_i = inputs[properties.idx_i]
         idx_j = inputs[properties.idx_j]
         N = atomic_numbers.size(0)

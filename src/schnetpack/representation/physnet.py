@@ -21,20 +21,24 @@ class PhysNetResidual(nn.Module):
     ):
         super(PhysNetResidual, self).__init__()
         self.n_atom_basis = n_atom_basis
-        self.linear = snn.Dense(n_atom_basis, 
-                                n_atom_basis, 
-                                weight_init=orthogonal_, 
-                                bias_init=zeros_)
+        self.activation = activation
         
         self.sequential = nn.Sequential(
-            activation(),
-            self.linear,
-            activation(),
-            self.linear
+            
+            snn.Dense(n_atom_basis, 
+                      n_atom_basis, 
+                      weight_init=orthogonal_, 
+                      bias_init=zeros_,
+                      activation=activation)
+            ,
+            snn.Dense(n_atom_basis, 
+                      n_atom_basis, 
+                      weight_init=orthogonal_, 
+                      bias_init=zeros_)
         )
         
     def forward(self,x):
-        return self.sequential(x) + x    
+        return self.sequential(self.activation(x)) + x    
     
     
 class PhysNetOutput(nn.Module):
@@ -46,7 +50,7 @@ class PhysNetOutput(nn.Module):
         n_output_residual:int
     ):
         super(PhysNetOutput, self).__init__()
-        self.activation = activation()
+        self.activation = activation
         
         self.residual = nn.ModuleList(
             [
@@ -74,7 +78,7 @@ class PhysNetModule(nn.Module):
         n_atomic_residual:int
     ):
         super(PhysNetModule, self).__init__()
-        self.activation = activation()
+        self.activation = activation
         self.residual = nn.ModuleList(
             [
                PhysNetResidual(n_atom_basis, activation) 
@@ -122,7 +126,7 @@ class PhysNetInteraction(nn.Module):
         super(PhysNetInteraction, self).__init__()
         self.n_atom_basis = n_atom_basis
         self.n_rbf = n_rbf
-        self.activation = activation()
+        self.activation = activation
         self.n_interactions = n_interactions
         
         self.linear_f = snn.Dense(n_atom_basis, n_atom_basis, weight_init=orthogonal_, bias_init=zeros_)
@@ -130,13 +134,13 @@ class PhysNetInteraction(nn.Module):
         
         self.linear_j = snn.Dense(n_atom_basis, 
                                   n_atom_basis, 
-                                  activation=activation(),
+                                  activation=activation,
                                   weight_init=orthogonal_, 
                                   bias_init=zeros_)
         
         self.linear_i = snn.Dense(n_atom_basis, 
                                   n_atom_basis, 
-                                  activation=activation(),
+                                  activation=activation,
                                   weight_init=orthogonal_, 
                                   bias_init=zeros_)
         
@@ -171,16 +175,6 @@ class PhysNetInteraction(nn.Module):
         
         return xp + self.linear_f(v)
     
-class SSP(nn.Module):
-    
-    def __init__(self, shift = 2.):
-        super(SSP, self).__init__()
-        self.register_buffer("shift", torch.FloatTensor([shift]))
-
-    def forward(self, inputs: torch.Tensor):
-        
-        return snn.activations.shifted_softplus(inputs)  
-    
 
 class PhysNet(nn.Module):
 
@@ -190,7 +184,7 @@ class PhysNet(nn.Module):
         n_interactions:int,
         radial_basis : Callable,
         cutoff_fn: Callable,
-        activation = SSP,
+        activation = snn.activations.shifted_softplus,
         n_output_residual = 1,
         n_atomic_residual = 2,
         n_modules = 5,

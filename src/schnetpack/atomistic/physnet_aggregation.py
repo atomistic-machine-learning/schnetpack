@@ -10,8 +10,9 @@ class Aggregation(nn.Module):
     
     def __init__(
             self, 
-            output_key: str = "y",
-            keys : List[str] = ["zbl", "electrostatic", "dispersion", "short_range"]
+            keys : List[str], 
+            output_key: str = "y"
+            
         ):
         
         super(Aggregation, self).__init__()

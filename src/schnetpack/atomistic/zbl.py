@@ -6,6 +6,7 @@ from schnetpack.nn.cutoff import PhysNetCutOff
 from schnetpack.nn.activations import softplus_inverse
 import schnetpack.properties as properties
 import schnetpack.nn as snn
+from schnetpack.units import *
 
 __all__ = ["ZBLRepulsionEnergy"]
 
@@ -17,18 +18,49 @@ class ZBLRepulsionEnergy(nn.Module):
     '''
     
     def __init__(self, 
-                 a0: float = 0.5291772105638411, 
-                 ke: float =14.399645351950548, 
+                 a0: float = 1.0, 
+                 ke: float = 1.0, 
                  output_key : str = "zbl",
                  trainable : bool = True,
-                 reset_param : bool = False
+                 reset_param : bool = False,
+                 energy_unit = "eV",
+                 length_unit = "Ang"
         ):
         super(ZBLRepulsionEnergy, self).__init__()
-        self.output_key = output_key
-        self.a0 = a0
-        self.ke = ke
+        
+        self.energy_unit = convert_units("Ha", energy_unit)
+        self.length_unit = convert_units("Bohr", length_unit)
+        self.conversion_factor = self.energy_unit*self.length_unit
+        
+        
+        self.a0 = a0*self.length_unit
+        self.ke = ke*self.conversion_factor
         self.kehalf = ke/2
+        
         self.cutoff_fn = PhysNetCutOff(10.0)
+        
+        self.output_key = output_key
+        """ 
+        Args:
+            
+            energy_unit: Sets the unit of energy given by the user. Default is Hartree
+            length_unit: Sets the unit of length given by the user. Default is Bohr
+            conversion_factor: Conversion factor between atomic units and user-defined units
+            a0: Bohr radius converted to desired units. Default set to atomic units.
+            ke: Coulomb constant converted to desired units. The default is given in atomic units (Ha and Bohr)
+            kehalf: Coulomb constant divided by two
+            cutoff_fn: Defines the Physnet cutoff function as given in references
+            output_key: Key under which the resulting energy is stored
+            
+        References:
+        .. [#Cutoff] Ebert, D. S.; Musgrave, F. K.; Peachey, D.; Perlin, K.; Worley, S. Texturing & Modeling: A Procedural Approach;
+        Morgan Kaufmann, 2003
+        .. [#Cutoff] O.Unke, M.Meuwly
+        PhysNet: A Neural Network for Predicting Energies, Forces, Dipole Moments and Partial Charges
+        https://arxiv.org/abs/1902.08408
+        .. [#ZBL] 
+        https://docs.lammps.org/pair_zbl.html
+        """
         
         if trainable:
             self.register_parameter('_adiv', nn.Parameter(torch.tensor(1.)))
@@ -56,7 +88,7 @@ class ZBLRepulsionEnergy(nn.Module):
         result = {}
         Zf = inputs[properties.Z]
         r_ij = inputs[properties.Rij]
-        d_ij = torch.norm(r_ij, dim=1).cuda()
+        d_ij = torch.norm(r_ij, dim=1)
         idx_i = inputs[properties.idx_i]
         idx_j = inputs[properties.idx_j]
         N = Zf.size(0)

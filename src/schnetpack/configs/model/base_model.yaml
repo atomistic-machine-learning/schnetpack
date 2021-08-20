@@ -6,7 +6,7 @@ _target_: schnetpack.atomistic.AtomisticModel
 optimizer_cls: torch.optim.Adam
 optimizer_args:
   lr: ${lr}
-  amsgrad: True
+  amsgrad: False
 
 scheduler_cls: schnetpack.train.ReduceLROnPlateau
 scheduler_monitor: val_loss

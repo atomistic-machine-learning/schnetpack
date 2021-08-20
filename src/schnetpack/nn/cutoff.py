@@ -29,7 +29,8 @@ def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
 
 
 class PhysNetCutOff(nn.Module):
-    """Cutoff Function from Physnet
+    """
+       Cutoff Function from Physnet
     
        References:
         .. [#Cutoff] Ebert, D. S.; Musgrave, F. K.; Peachey, D.; Perlin, K.; Worley, S. Texturing & Modeling: A Procedural Approach;
