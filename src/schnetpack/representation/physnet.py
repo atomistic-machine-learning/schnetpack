@@ -21,7 +21,10 @@ class PhysNetResidual(nn.Module):
     ):
         super(PhysNetResidual, self).__init__()
         self.n_atom_basis = n_atom_basis
-        self.linear = snn.Dense(n_atom_basis, n_atom_basis, weight_init=orthogonal_, bias_init=zeros_)
+        self.linear = snn.Dense(n_atom_basis, 
+                                n_atom_basis, 
+                                weight_init=orthogonal_, 
+                                bias_init=zeros_)
         
         self.sequential = nn.Sequential(
             activation(),
@@ -78,10 +81,12 @@ class PhysNetModule(nn.Module):
                for _ in range(n_atomic_residual)
             ]
         )
+        
         self.interaction= PhysNetInteraction(n_atom_basis, 
                                              activation, 
                                              n_rbf, 
                                              n_interactions)
+        
         self.output = PhysNetOutput(n_atom_basis, 
                              activation, 
                              n_output_residual)
@@ -122,24 +127,24 @@ class PhysNetInteraction(nn.Module):
         
         self.linear_f = snn.Dense(n_atom_basis, n_atom_basis, weight_init=orthogonal_, bias_init=zeros_)
         self.linear_g = snn.Dense(n_rbf, n_atom_basis, bias=False, weight_init=orthogonal_)
-        self.linear_j = snn.Dense(n_atom_basis, n_atom_basis, weight_init=orthogonal_, bias_init=zeros_)
-        self.linear_i = snn.Dense(n_atom_basis, n_atom_basis, weight_init=orthogonal_, bias_init=zeros_)
+        
+        self.linear_j = snn.Dense(n_atom_basis, 
+                                  n_atom_basis, 
+                                  activation=activation(),
+                                  weight_init=orthogonal_, 
+                                  bias_init=zeros_)
+        
+        self.linear_i = snn.Dense(n_atom_basis, 
+                                  n_atom_basis, 
+                                  activation=activation(),
+                                  weight_init=orthogonal_, 
+                                  bias_init=zeros_)
         
         self.residual = nn.ModuleList(
             [
                PhysNetResidual(n_atom_basis, activation) 
                for _ in range(n_interactions)
             ]
-        )
-        self.sequential_i = nn.Sequential( 
-                    activation(),
-                    self.linear_i,
-                    activation()
-        )
-        self.sequential_j = nn.Sequential(
-                    activation(),
-                    self.linear_j,
-                    activation()
         )
         
         self.u = nn.Parameter(torch.ones(n_atom_basis, requires_grad=True))
@@ -153,10 +158,11 @@ class PhysNetInteraction(nn.Module):
         n_atoms: int
     ):
         
+        x = self.activation(x)
         x_j = x[idx_j]
         xp = self.u*x 
-        vp = self.sequential_j(x_j*self.linear_g(g_ij))
-        vm = self.sequential_i(x)
+        vp = self.linear_j(x_j)*self.linear_g(g_ij)
+        vm = self.linear_i(x)
         v = snn.scatter_add(vp, idx_i, dim_size=n_atoms) + vm
         for module in self.residual:
             v = module(v)
