@@ -161,7 +161,7 @@ class AtomisticModel(pl.LightningModule):
         pred = self(batch)
         loss = self.loss_fn(pred, targets)
 
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log_metrics(targets, pred, "val")
 
         return {"val_loss": loss}
@@ -174,7 +174,7 @@ class AtomisticModel(pl.LightningModule):
         pred = self(batch)
         loss = self.loss_fn(pred, targets)
 
-        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=False)
+        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log_metrics(targets, pred, "test")
         return {"test_loss": loss}
 

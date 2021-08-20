@@ -8,8 +8,6 @@ import schnetpack as spk
 import schnetpack.nn as snn
 import schnetpack.properties as properties
 
-
-
 class Atomwise(nn.Module):
     """
     Predicts atom-wise contributions and accumulates global prediction, e.g. for the energy.
@@ -29,6 +27,7 @@ class Atomwise(nn.Module):
         output_key: str = "short_range",
         per_atom_output_key: Optional[str] = None,
         output_init_zero: bool = False
+
     ):
         """
         Args:
@@ -48,6 +47,7 @@ class Atomwise(nn.Module):
         """
         super(Atomwise, self).__init__()
         
+
         self.output_key = output_key
         self.per_atom_output_key = per_atom_output_key
         self.n_out = n_out
@@ -66,7 +66,7 @@ class Atomwise(nn.Module):
             activation=activation,
             last_init_zeros = output_init_zero
         )
-        
+
         self.aggregation_mode = aggregation_mode
         
         self.sum_module_dim = sum_module_dim          
@@ -76,6 +76,7 @@ class Atomwise(nn.Module):
         if self.sum_module_dim:
             inputs["scalar_representation"] = inputs["scalar_representation"].sum(0)
         
+        # predict atomwise contributions
         y = self.outnet(inputs["scalar_representation"])
         
         # aggregate
@@ -85,7 +86,6 @@ class Atomwise(nn.Module):
 
             idx_m = inputs[properties.idx_m]
             maxm = int(idx_m[-1]) + 1
-           
             y = snn.scatter_add(y, idx_m, dim_size=maxm)
             y = torch.squeeze(y, -1)
 
@@ -123,6 +123,7 @@ class DipoleMoment(nn.Module):
         correct_charges: bool = True,
         sum_module_dim: bool = False,
         output_init_zero: bool = False
+
     ):
         """
         Args:
@@ -139,8 +140,11 @@ class DipoleMoment(nn.Module):
             return_charges: If true, return latent partial charges
             dipole_key: the key under which the dipoles will be stored
             charges_key: the key under which partial charges will be stored
+
             use_vector_representation: If true, use vector representation to predict local,
                 atomic dipoles
+            correct_charges: If true, forces the sum of partial charges to be the the total charge, if provided,
+                and zero otherwise.
             sum_module_dim: Allows for the summation over multiple output layers if available
             output_init_zero: Initializes the weights of the final output layer to zero
         """
@@ -173,18 +177,19 @@ class DipoleMoment(nn.Module):
                 last_init_zeros=output_init_zero
             )
         
-
     def forward(self, inputs):
-        
+
         positions = inputs[properties.R]
         l0 = inputs["scalar_representation"]
         natoms = inputs[properties.n_atoms]
         idx_m = inputs[properties.idx_m]
         maxm = int(idx_m[-1]) + 1
         result = {}
+
         
         if self.sum_module_dim:
             l0 = l0.sum(0)
+
 
         if self.use_vector_representation:
             l1 = inputs["vector_representation"]
@@ -193,7 +198,7 @@ class DipoleMoment(nn.Module):
         else:
             charges = self.outnet(l0)
             atomic_dipoles = 0.0
-            
+
         if self.correct_charges:
             if properties.total_charge in inputs:
                 total_charge = inputs[properties.total_charge]
@@ -228,6 +233,7 @@ class Polarizability(nn.Module):
     """
     Predicts polarizability tensor using tensor rank factorization.
     This requires an equivariant representation, e.g. PaiNN, that provides both scalar and vectorial features.
+
     References:
     .. [#painn1] Schütt, Unke, Gastegger:
        Equivariant message passing for the prediction of tensorial properties and molecular spectra.

@@ -60,7 +60,7 @@ def build_mlp(
     
     if last_init_zeros:
         nn.init.zeros_(out_net[-1].weight)
-        
+
     return out_net
 
 
