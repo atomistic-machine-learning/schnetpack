@@ -37,7 +37,7 @@ class CachedNeighborList(Transform):
     is_postprocessor: bool = False
 
     def __init__(
-        self, cache_location: str, neighbor_list: Transform, cleanup_cache: bool = True, old_cache_location: str = None
+        self, cache_location: str, neighbor_list: Transform, cleanup_cache: bool = True, cache_workdir: str = None
     ):
         """
         Args:
@@ -47,18 +47,25 @@ class CachedNeighborList(Transform):
             cleanup_cache: If true, remove `cache_location` at the end of training.
         """
         super().__init__()
-        self.cache_location = cache_location
         self.neighbor_list = neighbor_list
         self.cleanup_cache = cleanup_cache
 
-        if self.cleanup_cache and os.path.exists(cache_location):
+        if self.cleanup_cache and os.path.exists(cache_location) and (cache_workdir is None):
             raise ValueError(
-                "Directory `cache_location` must not exists when `cleanup_cache==True`!"
+                "To enable cleanup_cache, either cache_workdir must be defined or cache_location must not exist!"
             )
         os.makedirs(cache_location, exist_ok=True)
 
-        if old_cache_location is not None:
-            shutil.copytree(old_cache_location, cache_location, dirs_exist_ok=True)
+        if cache_workdir is None:
+            # use cache_location to store and load neighborlists
+            self.cache_workdir = cache_location
+        else:
+            # cache workdir should be empty to avoid loading nbh lists from earlier runs
+            if os.path.exists(cache_workdir):
+                shutil.rmtree(cache_workdir)
+            # copy existing nbh lists to cache workdir
+            shutil.copytree(cache_location, cache_workdir)
+            self.cache_workdir = cache_workdir
 
     def forward(
         self,
@@ -66,7 +73,7 @@ class CachedNeighborList(Transform):
         results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         cache_file = os.path.join(
-            self.cache_location, f"cache_{inputs[properties.idx][0]}.pt"
+            self.cache_workdir, f"cache_{inputs[properties.idx][0]}.pt"
         )
 
         # try to read cached NBL
@@ -77,7 +84,7 @@ class CachedNeighborList(Transform):
             # acquire lock for caching
             lock = fasteners.InterProcessLock(
                 os.path.join(
-                    self.cache_location, f"cache_{inputs[properties.idx][0]}.lock"
+                    self.cache_workdir, f"cache_{inputs[properties.idx][0]}.lock"
                 )
             )
             with lock:
@@ -102,7 +109,7 @@ class CachedNeighborList(Transform):
     def teardown(self):
         if self.cleanup_cache:
             try:
-                shutil.rmtree(self.cache_location)
+                shutil.rmtree(self.cache_workdir)
             except:
                 pass
 
