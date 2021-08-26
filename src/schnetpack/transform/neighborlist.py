@@ -37,7 +37,7 @@ class CachedNeighborList(Transform):
     is_postprocessor: bool = False
 
     def __init__(
-        self, cache_location: str, neighbor_list: Transform, cleanup_cache: bool = True
+        self, cache_location: str, neighbor_list: Transform, cleanup_cache: bool = True, old_cache_location: str = None
     ):
         """
         Args:
@@ -56,6 +56,9 @@ class CachedNeighborList(Transform):
                 "Directory `cache_location` must not exists when `cleanup_cache==True`!"
             )
         os.makedirs(cache_location, exist_ok=True)
+
+        if old_cache_location is not None:
+            shutil.copytree(old_cache_location, cache_location, dirs_exist_ok=True)
 
     def forward(
         self,
