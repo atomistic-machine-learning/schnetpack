@@ -1,11 +1,11 @@
 import os
-import numpy as np
 import torch
 import shutil
 from ase import Atoms
 from ase.neighborlist import neighbor_list
 from typing import Dict, Optional
 from .base import Transform
+from dirsync import sync
 
 __all__ = [
     "ASENeighborList",
@@ -17,6 +17,10 @@ __all__ = [
 
 from schnetpack import properties
 import fasteners
+
+
+class CacheException(Exception):
+    pass
 
 
 class CachedNeighborList(Transform):
@@ -37,25 +41,45 @@ class CachedNeighborList(Transform):
     is_postprocessor: bool = False
 
     def __init__(
-        self, cache_location: str, neighbor_list: Transform, cleanup_cache: bool = True
+        self,
+        cache_path: str,
+        neighbor_list: Transform,
+        keep_cache: bool = False,
+        cache_workdir: str = None,
     ):
         """
         Args:
-            cache_location: Path of caching directory. If `cleanup_cache=True`,
-                this must not exist yet, but will be created and removed automatically.
+            cache_path: Path of caching directory.
             neighbor_list: the neighbor list to use
-            cleanup_cache: If true, remove `cache_location` at the end of training.
+            keep_cache: Keep cache at `cache_location` at the end of training, or copy built/updated cache there from
+                `cache_workdir` (if set). A pre-existing cache at `cache_location` will not be deleted, while a
+                 temporary cache at `cache_workdir` will always be removed.
+            cache_workdir: If this is set, the cache will be build here, e.g. a cluster scratch space
+                for faster performance. An existing cache at `cache_location` is copied here at the beginning of
+                training, and afterwards (if `keep_cache=True`) the final cache is copied to `cache_workdir`.
         """
         super().__init__()
-        self.cache_location = cache_location
         self.neighbor_list = neighbor_list
-        self.cleanup_cache = cleanup_cache
+        self.keep_cache = keep_cache
+        self.cache_path = cache_path
+        self.cache_workdir = cache_workdir
+        self.preexisting_cache = os.path.exists(self.cache_path)
+        self.has_tmp_workdir = cache_workdir is not None
 
-        if self.cleanup_cache and os.path.exists(cache_location):
-            raise ValueError(
-                "Directory `cache_location` must not exists when `cleanup_cache==True`!"
-            )
-        os.makedirs(cache_location, exist_ok=True)
+        os.makedirs(cache_path, exist_ok=True)
+
+        if self.has_tmp_workdir:
+            # cache workdir should be empty to avoid loading nbh lists from earlier runs
+            if os.path.exists(cache_workdir):
+                raise CacheException("The provided `cache_workdir` already exists!")
+
+            # copy existing nbh lists to cache workdir
+            if self.preexisting_cache:
+                shutil.copytree(cache_path, cache_workdir)
+            self.cache_location = cache_workdir
+        else:
+            # use cache_location to store and load neighborlists
+            self.cache_location = cache_path
 
     def forward(
         self,
@@ -63,7 +87,7 @@ class CachedNeighborList(Transform):
         results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         cache_file = os.path.join(
-            self.cache_location, f"cache_{inputs[properties.idx][0]}.pt"
+            self.cache_workdir, f"cache_{inputs[properties.idx][0]}.pt"
         )
 
         # try to read cached NBL
@@ -74,7 +98,7 @@ class CachedNeighborList(Transform):
             # acquire lock for caching
             lock = fasteners.InterProcessLock(
                 os.path.join(
-                    self.cache_location, f"cache_{inputs[properties.idx][0]}.lock"
+                    self.cache_workdir, f"cache_{inputs[properties.idx][0]}.lock"
                 )
             )
             with lock:
@@ -97,9 +121,21 @@ class CachedNeighborList(Transform):
         return inputs
 
     def teardown(self):
-        if self.cleanup_cache:
+        if not self.keep_cache and not self.preexisting_cache:
             try:
-                shutil.rmtree(self.cache_location)
+                shutil.rmtree(self.cache_path)
+            except:
+                pass
+
+        if self.cache_workdir is not None:
+            if self.keep_cache:
+                try:
+                    sync(self.cache_workdir, self.cache_path, "sync")
+                except:
+                    pass
+
+            try:
+                shutil.rmtree(self.cache_workdir)
             except:
                 pass
 
