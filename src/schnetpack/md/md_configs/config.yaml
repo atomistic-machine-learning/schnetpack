@@ -6,10 +6,13 @@ overwrite: false
 restart: null
 
 defaults:
-  - calculator: schnetpack
+  - calculator: spk
   - system: system
   - dynamics: base
-  - logging: basic
+  - callbacks:
+      - checkpoint
+      - hdf5
+      - tensorboard
 
 hydra:
   run:
