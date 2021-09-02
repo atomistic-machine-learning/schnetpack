@@ -20,11 +20,15 @@ seg_m: Final[str] = "_seg_m"  #: start indices of systems
 idx_m: Final[str] = "_idx_m"  #: indices of systems
 idx_i: Final[str] = "_idx_i"  #: indices of center atoms
 idx_j: Final[str] = "_idx_j"  #: indices of neighboring atoms
+idx_i_lr: Final[str] = "_idx_i_lr"  #: indices of center atoms for long-range
+idx_j_lr: Final[str] = "_idx_j_lr"  #: indices of neighboring atoms for long-range
+
 lidx_i: Final[str] = "_idx_i_local"  #: local indices of center atoms (within system)
 lidx_j: Final[
     str
 ] = "_idx_j_local"  #: local indices of neighboring atoms (within system)
 Rij: Final[str] = "_Rij"  #: indices of atom pairs
+Rij_lr: Final[str] = "_Rij_lr"  #: indices of atom pairs for long-range
 n_atoms: Final[str] = "_n_atoms"  #: number of atoms
 
 n_nbh: Final[str] = "_n_nbh"  #: number of neighbors

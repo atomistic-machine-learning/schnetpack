@@ -140,21 +140,37 @@ class CachedNeighborList(Transform):
                 pass
 
 
-class ASENeighborList(Transform):
+class NeighborListTransform(Transform):
     """
-    Calculate neighbor list using ASE.
+    Base class for neighbor lists.
+
+    Optionally, an additional long-range cutoff may be provided to support separate neighbor lists for
+    long- and short-range potentials.
+
     """
 
     is_preprocessor: bool = True
     is_postprocessor: bool = False
 
-    def __init__(self, cutoff):
+    def __init__(self, cutoff: float, long_range_cutoff: float = -1.0):
         """
         Args:
-            cutoff: cutoff radius for neighbor search
+            cutoff: Cutoff radius for neighbor search.
+            long_range_cutoff: If a long-range cutoff is provided, the transform will return separate values
+                as idx_i_lr, idx_j_lr, and Rij_lr
         """
         super().__init__()
-        self.cutoff = cutoff
+        self._short_range_cutoff = cutoff
+        self._long_range_cutoff = long_range_cutoff
+
+        if self._long_range_cutoff > 0:
+            if self._short_range_cutoff >= self._long_range_cutoff:
+                raise ValueError(
+                    "If a long-range cutoff is provided it needs to be larger than the short-range cutoff."
+                )
+            self._cutoff = self._long_range_cutoff
+        else:
+            self._cutoff = self._short_range_cutoff
 
     def forward(
         self,
@@ -165,50 +181,78 @@ class ASENeighborList(Transform):
         R = inputs[properties.R]
         cell = inputs[properties.cell]
         pbc = inputs[properties.pbc]
-        at = Atoms(numbers=Z, positions=R, cell=cell, pbc=pbc)
-        idx_i, idx_j, Rij = neighbor_list(
-            "ijD", at, self.cutoff, self_interaction=False
-        )
 
-        inputs[properties.idx_i] = torch.tensor(idx_i)
-        inputs[properties.idx_j] = torch.tensor(idx_j)
-        inputs[properties.Rij] = torch.tensor(Rij)
+        Rij, idx_i, idx_j = self._build_neighbor_list(Z, R, cell, pbc, self._cutoff)
+
+        if self._long_range_cutoff > 0.0:
+            inputs[properties.idx_i_lr] = idx_i.detach()
+            inputs[properties.idx_j_lr] = idx_j.detach()
+            inputs[properties.Rij_lr] = Rij.detach()
+            Rij, idx_i, idx_j = filter_short_range(
+                idx_i, idx_j, Rij, self._short_range_cutoff
+            )
+
+        inputs[properties.idx_i] = idx_i.detach()
+        inputs[properties.idx_j] = idx_j.detach()
+        inputs[properties.Rij] = Rij.detach()
         return inputs
 
+    def _build_neighbor_list(
+        self,
+        Z: torch.Tensor,
+        positions: torch.Tensor,
+        cell: torch.Tensor,
+        pbc: torch.Tensor,
+        cutoff: float,
+    ):
+        """Override with specific neighbor list implementation"""
+        raise NotImplementedError
 
-class TorchNeighborList(Transform):
+
+def filter_short_range(
+    idx_i: torch.Tensor,
+    idx_j: torch.Tensor,
+    Rij: torch.Tensor,
+    short_range_cutoff: float,
+):
+    rij = torch.norm(Rij, dim=-1)
+    cidx = torch.nonzero(rij <= short_range_cutoff).squeeze(-1)
+
+    idx_i_sr = idx_i[cidx]
+    idx_j_sr = idx_j[cidx]
+    Rij_sr = Rij[cidx]
+
+    return Rij_sr, idx_i_sr, idx_j_sr
+
+
+class ASENeighborList(NeighborListTransform):
+    """
+    Calculate neighbor list using ASE.
+    """
+
+    def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
+        at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
+        idx_i, idx_j, Rij = neighbor_list("ijD", at, cutoff, self_interaction=False)
+        idx_i = torch.from_numpy(idx_i)
+        idx_j = torch.from_numpy(idx_j)
+        Rij = torch.from_numpy(Rij)
+        return Rij, idx_i, idx_j
+
+
+class TorchNeighborList(NeighborListTransform):
     """
     Environment provider making use of neighbor lists as implemented in TorchAni
     (https://github.com/aiqm/torchani/blob/master/torchani/aev.py).
     Supports cutoffs and PBCs and can be performed on either CPU or GPU.
-
-    Args:
-        cutoff: cutoff radius for neighbor search
     """
 
-    is_preprocessor: bool = True
-    is_postprocessor: bool = False
-
-    def __init__(self, cutoff: float):
-        super(TorchNeighborList, self).__init__()
-        self.cutoff = cutoff
-
-    def forward(
-        self,
-        inputs: Dict[str, torch.Tensor],
-        results: Optional[Dict[str, torch.Tensor]] = None,
-    ) -> Dict[str, torch.Tensor]:
-        positions = inputs[properties.R]
-        pbc = inputs[properties.pbc]
-        cell = inputs[properties.cell]
-
+    def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
         # Check if shifts are needed for periodic boundary conditions
         if torch.all(pbc == 0):
             shifts = torch.zeros(0, 3, device=cell.device, dtype=torch.long)
         else:
-            shifts = self._get_shifts(cell, pbc)
-
-        idx_i, idx_j, Rij = self._get_neighbor_pairs(positions, cell, shifts)
+            shifts = self._get_shifts(cell, pbc, cutoff)
+        idx_i, idx_j, Rij = self._get_neighbor_pairs(positions, cell, shifts, cutoff)
 
         # Create bidirectional id arrays, similar to what the ASE neighbor_list returns
         bi_idx_i = torch.cat((idx_i, idx_j), dim=0)
@@ -217,14 +261,12 @@ class TorchNeighborList(Transform):
 
         # Sort along first dimension (necessary for atom-wise pooling)
         sorted_idx = torch.argsort(bi_idx_i)
+        idx_i = bi_idx_i[sorted_idx]
+        idx_j = bi_idx_j[sorted_idx]
+        Rij = bi_Rij[sorted_idx]
+        return Rij, idx_i, idx_j
 
-        inputs[properties.idx_i] = bi_idx_i[sorted_idx]
-        inputs[properties.idx_j] = bi_idx_j[sorted_idx]
-        inputs[properties.Rij] = bi_Rij[sorted_idx]
-
-        return inputs
-
-    def _get_neighbor_pairs(self, positions, cell, shifts):
+    def _get_neighbor_pairs(self, positions, cell, shifts, cutoff):
         """Compute pairs of atoms that are neighbors
         Copyright 2018- Xiang Gao and other ANI developers
         (https://github.com/aiqm/torchani/blob/master/torchani/aev.py)
@@ -263,7 +305,7 @@ class TorchNeighborList(Transform):
 
         # 5) Compute distances, and find all pairs within cutoff
         distances = torch.norm(Rij_all, dim=1)
-        in_cutoff = torch.nonzero(distances < self.cutoff, as_tuple=False)
+        in_cutoff = torch.nonzero(distances < cutoff, as_tuple=False)
 
         # 6) Reduce tensors to relevant components
         pair_index = in_cutoff.squeeze()
@@ -273,7 +315,7 @@ class TorchNeighborList(Transform):
 
         return atom_index_i, atom_index_j, Rij
 
-    def _get_shifts(self, cell, pbc):
+    def _get_shifts(self, cell, pbc, cutoff):
         """Compute the shifts of unit cell along the given cell vectors to make it
         large enough to contain all pairs of neighbor atoms with PBC under
         consideration.
@@ -293,7 +335,7 @@ class TorchNeighborList(Transform):
         reciprocal_cell = cell.inverse().t()
         inverse_lengths = torch.norm(reciprocal_cell, dim=1)
 
-        num_repeats = torch.ceil(self.cutoff * inverse_lengths).long()
+        num_repeats = torch.ceil(cutoff * inverse_lengths).long()
         num_repeats = torch.where(
             pbc, num_repeats, torch.Tensor([0], device=cell.device).long()
         )
