@@ -1,4 +1,4 @@
-_target_: orca
+_target_: schnetpack.md.calculators.OrcaCalculator
 required_properties:
   - energy
   - forces

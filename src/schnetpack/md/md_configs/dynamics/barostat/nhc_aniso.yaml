@@ -1,4 +1,4 @@
-_target_: nhc_barostat_aniso
+_target_: schnetpack.md.simulation_hooks.NHCBarostatAnisotropic
 target_pressure: 1000.0 # bar
 temperature_bath: 300.0 # K
 time_constant: 100.0 # fs

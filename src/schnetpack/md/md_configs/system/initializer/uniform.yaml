@@ -1,0 +1,6 @@
+_target_: schnetpack.md.UniformInit
+temperature: 300
+remove_center_of_mass: true
+remove_translation: true
+remove_rotation: true
+wrap_positions: false
