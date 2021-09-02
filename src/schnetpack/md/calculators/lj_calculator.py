@@ -8,7 +8,6 @@ import torch
 import torch.nn as nn
 
 from schnetpack.md.calculators import SchnetPackCalculator
-from schnetpack.md.neighborlist_md import ASENeighborListMD
 
 from schnetpack import properties
 import schnetpack.nn as snn
@@ -29,20 +28,15 @@ class LJCalculator(SchnetPackCalculator):
                                      internal MD units.
         position_units (float, float): Conversion factor for converting the system positions to the units required by
                                        the model.
+        neighbor_list (schnetpack.md.neighbor_list.MDNeighborList): Neighbor list object for determining which
+                                                                    interatomic distances should be computed.
         energy_label (str, optional): If provided, label is used to store the energies returned by the model to the
                                       system.
         stress_label (str, optional): If provided, label is used to store the stress returned by the model to the
                                       system (required for constant pressure simulations).
         property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
                                            the model. Only changes the units used for logging the various outputs.
-        neighbor_list (schnetpack.md.neighbor_list.MDNeighborList): Neighbor list object for determining which
-                                                                    interatomic distances should be computed.
-        cutoff (float): Cutoff radius for computing the neighbor interactions. If this is set to a negative number,
-                        the cutoff is determined automatically based on the model (default=-1.0). Units are the distance
-                        units used in the model.
         healing_length (float): Healing length used for the cutoff potential.
-        cutoff_shell (float): Second shell around the cutoff region. The neighbor lists only are recomputed when atoms
-                              move a distance further than this shell (default=1 model unit).
     """
 
     def __init__(
@@ -52,18 +46,16 @@ class LJCalculator(SchnetPackCalculator):
         force_label: str,
         energy_units: Union[str, float],
         position_units: Union[str, float],
+        neighbor_list: NeighborListMD,
         energy_label: str = None,
         stress_label: str = None,
         property_conversion: Dict[str, Union[str, float]] = {},
-        neighbor_list: NeighborListMD = ASENeighborListMD,
-        cutoff: float = 5.0,
         healing_length: float = 3.0,
-        cutoff_shell: float = 1.0,
     ):
         model = LJModel(
             r_equilibrium=r_equilibrium,
             well_depth=well_depth,
-            cutoff=cutoff,
+            cutoff=neighbor_list.cutoff,
             healing_length=healing_length,
             calc_forces=True,
             calc_stress=(stress_label is not None),
@@ -77,12 +69,10 @@ class LJCalculator(SchnetPackCalculator):
             force_label=force_label,
             energy_units=energy_units,
             position_units=position_units,
+            neighbor_list=neighbor_list,
             energy_label=energy_label,
             stress_label=stress_label,
             property_conversion=property_conversion,
-            neighbor_list=neighbor_list,
-            cutoff=cutoff,
-            cutoff_shell=cutoff_shell,
         )
 
     def _prepare_model(self, model_file: LJModel):
@@ -96,29 +86,6 @@ class LJCalculator(SchnetPackCalculator):
             LJModel: input model.
         """
         return model_file
-
-    def _init_neighbor_list(
-        self, neighbor_list: NeighborListMD, cutoff: float, cutoff_shell: float
-    ):
-        """
-        Function for properly setting up the neighbor list. Here no model cutoff has to be checked, as the model is
-        defined in the calculator.
-
-        Args:
-            neighbor_list (schnetpack.md.neighbor_lists.MDNeighborList.__init__): Uninitialized neighbor list class.
-            cutoff (float): Cutoff radius for computing the neighbor interactions. If this is set to a negative number,
-                            the cutoff is determined automatically based on the model (default=-1.0). Units are the
-                            distance units used in the model.
-            cutoff_shell (float): Second shell around the cutoff region. The neighbor lists only are recomputed when
-                                  atoms move a distance further than this shell (default=1 Angstrom).
-
-        Returns:
-            schnetpack.md.neighbor_lists.MDNeighborList: Initialized neighbor list.
-        """
-        # Check if atom triples need to be computed (e.g. for Behler functions)
-        return neighbor_list(
-            cutoff=cutoff, cutoff_shell=cutoff_shell, requires_triples=False
-        )
 
 
 class LJModel(nn.Module):

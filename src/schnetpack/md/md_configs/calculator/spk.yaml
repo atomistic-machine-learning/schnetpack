@@ -1,15 +1,14 @@
-_target_: schnetpack_ensemble
+_target_: schnetpack.md.calculators.SchnetPackCalculator
 required_properties:
   - energy
   - forces
-model_files:
-  - ???
+model_file: ???
 force_label: forces
 energy_units: kcal / mol
 position_units: Angstrom
 energy_label: energy
 stress_label: null
-cutoff: -1.0
-cutoff_shell: 1.0
-neighbor_list: ase
 script_model: true
+
+defaults:
+  neighbor_list: ase

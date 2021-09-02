@@ -13,7 +13,6 @@ import logging
 
 from schnetpack.md.calculators.base_calculator import MDCalculator, MDCalculatorError
 from schnetpack.md.calculators.ensemble_calculator import EnsembleCalculator
-from schnetpack.md.neighborlist_md import ASENeighborListMD
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +30,8 @@ class SchnetPackCalculator(MDCalculator):
                                      internal MD units.
         position_units (float, float): Conversion factor for converting the system positions to the units required by
                                        the model.
+        neighbor_list (schnetpack.md.neighbor_list.MDNeighborList): Neighbor list object for determining which
+                                                                    interatomic distances should be computed.
         energy_label (str, optional): If provided, label is used to store the energies returned by the model to the
                                       system.
         stress_label (str, optional): If provided, label is used to store the stress returned by the model to the
@@ -38,13 +39,6 @@ class SchnetPackCalculator(MDCalculator):
         required_properties (list): List of properties to be computed by the calculator
         property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
                                            the model. Only changes the units used for logging the various outputs.
-        neighbor_list (schnetpack.md.neighbor_list.MDNeighborList): Neighbor list object for determining which
-                                                                    interatomic distances should be computed.
-        cutoff (float): Cutoff radius for computing the neighbor interactions. If this is set to a negative number,
-                        the cutoff is determined automatically based on the model (default=-1.0). Units are the distance
-                        units used in the model.
-        cutoff_shell (float): Second shell around the cutoff region. The neighbor lists only are recomputed when atoms
-                              move a distance further than this shell (default=1 model unit).
         script_model (bool): convert loaded model to torchscript.
     """
 
@@ -54,13 +48,11 @@ class SchnetPackCalculator(MDCalculator):
         force_label: str,
         energy_units: Union[str, float],
         position_units: Union[str, float],
+        neighbor_list: NeighborListMD,
         energy_label: str = None,
         stress_label: str = None,
         required_properties: List = [],
         property_conversion: Dict[str, Union[str, float]] = {},
-        neighbor_list: NeighborListMD = ASENeighborListMD,
-        cutoff: float = -1.0,
-        cutoff_shell: float = 1.0,
         script_model: bool = False,
     ):
         super(SchnetPackCalculator, self).__init__(
@@ -74,11 +66,7 @@ class SchnetPackCalculator(MDCalculator):
         )
         self.script_model = script_model
         self.model = self._prepare_model(model_file)
-
-        # Set up the neighbor list:
-        self.neighbor_list = self._init_neighbor_list(
-            neighbor_list, cutoff, cutoff_shell
-        )
+        self.neighbor_list = neighbor_list
 
     def _prepare_model(self, model_file: str) -> AtomisticModel:
         """
@@ -145,8 +133,6 @@ class SchnetPackCalculator(MDCalculator):
         Returns:
 
         """
-        print(model.output_modules[1].calc_stress)
-        # model.output_modules[1].calc_stress = True
         stress = False
         for module in model.output_modules:
             if isinstance(module, schnetpack.atomistic.response.Forces):
@@ -156,63 +142,7 @@ class SchnetPackCalculator(MDCalculator):
         if not stress:
             raise MDCalculatorError("Failed to activate stress computation")
 
-        print(model.output_modules[1].calc_stress)
         return model
-
-    def _init_neighbor_list(
-        self, neighbor_list: NeighborListMD, cutoff: float, cutoff_shell: float
-    ):
-        """
-        Function for properly setting up the neighbor list used for the SchNetPack calculator.
-        This automatically checks, whether a proper cutoff has been provided and moves neighbor lists which support
-        CUDA to the appropriate device.
-
-        Args:
-            neighbor_list (schnetpack.md.neighbor_lists.MDNeighborList.__init__): Uninitialized neighbor list class.
-            cutoff (float): Cutoff radius for computing the neighbor interactions. If this is set to a negative number,
-                            the cutoff is determined automatically based on the model (default=-1.0). Units are the
-                            distance units used in the model.
-            cutoff_shell (float): Second shell around the cutoff region. The neighbor lists only are recomputed when
-                                  atoms move a distance further than this shell (default=1 Angstrom).
-
-        Returns:
-            schnetpack.md.neighbor_lists.MDNeighborList: Initialized neighbor list.
-        """
-        # Check if model has cutoff stored
-        if hasattr(self.model, "cutoff"):
-            model_cutoff = self.model.cutoff.item()
-        else:
-            model_cutoff = False
-
-        # If a negative cutoff is given, use model cutoff
-        if cutoff < 0.0:
-            if not model_cutoff:
-                raise MDCalculatorError(
-                    "No cutoff found in model, please specify calculator cutoff via calculator.cutoff= ..."
-                )
-            else:
-                log.info(
-                    "Using model cutoff of {:.2f} (model units)...".format(model_cutoff)
-                )
-                cutoff = model_cutoff
-        else:
-            # Check if cutoff is sensible and raise a warning
-            if cutoff < model_cutoff:
-                log.warning(
-                    "Cutoff {:.2f} for neighbor list smaller than cutoff in model {:.2f} (model units)...".format(
-                        cutoff, model_cutoff
-                    )
-                )
-                cutoff = model_cutoff
-            else:
-                log.info("Using cutoff of {:.2f} (model units)...".format(cutoff))
-
-        # Initialize the neighbor list
-        neighbor_list = neighbor_list(
-            cutoff=cutoff, cutoff_shell=cutoff_shell, requires_triples=False
-        )
-
-        return neighbor_list
 
     def calculate(self, system: System):
         """
@@ -254,13 +184,11 @@ class SchnetPackEnsembleCalculator(EnsembleCalculator, SchnetPackCalculator):
         force_label: str,
         energy_units: Union[str, float],
         position_units: Union[str, float],
+        neighbor_list: NeighborListMD,
         energy_label: str = None,
         stress_label: str = None,
         required_properties: List = [],
         property_conversion: Dict[str, Union[str, float]] = {},
-        neighbor_list: NeighborListMD = ASENeighborListMD,
-        cutoff: float = -1.0,
-        cutoff_shell: float = 1.0,
         script_model: bool = True,
     ):
         """
@@ -271,6 +199,8 @@ class SchnetPackEnsembleCalculator(EnsembleCalculator, SchnetPackCalculator):
                                          internal MD units.
             position_units (float, float): Conversion factor for converting the system positions to the units required by
                                            the model.
+            neighbor_list (schnetpack.md.neighbor_list.MDNeighborList): Neighbor list object for determining which
+                                                                        interatomic distances should be computed.
             energy_label (str, optional): If provided, label is used to store the energies returned by the model to the
                                           system.
             stress_label (str, optional): If provided, label is used to store the stress returned by the model to the
@@ -278,13 +208,6 @@ class SchnetPackEnsembleCalculator(EnsembleCalculator, SchnetPackCalculator):
             required_properties (list): List of properties to be computed by the calculator
             property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
                                                the model. Only changes the units used for logging the various outputs.
-            neighbor_list (schnetpack.md.neighbor_list.MDNeighborList): Neighbor list object for determining which
-                                                                        interatomic distances should be computed.
-            cutoff (float): Cutoff radius for computing the neighbor interactions. If this is set to a negative number,
-                            the cutoff is determined automatically based on the model (default=-1.0). Units are the distance
-                            units used in the model.
-            cutoff_shell (float): Second shell around the cutoff region. The neighbor lists only are recomputed when atoms
-                                  move a distance further than this shell (default=1 model unit).
             script_model (bool): convert loaded model to torchscript.
         """
         super(SchnetPackEnsembleCalculator, self).__init__(
@@ -293,12 +216,10 @@ class SchnetPackEnsembleCalculator(EnsembleCalculator, SchnetPackCalculator):
             force_label=force_label,
             energy_units=energy_units,
             position_units=position_units,
+            neighbor_list=neighbor_list,
             energy_label=energy_label,
             stress_label=stress_label,
             property_conversion=property_conversion,
-            neighbor_list=neighbor_list,
-            cutoff=cutoff,
-            cutoff_shell=cutoff_shell,
             script_model=script_model,
         )
         # Update the required properties

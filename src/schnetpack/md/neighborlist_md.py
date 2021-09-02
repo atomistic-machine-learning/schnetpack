@@ -1,17 +1,12 @@
 import torch
 import torch.nn as nn
 
-from schnetpack.transform import (
-    NeighborListTransform,
-    CollectAtomTriples,
-    ASENeighborList,
-    TorchNeighborList,
-)
+from schnetpack.transform import NeighborListTransform, CollectAtomTriples
 from schnetpack.data.loader import _atoms_collate_fn
 from typing import List, Dict
 from schnetpack import properties
 
-__all__ = ["NeighborListMD", "ASENeighborListMD", "TorchNeighborListMD"]
+__all__ = ["NeighborListMD"]
 
 
 class NeighborListMD:
@@ -170,29 +165,3 @@ class NeighborListMD:
             input_batch.append(inputs)
 
         return input_batch
-
-
-class ASENeighborListMD(NeighborListMD):
-    def __init__(
-        self, cutoff: float, cutoff_shell: float, requires_triples: bool = False
-    ):
-        super(ASENeighborListMD, self).__init__(
-            cutoff=cutoff,
-            cutoff_shell=cutoff_shell,
-            requires_triples=requires_triples,
-            base_nbl=ASENeighborList,
-            collate_fn=_atoms_collate_fn,
-        )
-
-
-class TorchNeighborListMD(NeighborListMD):
-    def __init__(
-        self, cutoff: float, cutoff_shell: float, requires_triples: bool = False
-    ):
-        super(TorchNeighborListMD, self).__init__(
-            cutoff=cutoff,
-            cutoff_shell=cutoff_shell,
-            requires_triples=requires_triples,
-            base_nbl=TorchNeighborList,
-            collate_fn=_atoms_collate_fn,
-        )
