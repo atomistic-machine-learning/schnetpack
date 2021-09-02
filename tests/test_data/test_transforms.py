@@ -20,6 +20,7 @@ class TestNeighborLists:
     """
     Test for different neighbor lists defined in neighbor_list using the Argon environment fixtures (periodic and
     non-periodic).
+
     """
 
     def test_neighbor_list(self, neighbor_list, environment):
