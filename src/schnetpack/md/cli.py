@@ -11,12 +11,7 @@ from omegaconf import DictConfig, OmegaConf
 import schnetpack.md
 from schnetpack.utils import str2class, int2precision
 from schnetpack.utils.script import print_config
-from schnetpack.md.utils import (
-    config_alias,
-    get_alias,
-    get_npt_integrator,
-    is_rpmd_integrator,
-)
+from schnetpack.md.utils import get_npt_integrator, is_rpmd_integrator
 
 from pytorch_lightning import seed_everything
 
@@ -60,7 +55,20 @@ def simulate(config: DictConfig):
         config = OmegaConf.merge(config, loaded_config)
 
     print_config(
-        config, fields=["calculator", "system", "dynamics", "logging"], resolve=True
+        config,
+        fields=[
+            "device",
+            "precision",
+            "seed",
+            "simulation_dir",
+            "overwrite",
+            "restart",
+            "calculator",
+            "system",
+            "dynamics",
+            "callbacks",
+        ],
+        resolve=True,
     )
 
     # ===========================================
@@ -113,7 +121,6 @@ def simulate(config: DictConfig):
         )
         if config.system.initializer is not None:
             log.info("Preparing initial conditions...")
-            config.system.initializer = config_alias(config.system.initializer)
             initializer = hydra.utils.instantiate(config.system.initializer)
             initializer.initialize_system(system)
 
@@ -121,27 +128,29 @@ def simulate(config: DictConfig):
     #   Set up the calculator
     # ===========================================
 
-    config.calculator = config_alias(config.calculator)
     # Change everything to dict for convenience
     calculator_config = dict(config.calculator)
 
     log.info("Setting up {:s} calculator...".format(calculator_config["_target_"]))
 
-    # Check for model_file entry and resolve hydra path schmafu...
-    # TODO: get rid of abspath here
-    # if "model_file" in calculator_config:
-    #     calculator_config["model_file"] = hydra.utils.to_absolute_path(
-    #         calculator_config["model_file"]
-    #     )
-
     # Check for neighbor lists
     if "neighbor_list" in calculator_config:
-        log.info(
-            "Using {:s} neighbor list...".format(calculator_config["neighbor_list"])
-        )
-        calculator_config["neighbor_list"] = str2class(
-            get_alias(calculator_config["neighbor_list"])
-        )
+        nbl_config = dict(calculator_config["neighbor_list"])
+        log.info("Setting up MD neighbor list...")
+
+        # Get primitive neighbor list
+        if "base_nbl" in nbl_config:
+            log.info(
+                "Using {:s} neighbor list as base...".format(nbl_config["base_nbl"])
+            )
+            nbl_config["base_nbl"] = str2class(nbl_config["base_nbl"])
+
+        # Get collate function
+        if "collate_fn" in nbl_config:
+            nbl_config["collate_fn"] = str2class(nbl_config["collate_fn"])
+
+        # Build neighbor list
+        calculator_config["neighbor_list"] = hydra.utils.instantiate(nbl_config)
 
     # Build the calculator
     calculator = hydra.utils.instantiate(calculator_config)
@@ -155,16 +164,14 @@ def simulate(config: DictConfig):
     # Temperature and pressure control should be treated differently (e.g. to avoid double thermostating with
     # NHC barostat and since npt integrators rely on the barostat for system propagation routines)
     if config.dynamics.thermostat is not None:
-        thermostat_hook = hydra.utils.instantiate(
-            config_alias(config.dynamics.thermostat)
-        )
+        thermostat_hook = hydra.utils.instantiate(config.dynamics.thermostat)
         log.info("Found {:s} thermostat...".format(config.dynamics.thermostat._target_))
     else:
         thermostat_hook = None
 
     # Check for barostat hook and whether thermostat is required
     if config.dynamics.barostat is not None:
-        barostat_hook = hydra.utils.instantiate(config_alias(config.dynamics.barostat))
+        barostat_hook = hydra.utils.instantiate(config.dynamics.barostat)
         log.info("Found {:s} barostat...".format(config.dynamics.barostat._target_))
 
         if thermostat_hook is not None:
@@ -190,7 +197,7 @@ def simulate(config: DictConfig):
 
     # Initialize all other simulation hooks
     simulation_hooks += [
-        hydra.utils.instantiate(config_alias(hook_cfg))
+        hydra.utils.instantiate(hook_cfg)
         for hook_cfg in config.dynamics.simulation_hooks
     ]
 
@@ -199,7 +206,6 @@ def simulate(config: DictConfig):
     # ===========================================
 
     integrator_config = dict(config.dynamics.integrator)
-    integrator_config["_target_"] = get_alias(integrator_config["_target_"])
 
     # Special integrators are needed for NPT simulations
     if barostat_hook is not None:
@@ -250,15 +256,15 @@ def simulate(config: DictConfig):
 
     logging_hooks = []
 
-    for hook in config.logging.logging:
-        # Get alias and convert config to dict for instantiating everything
-        hook_cfg = dict(config_alias(hook))
+    for hook in config.callbacks.values():
+        # Convert config to dict for instantiating everything
+        hook_cfg = dict(hook)
         log.info("Setting up {:s} logger...".format(hook_cfg["_target_"]))
 
         # Initialize data streams for file logger
         if "data_streams" in hook_cfg:
             data_streams = [
-                hydra.utils.instantiate(config_alias(data_stream))
+                hydra.utils.instantiate(data_stream)
                 for data_stream in hook_cfg["data_streams"]
             ]
             hook_cfg["data_streams"] = data_streams
