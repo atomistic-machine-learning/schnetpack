@@ -3,9 +3,10 @@ defaults:
 
 _target_: schnetpack.atomistic.AtomisticModel
 
-optimizer_cls: torch.optim.Adam
+optimizer_cls: torch.optim.AdamW
 optimizer_args:
   lr: ${lr}
+  weight_decay: 0.0
 
 scheduler_cls: schnetpack.train.ReduceLROnPlateau
 scheduler_monitor: val_loss

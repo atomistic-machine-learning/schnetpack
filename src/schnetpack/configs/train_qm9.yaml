@@ -22,8 +22,13 @@ data:
       property: ${property}
       remove_atomrefs: True
       remove_mean: True
-    - _target_: schnetpack.transform.ASENeighborList
-      cutoff: ${cutoff}
+    - _target_: schnetpack.transform.CachedNeighborList
+      cache_path: ${work_dir}/cache
+      cache_workdir: ${work_dir}/tmp_cache
+      keep_cache: True
+      neighbor_list:
+        _target_: schnetpack.transform.ASENeighborList
+        cutoff: ${cutoff}
     - _target_: schnetpack.transform.CastTo32
 
 model:

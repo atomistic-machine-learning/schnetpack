@@ -95,7 +95,7 @@ class PaiNN(nn.Module):
 
     .. [#painn1] Schütt, Unke, Gastegger:
        Equivariant message passing for the prediction of tensorial properties and molecular spectra.
-       ICML 2021 (to appear)
+       ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
 
     """
 

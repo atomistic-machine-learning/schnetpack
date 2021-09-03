@@ -3,4 +3,4 @@ cutoff: ???
 cutoff_shell: 2.0
 requires_triples: false
 base_nbl: schnetpack.transform.TorchNeighborList
-collate_fn: schnetpack.data.loader._atoms_collate_f
+collate_fn: schnetpack.data.loader._atoms_collate_fn
