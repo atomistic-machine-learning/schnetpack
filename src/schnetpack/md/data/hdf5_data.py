@@ -111,23 +111,43 @@ class HDF5Loader:
 
         entry_width = self.total_n_atoms * 3
 
+        # Extract energies
+        entry_start = 0
+        entry_stop = 1
+        self.properties[f"{properties.energy}_system"] = raw_positions[
+            :, :, entry_start:entry_stop
+        ].reshape(self.entries, self.n_replicas, self.n_molecules)
+
         # Extract positions
-        self.properties[properties.R] = raw_positions[:, :, :entry_width].reshape(
-            self.entries, self.n_replicas, self.total_n_atoms, -1
-        )
-        start = entry_width
+        entry_start = entry_stop
+        entry_stop += entry_width
+        self.properties[properties.R] = raw_positions[
+            :, :, entry_start:entry_stop
+        ].reshape(self.entries, self.n_replicas, self.total_n_atoms, 3)
 
         # Extract velocities if present
         if structures.attrs["has_velocities"]:
+            entry_start = entry_stop
+            entry_stop += entry_width
             self.properties["velocities"] = raw_positions[
-                :, :, start : start + entry_width
-            ].reshape(self.entries, self.n_replicas, self.total_n_atoms, -1)
-            start += entry_width
+                :, :, entry_start:entry_stop
+            ].reshape(self.entries, self.n_replicas, self.total_n_atoms, 3)
 
+        # Extract quantities due to simulation in box
         if structures.attrs["has_cells"]:
-            self.properties[properties.cell] = raw_positions[:, :, start:].reshape(
-                self.entries, self.n_replicas, self.n_molecules, 3, 3
-            )
+            # Get simulation cells
+            entry_start = entry_stop
+            entry_stop += 9
+            self.properties[properties.cell] = raw_positions[
+                :, :, entry_start:entry_stop
+            ].reshape(self.entries, self.n_replicas, self.n_molecules, 3, 3)
+
+            # Get stress tensor
+            entry_start = entry_stop
+            entry_stop += 9
+            self.properties[f"{properties.stress}_system"] = raw_positions[
+                :, :, entry_start:entry_stop
+            ].reshape(self.entries, self.n_replicas, self.n_molecules, 3, 3)
         else:
             self.properties[properties.cell] = None
 
@@ -261,7 +281,7 @@ class HDF5Loader:
                                present.
 
         Returns:
-            np.array: N_steps array containing the kinetic eenrgy of every configuration in internal units.
+            np.array: N_steps array containing the kinetic energy of every configuration in internal units.
         """
         # Get the velocities
         velocities = self.get_velocities(mol_idx=mol_idx, replica_idx=replica_idx)
@@ -277,6 +297,26 @@ class HDF5Loader:
         )
 
         return kinetic_energy
+
+    def get_potential_energy(
+        self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None
+    ):
+        """
+        Auxiliary routine for extracting a systems potential energy.
+
+        Args:
+            mol_idx (int): Index of the molecule to extract, by default uses the first molecule (mol_idx=0)
+            replica_idx (int): Replica of the molecule to extract (e.g. for ring polymer molecular dynamics). If
+                               replica_idx is set to None (default), the centroid is returned if multiple replicas are
+                               present.
+
+        Returns:
+            np.array: N_steps array containing the potential energy of every configuration in internal units.
+        """
+        energy_label = f"{properties.energy}_system"
+        return self.get_property(
+            energy_label, atomistic=False, mol_idx=mol_idx, replica_idx=replica_idx
+        )
 
     def get_temperature(
         self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None
@@ -303,6 +343,76 @@ class HDF5Loader:
         temperature = 2.0 / (3.0 * units.kB * self.n_atoms[mol_idx]) * kinetic_energy
 
         return temperature
+
+    def get_volume(self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None):
+        """
+        Auxiliary routine for computing the cell volume in periodic simulations.
+
+        Args:
+            mol_idx (int): Index of the molecule to extract, by default uses the first molecule (mol_idx=0)
+            replica_idx (int): Replica of the molecule to extract (e.g. for ring polymer molecular dynamics). If
+                               replica_idx is set to None (default), the centroid is returned if multiple replicas are
+                               present.
+
+        Returns:
+            np.array: N_steps array containing the cell volume of every configuration in internal units.
+        """
+        cells = self.get_property(
+            properties.cell, atomistic=False, mol_idx=mol_idx, replica_idx=replica_idx
+        )
+        return np.linalg.det(cells)
+
+    def get_stress(self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None):
+        """
+        Auxiliary routine for extracting the stress tensor in cell simulations.
+
+        Args:
+            mol_idx (int): Index of the molecule to extract, by default uses the first molecule (mol_idx=0)
+            replica_idx (int): Replica of the molecule to extract (e.g. for ring polymer molecular dynamics). If
+                               replica_idx is set to None (default), the centroid is returned if multiple replicas are
+                               present.
+
+        Returns:
+            np.array: N_steps x 3 x 3 array containing the stress tensor of every configuration in internal units.
+        """
+        stress_label = f"{properties.stress}_system"
+        return self.get_property(
+            stress_label, atomistic=False, mol_idx=mol_idx, replica_idx=replica_idx
+        )
+
+    def get_pressure(
+        self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None
+    ):
+        """
+        Auxiliary routine for computing the pressure in periodic simulations.
+
+        Args:
+            mol_idx (int): Index of the molecule to extract, by default uses the first molecule (mol_idx=0)
+            replica_idx (int): Replica of the molecule to extract (e.g. for ring polymer molecular dynamics). If
+                               replica_idx is set to None (default), the centroid is returned if multiple replicas are
+                               present.
+
+        Returns:
+            np.array: N_steps array containing the pressure of every configuration in bar.
+        """
+        # Get kinetic energy and volume
+        kinetic_energy = self.get_kinetic_energy(
+            mol_idx=mol_idx, replica_idx=replica_idx
+        )
+        volume = self.get_volume(mol_idx=mol_idx, replica_idx=replica_idx)
+
+        # Compute isotropic stress
+        stress = (
+            np.einsum(
+                "bii->b", self.get_stress(mol_idx=mol_idx, replica_idx=replica_idx)
+            )
+            / 3.0
+        )
+
+        # Compute the pressure and convert to bar
+        pressure = (2.0 / 3.0 * kinetic_energy / volume - stress) / units.bar
+
+        return pressure
 
     def convert_to_atoms(
         self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None
