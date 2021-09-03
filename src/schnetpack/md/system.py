@@ -12,6 +12,7 @@ from ase import Atoms
 from typing import Union, List, OrderedDict
 
 from schnetpack import units as spk_units
+from schnetpack.md.utils import UninitializedMixin
 
 __all__ = ["System"]
 
@@ -24,7 +25,7 @@ class SystemWarning(Warning):
     pass
 
 
-class System(nn.Module):
+class System(UninitializedMixin, nn.Module):
     """
     Container for all properties associated with the simulated molecular system
     (masses, positions, momenta, ...). Uses MD unit system defined in `schnetpack.units` internally.
@@ -74,7 +75,7 @@ class System(nn.Module):
         self.nm_transform = None
 
         # Index for aggregation
-        self.register_buffer("index_m", None)
+        self.register_uninitialized_buffer("index_m", dtype=torch.long)
 
         # number of molecules, replicas of each and vector with the number of
         # atoms in each molecule
@@ -82,22 +83,23 @@ class System(nn.Module):
         self.n_molecules = None
         self.total_n_atoms = None
 
-        self.register_buffer("n_atoms", None)
-
         # General static molecular properties
-        self.register_buffer("atom_types", None)
-        self.register_buffer("masses", None)
+        self.register_uninitialized_buffer("n_atoms", dtype=torch.long)
+        self.register_uninitialized_buffer("atom_types", dtype=torch.long)
+        self.register_uninitialized_buffer("masses")
 
         # Dynamic properties updated during simulation
-        self.register_buffer("positions", None)
-        self.register_buffer("momenta", None)
-        self.register_buffer("forces", None)
-        self.register_buffer("energy", None)
+        self.register_uninitialized_buffer("positions")
+        self.register_uninitialized_buffer("momenta")
+        self.register_uninitialized_buffer("forces")
+        self.register_uninitialized_buffer("energy")
 
         # Properties for periodic boundary conditions and crystal cells
-        self.register_buffer("cells", None)
-        self.register_buffer("pbc", None)
-        self.register_buffer("stress", None)  # Used for the computation of the pressure
+        self.register_uninitialized_buffer("cells")
+        self.register_uninitialized_buffer("pbc")
+        self.register_uninitialized_buffer(
+            "stress"
+        )  # Used for the computation of the pressure
 
         # Dummy tensor for device and dtype
         self.register_buffer("_dd_dummy", torch.zeros(1))
@@ -688,9 +690,12 @@ class System(nn.Module):
         Args:
             state_dict (dict): State dict of the system state.
         """
-        self.load_state_dict(state_dict)
+        self.load_state_dict(state_dict, strict=False)
 
         # Set derived properties for restarting
         self.n_replicas = self.positions.shape[0]
         self.total_n_atoms = self.positions.shape[1]
         self.n_molecules = self.n_atoms.shape[0]
+
+        # Set normal mode transformer
+        self.nm_transform = self._nm_transformer(self.n_replicas)
