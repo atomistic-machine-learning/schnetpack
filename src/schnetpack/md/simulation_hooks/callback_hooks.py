@@ -214,15 +214,20 @@ class MoleculeStream(DataStream):
         Args:
             simulator (schnetpack.md.Simulator): Simulator class used in the molecular dynamics simulation.
         """
+        # Account for potential energy and positions
+        data_dimension = 1 + simulator.system.total_n_atoms * 3
 
-        data_dimension = simulator.system.total_n_atoms * 3
         # If requested, also store velocities
         if self.store_velocities:
             data_dimension = data_dimension + simulator.system.total_n_atoms * 3
-        # Account for presence of simulation cells
+
+        # Account for presence of simulation cells and stress tensors
         if not torch.any(simulator.system.volume == 0.0):
             self.cells = True
-            data_dimension = data_dimension + simulator.system.n_molecules * 9
+            data_dimension = data_dimension + simulator.system.n_molecules * 2 * 9
+
+        # self.energy = torch.zeros(self.n_replicas, self.n_molecules, 1)
+        # self.stress = torch.zeros(self.n_replicas, self.n_molecules, 3, 3
 
         data_shape = (simulator.system.n_replicas, data_dimension)
 
@@ -256,24 +261,44 @@ class MoleculeStream(DataStream):
             buffer_position (int): Current position in the buffer.
             simulator (schnetpack.md.Simulator): Simulator class used in the molecular dynamics simulation.
         """
-        n_entries = simulator.system.total_n_atoms * 3
 
+        # Store energies
+        start = 0
+        stop = 1
         self.buffer[
-            buffer_position : buffer_position + 1, :, :n_entries
-        ] = simulator.system.positions.view(simulator.system.n_replicas, -1)
+            buffer_position : buffer_position + 1, :, start:stop
+        ] = simulator.system.energy.view(simulator.system.n_replicas, -1).detach()
 
-        current = n_entries
+        # Store positions
+        start = stop
+        stop += simulator.system.total_n_atoms * 3
+        self.buffer[
+            buffer_position : buffer_position + 1, :, start:stop
+        ] = simulator.system.positions.view(simulator.system.n_replicas, -1).detach()
 
         if self.store_velocities:
+            start = stop
+            stop += simulator.system.total_n_atoms * 3
             self.buffer[
-                buffer_position : buffer_position + 1, :, current : current + n_entries
-            ] = simulator.system.velocities.view(simulator.system.n_replicas, -1)
-            current += n_entries
+                buffer_position : buffer_position + 1, :, start:stop
+            ] = simulator.system.velocities.view(
+                simulator.system.n_replicas, -1
+            ).detach()
 
         if self.cells:
+            # Get cells
+            start = stop
+            stop += 9
             self.buffer[
-                buffer_position : buffer_position + 1, :, current:
-            ] = simulator.system.cells.view(simulator.system.n_replicas, -1)
+                buffer_position : buffer_position + 1, :, start:stop
+            ] = simulator.system.cells.view(simulator.system.n_replicas, -1).detach()
+
+            # Get stress tensors
+            start = stop
+            stop += 9
+            self.buffer[
+                buffer_position : buffer_position + 1, :, start:stop
+            ] = simulator.system.stress.view(simulator.system.n_replicas, -1).detach()
 
 
 class PropertyStream(DataStream):
