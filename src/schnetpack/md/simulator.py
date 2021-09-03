@@ -247,15 +247,3 @@ class Simulator(nn.Module):
 
         # In this case, set restart flag automatically
         self.restart = True
-
-    def load_system_state(self, state_dict):
-        """
-        Routine for only loading the system state of previous simulations.
-        This can e.g. be used for production runs, where an equilibrated system
-        is loaded, but the thermostat is changed.
-
-        Args:
-            state_dict (dict): State dict of the current simulation
-        """
-        # TODO: ???
-        self.system.state_dict = state_dict["system"]
