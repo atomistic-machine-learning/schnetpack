@@ -224,7 +224,7 @@ class Simulator(nn.Module):
         """
         # TODO: restart with metadynamics hooks etc, ?
         self.step = state_dict["step"]
-        self.system.load_state_dict(state_dict["system"])
+        self.system.load_system_state(state_dict["system"])
 
         if soft:
             # Do the same as in a basic state dict setting
