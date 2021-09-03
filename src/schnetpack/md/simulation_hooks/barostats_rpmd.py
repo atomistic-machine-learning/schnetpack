@@ -48,11 +48,11 @@ class PILEBarostat(BarostatHook):
         # Compute kBT, since it will be used a lot
         self.register_buffer("kb_temperature", self.temperature_bath * spk_units.kB)
 
-        self.register_buffer("propagator", None)
-        self.register_buffer("cell_momenta", None)
+        self.register_uninitialized_buffer("propagator")
+        self.register_uninitialized_buffer("cell_momenta")
 
-        self.register_buffer("c1", None)
-        self.register_buffer("c2", None)
+        self.register_uninitialized_buffer("c1")
+        self.register_uninitialized_buffer("c2")
 
         self.sinhdx = StableSinhDiv()
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 import torch.nn as nn
 
+from schnetpack.md.utils import UninitializedMixin
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -9,7 +11,7 @@ if TYPE_CHECKING:
 __all__ = ["RemoveCOMMotion", "SimulationHook"]
 
 
-class SimulationHook(nn.Module):
+class SimulationHook(UninitializedMixin, nn.Module):
     """
     Basic class for simulator hooks
     """

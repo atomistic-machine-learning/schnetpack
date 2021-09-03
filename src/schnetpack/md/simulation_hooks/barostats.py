@@ -231,30 +231,31 @@ class NHCBarostatIsotropic(BarostatHook):
         self.register_buffer("massive", torch.tensor(massive))
         self.register_buffer("multi_step", torch.tensor(multi_step))
         self.register_buffer("integration_order", torch.tensor(integration_order))
-        self.register_buffer("ys_time_step", None)
+
+        self.register_uninitialized_buffer("ys_time_step")
 
         # Find out number of particles (depends on whether massive or not)
-        self.register_buffer("degrees_of_freedom", None)
-        self.register_buffer("degrees_of_freedom_cell", None)
-        self.register_buffer("degrees_of_freedom_particles", None)
+        self.register_uninitialized_buffer("degrees_of_freedom")
+        self.register_uninitialized_buffer("degrees_of_freedom_cell")
+        self.register_uninitialized_buffer("degrees_of_freedom_particles")
 
         # Thermostat variables for particles
-        self.register_buffer("t_velocities", None)
-        self.register_buffer("t_positions", None)
-        self.register_buffer("t_forces", None)
-        self.register_buffer("t_masses", None)
+        self.register_uninitialized_buffer("t_velocities")
+        self.register_uninitialized_buffer("t_positions")
+        self.register_uninitialized_buffer("t_forces")
+        self.register_uninitialized_buffer("t_masses")
 
         # Thermostat variables for cell
-        self.register_buffer("t_velocities_cell", None)
-        self.register_buffer("t_positions_cell", None)
-        self.register_buffer("t_forces_cell", None)
-        self.register_buffer("t_masses_cell", None)
+        self.register_uninitialized_buffer("t_velocities_cell")
+        self.register_uninitialized_buffer("t_positions_cell")
+        self.register_uninitialized_buffer("t_forces_cell")
+        self.register_uninitialized_buffer("t_masses_cell")
 
         # Barostat variables
-        self.register_buffer("b_velocities_cell", None)
-        self.register_buffer("b_positions_cell", None)
-        self.register_buffer("b_forces_cell", None)
-        self.register_buffer("b_masses_cell", None)
+        self.register_uninitialized_buffer("b_velocities_cell")
+        self.register_uninitialized_buffer("b_positions_cell")
+        self.register_uninitialized_buffer("b_forces_cell")
+        self.register_uninitialized_buffer("b_masses_cell")
 
         # Stable sinh(x)/x approximation
         self.sinhdx = StableSinhDiv()

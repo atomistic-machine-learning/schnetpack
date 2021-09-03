@@ -210,9 +210,9 @@ class LangevinThermostat(ThermostatHook):
             temperature_bath=temperature_bath, time_constant=time_constant
         )
 
-        self.register_buffer("thermostat_factor", None)
-        self.register_buffer("c1", None)
-        self.register_buffer("c2", None)
+        self.register_uninitialized_buffer("thermostat_factor")
+        self.register_uninitialized_buffer("c1")
+        self.register_uninitialized_buffer("c2")
 
     def _init_thermostat(self, simulator: Simulator):
         """
@@ -309,15 +309,15 @@ class NHCThermostat(ThermostatHook):
         # Propagation parameters
         self.register_buffer("multi_step", torch.tensor(multi_step))
         self.register_buffer("integration_order", torch.tensor(integration_order))
-        self.register_buffer("time_step", None)
+        self.register_uninitialized_buffer("time_step")
 
         # Find out number of particles (depends on whether massive or not)
-        self.register_buffer("degrees_of_freedom", None)
-        self.register_buffer("masses", None)
+        self.register_uninitialized_buffer("degrees_of_freedom")
+        self.register_uninitialized_buffer("masses")
 
-        self.register_buffer("velocities", None)
-        self.register_buffer("positions", None)
-        self.register_buffer("forces", None)
+        self.register_uninitialized_buffer("velocities")
+        self.register_uninitialized_buffer("positions")
+        self.register_uninitialized_buffer("forces")
 
     def _init_thermostat(self, simulator: Simulator):
         """
@@ -561,10 +561,10 @@ class GLEThermostat(ThermostatHook):
         # To be initialized on beginning of the simulation, once system and
         # integrator are known
         self.register_buffer("free_particle_limit", torch.tensor(free_particle_limit))
-        self.register_buffer("thermostat_factor", None)
-        self.register_buffer("thermostat_momenta", None)
-        self.register_buffer("c1", None)
-        self.register_buffer("c2", None)
+        self.register_uninitialized_buffer("thermostat_factor")
+        self.register_uninitialized_buffer("thermostat_momenta")
+        self.register_uninitialized_buffer("c1")
+        self.register_uninitialized_buffer("c2")
 
     def _init_thermostat(self, simulator: Simulator):
         """
