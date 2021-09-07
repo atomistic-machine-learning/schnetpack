@@ -16,10 +16,10 @@ from schnetpack.md.calculators.ensemble_calculator import EnsembleCalculator
 
 log = logging.getLogger(__name__)
 
-__all__ = ["SchnetPackCalculator", "SchnetPackEnsembleCalculator"]
+__all__ = ["SchNetPackCalculator", "SchNetPackEnsembleCalculator"]
 
 
-class SchnetPackCalculator(MDCalculator):
+class SchNetPackCalculator(MDCalculator):
     """
     MD calculator for schnetpack models.
 
@@ -55,7 +55,7 @@ class SchnetPackCalculator(MDCalculator):
         property_conversion: Dict[str, Union[str, float]] = {},
         script_model: bool = False,
     ):
-        super(SchnetPackCalculator, self).__init__(
+        super(SchNetPackCalculator, self).__init__(
             required_properties=required_properties,
             force_label=force_label,
             energy_units=energy_units,
@@ -173,7 +173,7 @@ class SchnetPackCalculator(MDCalculator):
         return inputs
 
 
-class SchnetPackEnsembleCalculator(EnsembleCalculator, SchnetPackCalculator):
+class SchNetPackEnsembleCalculator(EnsembleCalculator, SchNetPackCalculator):
     """
     Ensemble calculator using schnetpack models. Uncertainties are computed as the variance of all model predictions.
     """
@@ -210,7 +210,7 @@ class SchnetPackEnsembleCalculator(EnsembleCalculator, SchnetPackCalculator):
                                                the model. Only changes the units used for logging the various outputs.
             script_model (bool): convert loaded model to torchscript.
         """
-        super(SchnetPackEnsembleCalculator, self).__init__(
+        super(SchNetPackEnsembleCalculator, self).__init__(
             model_file=model_files,
             required_properties=required_properties,
             force_label=force_label,

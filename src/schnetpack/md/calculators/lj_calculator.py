@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 import torch
 import torch.nn as nn
 
-from schnetpack.md.calculators import SchnetPackCalculator
+from schnetpack.md.calculators import SchNetPackCalculator
 
 from schnetpack import properties
 import schnetpack.nn as snn
@@ -16,7 +16,7 @@ from schnetpack.atomistic import Forces
 __all__ = ["LJCalculator", "LJModel"]
 
 
-class LJCalculator(SchnetPackCalculator):
+class LJCalculator(SchNetPackCalculator):
     """
     Lennard Jones potential calculator. Primarily used for testing barostats and thermostats.
 

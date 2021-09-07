@@ -1,4 +1,4 @@
-_target_: schnetpack.md.calculators.SchnetPackCalculator
+_target_: schnetpack.md.calculators.SchNetPackCalculator
 required_properties:
   - energy
   - forces
