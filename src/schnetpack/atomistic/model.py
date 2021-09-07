@@ -95,13 +95,10 @@ class AtomisticModel(pl.LightningModule):
         self.output_modules = nn.ModuleList(output_modules)
         self.pp = postprocess or []
 
-        self.required_derivatives = []
+        self.required_derivatives = set()
         for m in self.output_modules:
             if hasattr(m, "required_derivatives"):
-                for p in m.required_derivatives:
-                    if p not in self.required_derivatives:
-                        self.required_derivatives.append(p)
-
+                self.required_derivatives.update(m.required_derivatives)
         self.grad_enabled = len(self.required_derivatives) > 0
         self.inference_mode = False
 
