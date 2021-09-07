@@ -12,6 +12,8 @@ from pytorch_lightning.loggers import LightningLoggerBase
 from schnetpack.utils import str2class
 from schnetpack.utils.script import log_hyperparameters, print_config
 
+import pickle
+
 log = logging.getLogger(__name__)
 
 
@@ -71,10 +73,15 @@ def train(config: DictConfig):
     )
     model: LightningModule = hydra.utils.instantiate(
         config.model,
-        datamodule=datamodule,
+        # datamodule=datamodule,
         optimizer_cls=str2class(config.model.optimizer_cls),
         scheduler_cls=scheduler_cls,
     )
+    with open("tmp_file.pk", "wb") as f:
+        pickle.dump(model, f)
+
+    with open("tmp_file.pk", "rb") as f:
+        model = pickle.load(f)
 
     # Init Lightning callbacks
     callbacks: List[Callback] = []

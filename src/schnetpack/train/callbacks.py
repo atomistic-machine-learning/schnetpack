@@ -4,6 +4,7 @@ import torch
 
 from pytorch_lightning.callbacks import ModelCheckpoint
 import schnetpack as spk
+from pytorch_lightning import Trainer
 
 __all__ = ["ModelCheckpoint"]
 
@@ -28,6 +29,7 @@ class ModelCheckpoint(ModelCheckpoint):
         self.method = method
 
     def on_validation_end(self, trainer, pl_module) -> None:
+        self.trainer = trainer
         self.pl_module = pl_module
         super().on_validation_end(trainer, pl_module)
 
@@ -50,7 +52,7 @@ class ModelCheckpoint(ModelCheckpoint):
                     self.pl_module.inference_mode = True
                 mode = self.pl_module.training
 
-                torch.save(self.pl_module, self.inference_path)
+                self.trainer.save_checkpoint(self.inference_path)
 
                 if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
                     self.pl_module.inference_mode = imode

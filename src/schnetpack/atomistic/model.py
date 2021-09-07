@@ -54,7 +54,7 @@ class AtomisticModel(pl.LightningModule):
 
     def __init__(
         self,
-        datamodule: spk.data.AtomsDataModule,
+        # datamodule: spk.data.AtomsDataModule,
         representation: nn.Module,
         output_modules: List[nn.Module],
         outputs: List[ModelOutput],
@@ -80,7 +80,7 @@ class AtomisticModel(pl.LightningModule):
             postprocess: list of postprocessors to be applied to model for predictions
         """
         super().__init__()
-        self.datamodule = datamodule
+        # self.datamodule = datamodule
         self.optimizer_cls = optimizer_cls
         self.optimizer_kwargs = optimizer_args
         self.scheduler_cls = scheduler_cls
@@ -106,7 +106,7 @@ class AtomisticModel(pl.LightningModule):
         self.postprocessors = torch.nn.ModuleList()
         for pp in self.pp:
             pp.postprocessor()
-            pp.datamodule(self.datamodule)
+            pp.datamodule(self.trainer.datamodule)
             self.postprocessors.append(pp)
 
     def forward(self, inputs: Dict[str, torch.Tensor]):

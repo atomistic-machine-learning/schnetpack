@@ -87,7 +87,7 @@ class CachedNeighborList(Transform):
         results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         cache_file = os.path.join(
-            self.cache_workdir, f"cache_{inputs[properties.idx][0]}.pt"
+            self.cache_location, f"cache_{inputs[properties.idx][0]}.pt"
         )
 
         # try to read cached NBL
@@ -98,7 +98,7 @@ class CachedNeighborList(Transform):
             # acquire lock for caching
             lock = fasteners.InterProcessLock(
                 os.path.join(
-                    self.cache_workdir, f"cache_{inputs[properties.idx][0]}.lock"
+                    self.cache_location, f"cache_{inputs[properties.idx][0]}.lock"
                 )
             )
             with lock:

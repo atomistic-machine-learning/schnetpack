@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Tuple, Union
 
 
 import numpy as np
+import fasteners
 
 import pytorch_lightning as pl
 import torch
@@ -124,23 +125,30 @@ class AtomsDataModule(pl.LightningDataModule):
             datapath = self.datapath
         else:
             if not os.path.exists(self.data_workdir):
-                os.makedirs(self.data_workdir)
+                os.makedirs(self.data_workdir, exist_ok=True)
 
             name = self.datapath.split("/")[-1]
             datapath = os.path.join(self.data_workdir, name)
 
-            shutil.copy(self.datapath, datapath)
+            lock = fasteners.InterProcessLock(
+                os.path.join(self.data_workdir, f"cache_{name}.lock")
+            )
 
-            # reset datasets in case they need to be reloaded
-            self.dataset = None
-            self._train_dataset = None
-            self._val_dataset = None
-            self._test_dataset = None
+            with lock:
+                # retry reading, in case other process finished in the meantime
+                if not os.path.exists(datapath):
+                    shutil.copy(self.datapath, datapath)
 
-            # reset cleanup
-            self._has_teardown_fit = False
-            self._has_teardown_val = False
-            self._has_teardown_test = False
+                # reset datasets in case they need to be reloaded
+                self.dataset = None
+                self._train_dataset = None
+                self._val_dataset = None
+                self._test_dataset = None
+
+                # reset cleanup
+                self._has_teardown_fit = False
+                self._has_teardown_val = False
+                self._has_teardown_test = False
 
         # (re)load datasets
         if self.dataset is None:
