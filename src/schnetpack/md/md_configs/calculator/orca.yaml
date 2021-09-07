@@ -1,0 +1,16 @@
+_target_: schnetpack.md.calculators.OrcaCalculator
+required_properties:
+  - energy
+  - forces
+force_label: forces
+compdir: qm_calculations
+qm_executable: ???
+orca_template: ???
+energy_units: Hartree
+position_units: Bohr
+energy_label: energy
+stress_label: null
+property_conversion: { }
+overwrite: true
+adaptive: false
+basename: qm_calc

@@ -1,0 +1,3 @@
+_target_: schnetpack.md.simulation_hooks.TRPMDThermostat
+temperature_bath: 300.0 # K
+damping_factor: 0.8

@@ -13,6 +13,7 @@ __all__ = [
     "CountNeighbors",
     "CollectAtomTriples",
     "CachedNeighborList",
+    "NeighborListTransform",
 ]
 
 from schnetpack import properties
@@ -26,11 +27,9 @@ class CacheException(Exception):
 class CachedNeighborList(Transform):
     """
     Dynamic caching of neighbor lists.
-
     This wraps a neighbor list and stores the results the first time it is called
     for a dataset entry with the pid provided by AtomsDataset. Particularly,
     for large systems, this speeds up training significantly.
-
     Note:
         The provided cache location should be unique to the used dataset. Otherwise,
         wrong neighborhoods will be provided. The caching location can be reused
@@ -143,25 +142,30 @@ class CachedNeighborList(Transform):
 class NeighborListTransform(Transform):
     """
     Base class for neighbor lists.
-
     Optionally, an additional long-range cutoff may be provided to support separate neighbor lists for
     long- and short-range potentials.
-
     """
 
     is_preprocessor: bool = True
     is_postprocessor: bool = False
 
-    def __init__(self, cutoff: float, long_range_cutoff: float = -1.0):
+    def __init__(
+        self,
+        cutoff: float,
+        long_range_cutoff: float = -1.0,
+        return_offset: bool = False,
+    ):
         """
         Args:
             cutoff: Cutoff radius for neighbor search.
             long_range_cutoff: If a long-range cutoff is provided, the transform will return separate values
                 as idx_i_lr, idx_j_lr, and Rij_lr
+            return_offset (bool): return cell offset vectors in periodic simulations.
         """
         super().__init__()
         self._short_range_cutoff = cutoff
         self._long_range_cutoff = long_range_cutoff
+        self._return_offset = return_offset
 
         if self._long_range_cutoff > 0:
             if self._short_range_cutoff >= self._long_range_cutoff:
@@ -182,19 +186,29 @@ class NeighborListTransform(Transform):
         cell = inputs[properties.cell]
         pbc = inputs[properties.pbc]
 
-        Rij, idx_i, idx_j = self._build_neighbor_list(Z, R, cell, pbc, self._cutoff)
+        Rij, idx_i, idx_j, offset = self._build_neighbor_list(
+            Z, R, cell, pbc, self._cutoff
+        )
 
         if self._long_range_cutoff > 0.0:
             inputs[properties.idx_i_lr] = idx_i.detach()
             inputs[properties.idx_j_lr] = idx_j.detach()
             inputs[properties.Rij_lr] = Rij.detach()
-            Rij, idx_i, idx_j = filter_short_range(
-                idx_i, idx_j, Rij, self._short_range_cutoff
+
+            if self._return_offset:
+                inputs[properties.offsets_lr] = offset
+
+            Rij, idx_i, idx_j, offset = filter_short_range(
+                idx_i, idx_j, Rij, self._short_range_cutoff, offset
             )
 
         inputs[properties.idx_i] = idx_i.detach()
         inputs[properties.idx_j] = idx_j.detach()
         inputs[properties.Rij] = Rij.detach()
+
+        if self._return_offset:
+            inputs[properties.offsets] = offset
+
         return inputs
 
     def _build_neighbor_list(
@@ -214,6 +228,7 @@ def filter_short_range(
     idx_j: torch.Tensor,
     Rij: torch.Tensor,
     short_range_cutoff: float,
+    offset: Optional[torch.Tensor] = None,
 ):
     rij = torch.norm(Rij, dim=-1)
     cidx = torch.nonzero(rij <= short_range_cutoff).squeeze(-1)
@@ -222,7 +237,12 @@ def filter_short_range(
     idx_j_sr = idx_j[cidx]
     Rij_sr = Rij[cidx]
 
-    return Rij_sr, idx_i_sr, idx_j_sr
+    if offset is not None:
+        offset_sr = offset[cidx]
+    else:
+        offset_sr = None
+
+    return Rij_sr, idx_i_sr, idx_j_sr, offset_sr
 
 
 class ASENeighborList(NeighborListTransform):
@@ -232,11 +252,20 @@ class ASENeighborList(NeighborListTransform):
 
     def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
         at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
-        idx_i, idx_j, Rij = neighbor_list("ijD", at, cutoff, self_interaction=False)
+
+        if self._return_offset:
+            idx_i, idx_j, Rij, offset = neighbor_list(
+                "ijDS", at, cutoff, self_interaction=False
+            )
+            offset = torch.from_numpy(offset)
+        else:
+            idx_i, idx_j, Rij = neighbor_list("ijD", at, cutoff, self_interaction=False)
+            offset = None
+
         idx_i = torch.from_numpy(idx_i)
         idx_j = torch.from_numpy(idx_j)
         Rij = torch.from_numpy(Rij)
-        return Rij, idx_i, idx_j
+        return Rij, idx_i, idx_j, offset
 
 
 class TorchNeighborList(NeighborListTransform):
@@ -252,7 +281,9 @@ class TorchNeighborList(NeighborListTransform):
             shifts = torch.zeros(0, 3, device=cell.device, dtype=torch.long)
         else:
             shifts = self._get_shifts(cell, pbc, cutoff)
-        idx_i, idx_j, Rij = self._get_neighbor_pairs(positions, cell, shifts, cutoff)
+        idx_i, idx_j, Rij, offset = self._get_neighbor_pairs(
+            positions, cell, shifts, cutoff
+        )
 
         # Create bidirectional id arrays, similar to what the ASE neighbor_list returns
         bi_idx_i = torch.cat((idx_i, idx_j), dim=0)
@@ -264,13 +295,19 @@ class TorchNeighborList(NeighborListTransform):
         idx_i = bi_idx_i[sorted_idx]
         idx_j = bi_idx_j[sorted_idx]
         Rij = bi_Rij[sorted_idx]
-        return Rij, idx_i, idx_j
+
+        if self._return_offset:
+            bi_offset = torch.cat((-offset, offset), dim=0)
+            offset = bi_offset[sorted_idx]
+        else:
+            offset = None
+
+        return Rij, idx_i, idx_j, offset
 
     def _get_neighbor_pairs(self, positions, cell, shifts, cutoff):
         """Compute pairs of atoms that are neighbors
         Copyright 2018- Xiang Gao and other ANI developers
         (https://github.com/aiqm/torchani/blob/master/torchani/aev.py)
-
         Arguments:
             positions (:class:`torch.Tensor`): tensor of shape
                 (molecules, atoms, 3) for atom coordinates.
@@ -312,8 +349,9 @@ class TorchNeighborList(NeighborListTransform):
         atom_index_i = pi_all[pair_index]
         atom_index_j = pj_all[pair_index]
         Rij = Rij_all.index_select(0, pair_index)
+        offsets = shifts_all[pair_index]
 
-        return atom_index_i, atom_index_j, Rij
+        return atom_index_i, atom_index_j, Rij, offsets
 
     def _get_shifts(self, cell, pbc, cutoff):
         """Compute the shifts of unit cell along the given cell vectors to make it
@@ -321,13 +359,11 @@ class TorchNeighborList(NeighborListTransform):
         consideration.
         Copyright 2018- Xiang Gao and other ANI developers
         (https://github.com/aiqm/torchani/blob/master/torchani/aev.py)
-
         Arguments:
             cell (:class:`torch.Tensor`): tensor of shape (3, 3) of the three
             vectors defining unit cell: tensor([[x1, y1, z1], [x2, y2, z2], [x3, y3, z3]])
             pbc (:class:`torch.Tensor`): boolean vector of size 3 storing
                 if pbc is enabled for that direction.
-
         Returns:
             :class:`torch.Tensor`: long tensor of shifts. the center cell and
                 symmetric cells are not included.
@@ -381,7 +417,6 @@ class CollectAtomTriples(Transform):
         Using the neighbors contained within the cutoff shell, generate all unique pairs of neighbors and convert
         them to index arrays. Applied to the neighbor arrays, these arrays generate the indices involved in the atom
         triples.
-
         E.g.:
             idx_j[idx_j_triples] -> j atom in triple
             idx_j[idx_k_triples] -> k atom in triple
