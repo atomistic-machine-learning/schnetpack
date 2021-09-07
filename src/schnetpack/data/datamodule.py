@@ -173,7 +173,10 @@ class AtomsDataModule(pl.LightningDataModule):
     def teardown(self, stage: Optional[str] = None):
         if self.cleanup_workdir_stage and stage == self.cleanup_workdir_stage:
             if self.data_workdir is not None:
-                shutil.rmtree(self.data_workdir)
+                try:
+                    shutil.rmtree(self.data_workdir)
+                except:
+                    pass
                 self._has_setup_fit = False
                 self._has_setup_val = False
                 self._has_setup_test = False

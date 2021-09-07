@@ -146,14 +146,12 @@ class AddOffsets(Transform):
         self.register_buffer("mean", torch.zeros((1,)))
 
     def datamodule(self, value):
-        self._datamodule = value
-
         if self.add_atomrefs:
-            atrefs = self._datamodule.train_dataset.atomrefs
+            atrefs = value.train_dataset.atomrefs
             self.atomref.copy_(torch.tensor(atrefs[self._property]))
 
         if self.add_mean:
-            stats = self._datamodule.get_stats(
+            stats = value.get_stats(
                 self._property, self.is_extensive, self.add_atomrefs
             )
             self.mean.copy_(stats[0])

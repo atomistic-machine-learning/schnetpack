@@ -3,6 +3,7 @@ import os
 import uuid
 from typing import List
 
+import torch
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
@@ -131,6 +132,13 @@ def train(config: DictConfig):
     # Train the model
     log.info("Starting training.")
     trainer.fit(model=model, datamodule=datamodule)
+
+    log.info("Save inference model.")
+    model.trainer = None
+    model.train_dataloader = None
+    model.val_dataloader = None
+    model.test_dataloader = None
+    torch.save(model, "/home/kschuett/spkexperiments/etest.pts")
 
     # Evaluate model on test set after training
     log.info("Starting testing.")

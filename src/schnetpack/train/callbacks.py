@@ -5,6 +5,7 @@ import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
 import schnetpack as spk
 from pytorch_lightning import Trainer
+from copy import copy
 
 __all__ = ["ModelCheckpoint"]
 
@@ -52,7 +53,13 @@ class ModelCheckpoint(ModelCheckpoint):
                     self.pl_module.inference_mode = True
                 mode = self.pl_module.training
 
-                self.trainer.save_checkpoint(self.inference_path)
+                if self.trainer.training_type_plugin.should_rank_save_checkpoint:
+                    model = copy(self.pl_module)
+                    model.trainer = None
+                    model.train_dataloader = None
+                    model.val_dataloader = None
+                    model.test_dataloader = None
+                    torch.save(model, self.inference_path)
 
                 if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
                     self.pl_module.inference_mode = imode
