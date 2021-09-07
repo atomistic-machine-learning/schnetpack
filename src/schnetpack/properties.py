@@ -30,6 +30,8 @@ lidx_j: Final[
 Rij: Final[str] = "_Rij"  #: indices of atom pairs
 Rij_lr: Final[str] = "_Rij_lr"  #: indices of atom pairs for long-range
 n_atoms: Final[str] = "_n_atoms"  #: number of atoms
+offsets: Final[str] = "_offsets"  #: cell offset vectors
+offsets_lr: Final[str] = "_offsets_lr"  #: cell offset vectors
 
 n_nbh: Final[str] = "_n_nbh"  #: number of neighbors
 
@@ -42,13 +44,16 @@ idx_j_triples: Final[str] = "_idx_j_triples"
 #: indices of second neighboring atom triples
 idx_k_triples: Final[str] = "_idx_k_triples"
 
-
 ## chemical properties
 energy: Final[str] = "energy"
 forces: Final[str] = "forces"
 stress: Final[str] = "stress"
-
-total_charge: Final[str] = "total_charge"
-partial_charges: Final[str] = "partial_charges"
+masses: Final[str] = "masses"
 dipole_moment: Final[str] = "dipole_moment"
 polarizability: Final[str] = "polarizability"
+shielding: Final[str] = "shielding"
+hessian: Final[str] = "hessian"
+dipole_derivatives: Final[str] = "dipole_derivatives"
+polarizability_derivatives: Final[str] = "polarizability_derivatives"
+total_charge: Final[str] = "total_charge"
+partial_charges: Final[str] = "partial_charges"

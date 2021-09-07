@@ -1,0 +1,12 @@
+_target_: schnetpack.md.calculators.LJCalculator
+r_equilibrium: 3.405 # Angs
+well_depth: 3.984264 # 4*e (e=119.8K) in kJ/mol
+force_label: forces
+energy_units: kJ/mol
+position_units: Angstrom
+energy_label: energy
+stress_label: stress
+healing_length: 4.0 #0.3405
+
+defaults:
+  - neighbor_list: ase

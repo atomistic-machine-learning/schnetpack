@@ -1,0 +1,8 @@
+molecule_file: ???
+load_system_state: null
+n_replicas: 1
+position_unit_input: Angstrom
+mass_unit_input: 1.0
+
+defaults:
+  - initializer: uniform

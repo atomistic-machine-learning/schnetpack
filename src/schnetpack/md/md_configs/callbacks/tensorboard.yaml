@@ -1,0 +1,7 @@
+tensorboard:
+  _target_: schnetpack.md.simulation_hooks.TensorBoardLogger
+  log_file: logs
+  properties:
+    - energy
+    - temperature
+  every_n_steps: 10

@@ -1,0 +1,11 @@
+hdf5:
+  _target_: schnetpack.md.simulation_hooks.FileLogger
+  filename: simulation.hdf5
+  buffer_size: 100
+  data_streams:
+    - _target_: schnetpack.md.simulation_hooks.MoleculeStream
+      store_velocities: true
+    - _target_: schnetpack.md.simulation_hooks.PropertyStream
+      target_properties: [ energy ]
+  every_n_steps: 1
+  precision: ${precision}

@@ -1,0 +1,3 @@
+_target_: schnetpack.md.integrators.RingPolymer
+time_step: 0.20 # fs
+temperature: 300.0 # K

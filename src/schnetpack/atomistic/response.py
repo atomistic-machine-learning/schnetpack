@@ -59,13 +59,13 @@ class Forces(nn.Module):
         if dEdRij is None:
             dEdRij = torch.zeros_like(inputs[properties.Rij])
 
-        if self.calc_forces is not None:
+        if self.calc_forces:
             Fpred = torch.zeros_like(R)
             Fpred = Fpred.index_add(0, inputs[properties.idx_i], dEdRij)
             Fpred = Fpred.index_add(0, inputs[properties.idx_j], -dEdRij)
             results[self.force_key] = Fpred
 
-        if self.calc_stress is not None:
+        if self.calc_stress:
             stress_i = torch.zeros((R.shape[0], 3, 3), dtype=R.dtype, device=R.device)
 
             # sum over j
