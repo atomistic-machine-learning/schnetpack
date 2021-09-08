@@ -13,19 +13,11 @@ __all__ = ["ModelCheckpoint"]
 class ModelCheckpoint(ModelCheckpoint):
     """
     Just like the PyTorch Lightning ModelCheckpoint callback,
-    but also saves the best inference model
+    but also saves the best inference model with activated post-processing
     """
 
-    def __init__(
-        self,
-        inference_path: str,
-        save_as_torch_script: bool = True,
-        method: str = "script",
-        *args,
-        **kwargs
-    ):
+    def __init__(self, inference_path: str, method: str = "script", *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.save_as_torch_script = save_as_torch_script
         self.inference_path = inference_path
         self.method = method
 
@@ -45,22 +37,20 @@ class ModelCheckpoint(ModelCheckpoint):
             current = torch.tensor(float("inf" if self.mode == "min" else "-inf"))
 
         if current == self.best_model_score:
-            if self.save_as_torch_script:
-                self.pl_module.to_torchscript(self.inference_path, method=self.method)
-            else:
-                if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
-                    imode = self.pl_module.inference_mode
-                    self.pl_module.inference_mode = True
-                mode = self.pl_module.training
+            if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
+                imode = self.pl_module.inference_mode
+                self.pl_module.inference_mode = True
+            mode = self.pl_module.training
 
-                if self.trainer.training_type_plugin.should_rank_save_checkpoint:
-                    model = copy(self.pl_module)
-                    model.trainer = None
-                    model.train_dataloader = None
-                    model.val_dataloader = None
-                    model.test_dataloader = None
-                    torch.save(model, self.inference_path)
+            if self.trainer.training_type_plugin.should_rank_save_checkpoint:
+                # remove references to trainer and data loaders to avoid picle error in ddp
+                model = copy(self.pl_module)
+                model.trainer = None
+                model.train_dataloader = None
+                model.val_dataloader = None
+                model.test_dataloader = None
+                torch.save(model, self.inference_path)
 
-                if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
-                    self.pl_module.inference_mode = imode
-                self.pl_module.train(mode)
+            if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
+                self.pl_module.inference_mode = imode
+            self.pl_module.train(mode)
