@@ -2,9 +2,12 @@
 
 defaults:
   - trainer: default_trainer
-  - callbacks: default_callbacks
+  - callbacks:
+      - checkpoint
+      - earlystopping
+      - lrmonitor
   - model: null
-  - data: null
+  - data: custom
   - logger: tensorboard
 
 work_dir: ${hydra:runtime.cwd}

@@ -1,17 +1,6 @@
-_target_: pytorch_lightning.Trainer
+defaults:
+  - default_trainer
 
-# set `1` to train on GPU, `0` to train on CPU only
 gpus: 2
-precision: 32
-amp_backend: native
-
 accelerator: ddp
 num_nodes: 1
-
-min_epochs: null
-max_epochs: 100000
-
-weights_summary: top
-progress_bar_refresh_rate: 10
-
-terminate_on_nan: True
