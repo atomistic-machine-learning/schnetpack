@@ -1,7 +1,7 @@
 # @package _global_
 
 defaults:
-  - train_base
+  - train
   - override /model: pes
   - override /data: iso17
 
@@ -9,7 +9,7 @@ cutoff: 5.0
 n_rbf: 20
 lr: 1e-4
 
-name: iso17
+run_dir: runs/iso17
 energy_key: total_energy
 forces_key: atomic_forces
 

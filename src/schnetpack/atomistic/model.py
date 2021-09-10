@@ -110,7 +110,8 @@ class AtomisticModel(pl.LightningModule):
         self.postprocessors = torch.nn.ModuleList()
         for pp in self.pp:
             pp.postprocessor()
-            pp.datamodule(self.trainer.datamodule)
+            if stage == "fit":
+                pp.datamodule(self.trainer.datamodule)
             self.postprocessors.append(pp)
 
     def forward(self, inputs: Dict[str, torch.Tensor]):

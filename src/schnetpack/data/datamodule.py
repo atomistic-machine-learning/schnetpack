@@ -276,29 +276,14 @@ class AtomsDataModule(pl.LightningDataModule):
 
     @property
     def train_dataset(self) -> BaseAtomsData:
-        if not self.has_prepared_data:
-            self.prepare_data()
-
-        if not self.has_setup_fit:
-            self.setup(stage="fit")
         return self._train_dataset
 
     @property
     def val_dataset(self) -> BaseAtomsData:
-        if not self.has_prepared_data:
-            self.prepare_data()
-
-        if not self.has_setup_fit:
-            self.setup(stage="fit")
         return self._val_dataset
 
     @property
     def test_dataset(self) -> BaseAtomsData:
-        if not self.has_prepared_data:
-            self.prepare_data()
-
-        if not self.has_setup_fit:
-            self.setup(stage="test")
         return self._test_dataset
 
     def train_dataloader(self) -> AtomsLoader:

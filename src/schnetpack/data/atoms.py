@@ -385,7 +385,8 @@ class ASEAtomsData(BaseAtomsData):
         Args:
             datapath: Path to ASE DB.
             distance_unit: unit of atom positions and cell
-            property_unit_dict: defines all properties with units of the dataset.
+            property_unit_dict: Defines the available properties of the datasetseta and provides units
+                for ALL properties of the dataset. If a property is unit-less, you can pass "arb. unit" or `None`.
             kwargs: Pass arguments to init.
 
         Returns:
@@ -466,8 +467,25 @@ class ASEAtomsData(BaseAtomsData):
                     "Property dict does not contain all necessary structure keys"
                 ) from e
 
-        data = {}
         # add available properties to database
+        valid_props = set().union(
+            conn.metadata["_property_unit_dict"].keys(),
+            [
+                properties[structure.Z],
+                properties[structure.R],
+                properties[structure.cell],
+                properties[structure.pbc],
+            ],
+        )
+        for prop in properties:
+            if prop not in valid_props:
+                logger.warning(
+                    f"Property `{prop}` is not a defined property for this dataset and will be ignored. "
+                    + f"If it should be included, it has to be provided together with its unit when calling "
+                    + f"AseAtomsData.create()."
+                )
+
+        data = {}
         for pname in conn.metadata["_property_unit_dict"].keys():
             try:
                 data[pname] = properties[pname]

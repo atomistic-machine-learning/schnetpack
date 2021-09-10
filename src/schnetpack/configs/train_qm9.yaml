@@ -1,7 +1,7 @@
 # @package _global_
 
 defaults:
-  - train_base
+  - train
   - override /model: single_property
   - override /data: qm9
 
@@ -10,12 +10,20 @@ n_rbf: 20
 lr: 5e-4
 
 property: energy_U0
-name: qm9_${property}
+run_dir: runs/qm9_${property}
 
 data:
   distance_unit: Ang
-  property_units:
+  property_units: # convert to typically used energy units
     energy_U0: eV
+    energy_U: eV
+    enthalpy_H: eV
+    free_energy: eV
+    homo: eV
+    lumo: eV
+    gap: eV
+    zpve: eV
+
   transforms:
     - _target_: schnetpack.transform.SubtractCenterOfMass
     - _target_: schnetpack.transform.RemoveOffsets

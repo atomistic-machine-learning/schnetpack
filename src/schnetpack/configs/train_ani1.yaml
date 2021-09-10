@@ -1,7 +1,7 @@
 # @package _global_
 
 defaults:
-  - train_base
+  - train
   - override /model: single_property
   - override /data: ani1
 
@@ -10,7 +10,7 @@ n_rbf: 20
 lr: 1e-3
 
 property: energy
-name: ani1_${property}
+run_dir: runs/ani1_${property}
 
 data:
   distance_unit: Ang

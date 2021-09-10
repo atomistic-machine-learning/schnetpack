@@ -1,0 +1,59 @@
+# @package _global_
+
+defaults:
+  - trainer: default_trainer
+  - callbacks:
+      - checkpoint
+      - earlystopping
+      - lrmonitor
+  - model: null
+  - data: custom
+  - logger: tensorboard
+
+work_dir: ${hydra:runtime.cwd}
+data_dir: ${hydra:runtime.cwd}/data
+
+print_config: True
+run_dir: runs
+run_id: ${uuid:1}
+
+cutoff: ???
+n_rbf: ???
+lr: ???
+
+# hydra configuration
+hydra:
+    # output paths for hydra logs
+    run:
+        dir: ${run_dir}/${run_id}
+
+    # disable hydra config storage, since handled manually
+    output_subdir: null
+
+    help:
+      app_name: SchNetPack Train
+
+      template: |-
+        SchNetPack
+
+        == Configuration groups ==
+        Compose your configuration from those groups (db=mysql)
+
+        $APP_CONFIG_GROUPS
+
+        == Config ==
+        This is the config generated for this run.
+        You can change the config file to be loaded to a predefined one
+        > spktrain --config-name=train_qm9
+
+        or your own:
+        > spktrain --config-dir=./my_configs --config-name=my_config
+
+        You can override everything, for example:
+        > spktrain --config-name=train_qm9 data_dir=/path/to/datadir data.batch_size=50 --help
+
+        -------
+        $CONFIG
+        -------
+
+        ${hydra.help.footer}

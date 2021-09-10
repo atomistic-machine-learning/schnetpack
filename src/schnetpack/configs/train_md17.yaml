@@ -1,7 +1,7 @@
 # @package _global_
 
 defaults:
-  - train_base
+  - train
   - override /model: pes
   - override /data: md17
 
@@ -9,7 +9,7 @@ cutoff: 5.0
 n_rbf: 20
 lr: 5e-4
 
-name: md17_${data.molecule}
+run_dir: runs/md17_${data.molecule}
 energy_key: energy
 forces_key: forces
 
