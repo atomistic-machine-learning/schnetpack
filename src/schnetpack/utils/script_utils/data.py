@@ -92,13 +92,13 @@ def get_loaders(args, dataset, split_path, logging=None):
         batch_size=args.batch_size,
         sampler=RandomSampler(data_train),
         num_workers=4,
-        pin_memory=True,
+        pin_memory=args.cuda,
     )
     val_loader = spk.data.AtomsLoader(
-        data_val, batch_size=args.batch_size, num_workers=2, pin_memory=True
+        data_val, batch_size=args.batch_size, num_workers=2, pin_memory=args.cuda
     )
     test_loader = spk.data.AtomsLoader(
-        data_test, batch_size=args.batch_size, num_workers=2, pin_memory=True
+        data_test, batch_size=args.batch_size, num_workers=2, pin_memory=args.cuda
     )
 
     return train_loader, val_loader, test_loader
