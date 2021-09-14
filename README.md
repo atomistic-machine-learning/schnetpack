@@ -92,7 +92,7 @@ or the [standalone version](https://github.com/dmlc/tensorboard).
 To evaluate the trained model with the best validation error, call
 
 ```
-spk_run.py eval <modeldir> --split test [--cuda]
+spk_run.py eval <datapath> <modeldir> --split test [--cuda]
 ```
 
 which will run on the specified `--split` and write a result file `evaluation.txt` into the model directory.
