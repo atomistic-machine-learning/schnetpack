@@ -1,21 +1,9 @@
 defaults:
   - representation: painn
+  - optimizer: adam
+  - scheduler: reduce_on_plateau
 
 _target_: schnetpack.atomistic.AtomisticModel
-
-optimizer_cls: torch.optim.AdamW
-optimizer_args:
-  lr: ${lr}
-  weight_decay: 0.0
-
-scheduler_cls: schnetpack.train.ReduceLROnPlateau
-scheduler_monitor: val_loss
-scheduler_args:
-  mode: min
-  factor: 0.5
-  patience: 50
-  min_lr: 1e-6
-  smoothing_factor: 0.3
 
 output_modules: ???
 outputs: ???

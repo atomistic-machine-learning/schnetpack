@@ -3,6 +3,7 @@ import os
 import uuid
 from typing import List
 
+import torch
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
@@ -11,37 +12,38 @@ from pytorch_lightning.loggers import LightningLoggerBase
 
 from schnetpack.utils import str2class
 from schnetpack.utils.script import log_hyperparameters, print_config
+from schnetpack.data import BaseAtomsData, AtomsLoader
+from schnetpack.train import PredictionWriter
+
+import pickle
 
 log = logging.getLogger(__name__)
 
 
 OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()))
 
-
-@hydra.main(config_path="configs", config_name="train_base")
-def train(config: DictConfig):
-    """
-    General training routine for all models defined by the provided hydra configs.
-
-    """
-    print(
-        """
+header = """
    _____      __    _   __     __  ____             __  
   / ___/_____/ /_  / | / /__  / /_/ __ \____ ______/ /__
   \__ \/ ___/ __ \/  |/ / _ \/ __/ /_/ / __ `/ ___/ //_/
  ___/ / /__/ / / / /|  /  __/ /_/ ____/ /_/ / /__/ ,<   
 /____/\___/_/ /_/_/ |_/\___/\__/_/    \__,_/\___/_/|_|                                                          
+"""
+
+
+@hydra.main(config_path="configs", config_name="train")
+def train(config: DictConfig):
     """
-    )
+    General training routine for all models defined by the provided hydra configs.
+
+    """
+    print(header)
 
     if OmegaConf.is_missing(config, "data_dir"):
         log.error(
             f"Config incomplete! You need to specify the data directory `data_dir`."
         )
         return
-
-    if config.get("print_config"):
-        print_config(config, resolve=True)
 
     if not ("model" in config and "data" in config):
         log.error(
@@ -52,6 +54,40 @@ def train(config: DictConfig):
         """
         )
         return
+
+    if os.path.exists("config.yaml"):
+        log.info(
+            f"Config already exists in given directory {os.path.abspath('.')}."
+            + " Attempting to continue training."
+        )
+
+        # save old config
+        old_config = OmegaConf.load("config.yaml")
+        count = 1
+        while os.path.exists(f"config.old.{count}.yaml"):
+            count += 1
+        with open(f"config.old.{count}.yaml", "w") as f:
+            OmegaConf.save(old_config, f, resolve=False)
+
+        # resume from latest checkpoint
+        if config.trainer.resume_from_checkpoint is None:
+            if os.path.exists("checkpoints/last.ckpt"):
+                config.trainer.resume_from_checkpoint = "checkpoints/last.ckpt"
+            else:
+                raise FileNotFoundError(
+                    "No checkpoint file found! If the latest checkpoint is not stored at `checkpoints/last.ckpt`, the path "
+                    + "to the checkpoint has to be provided by the config at `config.trainer.resume_from_checkpoint`."
+                )
+
+        log.info(
+            f"Resuming from checkpoint {os.path.abspath(config.trainer.resume_from_checkpoint)}"
+        )
+    else:
+        with open("config.yaml", "w") as f:
+            OmegaConf.save(config, f, resolve=False)
+
+    if config.get("print_config"):
+        print_config(config, resolve=True)
 
     # Set seed for random number generators in pytorch, numpy and python.random
     if "seed" in config:
@@ -71,10 +107,14 @@ def train(config: DictConfig):
     )
     model: LightningModule = hydra.utils.instantiate(
         config.model,
-        datamodule=datamodule,
         optimizer_cls=str2class(config.model.optimizer_cls),
         scheduler_cls=scheduler_cls,
     )
+    with open("tmp_file.pk", "wb") as f:
+        pickle.dump(model, f)
+
+    with open("tmp_file.pk", "rb") as f:
+        model = pickle.load(f)
 
     # Init Lightning callbacks
     callbacks: List[Callback] = []
@@ -114,7 +154,7 @@ def train(config: DictConfig):
         config.trainer,
         callbacks=callbacks,
         logger=logger,
-        default_root_dir=os.path.join(config.name, config.run_id),
+        default_root_dir=os.path.join(config.run_id),
         _convert_="partial",
     )
 
@@ -131,3 +171,26 @@ def train(config: DictConfig):
 
     # Print path to best checkpoint
     log.info(f"Best checkpoint path:\n{trainer.checkpoint_callback.best_model_path}")
+
+
+@hydra.main(config_path="configs", config_name="predict")
+def predict(config: DictConfig):
+    log.info(f"Load data from `{config.data.datapath}`")
+    dataset: BaseAtomsData = hydra.utils.instantiate(config.data)
+    loader = AtomsLoader(dataset, batch_size=config.batch_size, num_workers=8)
+
+    model = torch.load("best_inference_model")
+
+    log.info(f"Instantiating trainer <{config.trainer._target_}>")
+    trainer: Trainer = hydra.utils.instantiate(
+        config.trainer,
+        callbacks=[
+            PredictionWriter(
+                output_dir=config.outputdir, write_interval=config.write_interval
+            )
+        ],
+        default_root_dir=".",
+        resume_from_checkpoint="checkpoints/last.ckpt",
+        _convert_="partial",
+    )
+    trainer.predict(model, dataloaders=loader, ckpt_path="best")

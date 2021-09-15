@@ -1,37 +1,35 @@
 # @package _global_
 
 defaults:
-  - train_base
   - override /model: pes
-  - override /data: iso17
+  - override /data: md17
 
 cutoff: 5.0
 n_rbf: 20
-lr: 1e-4
+lr: 5e-4
 
-name: iso17
-energy_key: total_energy
-forces_key: atomic_forces
+run_dir: runs/md17_${data.molecule}
+energy_key: energy
+forces_key: forces
 
 data:
   distance_unit: Ang
   property_units:
-    energy: eV
-    forces: eV/Ang
+    energy: kcal/mol
+    forces: kcal/mol/Ang
   transforms:
     - _target_: schnetpack.transform.SubtractCenterOfMass
     - _target_: schnetpack.transform.RemoveOffsets
-      property: total_energy
+      property: energy
       remove_mean: True
     - _target_: schnetpack.transform.ASENeighborList
       cutoff: ${cutoff}
     - _target_: schnetpack.transform.CastTo32
 
-
 model:
   postprocess:
     - _target_: schnetpack.transform.CastTo64
     - _target_: schnetpack.transform.AddOffsets
-      property: total_energy
+      property: energy
       add_mean: True
 
