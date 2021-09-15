@@ -7,13 +7,13 @@ import torch.nn.functional as F
 import schnetpack.properties as properties
 import schnetpack.nn as snn
 
-__all__ = ["PaiNN"]
+__all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
 
 
 class PaiNNInteraction(nn.Module):
     r"""PaiNN interaction block for modeling equivariant interactions of atomistic systems."""
 
-    def __init__(self, n_atom_basis: int, activation: Callable, epsilon: float = 1e-8):
+    def __init__(self, n_atom_basis: int, activation: Callable):
         """
         Args:
             n_atom_basis: number of features to describe atomic environments.
@@ -27,12 +27,6 @@ class PaiNNInteraction(nn.Module):
             snn.Dense(n_atom_basis, n_atom_basis, activation=activation),
             snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
         )
-        self.intraatomic_context_net = nn.Sequential(
-            snn.Dense(2 * n_atom_basis, n_atom_basis, activation=activation),
-            snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
-        )
-        self.mu_channel_mix = snn.Dense(n_atom_basis, 2 * n_atom_basis, activation=None)
-        self.epsilon = epsilon
 
     def forward(
         self,
@@ -70,6 +64,39 @@ class PaiNNInteraction(nn.Module):
         q = q + dq
         mu = mu + dmu
 
+        return q, mu
+
+
+class PaiNNMixing(nn.Module):
+    r"""PaiNN interaction block for mixing on atom features."""
+
+    def __init__(self, n_atom_basis: int, activation: Callable, epsilon: float = 1e-8):
+        """
+        Args:
+            n_atom_basis: number of features to describe atomic environments.
+            activation: if None, no activation function is used.
+            epsilon: stability constant added in norm to prevent numerical instabilities
+        """
+        super(PaiNNMixing, self).__init__()
+        self.n_atom_basis = n_atom_basis
+
+        self.intraatomic_context_net = nn.Sequential(
+            snn.Dense(2 * n_atom_basis, n_atom_basis, activation=activation),
+            snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
+        )
+        self.mu_channel_mix = snn.Dense(n_atom_basis, 2 * n_atom_basis, activation=None)
+        self.epsilon = epsilon
+
+    def forward(self, q: torch.Tensor, mu: torch.Tensor):
+        """Compute intraatomic mixing.
+
+        Args:
+            q: scalar input values
+            mu: vector input values
+
+        Returns:
+            atom features after interaction
+        """
         ## intra-atomic
         mu_mix = self.mu_channel_mix(mu)
         mu_V, mu_W = torch.split(mu_mix, self.n_atom_basis, dim=-1)
@@ -150,6 +177,13 @@ class PaiNN(nn.Module):
 
         self.interactions = snn.replicate_module(
             lambda: PaiNNInteraction(
+                n_atom_basis=self.n_atom_basis, activation=activation
+            ),
+            self.n_interactions,
+            shared_interactions,
+        )
+        self.mixing = snn.replicate_module(
+            lambda: PaiNNMixing(
                 n_atom_basis=self.n_atom_basis, activation=activation, epsilon=epsilon
             ),
             self.n_interactions,
@@ -191,8 +225,9 @@ class PaiNN(nn.Module):
         qs = q.shape
         mu = torch.zeros((qs[0], 3, qs[2]), device=q.device)
 
-        for i, interaction in enumerate(self.interactions):
+        for i, interaction, mixing in enumerate(zip(self.interactions, self.mixing)):
             q, mu = interaction(q, mu, filter_list[i], dir_ij, idx_i, idx_j, n_atoms)
+            q, mu = mixing(q, mu)
 
         q = q.squeeze(1)
 
