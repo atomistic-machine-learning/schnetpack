@@ -471,10 +471,10 @@ class ASEAtomsData(BaseAtomsData):
         valid_props = set().union(
             conn.metadata["_property_unit_dict"].keys(),
             [
-                properties[structure.Z],
-                properties[structure.R],
-                properties[structure.cell],
-                properties[structure.pbc],
+                structure.Z,
+                structure.R,
+                structure.cell,
+                structure.pbc,
             ],
         )
         for prop in properties:

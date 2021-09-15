@@ -1,16 +1,17 @@
 # @package _global_
 
 defaults:
-  - train
   - override /model: single_property
-  - override /data: ani1
+  - override /data: omdb
 
 cutoff: 5.0
 n_rbf: 20
+
 lr: 1e-3
 
-property: energy
-run_dir: runs/ani1_${property}
+property: band_gap
+run_dir: runs/mp_${property}
+
 
 data:
   distance_unit: Ang
@@ -33,4 +34,3 @@ model:
       property: ${property}
       add_mean: True
       add_atomrefs: True
-

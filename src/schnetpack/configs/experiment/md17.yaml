@@ -1,7 +1,6 @@
 # @package _global_
 
 defaults:
-  - train
   - override /model: pes
   - override /data: md17
 

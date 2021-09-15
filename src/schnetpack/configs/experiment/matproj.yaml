@@ -1,41 +1,28 @@
 # @package _global_
 
 defaults:
-  - train
   - override /model: single_property
-  - override /data: qm9
+  - override /data: materials_project
 
 cutoff: 5.0
 n_rbf: 20
-lr: 5e-4
+lr: 1e-3
 
-property: energy_U0
-run_dir: runs/qm9_${property}
+property: formation_energy_per_atom
+run_dir: runs/mp_${property}
 
 data:
   distance_unit: Ang
-  property_units: # convert to typically used energy units
-    energy_U0: eV
-    energy_U: eV
-    enthalpy_H: eV
-    free_energy: eV
-    homo: eV
-    lumo: eV
-    gap: eV
-    zpve: eV
-
+  property_units:
+    energy: eV
   transforms:
     - _target_: schnetpack.transform.SubtractCenterOfMass
     - _target_: schnetpack.transform.RemoveOffsets
       property: ${property}
       remove_atomrefs: True
       remove_mean: True
-    - _target_: schnetpack.transform.CachedNeighborList
-      cache_path: ${work_dir}/cache
-      keep_cache: False
-      neighbor_list:
-        _target_: schnetpack.transform.ASENeighborList
-        cutoff: ${cutoff}
+    - _target_: schnetpack.transform.ASENeighborList
+      cutoff: ${cutoff}
     - _target_: schnetpack.transform.CastTo32
 
 model:

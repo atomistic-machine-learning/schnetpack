@@ -9,6 +9,7 @@ defaults:
   - model: null
   - data: custom
   - logger: tensorboard
+  - experiment: null
 
 work_dir: ${hydra:runtime.cwd}
 data_dir: ${hydra:runtime.cwd}/data
@@ -27,6 +28,10 @@ hydra:
     run:
         dir: ${run_dir}/${run_id}
 
+    searchpath:
+      - file://${oc.env:PWD}
+      - file://${oc.env:PWD}/configs
+
     # disable hydra config storage, since handled manually
     output_subdir: null
 
@@ -43,17 +48,24 @@ hydra:
 
         == Config ==
         This is the config generated for this run.
-        You can change the config file to be loaded to a predefined one
-        > spktrain --config-name=train_qm9
-
-        or your own:
-        > spktrain --config-dir=./my_configs --config-name=my_config
-
-        You can override everything, for example:
-        > spktrain --config-name=train_qm9 data_dir=/path/to/datadir data.batch_size=50 --help
 
         -------
         $CONFIG
         -------
+
+        You can overide the config file with a pre-defined experiment config
+        > spktrain experiment=qm9
+
+        or your own experiment config, which needs to be located in a directory called `experiment` in the config search
+        path, e.g.,
+        > spktrain --config-dir=./my_configs experiment=my_experiment
+
+        with your experiment config located at `./my_configs/experiment/my_experiment.yaml`.
+        Your current working directory as well as an optional config subdirectory are automatically in the config
+        search path. Therefore, you can put your experiment config either in `$PWD/experiment`,
+        or `$PWD/configs/experiment`.
+
+        You can also override everything with the command line, for example:
+        > spktrain experiment=qm9 data_dir=/path/to/datadir data.batch_size=50
 
         ${hydra.help.footer}
