@@ -51,7 +51,6 @@ stress: Final[str] = "stress"
 masses: Final[str] = "masses"
 dipole_moment: Final[str] = "dipole_moment"
 polarizability: Final[str] = "polarizability"
-shielding: Final[str] = "shielding"
 hessian: Final[str] = "hessian"
 dipole_derivatives: Final[str] = "dipole_derivatives"
 polarizability_derivatives: Final[str] = "polarizability_derivatives"
@@ -60,4 +59,16 @@ partial_charges: Final[str] = "partial_charges"
 electric_field: Final[str] = "electric_field"
 magnetic_field: Final[str] = "magnetic_field"
 nuclear_magnetic_moments: Final[str] = "nuclear_magnetic_moments"
+shielding: Final[str] = "shielding"
 nuclear_spin_coupling: Final[str] = "nuclear_spin_coupling"
+
+## external fields needed for different response properties
+required_external_fields = {
+    dipole_moment: [electric_field],
+    dipole_derivatives: [electric_field],
+    partial_charges: [electric_field],
+    polarizability: [electric_field],
+    polarizability_derivatives: [electric_field],
+    shielding: [magnetic_field],
+    nuclear_spin_coupling: [magnetic_field],
+}

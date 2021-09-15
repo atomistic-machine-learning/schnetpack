@@ -1,6 +1,8 @@
 import importlib
 import torch
-from typing import Type, Union
+from typing import Type, Union, List
+
+from schnetpack import properties as spk_properties
 
 
 def int2precision(precision: Union[int, torch.dtype]):
@@ -38,3 +40,22 @@ def str2class(class_path: str) -> Type:
     module_name = ".".join(class_path[:-1])
     cls = getattr(importlib.import_module(module_name), class_name)
     return cls
+
+
+def required_fields_from_properties(properties: List[str]) -> List[str]:
+    """
+    Determine required external fields based on the response properties to be computed.
+
+    Args:
+        properties (list(str)): List of response properties for which external fields should be determined.
+
+    Returns:
+        list(str): List of required external fields.
+    """
+    required_fields = []
+
+    for p in properties:
+        if p in spk_properties.required_external_fields:
+            required_fields += spk_properties.required_external_fields[p]
+
+    return required_fields
