@@ -1,0 +1,38 @@
+# @package _global_
+
+defaults:
+  - train_base
+  - override /model: response
+  - override /data: custom
+  - override /logger: tensorboard
+
+cutoff: 9.448
+n_rbf: 20
+lr: 1e-4
+
+name: custom_data
+energy_key: energy
+response_properties:
+  - forces
+  - dipole_moment
+  - polarizability
+
+data:
+  distance_unit: 1.0
+  transforms:
+    - _target_: schnetpack.transform.SubtractCenterOfMass
+    - _target_: schnetpack.transform.RemoveOffsets
+      property: ${energy_key}
+      remove_mean: True
+    - _target_: schnetpack.transform.ExternalFields
+      response_properties: ${response_properties}
+    - _target_: schnetpack.transform.ASENeighborList
+      cutoff: ${cutoff}
+    - _target_: schnetpack.transform.CastTo32
+
+model:
+  postprocess:
+    - _target_: schnetpack.transform.CastTo64
+    - _target_: schnetpack.transform.AddOffsets
+      property: ${energy_key}
+      add_mean: True
