@@ -46,7 +46,7 @@ extensions = [
     "nbsphinx",
 ]
 
-autodoc_mock_imports = ["torch", "pytorch_lightning"]
+autodoc_mock_imports = ["torch", "pytorch_lightning", "torchmetrics"]
 autoclass_content = "both"
 autosummary_generate = True
 

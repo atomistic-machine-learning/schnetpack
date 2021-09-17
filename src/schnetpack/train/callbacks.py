@@ -1,7 +1,7 @@
 from copy import copy
 from typing import Dict
 
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint as BaseModelCheckpoint
 
 import schnetpack as spk
 
@@ -15,7 +15,16 @@ __all__ = ["ModelCheckpoint", "PredictionWriter"]
 
 
 class PredictionWriter(BasePredictionWriter):
+    """
+    Callback to store prediction results using ``torch.save``.
+    """
+
     def __init__(self, output_dir: str, write_interval: str):
+        """
+        Args:
+            output_dir: output directory for prediction files
+            write_interval: can be one of ["batch", "epoch", "batch_and_epoch"]
+        """
         super().__init__(write_interval)
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
@@ -44,9 +53,9 @@ class PredictionWriter(BasePredictionWriter):
         torch.save(predictions, os.path.join(self.output_dir, "predictions.pt"))
 
 
-class ModelCheckpoint(ModelCheckpoint):
+class ModelCheckpoint(BaseModelCheckpoint):
     """
-    Just like the PyTorch Lightning ModelCheckpoint callback,
+    Like the PyTorch Lightning ModelCheckpoint callback,
     but also saves the best inference model with activated post-processing
     """
 

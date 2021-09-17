@@ -59,6 +59,8 @@ def _atoms_collate_fn(batch):
 
 
 class AtomsLoader(DataLoader):
+    """ Data loader for subclasses of BaseAtomsData """
+
     def __init__(
         self,
         dataset: Dataset[T_co],

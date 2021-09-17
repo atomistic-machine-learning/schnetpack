@@ -11,9 +11,9 @@ Installation
 Requirements
 ^^^^^^^^^^^^
 
-* `Python <http://www.python.org/>`_ (>=3.6)
-* `PyTorch <https://pytorch.org/docs/stable/index.html>`_ (>=1.7)
-* `PyTorchLightning <https://www.pytorchlightning.ai/>`_ (>=1.3.3)
+* `Python <http://www.python.org/>`_ (>=3.8)
+* `PyTorch <https://pytorch.org/docs/stable/index.html>`_ (>=1.9)
+* `PyTorchLightning <https://www.pytorchlightning.ai/>`_ (>=1.4.5)
 * `Hydra <https://hydra.cc/>`_ (>=1.1.0)
 * `ASE <https://wiki.fysik.dtu.dk/ase/index.html>`_ (>=3.21)
 
@@ -33,24 +33,17 @@ Requirements
 Building from source
 ^^^^^^^^^^^^^^^^^^^^
 
-You can directly build a path from source through git clone. To do so, just type::
+You can also install the most recent code from our repository::
 
    $ git clone https://github.com/atomistic-machine-learning/schnetpack.git <dest_dir>
-
-then move in the new directory ``<dest_dir>``::
-
    $ cd <dest_dir>
 
-install both requirements and schnetpack::
+Install both requirements and SchNetPack::
 
    $ pip install -r requirements.txt
    $ pip install .
 
-and run tests to be sure everything runs as expected::
-
-   $ pytest
-
-Once that's done, you are ready to go!
+You are ready to go!
 
 
 Visualization with Tensorboard
@@ -73,6 +66,18 @@ The CLI is based on `Hydra <https://hydra.cc/>`_ and oriented on the PyTorch Lig
 This enables a flexible configuration of the model, data and training process.
 To fully take advantage of these features, it might be helpful for have a look at the Hydra and PyTorch Lightning docs.
 
+Recommended workflow
+^^^^^^^^^^^^^^^^^^^^
+
+We recommend that you create a working directory, where you can save your configs and SchNetPack will put all
+data, models and logs::
+
+    $ mkdir spk_workdir
+
+This way, you will have to makeIf you have stored 
+
+
+
 Example 1: QM9
 ^^^^^^^^^^^^^^
 
@@ -80,7 +85,7 @@ In the following, we focus on using the CLI to train on the QM9 dataset, but the
 procedure applies for the other benchmark datasets as well. The training can be
 started using::
 
-   $ spktrain +experiment=qm9 data_dir=<path>
+   $ spktrain experiment=qm9 data_dir=<path>
 
 This will print the defaults for the experiment config ``qm9`` and set the data directory to the chosen location.
 The dataset will be downloaded automatically if it does not exist there.
