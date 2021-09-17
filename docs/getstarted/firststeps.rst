@@ -1,8 +1,11 @@
+===========
+First steps
+===========
+
 SchNetPack aims to provide accessible atomistic neural networks
 that can be trained and applied out-of-the-box, while still being
 extensible to custom atomistic architectures.
 
-============
 Installation
 ============
 
@@ -54,9 +57,8 @@ The default logger is Tensorboard, which can be installed via::
    $ pip install tensorboard
 
 
-======================
-Command line interface
-======================
+Training pre-defined models
+===========================
 
 The best place to get started is training a SchNetPack model on a common benchmark dataset via the command line
 interface (CLI).
@@ -66,49 +68,42 @@ The CLI is based on `Hydra <https://hydra.cc/>`_ and oriented on the PyTorch Lig
 This enables a flexible configuration of the model, data and training process.
 To fully take advantage of these features, it might be helpful for have a look at the Hydra and PyTorch Lightning docs.
 
-Recommended workflow
-^^^^^^^^^^^^^^^^^^^^
-
-We recommend that you create a working directory, where you can save your configs and SchNetPack will put all
-data, models and logs::
-
-    $ mkdir spk_workdir
-
-This way, you will have to makeIf you have stored 
-
-
 
 Example 1: QM9
 ^^^^^^^^^^^^^^
 
 In the following, we focus on using the CLI to train on the QM9 dataset, but the same
-procedure applies for the other benchmark datasets as well. The training can be
-started using::
+procedure applies for the other benchmark datasets as well.
+First, create a working directory, where all data and runs will be stored::
 
-   $ spktrain experiment=qm9 data_dir=<path>
+    $ mkdir spk_workdir
+    $ cd spk_workdir
 
-This will print the defaults for the experiment config ``qm9`` and set the data directory to the chosen location.
-The dataset will be downloaded automatically if it does not exist there.
+Them, the training of a SchNet model with default settings for QM9 can be started by::
+
+   $ spktrain experiment=qm9
+
+The script prints the defaults for the experiment config ``qm9``.
+The dataset will be downloaded automatically to ``spk_workdir/data``, if it does not exist yet.
 Then, the training will be started.
 
-All values of the config can be changed from the command line.
-For example, the model will be stored in a directory with a unique run id as a subdirectory of the
-current working directory which is by default called ``runs``.
+All values of the config can be changed from the command line, including the directories for run and data.
+By default, the model is stored in a directory with a unique run id hash as a subdirectory of ``spk_workdir/runs``.
 This can be changed as follows::
 
-   $ spktrain +experiment=qm9 data_dir=<path> run_dir=~/all_my_runs run_id=this_run
+   $ spktrain experiment=qm9 data_dir=/my/data/dir run_dir=~/all_my_runs run_id=this_run
 
 If you call ``spktrain +experiment=qm9 --help``, you can see the full config with all the parameters
 that can be changed.
 Nested parameters can be changed as follows::
 
-   $ spktrain +experiment=qm9 data_dir=<path> data.batch_size=64
+   $ spktrain experiment=qm9 data_dir=<path> data.batch_size=64
 
 Hydra organizes parameters in config groups which allows hierarchical configurations consisting of multiple
 yaml files. This allows to easily change the whole dataset, model or representation.
 For instance, changing from the default SchNet representation to PaiNN, use::
 
-   $ spktrain +experiment=qm9 data_dir=<path> model/representation=painn
+   $ spktrain experiment=qm9 data_dir=<path> model/representation=painn
 
 For more details on config groups, have a look at the
 `Hydra docs <https://hydra.cc/docs/next/tutorials/basic/your_first_app/config_groups>`_.
@@ -117,11 +112,15 @@ For more details on config groups, have a look at the
 Example 2: Potential energy surfaces
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The example above uses the :class:`SinglePropertyModel` internally, which is a
-:class:`pytorch_lightning.LightningModule` for predicting single properties.
-The following example will use the PESModel, which can be used for predicting potential energy surfaces,
+The example above uses :class:`AtomisticModel` internally, which is a
+:class:`pytorch_lightning.LightningModule`, to predict single properties.
+The following example will use the same class to predict potential energy surfaces,
 in particular energies with the appropriate derivates to obtain forces and stress tensors.
-For more details on the available models, see :ref:`here<schnetpack.model>`
+This works since the pre-defined configuration for the MD17 dataset,
+provided from the command line by ``experiment=md17``, is selecting the representation and output modules that
+:class:`AtomisticModel` is using.
+A more detailed description of the configuration and how to build your custom configs can be
+found :ref:`here <configs>`.
 
 The ``spktrain`` script can be used to train a model for a molecule from the MD17 datasets::
 
@@ -149,70 +148,9 @@ If TensorBoard is installed, the results can be shown by calling::
 Furthermore, SchNetPack comes with configs for a CSV logger and `Aim <https://github.com/aimhubio/aim>`_.
 These can be selected as follows::
 
-   $ spktrain data_dir=<path> +experiment=md17 logger=csv/aim
+   $ spktrain data_dir=<path> +experiment=md17 logger=csv
 
 
-===============
-Representations
-===============
-
-SchNetPack currently supports SchNet, PaiNN and (w)ACSF.
-
-SchNet
-^^^^^^
-
-SchNet [#schnet1]_ [#schnet2]_ [#schnet3]_ is an end-to-end deep neural network architecture based on continuous-filter convolutions.
-It follows the deep tensor neural network framework, i.e. atom-wise representations are constructed by starting from
-embedding vectors that characterize the atom type before introducing the configuration of the system by a series of
-interaction blocks.
-
-PaiNN
-^^^^^
-
-PaiNN [#painn1]_ is the successor to SchNet, overcoming limitations of invariant representations
-by using equivariant representations.
-It improves over previous networks in terms of accuracy and/or data efficiency.
-
-ACSF & (w)ACSF
-^^^^^^^^^^^^^^
-
-ACSFs [#wacsf1]_ [#wacsf2]_  describe the local chemical environment around a central atom via a combination of radial and angular
-distribution functions. Those model come from Behler–Parrinello networks, based on atom centered symmetry functions (ACSFs).
-Moreover, wACSF comes as an extensions of this latest. It uses weighted atom-centered symmetry functions (wACSF).
-Whereas for SchNet, features are learned by the network, for ACSFs (and wACSFs) we need to introduce some handcrafted
-features before training.
-
-==================
-Benchmark Datasets
-==================
-
-SchNetPack provides convenient interfaces to popular benchmark datasets in order to train and test models.
-
-QM9
-^^^
-The ``qm9`` dataset contains 133,885 organic molecules with up to nine heavy atoms from C, O, N and F [#gsqm9]_.
-
-MD17
-^^^^
-The ``md17`` dataset allows to do molecular dynamics of small molecules containing molecular forces [#qm]_.
-
-ANI1
-^^^^
-The ``ani1`` dataset consists of more than 20 million conformations for 57454 small organic molecules from C, O and N [#ani]_.
-
-Materials Project
-^^^^^^^^^^^^^^^^^
-A repository of bulk crystals containing atom types ranging across the whole periodic table up to Z = 94 [#mp]_.
-
-OMDB
-^^^^
-The ``omdb`` dataset contains data from Organic Materials Database (OMDB) of bulk organic crystals.
-This database contains DFT (PBE) band gap (OMDB-GAP1 database) for 12500 non-magnetic materials.
-The registration to the OMDB is free for academic users. [#omdb]_.
-
-
-
-==========
 References
 ==========
 
@@ -233,31 +171,8 @@ References
    `SchNet - a deep learning architecture for molecules and materials <https://aip.scitation.org/doi/10.1063/1.5019779>`_
    The Journal of Chemical Physics **148** (24), 241722, 2018.
 
-.. [#painn1] Schütt, Unke, Gastegger:
+.. [#painn1a] Schütt, Unke, Gastegger:
    Equivariant message passing for the prediction of tensorial properties and molecular spectra.
-   ICML 2021 (to appear)
-
-.. [#wacsf1] M. Gastegger, L. Schwiedrzik, M. Bittermann, F. Berzsenyi, P. Marquetand.
-   `wACSF—Weighted atom-centered symmetry functions as descriptors in machine learning potentials <https://aip.scitation.org/doi/10.1063/1.5019667>`_
-   The Journal of Chemical Physics **148** (24), 241709. 2018.
-
-.. [#wacsf2] J. Behler, M. Parrinello.
-   `Generalized neural-network representation of high-dimensional potential-energy surfaces <https://link.aps.org/doi/10.1103/PhysRevLett.98.146401>`_
-   Physical Review Letters **98** (14), 146401. 2007.
-
-.. [#gsqm9] R. Ramakrishnan, P.O. Dral, M. Rupp, O. A. von Lilienfeld.
-   `Quantum chemistry structures and properties of 134 kilo molecules <https://doi.org/10.1038/sdata.2014.22>`_
-   Scientific Data **1** (140022). 2014.
-
-.. [#ani] J.S. Smith, O. Isayev, A.E. Roitberg.
-    `ANI-1, A data set of 20 million calculated off-equilibrium conformations for organic molecules. <https://doi.org/10.1038/sdata.2017.193>`_
-    Scientific Data **4** (170193). 2017.
+   ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
 
 .. [#qm] `Quantum-Machine.org <http://www.quantum-machine.org/data>`_
-
-.. [#omdb] `Organic Materials Database (OMDB) <https://omdb.mathub.io/dataset/>`_
-
-.. [#mp] A. Jain, S.P. Ong, G. Hautier, W. Chen, W.D. Richards, S. Dacek,
-    S. Cholia, D. Gunter, D. Skinner, G. Ceder, K.A. Persson.
-    `The Materials Project: A materials genome approach to accelerating materials innovation <https://doi.org/10.1063/1.4812323>`_
-    APL Materials **1** (1), 011002. 2013.

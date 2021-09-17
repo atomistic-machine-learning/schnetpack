@@ -19,11 +19,12 @@ Contents
    :caption: Getting Started
    :maxdepth: 1
 
-   getstarted/getstarted
+   getstarted/firststeps
+   getstarted/configs
 
 .. toctree::
    :glob:
-   :caption: Tutorials
+   :caption: SchNetPack from Python
    :maxdepth: 1
 
    tutorials/tutorial_01_preparing_data
