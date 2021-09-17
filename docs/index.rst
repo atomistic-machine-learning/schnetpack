@@ -20,7 +20,8 @@ Contents
    :maxdepth: 1
 
    getstarted/firststeps
-   getstarted/configs
+   getstarted/train_cli
+   getstarted/md
 
 .. toctree::
    :glob:
