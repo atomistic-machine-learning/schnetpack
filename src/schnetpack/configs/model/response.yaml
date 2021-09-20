@@ -22,7 +22,7 @@ outputs:
         _target_: torchmetrics.regression.MeanAbsoluteError
       mse:
         _target_: torchmetrics.regression.MeanSquaredError
-    loss_weight: 1.00
+    loss_weight: 0.05
   - _target_: schnetpack.atomistic.ModelOutput
     name: forces
     loss_fn:
@@ -32,7 +32,7 @@ outputs:
         _target_: torchmetrics.regression.MeanAbsoluteError
       mse:
         _target_: torchmetrics.regression.MeanSquaredError
-    loss_weight: 0.25
+    loss_weight: 0.95
   - _target_: schnetpack.atomistic.ModelOutput
     name: dipole_moment
     loss_fn:
@@ -42,7 +42,7 @@ outputs:
         _target_: torchmetrics.regression.MeanAbsoluteError
       mse:
         _target_: torchmetrics.regression.MeanSquaredError
-    loss_weight: 0.0010
+    loss_weight: 0.001
   - _target_: schnetpack.atomistic.ModelOutput
     name: polarizability
     loss_fn:
