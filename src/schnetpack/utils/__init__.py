@@ -52,10 +52,12 @@ def required_fields_from_properties(properties: List[str]) -> List[str]:
     Returns:
         list(str): List of required external fields.
     """
-    required_fields = []
+    required_fields = set()
 
     for p in properties:
         if p in spk_properties.required_external_fields:
-            required_fields += spk_properties.required_external_fields[p]
+            required_fields.update(spk_properties.required_external_fields[p])
+
+    required_fields = list(required_fields)
 
     return required_fields
