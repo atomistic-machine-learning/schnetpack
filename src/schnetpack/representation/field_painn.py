@@ -11,7 +11,7 @@ import schnetpack.nn as snn
 from schnetpack.representation import PaiNNInteraction, PaiNNMixing
 from schnetpack.utils import required_fields_from_properties
 
-__all__ = ["FieldPaiNN"]
+__all__ = ["FieldPaiNN", "NuclearMagneticMomentEmbedding"]
 
 
 class FieldInteraction(nn.Module):
