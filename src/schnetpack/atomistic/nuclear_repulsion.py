@@ -24,20 +24,26 @@ class ZBLRepulsionEnergy(nn.Module):
         cutoff_fn: Optional[Callable] = None,
     ):
         """
-
         Args:
             energy_unit (str/float): Energy unit.
             position_unit (str/float): Unit used for distances.
             output_key (str): Key to which results will be stored
             trainable (bool): If set to true, ZBL parameters will be optimized during training (default=True)
             cutoff_fn (Callable): Apply a cutoff function to the interatomic distances.
+
+        References:
+        .. [#Cutoff] Ebert, D. S.; Musgrave, F. K.; Peachey, D.; Perlin, K.; Worley, S.
+           Texturing & Modeling: A Procedural Approach;
+           Morgan Kaufmann, 2003
+        .. [#ZBL]
+           https://docs.lammps.org/pair_zbl.html
         """
         super(ZBLRepulsionEnergy, self).__init__()
 
         energy_units = spk_units.convert_units("Ha", energy_unit)
         position_units = spk_units.convert_units("Bohr", position_unit)
         ke = energy_units * position_units
-        self.ke = self.register_buffer("ke", torch.tensor(ke))
+        self.register_buffer("ke", torch.tensor(ke))
 
         self.cutoff_fn = cutoff_fn
         self.output_key = output_key
