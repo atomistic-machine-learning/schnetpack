@@ -39,17 +39,9 @@ def setup_md_units(md_base_units: Dict[str, Union[str, float]]):
     units["stress"] = units["energy"] / units["length"] ** 3
     units["pressure"] = units["stress"]
 
-    # Constants (internal frame)
-    units["kB"] = aseunits.kB / units["energy"]  # Always uses Kelvin
-    units["hbar"] = (
-        aseunits._hbar * (aseunits.J * aseunits.s) / (units["energy"] * units["time"])
-    )  # hbar is given in J*s by ASE
-
-    # For spectra
-    units["hbar2icm"] = units["hbar"] * 100.0 * aseunits._c * aseunits._aut
-
     # Conversion of length units
     units["A"] = aseunits.Angstrom / units["length"]
+    units["Ang"] = units["A"]
     units["Angs"] = units["A"]
     units["Angstrom"] = units["A"]
     units["nm"] = aseunits.nm / units["length"]
@@ -81,6 +73,19 @@ def setup_md_units(md_base_units: Dict[str, Union[str, float]]):
 
     # Charge distributions
     units["Debye"] = aseunits.Debye / (units["charge"] * units["length"])
+    units["C"] = aseunits.C / units["charge"]
+
+    # Constants (internal frame)
+    units["kB"] = aseunits.kB / units["energy"]  # Always uses Kelvin
+    units["hbar"] = (
+        aseunits._hbar * (aseunits.J * aseunits.s) / (units["energy"] * units["time"])
+    )  # hbar is given in J*s by ASE
+    units["ke"] = (
+        units["a0"] * units["Ha"] / units["charge"] ** 2
+    )  # Coulomb constant is 1 in atomic units
+
+    # For spectra
+    units["hbar2icm"] = units["hbar"] * 100.0 * aseunits._c * aseunits._aut
 
     return units
 
@@ -99,6 +104,7 @@ def setup_md_units(md_base_units: Dict[str, Union[str, float]]):
     hbar,
     hbar2icm,
     A,
+    Ang,
     Angs,
     Angstrom,
     nm,
@@ -116,9 +122,11 @@ def setup_md_units(md_base_units: Dict[str, Union[str, float]]):
     Dalton,
     amu,
     Debye,
+    C,
+    ke,
     bar,
     Pascal,
-) = [0.0] * 31
+) = [0.0] * 34
 
 
 def _conversion_factor_ase(unit: str):
