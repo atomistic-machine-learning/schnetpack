@@ -159,6 +159,7 @@ class EnergyEwaldError(Exception):
 class EnergyEwald(torch.nn.Module):
     """
     Compute the Coulomb energy of a set of point charges inside a periodic box.
+    Only works for periodic boundary conditions in all three spatial directions and orthorhombic boxes.
 
     Args:
         alpha (float): Ewald alpha.
@@ -278,7 +279,6 @@ class EnergyEwald(torch.nn.Module):
     ) -> torch.Tensor:
         """
         Compute the real space contribution of the screened charges.
-        Only works for periodic boundary conditions in all three spatial directions and orthorhombic boxes.
 
         Args:
             q (torch.Tensor): Partial charges.
