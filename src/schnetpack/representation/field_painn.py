@@ -62,7 +62,7 @@ class FieldInteraction(nn.Module):
             alpha_vector = self.vector_component[field](mu)
             dmu_field = (
                 alpha_scalar * external_fields[field]
-                + torch.sum(alpha_vector * external_fields[field], dim=1, keepdim=True)
+                - torch.sum(alpha_vector * external_fields[field], dim=1, keepdim=True)
                 * alpha_vector
             )
             dmu = dmu + dmu_field

@@ -211,7 +211,7 @@ class DipoleInteraction(nn.Module):
 
             mu_ij = mu[field][idx_j]
             # Dipole - dipole interaction tensor
-            tensor_ij = -mu_ij * d_ij[:, None, None] ** 2 + 3.0 * v_ij[
+            tensor_ij = mu_ij * d_ij[:, None, None] ** 2 - 3.0 * v_ij[
                 :, :, None
             ] * torch.sum(v_ij[:, :, None] * mu_ij, dim=1, keepdim=True)
             tensor_ij = tensor_ij * Wij / d_ij[:, None, None] ** 5
