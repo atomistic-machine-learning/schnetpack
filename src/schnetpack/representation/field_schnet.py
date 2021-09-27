@@ -226,13 +226,13 @@ class DipoleInteraction(nn.Module):
 
 class FieldSchNet(nn.Module):
     """FieldSchNet architecture for modeling interactions with external fields and response properties as described in
-     [#field4]_.
+    [#field4]_.
 
-     References:
-     .. [#field4] Gastegger, Schütt, Müller:
-        Machine learning of solvent effects on molecular spectra and reactions.
-        Chemical Science, 12(34), 11473-11483. 2021.
-     """
+    References:
+    .. [#field4] Gastegger, Schütt, Müller:
+       Machine learning of solvent effects on molecular spectra and reactions.
+       Chemical Science, 12(34), 11473-11483. 2021.
+    """
 
     def __init__(
         self,
@@ -339,16 +339,16 @@ class FieldSchNet(nn.Module):
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
-         Compute atomic representations/embeddings.
+        Compute atomic representations/embeddings.
 
-         Args:
-             inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+        Args:
+            inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
 
-         Returns:
-             torch.Tensor: atom-wise representation.
-             list of torch.Tensor: intermediate atom-wise representations, if
-             return_intermediate=True was used.
-         """
+        Returns:
+            torch.Tensor: atom-wise representation.
+            list of torch.Tensor: intermediate atom-wise representations, if
+            return_intermediate=True was used.
+        """
         atomic_numbers = inputs[structure.Z]
         r_ij = inputs[structure.Rij]
         idx_i = inputs[structure.idx_i]

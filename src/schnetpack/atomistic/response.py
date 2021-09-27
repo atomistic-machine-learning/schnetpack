@@ -149,9 +149,11 @@ class Response(nn.Module):
         self.map_properties = map_properties
 
         # Set up instructions for computing response properties and derivatives
-        derivative_instructions, required_derivatives, graph_required = (
-            self._construct_properties()
-        )
+        (
+            derivative_instructions,
+            required_derivatives,
+            graph_required,
+        ) = self._construct_properties()
         self.derivative_instructions = derivative_instructions
         self.required_derivatives = required_derivatives
         self.graph_required = graph_required
