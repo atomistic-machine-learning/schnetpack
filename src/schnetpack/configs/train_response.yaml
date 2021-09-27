@@ -6,7 +6,7 @@ defaults:
   - override /data: custom
   - override /logger: tensorboard
 
-cutoff: 9.448
+cutoff: 9.449
 n_rbf: 20
 lr: 1e-4
 
