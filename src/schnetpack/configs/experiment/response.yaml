@@ -1,7 +1,6 @@
 # @package _global_
 
 defaults:
-  - train_base
   - override /model: response
   - override /data: custom
   - override /logger: tensorboard
