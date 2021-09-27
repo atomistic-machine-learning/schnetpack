@@ -1,16 +1,15 @@
 # @package _global_
 
 defaults:
-  - train_base
   - override /model: single_property
-  - override /data: ani1
+  - override /data: materials_project
 
 cutoff: 5.0
 n_rbf: 20
 lr: 1e-3
 
-property: energy
-name: ani1_${property}
+property: formation_energy_per_atom
+run_dir: runs/mp_${property}
 
 data:
   distance_unit: Ang
@@ -33,4 +32,3 @@ model:
       property: ${property}
       add_mean: True
       add_atomrefs: True
-

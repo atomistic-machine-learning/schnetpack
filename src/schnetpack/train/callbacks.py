@@ -1,33 +1,62 @@
-from typing import Dict, Any
-
-import torch
+from copy import copy
+from typing import Dict
 
 from pytorch_lightning.callbacks import ModelCheckpoint
+
 import schnetpack as spk
 
-__all__ = ["ModelCheckpoint"]
+import torch
+import os
+from pytorch_lightning.callbacks import BasePredictionWriter
+from typing import List, Any
+from schnetpack.atomistic import AtomisticModel
+
+__all__ = ["ModelCheckpoint", "PredictionWriter"]
+
+
+class PredictionWriter(BasePredictionWriter):
+    def __init__(self, output_dir: str, write_interval: str):
+        super().__init__(write_interval)
+        self.output_dir = output_dir
+        os.makedirs(output_dir, exist_ok=True)
+
+    def write_on_batch_end(
+        self,
+        trainer,
+        pl_module: AtomisticModel,
+        prediction: Any,
+        batch_indices: List[int],
+        batch: Any,
+        batch_idx: int,
+        dataloader_idx: int,
+    ):
+        bdir = os.path.join(self.output_dir, str(dataloader_idx))
+        os.makedirs(bdir, exist_ok=True)
+        torch.save(prediction, os.path.join(bdir, f"{batch_idx}.pt"))
+
+    def write_on_epoch_end(
+        self,
+        trainer,
+        pl_module: AtomisticModel,
+        predictions: List[Any],
+        batch_indices: List[Any],
+    ):
+        torch.save(predictions, os.path.join(self.output_dir, "predictions.pt"))
 
 
 class ModelCheckpoint(ModelCheckpoint):
     """
     Just like the PyTorch Lightning ModelCheckpoint callback,
-    but also saves the best inference model
+    but also saves the best inference model with activated post-processing
     """
 
-    def __init__(
-        self,
-        inference_path: str,
-        save_as_torch_script: bool = True,
-        method: str = "script",
-        *args,
-        **kwargs
-    ):
+    def __init__(self, inference_path: str, method: str = "script", *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.save_as_torch_script = save_as_torch_script
         self.inference_path = inference_path
         self.method = method
 
     def on_validation_end(self, trainer, pl_module) -> None:
+        self.trainer = trainer
         self.pl_module = pl_module
         super().on_validation_end(trainer, pl_module)
 
@@ -42,16 +71,20 @@ class ModelCheckpoint(ModelCheckpoint):
             current = torch.tensor(float("inf" if self.mode == "min" else "-inf"))
 
         if current == self.best_model_score:
-            if self.save_as_torch_script:
-                self.pl_module.to_torchscript(self.inference_path, method=self.method)
-            else:
-                if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
-                    imode = self.pl_module.inference_mode
-                    self.pl_module.inference_mode = True
-                mode = self.pl_module.training
+            if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
+                imode = self.pl_module.inference_mode
+                self.pl_module.inference_mode = True
+            mode = self.pl_module.training
 
-                torch.save(self.pl_module, self.inference_path)
+            if self.trainer.training_type_plugin.should_rank_save_checkpoint:
+                # remove references to trainer and data loaders to avoid picle error in ddp
+                model = copy(self.pl_module)
+                model.trainer = None
+                model.train_dataloader = None
+                model.val_dataloader = None
+                model.test_dataloader = None
+                torch.save(model, self.inference_path)
 
-                if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
-                    self.pl_module.inference_mode = imode
-                self.pl_module.train(mode)
+            if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
+                self.pl_module.inference_mode = imode
+            self.pl_module.train(mode)

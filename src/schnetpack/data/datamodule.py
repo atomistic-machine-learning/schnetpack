@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Tuple, Union
 
 
 import numpy as np
+import fasteners
 
 import pytorch_lightning as pl
 import torch
@@ -124,23 +125,30 @@ class AtomsDataModule(pl.LightningDataModule):
             datapath = self.datapath
         else:
             if not os.path.exists(self.data_workdir):
-                os.makedirs(self.data_workdir)
+                os.makedirs(self.data_workdir, exist_ok=True)
 
             name = self.datapath.split("/")[-1]
             datapath = os.path.join(self.data_workdir, name)
 
-            shutil.copy(self.datapath, datapath)
+            lock = fasteners.InterProcessLock(
+                os.path.join(self.data_workdir, f"cache_{name}.lock")
+            )
 
-            # reset datasets in case they need to be reloaded
-            self.dataset = None
-            self._train_dataset = None
-            self._val_dataset = None
-            self._test_dataset = None
+            with lock:
+                # retry reading, in case other process finished in the meantime
+                if not os.path.exists(datapath):
+                    shutil.copy(self.datapath, datapath)
 
-            # reset cleanup
-            self._has_teardown_fit = False
-            self._has_teardown_val = False
-            self._has_teardown_test = False
+                # reset datasets in case they need to be reloaded
+                self.dataset = None
+                self._train_dataset = None
+                self._val_dataset = None
+                self._test_dataset = None
+
+                # reset cleanup
+                self._has_teardown_fit = False
+                self._has_teardown_val = False
+                self._has_teardown_test = False
 
         # (re)load datasets
         if self.dataset is None:
@@ -165,7 +173,10 @@ class AtomsDataModule(pl.LightningDataModule):
     def teardown(self, stage: Optional[str] = None):
         if self.cleanup_workdir_stage and stage == self.cleanup_workdir_stage:
             if self.data_workdir is not None:
-                shutil.rmtree(self.data_workdir)
+                try:
+                    shutil.rmtree(self.data_workdir)
+                except:
+                    pass
                 self._has_setup_fit = False
                 self._has_setup_val = False
                 self._has_setup_test = False
@@ -265,29 +276,14 @@ class AtomsDataModule(pl.LightningDataModule):
 
     @property
     def train_dataset(self) -> BaseAtomsData:
-        if not self.has_prepared_data:
-            self.prepare_data()
-
-        if not self.has_setup_fit:
-            self.setup(stage="fit")
         return self._train_dataset
 
     @property
     def val_dataset(self) -> BaseAtomsData:
-        if not self.has_prepared_data:
-            self.prepare_data()
-
-        if not self.has_setup_fit:
-            self.setup(stage="fit")
         return self._val_dataset
 
     @property
     def test_dataset(self) -> BaseAtomsData:
-        if not self.has_prepared_data:
-            self.prepare_data()
-
-        if not self.has_setup_fit:
-            self.setup(stage="test")
         return self._test_dataset
 
     def train_dataloader(self) -> AtomsLoader:

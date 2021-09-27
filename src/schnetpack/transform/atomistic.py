@@ -5,6 +5,7 @@ from ase.data import atomic_masses
 
 import schnetpack.properties as structure
 from .base import Transform
+from schnetpack.nn import scatter_add
 
 __all__ = [
     "SubtractCenterOfMass",
@@ -90,13 +91,13 @@ class RemoveOffsets(Transform):
 
         if self.remove_atomrefs:
             atrefs = self._datamodule.train_dataset.atomrefs
-            self.atomref.copy_(torch.tensor(atrefs[self._property]))
+            self.atomref = atrefs[self._property].detach()
 
         if self.remove_mean:
             stats = self._datamodule.get_stats(
                 self._property, self.is_extensive, self.remove_atomrefs
             )
-            self.mean.copy_(stats[0])
+            self.mean = stats[0].detach()
 
     def forward(
         self,
@@ -146,17 +147,15 @@ class AddOffsets(Transform):
         self.register_buffer("mean", torch.zeros((1,)))
 
     def datamodule(self, value):
-        self._datamodule = value
-
         if self.add_atomrefs:
-            atrefs = self._datamodule.train_dataset.atomrefs
-            self.atomref.copy_(torch.tensor(atrefs[self._property]))
+            atrefs = value.train_dataset.atomrefs
+            self.atomref = atrefs[self._property].detach()
 
         if self.add_mean:
-            stats = self._datamodule.get_stats(
+            stats = value.get_stats(
                 self._property, self.is_extensive, self.add_atomrefs
             )
-            self.mean.copy_(stats[0])
+            self.mean = stats[0].detach()
 
     def forward(
         self,
@@ -174,10 +173,12 @@ class AddOffsets(Transform):
             idx_m = inputs[structure.idx_m]
             y0i = self.atomref[inputs[structure.Z]]
             maxm = int(idx_m[-1]) + 1
-            tmp = torch.zeros((maxm, y0i.shape[1]), dtype=y0i.dtype, device=y0i.device)
-            y0 = tmp.index_add(0, idx_m, y0i)
+
+            y0 = scatter_add(y0i, idx_m, dim_size=maxm)
+
             if not self.is_extensive:
                 y0 /= inputs[structure.n_atoms]
+
             x[self._property] -= y0
 
         return x

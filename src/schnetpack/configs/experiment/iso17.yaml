@@ -1,18 +1,16 @@
 # @package _global_
 
 defaults:
-  - train_base
   - override /model: pes
-  - override /data: custom
-  - override /logger: tensorboard
+  - override /data: iso17
 
 cutoff: 5.0
 n_rbf: 20
 lr: 1e-4
 
-name: custom_data
-energy_key: energy
-forces_key: forces
+run_dir: runs/iso17
+energy_key: total_energy
+forces_key: atomic_forces
 
 data:
   distance_unit: Ang
@@ -22,15 +20,17 @@ data:
   transforms:
     - _target_: schnetpack.transform.SubtractCenterOfMass
     - _target_: schnetpack.transform.RemoveOffsets
-      property: energy
+      property: total_energy
       remove_mean: True
     - _target_: schnetpack.transform.ASENeighborList
       cutoff: ${cutoff}
     - _target_: schnetpack.transform.CastTo32
 
+
 model:
   postprocess:
     - _target_: schnetpack.transform.CastTo64
     - _target_: schnetpack.transform.AddOffsets
-      property: energy
+      property: total_energy
       add_mean: True
+

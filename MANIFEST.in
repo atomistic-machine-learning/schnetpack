@@ -1,4 +1,4 @@
-recursive-include schnetpack *.py
-recursive-include schnetpack *.yaml
+recursive-include src/schnetpack *.py
+recursive-include src/schnetpack *.yaml
 global-exclude *.pyc
 global-exclude __pycache__

@@ -1,0 +1,6 @@
+defaults:
+  - default_trainer
+
+gpus: 2
+accelerator: ddp
+num_nodes: 1

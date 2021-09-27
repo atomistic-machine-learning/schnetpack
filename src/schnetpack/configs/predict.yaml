@@ -1,32 +1,36 @@
 # @package _global_
-
 defaults:
   - trainer: default_trainer
-  - callbacks: default_callbacks
-  - model: null
-  - data: null
-  - logger: tensorboard
 
-work_dir: ${hydra:runtime.cwd}
-data_dir: ${hydra:runtime.cwd}/data
-name: default
-
-print_config: True
-run_dir: runs
-run_id: ${uuid:1}
-
+datapath: ???
+modeldir: ???
+outputdir: ???
 cutoff: ???
-n_rbf: ???
-lr: ???
+batch_size: 100
+write_interval: batch_and_epoch
+
+
+data:
+  _target_: schnetpack.data.ASEAtomsData
+  datapath: ${datapath}
+  transforms:
+    - _target_: schnetpack.transform.SubtractCenterOfMass
+    - _target_: schnetpack.transform.ASENeighborList
+      cutoff: ${cutoff}
+    - _target_: schnetpack.transform.CastTo32
+
 
 # hydra configuration
 hydra:
     # output paths for hydra logs
     run:
-        dir: ${run_dir}/${name}/${run_id}
+        dir: ${modeldir}
+
+    # disable hydra config storage, since handled manually
+    output_subdir: null
 
     help:
-      app_name: SchNetPack Train
+      app_name: SchNetPack Predict
 
       template: |-
         SchNetPack

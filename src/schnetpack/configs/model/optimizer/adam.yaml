@@ -1,0 +1,5 @@
+# @package model
+optimizer_cls: torch.optim.AdamW
+optimizer_args:
+  lr: ${lr}
+  weight_decay: 0.0
