@@ -116,7 +116,8 @@ class AtomisticModel(pl.LightningModule):
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
         for p in self.required_derivatives:
-            inputs[p].requires_grad_()
+            if p in inputs:
+                inputs[p].requires_grad_()
 
         inputs.update(self.representation(inputs))
 
