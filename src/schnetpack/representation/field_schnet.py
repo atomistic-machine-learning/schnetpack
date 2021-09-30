@@ -1,21 +1,20 @@
 from typing import Callable, Dict, List, Optional
 
 import torch
-from torch import nn
+from torch import nn, nn as nn
 from torch.nn.init import zeros_
 
 import schnetpack.properties as structure
 from schnetpack.nn import Dense, scatter_add
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.representation.schnet import SchNetInteraction
-from schnetpack.representation.field_painn import NuclearMagneticMomentEmbedding
 from schnetpack.utils import required_fields_from_properties
 
-from schnetpack import properties
+from schnetpack import properties, nn as snn
 
 import schnetpack.nn as snn
 
-__all__ = ["FieldSchNet"]
+__all__ = ["FieldSchNet", "NuclearMagneticMomentEmbedding", "_setup_external_fields"]
 
 
 class FieldSchNetFieldInteraction(nn.Module):
@@ -224,6 +223,31 @@ class DipoleInteraction(nn.Module):
         return dq
 
 
+class NuclearMagneticMomentEmbedding(nn.Module):
+    """
+    Special embedding for nuclear magnetic moments, since they can scale differently based on an atoms gyromagnetic
+    ratio.
+
+    Args:
+        n_atom_basis (int): number of features to describe atomic environments.
+        max_z (int): Maximum number of atom types used in embedding.
+    """
+
+    def __init__(self, n_atom_basis: int, max_z: int):
+        super(NuclearMagneticMomentEmbedding, self).__init__()
+        self.gyromagnetic_ratio = nn.Embedding(max_z, 1, padding_idx=0)
+        self.vector_mapping = snn.Dense(1, n_atom_basis, activation=None, bias=False)
+
+    def forward(self, Z: torch.Tensor, nuclear_magnetic_moments: torch.Tensor):
+        gamma = self.gyromagnetic_ratio(Z).unsqueeze(-1)
+        delta_nmm = self.vector_mapping(nuclear_magnetic_moments.unsqueeze(-1))
+
+        # for linear f f(a*x) = a * f(x)
+        dmu = gamma * delta_nmm
+
+        return dmu
+
+
 class FieldSchNet(nn.Module):
     """FieldSchNet architecture for modeling interactions with external fields and response properties as described in
     [#field4]_.
@@ -355,9 +379,11 @@ class FieldSchNet(nn.Module):
         idx_j = inputs[structure.idx_j]
         idx_m = inputs[properties.idx_m]
 
-        # Set up external fields
+        field_components = _setup_external_fields(inputs, self.external_fields)
+        # Bring fields to final shape for model
         external_fields = {
-            field: inputs[field][idx_m].unsqueeze(-1) for field in self.external_fields
+            field: field_components[field][idx_m].unsqueeze(-1)
+            for field in self.external_fields
         }
 
         # compute atom and pair features
@@ -376,10 +402,10 @@ class FieldSchNet(nn.Module):
         mu = self.initial_dipole_update(q, mu, r_ij, idx_i, idx_j, rcut_ij)
 
         if self.nmm_embedding is not None:
-            mu[properties.magnetic_field] = self.nmm_embedding(
-                mu[properties.magnetic_field],
-                atomic_numbers,
-                inputs[properties.nuclear_magnetic_moments],
+            mu[properties.magnetic_field] = mu[
+                properties.magnetic_field
+            ] + self.nmm_embedding(
+                atomic_numbers, field_components[properties.nuclear_magnetic_moments]
             )
 
         for (
@@ -407,4 +433,49 @@ class FieldSchNet(nn.Module):
 
             mu = dipole_update(dq, mu, r_ij, idx_i, idx_j, rcut_ij)
 
-        return {"scalar_representation": q.squeeze(1)}
+        output_dict = {"scalar_representation": q.squeeze(1)}
+        output_dict.update(field_components)
+
+        return output_dict
+
+
+def _setup_external_fields(inputs: Dict[str, torch.Tensor], required_fields: List[str]):
+    """
+    Auxiliary function for setting up dummy external fields in response models.
+    Checks if fields are present in input and sets dummy fields otherwise.
+
+    Args:
+        inputs (dict(str, torch.Tensor)): Input batch to model.
+        required_fields (list(str)): Required external fields
+
+    Returns:
+        dict(str, torch.Tensor): All field components which should be added to the ouput for computing response
+                                 properties.
+    """
+    n_atoms = inputs[properties.n_atoms]
+    n_molecules = n_atoms.shape[0]
+
+    field_components = {}  # Dictionary used to update input batch for derivatives
+    external_fields = (
+        {}
+    )  # Fields passed to interaction computation (cast to batch structure)
+    for field in required_fields:
+        # Store all fields in directory which will be returned for derivatives
+        if field not in inputs:
+            field_components[field] = torch.zeros(
+                n_molecules, 3, requires_grad=True, device=n_atoms.device
+            )
+        else:
+            field_components[field] = inputs[field]
+
+    if properties.magnetic_field in required_fields:
+        if properties.nuclear_magnetic_moments not in inputs:
+            field_components[properties.nuclear_magnetic_moments] = torch.zeros_like(
+                inputs[properties.R], requires_grad=True
+            )
+        else:
+            field_components[properties.nuclear_magnetic_moments] = inputs[
+                properties.nuclear_magnetic_moments
+            ]
+
+    return field_components
