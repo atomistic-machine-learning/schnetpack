@@ -9,11 +9,13 @@ from typing import List
 import schnetpack.properties as properties
 import schnetpack.nn as snn
 from schnetpack.representation import PaiNNInteraction, PaiNNMixing
+from schnetpack.representation.field_schnet import (
+    NuclearMagneticMomentEmbedding,
+    _setup_external_fields,
+)
 from schnetpack.utils import required_fields_from_properties
 
-from torch.nn.init import zeros_
-
-__all__ = ["FieldPaiNN", "NuclearMagneticMomentEmbedding"]
+__all__ = ["FieldPaiNN"]
 
 
 class FieldInteraction(nn.Module):
@@ -70,33 +72,6 @@ class FieldInteraction(nn.Module):
         mu = mu + dmu
 
         return q, mu
-
-
-class NuclearMagneticMomentEmbedding(nn.Module):
-    """
-    Special embedding for nuclear magnetic moments, since they can scale differently based on an atoms gyromagnetic
-    ratio.
-
-    Args:
-        n_atom_basis (int): number of features to describe atomic environments.
-        max_z (int): Maximum number of atom types used in embedding.
-    """
-
-    def __init__(self, n_atom_basis: int, max_z: int):
-        super(NuclearMagneticMomentEmbedding, self).__init__()
-        self.gyromagnetic_ratio = nn.Embedding(max_z, 1, padding_idx=0)
-        self.vector_mapping = snn.Dense(1, n_atom_basis, activation=None, bias=False)
-
-    def forward(
-        self, mu: torch.Tensor, Z: torch.Tensor, nuclear_magnetic_moments: torch.Tensor
-    ):
-        gamma = self.gyromagnetic_ratio(Z).unsqueeze(-1)
-        delta_nmm = self.vector_mapping(nuclear_magnetic_moments.unsqueeze(-1))
-
-        # for linear f f(a*x) = a * f(x)
-        mu = mu + gamma * delta_nmm
-
-        return mu
 
 
 class FieldPaiNN(nn.Module):
@@ -228,9 +203,11 @@ class FieldPaiNN(nn.Module):
         idx_m = inputs[properties.idx_m]
         n_atoms = atomic_numbers.shape[0]
 
-        # Set up external fields
+        field_components = _setup_external_fields(inputs, self.external_fields)
+        # Bring fields to final shape for model
         external_fields = {
-            field: inputs[field][idx_m].unsqueeze(-1) for field in self.external_fields
+            field: field_components[field][idx_m].unsqueeze(-1)
+            for field in self.external_fields
         }
 
         # Modify electric field if requested (e.g. build from point charges)
@@ -260,8 +237,8 @@ class FieldPaiNN(nn.Module):
 
         # Embed nuclear magnetic moment information for spin-spin coupling and shielding
         if self.nmm_embedding is not None:
-            mu = self.nmm_embedding(
-                mu, atomic_numbers, inputs[properties.nuclear_magnetic_moments]
+            mu = mu + self.nmm_embedding(
+                atomic_numbers, field_components[properties.nuclear_magnetic_moments]
             )
 
         for i, (interaction, field_interaction, mixing) in enumerate(
@@ -273,4 +250,8 @@ class FieldPaiNN(nn.Module):
 
         q = q.squeeze(1)
 
-        return {"scalar_representation": q, "vector_representation": mu}
+        output_dict = {"scalar_representation": q, "vector_representation": mu}
+        # Add field components for derivatives
+        output_dict.update(field_components)
+
+        return output_dict
