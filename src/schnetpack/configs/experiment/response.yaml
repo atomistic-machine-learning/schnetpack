@@ -23,8 +23,6 @@ data:
     - _target_: schnetpack.transform.RemoveOffsets
       property: ${energy_key}
       remove_mean: True
-    - _target_: schnetpack.transform.ExternalFields
-      response_properties: ${response_properties}
     - _target_: schnetpack.transform.ASENeighborList
       cutoff: ${cutoff}
     - _target_: schnetpack.transform.CastTo32

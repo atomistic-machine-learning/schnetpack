@@ -11,4 +11,3 @@ from .atomistic import *
 from .casting import *
 from .neighborlist import *
 from .base import *
-from .fields import *
