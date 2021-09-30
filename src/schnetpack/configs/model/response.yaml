@@ -1,6 +1,6 @@
 defaults:
   - base_model
-  - override representation: field_painn
+  - override representation: field_schnet
 
 scheduler_args:
   mode: min
