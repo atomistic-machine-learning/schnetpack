@@ -1,11 +1,10 @@
-from typing import Sequence, Union, Callable, Dict, Optional, List
+from typing import Dict, Optional, List
 
 import torch
 import torch.nn as nn
-
-import schnetpack as spk
-import schnetpack.properties as properties
 from torch.autograd import grad
+
+import schnetpack.properties as properties
 
 __all__ = ["Forces"]
 
@@ -97,3 +96,55 @@ class Forces(nn.Module):
             results[self.stress_key] = stress.reshape(maxm * 3, 3) / volume
 
         return results
+
+
+class PositionGrad(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, R, cell, Rij, idx_i, idx_j, idx_m):
+        ctx.Rshape = R.shape
+
+        if cell.requires_grad:
+            ctx.save_for_backward(idx_i, idx_j, Rij, cell, idx_m)
+        else:
+            ctx.save_for_backward(idx_i, idx_j)
+        return Rij
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        inputs = ctx.saved_tensors
+        idx_i, idx_j = inputs[:2]
+
+        if ctx.needs_input_grad[0]:
+            dR = torch.zeros(
+                ctx.Rshape, dtype=grad_output.dtype, device=grad_output.device
+            )
+            dR = dR.index_add(0, idx_i, -grad_output)
+            dR = dR.index_add(0, idx_j, grad_output)
+        else:
+            dR = None
+
+        if ctx.needs_input_grad[1]:
+            Rij, cell, idx_m = inputs[2:]
+
+            dcell_i = torch.zeros(
+                (ctx.Rshape[0], 3, 3),
+                dtype=grad_output.dtype,
+                device=grad_output.device,
+            )
+
+            # sum over j
+            dcell_i = dcell_i.index_add(
+                0, idx_i, grad_output[:, None, :] * Rij[:, :, None],
+            )
+            maxm = int(idx_m[-1]) + 1
+            dcell = torch.zeros(
+                (maxm, 3, 3), dtype=dcell_i.dtype, device=dcell_i.device
+            )
+            dcell = dcell.index_add(0, idx_m, dcell_i)
+        else:
+            dcell = None
+
+        return dR, dcell, grad_output, None, None, None
+
+
+position_grad = PositionGrad.apply
