@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, Callable, List, Type, TYPE_CHECKING
+from typing import Any, Dict, Optional, Union, List, Type
 
+from schnetpack.atomistic.response import position_grad
 from schnetpack.transform import Transform
+import schnetpack.properties as properties
 
 import torch
 import pytorch_lightning as pl
@@ -89,9 +91,6 @@ class AtomisticModel(pl.LightningModule):
         self.scheduler_kwargs = scheduler_args
         self.schedule_monitor = scheduler_monitor
 
-        # self.save_hyperparameters(
-        #     "representation", "output_modules", "postprocess", "outputs"
-        # )
         self.representation = representation
         self.outputs = nn.ModuleList(outputs)
         self.output_modules = nn.ModuleList(output_modules)
@@ -117,6 +116,27 @@ class AtomisticModel(pl.LightningModule):
     def forward(self, inputs: Dict[str, torch.Tensor]):
         for p in self.required_derivatives:
             inputs[p].requires_grad_()
+
+        # setup backward pass for precalculated Rij wrt. Ri
+        if spk.properties.R in self.required_derivatives:
+            if spk.properties.Rij in inputs.keys():
+                inputs[spk.properties.Rij] = position_grad(
+                    inputs[properties.R],
+                    inputs[properties.cell],
+                    inputs[properties.Rij],
+                    inputs[properties.idx_i],
+                    inputs[properties.idx_j],
+                    inputs[properties.idx_m],
+                )
+            if spk.properties.Rij_lr in inputs.keys():
+                inputs[spk.properties.Rij_lr] = position_grad(
+                    inputs[properties.R],
+                    inputs[properties.cell],
+                    inputs[properties.Rij_lr],
+                    inputs[properties.idx_i_lr],
+                    inputs[properties.idx_j_lr],
+                    inputs[properties.idx_m],
+                )
 
         inputs.update(self.representation(inputs))
 
