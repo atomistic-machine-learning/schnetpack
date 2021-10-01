@@ -56,7 +56,12 @@ class Forces(nn.Module):
         if self.calc_stress:
             dx.append(inputs[properties.cell])
 
-        grads = grad([Epred], dx, grad_outputs=go, create_graph=self.training,)
+        grads = grad(
+            [Epred],
+            dx,
+            grad_outputs=go,
+            create_graph=self.training,
+        )
 
         if self.calc_forces:
             dEdR = grads[0]
@@ -125,7 +130,9 @@ class PositionGrad(torch.autograd.Function):
 
             # sum over j
             dcell_i = dcell_i.index_add(
-                0, idx_i, grad_output[:, None, :] * Rij[:, :, None],
+                0,
+                idx_i,
+                grad_output[:, None, :] * Rij[:, :, None],
             )
             maxm = int(idx_m[-1]) + 1
             dcell = torch.zeros(
