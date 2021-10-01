@@ -89,7 +89,7 @@ class EnergyCoulomb(nn.Module):
         ke = spk_units.convert_units("Ha", energy_unit) * spk_units.convert_units(
             "Bohr", position_unit
         )
-        self.register_buffer("ke", torch.Tensor(ke))
+        self.register_buffer("ke", torch.Tensor([ke]))
 
         self.coulomb_potential = coulomb_potential
         self.charge_key = charge_key
@@ -189,7 +189,7 @@ class EnergyEwald(torch.nn.Module):
         ke = spk_units.convert_units("Ha", energy_unit) * spk_units.convert_units(
             "Bohr", position_unit
         )
-        self.register_buffer("ke", torch.Tensor(ke))
+        self.register_buffer("ke", torch.Tensor([ke]))
 
         self.charge_key = charge_key
         self.output_key = output_key
@@ -205,10 +205,6 @@ class EnergyEwald(torch.nn.Module):
         kvecs = self._generate_kvecs()
         self.register_buffer("kvecs", kvecs)
 
-        raise UserWarning(
-            "GRADIENTS AND STRESS TENSORS DO NOT WORK FOR EWALD SUMMATION!"
-        )
-
     def _generate_kvecs(self) -> torch.Tensor:
         """
         Auxiliary routine for setting up the k-vectors.
@@ -216,12 +212,12 @@ class EnergyEwald(torch.nn.Module):
         Returns:
             torch.Tensor: k-vectors.
         """
-        krange = torch.arange(0, self.kmax + 1)
+        krange = torch.arange(0, self.k_max + 1)
         krange = torch.cat([krange, -krange[1:]])
         kvecs = torch.cartesian_prod(krange, krange, krange)
         norm = torch.sum(kvecs ** 2, dim=1)
-        kvecs = kvecs[norm <= self.kmax ** 2 + 2, :]
-        norm = norm[norm <= self.kmax ** 2 + 2]
+        kvecs = kvecs[norm <= self.k_max ** 2 + 2, :]
+        norm = norm[norm <= self.k_max ** 2 + 2]
         kvecs = kvecs[norm != 0, :]
         return kvecs
 
@@ -235,7 +231,6 @@ class EnergyEwald(torch.nn.Module):
          Returns:
              dict(str, torch.Tensor): results with Coulomb energy.
          """
-        # TODO: massive problem with forces and stress -> requires grad on positions and cell and postproc correction?
         q = inputs[self.charge_key].squeeze(-1)
         idx_m = inputs[properties.idx_m]
 
@@ -261,7 +256,9 @@ class EnergyEwald(torch.nn.Module):
         y_real = self._real_space(q, d_ij, idx_i, idx_j, idx_m, n_atoms, n_molecules)
         y_reciprocal = self._reciprocal_space(q, positions, cell, idx_m, n_molecules)
 
-        y = y_real + y_reciprocal
+        # y = y_real + y_reciprocal
+        # y = y_reciprocal
+        y = y_real
 
         results = {self.output_key: y}
 
@@ -332,30 +329,31 @@ class EnergyEwald(torch.nn.Module):
           Returns:
               torch.Tensor: Real space Coulomb energy.
           """
-        # TODO: we need to change the cell shape to (M x 3 x 3)
-
         # extract box dimensions from cells
-        l_box = torch.diagonal(cell, dim1=-2, dim2=-1)  # M x 3
+        # l_box = torch.diagonal(cell, dim1=-2, dim2=-1)  # M x 3
+        # TODO: this needs to be solved for proper derivatives
+        l_box = torch.linalg.eigvalsh(cell)#, dim1=-2, dim2=-1)  # M x 3
+
         v_box = torch.prod(l_box, dim=1)  # M
 
-        if torch.any(torch.isclose(v_box, torch.tensor([0]))):
+        if torch.any(torch.isclose(v_box, torch.zeros_like(v_box))):
             raise EnergyEwaldError("Simulation box has no volume.")
 
         # 1) compute the prefactor
         prefactor = 2.0 * np.pi / v_box
 
         # setup kvecs M x K x 3
-        kvec = 2.0 * np.pi * self.kvec[None, :, :] / l_box[:, None, :]
+        kvecs = 2.0 * np.pi * self.kvecs[None, :, :] / l_box[:, None, :]
 
         # Squared length of vectors M x K
-        k_squared = torch.sum(kvec * kvec, dim=2)
+        k_squared = torch.sum(kvecs * kvecs, dim=2)
 
         # 2) Gaussian part of ewald sum
         q_gauss = torch.exp(-0.25 * k_squared / self.alpha)  # M x K
 
         # 3) Compute charge density fourier terms
         # Dot product in exponent -> MN x K, expand kvecs in MN batch structure
-        kvec_dot_pos = torch.sum(kvec[idx_m] * positions[:, None, :], dim=2)
+        kvec_dot_pos = torch.sum(kvecs[idx_m] * positions[:, None, :], dim=2)
 
         # charge densities MN x K -> M x K
         q_real = snn.scatter_add(

@@ -78,7 +78,7 @@ class Forces(nn.Module):
 
             idx_m = inputs[properties.idx_m]
             maxm = int(idx_m[-1]) + 1
-            cell_33 = inputs[properties.cell].view(maxm, 3, 3)
+            cell_33 = inputs[properties.cell] #.view(maxm, 3, 3)
             volume = (
                 torch.sum(
                     cell_33[:, 0, :]
@@ -89,7 +89,8 @@ class Forces(nn.Module):
                 .expand(maxm, 3)
                 .reshape(maxm * 3, 1)
             )
-            results[self.stress_key] = dEdC / volume
+            # TODO: colume shape, etc
+            results[self.stress_key] = dEdC# / volume
 
         return results
 
@@ -139,7 +140,6 @@ class PositionGrad(torch.autograd.Function):
                 (maxm, 3, 3), dtype=dcell_i.dtype, device=dcell_i.device
             )
             dcell = dcell.index_add(0, idx_m, dcell_i)
-            dcell = dcell.reshape(maxm * 3, 3)
         else:
             dcell = None
 

@@ -183,7 +183,7 @@ class NeighborListTransform(Transform):
     ) -> Dict[str, torch.Tensor]:
         Z = inputs[properties.Z]
         R = inputs[properties.R]
-        cell = inputs[properties.cell]
+        cell = inputs[properties.cell].view(3,3)
         pbc = inputs[properties.pbc]
 
         Rij, idx_i, idx_j, offset = self._build_neighbor_list(
