@@ -209,3 +209,7 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/", None),
     "pytorch_lightning": ("https://pytorch-lightning.readthedocs.io/en/stable/", None),
 }
+
+import builtins
+
+builtins.sphinx = True

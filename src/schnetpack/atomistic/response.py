@@ -146,4 +146,7 @@ class PositionGrad(torch.autograd.Function):
         return dR, dcell, grad_output, None, None, None
 
 
-position_grad = PositionGrad.apply
+if "sphinx" not in __builtins__:
+    position_grad = PositionGrad.apply
+else:
+    position_grad = None
