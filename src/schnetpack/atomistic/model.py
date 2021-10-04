@@ -3,12 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional, Union, List, Type
 
-import pytorch_lightning as pl
-import torch
-import torch.nn as nn
-from torchmetrics import Metric
-
+from schnetpack.atomistic.response import position_grad
 from schnetpack.transform import Transform
+import schnetpack.properties as properties
+
+import torch
+import pytorch_lightning as pl
+import torch.nn as nn
+
+import schnetpack as spk
+from torchmetrics import Metric
 
 __all__ = ["AtomisticModel", "ModelOutput"]
 
@@ -20,12 +24,12 @@ class ModelOutput(nn.Module):
     """
 
     def __init__(
-            self,
-            name: str,
-            loss_fn: Optional[nn.Module] = None,
-            loss_weight: float = 1.0,
-            metrics: Optional[Dict[str, Metric]] = None,
-            target_name: Optional[str] = None,
+        self,
+        name: str,
+        loss_fn: Optional[nn.Module] = None,
+        loss_weight: float = 1.0,
+        metrics: Optional[Dict[str, Metric]] = None,
+        target_name: Optional[str] = None,
     ):
         """
         Args:
@@ -53,17 +57,17 @@ class AtomisticModel(pl.LightningModule):
     required_derivatives: List[str]
 
     def __init__(
-            self,
-            # datamodule: spk.data.AtomsDataModule,
-            representation: nn.Module,
-            output_modules: List[nn.Module],
-            outputs: List[ModelOutput],
-            optimizer_cls: Type[torch.optim.Optimizer],
-            optimizer_args: Optional[Dict[str, Any]] = None,
-            scheduler_cls: Optional[Type] = None,
-            scheduler_args: Optional[Dict[str, Any]] = None,
-            scheduler_monitor: Optional[str] = None,
-            postprocess: Optional[List[Transform]] = None,
+        self,
+        # datamodule: spk.data.AtomsDataModule,
+        representation: nn.Module,
+        output_modules: List[nn.Module],
+        outputs: List[ModelOutput],
+        optimizer_cls: Type[torch.optim.Optimizer],
+        optimizer_args: Optional[Dict[str, Any]] = None,
+        scheduler_cls: Optional[Type] = None,
+        scheduler_args: Optional[Dict[str, Any]] = None,
+        scheduler_monitor: Optional[str] = None,
+        postprocess: Optional[List[Transform]] = None,
     ):
         """
         Args:
@@ -87,9 +91,6 @@ class AtomisticModel(pl.LightningModule):
         self.scheduler_kwargs = scheduler_args
         self.schedule_monitor = scheduler_monitor
 
-        # self.save_hyperparameters(
-        #     "representation", "output_modules", "postprocess", "outputs"
-        # )
         self.representation = representation
         self.outputs = nn.ModuleList(outputs)
         self.output_modules = nn.ModuleList(output_modules)
@@ -115,6 +116,27 @@ class AtomisticModel(pl.LightningModule):
     def forward(self, inputs: Dict[str, torch.Tensor]):
         for p in self.required_derivatives:
             inputs[p].requires_grad_()
+
+        # setup backward pass for precalculated Rij wrt. Ri
+        if spk.properties.R in self.required_derivatives:
+            if spk.properties.Rij in inputs.keys():
+                inputs[spk.properties.Rij] = position_grad(
+                    inputs[properties.R],
+                    inputs[properties.cell],
+                    inputs[properties.Rij],
+                    inputs[properties.idx_i],
+                    inputs[properties.idx_j],
+                    inputs[properties.idx_m],
+                )
+            if spk.properties.Rij_lr in inputs.keys():
+                inputs[spk.properties.Rij_lr] = position_grad(
+                    inputs[properties.R],
+                    inputs[properties.cell],
+                    inputs[properties.Rij_lr],
+                    inputs[properties.idx_i_lr],
+                    inputs[properties.idx_j_lr],
+                    inputs[properties.idx_m],
+                )
 
         inputs.update(self.representation(inputs))
 
@@ -197,7 +219,7 @@ class AtomisticModel(pl.LightningModule):
             return optimizer
 
     def postprocess(
-            self, inputs: Dict[str, torch.Tensor], results: Dict[str, torch.Tensor]
+        self, inputs: Dict[str, torch.Tensor], results: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
         if self.inference_mode:
             for pp in self.postprocessors:
@@ -205,11 +227,11 @@ class AtomisticModel(pl.LightningModule):
         return results
 
     def to_torchscript(
-            self,
-            file_path: Optional[Union[str, Path]] = None,
-            method: Optional[str] = "script",
-            example_inputs: Optional[Any] = None,
-            **kwargs,
+        self,
+        file_path: Optional[Union[str, Path]] = None,
+        method: Optional[str] = "script",
+        example_inputs: Optional[Any] = None,
+        **kwargs,
     ) -> Union[torch.ScriptModule, Dict[str, torch.ScriptModule]]:
         imode = self.inference_mode
         self.inference_mode = True
