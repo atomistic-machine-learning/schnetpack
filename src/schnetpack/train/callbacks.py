@@ -59,10 +59,9 @@ class ModelCheckpoint(BaseModelCheckpoint):
     but also saves the best inference model with activated post-processing
     """
 
-    def __init__(self, inference_path: str, method: str = "script", *args, **kwargs):
+    def __init__(self, inference_path: str, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.inference_path = inference_path
-        self.method = method
 
     def on_validation_end(self, trainer, pl_module) -> None:
         self.trainer = trainer
@@ -80,20 +79,22 @@ class ModelCheckpoint(BaseModelCheckpoint):
             current = torch.tensor(float("inf" if self.mode == "min" else "-inf"))
 
         if current == self.best_model_score:
-            if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
-                imode = self.pl_module.inference_mode
-                self.pl_module.inference_mode = True
-            mode = self.pl_module.training
+            # if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
+            #     imode = self.pl_module.inference_mode
+            #     self.pl_module.inference_mode = True
+            # mode = self.pl_module.training
 
             if self.trainer.training_type_plugin.should_rank_save_checkpoint:
-                # remove references to trainer and data loaders to avoid picle error in ddp
+                # remove references to trainer and data loaders to avoid pickle error in ddp
                 model = copy(self.pl_module)
+                model.eval()
+                model.inference_mode = True
                 model.trainer = None
                 model.train_dataloader = None
                 model.val_dataloader = None
                 model.test_dataloader = None
                 torch.save(model, self.inference_path)
 
-            if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
-                self.pl_module.inference_mode = imode
-            self.pl_module.train(mode)
+            # if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
+            #     self.pl_module.inference_mode = imode
+            # self.pl_module.train(mode)
