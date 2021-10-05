@@ -127,7 +127,7 @@ class System:
         )
 
         for i in range(self.n_molecules):
-            self.n_atoms[i] = molecules[i].get_number_of_atoms()
+            self.n_atoms[i] = molecules[i].get_global_number_of_atoms()
 
         # 3) Determine the maximum number of atoms present (in case of
         #    differently sized molecules)
