@@ -24,7 +24,7 @@ def compute_centroid(ensemble):
 def batch_inverse(tensor):
     """
     Compute the matrix inverse of a batch of square matrices. This routine is used for removing rotational motion
-    during the molecular dynamics simulation. Taken from https://stackoverflow.com/questions/46595157
+    during the molecular dynamics simulation.
 
     Args:
         tensor (torch.Tensor):  Tensor of square matrices with the shape n_batch x dim1 x dim1
@@ -32,11 +32,7 @@ def batch_inverse(tensor):
     Returns:
         torch.Tensor: Tensor of the inverted square matrices with the same shape as the input tensor.
     """
-    eye = (
-        tensor.new_ones(tensor.size(-1), device=tensor.device).diag().expand_as(tensor)
-    )
-    tensor_inv, _ = torch.solve(eye, tensor)
-    return tensor_inv
+    return torch.linalg.inv(tensor)
 
 
 class RunningAverage:
