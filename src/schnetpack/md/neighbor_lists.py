@@ -109,6 +109,7 @@ class SimpleNeighborList(MDNeighborList):
 
     def __init__(self, cutoff=None, shell=None, device=None):
         super(SimpleNeighborList, self).__init__(cutoff, shell, device=device)
+        self.n_replicas = None
 
     def _construct_neighbor_list(self, system):
         """
@@ -120,6 +121,7 @@ class SimpleNeighborList(MDNeighborList):
         """
         # Set the maximum neighbors to include all interactions
         self.max_neighbors = system.max_n_atoms - 1
+        self.n_replicas = system.n_replicas
 
         # Construct basic, unmasked tile
         basic_tile = torch.arange(system.max_n_atoms, device=system.device)[
@@ -164,7 +166,10 @@ class SimpleNeighborList(MDNeighborList):
         Returns:
             bool: Indicator whether it is necessary to compute a new neighbor list or not.
         """
-        return False
+        if self.n_replicas is not None and self.n_replicas == system.n_replicas:
+            return False
+        else:
+            return True
 
 
 class EnvironmentProviderNeighborList(MDNeighborList):
