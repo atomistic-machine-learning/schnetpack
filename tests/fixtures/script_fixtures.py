@@ -45,6 +45,7 @@ def args(batch_size, n_train_set, n_validation_set):
         split=[n_train_set, n_validation_set],
         mode="train",
         lr=0.01,
+        cuda=False,
     )
 
 
