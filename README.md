@@ -1,6 +1,5 @@
 # SchNetPack - Deep Neural Networks for Atomistic Systems
 [![Build Status](https://travis-ci.com/atomistic-machine-learning/schnetpack.svg?branch=master)](https://travis-ci.com/atomistic-machine-learning/schnetpack)
-[![codecov](https://codecov.io/gh/atomistic-machine-learning/schnetpack/branch/master/graph/badge.svg)](https://codecov.io/gh/atomistic-machine-learning/schnetpack)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/python/black)
 
 
