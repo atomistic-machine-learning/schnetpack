@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional, Union, List, Type
 
-from schnetpack.atomistic.response import position_grad
+from schnetpack.atomistic.response import setup_input_grads
 from schnetpack.transform import Transform
 import schnetpack.properties as properties
 
@@ -114,29 +114,8 @@ class AtomisticModel(pl.LightningModule):
             self.postprocessors.append(pp)
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
-        for p in self.required_derivatives:
-            inputs[p].requires_grad_()
-
-        # setup backward pass for precalculated Rij wrt. Ri
-        if spk.properties.R in self.required_derivatives:
-            if spk.properties.Rij in inputs.keys():
-                inputs[spk.properties.Rij] = position_grad(
-                    inputs[properties.R],
-                    inputs[properties.cell],
-                    inputs[properties.Rij],
-                    inputs[properties.idx_i],
-                    inputs[properties.idx_j],
-                    inputs[properties.idx_m],
-                )
-            if spk.properties.Rij_lr in inputs.keys():
-                inputs[spk.properties.Rij_lr] = position_grad(
-                    inputs[properties.R],
-                    inputs[properties.cell],
-                    inputs[properties.Rij_lr],
-                    inputs[properties.idx_i_lr],
-                    inputs[properties.idx_j_lr],
-                    inputs[properties.idx_m],
-                )
+        # setup gradients w.r.t. structure
+        setup_input_grads(inputs, self.required_derivatives)
 
         inputs.update(self.representation(inputs))
 

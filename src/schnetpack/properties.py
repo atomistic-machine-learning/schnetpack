@@ -14,6 +14,7 @@ position: Final[str] = "_positions"  #: atom positions
 R: Final[str] = position  #: atom positions
 
 cell: Final[str] = "_cell"  #: unit cell
+strain: Final[str] = "strain"
 pbc: Final[str] = "_pbc"  #: periodic boundary conditions
 
 seg_m: Final[str] = "_seg_m"  #: start indices of systems
@@ -32,6 +33,11 @@ Rij_lr: Final[str] = "_Rij_lr"  #: indices of atom pairs for long-range
 n_atoms: Final[str] = "_n_atoms"  #: number of atoms
 offsets: Final[str] = "_offsets"  #: cell offset vectors
 offsets_lr: Final[str] = "_offsets_lr"  #: cell offset vectors
+
+R_strained: Final[str] = (
+    position + "_strained"
+)  #: atom positions with strain-dependence
+cell_strained: Final[str] = cell + "_strained"  #: atom positions with strain-dependence
 
 n_nbh: Final[str] = "_n_nbh"  #: number of neighbors
 
