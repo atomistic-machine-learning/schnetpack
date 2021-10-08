@@ -9,6 +9,10 @@ import schnetpack.properties as properties
 __all__ = ["Forces"]
 
 
+class ResponseException(Exception):
+    pass
+
+
 class Forces(nn.Module):
     """
     Predicts forces and stress as response of the energy prediction
@@ -67,30 +71,22 @@ class Forces(nn.Module):
             dEdR = grads[0]
             # TorchScript needs Tensor instead of Optional[Tensor]
             if dEdR is None:
-                dEdR = torch.zeros_like(inputs[properties.Rij])
+                dEdR = torch.zeros_like(inputs[properties.R])
             results[self.force_key] = -dEdR
 
-        # if self.calc_stress:
-        #     dEdC = grads[-1]
-        #     # TorchScript needs Tensor instead of Optional[Tensor]
-        #     if dEdC is None:
-        #         dEdC = torch.zeros_like(inputs[properties.strain])
-        #
-        #     idx_m = inputs[properties.idx_m]
-        #     maxm = int(idx_m[-1]) + 1
-        #     cell_33 = inputs[properties.cell]  # .view(maxm, 3, 3)
-        #     volume = (
-        #         torch.sum(
-        #             cell_33[:, 0, :]
-        #             * torch.cross(cell_33[:, 1, :], cell_33[:, 2, :], dim=1),
-        #             dim=1,
-        #             keepdim=True,
-        #         )
-        #         .expand(maxm, 3)
-        #         .reshape(maxm * 3, 1)
-        #     )
-        #     # TODO: colume shape, etc
-        #     results[self.stress_key] = dEdC  # / volume
+        if self.calc_stress:
+            if not torch.all(inputs[properties.pbc]):
+                raise ResponseException(
+                    f"Stress calculation is currently only supported for batches with only 3d periodic cells."
+                )
+
+            dEdS = grads[-1]
+            # TorchScript needs Tensor instead of Optional[Tensor]
+            if dEdS is None:
+                dEdS = torch.zeros_like(inputs[properties.strain])
+
+            volume = torch.linalg.det(inputs[properties.cell])
+            results[self.stress_key] = dEdS / volume[:, None, None]
 
         return results
 

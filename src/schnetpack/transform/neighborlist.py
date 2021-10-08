@@ -183,7 +183,7 @@ class NeighborListTransform(Transform):
     ) -> Dict[str, torch.Tensor]:
         Z = inputs[properties.Z]
         R = inputs[properties.R]
-        cell = inputs[properties.cell].view(3,3)
+        cell = inputs[properties.cell].view(3, 3)
         pbc = inputs[properties.pbc]
 
         Rij, idx_i, idx_j, offset = self._build_neighbor_list(
@@ -252,6 +252,7 @@ class ASENeighborList(NeighborListTransform):
 
     def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
         at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
+        at.wrap()
 
         if self._return_offset:
             idx_i, idx_j, Rij, offset = neighbor_list(
