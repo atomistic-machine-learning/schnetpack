@@ -58,11 +58,11 @@ class AtomisticModel(pl.LightningModule):
 
     def __init__(
         self,
-        # datamodule: spk.data.AtomsDataModule,
         representation: nn.Module,
-        output_modules: List[nn.Module],
         outputs: List[ModelOutput],
-        optimizer_cls: Type[torch.optim.Optimizer],
+        input_modules: List[nn.Module] = None,
+        output_modules: List[nn.Module] = None,
+        optimizer_cls: Type[torch.optim.Optimizer] = torch.optim.Adam,
         optimizer_args: Optional[Dict[str, Any]] = None,
         scheduler_cls: Optional[Type] = None,
         scheduler_args: Optional[Dict[str, Any]] = None,
@@ -73,7 +73,11 @@ class AtomisticModel(pl.LightningModule):
         Args:
             datamodule: pytorch_lightning module for dataset
             representation: nn.Module for atomistic representation
-            output_modules: List of module to compute outputs from atomistic representation.
+            input_modules: List of modules to prepare inputs before computing atomistic representations, e.g.
+                for the separation of long- and short-range interactions or introducing external fields
+                for response properties.
+                Input modules must modify and return the input dictionary.
+            output_modules: List of modules to compute outputs from atomistic representation.
                 Output modules must modify and return the input dictionary.
             outputs: list of outputs an optional loss functions
             optimizer_cls: type of torch optimizer,e.g. torch.optim.Adam
@@ -93,6 +97,7 @@ class AtomisticModel(pl.LightningModule):
 
         self.representation = representation
         self.outputs = nn.ModuleList(outputs)
+        self.input_modules = nn.ModuleList(input_modules)
         self.output_modules = nn.ModuleList(output_modules)
         self.pp = postprocess or []
 
@@ -117,8 +122,14 @@ class AtomisticModel(pl.LightningModule):
         # setup gradients w.r.t. structure
         setup_input_grads(inputs, self.required_derivatives)
 
+        # apply input modules
+        for inmod in self.input_modules:
+            inputs.update(inmod(inputs))
+
+        # compute representation
         inputs.update(self.representation(inputs))
 
+        # apply output modules
         for outmod in self.output_modules:
             inputs.update(outmod(inputs))
 
