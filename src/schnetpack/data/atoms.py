@@ -327,7 +327,7 @@ class ASEAtomsData(BaseAtomsData):
                 torch.tensor(row["positions"].copy()) * self.distance_conversion
             )
             properties[structure.cell] = (
-                torch.tensor(row["cell"].copy()) * self.distance_conversion
+                torch.tensor(row["cell"][None].copy()) * self.distance_conversion
             )
             properties[structure.pbc] = torch.tensor(row["pbc"])
 
