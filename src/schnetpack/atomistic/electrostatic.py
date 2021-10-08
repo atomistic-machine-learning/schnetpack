@@ -74,14 +74,14 @@ class EnergyCoulomb(nn.Module):
     """
 
     def __init__(
-        self,
-        energy_unit: Union[str, float],
-        position_unit: Union[str, float],
-        coulomb_potential: nn.Module,
-        charge_key: str,
-        output_key: str,
-        use_neighbors_lr: bool = True,
-        cutoff: Optional[float] = None,
+            self,
+            energy_unit: Union[str, float],
+            position_unit: Union[str, float],
+            coulomb_potential: nn.Module,
+            charge_key: str,
+            output_key: str,
+            use_neighbors_lr: bool = True,
+            cutoff: Optional[float] = None,
     ):
         super(EnergyCoulomb, self).__init__()
 
@@ -173,15 +173,15 @@ class EnergyEwald(torch.nn.Module):
     """
 
     def __init__(
-        self,
-        alpha: float,
-        k_max: int,
-        energy_unit: Union[str, float],
-        position_unit: Union[str, float],
-        charge_key: str,
-        output_key: str,
-        use_neighbors_lr: bool = True,
-        screening_fn: Optional[nn.Module] = None,
+            self,
+            alpha: float,
+            k_max: int,
+            energy_unit: Union[str, float],
+            position_unit: Union[str, float],
+            charge_key: str,
+            output_key: str,
+            use_neighbors_lr: bool = True,
+            screening_fn: Optional[nn.Module] = None,
     ):
         super(EnergyEwald, self).__init__()
 
@@ -198,7 +198,7 @@ class EnergyEwald(torch.nn.Module):
         self.screening_fn = screening_fn
 
         # TODO: automatic computation of alpha, unit conversion?
-        self.register_buffer("alpha", torch.FloatTensor([alpha]))
+        self.register_buffer("alpha", torch.Tensor([alpha]))
 
         # Set up lattice vectors
         self.k_max = k_max
@@ -212,13 +212,14 @@ class EnergyEwald(torch.nn.Module):
         Returns:
             torch.Tensor: k-vectors.
         """
-        krange = torch.arange(0, self.k_max + 1)
+        krange = torch.arange(0, self.k_max + 1, dtype=self.alpha.dtype)
         krange = torch.cat([krange, -krange[1:]])
         kvecs = torch.cartesian_prod(krange, krange, krange)
         norm = torch.sum(kvecs ** 2, dim=1)
         kvecs = kvecs[norm <= self.k_max ** 2 + 2, :]
         norm = norm[norm <= self.k_max ** 2 + 2]
         kvecs = kvecs[norm != 0, :]
+
         return kvecs
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -256,23 +257,26 @@ class EnergyEwald(torch.nn.Module):
         y_real = self._real_space(q, d_ij, idx_i, idx_j, idx_m, n_atoms, n_molecules)
         y_reciprocal = self._reciprocal_space(q, positions, cell, idx_m, n_molecules)
 
+        print(y_real / 1.3806488e-23, "YR")
+        print(y_real, "YR")
+
         # y = y_real + y_reciprocal
-        # y = y_reciprocal
-        y = y_real
+        y = y_reciprocal
+        # y = y_real
 
         results = {self.output_key: y}
 
         return results
 
     def _real_space(
-        self,
-        q: torch.Tensor,
-        d_ij: torch.Tensor,
-        idx_i: torch.Tensor,
-        idx_j: torch.Tensor,
-        idx_m: torch.Tensor,
-        n_atoms: int,
-        n_molecules: int,
+            self,
+            q: torch.Tensor,
+            d_ij: torch.Tensor,
+            idx_i: torch.Tensor,
+            idx_j: torch.Tensor,
+            idx_m: torch.Tensor,
+            n_atoms: int,
+            n_molecules: int,
     ) -> torch.Tensor:
         """
         Compute the real space contribution of the screened charges.
@@ -304,17 +308,17 @@ class EnergyEwald(torch.nn.Module):
 
         y = snn.scatter_add(potential_ij, idx_i, dim_size=n_atoms)
         y = snn.scatter_add(y, idx_m, dim_size=n_molecules)
-        y = 0.5 * self.ke * torch.squeeze(y, -1)
+        y = 0.5 * self.ke * y.squeeze(-1)
 
         return y
 
     def _reciprocal_space(
-        self,
-        q: torch.Tensor,
-        positions: torch.Tensor,
-        cell: torch.Tensor,
-        idx_m: torch.Tensor,
-        n_molecules: int,
+            self,
+            q: torch.Tensor,
+            positions: torch.Tensor,
+            cell: torch.Tensor,
+            idx_m: torch.Tensor,
+            n_molecules: int,
     ):
         """
           Compute the reciprocal space contribution.
@@ -330,11 +334,8 @@ class EnergyEwald(torch.nn.Module):
               torch.Tensor: Real space Coulomb energy.
           """
         # extract box dimensions from cells
-        # l_box = torch.diagonal(cell, dim1=-2, dim2=-1)  # M x 3
-        # TODO: this needs to be solved for proper derivatives
-        l_box = torch.linalg.eigvalsh(cell)#, dim1=-2, dim2=-1)  # M x 3
-
-        v_box = torch.prod(l_box, dim=1)  # M
+        recip_box = 2.0 * np.pi * torch.linalg.inv(cell).transpose(1, 2)
+        v_box = torch.abs(torch.linalg.det(cell))
 
         if torch.any(torch.isclose(v_box, torch.zeros_like(v_box))):
             raise EnergyEwaldError("Simulation box has no volume.")
@@ -343,10 +344,11 @@ class EnergyEwald(torch.nn.Module):
         prefactor = 2.0 * np.pi / v_box
 
         # setup kvecs M x K x 3
-        kvecs = 2.0 * np.pi * self.kvecs[None, :, :] / l_box[:, None, :]
+        kvecs = torch.matmul(self.kvecs[None, :, :], recip_box)
+        # kvecs = 2.0 * np.pi * torch.linalg.solve(cell, self.kvecs.transpose(0,1)).transpose(1,2)
 
         # Squared length of vectors M x K
-        k_squared = torch.sum(kvecs * kvecs, dim=2)
+        k_squared = torch.sum(kvecs ** 2, dim=2)
 
         # 2) Gaussian part of ewald sum
         q_gauss = torch.exp(-0.25 * k_squared / self.alpha)  # M x K
@@ -363,7 +365,7 @@ class EnergyEwald(torch.nn.Module):
             (q[:, None] * torch.sin(kvec_dot_pos)), idx_m, dim_size=n_molecules
         )
         # Compute square of density
-        q_dens = q_real * q_real + q_imag * q_imag
+        q_dens = q_real ** 2 + q_imag ** 2
 
         # Sum over k vectors -> M x K -> M
         y_ewald = prefactor * torch.sum(q_dens * q_gauss / k_squared, dim=1)
@@ -372,6 +374,8 @@ class EnergyEwald(torch.nn.Module):
         self_interaction = torch.sqrt(self.alpha / np.pi) * snn.scatter_add(
             q ** 2, idx_m, dim_size=n_molecules
         )
+        print(self_interaction * self.ke / 1.3806488e-23)
+        print(y_ewald * self.ke / 1.3806488e-23)
 
         # Bring everything together
         y_ewald = self.ke * (y_ewald - self_interaction)
