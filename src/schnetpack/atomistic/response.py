@@ -51,192 +51,40 @@ class Forces(nn.Module):
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         Epred = inputs[self.energy_key]
+        R = inputs[properties.position]
         results = {}
 
         go: List[Optional[torch.Tensor]] = [torch.ones_like(Epred)]
-        dx = []
-        if self.calc_forces:
-            dx.append(inputs[properties.R])
-        if self.calc_stress or True:
-            dx.append(inputs[properties.strain])
-
         grads = grad(
             [Epred],
-            dx,
+            [inputs[prop] for prop in self.required_derivatives],
             grad_outputs=go,
             create_graph=self.training,
-        )
+        )[0]
 
         if self.calc_forces:
-            dEdR = grads[0]
+            dEdRij = grads[0]
             # TorchScript needs Tensor instead of Optional[Tensor]
-            if dEdR is None:
-                dEdR = torch.zeros_like(inputs[properties.R])
-            results[self.force_key] = -dEdR
+            if dEdRij is None:
+                dEdRij = torch.zeros_like(inputs[properties.Rij])
+
+            Fpred = torch.zeros_like(R)
+            Fpred = Fpred.index_add(0, inputs[properties.idx_i], dEdRij)
+            Fpred = Fpred.index_add(0, inputs[properties.idx_j], -dEdRij)
+            results[self.force_key] = Fpred
 
         if self.calc_stress:
-            if not torch.all(inputs[properties.pbc]):
-                raise ResponseException(
-                    f"Stress calculation is currently only supported for batches with only 3d periodic cells."
-                )
-
-            dEdS = grads[-1]
+            stress = grads[-1]
             # TorchScript needs Tensor instead of Optional[Tensor]
-            if dEdS is None:
-                dEdS = torch.zeros_like(inputs[properties.strain])
+            if stress is None:
+                stress = torch.zeros_like(inputs[properties.cell])
 
-            volume = torch.linalg.det(inputs[properties.cell])
-            results[self.stress_key] = dEdS / volume[:, None, None]
+            cell = inputs[properties.cell]
+            volume = torch.sum(
+                cell[:, 0, :] * torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
+                dim=1,
+                keepdim=True,
+            )
+            results[self.stress_key] = stress / volume
 
         return results
-
-
-class RijGrads(torch.autograd.Function):
-    @staticmethod
-    def forward(
-        ctx,
-        R: torch.Tensor,
-        Rij: torch.Tensor,
-        strain: torch.Tensor,
-        idx_i: torch.Tensor,
-        idx_j: torch.Tensor,
-        idx_m: torch.Tensor,
-    ):
-        ctx.Rshape = R.shape
-
-        if strain.requires_grad:
-            ctx.save_for_backward(idx_i, idx_j, R, Rij, idx_m)
-        else:
-            ctx.save_for_backward(idx_i, idx_j)
-        return Rij
-
-    @staticmethod
-    def backward(ctx, go_Rij: torch.Tensor):
-        inputs = ctx.saved_tensors
-        idx_i, idx_j = inputs[:2]
-
-        if ctx.needs_input_grad[0]:
-            # dRij/dR
-            dR = torch.zeros(ctx.Rshape, dtype=go_Rij.dtype, device=go_Rij.device)
-            dR = dR.index_add(0, idx_i, -go_Rij)
-            dR = dR.index_add(0, idx_j, go_Rij)
-        else:
-            dR = None
-
-        if ctx.needs_input_grad[2]:
-            R, Rij, idx_m = inputs[2:]
-
-            dstrain_i = torch.zeros(
-                (ctx.Rshape[0], 3, 3),
-                dtype=go_Rij.dtype,
-                device=go_Rij.device,
-            )
-            dstrain_i = dstrain_i.index_add(
-                0,
-                idx_i,
-                go_Rij[:, None, :] * Rij[:, :, None],
-            )
-
-            # sum over i
-            maxm = int(idx_m[-1]) + 1
-            dstrain = torch.zeros(
-                (maxm, 3, 3), dtype=dstrain_i.dtype, device=dstrain_i.device
-            )
-            dstrain = dstrain.index_add(0, idx_m, dstrain_i)
-        else:
-            dstrain = None
-
-        return (
-            dR,
-            go_Rij,
-            dstrain,
-            None,
-            None,
-            None,
-        )
-
-
-class StrainPositions(torch.autograd.Function):
-    @staticmethod
-    def forward(
-        ctx,
-        R: torch.Tensor,
-        strain: torch.Tensor,
-        idx_m: torch.Tensor,
-    ):
-        ctx.Rshape = R.shape
-        ctx.save_for_backward(R, idx_m)
-        return R
-
-    @staticmethod
-    def backward(ctx, go_R: torch.Tensor):
-        R, idx_m = ctx.saved_tensors
-
-        dstrain_i = torch.zeros(
-            (ctx.Rshape[0], 3, 3),
-            dtype=go_R.dtype,
-            device=go_R.device,
-        )
-        dstrain_i += go_R[:, None, :] * R[:, :, None]
-
-        # sum over i
-        maxm = int(idx_m[-1]) + 1
-        dstrain = torch.zeros(
-            (maxm, 3, 3), dtype=dstrain_i.dtype, device=dstrain_i.device
-        )
-        dstrain = dstrain.index_add(0, idx_m, dstrain_i)
-
-        return (
-            go_R,
-            dstrain,
-            None,
-        )
-
-
-class StrainCell(torch.autograd.Function):
-    @staticmethod
-    def forward(
-        ctx,
-        cell: torch.Tensor,
-        strain: torch.Tensor,
-    ):
-        ctx.save_for_backward(cell)
-        return cell
-
-    @staticmethod
-    def backward(ctx, go_cell: torch.Tensor):
-        cell = ctx.saved_tensors[0]
-        dstrain = torch.matmul(go_cell, cell.transpose(1, 2))
-        return None, dstrain
-
-
-def setup_input_grads(inputs: Dict[str, torch.Tensor], required_derivatives):
-    required_derivatives += [properties.strain]
-
-    if properties.strain in required_derivatives:
-        inputs[properties.strain] = torch.zeros_like(inputs[properties.cell])
-
-    for p in required_derivatives:
-        inputs[p].requires_grad_()
-
-    inputs[properties.Rij] = RijGrads.apply(
-        inputs[properties.R],
-        inputs[properties.Rij],
-        inputs[properties.strain],
-        inputs[properties.idx_i],
-        inputs[properties.idx_j],
-        inputs[properties.idx_m],
-    )
-
-    inputs = strain_structure(inputs)
-    return inputs
-
-
-def strain_structure(inputs: Dict[str, torch.Tensor]):
-    strain = inputs[properties.strain]
-
-    inputs[properties.R_strained] = StrainPositions.apply(
-        inputs[properties.R], strain, inputs[properties.idx_m]
-    )
-    inputs[properties.cell_strained] = StrainCell.apply(inputs[properties.cell], strain)
-    return inputs

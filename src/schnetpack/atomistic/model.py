@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional, Union, List, Type
 
-from schnetpack.atomistic.response import setup_input_grads
 from schnetpack.transform import Transform
 import schnetpack.properties as properties
 
@@ -115,7 +114,12 @@ class AtomisticModel(pl.LightningModule):
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
         # setup gradients w.r.t. structure
-        setup_input_grads(inputs, self.required_derivatives)
+        if properties.strain in self.required_derivatives:
+            inputs[properties.strain] = torch.zeros_like(inputs[properties.cell])
+
+        for p in self.required_derivatives:
+            if p in inputs.keys():
+                inputs[p].requires_grad_()
 
         inputs.update(self.representation(inputs))
 
