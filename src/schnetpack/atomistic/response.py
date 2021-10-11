@@ -6,7 +6,7 @@ from torch.autograd import grad
 
 import schnetpack.properties as properties
 
-__all__ = ["Forces"]
+__all__ = ["Forces", "StrainResponse"]
 
 
 class ResponseException(Exception):
@@ -45,7 +45,7 @@ class Forces(nn.Module):
 
         self.required_derivatives = []
         if self.calc_forces:
-            self.required_derivatives.append(properties.R)
+            self.required_derivatives.append(properties.Rij)
         if self.calc_stress:
             self.required_derivatives.append(properties.strain)
 
@@ -60,7 +60,7 @@ class Forces(nn.Module):
             [inputs[prop] for prop in self.required_derivatives],
             grad_outputs=go,
             create_graph=self.training,
-        )[0]
+        )
 
         if self.calc_forces:
             dEdRij = grads[0]
@@ -84,7 +84,48 @@ class Forces(nn.Module):
                 cell[:, 0, :] * torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
                 dim=1,
                 keepdim=True,
-            )
+            )[:, :, None]
             results[self.stress_key] = stress / volume
 
         return results
+
+
+class StrainResponse(nn.Module):
+    """
+    THis is required to calculate the stress as a response property.
+    Adds strain-dependence to relative atomic positions Rij and (optionally) to absolute positions and unit cell.
+    """
+
+    def __init__(
+        self, strain_Rij: bool = True, strain_R: bool = False, strain_cell: bool = False
+    ):
+        super().__init__()
+        self.strain_Rij = strain_Rij
+        self.strain_R = strain_R
+        self.strain_cell = strain_cell
+
+    def forward(self, inputs: Dict[str, torch.Tensor]):
+        idx_m = inputs[properties.idx_m]
+        idx_i = inputs[properties.idx_i]
+        strain = torch.zeros_like(inputs[properties.cell])
+        strain.requires_grad_()
+        inputs[properties.strain] = strain
+
+        strain_i = strain[idx_m]
+        if self.strain_Rij:
+            strain_ij = strain_i[idx_i]
+            inputs[properties.Rij] = inputs[properties.Rij] + torch.bmm(
+                strain_ij, inputs[properties.Rij][:, :, None]
+            ).squeeze(-1)
+
+        if self.strain_R:
+            inputs[properties.R] = inputs[properties.R] + torch.matmul(
+                strain_i, inputs[properties.R][:, :, None]
+            ).squeeze(-1)
+
+        if self.strain_cell:
+            inputs[properties.cell] = inputs[properties.cell] + torch.matmul(
+                strain, inputs[properties.cell]
+            )
+
+        return inputs

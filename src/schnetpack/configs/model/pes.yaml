@@ -1,10 +1,6 @@
 defaults:
   - base_model
 
-input_modules:
-  - _target_: schnetpack.atomistic.SplitShortRange
-
-
 output_modules:
   - _target_: schnetpack.atomistic.Atomwise
     output_key: ${energy_key}

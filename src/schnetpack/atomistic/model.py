@@ -119,9 +119,6 @@ class AtomisticModel(pl.LightningModule):
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
         # setup gradients w.r.t. structure
-        if properties.strain in self.required_derivatives:
-            inputs[properties.strain] = torch.zeros_like(inputs[properties.cell])
-
         for p in self.required_derivatives:
             if p in inputs.keys():
                 inputs[p].requires_grad_()
