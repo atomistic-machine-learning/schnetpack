@@ -15,10 +15,9 @@ extensible to custom atomistic architectures.
 _**Note: This is the last version before a major update. In the next version, we plan to adopt Hydra and PyTorch Lightning, switch to indexing instead of masking and make the networks compatible with TorchScript. Therefore, there will be breaking changes.**_
 
 ##### Requirements:
-- python 3
 - ASE
 - numpy
-- PyTorch (>=0.4.1)
+- PyTorch (>=1.8)
 - h5py
 - Optional: tensorboardX
 
