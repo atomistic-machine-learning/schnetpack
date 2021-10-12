@@ -11,9 +11,9 @@ def read(fname):
 
 setup(
     name="schnetpack",
-    version="0.4.0-rc",
+    version="1.0.0",
     author="Kristof T. Schuett, Michael Gastegger, Pan Kessel, Kim Nicoli",
-    email="michael.gastegger@tu-berlin.de",
+    email="kristof.schuett@tu-berlin.de, michael.gastegger@tu-berlin.de",
     url="https://github.com/atomistic-machine-learning/schnetpack",
     packages=find_packages("src"),
     scripts=[
