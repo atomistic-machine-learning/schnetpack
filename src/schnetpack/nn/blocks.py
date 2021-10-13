@@ -14,7 +14,7 @@ def build_mlp(
     n_hidden: Optional[Union[int, Sequence[int]]] = None,
     n_layers: int = 2,
     activation: Callable = F.silu,
-) -> torch.Tensor:
+) -> nn.Module:
     """
     Build multiple layer fully connected perceptron neural network.
 
