@@ -52,7 +52,7 @@ class ZBLRepulsionEnergy(nn.Module):
         # Since all quantities have a predefined sign, they are initialized to the inverse softplus and a softplus
         # function is applied in the forward pass to guarantee the correct sign during training
         a_div = snn.softplus_inverse(
-            torch.tensor([1.0 / 0.8854]) * position_units
+            torch.tensor([1.0 / (position_units * 0.8854)])
         )  # in this way, distances can be used directly
         a_pow = snn.softplus_inverse(torch.tensor([0.23]))
         exponents = snn.softplus_inverse(
