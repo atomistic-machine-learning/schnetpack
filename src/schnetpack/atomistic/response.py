@@ -6,7 +6,11 @@ from torch.autograd import grad
 
 import schnetpack.properties as properties
 
-__all__ = ["Forces"]
+__all__ = ["Forces", "StrainResponse"]
+
+
+class ResponseException(Exception):
+    pass
 
 
 class Forces(nn.Module):
@@ -41,112 +45,87 @@ class Forces(nn.Module):
 
         self.required_derivatives = []
         if self.calc_forces:
-            self.required_derivatives.append(properties.R)
+            self.required_derivatives.append(properties.Rij)
         if self.calc_stress:
-            self.required_derivatives.append(properties.cell)
+            self.required_derivatives.append(properties.strain)
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         Epred = inputs[self.energy_key]
+        R = inputs[properties.position]
         results = {}
 
         go: List[Optional[torch.Tensor]] = [torch.ones_like(Epred)]
-        dx = []
-        if self.calc_forces:
-            dx.append(inputs[properties.R])
-        if self.calc_stress:
-            dx.append(inputs[properties.cell])
-
         grads = grad(
             [Epred],
-            dx,
+            [inputs[prop] for prop in self.required_derivatives],
             grad_outputs=go,
             create_graph=self.training,
         )
 
         if self.calc_forces:
-            dEdR = grads[0]
+            dEdRij = grads[0]
             # TorchScript needs Tensor instead of Optional[Tensor]
-            if dEdR is None:
-                dEdR = torch.zeros_like(inputs[properties.Rij])
-            results[self.force_key] = -dEdR
+            if dEdRij is None:
+                dEdRij = torch.zeros_like(inputs[properties.Rij])
+
+            Fpred = torch.zeros_like(R)
+            Fpred = Fpred.index_add(0, inputs[properties.idx_i], dEdRij)
+            Fpred = Fpred.index_add(0, inputs[properties.idx_j], -dEdRij)
+            results[self.force_key] = Fpred
 
         if self.calc_stress:
-            dEdC = grads[-1]
+            stress = grads[-1]
             # TorchScript needs Tensor instead of Optional[Tensor]
-            if dEdC is None:
-                dEdC = torch.zeros_like(inputs[properties.cell])
+            if stress is None:
+                stress = torch.zeros_like(inputs[properties.cell])
 
-            idx_m = inputs[properties.idx_m]
-            maxm = int(idx_m[-1]) + 1
-            cell_33 = inputs[properties.cell].view(maxm, 3, 3)
-            volume = (
-                torch.sum(
-                    cell_33[:, 0, :]
-                    * torch.cross(cell_33[:, 1, :], cell_33[:, 2, :], dim=1),
-                    dim=1,
-                    keepdim=True,
-                )
-                .expand(maxm, 3)
-                .reshape(maxm * 3, 1)
-            )
-            results[self.stress_key] = dEdC / volume
+            cell = inputs[properties.cell]
+            volume = torch.sum(
+                cell[:, 0, :] * torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
+                dim=1,
+                keepdim=True,
+            )[:, :, None]
+            results[self.stress_key] = stress / volume
 
         return results
 
 
-class PositionGrad(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, R, cell, Rij, idx_i, idx_j, idx_m):
-        ctx.Rshape = R.shape
+class StrainResponse(nn.Module):
+    """
+    THis is required to calculate the stress as a response property.
+    Adds strain-dependence to relative atomic positions Rij and (optionally) to absolute positions and unit cell.
+    """
 
-        if cell.requires_grad:
-            ctx.save_for_backward(idx_i, idx_j, Rij, cell, idx_m)
-        else:
-            ctx.save_for_backward(idx_i, idx_j)
-        return Rij
+    def __init__(
+        self, strain_Rij: bool = True, strain_R: bool = False, strain_cell: bool = False
+    ):
+        super().__init__()
+        self.strain_Rij = strain_Rij
+        self.strain_R = strain_R
+        self.strain_cell = strain_cell
 
-    @staticmethod
-    def backward(ctx, grad_output):
-        inputs = ctx.saved_tensors
-        idx_i, idx_j = inputs[:2]
+    def forward(self, inputs: Dict[str, torch.Tensor]):
+        idx_m = inputs[properties.idx_m]
+        idx_i = inputs[properties.idx_i]
+        strain = torch.zeros_like(inputs[properties.cell])
+        strain.requires_grad_()
+        inputs[properties.strain] = strain
 
-        if ctx.needs_input_grad[0]:
-            dR = torch.zeros(
-                ctx.Rshape, dtype=grad_output.dtype, device=grad_output.device
+        strain_i = strain[idx_m]
+        if self.strain_Rij:
+            strain_ij = strain_i[idx_i]
+            inputs[properties.Rij] = inputs[properties.Rij] + torch.bmm(
+                strain_ij, inputs[properties.Rij][:, :, None]
+            ).squeeze(-1)
+
+        if self.strain_R:
+            inputs[properties.R] = inputs[properties.R] + torch.sum(
+                inputs[properties.R][:, :, None] * strain_i, dim=1
             )
-            dR = dR.index_add(0, idx_i, -grad_output)
-            dR = dR.index_add(0, idx_j, grad_output)
-        else:
-            dR = None
 
-        if ctx.needs_input_grad[1]:
-            Rij, cell, idx_m = inputs[2:]
-
-            dcell_i = torch.zeros(
-                (ctx.Rshape[0], 3, 3),
-                dtype=grad_output.dtype,
-                device=grad_output.device,
+        if self.strain_cell:
+            inputs[properties.cell] = inputs[properties.cell] + torch.sum(
+                inputs[properties.cell][:, :, :, None] * strain[:, None, :, :], dim=2
             )
 
-            # sum over j
-            dcell_i = dcell_i.index_add(
-                0,
-                idx_i,
-                grad_output[:, None, :] * Rij[:, :, None],
-            )
-            maxm = int(idx_m[-1]) + 1
-            dcell = torch.zeros(
-                (maxm, 3, 3), dtype=dcell_i.dtype, device=dcell_i.device
-            )
-            dcell = dcell.index_add(0, idx_m, dcell_i)
-            dcell = dcell.reshape(maxm * 3, 3)
-        else:
-            dcell = None
-
-        return dR, dcell, grad_output, None, None, None
-
-
-if "sphinx" not in __builtins__:
-    position_grad = PositionGrad.apply
-else:
-    position_grad = None
+        return inputs

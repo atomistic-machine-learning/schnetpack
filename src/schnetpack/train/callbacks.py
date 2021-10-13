@@ -3,8 +3,6 @@ from typing import Dict
 
 from pytorch_lightning.callbacks import ModelCheckpoint as BaseModelCheckpoint
 
-import schnetpack as spk
-
 import torch
 import os
 from pytorch_lightning.callbacks import BasePredictionWriter
@@ -79,10 +77,6 @@ class ModelCheckpoint(BaseModelCheckpoint):
             current = torch.tensor(float("inf" if self.mode == "min" else "-inf"))
 
         if current == self.best_model_score:
-            # if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
-            #     imode = self.pl_module.inference_mode
-            #     self.pl_module.inference_mode = True
-            # mode = self.pl_module.training
 
             if self.trainer.training_type_plugin.should_rank_save_checkpoint:
                 # remove references to trainer and data loaders to avoid pickle error in ddp
@@ -94,7 +88,4 @@ class ModelCheckpoint(BaseModelCheckpoint):
                 model.val_dataloader = None
                 model.test_dataloader = None
                 torch.save(model, self.inference_path)
-
-            # if isinstance(self.pl_module, spk.atomistic.model.AtomisticModel):
-            #     self.pl_module.inference_mode = imode
-            # self.pl_module.train(mode)
+                model.train()
