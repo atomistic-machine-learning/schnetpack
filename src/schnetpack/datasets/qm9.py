@@ -29,6 +29,7 @@ class QM9(AtomsDataModule):
     figshare and load the data into pytorch.
 
     References:
+
         .. [#qm9_1] https://ndownloader.figshare.com/files/3195404
 
     """

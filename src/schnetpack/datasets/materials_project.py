@@ -18,6 +18,10 @@ class MaterialsProject(AtomsDataModule):
     This class adds convenient functions to download Materials Project data into
     pytorch.
 
+    References:
+
+        .. [#matproj] https://materialsproject.org/
+
     """
 
     # properties

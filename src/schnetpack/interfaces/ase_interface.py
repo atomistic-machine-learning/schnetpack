@@ -37,104 +37,49 @@ from schnetpack.transform import CastTo32, ASENeighborList, CastTo64
 from schnetpack.units import convert_units
 
 from typing import Optional, List, Union
+from ase import Atoms
 
 log = logging.getLogger(__name__)
 
-__all__ = ["SpkCalculator", "AseInterface"]
+__all__ = ["SpkCalculator", "AseInterface", "AtomsConverter"]
 
 
-class SpkCalculatorError(Exception):
+class AtomsConverterError(Exception):
     pass
 
 
-class SpkCalculator(Calculator):
+class AtomsConverter:
     """
-    ASE calculator for schnetpack machine learning models.
+    Convert ASE atoms to SchNetPack input batch format for model prediction.
 
-    Args:
-        model (schnetpack.AtomisticModel): Trained model for calculations
-        cutoff (float): environment cutoff used in calculator
-        neighbor_list (schnetpack.transform.Transform, optional): neighbor list for computing interatomic distances.
-        device (str, optional): select to run calculations on 'cuda' or 'cpu'
-        energy (str, optional): name of energy property in provided model.
-        forces (str, optional): name of forces in provided model.
-        stress (str, optional): name of stress property in provided model.
-        energy_units (str, optional): energy units used by model
-        forces_units (str, optional): force units used by model
-        stress_units (str, optional): stress units used by model
-        precision (str): toggle model precision
-        **kwargs: Additional arguments for basic ase calculator class
     """
-
-    energy = "energy"
-    forces = "forces"
-    stress = "stress"
-    implemented_properties = [energy, forces, stress]
 
     def __init__(
         self,
-        model: schnetpack.atomistic.model.AtomisticModel,
-        cutoff: float,
-        neighbor_list: schnetpack.transform.Transform = ASENeighborList,
+        neighbor_list: schnetpack.transform.Transform,
         device: Union[str, torch.device] = "cpu",
-        energy: str = "energy",
-        forces: str = "forces",
-        stress: str = "stress",
-        energy_units: Union[str, float] = "kcal/mol",
-        forces_units: Union[str, float] = "kcal/mol/Angstrom",
-        stress_units: Union[str, float] = "kcal/mol/Angstrom/Angstrom/Angstrom",
-        precision: str = "float64",
-        **kwargs,
+        dtype: torch.dtype = torch.float32,
     ):
-        Calculator.__init__(self, **kwargs)
-
+        self.neighbor_list = neighbor_list
         self.device = device
-        self.model = model
-        self.model.to(device)
+        self.dtype = dtype
 
         # get transforms and initialize neighbor list
-        self.transforms: List[schnetpack.transform.Transform] = [neighbor_list(cutoff)]
-        # check if triple indices for angles need to be computed
-        self._check_for_triples()
+        self.transforms: List[schnetpack.transform.Transform] = [neighbor_list]
 
         # Set numerical precision
-        if precision == "float32":
-            self.model.to(torch.float32)
+        if dtype == torch.float32:
             self.transforms.append(CastTo32())
-        elif precision == "float64":
-            self.model.to(torch.float64)
+        elif dtype == torch.float64:
             self.transforms.append(CastTo64())
         else:
-            raise SpkCalculatorError(f"Unrecognized precision {precision}")
+            raise AtomsConverterError(f"Unrecognized precision {dtype}")
 
-        # Set transforms to pre mode
-        self._set_pre_mode_transforms()
-        # TODO: activate computation of stress in model if requested
-
-        # Mapping between ASE names and model outputs
-        self.property_map = {
-            self.energy: energy,
-            self.forces: forces,
-            self.stress: stress,
-        }
-
-        # Unit conversion to default ASE units
-        self.property_units = {
-            self.energy: convert_units(energy_units, "eV"),
-            self.forces: convert_units(forces_units, "eV/Angstrom"),
-            self.stress: convert_units(stress_units, "eV/A/A/A"),
-        }
-
-    def _set_pre_mode_transforms(self):
-        """
-        Initialize preprocessor mode for transforms.
-        """
         for t in self.transforms:
             t.preprocessor()
 
-    def _atoms2input(self, atoms: ase.Atoms):
+    def __call__(self, atoms: Atoms):
         """
-        Convert ASE atoms object to input batch format for model prediction.
 
         Args:
             atoms (ase.Atoms): ASE atoms object of the molecule.
@@ -160,19 +105,64 @@ class SpkCalculator(Calculator):
 
         return inputs
 
-    def _check_for_triples(self):
-        """
-        Check, whether model representation requires collection of atomic triples and activate automatically.
-        """
-        if isinstance(
-            self.model.representation,
-            schnetpack.representation.symfuncs.SymmetryFunctions,
-        ):
-            if self.model.representation.n_basis_angular > 0:
-                log.info("Enabling collection of atom triples for angular functions...")
-                self.transforms.append(
-                    schnetpack.transform.neighborlist.CollectAtomTriples()
-                )
+
+class SpkCalculator(Calculator):
+    """
+    ASE calculator for schnetpack machine learning models.
+
+    Args:
+        model: Trained model for calculations
+        neighbor_list: neighbor list for computing interatomic distances.
+        device: select to run calculations on 'cuda' or 'cpu'
+        energy: name of energy property in provided model.
+        forces: name of forces in provided model.
+        stress: name of stress property in provided model.
+        energy_units: energy units used by model
+        forces_units: force units used by model
+        stress_units: stress units used by model
+        precision: toggle model precision
+        **kwargs: Additional arguments for basic ase calculator class
+    """
+
+    energy = "energy"
+    forces = "forces"
+    stress = "stress"
+    implemented_properties = [energy, forces, stress]
+
+    def __init__(
+        self,
+        model: schnetpack.atomistic.AtomisticModel,
+        converter: AtomsConverter,
+        energy: str = "energy",
+        forces: str = "forces",
+        stress: str = "stress",
+        energy_units: Union[str, float] = "kcal/mol",
+        forces_units: Union[str, float] = "kcal/mol/Angstrom",
+        stress_units: Union[str, float] = "kcal/mol/Angstrom/Angstrom/Angstrom",
+        **kwargs,
+    ):
+        Calculator.__init__(self, **kwargs)
+
+        self.converter = converter
+
+        self.model = model
+        self.model.to(device=self.converter.device, dtype=self.converter.dtype)
+
+        # TODO: activate computation of stress in model if requested
+
+        # Mapping between ASE names and model outputs
+        self.property_map = {
+            self.energy: energy,
+            self.forces: forces,
+            self.stress: stress,
+        }
+
+        # Unit conversion to default ASE units
+        self.property_units = {
+            self.energy: convert_units(energy_units, "eV"),
+            self.forces: convert_units(forces_units, "eV/Angstrom"),
+            self.stress: convert_units(stress_units, "eV/A/A/A"),
+        }
 
     def calculate(
         self,
@@ -193,7 +183,7 @@ class SpkCalculator(Calculator):
             Calculator.calculate(self, atoms)
 
             # Convert to schnetpack input format
-            model_inputs = self._atoms2input(atoms)
+            model_inputs = self.converter(atoms)
             model_results = self.model(model_inputs)
 
             results = {}
@@ -213,7 +203,7 @@ class SpkCalculator(Calculator):
                             * self.property_units[prop]
                         )
                 else:
-                    raise SpkCalculatorError(
+                    raise AtomsConverterError(
                         "'{:s}' is not a property of your model. Please "
                         "check the model"
                         "properties!".format(model_prop)
@@ -232,32 +222,28 @@ class AseInterface:
         molecule_path: str,
         working_dir: str,
         model: schnetpack.atomistic.model.AtomisticModel,
-        cutoff: float,
-        neighbor_list: schnetpack.transform.Transform = ASENeighborList,
-        device: Union[str, torch.device] = torch.device("cuda"),
+        converter: AtomsConverter,
         energy: str = "energy",
         forces: str = "forces",
         stress: str = "stress",
         energy_units: Union[str, float] = "kcal/mol",
         forces_units: Union[str, float] = "kcal/mol/Angstrom",
         stress_units: Union[str, float] = "kcal/mol/Angstrom/Angstrom/Angstrom",
-        precision: str = "float64",
     ):
         """
         Args:
-            molecule_path (str): Path to initial geometry
-            working_dir (str): Path to directory where files should be stored
-            model (schnetpack.model.AtomisticModel): Trained model
-            cutoff (float): environment cutoff used in calculator
-            neighbor_list (schnetpack.transform.Transform, optional): neighbor list for computing interatomic distances.
-            device (str, optional): select to run calculations on 'cuda' or 'cpu'
-            energy (str, optional): name of energy property in provided model.
-            forces (str, optional): name of forces in provided model.
-            stress (str, optional): name of stress property in provided model.
-            energy_units (str, optional): energy units used by model
-            forces_units (str, optional): force units used by model
-            stress_units (str, optional): stress units used by model
-            precision (str): toggle model precision
+            molecule_path: Path to initial geometry
+            working_dir: Path to directory where files should be stored
+            model: Trained model
+            neighbor_list: neighbor list for computing interatomic distances.
+            device: select to run calculations on 'cuda' or 'cpu'
+            energy: name of energy property in provided model.
+            forces: name of forces in provided model.
+            stress: name of stress property in provided model.
+            energy_units: energy units used by model
+            forces_units: force units used by model
+            stress_units: stress units used by model
+            precision: toggle model precision
         """
         # Setup directory
         self.working_dir = working_dir
@@ -270,16 +256,13 @@ class AseInterface:
         # Set up calculator
         calculator = SpkCalculator(
             model,
-            cutoff,
-            neighbor_list=neighbor_list,
-            device=device,
+            converter=converter,
             energy=energy,
             forces=forces,
             stress=stress,
             energy_units=energy_units,
             forces_units=forces_units,
             stress_units=stress_units,
-            precision=precision,
         )
 
         self.molecule.set_calculator(calculator)
@@ -291,10 +274,9 @@ class AseInterface:
         Save the current molecular geometry.
 
         Args:
-            name (str): Name of save-file.
-            file_format (str): Format to store geometry (default xyz).
-            append (bool): If set to true, geometry is added to end of file
-                (default False).
+            name: Name of save-file.
+            file_format: Format to store geometry (default xyz).
+            append: If set to true, geometry is added to end of file (default False).
         """
         molecule_path = os.path.join(
             self.working_dir, "{:s}.{:s}".format(name, file_format)
@@ -331,16 +313,15 @@ class AseInterface:
         production.
 
         Args:
-            name (str): Basic name of logfile and trajectory
-            time_step (float): Time step in fs (default=0.5)
-            temp_init (float): Initial temperature of the system in K
-                (default is 300)
-            temp_bath (float): Carry out Langevin NVT dynamics at the specified
+            name: Basic name of logfile and trajectory
+            time_step: Time step in fs (default=0.5)
+            temp_init: Initial temperature of the system in K (default is 300)
+            temp_bath: Carry out Langevin NVT dynamics at the specified
                 temperature. If set to None, NVE dynamics are performed
                 instead (default=None)
-            reset (bool): Whether dynamics should be restarted with new initial
+            reset: Whether dynamics should be restarted with new initial
                 conditions (default=False)
-            interval (int): Data is stored every interval steps (default=1)
+            interval: Data is stored every interval steps (default=1)
         """
 
         # If a previous dynamics run has been performed, don't reinitialize
@@ -387,11 +368,9 @@ class AseInterface:
         Initialize velocities for molecular dynamics
 
         Args:
-            temp_init (float): Initial temperature in Kelvin (default 300)
-            remove_translation (bool): Remove translation components of
-                velocity (default True)
-            remove_rotation (bool): Remove rotation components of velocity
-                (default True)
+            temp_init: Initial temperature in Kelvin (default 300)
+            remove_translation: Remove translation components of velocity (default True)
+            remove_rotation: Remove rotation components of velocity (default True)
         """
         MaxwellBoltzmannDistribution(self.molecule, temp_init * units.kB)
         if remove_translation:
@@ -405,7 +384,7 @@ class AseInterface:
         upon initializing the class.
 
         Args:
-            steps (int): Number of simulation steps performed
+            steps: Number of simulation steps performed
         """
         if not self.dynamics:
             raise AttributeError(
@@ -420,8 +399,8 @@ class AseInterface:
         (BFGS + line search)
 
         Args:
-            fmax (float): Maximum residual force change (default 1.e-2)
-            steps (int): Maximum number of steps (default 1000)
+            fmax: Maximum residual force change (default 1.e-2)
+            steps: Maximum number of steps (default 1000)
         """
         name = "optimization"
         optimize_file = os.path.join(self.working_dir, name)
@@ -440,8 +419,7 @@ class AseInterface:
         Use ase calculator to compute numerical frequencies for the molecule
 
         Args:
-            write_jmol (bool): Write frequencies to input file for
-                visualization in jmol (default=True)
+            write_jmol: Write frequencies to input file for visualization in jmol (default=True)
         """
         freq_file = os.path.join(self.working_dir, "normal_modes")
 

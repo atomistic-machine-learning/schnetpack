@@ -2,8 +2,13 @@ import math
 import torch
 from torch import nn
 
-
-__all__ = ["CosineCutoff", "MollifierCutoff", "mollifier_cutoff", "cosine_cutoff"]
+__all__ = [
+    "CosineCutoff",
+    "MollifierCutoff",
+    "mollifier_cutoff",
+    "cosine_cutoff",
+    "SwitchFunction",
+]
 
 
 def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
@@ -97,3 +102,57 @@ class MollifierCutoff(nn.Module):
 
     def forward(self, input: torch.Tensor):
         return mollifier_cutoff(input, self.cutoff, self.eps)
+
+
+def _switch_component(
+    x: torch.Tensor, ones: torch.Tensor, zeros: torch.Tensor
+) -> torch.Tensor:
+    """
+    Basic component of switching functions.
+
+    Args:
+        x (torch.Tensor): Switch functions.
+        ones (torch.Tensor): Tensor with ones.
+        zeros (torch.Tensor): Zero tensor
+
+    Returns:
+        torch.Tensor: Output tensor.
+    """
+    x_ = torch.where(x <= 0, ones, x)
+    return torch.where(x <= 0, zeros, torch.exp(-ones / x_))
+
+
+class SwitchFunction(nn.Module):
+    """
+    Decays from 1 to 0 between `switch_on` and `switch_off`.
+    """
+
+    def __init__(self, switch_on: float, switch_off: float):
+        """
+
+        Args:
+            switch_on (float): Onset of switch.
+            switch_off (float): Value from which on switch is 0.
+        """
+        super(SwitchFunction, self).__init__()
+        self.register_buffer("switch_on", torch.Tensor([switch_on]))
+        self.register_buffer("switch_off", torch.Tensor([switch_off]))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+
+        Args:
+            x (torch.Tensor): tensor to which switching function should be applied to.
+
+        Returns:
+            torch.Tensor: switch output
+        """
+        x = (x - self.switch_on) / (self.switch_off - self.switch_on)
+
+        ones = torch.ones_like(x)
+        zeros = torch.zeros_like(x)
+        fp = _switch_component(x, ones, zeros)
+        fm = _switch_component(1 - x, ones, zeros)
+
+        f_switch = torch.where(x <= 0, ones, torch.where(x >= 1, zeros, fm / (fp + fm)))
+        return f_switch

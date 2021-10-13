@@ -1,0 +1,73 @@
+defaults:
+  - pes
+
+input_modules:
+  - _target_: schnetpack.atomistic.FilterShortRange
+    short_range_cutoff: ${cutoff}
+
+
+output_modules:
+  # Basic short range energy
+  - _target_: schnetpack.atomistic.Atomwise
+    output_key: energy_sr
+    n_in: ${model.representation.n_atom_basis}
+    aggregation_mode: sum
+  # Dipole moment layer for prediction of partial charges
+  - _target_: schnetpack.atomistic.DipoleMoment
+    n_in: ${model.representation.n_atom_basis}
+    return_charges: true
+    charges_key: partial_charges
+    correct_charges: true
+  # Coulomb energy with damped potential based on dipole charges
+  - _target_: schnetpack.atomistic.EnergyCoulomb
+    energy_unit: ${energy_unit}
+    position_unit: ${length_unit}
+    coulomb_potential:
+      _target_: schnetpack.atomistic.DampedCoulombPotential
+      switch_fn:
+        _target_: schnetpack.nn.SwitchFunction
+        switch_on: ${cutoff_sr}
+        switch_off: ${cutoff_lr}
+    output_key: energy_coulomb
+    charges_key: partial_charges
+    use_neighbors_lr: true
+    cutoff: ${cutoff_lr}
+  # ZBL nuclear repulsion energy
+  - _target_: schnetpack.atomistic.ZBLRepulsionEnergy
+    energy_unit: ${energy_unit}
+    position_unit: ${length_unit}
+    output_key: energy_zbl
+    trainable: true
+    cutoff_fn:
+      _target_: schnetpack.nn.cutoff.CosineCutoff
+      cutoff: ${cutoff_sr}
+  # Aggregate all energies
+  - _target_: schnetpack.atomistic.Aggregation
+    output_key: ${energy_key}
+    keys: [ energy_sr, energy_zbl, energy_coulomb ]
+  # Force prediction from energy
+  - _target_: schnetpack.atomistic.Forces
+    energy_key: ${energy_key}
+    force_key: ${forces_key}
+
+outputs:
+  - _target_: schnetpack.atomistic.ModelOutput
+    name: ${energy_key}
+    loss_fn:
+      _target_: torch.nn.MSELoss
+    metrics:
+      mae:
+        _target_: torchmetrics.regression.MeanAbsoluteError
+      mse:
+        _target_: torchmetrics.regression.MeanSquaredError
+    loss_weight: 0.05
+  - _target_: schnetpack.atomistic.ModelOutput
+    name: ${forces_key}
+    loss_fn:
+      _target_: torch.nn.MSELoss
+    metrics:
+      mae:
+        _target_: torchmetrics.regression.MeanAbsoluteError
+      mse:
+        _target_: torchmetrics.regression.MeanSquaredError
+    loss_weight: 0.95
