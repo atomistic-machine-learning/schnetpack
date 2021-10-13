@@ -85,7 +85,7 @@ class Forces(nn.Module):
                 dim=1,
                 keepdim=True,
             )[:, :, None]
-            results[self.stress_key] = stress / volume
+            results[self.stress_key] = stress  # / volume
 
         return results
 
@@ -119,13 +119,13 @@ class StrainResponse(nn.Module):
             ).squeeze(-1)
 
         if self.strain_R:
-            inputs[properties.R] = inputs[properties.R] + torch.matmul(
-                strain_i, inputs[properties.R][:, :, None]
-            ).squeeze(-1)
+            inputs[properties.R] = inputs[properties.R] + torch.sum(
+                inputs[properties.R][:, :, None] * strain_i, dim=1
+            )
 
         if self.strain_cell:
-            inputs[properties.cell] = inputs[properties.cell] + torch.matmul(
-                strain, inputs[properties.cell]
+            inputs[properties.cell] = inputs[properties.cell] + torch.sum(
+                inputs[properties.cell][:, :, :, None] * strain[:, None, :, :], dim=2
             )
 
         return inputs
