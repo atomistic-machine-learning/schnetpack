@@ -3,8 +3,6 @@ import torch.nn as nn
 
 from typing import Dict, List
 
-from schnetpack import properties
-
 __all__ = ["Aggregation"]
 
 
