@@ -19,11 +19,13 @@ Contents
    :caption: Getting Started
    :maxdepth: 1
 
-   getstarted/getstarted
+   getstarted/firststeps
+   getstarted/train_cli
+   getstarted/md
 
 .. toctree::
    :glob:
-   :caption: Tutorials
+   :caption: SchNetPack from Python
    :maxdepth: 1
 
    tutorials/tutorial_01_preparing_data
@@ -37,11 +39,10 @@ Contents
    :maxdepth: 1
 
    api/schnetpack
+   api/atomistic
    api/data
    api/datasets
-   api/model
    api/representation
-   api/atomistic
    api/nn
    api/train
    api/transform

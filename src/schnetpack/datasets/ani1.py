@@ -24,7 +24,8 @@ class ANI1(AtomsDataModule):
     load the data into pytorch.
 
     References:
-        .. [#ani1] https://arxiv.org/abs/1708.04987
+
+        .. [#ani1a] https://arxiv.org/abs/1708.04987
 
     """
 

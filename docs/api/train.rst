@@ -12,6 +12,7 @@ Callbacks
     :template: classtemplate.rst
 
     ModelCheckpoint
+    PredictionWriter
 
 Scheduler
 ---------

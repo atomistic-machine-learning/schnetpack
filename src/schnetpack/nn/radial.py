@@ -3,7 +3,7 @@ from math import pi
 import torch
 import torch.nn as nn
 
-__all__ = ["gaussian_rbf", "GaussianRBF", "GaussianRBFCentered"]
+__all__ = ["gaussian_rbf", "GaussianRBF", "GaussianRBFCentered", "BesselRBF"]
 
 from torch import nn as nn
 

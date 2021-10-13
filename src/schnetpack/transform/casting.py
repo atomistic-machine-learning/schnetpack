@@ -46,7 +46,7 @@ class CastTo32(CastMap):
 
 
 class CastTo64(CastMap):
-    """Cast all float64 tensors to float32"""
+    """Cast all float32 tensors to float64"""
 
     def __init__(self):
         super().__init__(type_map={torch.float32: torch.float64})

@@ -85,7 +85,7 @@ class Forces(nn.Module):
                 dim=1,
                 keepdim=True,
             )[:, :, None]
-            results[self.stress_key] = stress  # / volume
+            results[self.stress_key] = stress / volume
 
         return results
 
