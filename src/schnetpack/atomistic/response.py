@@ -92,7 +92,7 @@ class Forces(nn.Module):
 
 class StrainResponse(nn.Module):
     """
-    THis is required to calculate the stress as a response property.
+    This is required to calculate the stress as a response property.
     Adds strain-dependence to relative atomic positions Rij and (optionally) to absolute positions and unit cell.
     """
 

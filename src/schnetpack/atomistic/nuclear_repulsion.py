@@ -12,7 +12,14 @@ __all__ = ["ZBLRepulsionEnergy"]
 
 class ZBLRepulsionEnergy(nn.Module):
     """
-    Computes a Ziegler-Biersack-Littmark style repulsion energy
+    Computes a Ziegler-Biersack-Littmark style repulsion energy.
+
+    References:
+    .. [#Cutoff] Ebert, D. S.; Musgrave, F. K.; Peachey, D.; Perlin, K.; Worley, S.
+       Texturing & Modeling: A Procedural Approach;
+       Morgan Kaufmann, 2003
+    .. [#ZBL]
+       https://docs.lammps.org/pair_zbl.html
     """
 
     def __init__(
@@ -30,13 +37,6 @@ class ZBLRepulsionEnergy(nn.Module):
             output_key (str): Key to which results will be stored
             trainable (bool): If set to true, ZBL parameters will be optimized during training (default=True)
             cutoff_fn (Callable): Apply a cutoff function to the interatomic distances.
-
-        References:
-        .. [#Cutoff] Ebert, D. S.; Musgrave, F. K.; Peachey, D.; Perlin, K.; Worley, S.
-           Texturing & Modeling: A Procedural Approach;
-           Morgan Kaufmann, 2003
-        .. [#ZBL]
-           https://docs.lammps.org/pair_zbl.html
         """
         super(ZBLRepulsionEnergy, self).__init__()
 
