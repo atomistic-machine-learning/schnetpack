@@ -59,29 +59,29 @@ class DampedCoulombPotential(nn.Module):
 
 class EnergyCoulomb(nn.Module):
     """
-     Compute Coulomb energy from a set of point charges via direct summation. Depending on the form of the
-     potential function, the interaction can be damped for short distances. If a cutoff is requested, the full
-     potential is shifted, so that it and its first derivative is zero starting from the cutoff.
+    Compute Coulomb energy from a set of point charges via direct summation. Depending on the form of the
+    potential function, the interaction can be damped for short distances. If a cutoff is requested, the full
+    potential is shifted, so that it and its first derivative is zero starting from the cutoff.
 
-     Args:
-         energy_unit (str/float): Units used for the energy.
-         position_unit (str/float): Units used for lengths and positions.
-         coulomb_potential (torch.nn.Module): Distance part of the potential.
-         charge_key (str): Key of partial charges in the input batch.
-         output_key (str): Name of the energy property in the output.
-         use_neighbors_lr (bool): Whether to use standard or long range neighbor list elements (default = True).
-         cutoff (optional, float): Apply a long range cutoff (potential is shifted to 0, default=None).
+    Args:
+        energy_unit (str/float): Units used for the energy.
+        position_unit (str/float): Units used for lengths and positions.
+        coulomb_potential (torch.nn.Module): Distance part of the potential.
+        output_key (str): Name of the energy property in the output.
+        charges_key (str): Key of partial charges in the input batch.
+        use_neighbors_lr (bool): Whether to use standard or long range neighbor list elements (default = True).
+        cutoff (optional, float): Apply a long range cutoff (potential is shifted to 0, default=None).
     """
 
     def __init__(
-            self,
-            energy_unit: Union[str, float],
-            position_unit: Union[str, float],
-            coulomb_potential: nn.Module,
-            charge_key: str,
-            output_key: str,
-            use_neighbors_lr: bool = True,
-            cutoff: Optional[float] = None,
+        self,
+        energy_unit: Union[str, float],
+        position_unit: Union[str, float],
+        coulomb_potential: nn.Module,
+        output_key: str,
+        charges_key: str = properties.partial_charges,
+        use_neighbors_lr: bool = True,
+        cutoff: Optional[float] = None,
     ):
         super(EnergyCoulomb, self).__init__()
 
@@ -92,7 +92,7 @@ class EnergyCoulomb(nn.Module):
         self.register_buffer("ke", torch.Tensor([ke]))
 
         self.coulomb_potential = coulomb_potential
-        self.charge_key = charge_key
+        self.charges_key = charges_key
         self.output_key = output_key
         self.use_neighbors_lr = use_neighbors_lr
 
@@ -115,7 +115,7 @@ class EnergyCoulomb(nn.Module):
         Returns:
             dict(str, torch.Tensor): results with Coulomb energy.
         """
-        q = inputs[self.charge_key].squeeze(-1)
+        q = inputs[self.charges_key].squeeze(-1)
         idx_m = inputs[properties.idx_m]
 
         if self.use_neighbors_lr:
@@ -166,22 +166,22 @@ class EnergyEwald(torch.nn.Module):
         k_max (int): Number of lattice vectors.
         energy_unit (str/float): Units used for the energy.
         position_unit (str/float): Units used for lengths and positions.
-        charge_key (str): Key of partial charges in the input batch.
         output_key (str): Name of the energy property in the output.
+        charges_key (str): Key of partial charges in the input batch.
         use_neighbors_lr (bool): Whether to use standard or long range neighbor list elements (default = True).
         screening_fn (optional, float): Apply a screening function to the real space interaction.
     """
 
     def __init__(
-            self,
-            alpha: float,
-            k_max: int,
-            energy_unit: Union[str, float],
-            position_unit: Union[str, float],
-            charge_key: str,
-            output_key: str,
-            use_neighbors_lr: bool = True,
-            screening_fn: Optional[nn.Module] = None,
+        self,
+        alpha: float,
+        k_max: int,
+        energy_unit: Union[str, float],
+        position_unit: Union[str, float],
+        output_key: str,
+        charges_key: str = properties.partial_charges,
+        use_neighbors_lr: bool = True,
+        screening_fn: Optional[nn.Module] = None,
     ):
         super(EnergyEwald, self).__init__()
 
@@ -191,13 +191,13 @@ class EnergyEwald(torch.nn.Module):
         )
         self.register_buffer("ke", torch.Tensor([ke]))
 
-        self.charge_key = charge_key
+        self.charges_key = charges_key
         self.output_key = output_key
         self.use_neighbors_lr = use_neighbors_lr
 
         self.screening_fn = screening_fn
 
-        # TODO: automatic computation of alpha, unit conversion?
+        # TODO: automatic computation of alpha
         self.register_buffer("alpha", torch.Tensor([alpha]))
 
         # Set up lattice vectors
@@ -224,15 +224,15 @@ class EnergyEwald(torch.nn.Module):
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
-         Compute the Coulomb energy of the periodic system.
+        Compute the Coulomb energy of the periodic system.
 
-         Args:
-             inputs (dict(str,torch.Tensor)): Input batch.
+        Args:
+            inputs (dict(str,torch.Tensor)): Input batch.
 
-         Returns:
-             dict(str, torch.Tensor): results with Coulomb energy.
-         """
-        q = inputs[self.charge_key].squeeze(-1)
+        Returns:
+            dict(str, torch.Tensor): results with Coulomb energy.
+        """
+        q = inputs[self.charges_key].squeeze(-1)
         idx_m = inputs[properties.idx_m]
 
         # Use long range neighbor list if requested
@@ -257,26 +257,21 @@ class EnergyEwald(torch.nn.Module):
         y_real = self._real_space(q, d_ij, idx_i, idx_j, idx_m, n_atoms, n_molecules)
         y_reciprocal = self._reciprocal_space(q, positions, cell, idx_m, n_molecules)
 
-        print(y_real / 1.3806488e-23, "YR")
-        print(y_real, "YR")
-
-        # y = y_real + y_reciprocal
-        y = y_reciprocal
-        # y = y_real
+        y = y_real + y_reciprocal
 
         results = {self.output_key: y}
 
         return results
 
     def _real_space(
-            self,
-            q: torch.Tensor,
-            d_ij: torch.Tensor,
-            idx_i: torch.Tensor,
-            idx_j: torch.Tensor,
-            idx_m: torch.Tensor,
-            n_atoms: int,
-            n_molecules: int,
+        self,
+        q: torch.Tensor,
+        d_ij: torch.Tensor,
+        idx_i: torch.Tensor,
+        idx_j: torch.Tensor,
+        idx_m: torch.Tensor,
+        n_atoms: int,
+        n_molecules: int,
     ) -> torch.Tensor:
         """
         Compute the real space contribution of the screened charges.
@@ -313,26 +308,26 @@ class EnergyEwald(torch.nn.Module):
         return y
 
     def _reciprocal_space(
-            self,
-            q: torch.Tensor,
-            positions: torch.Tensor,
-            cell: torch.Tensor,
-            idx_m: torch.Tensor,
-            n_molecules: int,
+        self,
+        q: torch.Tensor,
+        positions: torch.Tensor,
+        cell: torch.Tensor,
+        idx_m: torch.Tensor,
+        n_molecules: int,
     ):
         """
-          Compute the reciprocal space contribution.
+        Compute the reciprocal space contribution.
 
-          Args:
-              q (torch.Tensor): Partial charges.
-              positions (torch.Tensor): Atom positions.
-              cell (torch.Tensor): Molecular cells.
-              idx_m (torch.Tensor): Molecular indices of each atom.
-              n_molecules (int): Number of molecules.
+        Args:
+            q (torch.Tensor): Partial charges.
+            positions (torch.Tensor): Atom positions.
+            cell (torch.Tensor): Molecular cells.
+            idx_m (torch.Tensor): Molecular indices of each atom.
+            n_molecules (int): Number of molecules.
 
-          Returns:
-              torch.Tensor: Real space Coulomb energy.
-          """
+        Returns:
+            torch.Tensor: Real space Coulomb energy.
+        """
         # extract box dimensions from cells
         recip_box = 2.0 * np.pi * torch.linalg.inv(cell).transpose(1, 2)
         v_box = torch.abs(torch.linalg.det(cell))
@@ -345,7 +340,6 @@ class EnergyEwald(torch.nn.Module):
 
         # setup kvecs M x K x 3
         kvecs = torch.matmul(self.kvecs[None, :, :], recip_box)
-        # kvecs = 2.0 * np.pi * torch.linalg.solve(cell, self.kvecs.transpose(0,1)).transpose(1,2)
 
         # Squared length of vectors M x K
         k_squared = torch.sum(kvecs ** 2, dim=2)
@@ -374,8 +368,6 @@ class EnergyEwald(torch.nn.Module):
         self_interaction = torch.sqrt(self.alpha / np.pi) * snn.scatter_add(
             q ** 2, idx_m, dim_size=n_molecules
         )
-        print(self_interaction * self.ke / 1.3806488e-23)
-        print(y_ewald * self.ke / 1.3806488e-23)
 
         # Bring everything together
         y_ewald = self.ke * (y_ewald - self_interaction)
