@@ -49,12 +49,18 @@ class ZBLRepulsionEnergy(nn.Module):
         self.output_key = output_key
 
         # Basic ZBL parameters (in atomic units)
-        a_div = (
-            torch.tensor([0.8854]) * position_units
+        # Since all quantities have a predefined sign, they are initialized to the inverse softplus and a softplus
+        # function is applied in the forward pass to guarantee the correct sign during training
+        a_div = snn.softplus_inverse(
+            torch.tensor([1.0 / 0.8854]) * position_units
         )  # in this way, distances can be used directly
-        a_pow = torch.tensor([0.23])
-        coefficients = torch.tensor([3.19980, 0.94229, 0.40290, 0.20162])
-        exponents = torch.tensor([0.18175, 0.50986, 0.28022, 0.02817])
+        a_pow = snn.softplus_inverse(torch.tensor([0.23]))
+        exponents = snn.softplus_inverse(
+            torch.tensor([3.19980, 0.94229, 0.40290, 0.20162])
+        )
+        coefficients = snn.softplus_inverse(
+            torch.tensor([0.18175, 0.50986, 0.28022, 0.02817])
+        )
 
         # Initialize network parameters
         self.a_pow = nn.Parameter(a_pow, requires_grad=trainable)
@@ -74,14 +80,15 @@ class ZBLRepulsionEnergy(nn.Module):
         n_molecules = int(idx_m[-1]) + 1
 
         # Construct screening function
-        a = z ** torch.abs(self.a_pow)
-        a_ij = (a[idx_i] + a[idx_j]) / torch.abs(self.a_div)
+        a = z ** F.softplus(self.a_pow)
+        a_ij = (a[idx_i] + a[idx_j]) * F.softplus(self.a_div)
         # Get exponents and coefficients, normalize the latter
-        exponents = a_ij[..., None] * torch.abs(self.exponents)[None, ...]
-        coefficients = torch.abs(self.coefficients)[None, ...]
-        coefficients = F.normalize(coefficients, p=1, dim=0)
+        exponents = a_ij[..., None] * F.softplus(self.exponents)[None, ...]
+        coefficients = F.softplus(self.coefficients)[None, ...]
+        coefficients = F.normalize(coefficients, p=1, dim=1)
+
         screening = torch.sum(
-            coefficients * torch.exp(-exponents * r_ij[:, None]), dim=1
+            coefficients * torch.exp(-exponents * d_ij[:, None]), dim=1
         )
 
         # Compute nuclear repulsion
