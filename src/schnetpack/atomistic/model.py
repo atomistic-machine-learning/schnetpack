@@ -53,8 +53,6 @@ class AtomisticModel(pl.LightningModule):
 
     """
 
-    required_derivatives: List[str]
-
     def __init__(
         self,
         representation: nn.Module,
