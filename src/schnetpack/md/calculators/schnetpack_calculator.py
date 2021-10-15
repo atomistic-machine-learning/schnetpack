@@ -92,7 +92,7 @@ class SchNetPackCalculator(MDCalculator):
         """
 
         log.info("Loading model from {:s}".format(model_file))
-        model = torch.load(model_file).to(torch.float32)
+        model = torch.load(model_file).to(torch.float64)
         model = model.eval()
 
         if self.stress_label is not None:
@@ -101,7 +101,7 @@ class SchNetPackCalculator(MDCalculator):
 
         if self.script_model:
             log.info("Converting model to torch script...")
-            model = model.to_torchscript(None, "script")
+            model = model.to_torchscript(file_path=None, method="script")
 
         log.info("Deactivating inference mode for simulation...")
         self._deactivate_inference_mode(model)
@@ -116,7 +116,7 @@ class SchNetPackCalculator(MDCalculator):
                     log.info("Found `AddOffsets` postprocessing module...")
                     log.info(
                         "Constant offset of {:20.11f} will be removed...".format(
-                            pp.mean.detach().cpu().numpy()[0]
+                            pp.mean.detach().cpu().numpy()
                         )
                     )
         model.inference_mode = False
