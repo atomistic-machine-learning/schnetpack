@@ -27,6 +27,12 @@ class TestNeighborLists:
         cutoff, props, neighbors_ref = environment
         neighbor_list = neighbor_list(cutoff)
         neighbors = neighbor_list(props)
+        R = props[structure.R]
+        neighbors[structure.Rij] = (
+            R[neighbors[structure.idx_j]]
+            - R[neighbors[structure.idx_i]]
+            + props[structure.offsets]
+        )
 
         neighbors = self._sort_neighbors(neighbors)
         neighbors_ref = self._sort_neighbors(neighbors_ref)
@@ -54,7 +60,7 @@ class TestNeighborLists:
 
         sort_idx = self._get_unique_idx(idx_i, idx_j, Rij)
 
-        return (idx_i[sort_idx], idx_j[sort_idx], Rij[sort_idx])
+        return idx_i[sort_idx], idx_j[sort_idx], Rij[sort_idx]
 
     @staticmethod
     def _get_unique_idx(
@@ -91,8 +97,15 @@ class TestNeighborLists:
 def test_single_atom(single_atom, neighbor_list, cutoff):
     neighbor_list = neighbor_list(cutoff)
     props_after = neighbor_list(single_atom)
+    R = props_after[structure.R]
+    props_after[structure.Rij] = (
+        R[props_after[structure.idx_j]]
+        - R[props_after[structure.idx_i]]
+        + props_after[structure.offsets]
+    )
+
     assert_consistent(single_atom, props_after)
-    assert len(props_after[structure.Rij]) == 0
+    assert len(props_after[structure.offsets]) == 0
     assert len(props_after[structure.idx_i]) == 0
     assert len(props_after[structure.idx_j]) == 0
 

@@ -233,7 +233,7 @@ class TorchNeighborList(NeighborListTransform):
 
         bi_offset = torch.cat((-offset, offset), dim=0)
         offset = bi_offset[sorted_idx]
-        offset = torch.mm(offset, cell)
+        offset = torch.mm(offset.to(cell.dtype), cell)
 
         return idx_i, idx_j, offset
 
