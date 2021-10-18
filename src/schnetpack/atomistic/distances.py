@@ -6,6 +6,22 @@ import torch.nn as nn
 import schnetpack.properties as properties
 
 
+class PairwiseDistances(nn.Module):
+    """
+    Compute pair-wise distances from indices provided by a neighbor list transform.
+    """
+
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        R = inputs[properties.R]
+        offsets = inputs[properties.offsets]
+        idx_i = inputs[properties.idx_i]
+        idx_j = inputs[properties.idx_j]
+
+        Rij = R[idx_i] - R[idx_j] + offsets
+        inputs[properties.Rij] = Rij
+        return inputs
+
+
 class FilterShortRange(nn.Module):
     """
     Separate short-range from all supplied distances.
