@@ -21,9 +21,10 @@ class OrganicMaterialsDatabase(AtomsDataModule):
     (PBE) band gap (OMDB-GAP1 database) for 12500 non-magnetic materials.
 
     References:
-        arXiv: https://arxiv.org/abs/1810.12814 "Band gap prediction for large organic
-        crystal structures with machine learning" Bart Olsthoorn, R. Matthias Geilhufe,
-        Stanislav S. Borysov, Alexander V. Balatsky (Submitted on 30 Oct 2018)
+
+        .. [#omdb] Bart Olsthoorn, R. Matthias Geilhufe, Stanislav S. Borysov, Alexander V. Balatsky.
+           Band gap prediction for large organic crystal structures with machine learning.
+           https://arxiv.org/abs/1810.12814
     """
 
     BandGap = "band_gap"

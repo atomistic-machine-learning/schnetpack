@@ -8,6 +8,8 @@ import schnetpack as spk
 import schnetpack.nn as snn
 import schnetpack.properties as properties
 
+__all__ = ["Atomwise", "DipoleMoment", "Polarizability"]
+
 
 class Atomwise(nn.Module):
     """
@@ -84,7 +86,8 @@ class DipoleMoment(nn.Module):
     The latter requires a representation supplying (equivariant) vector features.
 
     References:
-    .. [#painn1] Schütt, Unke, Gastegger:
+
+    .. [#painn1] Schütt, Unke, Gastegger.
        Equivariant message passing for the prediction of tensorial properties and molecular spectra.
        ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
     .. [#irspec] Gastegger, Behler, Marquetand.
@@ -207,9 +210,10 @@ class Polarizability(nn.Module):
     This requires an equivariant representation, e.g. PaiNN, that provides both scalar and vectorial features.
 
     References:
-    .. [#painn1] Schütt, Unke, Gastegger:
+
+    .. [#painn1a] Schütt, Unke, Gastegger:
        Equivariant message passing for the prediction of tensorial properties and molecular spectra.
-       ICML 2021
+       ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
     """
 
     def __init__(

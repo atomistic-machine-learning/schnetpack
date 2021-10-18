@@ -1,6 +1,13 @@
 defaults:
   - pes
 
+input_modules:
+  - _target_: schnetpack.atomistic.StrainResponse
+    strain_Rij: True
+    strain_R: False
+    strain_cell: False
+
+
 output_modules:
   - _target_: schnetpack.atomistic.Atomwise
     output_key: ${energy_key}
@@ -9,7 +16,8 @@ output_modules:
   - _target_: schnetpack.atomistic.Forces
     energy_key: ${energy_key}
     force_key: ${forces_key}
-    stress_key: ${stress_key}
+    stress_key: stress
+    calc_stress: True
 
 outputs:
   - _target_: schnetpack.atomistic.ModelOutput
@@ -32,13 +40,3 @@ outputs:
       mse:
         _target_: torchmetrics.regression.MeanSquaredError
     loss_weight: 0.90
-  - _target_: schnetpack.atomistic.ModelOutput
-    name: ${stress_key}
-    loss_fn:
-      _target_: torch.nn.MSELoss
-    metrics:
-      mae:
-        _target_: torchmetrics.regression.MeanAbsoluteError
-      mse:
-        _target_: torchmetrics.regression.MeanSquaredError
-    loss_weight: 0.05

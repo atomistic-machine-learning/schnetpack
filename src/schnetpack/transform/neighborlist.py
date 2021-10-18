@@ -152,29 +152,16 @@ class NeighborListTransform(Transform):
     def __init__(
         self,
         cutoff: float,
-        long_range_cutoff: float = -1.0,
         return_offset: bool = False,
     ):
         """
         Args:
             cutoff: Cutoff radius for neighbor search.
-            long_range_cutoff: If a long-range cutoff is provided, the transform will return separate values
-                as idx_i_lr, idx_j_lr, and Rij_lr
             return_offset (bool): return cell offset vectors in periodic simulations.
         """
         super().__init__()
-        self._short_range_cutoff = cutoff
-        self._long_range_cutoff = long_range_cutoff
+        self._cutoff = cutoff
         self._return_offset = return_offset
-
-        if self._long_range_cutoff > 0:
-            if self._short_range_cutoff >= self._long_range_cutoff:
-                raise ValueError(
-                    "If a long-range cutoff is provided it needs to be larger than the short-range cutoff."
-                )
-            self._cutoff = self._long_range_cutoff
-        else:
-            self._cutoff = self._short_range_cutoff
 
     def forward(
         self,
@@ -183,24 +170,12 @@ class NeighborListTransform(Transform):
     ) -> Dict[str, torch.Tensor]:
         Z = inputs[properties.Z]
         R = inputs[properties.R]
-        cell = inputs[properties.cell]
+        cell = inputs[properties.cell].view(3, 3)
         pbc = inputs[properties.pbc]
 
         Rij, idx_i, idx_j, offset = self._build_neighbor_list(
             Z, R, cell, pbc, self._cutoff
         )
-
-        if self._long_range_cutoff > 0.0:
-            inputs[properties.idx_i_lr] = idx_i.detach()
-            inputs[properties.idx_j_lr] = idx_j.detach()
-            inputs[properties.Rij_lr] = Rij.detach()
-
-            if self._return_offset:
-                inputs[properties.offsets_lr] = offset
-
-            Rij, idx_i, idx_j, offset = filter_short_range(
-                idx_i, idx_j, Rij, self._short_range_cutoff, offset
-            )
 
         inputs[properties.idx_i] = idx_i.detach()
         inputs[properties.idx_j] = idx_j.detach()
@@ -223,28 +198,6 @@ class NeighborListTransform(Transform):
         raise NotImplementedError
 
 
-def filter_short_range(
-    idx_i: torch.Tensor,
-    idx_j: torch.Tensor,
-    Rij: torch.Tensor,
-    short_range_cutoff: float,
-    offset: Optional[torch.Tensor] = None,
-):
-    rij = torch.norm(Rij, dim=-1)
-    cidx = torch.nonzero(rij <= short_range_cutoff).squeeze(-1)
-
-    idx_i_sr = idx_i[cidx]
-    idx_j_sr = idx_j[cidx]
-    Rij_sr = Rij[cidx]
-
-    if offset is not None:
-        offset_sr = offset[cidx]
-    else:
-        offset_sr = None
-
-    return Rij_sr, idx_i_sr, idx_j_sr, offset_sr
-
-
 class ASENeighborList(NeighborListTransform):
     """
     Calculate neighbor list using ASE.
@@ -252,6 +205,7 @@ class ASENeighborList(NeighborListTransform):
 
     def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
         at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
+        at.wrap()
 
         if self._return_offset:
             idx_i, idx_j, Rij, offset = neighbor_list(

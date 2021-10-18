@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, Callable, List, Type, TYPE_CHECKING
+from typing import Any, Dict, Optional, Union, List, Type
 
 from schnetpack.transform import Transform
+import schnetpack.properties as properties
 
 import torch
 import pytorch_lightning as pl
@@ -52,15 +53,13 @@ class AtomisticModel(pl.LightningModule):
 
     """
 
-    required_derivatives: List[str]
-
     def __init__(
         self,
-        # datamodule: spk.data.AtomsDataModule,
         representation: nn.Module,
-        output_modules: List[nn.Module],
         outputs: List[ModelOutput],
-        optimizer_cls: Type[torch.optim.Optimizer],
+        input_modules: List[nn.Module] = None,
+        output_modules: List[nn.Module] = None,
+        optimizer_cls: Type[torch.optim.Optimizer] = torch.optim.Adam,
         optimizer_args: Optional[Dict[str, Any]] = None,
         scheduler_cls: Optional[Type] = None,
         scheduler_args: Optional[Dict[str, Any]] = None,
@@ -71,7 +70,11 @@ class AtomisticModel(pl.LightningModule):
         Args:
             datamodule: pytorch_lightning module for dataset
             representation: nn.Module for atomistic representation
-            output_modules: List of module to compute outputs from atomistic representation.
+            input_modules: List of modules to prepare inputs before computing atomistic representations, e.g.
+                for the separation of long- and short-range interactions or introducing external fields
+                for response properties.
+                Input modules must modify and return the input dictionary.
+            output_modules: List of modules to compute outputs from atomistic representation.
                 Output modules must modify and return the input dictionary.
             outputs: list of outputs an optional loss functions
             optimizer_cls: type of torch optimizer,e.g. torch.optim.Adam
@@ -89,11 +92,9 @@ class AtomisticModel(pl.LightningModule):
         self.scheduler_kwargs = scheduler_args
         self.schedule_monitor = scheduler_monitor
 
-        # self.save_hyperparameters(
-        #     "representation", "output_modules", "postprocess", "outputs"
-        # )
         self.representation = representation
         self.outputs = nn.ModuleList(outputs)
+        self.input_modules = nn.ModuleList(input_modules)
         self.output_modules = nn.ModuleList(output_modules)
         self.pp = postprocess or []
 
@@ -115,12 +116,19 @@ class AtomisticModel(pl.LightningModule):
             self.postprocessors.append(pp)
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
+        # setup gradients w.r.t. structure
         for p in self.required_derivatives:
-            if p in inputs:
+            if p in inputs.keys():
                 inputs[p].requires_grad_()
 
+        # apply input modules
+        for inmod in self.input_modules:
+            inputs.update(inmod(inputs))
+
+        # compute representation
         inputs.update(self.representation(inputs))
 
+        # apply output modules
         for outmod in self.output_modules:
             inputs.update(outmod(inputs))
 

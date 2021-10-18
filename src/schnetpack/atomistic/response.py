@@ -3,18 +3,22 @@ from typing import Dict, Optional, List
 import torch
 import torch.nn as nn
 
-import schnetpack.properties as properties
 from torch.autograd import grad
+
+from schnetpack.nn.utils import derivative_from_molecular, derivative_from_atomic
+import schnetpack.properties as properties
 
 __all__ = ["Forces", "Response"]
 
-from schnetpack.nn.utils import derivative_from_molecular, derivative_from_atomic
+
+class ResponseException(Exception):
+    pass
 
 
 class Forces(nn.Module):
     """
     Predicts forces and stress as response of the energy prediction
-    w.r.t. the atom positions.
+    w.r.t. the atom positions and strain.
 
     """
 
@@ -41,7 +45,11 @@ class Forces(nn.Module):
         self.force_key = force_key
         self.stress_key = stress_key
 
-        self.required_derivatives = [properties.Rij]
+        self.required_derivatives = []
+        if self.calc_forces:
+            self.required_derivatives.append(properties.Rij)
+        if self.calc_stress:
+            self.required_derivatives.append(properties.strain)
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         Epred = inputs[self.energy_key]
@@ -49,53 +57,37 @@ class Forces(nn.Module):
         results = {}
 
         go: List[Optional[torch.Tensor]] = [torch.ones_like(Epred)]
-        dEdRij = grad(
+        grads = grad(
             [Epred],
-            [inputs[properties.Rij]],
+            [inputs[prop] for prop in self.required_derivatives],
             grad_outputs=go,
             create_graph=self.training,
-        )[0]
-
-        # TorchScript needs Tensor instead of Optional[Tensor]
-        if dEdRij is None:
-            dEdRij = torch.zeros_like(inputs[properties.Rij])
+        )
 
         if self.calc_forces:
+            dEdRij = grads[0]
+            # TorchScript needs Tensor instead of Optional[Tensor]
+            if dEdRij is None:
+                dEdRij = torch.zeros_like(inputs[properties.Rij])
+
             Fpred = torch.zeros_like(R)
             Fpred = Fpred.index_add(0, inputs[properties.idx_i], dEdRij)
             Fpred = Fpred.index_add(0, inputs[properties.idx_j], -dEdRij)
             results[self.force_key] = Fpred
 
         if self.calc_stress:
-            stress_i = torch.zeros((R.shape[0], 3, 3), dtype=R.dtype, device=R.device)
+            stress = grads[-1]
+            # TorchScript needs Tensor instead of Optional[Tensor]
+            if stress is None:
+                stress = torch.zeros_like(inputs[properties.cell])
 
-            # sum over j
-            stress_i = stress_i.index_add(
-                0,
-                inputs[properties.idx_i],
-                dEdRij[:, None, :] * inputs[properties.Rij][:, :, None],
-            )
-
-            # sum over i
-            idx_m = inputs[properties.idx_m]
-            maxm = int(idx_m[-1]) + 1
-            stress = torch.zeros(
-                (maxm, 3, 3), dtype=stress_i.dtype, device=stress_i.device
-            )
-            stress = stress.index_add(0, idx_m, stress_i)
-
-            cell_33 = inputs[properties.cell].view(maxm, 3, 3)
-            volume = (
-                torch.sum(
-                    cell_33[:, 0, :]
-                    * torch.cross(cell_33[:, 1, :], cell_33[:, 2, :], dim=1),
-                    dim=1,
-                    keepdim=True,
-                )
-                .expand(maxm, 3)
-                .reshape(maxm * 3, 1)
-            )
-            results[self.stress_key] = stress.reshape(maxm * 3, 3) / volume
+            cell = inputs[properties.cell]
+            volume = torch.sum(
+                cell[:, 0, :] * torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
+                dim=1,
+                keepdim=True,
+            )[:, :, None]
+            results[self.stress_key] = stress / volume
 
         return results
 
