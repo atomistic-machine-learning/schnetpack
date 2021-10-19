@@ -1,7 +1,7 @@
 from typing import Callable, Dict, List, Optional
 
 import torch
-from torch import nn, nn as nn
+import torch.nn as nn
 from torch.nn.init import zeros_
 
 import schnetpack.properties as structure
@@ -10,11 +10,10 @@ from schnetpack.nn.activations import shifted_softplus
 from schnetpack.representation.schnet import SchNetInteraction
 from schnetpack.utils import required_fields_from_properties
 
-from schnetpack import properties, nn as snn
-
+from schnetpack import properties
 import schnetpack.nn as snn
 
-__all__ = ["FieldSchNet", "NuclearMagneticMomentEmbedding", "_setup_external_fields"]
+__all__ = ["FieldSchNet", "NuclearMagneticMomentEmbedding"]
 
 
 class FieldSchNetFieldInteraction(nn.Module):
@@ -297,7 +296,6 @@ class FieldSchNet(nn.Module):
         self.n_filters = n_filters or self.n_atom_basis
         self.radial_basis = radial_basis
         self.cutoff_fn = cutoff_fn
-        self.cutoff = cutoff_fn.cutoff
 
         if response_properties is not None:
             external_fields = required_fields_from_properties(response_properties)
@@ -379,12 +377,16 @@ class FieldSchNet(nn.Module):
         idx_j = inputs[structure.idx_j]
         idx_m = inputs[properties.idx_m]
 
-        field_components = _setup_external_fields(inputs, self.external_fields)
         # Bring fields to final shape for model
         external_fields = {
-            field: field_components[field][idx_m].unsqueeze(-1)
-            for field in self.external_fields
+            field: inputs[field][idx_m].unsqueeze(-1) for field in self.external_fields
         }
+
+        # Apply field modifier
+        if self.electric_field_modifier is not None:
+            external_fields[properties.electric_field] = external_fields[
+                properties.electric_field
+            ] + self.electric_field_modifier(inputs)
 
         # compute atom and pair features
         d_ij = torch.norm(r_ij, dim=1)
@@ -405,7 +407,7 @@ class FieldSchNet(nn.Module):
             mu[properties.magnetic_field] = mu[
                 properties.magnetic_field
             ] + self.nmm_embedding(
-                atomic_numbers, field_components[properties.nuclear_magnetic_moments]
+                atomic_numbers, inputs[properties.nuclear_magnetic_moments]
             )
 
         for (
@@ -434,48 +436,5 @@ class FieldSchNet(nn.Module):
             mu = dipole_update(dq, mu, r_ij, idx_i, idx_j, rcut_ij)
 
         output_dict = {"scalar_representation": q.squeeze(1)}
-        output_dict.update(field_components)
 
         return output_dict
-
-
-def _setup_external_fields(inputs: Dict[str, torch.Tensor], required_fields: List[str]):
-    """
-    Auxiliary function for setting up dummy external fields in response models.
-    Checks if fields are present in input and sets dummy fields otherwise.
-
-    Args:
-        inputs (dict(str, torch.Tensor)): Input batch to model.
-        required_fields (list(str)): Required external fields
-
-    Returns:
-        dict(str, torch.Tensor): All field components which should be added to the ouput for computing response
-                                 properties.
-    """
-    n_atoms = inputs[properties.n_atoms]
-    n_molecules = n_atoms.shape[0]
-
-    field_components = {}  # Dictionary used to update input batch for derivatives
-    external_fields = (
-        {}
-    )  # Fields passed to interaction computation (cast to batch structure)
-    for field in required_fields:
-        # Store all fields in directory which will be returned for derivatives
-        if field not in inputs:
-            field_components[field] = torch.zeros(
-                n_molecules, 3, requires_grad=True, device=n_atoms.device
-            )
-        else:
-            field_components[field] = inputs[field]
-
-    if properties.magnetic_field in required_fields:
-        if properties.nuclear_magnetic_moments not in inputs:
-            field_components[properties.nuclear_magnetic_moments] = torch.zeros_like(
-                inputs[properties.R], requires_grad=True
-            )
-        else:
-            field_components[properties.nuclear_magnetic_moments] = inputs[
-                properties.nuclear_magnetic_moments
-            ]
-
-    return field_components
