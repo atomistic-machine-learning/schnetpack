@@ -66,11 +66,8 @@ def derivative_from_atomic(
     fx: torch.Tensor,
     dx: torch.Tensor,
     n_atoms: torch.Tensor,
-    reduce_ij: bool,
     create_graph: bool = False,
     retain_graph: bool = False,
-    idx_i: Optional[torch.Tensor] = None,
-    idx_j: Optional[torch.Tensor] = None,
 ):
     """
     Compute the derivative of a tensor with the leading dimension of (batch x atoms) with respect to another tensor of
@@ -84,21 +81,14 @@ def derivative_from_atomic(
         fx (torch.Tensor): Tensor for which the derivative is taken.
         dx (torch.Tensor): Derivative.
         n_atoms (torch.Tensor): Tensor containing the number of atoms for each molecule.
-        reduce_ij (bool): If the derivative is with respect to distances R_ij, reduce to atom positions.
         create_graph (bool): Create computational graph.
         retain_graph (bool): Keep the computational graph.
-        idx_i (torch.Tensor, optional): Index for i neighbors, required for `reduce_ij`.
-        idx_j (torch.Tensor, optional): Index for j neighbors, required for `reduce_ij`.
 
     Returns:
         torch.Tensor: derivative of `fx` with respect to `dx`.
     """
-    n_total = torch.sum(n_atoms)
-
     # Split input tensor for easier bookkeeping
     fxm = fx.split(list(n_atoms))
-
-    # create_graph = True
 
     dfdx = []
 
@@ -117,14 +107,6 @@ def derivative_from_atomic(
                 create_graph=create_graph,
                 retain_graph=retain_graph,
             )[0]
-
-            # Reduce Rij to R if requested.
-            if reduce_ij:
-                dfdx_i_tmp = torch.zeros(
-                    n_total, *dfdx_i.shape[1:], device=fx.device, dtype=fx.dtype
-                )
-                dfdx_i_tmp = dfdx_i_tmp.index_add(0, idx_i, -dfdx_i)
-                dfdx_i = dfdx_i_tmp.index_add(0, idx_j, dfdx_i)
 
             dfdx_mol.append(dfdx_i[n_mol : n_mol + n_atoms[idx], ...])
 
