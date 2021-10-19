@@ -138,112 +138,90 @@ class Response(nn.Module):
 
         # Set up instructions for computing response properties and derivatives
         (
-            derivative_instructions,
+            basic_derivatives,
             required_derivatives,
+            derivative_instructions,
             graph_required,
         ) = self._construct_properties()
-        self.derivative_instructions = derivative_instructions
+        # Basic and required can not be merged
+        self.basic_derivatives = basic_derivatives
         self.required_derivatives = required_derivatives
+        self.derivative_instructions = derivative_instructions
         self.graph_required = graph_required
+
+        # Check whether basic graph is enough or higher level derivatives are necessary
+        self.basic_graph_required = len(self.basic_derivatives) != len(
+            [p for p in self.derivative_instructions if self.derivative_instructions[p]]
+        )
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         energy = inputs[self.energy_key]
-        R = inputs[properties.R]
 
-        device = R.device
-        dtype = R.dtype
+        # Compute base level derivatives
+        go: List[Optional[torch.Tensor]] = [torch.ones_like(energy)]
+        basic_derivatives = grad(
+            [energy],
+            [inputs[prop] for prop in self.basic_derivatives.values()],
+            grad_outputs=go,
+            create_graph=(self.basic_graph_required or self.training),
+            retain_graph=self.basic_graph_required,
+        )
+        # Convert to dictionary
+        basic_derivatives = dict(zip(self.basic_derivatives.keys(), basic_derivatives))
 
         results = {}
 
+        # ================================
+        # dE / dR
+        # ================================
         if self.derivative_instructions["dEdR"]:
 
             # basic distance derivatives
-            go: List[Optional[torch.Tensor]] = [torch.ones_like(energy)]
-            dEdRij = grad(
-                [energy],
-                [inputs[properties.Rij]],
-                grad_outputs=go,
-                create_graph=(self.graph_required["dEdR"] or self.training),
-                retain_graph=True,
-            )[0]
-
-            # Forces
-            Fpred = torch.zeros_like(R)
-            Fpred = Fpred.index_add(0, inputs[properties.idx_i], dEdRij)
-            Fpred = Fpred.index_add(0, inputs[properties.idx_j], -dEdRij)
-
             if properties.forces in self.response_properties:
-                results[properties.forces] = Fpred
+                results[properties.forces] = -basic_derivatives["dEdR"]
 
             if self.derivative_instructions["d2EdR2"]:
                 d2EdR2 = derivative_from_atomic(
-                    -Fpred,
-                    inputs[properties.Rij],
+                    basic_derivatives["dEdR"],
+                    inputs[properties.R],
                     inputs[properties.n_atoms],
-                    True,
                     create_graph=(self.graph_required["d2EdR2"] or self.training),
                     retain_graph=True,
-                    idx_i=inputs[properties.idx_i],
-                    idx_j=inputs[properties.idx_j],
                 )
                 results[properties.hessian] = d2EdR2
 
-            # Stress tensor
-            if properties.stress in self.response_properties:
-                stress_i = torch.zeros(
-                    (R.shape[0], 3, 3), dtype=R.dtype, device=R.device
-                )
+        # ================================
+        # dE / ds
+        # ================================
+        if self.derivative_instructions["dEds"]:
+            stress = basic_derivatives["dEds"]
 
-                # sum over j
-                stress_i = stress_i.index_add(
-                    0,
-                    inputs[properties.idx_i],
-                    dEdRij[:, None, :] * inputs[properties.Rij][:, :, None],
-                )
+            # TorchScript needs Tensor instead of Optional[Tensor]
+            if stress is None:
+                stress = torch.zeros_like(inputs[properties.cell])
 
-                # sum over i
-                idx_m = inputs[properties.idx_m]
-                maxm = int(idx_m[-1]) + 1
-                stress = torch.zeros(
-                    (maxm, 3, 3), dtype=stress_i.dtype, device=stress_i.device
-                )
-                stress = stress.index_add(0, idx_m, stress_i)
+            cell = inputs[properties.cell]
+            volume = torch.sum(
+                cell[:, 0, :] * torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
+                dim=1,
+                keepdim=True,
+            )[:, :, None]
+            results[properties.stress] = stress / volume
 
-                cell_33 = inputs[properties.cell].view(maxm, 3, 3)
-                volume = (
-                    torch.sum(
-                        cell_33[:, 0, :]
-                        * torch.cross(cell_33[:, 1, :], cell_33[:, 2, :], dim=1),
-                        dim=1,
-                        keepdim=True,
-                    )
-                    .expand(maxm, 3)
-                    .reshape(maxm * 3, 1)
-                )
-                results[properties.stress] = stress.reshape(maxm * 3, 3) / volume
-
+        # ================================
+        # dE / dF
+        # ================================
         if self.derivative_instructions["dEdF"]:
-
-            dEdF = derivative_from_molecular(
-                energy,
-                inputs[properties.electric_field],
-                create_graph=(self.graph_required["dEdF"] or self.training),
-                retain_graph=True,
-            )
-            results[properties.dipole_moment] = -dEdF
+            dEdF = basic_derivatives["dEdF"]
+            results[properties.dipole_moment] = -basic_derivatives["dEdF"]
 
             if self.derivative_instructions["d2EdFdR"]:
-                d2EdFdR_tmp = derivative_from_molecular(
+                d2EdFdR = derivative_from_molecular(
                     -dEdF,
-                    inputs[properties.Rij],
+                    inputs[properties.R],
                     create_graph=(self.graph_required["d2EdFdR"] or self.training),
                     retain_graph=True,
                 )
-                # Bring from Rij to R
-                d2EdFdR = torch.zeros((R.shape[0], 3, 3), device=device, dtype=dtype)
-                d2EdFdR = d2EdFdR.index_add(0, inputs[properties.idx_i], -d2EdFdR_tmp)
-                d2EdFdR = d2EdFdR.index_add(0, inputs[properties.idx_j], d2EdFdR_tmp)
-
                 results[properties.dipole_derivatives] = d2EdFdR
 
                 # Compute partial charges if requested
@@ -259,36 +237,22 @@ class Response(nn.Module):
                     create_graph=(self.graph_required["d2EdF2"] or self.training),
                     retain_graph=True,
                 )
-
                 results[properties.polarizability] = d2EdF2
 
                 if self.derivative_instructions["d3EdF2dR"]:
-                    d3EdF2dR_tmp = derivative_from_molecular(
+                    d3EdF2dR = derivative_from_molecular(
                         d2EdF2,
-                        inputs[properties.Rij],
+                        inputs[properties.R],
                         create_graph=(self.graph_required["d3EdF2dR"] or self.training),
                         retain_graph=True,
                     )
-
-                    d3EdF2dR = torch.zeros(
-                        (R.shape[0], 3, 3, 3), device=device, dtype=dtype
-                    )
-                    d3EdF2dR = d3EdF2dR.index_add(
-                        0, inputs[properties.idx_i], -d3EdF2dR_tmp
-                    )
-                    d3EdF2dR = d3EdF2dR.index_add(
-                        0, inputs[properties.idx_j], d3EdF2dR_tmp
-                    )
-
                     results[properties.polarizability_derivatives] = d3EdF2dR
 
+        # ================================
+        # dE / dB
+        # ================================
         if self.derivative_instructions["dEdB"]:
-            dEdB = derivative_from_molecular(
-                energy,
-                inputs[properties.magnetic_field],
-                create_graph=(self.graph_required["dEdB"] or self.training),
-                retain_graph=True,
-            )
+            dEdB = basic_derivatives["dEdB"]
             results["dEdB"] = dEdB
 
             if self.derivative_instructions["d2EdBdI"]:
@@ -300,13 +264,11 @@ class Response(nn.Module):
                 )
                 results[properties.shielding] = d2EdBdI
 
+        # ================================
+        # dE / dI
+        # ================================
         if self.derivative_instructions["dEdI"]:
-            dEdI = derivative_from_molecular(
-                energy,
-                inputs[properties.nuclear_magnetic_moments],
-                create_graph=(self.graph_required["dEdI"] or self.training),
-                retain_graph=True,
-            )
+            dEdI = basic_derivatives["dEdI"]
             results["dEdI"] = dEdI
 
             if self.derivative_instructions["d2EdI2"]:
@@ -314,7 +276,6 @@ class Response(nn.Module):
                     dEdI,
                     inputs[properties.nuclear_magnetic_moments],
                     inputs[properties.n_atoms],
-                    False,
                     create_graph=(self.graph_required["d2EdI2"] or self.training),
                     retain_graph=True,
                 )
@@ -336,8 +297,10 @@ class Response(nn.Module):
             - for which derivatives does a graph need to be constructed
 
         Returns:
-            (dict(str, bool), list(str), dict(str, bool)): dictionary of required derivatives, list of variables which
-                                                           need gradients, dictionary of required graphs.
+            (dict(str, str), list(str), dict(str, bool), dict(str, bool)): dictionary of basic derivatives, list of
+                                                                           variables which need gradients, dictionary
+                                                                           of deriviative instructions, dictionary of
+                                                                           required graphs.
         """
         derivative_instructions = {
             "dEdR": False,
@@ -367,6 +330,7 @@ class Response(nn.Module):
         }
 
         required_derivatives = set()
+        basic_derivatives = dict()
 
         # position derivatives
         if (properties.forces in self.response_properties) or (
@@ -375,6 +339,7 @@ class Response(nn.Module):
 
             derivative_instructions["dEdR"] = True
             required_derivatives.add(properties.R)
+            basic_derivatives["dEdR"] = properties.R
 
             if properties.hessian in self.response_properties:
                 graph_required["dEdR"] = True
@@ -384,6 +349,7 @@ class Response(nn.Module):
         if properties.stress in self.response_properties:
             derivative_instructions["dEds"] = True
             required_derivatives.add(properties.strain)
+            basic_derivatives["dEds"] = properties.strain
 
         # electric field derivatives
         if (
@@ -396,13 +362,14 @@ class Response(nn.Module):
 
             derivative_instructions["dEdF"] = True
             required_derivatives.add(properties.electric_field)
+            basic_derivatives["dEdF"] = properties.electric_field
 
             if (properties.dipole_derivatives in self.response_properties) or (
                 properties.partial_charges in self.response_properties
             ):
                 graph_required["dEdF"] = True
                 derivative_instructions["d2EdFdR"] = True
-                required_derivatives.add(properties.Rij)
+                required_derivatives.add(properties.R)
 
             if (properties.polarizability in self.response_properties) or (
                 properties.polarizability_derivatives in self.response_properties
@@ -413,12 +380,13 @@ class Response(nn.Module):
                 if properties.polarizability_derivatives in self.response_properties:
                     graph_required["d2EdF2"] = True
                     derivative_instructions["d3EdF2dR"] = True
-                    required_derivatives.add(properties.Rij)
+                    required_derivatives.add(properties.R)
 
         # magnetic moment derivatives
         if properties.nuclear_spin_coupling in self.response_properties:
             # First derivative
             required_derivatives.add(properties.nuclear_magnetic_moments)
+            basic_derivatives["dEdI"] = properties.nuclear_magnetic_moments
             derivative_instructions["dEdI"] = True
 
             # Second derivative for couplings
@@ -429,6 +397,7 @@ class Response(nn.Module):
         if properties.shielding in self.response_properties:
             # First derivative
             required_derivatives.add(properties.magnetic_field)
+            basic_derivatives["dEdB"] = properties.magnetic_field
             derivative_instructions["dEdB"] = True
 
             # Second derivative for shielding
@@ -439,7 +408,12 @@ class Response(nn.Module):
         # Convert back to list
         required_derivatives = list(required_derivatives)
 
-        return derivative_instructions, required_derivatives, graph_required
+        return (
+            basic_derivatives,
+            required_derivatives,
+            derivative_instructions,
+            graph_required,
+        )
 
 
 class Strain(nn.Module):
