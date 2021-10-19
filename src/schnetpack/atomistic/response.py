@@ -53,7 +53,6 @@ class Forces(nn.Module):
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         Epred = inputs[self.energy_key]
-        R = inputs[properties.position]
         results = {}
 
         go: List[Optional[torch.Tensor]] = [torch.ones_like(Epred)]
@@ -351,6 +350,7 @@ class Response(nn.Module):
             "dEdI": False,
             "d2EdBdI": False,
             "d2EdI2": False,
+            "dEds": False,
         }
         graph_required = {
             "dEdR": False,
@@ -363,24 +363,29 @@ class Response(nn.Module):
             "dEdI": False,
             "d2EdBdI": False,
             "d2EdI2": False,
+            "dEds": False,
         }
 
         required_derivatives = set()
 
-        if (
-            (properties.forces in self.response_properties)
-            or (properties.hessian in self.response_properties)
-            or (properties.stress in self.response_properties)
+        # position derivatives
+        if (properties.forces in self.response_properties) or (
+            properties.hessian in self.response_properties
         ):
 
             derivative_instructions["dEdR"] = True
-            # TODO
-            required_derivatives.add(properties.Rij)
+            required_derivatives.add(properties.R)
 
             if properties.hessian in self.response_properties:
                 graph_required["dEdR"] = True
                 derivative_instructions["d2EdR2"] = True
 
+        # strain derivatives
+        if properties.stress in self.response_properties:
+            derivative_instructions["dEds"] = True
+            required_derivatives.add(properties.strain)
+
+        # electric field derivatives
         if (
             (properties.dipole_moment in self.response_properties)
             or (properties.polarizability in self.response_properties)
@@ -410,6 +415,7 @@ class Response(nn.Module):
                     derivative_instructions["d3EdF2dR"] = True
                     required_derivatives.add(properties.Rij)
 
+        # magnetic moment derivatives
         if properties.nuclear_spin_coupling in self.response_properties:
             # First derivative
             required_derivatives.add(properties.nuclear_magnetic_moments)
@@ -419,6 +425,7 @@ class Response(nn.Module):
             graph_required["dEdI"] = True
             derivative_instructions["d2EdI2"] = True
 
+        # magnetic field derivatives
         if properties.shielding in self.response_properties:
             # First derivative
             required_derivatives.add(properties.magnetic_field)
