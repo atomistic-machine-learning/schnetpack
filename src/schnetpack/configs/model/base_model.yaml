@@ -5,5 +5,7 @@ defaults:
 
 _target_: schnetpack.atomistic.AtomisticModel
 
+input_modules:
+  - _target_: schnetpack.atomistic.PairwiseDistances
 output_modules: ???
 outputs: ???

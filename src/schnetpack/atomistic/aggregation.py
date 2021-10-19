@@ -18,7 +18,7 @@ class Aggregation(nn.Module):
     def __init__(self, keys: List[str], output_key: str = "y"):
         super(Aggregation, self).__init__()
 
-        self.keys = keys
+        self.keys: List[str] = list(keys)
         self.output_key = output_key
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:

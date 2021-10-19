@@ -2,12 +2,13 @@ from typing import Dict, Optional, List
 
 import torch
 import torch.nn as nn
+
 from torch.autograd import grad
 
-import schnetpack.properties as properties
 from schnetpack.nn.utils import derivative_from_molecular, derivative_from_atomic
+import schnetpack.properties as properties
 
-__all__ = ["Forces", "StrainResponse", "Response"]
+__all__ = ["Forces", "Strain", "Response"]
 
 
 class ResponseException(Exception):
@@ -17,7 +18,7 @@ class ResponseException(Exception):
 class Forces(nn.Module):
     """
     Predicts forces and stress as response of the energy prediction
-    w.r.t. the atom positions.
+    w.r.t. the atom positions and strain.
 
     """
 
@@ -46,7 +47,7 @@ class Forces(nn.Module):
 
         self.required_derivatives = []
         if self.calc_forces:
-            self.required_derivatives.append(properties.Rij)
+            self.required_derivatives.append(properties.R)
         if self.calc_stress:
             self.required_derivatives.append(properties.strain)
 
@@ -64,15 +65,12 @@ class Forces(nn.Module):
         )
 
         if self.calc_forces:
-            dEdRij = grads[0]
+            dEdR = grads[0]
             # TorchScript needs Tensor instead of Optional[Tensor]
-            if dEdRij is None:
-                dEdRij = torch.zeros_like(inputs[properties.Rij])
+            if dEdR is None:
+                dEdR = torch.zeros_like(inputs[properties.R])
 
-            Fpred = torch.zeros_like(R)
-            Fpred = Fpred.index_add(0, inputs[properties.idx_i], dEdRij)
-            Fpred = Fpred.index_add(0, inputs[properties.idx_j], -dEdRij)
-            results[self.force_key] = Fpred
+            results[self.force_key] = dEdR
 
         if self.calc_stress:
             stress = grads[-1]
@@ -89,47 +87,6 @@ class Forces(nn.Module):
             results[self.stress_key] = stress / volume
 
         return results
-
-
-class StrainResponse(nn.Module):
-    """
-    THis is required to calculate the stress as a response property.
-    Adds strain-dependence to relative atomic positions Rij and (optionally) to absolute positions and unit cell.
-    """
-
-    def __init__(
-        self, strain_Rij: bool = True, strain_R: bool = False, strain_cell: bool = False
-    ):
-        super().__init__()
-        self.strain_Rij = strain_Rij
-        self.strain_R = strain_R
-        self.strain_cell = strain_cell
-
-    def forward(self, inputs: Dict[str, torch.Tensor]):
-        idx_m = inputs[properties.idx_m]
-        idx_i = inputs[properties.idx_i]
-        strain = torch.zeros_like(inputs[properties.cell])
-        strain.requires_grad_()
-        inputs[properties.strain] = strain
-
-        strain_i = strain[idx_m]
-        if self.strain_Rij:
-            strain_ij = strain_i[idx_i]
-            inputs[properties.Rij] = inputs[properties.Rij] + torch.bmm(
-                strain_ij, inputs[properties.Rij][:, :, None]
-            ).squeeze(-1)
-
-        if self.strain_R:
-            inputs[properties.R] = inputs[properties.R] + torch.sum(
-                inputs[properties.R][:, :, None] * strain_i, dim=1
-            )
-
-        if self.strain_cell:
-            inputs[properties.cell] = inputs[properties.cell] + torch.sum(
-                inputs[properties.cell][:, :, :, None] * strain[:, None, :, :], dim=2
-            )
-
-        return inputs
 
 
 class Response(nn.Module):
@@ -417,6 +374,7 @@ class Response(nn.Module):
         ):
 
             derivative_instructions["dEdR"] = True
+            # TODO
             required_derivatives.add(properties.Rij)
 
             if properties.hessian in self.response_properties:
@@ -475,3 +433,29 @@ class Response(nn.Module):
         required_derivatives = list(required_derivatives)
 
         return derivative_instructions, required_derivatives, graph_required
+
+
+class Strain(nn.Module):
+    """
+    This is required to calculate the stress as a response property.
+    Adds strain-dependence to relative atomic positions Rij and (optionally) to absolute positions and unit cell.
+    """
+
+    def forward(self, inputs: Dict[str, torch.Tensor]):
+        strain = torch.zeros_like(inputs[properties.cell])
+        strain.requires_grad_()
+        inputs[properties.strain] = strain
+
+        # strain cell
+        inputs[properties.cell] = inputs[properties.cell] + torch.matmul(
+            strain, inputs[properties.cell]
+        )
+
+        # strain positions
+        idx_m = inputs[properties.idx_m]
+        strain_i = strain[idx_m]
+        inputs[properties.R] = inputs[properties.R] + torch.matmul(
+            strain_i, inputs[properties.R][:, :, None]
+        ).squeeze(-1)
+
+        return inputs

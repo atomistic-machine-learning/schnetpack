@@ -53,8 +53,6 @@ class AtomisticModel(pl.LightningModule):
 
     """
 
-    required_derivatives: List[str]
-
     def __init__(
         self,
         representation: nn.Module,
@@ -87,7 +85,6 @@ class AtomisticModel(pl.LightningModule):
             postprocess: list of postprocessors to be applied to model for predictions
         """
         super().__init__()
-        # self.datamodule = datamodule
         self.optimizer_cls = optimizer_cls
         self.optimizer_kwargs = optimizer_args
         self.scheduler_cls = scheduler_cls

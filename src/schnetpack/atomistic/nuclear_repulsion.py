@@ -85,7 +85,7 @@ class ZBLRepulsionEnergy(nn.Module):
         # Get exponents and coefficients, normalize the latter
         exponents = a_ij[..., None] * F.softplus(self.exponents)[None, ...]
         coefficients = F.softplus(self.coefficients)[None, ...]
-        coefficients = F.normalize(coefficients, p=1, dim=1)
+        coefficients = F.normalize(coefficients, p=1.0, dim=1)
 
         screening = torch.sum(
             coefficients * torch.exp(-exponents * d_ij[:, None]), dim=1
@@ -102,7 +102,7 @@ class ZBLRepulsionEnergy(nn.Module):
         # Compute ZBL energy
         y_zbl = snn.scatter_add(repulsion * screening, idx_i, dim_size=n_atoms)
         y_zbl = snn.scatter_add(y_zbl, idx_m, dim_size=n_molecules)
-        y_zbl = 0.5 * self.ke * y_zbl.squeeze(-1)
+        y_zbl = 0.5 * self.ke * y_zbl
 
         result = {self.output_key: y_zbl}
 

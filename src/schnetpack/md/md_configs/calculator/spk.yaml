@@ -11,4 +11,4 @@ stress_label: null
 script_model: true
 
 defaults:
-  neighbor_list: ase
+  - neighbor_list: ase

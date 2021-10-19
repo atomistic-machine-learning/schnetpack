@@ -2,11 +2,8 @@ defaults:
   - pes
 
 input_modules:
-  - _target_: schnetpack.atomistic.StrainResponse
-    strain_Rij: True
-    strain_R: False
-    strain_cell: False
-
+  - _target_: schnetpack.atomistic.PairwiseDistances
+  - _target_: schnetpack.atomistic.Strain
 
 output_modules:
   - _target_: schnetpack.atomistic.Atomwise
