@@ -45,7 +45,7 @@ class StaticExternalFields(nn.Module):
                     n_molecules,
                     3,
                     device=n_atoms.device,
-                    dtype=n_atoms.dtype,
+                    dtype=inputs[properties.R].dtype,
                     requires_grad=True,
                 )
 
