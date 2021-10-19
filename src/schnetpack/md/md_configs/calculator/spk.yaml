@@ -8,7 +8,7 @@ energy_units: kcal / mol
 position_units: Angstrom
 energy_label: energy
 stress_label: null
-script_model: true
+script_model: false
 
 defaults:
   - neighbor_list: ase
