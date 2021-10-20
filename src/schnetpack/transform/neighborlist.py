@@ -111,7 +111,7 @@ class CachedNeighborList(Transform):
                     data = {
                         properties.idx_i: inputs[properties.idx_i],
                         properties.idx_j: inputs[properties.idx_j],
-                        properties.Rij: inputs[properties.Rij],
+                        properties.offsets: inputs[properties.offsets],
                     }
                     torch.save(data, cache_file)
                 except Exception as e:
@@ -152,16 +152,13 @@ class NeighborListTransform(Transform):
     def __init__(
         self,
         cutoff: float,
-        return_offset: bool = False,
     ):
         """
         Args:
             cutoff: Cutoff radius for neighbor search.
-            return_offset (bool): return cell offset vectors in periodic simulations.
         """
         super().__init__()
         self._cutoff = cutoff
-        self._return_offset = return_offset
 
     def forward(
         self,
@@ -173,16 +170,11 @@ class NeighborListTransform(Transform):
         cell = inputs[properties.cell].view(3, 3)
         pbc = inputs[properties.pbc]
 
-        Rij, idx_i, idx_j, offset = self._build_neighbor_list(
-            Z, R, cell, pbc, self._cutoff
-        )
+        idx_i, idx_j, offset = self._build_neighbor_list(Z, R, cell, pbc, self._cutoff)
 
         inputs[properties.idx_i] = idx_i.detach()
         inputs[properties.idx_j] = idx_j.detach()
-        inputs[properties.Rij] = Rij.detach()
-
-        if self._return_offset:
-            inputs[properties.offsets] = offset
+        inputs[properties.offsets] = offset
 
         return inputs
 
@@ -207,19 +199,12 @@ class ASENeighborList(NeighborListTransform):
         at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
         at.wrap()
 
-        if self._return_offset:
-            idx_i, idx_j, Rij, offset = neighbor_list(
-                "ijDS", at, cutoff, self_interaction=False
-            )
-            offset = torch.from_numpy(offset)
-        else:
-            idx_i, idx_j, Rij = neighbor_list("ijD", at, cutoff, self_interaction=False)
-            offset = None
-
+        idx_i, idx_j, S = neighbor_list("ijS", at, cutoff, self_interaction=False)
         idx_i = torch.from_numpy(idx_i)
         idx_j = torch.from_numpy(idx_j)
-        Rij = torch.from_numpy(Rij)
-        return Rij, idx_i, idx_j, offset
+        S = torch.from_numpy(S).to(dtype=positions.dtype)
+        offset = torch.mm(S, cell)
+        return idx_i, idx_j, offset
 
 
 class TorchNeighborList(NeighborListTransform):
@@ -235,28 +220,22 @@ class TorchNeighborList(NeighborListTransform):
             shifts = torch.zeros(0, 3, device=cell.device, dtype=torch.long)
         else:
             shifts = self._get_shifts(cell, pbc, cutoff)
-        idx_i, idx_j, Rij, offset = self._get_neighbor_pairs(
-            positions, cell, shifts, cutoff
-        )
+        idx_i, idx_j, offset = self._get_neighbor_pairs(positions, cell, shifts, cutoff)
 
         # Create bidirectional id arrays, similar to what the ASE neighbor_list returns
         bi_idx_i = torch.cat((idx_i, idx_j), dim=0)
         bi_idx_j = torch.cat((idx_j, idx_i), dim=0)
-        bi_Rij = torch.cat((-Rij, Rij), dim=0)
 
         # Sort along first dimension (necessary for atom-wise pooling)
         sorted_idx = torch.argsort(bi_idx_i)
         idx_i = bi_idx_i[sorted_idx]
         idx_j = bi_idx_j[sorted_idx]
-        Rij = bi_Rij[sorted_idx]
 
-        if self._return_offset:
-            bi_offset = torch.cat((-offset, offset), dim=0)
-            offset = bi_offset[sorted_idx]
-        else:
-            offset = None
+        bi_offset = torch.cat((-offset, offset), dim=0)
+        offset = bi_offset[sorted_idx]
+        offset = torch.mm(offset.to(cell.dtype), cell)
 
-        return Rij, idx_i, idx_j, offset
+        return idx_i, idx_j, offset
 
     def _get_neighbor_pairs(self, positions, cell, shifts, cutoff):
         """Compute pairs of atoms that are neighbors
@@ -302,10 +281,9 @@ class TorchNeighborList(NeighborListTransform):
         pair_index = in_cutoff.squeeze()
         atom_index_i = pi_all[pair_index]
         atom_index_j = pj_all[pair_index]
-        Rij = Rij_all.index_select(0, pair_index)
         offsets = shifts_all[pair_index]
 
-        return atom_index_i, atom_index_j, Rij, offsets
+        return atom_index_i, atom_index_j, offsets
 
     def _get_shifts(self, cell, pbc, cutoff):
         """Compute the shifts of unit cell along the given cell vectors to make it

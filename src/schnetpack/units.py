@@ -131,6 +131,10 @@ def setup_md_units(md_base_units: Dict[str, Union[str, float]]):
 
 def _conversion_factor_ase(unit: str):
     """Get units by string and convert to ase unit system."""
+    if unit == "A":
+        raise Warning(
+            "The unit string 'A' specifies Ampere. For Angstrom, please use 'Ang' or 'Angstrom'."
+        )
     return getattr(aseunits, unit)
 
 

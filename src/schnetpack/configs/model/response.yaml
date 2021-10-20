@@ -1,0 +1,67 @@
+defaults:
+  - base_model
+  - override representation: field_schnet
+
+scheduler_args:
+  mode: min
+  factor: 0.5
+  patience: 15
+  min_lr: 1e-6
+  smoothing_factor: 0.0
+
+input_modules:
+  - _target_: schnetpack.atomistic.PairwiseDistances
+  - _target_: schnetpack.atomistic.StaticExternalFields
+    response_properties: ${response_properties}
+
+
+output_modules:
+  - _target_: schnetpack.atomistic.Atomwise
+    output_key: ${energy_key}
+    n_in: ${model.representation.n_atom_basis}
+    aggregation_mode: sum
+  - _target_: schnetpack.atomistic.Response
+    energy_key: ${energy_key}
+    response_properties: ${response_properties}
+
+outputs:
+  - _target_: schnetpack.atomistic.ModelOutput
+    name: ${energy_key}
+    loss_fn:
+      _target_: torch.nn.MSELoss
+    metrics:
+      mae:
+        _target_: torchmetrics.regression.MeanAbsoluteError
+      mse:
+        _target_: torchmetrics.regression.MeanSquaredError
+    loss_weight: 0.01
+  - _target_: schnetpack.atomistic.ModelOutput
+    name: forces
+    loss_fn:
+      _target_: torch.nn.MSELoss
+    metrics:
+      mae:
+        _target_: torchmetrics.regression.MeanAbsoluteError
+      mse:
+        _target_: torchmetrics.regression.MeanSquaredError
+    loss_weight: 0.95
+  - _target_: schnetpack.atomistic.ModelOutput
+    name: dipole_moment
+    loss_fn:
+      _target_: torch.nn.MSELoss
+    metrics:
+      mae:
+        _target_: torchmetrics.regression.MeanAbsoluteError
+      mse:
+        _target_: torchmetrics.regression.MeanSquaredError
+    loss_weight: 0.001
+  - _target_: schnetpack.atomistic.ModelOutput
+    name: polarizability
+    loss_fn:
+      _target_: torch.nn.MSELoss
+    metrics:
+      mae:
+        _target_: torchmetrics.regression.MeanAbsoluteError
+      mse:
+        _target_: torchmetrics.regression.MeanSquaredError
+    loss_weight: 0.0001

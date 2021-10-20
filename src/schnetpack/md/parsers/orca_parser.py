@@ -32,7 +32,7 @@ __all__ = [
 
 # Conversion from ppm to atomic units. Alpha is the fine structure constant and 1e6 are
 # the ppm
-ppm2au = 1.0 / (units.alpha ** 2 * 1e6)
+ppm2au = 2.0 / (units.alpha ** 2 * 1e6)
 
 
 class OrcaParserException(Exception):
@@ -72,6 +72,7 @@ class OrcaParser:
         properties.dipole_derivatives,
         properties.polarizability_derivatives,
     ]
+    molecular_properties = [properties.dipole_moment, properties.polarizability]
     file_extensions = {properties.forces: ".engrad", properties.hessian: ".oinp.hess"}
     atomistic = ["atoms", properties.forces, properties.shielding]
 
@@ -81,12 +82,20 @@ class OrcaParser:
         target_properties: List,
         filter: Optional[Dict[str, float]] = None,
         mask_charges: bool = False,
+        property_units: Dict[str, Union[str, float]] = {},
+        distance_unit: Union[str, float] = 1.0,
     ):
         self.dbpath = dbpath
 
         main_properties = []
         hessian_properties = []
         dummy_properties = []
+
+        # Initialize property unit dict
+        self.property_units = property_units
+        for p in target_properties:
+            if p not in self.property_units:
+                self.property_units[p] = 1.0
 
         for p in target_properties:
             if p in self.main_properties:
@@ -96,10 +105,17 @@ class OrcaParser:
             else:
                 print("Unrecognized property {:s}".format(p))
 
+        if properties.electric_field in target_properties:
+            dummy_properties.append(properties.electric_field)
+        if properties.magnetic_field in target_properties:
+            dummy_properties.append(properties.magnetic_field)
+
         all_properties = main_properties + hessian_properties + dummy_properties
         self.all_properties = all_properties
 
-        self.atomsdata = spk.data.ASEAtomsData(dbpath)
+        self.atomsdata = spk.data.ASEAtomsData.create(
+            dbpath, distance_unit=distance_unit, property_unit_dict=self.property_units
+        )
 
         # The main file parser is always needed
         self.main_parser = OrcaMainFileParser(
@@ -200,7 +216,7 @@ class OrcaParser:
                 atypes, coords = main_properties[p]
                 atoms = Atoms(atypes, coords)
             else:
-                target_properties[p] = main_properties[p].astype(np.float32)
+                target_properties[p] = main_properties[p].astype(np.float64)
 
         if self.hessian_parser is not None:
             hessian_file = (
@@ -226,6 +242,17 @@ class OrcaParser:
                         )
                     else:
                         target_properties[p] = hessian_properties[p]
+
+        # Unsqueeze first dimension for new batch format
+        for p in target_properties:
+            if p in self.molecular_properties:
+                target_properties[p] = target_properties[p][None, ...]
+
+        # Add dummy fields if requested
+        if properties.electric_field in self.all_properties:
+            target_properties[properties.electric_field] = np.zeros((1, 3))
+            if properties.magnetic_field in self.all_properties:
+                target_properties[properties.magnetic_field] = np.zeros((1, 3))
 
         return atoms, target_properties
 
@@ -345,7 +372,7 @@ class OrcaFormatter:
         position,
         stop: Optional[int] = None,
         datatype: str = "vector",
-        converter: type = float,
+        converter: type = np.double,
         skip_first: Optional[int] = None,
         unit: Optional[Union[float]] = None,
         default: Optional[float] = None,
@@ -461,13 +488,12 @@ class OrcaFormatter:
 
         for block in subdata:
             for i, entry in enumerate(block[1:]):
-                matrix[i] += [float(x) for x in entry.split()[1:]]
+                matrix[i] += [self.converter(x) for x in entry.split()[1:]]
 
         matrix = np.array(matrix)
         return matrix
 
-    @staticmethod
-    def _format_shielding(parsed: List[str]):
+    def _format_shielding(self, parsed: List[str]):
         """
         Format the raw shielding tensors taken from the ORCA output.
 
@@ -489,7 +515,7 @@ class OrcaFormatter:
                     current_shielding = []
                     parse = False
                 else:
-                    current_shielding.append([float(x) for x in line.split()])
+                    current_shielding.append([self.converter(x) for x in line.split()])
             else:
                 continue
 
