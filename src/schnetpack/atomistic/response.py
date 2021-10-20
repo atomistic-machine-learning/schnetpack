@@ -69,7 +69,7 @@ class Forces(nn.Module):
             if dEdR is None:
                 dEdR = torch.zeros_like(inputs[properties.R])
 
-            results[self.force_key] = dEdR
+            results[self.force_key] = -dEdR
 
         if self.calc_stress:
             stress = grads[-1]
