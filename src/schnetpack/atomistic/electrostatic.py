@@ -138,7 +138,7 @@ class EnergyCoulomb(nn.Module):
 
         # Apply cutoff if requested (shifting to zero)
         if self.cutoff is not None:
-            potential = potential - self.shift ** 2 / potential - 2.0 * self.shift
+            potential = potential + self.shift ** 2 / potential - 2.0 * self.shift
             potential = torch.where(
                 d_ij <= self.cutoff, potential, torch.zeros_like(potential)
             )
