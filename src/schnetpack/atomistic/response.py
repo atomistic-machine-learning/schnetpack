@@ -164,7 +164,7 @@ class Response(nn.Module):
             [inputs[prop] for prop in self.basic_derivatives.values()],
             grad_outputs=go,
             create_graph=(self.basic_graph_required or self.training),
-            retain_graph=self.basic_graph_required,
+            retain_graph=(self.basic_graph_required or self.training),
         )
         # Convert to dictionary
         basic_derivatives = dict(zip(self.basic_derivatives.keys(), basic_derivatives))
