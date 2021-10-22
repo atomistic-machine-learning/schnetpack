@@ -5,7 +5,7 @@ import schnetpack.atomistic.response
 
 if TYPE_CHECKING:
     from schnetpack.md import System
-    from schnetpack.atomistic.model import AtomisticModel
+    from schnetpack.task import AtomisticTask
     from schnetpack.md.neighborlist_md import NeighborListMD
 
 import torch
@@ -68,7 +68,7 @@ class SchNetPackCalculator(MDCalculator):
         self.model = self._prepare_model(model_file)
         self.neighbor_list = neighbor_list
 
-    def _prepare_model(self, model_file: str) -> AtomisticModel:
+    def _prepare_model(self, model_file: str) -> AtomisticTask:
         """
         Load an individual model.
 
@@ -76,11 +76,11 @@ class SchNetPackCalculator(MDCalculator):
             model_file (str): path to model.
 
         Returns:
-           AtomisticModel: loaded schnetpack model
+           AtomisticTask: loaded schnetpack model
         """
         return self._load_model(model_file)
 
-    def _load_model(self, model_file: str) -> AtomisticModel:
+    def _load_model(self, model_file: str) -> AtomisticTask:
         """
         Load an individual model, activate stress computation and convert to torch script if requested.
 
@@ -88,7 +88,7 @@ class SchNetPackCalculator(MDCalculator):
             model_file (str): path to model.
 
         Returns:
-           AtomisticModel: loaded schnetpack model
+           AtomisticTask: loaded schnetpack model
         """
 
         log.info("Loading model from {:s}".format(model_file))
@@ -109,7 +109,7 @@ class SchNetPackCalculator(MDCalculator):
         return model
 
     @staticmethod
-    def _deactivate_inference_mode(model: AtomisticModel) -> AtomisticModel:
+    def _deactivate_inference_mode(model: AtomisticTask) -> AtomisticTask:
         if hasattr(model, "postprocessors"):
             for pp in model.postprocessors:
                 if isinstance(pp, schnetpack.transform.AddOffsets):
@@ -123,12 +123,12 @@ class SchNetPackCalculator(MDCalculator):
         return model
 
     @staticmethod
-    def _activate_stress(model: AtomisticModel) -> AtomisticModel:
+    def _activate_stress(model: AtomisticTask) -> AtomisticTask:
         """
         Activate stress computations for simulations in cells.
 
         Args:
-            model (AtomisticModel): loaded schnetpack model for which stress computation should be activated.
+            model (AtomisticTask): loaded schnetpack model for which stress computation should be activated.
 
         Returns:
 
@@ -227,7 +227,7 @@ class SchNetPackEnsembleCalculator(EnsembleCalculator, SchNetPackCalculator):
         # Convert list of models to module list
         self.models = torch.nn.ModuleList(self.model)
 
-    def _prepare_model(self, model_files: List[str]) -> List[AtomisticModel]:
+    def _prepare_model(self, model_files: List[str]) -> List[AtomisticTask]:
         """
         Load multiple models.
 

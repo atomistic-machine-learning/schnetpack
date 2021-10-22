@@ -17,7 +17,7 @@ output_modules:
     calc_stress: True
 
 outputs:
-  - _target_: schnetpack.atomistic.ModelOutput
+  - _target_: schnetpack.task.ModelOutput
     name: ${energy_key}
     loss_fn:
       _target_: torch.nn.MSELoss
@@ -27,7 +27,7 @@ outputs:
       mse:
         _target_: torchmetrics.regression.MeanSquaredError
     loss_weight: 0.05
-  - _target_: schnetpack.atomistic.ModelOutput
+  - _target_: schnetpack.task.ModelOutput
     name: ${forces_key}
     loss_fn:
       _target_: torch.nn.MSELoss

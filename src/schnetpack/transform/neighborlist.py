@@ -83,7 +83,6 @@ class CachedNeighborList(Transform):
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
-        results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         cache_file = os.path.join(
             self.cache_location, f"cache_{inputs[properties.idx][0]}.pt"
@@ -107,7 +106,7 @@ class CachedNeighborList(Transform):
                     inputs.update(data)
                 except IOError:
                     # now it is save to calculate and cache
-                    inputs = self.neighbor_list(inputs, results)
+                    inputs = self.neighbor_list(inputs)
                     data = {
                         properties.idx_i: inputs[properties.idx_i],
                         properties.idx_j: inputs[properties.idx_j],
@@ -163,7 +162,6 @@ class NeighborListTransform(Transform):
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
-        results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         Z = inputs[properties.Z]
         R = inputs[properties.R]
@@ -175,7 +173,6 @@ class NeighborListTransform(Transform):
         inputs[properties.idx_i] = idx_i.detach()
         inputs[properties.idx_j] = idx_j.detach()
         inputs[properties.offsets] = offset
-
         return inputs
 
     def _build_neighbor_list(
@@ -343,7 +340,6 @@ class CollectAtomTriples(Transform):
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
-        results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         """
         Using the neighbors contained within the cutoff shell, generate all unique pairs of neighbors and convert
@@ -378,7 +374,6 @@ class CollectAtomTriples(Transform):
         inputs[properties.idx_i_triples] = idx_i_triples
         inputs[properties.idx_j_triples] = idx_j_triples.squeeze(-1)
         inputs[properties.idx_k_triples] = idx_k_triples.squeeze(-1)
-
         return inputs
 
 
@@ -401,7 +396,6 @@ class CountNeighbors(Transform):
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
-        results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         idx_i = inputs[properties.idx_i]
 

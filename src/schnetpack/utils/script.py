@@ -38,7 +38,7 @@ def log_hyperparameters(
     hparams = {}
 
     # choose which parts of hydra config will be saved to loggers
-    hparams["run_dir"] = config["run_dir"]
+    hparams["run"] = {"path": config["run"]["path"], "id": config["run"]["id"]}
     hparams["trainer"] = todict(config["trainer"])
     hparams["model"] = todict(config["model"])
     hparams["data"] = todict(config["data"])
@@ -65,9 +65,12 @@ def log_hyperparameters(
 def print_config(
     config: DictConfig,
     fields: Sequence[str] = (
-        "trainer",
-        "model",
+        "run",
+        "globals",
         "data",
+        "model",
+        "task",
+        "trainer",
         "callbacks",
         "logger",
         "seed",

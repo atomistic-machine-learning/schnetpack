@@ -77,7 +77,8 @@ class Atomwise(nn.Module):
             y = snn.scatter_add(y, idx_m, dim_size=maxm)
             y = torch.squeeze(y, -1)
 
-        return {self.output_key: y}
+        inputs[self.output_key] = y
+        return inputs
 
 
 class DipoleMoment(nn.Module):

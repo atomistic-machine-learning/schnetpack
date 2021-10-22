@@ -1,32 +1,26 @@
 # @package _global_
 
 defaults:
+  - run: default_run
+  - globals: default_globals
   - trainer: default_trainer
   - callbacks:
       - checkpoint
       - earlystopping
       - lrmonitor
+  - task: default_task
   - model: null
   - data: custom
   - logger: tensorboard
   - experiment: null
 
-work_dir: ${hydra:runtime.cwd}
-data_dir: ${hydra:runtime.cwd}/data
-
 print_config: True
-run_dir: runs
-run_id: ${uuid:1}
-
-cutoff: ???
-n_rbf: ???
-lr: ???
 
 # hydra configuration
 hydra:
     # output paths for hydra logs
     run:
-        dir: ${run_dir}/${run_id}
+        dir: ${run.path}/${run.id}
 
     searchpath:
       - file://${oc.env:PWD}

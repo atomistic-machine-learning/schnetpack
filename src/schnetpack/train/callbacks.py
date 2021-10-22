@@ -7,7 +7,7 @@ import torch
 import os
 from pytorch_lightning.callbacks import BasePredictionWriter
 from typing import List, Any
-from schnetpack.atomistic import AtomisticModel
+from schnetpack.task import AtomisticTask
 
 __all__ = ["ModelCheckpoint", "PredictionWriter"]
 
@@ -30,7 +30,7 @@ class PredictionWriter(BasePredictionWriter):
     def write_on_batch_end(
         self,
         trainer,
-        pl_module: AtomisticModel,
+        pl_module: AtomisticTask,
         prediction: Any,
         batch_indices: List[int],
         batch: Any,
@@ -44,7 +44,7 @@ class PredictionWriter(BasePredictionWriter):
     def write_on_epoch_end(
         self,
         trainer,
-        pl_module: AtomisticModel,
+        pl_module: AtomisticTask,
         predictions: List[Any],
         batch_indices: List[Any],
     ):

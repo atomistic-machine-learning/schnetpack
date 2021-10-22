@@ -1,11 +1,8 @@
 defaults:
   - representation: painn
-  - optimizer: adam
-  - scheduler: reduce_on_plateau
 
-_target_: schnetpack.atomistic.AtomisticModel
+_target_: schnetpack.model.NeuralNetworkPotential
 
 input_modules:
   - _target_: schnetpack.atomistic.PairwiseDistances
 output_modules: ???
-outputs: ???

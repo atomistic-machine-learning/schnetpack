@@ -153,4 +153,5 @@ class SchNet(nn.Module):
             v = interaction(x, f_ij, idx_i, idx_j, rcut_ij)
             x = x + v
 
-        return {"scalar_representation": x}
+        inputs["scalar_representation"] = x
+        return inputs

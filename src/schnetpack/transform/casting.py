@@ -27,15 +27,11 @@ class CastMap(Transform):
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
-        results: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
-        if results is None:
-            results = {}
-        x = inputs if self.mode == "pre" else results
-        for k, v in x.items():
+        for k, v in inputs.items():
             if v.dtype in self.type_map:
-                x[k] = v.to(dtype=self.type_map[v.dtype])
-        return x
+                inputs[k] = v.to(dtype=self.type_map[v.dtype])
+        return inputs
 
 
 class CastTo32(CastMap):

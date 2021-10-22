@@ -1,24 +1,20 @@
-from __future__ import annotations
-
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, List, Type
+from typing import Optional, Dict, List, Type, Any, Union
 
-from schnetpack.transform import Transform
-import schnetpack.properties as properties
-
-import torch
 import pytorch_lightning as pl
-import torch.nn as nn
-
-import schnetpack as spk
+import torch
+from torch import nn as nn
 from torchmetrics import Metric
 
-__all__ = ["AtomisticModel", "ModelOutput"]
+from schnetpack.model.base import AtomisticModel
+from schnetpack.transform import Transform
+
+__all__ = ["ModelOutput", "AtomisticTask"]
 
 
 class ModelOutput(nn.Module):
     """
-    Defines an output for the model, including optional loss function and weight for training
+    Defines an output of a model, including mappings to a loss function and weight for training
     and metrics to be logged.
     """
 
@@ -47,92 +43,49 @@ class ModelOutput(nn.Module):
         self.metrics = nn.ModuleDict(metrics)
 
 
-class AtomisticModel(pl.LightningModule):
+class AtomisticTask(pl.LightningModule):
     """
-    Base class for all SchNetPack models.
+    Defines a learning task in SchNetPack including model, losses and optimizer.
 
     """
 
     def __init__(
         self,
-        representation: nn.Module,
+        model: AtomisticModel,
         outputs: List[ModelOutput],
-        input_modules: List[nn.Module] = None,
-        output_modules: List[nn.Module] = None,
         optimizer_cls: Type[torch.optim.Optimizer] = torch.optim.Adam,
         optimizer_args: Optional[Dict[str, Any]] = None,
         scheduler_cls: Optional[Type] = None,
         scheduler_args: Optional[Dict[str, Any]] = None,
         scheduler_monitor: Optional[str] = None,
-        postprocess: Optional[List[Transform]] = None,
     ):
         """
         Args:
-            datamodule: pytorch_lightning module for dataset
-            representation: nn.Module for atomistic representation
-            input_modules: List of modules to prepare inputs before computing atomistic representations, e.g.
-                for the separation of long- and short-range interactions or introducing external fields
-                for response properties.
-                Input modules must modify and return the input dictionary.
-            output_modules: List of modules to compute outputs from atomistic representation.
-                Output modules must modify and return the input dictionary.
             outputs: list of outputs an optional loss functions
             optimizer_cls: type of torch optimizer,e.g. torch.optim.Adam
             optimizer_args: dict of optimizer keyword arguments
             scheduler_cls: type of torch learning rate scheduler
             scheduler_args: dict of scheduler keyword arguments
             scheduler_monitor: name of metric to be observed for ReduceLROnPlateau
-            postprocess: list of postprocessors to be applied to model for predictions
         """
         super().__init__()
+        self.model = model
         self.optimizer_cls = optimizer_cls
         self.optimizer_kwargs = optimizer_args
         self.scheduler_cls = scheduler_cls
         self.scheduler_kwargs = scheduler_args
         self.schedule_monitor = scheduler_monitor
-
-        self.representation = representation
         self.outputs = nn.ModuleList(outputs)
-        self.input_modules = nn.ModuleList(input_modules)
-        self.output_modules = nn.ModuleList(output_modules)
-        self.pp = postprocess or []
 
-        required_derivatives = set()
-        for m in self.output_modules:
-            if hasattr(m, "required_derivatives"):
-                required_derivatives.update(m.required_derivatives)
-        self.required_derivatives: List[str] = list(required_derivatives)
-
-        self.grad_enabled = len(self.required_derivatives) > 0
+        self.grad_enabled = len(self.model.required_derivatives) > 0
         self.inference_mode = False
 
     def setup(self, stage=None):
-        self.postprocessors = torch.nn.ModuleList()
-        for pp in self.pp:
-            pp.postprocessor()
-            if stage == "fit":
-                pp.datamodule(self.trainer.datamodule)
-            self.postprocessors.append(pp)
+        if stage == "fit":
+            self.model.initialize_postprocessors(self.trainer.datamodule)
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
-        # setup gradients w.r.t. structure
-        for p in self.required_derivatives:
-            if p in inputs.keys():
-                inputs[p].requires_grad_()
-
-        # apply input modules
-        for inmod in self.input_modules:
-            inputs.update(inmod(inputs))
-
-        # compute representation
-        inputs.update(self.representation(inputs))
-
-        # apply output modules
-        for outmod in self.output_modules:
-            inputs.update(outmod(inputs))
-
-        results = {out.property: inputs[out.property] for out in self.outputs}
-        results = self.postprocess(inputs, results)
+        results = self.model(inputs)
         return results
 
     def loss_fn(self, pred, batch):
@@ -205,14 +158,6 @@ class AtomisticModel(pl.LightningModule):
             return [optimizer], [optimconf]
         else:
             return optimizer
-
-    def postprocess(
-        self, inputs: Dict[str, torch.Tensor], results: Dict[str, torch.Tensor]
-    ) -> Dict[str, torch.Tensor]:
-        if self.inference_mode:
-            for pp in self.postprocessors:
-                results = pp(inputs, results)
-        return results
 
     def to_torchscript(
         self,
