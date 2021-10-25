@@ -26,7 +26,7 @@ class AtomisticModel(nn.Module):
     ):
         super().__init__()
         self.input_dtype = input_dtype
-        self._do_postprocess = enable_postprocess
+        self.enable_postprocess = enable_postprocess
         self.postprocessors = nn.ModuleList(postprocessors)
         self.required_derivatives: Optional[List[str]] = None
 
@@ -50,18 +50,12 @@ class AtomisticModel(nn.Module):
                 inputs[p].requires_grad_()
         return inputs
 
-    def enable_postproces(self):
-        self._do_postprocess = True
-
-    def disable_postproces(self):
-        self._do_postprocess = False
-
     def initialize_postprocessors(self, datamodule):
         for pp in self.postprocessors:
             pp.datamodule(datamodule)
 
     def postprocess(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        if self._do_postprocess:
+        if self.enable_postprocess:
             # apply postprocessing
             for pp in self.postprocessors:
                 inputs = pp(inputs)
@@ -70,8 +64,8 @@ class AtomisticModel(nn.Module):
 
 class NeuralNetworkPotential(AtomisticModel):
     """
-    A generic neural network potential class that sequentially applies a list of input modules, a representation module and
-    a list of output modules.
+    A generic neural network potential class that sequentially applies a list of input modules, a representation module
+    and a list of output modules.
 
     This can be flexibly configured for various, e.g. property prediction or potential energy sufaces with response
     properties.
@@ -92,8 +86,8 @@ class NeuralNetworkPotential(AtomisticModel):
             enable_postprocess=enable_postprocess,
         )
         self.representation = representation
-        self.input_modules = nn.Sequential(*input_modules)
-        self.output_modules = nn.Sequential(*output_modules)
+        self.input_modules = nn.ModuleList(input_modules)
+        self.output_modules = nn.ModuleList(output_modules)
 
         self.required_derivatives = self.collect_derivatives()
 
@@ -101,9 +95,13 @@ class NeuralNetworkPotential(AtomisticModel):
         # inititalize derivatives for response properties
         inputs = self.initialize_derivatives(inputs)
 
-        inputs = self.input_modules(inputs)
+        for m in self.input_modules:
+            inputs = m(inputs)
+
         inputs = self.representation(inputs)
-        inputs = self.output_modules(inputs)
+
+        for m in self.output_modules:
+            inputs = m(inputs)
 
         # apply (optional) postprocessing
         inputs = self.postprocess(inputs)

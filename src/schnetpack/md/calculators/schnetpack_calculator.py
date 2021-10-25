@@ -101,7 +101,8 @@ class SchNetPackCalculator(MDCalculator):
 
         if self.script_model:
             log.info("Converting model to torch script...")
-            model = model.to_torchscript(file_path=None, method="script")
+            # model = model.to_torchscript(file_path=None, method="script")
+            model = torch.jit.script(model)
 
         log.info("Deactivating inference mode for simulation...")
         self._deactivate_inference_mode(model)

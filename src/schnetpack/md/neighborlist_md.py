@@ -25,7 +25,7 @@ class NeighborListMD:
         self._collate = collate_fn
 
         # Build neighbor list transform
-        self.transform = [base_nbl(self.cutoff_full, return_offset=True)]
+        self.transform = [base_nbl(self.cutoff_full)]
 
         if self.requires_triples:
             self.transform.append(CollectAtomTriples())
@@ -103,19 +103,13 @@ class NeighborListMD:
                 del self.molecular_indices[idx][properties.Z]
                 del self.molecular_indices[idx][properties.cell]
                 del self.molecular_indices[idx][properties.pbc]
-            else:
-                self._update_Rij(input_batch[idx], idx)
 
         neighbor_idx = self._collate(self.molecular_indices)
-        # Remove offsets and n_atoms
-        del neighbor_idx[properties.offsets]
+        # Remove n_atoms
         del neighbor_idx[properties.n_atoms]
 
         # Move everything to correct device
         neighbor_idx = {p: neighbor_idx[p].to(positions.device) for p in neighbor_idx}
-
-        # Make sure Rij has the right dtype (e.g. ASE nbl likes to change precision for some strange reason)
-        neighbor_idx[properties.Rij] = neighbor_idx[properties.Rij].to(positions.dtype)
 
         return neighbor_idx
 
