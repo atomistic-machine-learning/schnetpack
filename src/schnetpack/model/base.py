@@ -14,8 +14,44 @@ class AtomisticModel(nn.Module):
     """
     Base class for all SchNetPack models.
 
-    Models should override the `forward` method and call `BaseAtomisticModel.forward`` to enable
-    postprocessing and assembling the results dictionary.
+    SchNetPack models should subclass `AtomisticModel` implement the forward method. To use the automatic collection of
+    required derivatives, each submodule that requires gradients w.r.t to the input, should list them as strings in
+    `submodule.required_derivatives = ["input_key"]`. The model needs to call `self.collect_derivatives()` at the end
+    of its `__init__`.
+
+    To make use of postproceesing transform, the model should call `input = self.postprocessing(input)` at the end of
+    its `forward`. The post processors will only be applied if `enable_postprocess=True`.
+
+    Example:
+         class SimpleModel(AtomisticModel):
+            def __init__(
+                self,
+                representation: nn.Module,
+                output_module: nn.Module,
+                postprocessors: Optional[List[Transform]] = None,
+                input_dtype: torch.dtype = torch.float32,
+                enable_postprocess: bool = False,
+            ):
+                super().__init__(
+                    input_dtype=input_dtype,
+                    postprocessors=postprocessors,
+                    enable_postprocess=enable_postprocess,
+                )
+                self.representation = representation
+                self.output_modules = output_modules
+
+                self.collect_derivatives()
+
+            def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+                inputs = self.initialize_derivatives(inputs)
+
+                inputs = self.representation(inputs)
+                inputs = self.output_module(inputs)
+
+                # apply postprocessing (if enabled)
+                inputs = self.postprocess(inputs)
+                return inputs
+
     """
 
     def __init__(
@@ -24,6 +60,13 @@ class AtomisticModel(nn.Module):
         input_dtype: torch.dtype = torch.float32,
         enable_postprocess: bool = False,
     ):
+        """
+        Args:
+            postprocessors: Post-processing transforms tha may be initialized using te `datamodule`, but are not
+                applied during training.
+            input_dtype: The dtype of real inputs.
+            enable_postprocess: If true, post-processing is applied.
+        """
         super().__init__()
         self.input_dtype = input_dtype
         self.enable_postprocess = enable_postprocess
@@ -40,7 +83,7 @@ class AtomisticModel(nn.Module):
             ):
                 required_derivatives.update(m.required_derivatives)
         required_derivatives: List[str] = list(required_derivatives)
-        return required_derivatives
+        self.required_derivatives = required_derivatives
 
     def initialize_derivatives(
         self, inputs: Dict[str, torch.Tensor]
@@ -80,6 +123,17 @@ class NeuralNetworkPotential(AtomisticModel):
         input_dtype: torch.dtype = torch.float32,
         enable_postprocess: bool = False,
     ):
+        """
+        Args:
+            representation: The module that builds representation from inputs.
+            input_modules: Modules that are applied before representation, e.g. to modify input or add additional tensors for response
+                properties.
+            output_modules: Modules that predict output properties from the representation.
+            postprocessors: Post-processing transforms tha may be initialized using te `datamodule`, but are not
+                applied during training.
+            input_dtype: The dtype of real inputs.
+            enable_postprocess: If true, post-processing is applied.
+        """
         super().__init__(
             input_dtype=input_dtype,
             postprocessors=postprocessors,
@@ -89,7 +143,7 @@ class NeuralNetworkPotential(AtomisticModel):
         self.input_modules = nn.ModuleList(input_modules)
         self.output_modules = nn.ModuleList(output_modules)
 
-        self.required_derivatives = self.collect_derivatives()
+        self.collect_derivatives()
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # inititalize derivatives for response properties
@@ -103,6 +157,6 @@ class NeuralNetworkPotential(AtomisticModel):
         for m in self.output_modules:
             inputs = m(inputs)
 
-        # apply (optional) postprocessing
+        # apply postprocessing (if enabled)
         inputs = self.postprocess(inputs)
         return inputs
