@@ -31,9 +31,10 @@ import torch
 import schnetpack
 import logging
 
+import schnetpack.task
 from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
-from schnetpack.transform import CastTo32, ASENeighborList, CastTo64
+from schnetpack.transform import CastTo32, CastTo64
 from schnetpack.units import convert_units
 
 from typing import Optional, List, Union
@@ -131,7 +132,7 @@ class SpkCalculator(Calculator):
 
     def __init__(
         self,
-        model: schnetpack.atomistic.AtomisticModel,
+        model: schnetpack.model.AtomisticModel,
         converter: AtomsConverter,
         energy: str = "energy",
         forces: str = "forces",
@@ -221,7 +222,7 @@ class AseInterface:
         self,
         molecule_path: str,
         working_dir: str,
-        model: schnetpack.atomistic.model.AtomisticModel,
+        model: schnetpack.model.AtomisticModel,
         converter: AtomsConverter,
         energy: str = "energy",
         forces: str = "forces",

@@ -6,8 +6,8 @@ response_properties: ${response_properties}
 shared_interactions: False
 radial_basis:
   _target_: schnetpack.nn.radial.GaussianRBF
-  n_rbf: ${n_rbf}
-  cutoff: ${cutoff}
+  n_rbf: 20
+  cutoff: ${globals.cutoff}
 cutoff_fn:
   _target_: schnetpack.nn.cutoff.CosineCutoff
-  cutoff: ${cutoff}
+  cutoff: ${globals.cutoff}

@@ -39,7 +39,7 @@ def train(config: DictConfig):
     """
     print(header)
 
-    if OmegaConf.is_missing(config, "data_dir"):
+    if OmegaConf.is_missing(config, "run.data_dir"):
         log.error(
             f"Config incomplete! You need to specify the data directory `data_dir`."
         )
@@ -93,28 +93,29 @@ def train(config: DictConfig):
     if "seed" in config:
         seed_everything(config.seed)
 
-    if not os.path.exists(config.data_dir):
-        os.makedirs(config.data_dir)
+    if not os.path.exists(config.run.data_dir):
+        os.makedirs(config.run.data_dir)
 
     # Init Lightning datamodule
     log.info(f"Instantiating datamodule <{config.data._target_}>")
     datamodule: LightningDataModule = hydra.utils.instantiate(config.data)
 
-    # Init Lightning model
+    # Init model
     log.info(f"Instantiating model <{config.model._target_}>")
+    model = hydra.utils.instantiate(config.model)
+
+    # Init LightningModule
+    log.info(f"Instantiating task <{config.task._target_}>")
     scheduler_cls = (
-        str2class(config.model.scheduler_cls) if config.model.scheduler_cls else None
+        str2class(config.task.scheduler_cls) if config.task.scheduler_cls else None
     )
-    model: LightningModule = hydra.utils.instantiate(
-        config.model,
-        optimizer_cls=str2class(config.model.optimizer_cls),
+
+    task: LightningModule = hydra.utils.instantiate(
+        config.task,
+        model=model,
+        optimizer_cls=str2class(config.task.optimizer_cls),
         scheduler_cls=scheduler_cls,
     )
-    with open("tmp_file.pk", "wb") as f:
-        pickle.dump(model, f)
-
-    with open("tmp_file.pk", "rb") as f:
-        model = pickle.load(f)
 
     # Init Lightning callbacks
     callbacks: List[Callback] = []
@@ -154,16 +155,16 @@ def train(config: DictConfig):
         config.trainer,
         callbacks=callbacks,
         logger=logger,
-        default_root_dir=os.path.join(config.run_id),
+        default_root_dir=os.path.join(config.run.id),
         _convert_="partial",
     )
 
     log.info("Logging hyperparameters.")
-    log_hyperparameters(config=config, model=model, trainer=trainer)
+    log_hyperparameters(config=config, model=task, trainer=trainer)
 
     # Train the model
     log.info("Starting training.")
-    trainer.fit(model=model, datamodule=datamodule)
+    trainer.fit(model=task, datamodule=datamodule)
 
     # Evaluate model on test set after training
     log.info("Starting testing.")

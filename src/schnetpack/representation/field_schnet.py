@@ -435,6 +435,5 @@ class FieldSchNet(nn.Module):
 
             mu = dipole_update(dq, mu, r_ij, idx_i, idx_j, rcut_ij)
 
-        output_dict = {"scalar_representation": q.squeeze(1)}
-
-        return output_dict
+        inputs["scalar_representation"] = q.squeeze(1)
+        return inputs

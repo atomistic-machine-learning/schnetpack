@@ -84,9 +84,6 @@ class AtomsDataModule(pl.LightningDataModule):
             val_transforms=val_transforms or copy(transforms) or [],
             test_transforms=test_transforms or copy(transforms) or [],
         )
-        self._init_transforms(self.train_transforms)
-        self._init_transforms(self.val_transforms)
-        self._init_transforms(self.test_transforms)
 
         self.batch_size = batch_size
         self.val_batch_size = val_batch_size or test_batch_size or batch_size
@@ -114,10 +111,6 @@ class AtomsDataModule(pl.LightningDataModule):
         self._train_dataset = None
         self._val_dataset = None
         self._test_dataset = None
-
-    def _init_transforms(self, transforms):
-        for t in transforms:
-            t.preprocessor()
 
     def setup(self, stage: Optional[str] = None):
         # check whether data needs to be copied

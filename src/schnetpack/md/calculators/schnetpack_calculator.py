@@ -5,7 +5,7 @@ import schnetpack.atomistic.response
 
 if TYPE_CHECKING:
     from schnetpack.md import System
-    from schnetpack.atomistic.model import AtomisticModel
+    from schnetpack.model import AtomisticModel
     from schnetpack.md.neighborlist_md import NeighborListMD
 
 import torch
@@ -76,7 +76,7 @@ class SchNetPackCalculator(MDCalculator):
             model_file (str): path to model.
 
         Returns:
-           AtomisticModel: loaded schnetpack model
+           AtomisticTask: loaded schnetpack model
         """
         return self._load_model(model_file)
 
@@ -88,7 +88,7 @@ class SchNetPackCalculator(MDCalculator):
             model_file (str): path to model.
 
         Returns:
-           AtomisticModel: loaded schnetpack model
+           AtomisticTask: loaded schnetpack model
         """
 
         log.info("Loading model from {:s}".format(model_file))
@@ -101,7 +101,7 @@ class SchNetPackCalculator(MDCalculator):
 
         if self.script_model:
             log.info("Converting model to torch script...")
-            model = model.to_torchscript(file_path=None, method="script")
+            model = torch.jit.script(model)
 
         log.info("Deactivating inference mode for simulation...")
         self._deactivate_inference_mode(model)
@@ -128,7 +128,7 @@ class SchNetPackCalculator(MDCalculator):
         Activate stress computations for simulations in cells.
 
         Args:
-            model (AtomisticModel): loaded schnetpack model for which stress computation should be activated.
+            model (AtomisticTask): loaded schnetpack model for which stress computation should be activated.
 
         Returns:
 

@@ -3,7 +3,7 @@ defaults:
 
 _target_: schnetpack.datasets.ANI1
 
-datapath: ${data_dir}/ani1.db  # data_dir is specified in train.yaml
+datapath: ${run.data_dir}/ani1.db  # data_dir is specified in train.yaml
 batch_size: 32
 num_train: 10000000
 num_val: 100000

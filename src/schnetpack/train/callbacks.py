@@ -7,7 +7,7 @@ import torch
 import os
 from pytorch_lightning.callbacks import BasePredictionWriter
 from typing import List, Any
-from schnetpack.atomistic import AtomisticModel
+from schnetpack.task import AtomisticTask
 
 __all__ = ["ModelCheckpoint", "PredictionWriter"]
 
@@ -30,7 +30,7 @@ class PredictionWriter(BasePredictionWriter):
     def write_on_batch_end(
         self,
         trainer,
-        pl_module: AtomisticModel,
+        pl_module: AtomisticTask,
         prediction: Any,
         batch_indices: List[int],
         batch: Any,
@@ -44,7 +44,7 @@ class PredictionWriter(BasePredictionWriter):
     def write_on_epoch_end(
         self,
         trainer,
-        pl_module: AtomisticModel,
+        pl_module: AtomisticTask,
         predictions: List[Any],
         batch_indices: List[Any],
     ):
@@ -57,11 +57,14 @@ class ModelCheckpoint(BaseModelCheckpoint):
     but also saves the best inference model with activated post-processing
     """
 
-    def __init__(self, inference_path: str, *args, **kwargs):
+    def __init__(
+        self, inference_path: str, enable_postprocessing=True, *args, **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self.inference_path = inference_path
+        self.enable_postprocessing = enable_postprocessing
 
-    def on_validation_end(self, trainer, pl_module) -> None:
+    def on_validation_end(self, trainer, pl_module: AtomisticTask) -> None:
         self.trainer = trainer
         self.pl_module = pl_module
         super().on_validation_end(trainer, pl_module)
@@ -77,15 +80,17 @@ class ModelCheckpoint(BaseModelCheckpoint):
             current = torch.tensor(float("inf" if self.mode == "min" else "-inf"))
 
         if current == self.best_model_score:
-
             if self.trainer.training_type_plugin.should_rank_save_checkpoint:
                 # remove references to trainer and data loaders to avoid pickle error in ddp
-                model = copy(self.pl_module)
+                model = self.pl_module.model
+                pp_status = model.enable_postprocess
+
+                if self.enable_postprocessing:
+                    model.enable_postprocess = True
+
                 model.eval()
-                model.inference_mode = True
-                model.trainer = None
-                model.train_dataloader = None
-                model.val_dataloader = None
-                model.test_dataloader = None
                 torch.save(model, self.inference_path)
                 model.train()
+
+                if self.enable_postprocessing:
+                    model.enable_postprocess = pp_status

@@ -231,4 +231,6 @@ class PaiNN(nn.Module):
 
         q = q.squeeze(1)
 
-        return {"scalar_representation": q, "vector_representation": mu}
+        inputs["scalar_representation"] = q
+        inputs["vector_representation"] = mu
+        return inputs

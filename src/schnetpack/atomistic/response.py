@@ -53,7 +53,6 @@ class Forces(nn.Module):
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         Epred = inputs[self.energy_key]
-        results = {}
 
         go: List[Optional[torch.Tensor]] = [torch.ones_like(Epred)]
         grads = grad(
@@ -69,7 +68,7 @@ class Forces(nn.Module):
             if dEdR is None:
                 dEdR = torch.zeros_like(inputs[properties.R])
 
-            results[self.force_key] = -dEdR
+            inputs[self.force_key] = -dEdR
 
         if self.calc_stress:
             stress = grads[-1]
@@ -83,9 +82,9 @@ class Forces(nn.Module):
                 dim=1,
                 keepdim=True,
             )[:, :, None]
-            results[self.stress_key] = stress / volume
+            inputs[self.stress_key] = stress / volume
 
-        return results
+        return inputs
 
 
 class Response(nn.Module):

@@ -1,4 +1,4 @@
-# @package model
+# @package task
 scheduler_cls: schnetpack.train.ReduceLROnPlateau
 scheduler_monitor: val_loss
 scheduler_args:
