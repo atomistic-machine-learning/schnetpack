@@ -222,7 +222,7 @@ class AseInterface:
         self,
         molecule_path: str,
         working_dir: str,
-        model: schnetpack.task.AtomisticTask,
+        model: schnetpack.model.AtomisticModel,
         converter: AtomsConverter,
         energy: str = "energy",
         forces: str = "forces",

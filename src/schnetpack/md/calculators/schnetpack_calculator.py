@@ -5,7 +5,7 @@ import schnetpack.atomistic.response
 
 if TYPE_CHECKING:
     from schnetpack.md import System
-    from schnetpack.task import AtomisticTask
+    from schnetpack.model import AtomisticModel
     from schnetpack.md.neighborlist_md import NeighborListMD
 
 import torch
@@ -68,7 +68,7 @@ class SchNetPackCalculator(MDCalculator):
         self.model = self._prepare_model(model_file)
         self.neighbor_list = neighbor_list
 
-    def _prepare_model(self, model_file: str) -> AtomisticTask:
+    def _prepare_model(self, model_file: str) -> AtomisticModel:
         """
         Load an individual model.
 
@@ -80,7 +80,7 @@ class SchNetPackCalculator(MDCalculator):
         """
         return self._load_model(model_file)
 
-    def _load_model(self, model_file: str) -> AtomisticTask:
+    def _load_model(self, model_file: str) -> AtomisticModel:
         """
         Load an individual model, activate stress computation and convert to torch script if requested.
 
@@ -101,7 +101,6 @@ class SchNetPackCalculator(MDCalculator):
 
         if self.script_model:
             log.info("Converting model to torch script...")
-            # model = model.to_torchscript(file_path=None, method="script")
             model = torch.jit.script(model)
 
         log.info("Deactivating inference mode for simulation...")
@@ -110,7 +109,7 @@ class SchNetPackCalculator(MDCalculator):
         return model
 
     @staticmethod
-    def _deactivate_inference_mode(model: AtomisticTask) -> AtomisticTask:
+    def _deactivate_inference_mode(model: AtomisticModel) -> AtomisticModel:
         if hasattr(model, "postprocessors"):
             for pp in model.postprocessors:
                 if isinstance(pp, schnetpack.transform.AddOffsets):
@@ -124,7 +123,7 @@ class SchNetPackCalculator(MDCalculator):
         return model
 
     @staticmethod
-    def _activate_stress(model: AtomisticTask) -> AtomisticTask:
+    def _activate_stress(model: AtomisticModel) -> AtomisticModel:
         """
         Activate stress computations for simulations in cells.
 
@@ -228,7 +227,7 @@ class SchNetPackEnsembleCalculator(EnsembleCalculator, SchNetPackCalculator):
         # Convert list of models to module list
         self.models = torch.nn.ModuleList(self.model)
 
-    def _prepare_model(self, model_files: List[str]) -> List[AtomisticTask]:
+    def _prepare_model(self, model_files: List[str]) -> List[AtomisticModel]:
         """
         Load multiple models.
 
