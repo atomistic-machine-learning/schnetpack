@@ -168,8 +168,6 @@ class Response(nn.Module):
         # Convert to dictionary
         basic_derivatives = dict(zip(self.basic_derivatives.keys(), basic_derivatives))
 
-        results = {}
-
         # ================================
         # dE / dR
         # ================================
@@ -177,7 +175,7 @@ class Response(nn.Module):
 
             # basic distance derivatives
             if properties.forces in self.response_properties:
-                results[properties.forces] = -basic_derivatives["dEdR"]
+                inputs[properties.forces] = -basic_derivatives["dEdR"]
 
             if self.derivative_instructions["d2EdR2"]:
                 d2EdR2 = derivative_from_atomic(
@@ -187,7 +185,7 @@ class Response(nn.Module):
                     create_graph=(self.graph_required["d2EdR2"] or self.training),
                     retain_graph=True,
                 )
-                results[properties.hessian] = d2EdR2
+                inputs[properties.hessian] = d2EdR2
 
         # ================================
         # dE / ds
@@ -205,14 +203,14 @@ class Response(nn.Module):
                 dim=1,
                 keepdim=True,
             )[:, :, None]
-            results[properties.stress] = stress / volume
+            inputs[properties.stress] = stress / volume
 
         # ================================
         # dE / dF
         # ================================
         if self.derivative_instructions["dEdF"]:
             dEdF = basic_derivatives["dEdF"]
-            results[properties.dipole_moment] = -basic_derivatives["dEdF"]
+            inputs[properties.dipole_moment] = -basic_derivatives["dEdF"]
 
             if self.derivative_instructions["d2EdFdR"]:
                 d2EdFdR = derivative_from_molecular(
@@ -221,11 +219,11 @@ class Response(nn.Module):
                     create_graph=(self.graph_required["d2EdFdR"] or self.training),
                     retain_graph=True,
                 )
-                results[properties.dipole_derivatives] = d2EdFdR
+                inputs[properties.dipole_derivatives] = d2EdFdR
 
                 # Compute partial charges if requested
                 if properties.partial_charges in self.response_properties:
-                    results[properties.partial_charges] = (
+                    inputs[properties.partial_charges] = (
                         torch.einsum("bii->b", d2EdFdR) / 3.0
                     )
 
@@ -236,7 +234,7 @@ class Response(nn.Module):
                     create_graph=(self.graph_required["d2EdF2"] or self.training),
                     retain_graph=True,
                 )
-                results[properties.polarizability] = d2EdF2
+                inputs[properties.polarizability] = d2EdF2
 
                 if self.derivative_instructions["d3EdF2dR"]:
                     d3EdF2dR = derivative_from_molecular(
@@ -245,14 +243,14 @@ class Response(nn.Module):
                         create_graph=(self.graph_required["d3EdF2dR"] or self.training),
                         retain_graph=True,
                     )
-                    results[properties.polarizability_derivatives] = d3EdF2dR
+                    inputs[properties.polarizability_derivatives] = d3EdF2dR
 
         # ================================
         # dE / dB
         # ================================
         if self.derivative_instructions["dEdB"]:
             dEdB = basic_derivatives["dEdB"]
-            results["dEdB"] = dEdB
+            inputs["dEdB"] = dEdB
 
             if self.derivative_instructions["d2EdBdI"]:
                 d2EdBdI = derivative_from_molecular(
@@ -261,14 +259,14 @@ class Response(nn.Module):
                     create_graph=(self.graph_required["d2EdBdI"] or self.training),
                     retain_graph=True,
                 )
-                results[properties.shielding] = d2EdBdI
+                inputs[properties.shielding] = d2EdBdI
 
         # ================================
         # dE / dI
         # ================================
         if self.derivative_instructions["dEdI"]:
             dEdI = basic_derivatives["dEdI"]
-            results["dEdI"] = dEdI
+            inputs["dEdI"] = dEdI
 
             if self.derivative_instructions["d2EdI2"]:
                 d2EdI2 = derivative_from_atomic(
@@ -278,12 +276,12 @@ class Response(nn.Module):
                     create_graph=(self.graph_required["d2EdI2"] or self.training),
                     retain_graph=True,
                 )
-                results[properties.nuclear_spin_coupling] = d2EdI2
+                inputs[properties.nuclear_spin_coupling] = d2EdI2
 
         for prop in self.map_properties:
-            results[self.map_properties[prop]] = results[prop]
+            inputs[self.map_properties[prop]] = inputs[prop]
 
-        return results
+        return inputs
 
     def _construct_properties(self):
         """
