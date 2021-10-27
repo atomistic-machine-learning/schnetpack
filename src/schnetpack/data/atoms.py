@@ -605,7 +605,7 @@ class AtomsDataSubset(Subset):
         return self.dataset.get_atomref(properties)
 
     def get_properties(self, idx, load_only=None):
-        return self.dataset.get_properties(idx, load_only)
+        return self.dataset.get_properties(self.indices[idx], load_only)
 
     def set_load_only(self, load_only):
         # check if properties are available
@@ -631,7 +631,7 @@ class AtomsDataSubset(Subset):
         return create_subset(self, subset)
 
     def __getitem__(self, idx):
-        _, properties = self.get_properties(self.indices[idx], self.load_only)
+        _, properties = self.get_properties(idx, self.load_only)
         properties["_idx"] = np.array([idx], dtype=np.int)
 
         return torchify_dict(properties)
