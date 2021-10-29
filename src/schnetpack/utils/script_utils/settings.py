@@ -135,7 +135,7 @@ def get_environment_provider(args, device):
         return spk.environment.AseEnvironmentProvider(cutoff=args.cutoff)
     elif args.environment_provider == "torch":
         return spk.environment.TorchEnvironmentProvider(
-            cutoff=args.cutoff, device="cpu"
+            cutoff=args.cutoff, device=device
         )
     else:
         raise NotImplementedError
