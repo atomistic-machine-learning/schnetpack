@@ -26,9 +26,10 @@ def main(args):
     train_args = setup_run(args)
 
     device = torch.device("cuda" if args.cuda else "cpu")
+    ep_device = torch.device(args.environment_provider_device)
 
     # get dataset
-    environment_provider = get_environment_provider(train_args, device=device)
+    environment_provider = get_environment_provider(train_args, device=ep_device)
     dataset = get_dataset(train_args, environment_provider=environment_provider)
 
     # get dataloaders

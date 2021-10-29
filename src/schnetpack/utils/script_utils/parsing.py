@@ -143,6 +143,12 @@ def get_mode_parsers():
         help="Number of checkpoints that will be stored (default: %(default)s)",
         default=3,
     )
+    train_parser.add_argument(
+        "--environment_provider_device",
+        help="Choose device for environment providers. It is recommended to keep CPU. (default: %(default)s)",
+        choices=["cpu", "cuda"],
+        default="cpu",
+    )
 
     # evaluation parser
     eval_parser = ArgumentParser(add_help=False)
@@ -172,6 +178,12 @@ def get_mode_parsers():
     )
     eval_parser.add_argument(
         "--overwrite", help="Remove previous evaluation files", action="store_true"
+    )
+    eval_parser.add_argument(
+        "--environment_provider_device",
+        help="Choose device for environment providers. It is recommended to keep CPU. (default: %(default)s)",
+        choices=["cpu", "cuda"],
+        default="cpu",
     )
 
     return json_parser, train_parser, eval_parser
