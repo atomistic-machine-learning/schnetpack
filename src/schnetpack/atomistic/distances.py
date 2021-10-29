@@ -50,5 +50,4 @@ class FilterShortRange(nn.Module):
         inputs[properties.Rij] = Rij[cidx]
         inputs[properties.idx_i] = idx_i[cidx]
         inputs[properties.idx_j] = idx_j[cidx]
-
         return inputs

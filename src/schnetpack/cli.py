@@ -73,21 +73,17 @@ def train(config: DictConfig):
         if config.trainer.resume_from_checkpoint is None:
             if os.path.exists("checkpoints/last.ckpt"):
                 config.trainer.resume_from_checkpoint = "checkpoints/last.ckpt"
-            else:
-                raise FileNotFoundError(
-                    "No checkpoint file found! If the latest checkpoint is not stored at `checkpoints/last.ckpt`, the path "
-                    + "to the checkpoint has to be provided by the config at `config.trainer.resume_from_checkpoint`."
-                )
 
-        log.info(
-            f"Resuming from checkpoint {os.path.abspath(config.trainer.resume_from_checkpoint)}"
-        )
+        if config.trainer.resume_from_checkpoint is not None:
+            log.info(
+                f"Resuming from checkpoint {os.path.abspath(config.trainer.resume_from_checkpoint)}"
+            )
     else:
         with open("config.yaml", "w") as f:
             OmegaConf.save(config, f, resolve=False)
 
     if config.get("print_config"):
-        print_config(config, resolve=True)
+        print_config(config, resolve=False)
 
     # Set seed for random number generators in pytorch, numpy and python.random
     if "seed" in config:

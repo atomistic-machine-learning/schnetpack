@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Dict, Optional, List
 
 from schnetpack.transform import Transform
+import schnetpack.properties as properties
 
 import torch
 import torch.nn as nn

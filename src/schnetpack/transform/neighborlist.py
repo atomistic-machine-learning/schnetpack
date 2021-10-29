@@ -3,7 +3,7 @@ import torch
 import shutil
 from ase import Atoms
 from ase.neighborlist import neighbor_list
-from typing import Dict, Optional
+from typing import Dict
 from .base import Transform
 from dirsync import sync
 
@@ -115,7 +115,6 @@ class CachedNeighborList(Transform):
                     torch.save(data, cache_file)
                 except Exception as e:
                     print(e)
-
         return inputs
 
     def teardown(self):
@@ -169,7 +168,6 @@ class NeighborListTransform(Transform):
         pbc = inputs[properties.pbc]
 
         idx_i, idx_j, offset = self._build_neighbor_list(Z, R, cell, pbc, self._cutoff)
-
         inputs[properties.idx_i] = idx_i.detach()
         inputs[properties.idx_j] = idx_j.detach()
         inputs[properties.offsets] = offset
