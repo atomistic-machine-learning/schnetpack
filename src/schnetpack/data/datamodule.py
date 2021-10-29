@@ -223,15 +223,8 @@ class AtomsDataModule(pl.LightningDataModule):
                     + "the sizes of the training and validation partitions need to be set!"
                 )
 
-            if self.num_test is None:
-                self.num_test = len(self.dataset) - self.num_train - self.num_val
-            lengths = [self.num_train, self.num_val, self.num_test]
-            offsets = torch.cumsum(torch.tensor(lengths), dim=0)
-            indices = torch.randperm(sum(lengths)).tolist()
-            self.train_idx, self.val_idx, self.test_idx = [
-                indices[offset - length : offset]
-                for offset, length in zip(offsets, lengths)
-            ]
+            self.train_idx, self.val_idx, self.test_idx = self._split_data()
+
             if self.split_file is not None:
                 np.savez(
                     self.split_file,
@@ -239,6 +232,19 @@ class AtomsDataModule(pl.LightningDataModule):
                     val_idx=self.val_idx,
                     test_idx=self.test_idx,
                 )
+
+    def _split_data(self):
+        if self.num_test is None:
+            self.num_test = len(self.dataset) - self.num_train - self.num_val
+
+        lengths = [self.num_train, self.num_val, self.num_test]
+        offsets = torch.cumsum(torch.tensor(lengths), dim=0)
+        indices = torch.randperm(sum(lengths)).tolist()
+        train_idx, val_idx, test_idx = [
+            indices[offset - length : offset]
+            for offset, length in zip(offsets, lengths)
+        ]
+        return train_idx, val_idx, test_idx
 
     def setup_transforms(self):
         # setup transforms

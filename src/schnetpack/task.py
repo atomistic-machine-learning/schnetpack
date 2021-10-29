@@ -7,7 +7,6 @@ from torch import nn as nn
 from torchmetrics import Metric
 
 from schnetpack.model.base import AtomisticModel
-from schnetpack.transform import Transform
 
 __all__ = ["ModelOutput", "AtomisticTask"]
 
