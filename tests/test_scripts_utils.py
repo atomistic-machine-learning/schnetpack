@@ -11,7 +11,12 @@ from tests.fixtures import *
 
 # scripts
 def test_statistics(
-    example_dataset, split_path, args, n_train_set, n_validation_set, batch_size,
+    example_dataset,
+    split_path,
+    args,
+    n_train_set,
+    n_validation_set,
+    batch_size,
 ):
     # test for statistics not in split file
     if os.path.exists(split_path):
@@ -70,7 +75,11 @@ def test_setup_overwrite(modeldir):
         test_file.write("in der schublade liegt noch ein schmalzbrot")
 
     args = Namespace(
-        mode="train", modelpath=modeldir, overwrite=True, seed=20, dataset="qm9",
+        mode="train",
+        modelpath=modeldir,
+        overwrite=True,
+        seed=20,
+        dataset="qm9",
     )
     train_args = spk.utils.setup_run(args)
 
@@ -106,7 +115,8 @@ def test_simple_loss():
     args = Namespace(property="prop")
     loss_fn = spk.utils.simple_loss_fn(args)
     loss = loss_fn(
-        {"prop": torch.FloatTensor([100, 100])}, {"prop": torch.FloatTensor([20, 20])},
+        {"prop": torch.FloatTensor([100, 100])},
+        {"prop": torch.FloatTensor([20, 20])},
     )
     assert loss == 80 ** 2
 
@@ -117,14 +127,20 @@ def test_tradeoff_loff():
     rho = dict(property=0.0, derivative=1.0)
     loss_fn = spk.utils.tradeoff_loss_fn(rho, property_names)
     loss = loss_fn(
-        {"prop": torch.FloatTensor([100, 100]), "der": torch.FloatTensor([100, 100]),},
+        {
+            "prop": torch.FloatTensor([100, 100]),
+            "der": torch.FloatTensor([100, 100]),
+        },
         {"prop": torch.FloatTensor([20, 20]), "der": torch.FloatTensor([40, 40])},
     )
     assert loss == 60 ** 2
     rho = dict(property=1.0, derivative=0.0)
     loss_fn = spk.utils.tradeoff_loss_fn(rho, property_names)
     loss = loss_fn(
-        {"prop": torch.FloatTensor([100, 100]), "der": torch.FloatTensor([100, 100]),},
+        {
+            "prop": torch.FloatTensor([100, 100]),
+            "der": torch.FloatTensor([100, 100]),
+        },
         {"prop": torch.FloatTensor([20, 20]), "der": torch.FloatTensor([40, 40])},
     )
     assert loss == 80 ** 2

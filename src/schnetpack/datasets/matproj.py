@@ -139,7 +139,11 @@ class MaterialsProject(DownloadableAtomsData):
                 for nsites in range(0, 300, 30):
                     ns = {"$lt": nsites + 31, "$gt": nsites}
                     query = m.query(
-                        criteria={"nelements": N, "is_compatible": True, "nsites": ns,},
+                        criteria={
+                            "nelements": N,
+                            "is_compatible": True,
+                            "nsites": ns,
+                        },
                         properties=[
                             "structure",
                             "energy_per_atom",

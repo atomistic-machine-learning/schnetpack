@@ -22,7 +22,9 @@ def test_parameter_update_schnet(
         exclude += ["distance_expansion"]
 
     assert_params_changed(
-        schnet, schnet_batch, exclude=exclude,
+        schnet,
+        schnet_batch,
+        exclude=exclude,
     )
 
 
@@ -127,7 +129,10 @@ def test_shape_tiled_multilayer_network(
 
 
 def test_shape_elemental_gate(
-    elemental_gate_layer, elements, random_int_input, random_shape,
+    elemental_gate_layer,
+    elements,
+    random_int_input,
+    random_shape,
 ):
     out_shape = random_shape + [len(elements)]
     assert_output_shape_valid(elemental_gate_layer, [random_int_input], out_shape)
