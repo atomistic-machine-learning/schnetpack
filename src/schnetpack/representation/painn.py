@@ -84,7 +84,9 @@ class PaiNNMixing(nn.Module):
             snn.Dense(2 * n_atom_basis, n_atom_basis, activation=activation),
             snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
         )
-        self.mu_channel_mix = snn.Dense(n_atom_basis, 2 * n_atom_basis, activation=None)
+        self.mu_channel_mix = snn.Dense(
+            n_atom_basis, 2 * n_atom_basis, activation=None, bias=False
+        )
         self.epsilon = epsilon
 
     def forward(self, q: torch.Tensor, mu: torch.Tensor):
