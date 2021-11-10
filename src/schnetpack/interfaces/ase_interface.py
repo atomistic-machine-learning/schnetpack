@@ -76,9 +76,6 @@ class AtomsConverter:
         else:
             raise AtomsConverterError(f"Unrecognized precision {dtype}")
 
-        #for t in self.transforms:
-        #    t.preprocessor()
-
     def __call__(self, atoms: Atoms):
         """
 
