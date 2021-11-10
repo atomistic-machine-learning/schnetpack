@@ -112,8 +112,8 @@ class PaiNNMixing(nn.Module):
 
         dqmu_intra = dqmu_intra * torch.sum(mu_V * mu_W, dim=1, keepdim=True)
 
-        q = dq_intra + dqmu_intra
-        mu = dmu_intra
+        q = q + dq_intra + dqmu_intra
+        mu = mu + dmu_intra
         return q, mu
 
 
