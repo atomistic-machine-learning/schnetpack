@@ -76,9 +76,6 @@ class AtomsConverter:
         else:
             raise AtomsConverterError(f"Unrecognized precision {dtype}")
 
-        for t in self.transforms:
-            t.preprocessor()
-
     def __call__(self, atoms: Atoms):
         """
 
@@ -162,7 +159,7 @@ class SpkCalculator(Calculator):
         self.property_units = {
             self.energy: convert_units(energy_units, "eV"),
             self.forces: convert_units(forces_units, "eV/Angstrom"),
-            self.stress: convert_units(stress_units, "eV/A/A/A"),
+            self.stress: convert_units(stress_units, "eV/Ang/Ang/Ang"),
         }
 
     def calculate(
