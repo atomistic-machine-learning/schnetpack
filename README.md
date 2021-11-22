@@ -63,7 +63,7 @@ You're ready to go!
 Under construction. For a first test, use:
 
 ```
-spktrain --config-name=train_qm9 data_dir=path_to_dir model/representation=painn
+spktrain experiment=qm9 model/representation=painn
 ```
 
 ## Documentation
