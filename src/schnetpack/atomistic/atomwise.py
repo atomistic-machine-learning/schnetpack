@@ -280,5 +280,5 @@ class Polarizability(nn.Module):
         maxm = int(idx_m[-1]) + 1
         alpha = snn.scatter_add(alpha, idx_m, dim_size=maxm)
 
-        result = {self.polarizability_key: alpha}
-        return result
+        inputs[self.polarizability_key] = alpha
+        return inputs
