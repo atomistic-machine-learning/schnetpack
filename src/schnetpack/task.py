@@ -41,6 +41,19 @@ class ModelOutput(nn.Module):
         self.loss_weight = loss_weight
         self.metrics = nn.ModuleDict(metrics)
 
+    def calculate_loss(self, pred, target):
+        loss = self.loss_weight * self.loss_fn(
+            pred[self.property], target[self.target_name]
+        )
+        return loss
+
+    def calculate_metrics(self, pred, target):
+        metrics = {
+            metric_name: metric(pred[self.property], target[self.target_name])
+            for metric_name, metric in self.metrics.items()
+        }
+        return metrics
+
 
 class AtomisticTask(pl.LightningModule):
     """
@@ -90,18 +103,15 @@ class AtomisticTask(pl.LightningModule):
     def loss_fn(self, pred, batch):
         loss = 0.0
         for output in self.outputs:
-            loss_p = output.loss_weight * output.loss_fn(
-                pred[output.property], batch[output.target_name]
-            )
-            loss += loss_p
+            loss += output.calculate_loss(pred, batch)
         return loss
 
     def log_metrics(self, pred, targets, subset):
         for output in self.outputs:
-            for metric_name, pmetric in output.metrics.items():
+            for metric_name, metric in output.calculate_metrics(pred, targets).items():
                 self.log(
                     f"{subset}_{output.property}_{metric_name}",
-                    pmetric(pred[output.property], targets[output.target_name]),
+                    metric,
                     on_step=False,
                     on_epoch=True,
                     prog_bar=False,
