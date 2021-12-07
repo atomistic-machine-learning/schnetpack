@@ -93,7 +93,7 @@ class BaseAtomsData(ABC):
 
     def subset(self, subset_idx: List[int]):
         assert (
-           subset_idx is not None
+            subset_idx is not None
         ), "Indices for creation of the subset need to be provided!"
         ds = copy.copy(self)
         if ds.subset_idx:
