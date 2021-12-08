@@ -32,7 +32,7 @@ class ModelOutput(nn.Module):
                 If not given, the output name is assumed to also be the target name.
             loss_fn: function to compute the loss
             loss_weight: loss weight in the composite loss: $l = w_1 l_1 + \dots + w_n l_n$
-            metrics: dictionary of
+            metrics: dictionary of metrics with names as keys
         """
         super().__init__()
         self.property = name
@@ -82,8 +82,8 @@ class AtomisticTask(pl.LightningModule):
             scheduler_cls: type of torch learning rate scheduler
             scheduler_args: dict of scheduler keyword arguments
             scheduler_monitor: name of metric to be observed for ReduceLROnPlateau
-            warmup_steps: number of steps used to increase the learning rate linearly to the target learning rate
-             at the beginning of training
+            warmup_steps: number of steps used to increase the learning rate from zero linearly to the target learning
+              rate at the beginning of training
         """
         super().__init__()
         self.model = model
