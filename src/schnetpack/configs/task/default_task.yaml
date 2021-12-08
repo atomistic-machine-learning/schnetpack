@@ -4,3 +4,4 @@ defaults:
 
 _target_: schnetpack.AtomisticTask
 outputs: ???
+warmup_steps: 0

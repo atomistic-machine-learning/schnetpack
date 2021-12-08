@@ -42,6 +42,8 @@ class ModelOutput(nn.Module):
         self.metrics = nn.ModuleDict(metrics)
 
     def calculate_loss(self, pred, target):
+        if self.loss_weight == 0 or self.loss_fn is None:
+            return 0.0
         loss = self.loss_weight * self.loss_fn(
             pred[self.property], target[self.target_name]
         )
@@ -70,6 +72,7 @@ class AtomisticTask(pl.LightningModule):
         scheduler_cls: Optional[Type] = None,
         scheduler_args: Optional[Dict[str, Any]] = None,
         scheduler_monitor: Optional[str] = None,
+        warmup_steps: int = 0,
     ):
         """
         Args:
@@ -79,6 +82,8 @@ class AtomisticTask(pl.LightningModule):
             scheduler_cls: type of torch learning rate scheduler
             scheduler_args: dict of scheduler keyword arguments
             scheduler_monitor: name of metric to be observed for ReduceLROnPlateau
+            warmup_steps: number of steps used to increase the learning rate linearly to the target learning rate
+             at the beginning of training
         """
         super().__init__()
         self.model = model
@@ -91,6 +96,8 @@ class AtomisticTask(pl.LightningModule):
 
         self.grad_enabled = len(self.model.required_derivatives) > 0
         self.inference_mode = False
+        self.lr = optimizer_args["lr"]
+        self.warmup_steps = warmup_steps
 
     def setup(self, stage=None):
         if stage == "fit":
@@ -159,14 +166,34 @@ class AtomisticTask(pl.LightningModule):
         )
 
         if self.scheduler_cls:
+            schedulers = []
             schedule = self.scheduler_cls(optimizer=optimizer, **self.scheduler_kwargs)
-
             optimconf = {"scheduler": schedule, "name": "lr_schedule"}
             if self.schedule_monitor:
                 optimconf["monitor"] = self.schedule_monitor
-            return [optimizer], [optimconf]
+            schedulers.append(optimconf)
+            return [optimizer], schedulers
         else:
             return optimizer
+
+    def optimizer_step(
+        self,
+        epoch: int = None,
+        batch_idx: int = None,
+        optimizer=None,
+        optimizer_idx: int = None,
+        optimizer_closure=None,
+        on_tpu: bool = None,
+        using_native_amp: bool = None,
+        using_lbfgs: bool = None,
+    ):
+        if self.trainer.global_step < self.warmup_steps:
+            lr_scale = min(1.0, float(self.trainer.global_step + 1) / self.warmup_steps)
+            for pg in optimizer.param_groups:
+                pg["lr"] = lr_scale * self.lr
+
+        # update params
+        optimizer.step(closure=optimizer_closure)
 
     def to_torchscript(
         self,

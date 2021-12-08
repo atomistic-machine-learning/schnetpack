@@ -15,8 +15,6 @@ from schnetpack.utils.script import log_hyperparameters, print_config
 from schnetpack.data import BaseAtomsData, AtomsLoader
 from schnetpack.train import PredictionWriter
 
-import pickle
-
 log = logging.getLogger(__name__)
 
 
