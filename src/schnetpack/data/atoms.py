@@ -91,9 +91,15 @@ class BaseAtomsData(ABC):
                 self._transforms.append(tf)
             self._transform_module = torch.nn.Sequential(*self._transforms)
 
-    def subset(self, subset_idx: Optional[List[int]]):
+    def subset(self, subset_idx: List[int]):
+        assert (
+            subset_idx is not None
+        ), "Indices for creation of the subset need to be provided!"
         ds = copy.copy(self)
-        ds.subset_idx = subset_idx
+        if ds.subset_idx:
+            ds.subset_idx = [ds.subset_idx[i] for i in subset_idx]
+        else:
+            ds.subset_idx = subset_idx
         return ds
 
     @property
