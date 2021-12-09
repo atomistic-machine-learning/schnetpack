@@ -91,9 +91,9 @@ All values of the config can be changed from the command line, including the dir
 By default, the model is stored in a directory with a unique run id hash as a subdirectory of ``spk_workdir/runs``.
 This can be changed as follows::
 
-   $ spktrain experiment=qm9 data_dir=/my/data/dir run_dir=~/all_my_runs run_id=this_run
+   $ spktrain experiment=qm9 run.data_dir=/my/data/dir run.path=~/all_my_runs run.id=this_run
 
-If you call ``spktrain +experiment=qm9 --help``, you can see the full config with all the parameters
+If you call ``spktrain experiment=qm9 --help``, you can see the full config with all the parameters
 that can be changed.
 Nested parameters can be changed as follows::
 
@@ -104,6 +104,29 @@ yaml files. This allows to easily change the whole dataset, model or representat
 For instance, changing from the default SchNet representation to PaiNN, use::
 
    $ spktrain experiment=qm9 data_dir=<path> model/representation=painn
+
+It is a bit confusing at first when to use "." or "/". The slash is used, if you are loading a preconfigured config
+group, while the dot is used changing individual values. For example, the config group "model/representation"
+corresponds to the following part of the config: ::
+
+    model:
+      representation:
+        _target_: schnetpack.representation.PaiNN
+        n_atom_basis: 128
+        n_interactions: 3
+        shared_interactions: false
+        shared_filters: false
+        radial_basis:
+          _target_: schnetpack.nn.radial.GaussianRBF
+          n_rbf: 20
+          cutoff: ${globals.cutoff}
+        cutoff_fn:
+          _target_: schnetpack.nn.cutoff.CosineCutoff
+          cutoff: ${globals.cutoff}
+
+If you would want to additionally change some value of this group, you could use: ::
+
+    $ spktrain experiment=qm9 data_dir=<path> model/representation=painn model.representation.n_interactions=5
 
 For more details on config groups, have a look at the
 `Hydra docs <https://hydra.cc/docs/next/tutorials/basic/your_first_app/config_groups>`_.
@@ -124,17 +147,42 @@ found :ref:`here <configs>`.
 
 The ``spktrain`` script can be used to train a model for a molecule from the MD17 datasets::
 
-   $ spktrain data_dir=<path> +experiment=md17 data.molecule=uracil
+   $ spktrain experiment=md17 data.molecule=uracil
 
 In the case of MD17, reference calculations of energies and forces are available.
 Therefore, one needs to set weights for the losses of those properties.
+The losses are defined as part of output definitions in the ``task`` config group: ::
+
+    task:
+      outputs:
+        - _target_: schnetpack.task.ModelOutput
+          name: ${globals.energy_key}
+          loss_fn:
+            _target_: torch.nn.MSELoss
+          metrics:
+            mae:
+              _target_: torchmetrics.regression.MeanAbsoluteError
+            mse:
+              _target_: torchmetrics.regression.MeanSquaredError
+          loss_weight: 0.005
+        - _target_: schnetpack.task.ModelOutput
+          name: ${globals.forces_key}
+          loss_fn:
+            _target_: torch.nn.MSELoss
+          metrics:
+            mae:
+              _target_: torchmetrics.regression.MeanAbsoluteError
+            mse:
+              _target_: torchmetrics.regression.MeanSquaredError
+          loss_weight: 0.995
+
 For a training on *energies* and *forces*, we recommend to put a stronger
 weight on the loss of the force prediction during training.
-By default, the loss weights are set to 0.05 for the energy and 0.95 for forces.
+By default, the loss weights are set to 0.005 for the energy and 0.995 for forces.
 This can be changed as follow::
 
-    $ spktrain data_dir=<path> +experiment=md17 data.molecule=uracil model.output.energy.loss_weight=0.01 \
-        model.output.forces.loss_weight=0.99
+    $ spktrain experiment=md17 data.molecule=uracil task.outputs.0.loss_weight=0.005 \
+        task.outputs.1.loss_weight=0.995
 
 
 Logging
@@ -148,7 +196,7 @@ If TensorBoard is installed, the results can be shown by calling::
 Furthermore, SchNetPack comes with configs for a CSV logger and `Aim <https://github.com/aimhubio/aim>`_.
 These can be selected as follows::
 
-   $ spktrain data_dir=<path> +experiment=md17 logger=csv
+   $ spktrain experiment=md17 logger=csv
 
 
 References
