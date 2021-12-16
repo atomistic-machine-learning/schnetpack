@@ -153,7 +153,6 @@ class MD17(AtomsDataModule):
                     f"The dataset at the given location does not contain the specified molecule: "
                     + f"`{md['molecule']}` instead of `{self.molecule}`"
                 )
-        super().prepare_data()
 
     def _download_data(
         self,
