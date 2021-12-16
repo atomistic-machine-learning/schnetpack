@@ -228,9 +228,21 @@ class AtomsDataModule(pl.LightningDataModule):
         lock = fasteners.InterProcessLock(f"splitting.lock")
 
         with lock:
-            print(self.trainer.global_rank, self.trainer.local_rank, "Enter lock")
+            logging.debug(
+                "Global rank:",
+                self.trainer.global_rank,
+                ", lokal rank:",
+                self.trainer.local_rank,
+                " >> Enter splitting lock",
+            )
             if self.split_file is not None and os.path.exists(self.split_file):
-                print(self.trainer.global_rank, self.trainer.local_rank, "Load split")
+                logging.debug(
+                    "Global rank:",
+                    self.trainer.global_rank,
+                    ", lokal rank:",
+                    self.trainer.local_rank,
+                    " >> Load split",
+                )
                 S = np.load(self.split_file)
                 self.train_idx = S["train_idx"].tolist()
                 self.val_idx = S["val_idx"].tolist()
@@ -248,7 +260,13 @@ class AtomsDataModule(pl.LightningDataModule):
                         f"Split file was given, but `num_test ({self.num_test}) != len(test_idx)` ({len(self.test_idx)})!"
                     )
             else:
-                print(self.trainer.global_rank, self.trainer.local_rank, "Create split")
+                logging.debug(
+                    "Global rank:",
+                    self.trainer.global_rank,
+                    ", lokal rank:",
+                    self.trainer.local_rank,
+                    " >> Create split",
+                )
                 if not self.num_train or not self.num_val:
                     raise AtomsDataModuleError(
                         "If no `split_file` is given, "
@@ -258,8 +276,12 @@ class AtomsDataModule(pl.LightningDataModule):
                 self.train_idx, self.val_idx, self.test_idx = self._split_data()
 
                 if self.split_file is not None:
-                    print(
-                        self.trainer.global_rank, self.trainer.local_rank, "Save split"
+                    logging.debug(
+                        "Global rank:",
+                        self.trainer.global_rank,
+                        ", lokal rank:",
+                        self.trainer.local_rank,
+                        " >> Save split",
                     )
                     np.savez(
                         self.split_file,
@@ -268,7 +290,13 @@ class AtomsDataModule(pl.LightningDataModule):
                         test_idx=self.test_idx,
                     )
 
-        print(self.trainer.global_rank, self.trainer.local_rank, "Exit lock")
+        logging.debug(
+            "Global rank:",
+            self.trainer.global_rank,
+            ", lokal rank:",
+            self.trainer.local_rank,
+            " >> Exit splitting lock",
+        )
 
     def _split_data(self):
         if self.num_test is None:
