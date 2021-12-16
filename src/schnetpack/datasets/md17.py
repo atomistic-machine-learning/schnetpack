@@ -71,6 +71,7 @@ class MD17(AtomsDataModule):
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
         data_workdir: Optional[str] = None,
+        **kwargs,
     ):
         """
         Args:
@@ -115,6 +116,7 @@ class MD17(AtomsDataModule):
             property_units=property_units,
             distance_unit=distance_unit,
             data_workdir=data_workdir,
+            **kwargs,
         )
 
         if molecule not in MD17.datasets_dict.keys():

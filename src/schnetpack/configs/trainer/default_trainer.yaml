@@ -1,6 +1,6 @@
 _target_: pytorch_lightning.Trainer
 
-gpus: 1
+devices: 1
 
 min_epochs: null
 max_epochs: 100000
@@ -16,7 +16,7 @@ val_check_interval: 1.0
 check_val_every_n_epoch: 1
 stochastic_weight_avg: False
 
-num_sanity_val_steps: 2
+num_sanity_val_steps: 0
 fast_dev_run: False
 overfit_batches: 0
 limit_train_batches: 1.0
@@ -26,9 +26,9 @@ track_grad_norm: -1
 terminate_on_nan: True
 
 amp_backend: "native"
-amp_level: "02"
+amp_level: null
 precision: 32
-accelerator: null
+accelerator: auto
 num_nodes: 1
 tpu_cores: null
 deterministic: False

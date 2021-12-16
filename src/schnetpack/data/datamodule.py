@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 from copy import copy
@@ -8,6 +9,7 @@ import numpy as np
 import fasteners
 
 import pytorch_lightning as pl
+from pytorch_lightning.utilities.enums import DeviceType
 import torch
 
 from schnetpack.data import (
@@ -18,6 +20,7 @@ from schnetpack.data import (
     AtomsLoader,
     calculate_stats,
 )
+
 
 __all__ = ["AtomsDataModule", "AtomsDataModuleError"]
 
@@ -54,6 +57,7 @@ class AtomsDataModule(pl.LightningDataModule):
         distance_unit: Optional[str] = None,
         data_workdir: Optional[str] = None,
         cleanup_workdir_stage: Optional[str] = "test",
+        pin_memory: Optional[bool] = None,
     ):
         """
         Args:
@@ -78,6 +82,7 @@ class AtomsDataModule(pl.LightningDataModule):
             distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
             data_workdir: Copy data here as part of setup, e.g. cluster scratch for faster performance.
             cleanup_workdir_after: Determines after which stage to remove the data workdir
+            pin_memory: If true, pin memory of loaded data to GPU. Default: Will be set to true, when GPUs are used.
         """
         super().__init__(
             train_transforms=train_transforms or copy(transforms) or [],
@@ -103,6 +108,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self._is_setup = False
         self.data_workdir = data_workdir
         self.cleanup_workdir_stage = cleanup_workdir_stage
+        self.pin_memory = pin_memory
 
         self.train_idx = None
         self.val_idx = None
@@ -124,12 +130,26 @@ class AtomsDataModule(pl.LightningDataModule):
             datapath = os.path.join(self.data_workdir, name)
 
             lock = fasteners.InterProcessLock(
-                os.path.join(self.data_workdir, f"cache_{name}.lock")
+                os.path.join(self.data_workdir, f"dataworkdir_{name}.lock")
             )
 
             with lock:
+                logging.debug(
+                    "Global rank:",
+                    self.trainer.global_rank,
+                    ", lokal rank:",
+                    self.trainer.local_rank,
+                    " >> Enter lock",
+                )
                 # retry reading, in case other process finished in the meantime
                 if not os.path.exists(datapath):
+                    logging.debug(
+                        "Global rank:",
+                        self.trainer.global_rank,
+                        ", lokal rank:",
+                        self.trainer.local_rank,
+                        " >> Copy data to data workdir",
+                    )
                     shutil.copy(self.datapath, datapath)
 
                 # reset datasets in case they need to be reloaded
@@ -142,6 +162,13 @@ class AtomsDataModule(pl.LightningDataModule):
                 self._has_teardown_fit = False
                 self._has_teardown_val = False
                 self._has_teardown_test = False
+            logging.debug(
+                "Global rank:",
+                self.trainer.global_rank,
+                ", lokal rank:",
+                self.trainer.local_rank,
+                " >> Exit lock",
+            )
 
         # (re)load datasets
         if self.dataset is None:
@@ -160,7 +187,6 @@ class AtomsDataModule(pl.LightningDataModule):
             self._train_dataset = self.dataset.subset(self.train_idx)
             self._val_dataset = self.dataset.subset(self.val_idx)
             self._test_dataset = self.dataset.subset(self.test_idx)
-
             self.setup_transforms()
 
     def teardown(self, stage: Optional[str] = None):
@@ -199,39 +225,78 @@ class AtomsDataModule(pl.LightningDataModule):
             )
 
         # split dataset
-        if self.split_file is not None and os.path.exists(self.split_file):
-            S = np.load(self.split_file)
-            self.train_idx = S["train_idx"].tolist()
-            self.val_idx = S["val_idx"].tolist()
-            self.test_idx = S["test_idx"].tolist()
-            if self.num_train and self.num_train != len(self.train_idx):
-                raise AtomsDataModuleError(
-                    f"Split file was given, but `num_train ({self.num_train}) != len(train_idx)` ({len(self.train_idx)})!"
-                )
-            if self.num_val and self.num_val != len(self.val_idx):
-                raise AtomsDataModuleError(
-                    f"Split file was given, but `num_val ({self.num_val}) != len(val_idx)` ({len(self.val_idx)})!"
-                )
-            if self.num_test and self.num_test != len(self.test_idx):
-                raise AtomsDataModuleError(
-                    f"Split file was given, but `num_test ({self.num_test}) != len(test_idx)` ({len(self.test_idx)})!"
-                )
-        else:
-            if not self.num_train or not self.num_val:
-                raise AtomsDataModuleError(
-                    "If no `split_file` is given, "
-                    + "the sizes of the training and validation partitions need to be set!"
-                )
+        lock = fasteners.InterProcessLock(f"splitting.lock")
 
-            self.train_idx, self.val_idx, self.test_idx = self._split_data()
-
-            if self.split_file is not None:
-                np.savez(
-                    self.split_file,
-                    train_idx=self.train_idx,
-                    val_idx=self.val_idx,
-                    test_idx=self.test_idx,
+        with lock:
+            logging.debug(
+                "Global rank:",
+                self.trainer.global_rank,
+                ", lokal rank:",
+                self.trainer.local_rank,
+                " >> Enter splitting lock",
+            )
+            if self.split_file is not None and os.path.exists(self.split_file):
+                logging.debug(
+                    "Global rank:",
+                    self.trainer.global_rank,
+                    ", lokal rank:",
+                    self.trainer.local_rank,
+                    " >> Load split",
                 )
+                S = np.load(self.split_file)
+                self.train_idx = S["train_idx"].tolist()
+                self.val_idx = S["val_idx"].tolist()
+                self.test_idx = S["test_idx"].tolist()
+                if self.num_train and self.num_train != len(self.train_idx):
+                    logging.warning(
+                        f"Split file was given, but `num_train ({self.num_train}) != len(train_idx)` ({len(self.train_idx)})!"
+                    )
+                if self.num_val and self.num_val != len(self.val_idx):
+                    logging.warning(
+                        f"Split file was given, but `num_val ({self.num_val}) != len(val_idx)` ({len(self.val_idx)})!"
+                    )
+                if self.num_test and self.num_test != len(self.test_idx):
+                    logging.warning(
+                        f"Split file was given, but `num_test ({self.num_test}) != len(test_idx)` ({len(self.test_idx)})!"
+                    )
+            else:
+                logging.debug(
+                    "Global rank:",
+                    self.trainer.global_rank,
+                    ", lokal rank:",
+                    self.trainer.local_rank,
+                    " >> Create split",
+                )
+                if not self.num_train or not self.num_val:
+                    raise AtomsDataModuleError(
+                        "If no `split_file` is given, "
+                        + "the sizes of the training and validation partitions need to be set!"
+                    )
+
+                self.train_idx, self.val_idx, self.test_idx = self._split_data()
+
+                if self.split_file is not None:
+                    logging.debug(
+                        "Global rank:",
+                        self.trainer.global_rank,
+                        ", lokal rank:",
+                        self.trainer.local_rank,
+                        " >> Save split",
+                    )
+                    np.savez(
+                        self.split_file,
+                        train_idx=self.train_idx,
+                        val_idx=self.val_idx,
+                        test_idx=self.test_idx,
+                    )
+
+        logging.debug(
+            "Global rank:",
+            self.trainer.global_rank,
+            ", lokal rank:",
+            self.trainer.local_rank,
+            " >> Exit splitting lock",
+        )
 
     def _split_data(self):
         if self.num_test is None:
@@ -286,26 +351,44 @@ class AtomsDataModule(pl.LightningDataModule):
         return self._test_dataset
 
     def train_dataloader(self) -> AtomsLoader:
+        pin_memory = (
+            self.trainer._device_type == DeviceType.GPU
+            if self.pin_memory is None
+            else self.pin_memory
+        )
+
         return AtomsLoader(
             self.train_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=True,
-            pin_memory=True,
+            pin_memory=pin_memory,
         )
 
     def val_dataloader(self) -> AtomsLoader:
+        pin_memory = (
+            self.trainer._device_type == DeviceType.GPU
+            if self.pin_memory is None
+            else self.pin_memory
+        )
+
         return AtomsLoader(
             self.val_dataset,
             batch_size=self.val_batch_size,
             num_workers=self.num_val_workers,
-            pin_memory=True,
+            pin_memory=pin_memory,
         )
 
     def test_dataloader(self) -> AtomsLoader:
+        pin_memory = (
+            self.trainer._device_type == DeviceType.GPU
+            if self.pin_memory is None
+            else self.pin_memory
+        )
+
         return AtomsLoader(
             self.test_dataset,
             batch_size=self.test_batch_size,
             num_workers=self.num_test_workers,
-            pin_memory=True,
+            pin_memory=pin_memory,
         )

@@ -1,7 +1,7 @@
 defaults:
-  - default_trainer
+  - debug_trainer
 
 devices: 2
-accelerator: auto
+accelerator: cpu
 strategy: ddp
 num_nodes: 1
