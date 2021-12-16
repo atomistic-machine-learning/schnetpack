@@ -85,7 +85,11 @@ def train(config: DictConfig):
 
     # Set seed for random number generators in pytorch, numpy and python.random
     if "seed" in config:
-        seed_everything(config.seed)
+        log.info(f"Seed with <{config.seed}>")
+        seed_everything(config.seed, workers=True)
+    else:
+        log.info(f"Seed randomly...")
+        seed_everything(workers=True)
 
     if not os.path.exists(config.run.data_dir):
         os.makedirs(config.run.data_dir)
