@@ -51,6 +51,7 @@ class OrganicMaterialsDatabase(AtomsDataModule):
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
         raw_path: Optional[str] = None,
+        **kwargs
     ):
         """
         Args:
@@ -95,6 +96,7 @@ class OrganicMaterialsDatabase(AtomsDataModule):
             num_test_workers=num_test_workers,
             property_units=property_units,
             distance_unit=distance_unit,
+            **kwargs
         )
         self.raw_path = raw_path
 

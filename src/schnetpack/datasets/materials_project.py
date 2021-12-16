@@ -53,6 +53,7 @@ class MaterialsProject(AtomsDataModule):
         distance_unit: Optional[str] = None,
         apikey: Optional[str] = None,
         timestamp: Optional[str] = None,
+        **kwargs
     ):
         """
 
@@ -99,6 +100,7 @@ class MaterialsProject(AtomsDataModule):
             num_test_workers=num_test_workers,
             property_units=property_units,
             distance_unit=distance_unit,
+            **kwargs
         )
         self.apikey = apikey
         self.timestamp = timestamp
