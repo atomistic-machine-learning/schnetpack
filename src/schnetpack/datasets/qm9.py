@@ -74,6 +74,7 @@ class QM9(AtomsDataModule):
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
         data_workdir: Optional[str] = None,
+        **kwargs
     ):
         """
 
@@ -121,6 +122,7 @@ class QM9(AtomsDataModule):
             property_units=property_units,
             distance_unit=distance_unit,
             data_workdir=data_workdir,
+            **kwargs
         )
 
         self.remove_uncharacterized = remove_uncharacterized
