@@ -22,7 +22,6 @@ class Aggregation(nn.Module):
         self.output_key = output_key
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        result = {}
         energy = torch.stack([inputs[key] for key in self.keys]).sum(0)
-        result[self.output_key] = energy
-        return result
+        inputs[self.output_key] = energy
+        return inputs
