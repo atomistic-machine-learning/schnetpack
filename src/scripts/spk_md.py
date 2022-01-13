@@ -11,7 +11,7 @@ except ImportError:
 
 def read_options(yamlpath):
     with open(yamlpath, "r") as tf:
-        tradoffs = yaml.load(tf)
+        tradoffs = yaml.safe_load(tf)
 
     logging.info("Read options from {:s}.".format(yamlpath))
     return tradoffs
