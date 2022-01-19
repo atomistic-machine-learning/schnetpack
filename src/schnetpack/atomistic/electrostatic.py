@@ -94,6 +94,7 @@ class EnergyCoulomb(nn.Module):
         self.coulomb_potential = coulomb_potential
         self.charges_key = charges_key
         self.output_key = output_key
+        self.model_outputs = [output_key]
         self.use_neighbors_lr = use_neighbors_lr
 
         if cutoff is not None:
@@ -147,9 +148,8 @@ class EnergyCoulomb(nn.Module):
         y = snn.scatter_add(y, idx_m, dim_size=n_molecules)
         y = 0.5 * self.ke * torch.squeeze(y, -1)
 
-        result = {self.output_key: y}
-
-        return result
+        inputs[self.output_key] = y
+        return inputs
 
 
 class EnergyEwaldError(Exception):
@@ -193,6 +193,7 @@ class EnergyEwald(torch.nn.Module):
 
         self.charges_key = charges_key
         self.output_key = output_key
+        self.model_outputs = [output_key]
         self.use_neighbors_lr = use_neighbors_lr
 
         self.screening_fn = screening_fn
@@ -259,9 +260,8 @@ class EnergyEwald(torch.nn.Module):
 
         y = y_real + y_reciprocal
 
-        results = {self.output_key: y}
-
-        return results
+        inputs[self.output_key] = y
+        return inputs
 
     def _real_space(
         self,
