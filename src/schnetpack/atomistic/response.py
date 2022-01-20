@@ -143,6 +143,8 @@ class Response(nn.Module):
             if prop not in map_properties:
                 self.map_properties[prop] = prop
 
+        self.model_outputs = list(self.map_properties.keys())
+
         # Set up instructions for computing response properties and derivatives
         (
             basic_derivatives,
