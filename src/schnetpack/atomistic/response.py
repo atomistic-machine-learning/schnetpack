@@ -110,7 +110,7 @@ class Response(nn.Module):
         self,
         energy_key: str,
         response_properties: List[str],
-        map_properties: Dict[str, str] = {},
+        map_properties: Optional[Dict[str, str]] = None,
     ):
         """
         Compute different response properties by taking derivatives of an energy model. See [#field1]_ for details.
@@ -138,9 +138,14 @@ class Response(nn.Module):
 
         self.energy_key = energy_key
         self.response_properties = response_properties
-        self.map_properties = map_properties
+
+        if self.map_properties is None:
+            self.map_properties = {}
+        else:
+            self.map_properties = map_properties
+
         for prop in self.response_properties:
-            if prop not in map_properties:
+            if prop not in self.map_properties:
                 self.map_properties[prop] = prop
 
         self.model_outputs = list(self.map_properties.keys())
