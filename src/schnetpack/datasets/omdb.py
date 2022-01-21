@@ -73,7 +73,7 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
             units=units,
             environment_provider=environment_provider,
         )
-        
+
         if download and not os.path.exists(dbpath):
             # Convert OMDB .tar.gz into a .db file
             self._convert()
