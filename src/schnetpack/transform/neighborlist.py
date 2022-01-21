@@ -140,8 +140,6 @@ class CachedNeighborList(Transform):
 class NeighborListTransform(Transform):
     """
     Base class for neighbor lists.
-    Optionally, an additional long-range cutoff may be provided to support separate neighbor lists for
-    long- and short-range potentials.
     """
 
     is_preprocessor: bool = True
