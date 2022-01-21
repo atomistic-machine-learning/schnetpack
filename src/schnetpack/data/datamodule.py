@@ -84,11 +84,11 @@ class AtomsDataModule(pl.LightningDataModule):
             cleanup_workdir_after: Determines after which stage to remove the data workdir
             pin_memory: If true, pin memory of loaded data to GPU. Default: Will be set to true, when GPUs are used.
         """
-        super().__init__(
-            train_transforms=train_transforms or copy(transforms) or [],
-            val_transforms=val_transforms or copy(transforms) or [],
-            test_transforms=test_transforms or copy(transforms) or [],
-        )
+        super().__init__()
+
+        self._train_transforms = train_transforms or copy(transforms) or []
+        self._val_transforms = val_transforms or copy(transforms) or []
+        self._test_transforms = test_transforms or copy(transforms) or []
 
         self.batch_size = batch_size
         self.val_batch_size = val_batch_size or test_batch_size or batch_size
@@ -117,6 +117,21 @@ class AtomsDataModule(pl.LightningDataModule):
         self._train_dataset = None
         self._val_dataset = None
         self._test_dataset = None
+
+    @property
+    def train_transforms(self):
+        """Optional transforms (or collection of transforms) you can apply to train dataset."""
+        return self._train_transforms
+
+    @property
+    def val_transforms(self):
+        """Optional transforms (or collection of transforms) you can apply to validation dataset."""
+        return self._val_transforms
+
+    @property
+    def test_transforms(self):
+        """Optional transforms (or collection of transforms) you can apply to test dataset."""
+        return self._test_transforms
 
     def setup(self, stage: Optional[str] = None):
         # check whether data needs to be copied
@@ -208,7 +223,7 @@ class AtomsDataModule(pl.LightningDataModule):
             )
 
         # split dataset
-        lock = fasteners.InterProcessLock(f"splitting.lock")
+        lock = fasteners.InterProcessLock("splitting.lock")
 
         with lock:
             self.log_with_rank("Enter splitting lock")
@@ -320,44 +335,35 @@ class AtomsDataModule(pl.LightningDataModule):
         return self._test_dataset
 
     def train_dataloader(self) -> AtomsLoader:
-        pin_memory = (
-            self.trainer._device_type == DeviceType.GPU
-            if self.pin_memory is None
-            else self.pin_memory
-        )
-
         return AtomsLoader(
             self.train_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=True,
-            pin_memory=pin_memory,
+            pin_memory=self.use_pin_memory(),
         )
 
     def val_dataloader(self) -> AtomsLoader:
-        pin_memory = (
-            self.trainer._device_type == DeviceType.GPU
-            if self.pin_memory is None
-            else self.pin_memory
-        )
-
         return AtomsLoader(
             self.val_dataset,
             batch_size=self.val_batch_size,
             num_workers=self.num_val_workers,
-            pin_memory=pin_memory,
+            pin_memory=self.use_pin_memory(),
         )
 
     def test_dataloader(self) -> AtomsLoader:
-        pin_memory = (
-            self.trainer._device_type == DeviceType.GPU
-            if self.pin_memory is None
-            else self.pin_memory
-        )
-
         return AtomsLoader(
             self.test_dataset,
             batch_size=self.test_batch_size,
             num_workers=self.num_test_workers,
-            pin_memory=pin_memory,
+            pin_memory=self.use_pin_memory(),
         )
+
+    def use_pin_memory(self) -> bool:
+        if self.pin_memory is not None:
+            return self.pin_memory
+
+        if self.trainer is not None:
+            return self.trainer._device_type == DeviceType.GPU
+
+        return False
