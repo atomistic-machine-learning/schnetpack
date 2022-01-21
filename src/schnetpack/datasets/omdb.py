@@ -32,9 +32,9 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
             (default=spk.environment.SimpleEnvironmentProvider).
 
     References:
-        arXiv: https://arxiv.org/abs/1810.12814 "Band gap prediction for large organic
-        crystal structures with machine learning" Bart Olsthoorn, R. Matthias Geilhufe,
-        Stanislav S. Borysov, Alexander V. Balatsky (Submitted on 30 Oct 2018)
+        Olsthoorn, B., Geilhufe, R.M., Borysov, S.S. and Balatsky, A.V. (2019),
+        Band Gap Prediction for Large Organic Crystal Structures with Machine Learning.
+        Adv. Quantum Technol., 2: 1900023. https://doi.org/10.1002/qute.201900023
 
     """
 
@@ -60,15 +60,11 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
 
         if not os.path.exists(path) and not os.path.exists(dbpath):
             raise FileNotFoundError(
-                "Download OMDB dataset (e.g. OMDB-GAP1.tar.gz) from "
-                "https://omdb.diracmaterials.org/dataset/ and set datapath to this file"
+                "Download OMDB dataset (e.g. OMDB-GAP1_v1.1.tar.gz) from "
+                "https://omdb.mathub.io/dataset and set datapath to this file"
             )
 
-        if download and not os.path.exists(dbpath):
-            # Convert OMDB .tar.gz into a .db file
-            self._convert()
-
-        super(OrganicMaterialsDatabase, self).__init__(
+        super().__init__(
             dbpath=dbpath,
             subset=subset,
             load_only=load_only,
@@ -77,6 +73,10 @@ class OrganicMaterialsDatabase(DownloadableAtomsData):
             units=units,
             environment_provider=environment_provider,
         )
+        
+        if download and not os.path.exists(dbpath):
+            # Convert OMDB .tar.gz into a .db file
+            self._convert()
 
     def _convert(self):
         """
