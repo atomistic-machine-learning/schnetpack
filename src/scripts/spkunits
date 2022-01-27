@@ -18,7 +18,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--propunit",
-        help="Distance units as string, corresponding "
+        help="Property units as string, corresponding "
         "to ASE units (e.g. `kcal/mol/Ang`), in the form: `property1:unit1,property2,unit2`",
     )
     args = parser.parse_args()
