@@ -44,6 +44,11 @@ class Forces(nn.Module):
         self.energy_key = energy_key
         self.force_key = force_key
         self.stress_key = stress_key
+        self.model_outputs = []
+        if calc_forces:
+            self.model_outputs.append(force_key)
+        if calc_stress:
+            self.model_outputs.append(stress_key)
 
         self.required_derivatives = []
         if self.calc_forces:
@@ -105,7 +110,7 @@ class Response(nn.Module):
         self,
         energy_key: str,
         response_properties: List[str],
-        map_properties: Dict[str, str] = {},
+        map_properties: Optional[Dict[str, str]] = None,
     ):
         """
         Compute different response properties by taking derivatives of an energy model. See [#field1]_ for details.
@@ -133,7 +138,17 @@ class Response(nn.Module):
 
         self.energy_key = energy_key
         self.response_properties = response_properties
-        self.map_properties = map_properties
+
+        if map_properties is None:
+            self.map_properties = {}
+        else:
+            self.map_properties = map_properties
+
+        for prop in self.response_properties:
+            if prop not in self.map_properties:
+                self.map_properties[prop] = prop
+
+        self.model_outputs = list(self.map_properties.keys())
 
         # Set up instructions for computing response properties and derivatives
         (
@@ -167,6 +182,7 @@ class Response(nn.Module):
         )
         # Convert to dictionary
         basic_derivatives = dict(zip(self.basic_derivatives.keys(), basic_derivatives))
+        results = {}
 
         # ================================
         # dE / dR
@@ -175,7 +191,7 @@ class Response(nn.Module):
 
             # basic distance derivatives
             if properties.forces in self.response_properties:
-                inputs[properties.forces] = -basic_derivatives["dEdR"]
+                results[properties.forces] = -basic_derivatives["dEdR"]
 
             if self.derivative_instructions["d2EdR2"]:
                 d2EdR2 = derivative_from_atomic(
@@ -185,7 +201,7 @@ class Response(nn.Module):
                     create_graph=(self.graph_required["d2EdR2"] or self.training),
                     retain_graph=True,
                 )
-                inputs[properties.hessian] = d2EdR2
+                results[properties.hessian] = d2EdR2
 
         # ================================
         # dE / ds
@@ -203,14 +219,14 @@ class Response(nn.Module):
                 dim=1,
                 keepdim=True,
             )[:, :, None]
-            inputs[properties.stress] = stress / volume
+            results[properties.stress] = stress / volume
 
         # ================================
         # dE / dF
         # ================================
         if self.derivative_instructions["dEdF"]:
             dEdF = basic_derivatives["dEdF"]
-            inputs[properties.dipole_moment] = -basic_derivatives["dEdF"]
+            results[properties.dipole_moment] = -basic_derivatives["dEdF"]
 
             if self.derivative_instructions["d2EdFdR"]:
                 d2EdFdR = derivative_from_molecular(
@@ -219,11 +235,11 @@ class Response(nn.Module):
                     create_graph=(self.graph_required["d2EdFdR"] or self.training),
                     retain_graph=True,
                 )
-                inputs[properties.dipole_derivatives] = d2EdFdR
+                results[properties.dipole_derivatives] = d2EdFdR
 
                 # Compute partial charges if requested
                 if properties.partial_charges in self.response_properties:
-                    inputs[properties.partial_charges] = (
+                    results[properties.partial_charges] = (
                         torch.einsum("bii->b", d2EdFdR) / 3.0
                     )
 
@@ -234,7 +250,7 @@ class Response(nn.Module):
                     create_graph=(self.graph_required["d2EdF2"] or self.training),
                     retain_graph=True,
                 )
-                inputs[properties.polarizability] = d2EdF2
+                results[properties.polarizability] = d2EdF2
 
                 if self.derivative_instructions["d3EdF2dR"]:
                     d3EdF2dR = derivative_from_molecular(
@@ -243,14 +259,14 @@ class Response(nn.Module):
                         create_graph=(self.graph_required["d3EdF2dR"] or self.training),
                         retain_graph=True,
                     )
-                    inputs[properties.polarizability_derivatives] = d3EdF2dR
+                    results[properties.polarizability_derivatives] = d3EdF2dR
 
         # ================================
         # dE / dB
         # ================================
         if self.derivative_instructions["dEdB"]:
             dEdB = basic_derivatives["dEdB"]
-            inputs["dEdB"] = dEdB
+            results["dEdB"] = dEdB
 
             if self.derivative_instructions["d2EdBdI"]:
                 d2EdBdI = derivative_from_molecular(
@@ -259,14 +275,14 @@ class Response(nn.Module):
                     create_graph=(self.graph_required["d2EdBdI"] or self.training),
                     retain_graph=True,
                 )
-                inputs[properties.shielding] = d2EdBdI
+                results[properties.shielding] = d2EdBdI
 
         # ================================
         # dE / dI
         # ================================
         if self.derivative_instructions["dEdI"]:
             dEdI = basic_derivatives["dEdI"]
-            inputs["dEdI"] = dEdI
+            results["dEdI"] = dEdI
 
             if self.derivative_instructions["d2EdI2"]:
                 d2EdI2 = derivative_from_atomic(
@@ -276,10 +292,10 @@ class Response(nn.Module):
                     create_graph=(self.graph_required["d2EdI2"] or self.training),
                     retain_graph=True,
                 )
-                inputs[properties.nuclear_spin_coupling] = d2EdI2
+                results[properties.nuclear_spin_coupling] = d2EdI2
 
         for prop in self.map_properties:
-            inputs[self.map_properties[prop]] = inputs[prop]
+            inputs[self.map_properties[prop]] = results[prop]
 
         return inputs
 

@@ -45,6 +45,7 @@ class Atomwise(nn.Module):
         """
         super(Atomwise, self).__init__()
         self.output_key = output_key
+        self.model_outputs = [output_key]
         self.per_atom_output_key = per_atom_output_key
         self.n_out = n_out
 
@@ -137,6 +138,10 @@ class DipoleMoment(nn.Module):
         self.dipole_key = dipole_key
         self.charges_key = charges_key
         self.return_charges = return_charges
+        self.model_outputs = [dipole_key]
+        if self.return_charges:
+            self.model_outputs.append(charges_key)
+
         self.predict_magnitude = predict_magnitude
         self.use_vector_representation = use_vector_representation
         self.correct_charges = correct_charges
@@ -242,6 +247,7 @@ class Polarizability(nn.Module):
         self.n_layers = n_layers
         self.n_hidden = n_hidden
         self.polarizability_key = polarizability_key
+        self.model_outputs = [polarizability_key]
 
         self.outnet = spk.nn.build_gated_equivariant_mlp(
             n_in=n_in,

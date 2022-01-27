@@ -103,6 +103,6 @@ class ZBLRepulsionEnergy(nn.Module):
         y_zbl = snn.scatter_add(y_zbl, idx_m, dim_size=n_molecules)
         y_zbl = 0.5 * self.ke * y_zbl
 
-        result = {self.output_key: y_zbl}
+        inputs[self.output_key] = y_zbl
 
-        return result
+        return inputs

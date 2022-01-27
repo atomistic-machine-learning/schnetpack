@@ -73,6 +73,7 @@ class AtomisticModel(nn.Module):
         self.enable_postprocess = enable_postprocess
         self.postprocessors = nn.ModuleList(postprocessors)
         self.required_derivatives: Optional[List[str]] = None
+        self.model_outputs: Optional[List[str]] = None
 
     def collect_derivatives(self) -> List[str]:
         self.required_derivatives = None
@@ -85,6 +86,15 @@ class AtomisticModel(nn.Module):
                 required_derivatives.update(m.required_derivatives)
         required_derivatives: List[str] = list(required_derivatives)
         self.required_derivatives = required_derivatives
+
+    def collect_outputs(self) -> List[str]:
+        self.model_outputs = None
+        model_outputs = set()
+        for m in self.modules():
+            if hasattr(m, "model_outputs") and m.model_outputs is not None:
+                model_outputs.update(m.model_outputs)
+        model_outputs: List[str] = list(model_outputs)
+        self.model_outputs = model_outputs
 
     def initialize_derivatives(
         self, inputs: Dict[str, torch.Tensor]
@@ -104,6 +114,12 @@ class AtomisticModel(nn.Module):
             for pp in self.postprocessors:
                 inputs = pp(inputs)
         return inputs
+
+    def extract_outputs(
+        self, inputs: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
+        results = {k: inputs[k] for k in self.model_outputs}
+        return results
 
 
 class NeuralNetworkPotential(AtomisticModel):
@@ -145,6 +161,7 @@ class NeuralNetworkPotential(AtomisticModel):
         self.output_modules = nn.ModuleList(output_modules)
 
         self.collect_derivatives()
+        self.collect_outputs()
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # inititalize derivatives for response properties
@@ -160,4 +177,6 @@ class NeuralNetworkPotential(AtomisticModel):
 
         # apply postprocessing (if enabled)
         inputs = self.postprocess(inputs)
-        return inputs
+        results = self.extract_outputs(inputs)
+
+        return results

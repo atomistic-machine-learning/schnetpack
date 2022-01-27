@@ -220,6 +220,17 @@ class ASEAtomsData(BaseAtomsData):
 
         # initialize units
         md = self.metadata
+        if "_distance_unit" not in md.keys():
+            raise AtomsDataError(
+                "Dataset does not have a distance unit set. Please add units to the dataset using"
+                "`spkunits`!"
+            )
+        if "_property_unit_dict" not in md.keys():
+            raise AtomsDataError(
+                "Dataset does not have a property units set. Please add units to the dataset using"
+                "`spkunits`!"
+            )
+
         if distance_unit:
             self.distance_conversion = spk.units.convert_units(
                 md["_distance_unit"], distance_unit

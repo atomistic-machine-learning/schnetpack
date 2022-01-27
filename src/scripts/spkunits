@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+import schnetpack.data as dat
+import argparse
+
+from ase.db import connect
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Set units of an ASE dataset, e.g. to convert from SchNetPack 1.0 to the new format."
+    )
+    parser.add_argument(
+        "data_path",
+        help="Path to ASE DB dataset",
+    )
+    parser.add_argument(
+        "--distunit",
+        help="Distance unit as string, corresponding to ASE units (e.g. `Ang`)",
+    )
+    parser.add_argument(
+        "--propunit",
+        help="Property units as string, corresponding "
+        "to ASE units (e.g. `kcal/mol/Ang`), in the form: `property1:unit1,property2,unit2`",
+    )
+    args = parser.parse_args()
+    with connect(args.data_path) as db:
+        meta = db.metadata
+    print(meta)
+
+    if "atomrefs" not in meta.keys():
+        meta["atomrefs"] = {}
+
+    if args.distunit:
+        if args.distunit == "A":
+            raise ValueError(
+                "The provided unit (A for Ampere) is not a valid distance unit according to the ASE unit"
+                " definitions. You probably mean `Ang`/`Angstrom`. Please also check your property units!"
+            )
+        meta["_distance_unit"] = args.distunit
+
+    if args.propunit:
+        if "_property_unit_dict" not in meta.keys():
+            meta["_property_unit_dict"] = {}
+
+        for p in args.propunit.split(","):
+            prop, unit = p.split(":")
+            meta["_property_unit_dict"][prop] = unit
+
+    with connect(args.data_path) as db:
+        db.metadata = meta
