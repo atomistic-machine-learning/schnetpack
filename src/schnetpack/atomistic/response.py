@@ -139,7 +139,7 @@ class Response(nn.Module):
         self.energy_key = energy_key
         self.response_properties = response_properties
 
-        if self.map_properties is None:
+        if map_properties is None:
             self.map_properties = {}
         else:
             self.map_properties = map_properties
