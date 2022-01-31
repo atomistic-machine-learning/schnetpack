@@ -166,7 +166,7 @@ def train(config: DictConfig):
 
     # Evaluate model on test set after training
     log.info("Starting testing.")
-    trainer.test()
+    trainer.test(model=task, datamodule=datamodule)
 
     # Print path to best checkpoint
     log.info(f"Best checkpoint path:\n{trainer.checkpoint_callback.best_model_path}")
