@@ -288,7 +288,7 @@ class System(UninitializedMixin, nn.Module):
         """
         # Compute the moment of inertia tensor
         moment_of_inertia = (
-            torch.sum(self.positions ** 2, dim=2, keepdim=True)[..., None]
+            torch.sum(self.positions**2, dim=2, keepdim=True)[..., None]
             * torch.eye(3, dtype=self.positions.dtype, device=self.positions.device)[
                 None, None, :, :
             ]
@@ -380,7 +380,7 @@ class System(UninitializedMixin, nn.Module):
                           the shape n_replicas x n_molecules x 1
         """
         kinetic_energy = 0.5 * self.sum_atoms(
-            torch.sum(self.momenta ** 2, dim=2, keepdim=True) / self.masses
+            torch.sum(self.momenta**2, dim=2, keepdim=True) / self.masses
         )
         return kinetic_energy
 
@@ -531,7 +531,7 @@ class System(UninitializedMixin, nn.Module):
                           Hartree) with the shape 1 x n_molecules x 1
         """
         kinetic_energy = 0.5 * self.sum_atoms(
-            torch.sum(self.centroid_momenta ** 2, dim=2, keepdim=True) / self.masses
+            torch.sum(self.centroid_momenta**2, dim=2, keepdim=True) / self.masses
         )
         return kinetic_energy
 
