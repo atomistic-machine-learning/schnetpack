@@ -72,7 +72,7 @@ class PILEBarostat(BarostatHook):
             simulator.system.n_molecules, device=simulator.device, dtype=simulator.dtype
         )
         self.mass = (
-            3.0 * simulator.system.n_atoms / self.frequency ** 2 * self.kb_temperature
+            3.0 * simulator.system.n_atoms / self.frequency**2 * self.kb_temperature
         ).to(simulator.dtype)
 
         # Set up cell thermostat coefficients
@@ -86,7 +86,7 @@ class PILEBarostat(BarostatHook):
             simulator.system.n_replicas
             * self.mass
             * self.kb_temperature
-            * (1.0 - self.c1 ** 2)
+            * (1.0 - self.c1**2)
         )
 
     def on_step_begin(self, simulator: Simulator):

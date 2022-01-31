@@ -102,7 +102,7 @@ class PaiNNMixing(nn.Module):
         ## intra-atomic
         mu_mix = self.mu_channel_mix(mu)
         mu_V, mu_W = torch.split(mu_mix, self.n_atom_basis, dim=-1)
-        mu_Vn = torch.sqrt(torch.sum(mu_V ** 2, dim=-2, keepdim=True) + self.epsilon)
+        mu_Vn = torch.sqrt(torch.sum(mu_V**2, dim=-2, keepdim=True) + self.epsilon)
 
         ctx = torch.cat([q, mu_Vn], dim=-1)
         x = self.intraatomic_context_net(ctx)

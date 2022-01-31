@@ -32,7 +32,7 @@ __all__ = [
 
 # Conversion from ppm to atomic units. Alpha is the fine structure constant and 1e6 are
 # the ppm
-ppm2au = 2.0 / (units.alpha ** 2 * 1e6)
+ppm2au = 2.0 / (units.alpha**2 * 1e6)
 
 
 class OrcaParserException(Exception):

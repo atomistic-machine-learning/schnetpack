@@ -70,7 +70,7 @@ def calculate_stats(
         delta = sample_mean - mean
         mean += delta * batch_size / new_count
         corr = batch_size * count / new_count
-        M2 += sample_m2 + delta ** 2 * corr
+        M2 += sample_m2 + delta**2 * corr
         count = new_count
 
     stddev = torch.sqrt(M2 / count)
