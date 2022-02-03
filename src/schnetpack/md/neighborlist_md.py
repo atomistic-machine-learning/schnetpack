@@ -14,8 +14,8 @@ class NeighborListMD:
         self,
         cutoff: float,
         cutoff_shell: float,
-        requires_triples: bool,
         base_nbl: NeighborListTransform,
+        requires_triples: bool = False,
         collate_fn: callable = _atoms_collate_fn,
     ):
         self.cutoff = cutoff
