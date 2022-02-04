@@ -368,7 +368,6 @@ class PIGLETThermostat(RPMDGLEThermostat):
 
 
 class NHCRingPolymerThermostat(NHCThermostat):
-    # TODO: local variant destroys structure
     ring_polymer = True
     """
     Nose-Hoover chain thermostat for ring polymer molecular dynamics simulations as e.g. described in
