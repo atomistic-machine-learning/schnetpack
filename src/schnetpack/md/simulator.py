@@ -138,7 +138,6 @@ class Simulator(nn.Module):
                 # Call hook after forces
                 for hook in self.simulator_hooks:
                     hook.on_step_middle(self)
-                # self.system.wrap_positions()
 
                 # Do half step momenta
                 self.integrator.half_step(self.system)
