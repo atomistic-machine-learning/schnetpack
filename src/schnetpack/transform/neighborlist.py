@@ -446,3 +446,5 @@ class WrapPositions(Transform):
         R_wrapped = torch.sum(inv_positions[..., None] * cell[None, ...], dim=1)
 
         inputs[properties.R] = R_wrapped
+
+        return inputs
