@@ -83,14 +83,14 @@ class ModelCheckpoint(BaseModelCheckpoint):
             if self.trainer.training_type_plugin.should_rank_save_checkpoint:
                 # remove references to trainer and data loaders to avoid pickle error in ddp
                 model = self.pl_module.model
-                pp_status = model.enable_postprocess
+                pp_status = model.do_postprocessing
 
                 if self.enable_postprocessing:
-                    model.enable_postprocess = True
+                    model.do_postprocessing = True
 
                 model.eval()
                 torch.save(model, self.inference_path)
                 model.train()
 
                 if self.enable_postprocessing:
-                    model.enable_postprocess = pp_status
+                    model.do_postprocessing = pp_status

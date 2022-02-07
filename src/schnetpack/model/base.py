@@ -31,7 +31,7 @@ class AtomisticModel(nn.Module):
                 output_module: nn.Module,
                 postprocessors: Optional[List[Transform]] = None,
                 input_dtype: torch.dtype = torch.float32,
-                enable_postprocess: bool = False,
+                enable_postprocess: Optional[bool] = None,
             ):
                 super().__init__(
                     input_dtype=input_dtype,
@@ -59,21 +59,32 @@ class AtomisticModel(nn.Module):
         self,
         postprocessors: Optional[List[Transform]] = None,
         input_dtype: torch.dtype = torch.float32,
-        enable_postprocess: bool = False,
+        do_postprocessing: Optional[bool] = None,
     ):
         """
         Args:
             postprocessors: Post-processing transforms tha may be initialized using te `datamodule`, but are not
                 applied during training.
             input_dtype: The dtype of real inputs.
-            enable_postprocess: If true, post-processing is applied.
+            do_postprocessing: If true, post-processing is activated.
+                If `do_postprocessing=None`, post-processing is apllied only in eval mode (default).
         """
         super().__init__()
         self.input_dtype = input_dtype
-        self.enable_postprocess = enable_postprocess
+        self._do_postprocessing = do_postprocessing
         self.postprocessors = nn.ModuleList(postprocessors)
         self.required_derivatives: Optional[List[str]] = None
         self.model_outputs: Optional[List[str]] = None
+
+    @property
+    def do_postprocessing(self) -> bool:
+        if self._do_postprocessing is None:
+            return not self.training
+        return self._do_postprocessing
+
+    @do_postprocessing.setter
+    def do_postprocessing(self, value: Optional[bool]):
+        self._do_postprocessing = value
 
     def collect_derivatives(self) -> List[str]:
         self.required_derivatives = None
@@ -109,7 +120,7 @@ class AtomisticModel(nn.Module):
             pp.datamodule(datamodule)
 
     def postprocess(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        if self.enable_postprocess:
+        if self.do_postprocessing:
             # apply postprocessing
             for pp in self.postprocessors:
                 inputs = pp(inputs)
@@ -138,7 +149,7 @@ class NeuralNetworkPotential(AtomisticModel):
         output_modules: List[nn.Module] = None,
         postprocessors: Optional[List[Transform]] = None,
         input_dtype: torch.dtype = torch.float32,
-        enable_postprocess: bool = False,
+        do_postprocessing: Optional[bool] = None,
     ):
         """
         Args:
@@ -149,12 +160,13 @@ class NeuralNetworkPotential(AtomisticModel):
             postprocessors: Post-processing transforms tha may be initialized using te `datamodule`, but are not
                 applied during training.
             input_dtype: The dtype of real inputs.
-            enable_postprocess: If true, post-processing is applied.
+            do_postprocessing: If true, post-processing is activated.
+                If `do_postprocessing=None`, post-processing is apllied only in eval mode (default).
         """
         super().__init__(
             input_dtype=input_dtype,
             postprocessors=postprocessors,
-            enable_postprocess=enable_postprocess,
+            do_postprocessing=do_postprocessing,
         )
         self.representation = representation
         self.input_modules = nn.ModuleList(input_modules)

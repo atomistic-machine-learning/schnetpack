@@ -59,7 +59,7 @@ class ModelOutput(nn.Module):
 
 class AtomisticTask(pl.LightningModule):
     """
-    Defines a learning task in SchNetPack including model, losses and optimizer.
+    The basic learning task in SchNetPack, which ties model, loss and optimizer together.
 
     """
 
@@ -95,7 +95,6 @@ class AtomisticTask(pl.LightningModule):
         self.outputs = nn.ModuleList(outputs)
 
         self.grad_enabled = len(self.model.required_derivatives) > 0
-        self.inference_mode = False
         self.lr = optimizer_args["lr"]
         self.warmup_steps = warmup_steps
 
@@ -194,16 +193,3 @@ class AtomisticTask(pl.LightningModule):
 
         # update params
         optimizer.step(closure=optimizer_closure)
-
-    def to_torchscript(
-        self,
-        file_path: Optional[Union[str, Path]] = None,
-        method: Optional[str] = "script",
-        example_inputs: Optional[Any] = None,
-        **kwargs,
-    ) -> Union[torch.ScriptModule, Dict[str, torch.ScriptModule]]:
-        imode = self.inference_mode
-        self.inference_mode = True
-        script = super().to_torchscript(file_path, method, example_inputs, **kwargs)
-        self.inference_mode = imode
-        return script
