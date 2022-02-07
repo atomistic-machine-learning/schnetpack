@@ -10,14 +10,29 @@ __all__ = ["NeighborListMD"]
 
 
 class NeighborListMD:
+    """
+    Wrapper for neighbor list transforms to make them suitable for molecular dynamics simulations. Introduces handling
+    of multiple replicas and a cutoff shell (buffer region) to avoid recomputations of the neighbor list in every step.
+    """
+
     def __init__(
         self,
         cutoff: float,
         cutoff_shell: float,
-        requires_triples: bool,
         base_nbl: NeighborListTransform,
+        requires_triples: bool = False,
         collate_fn: callable = _atoms_collate_fn,
     ):
+        """
+
+        Args:
+            cutoff (float): Cutoff radius.
+            cutoff_shell (float): Buffer region. Atoms can move this much unitil neighbor list needs to be recomputed.
+            base_nbl (schnetpack.transform.NeighborListTransform): basic SchNetPack neighbor list transform.
+            requires_triples (bool): Compute atom triples, e.g. for angles (default=False).
+            collate_fn (callable): Collate function for batch generation. Used to combine neighbor lists of differnt
+                                   replicas and molecules.
+        """
         self.cutoff = cutoff
         self.cutoff_shell = cutoff_shell
         self.cutoff_full = cutoff + cutoff_shell
@@ -37,7 +52,25 @@ class NeighborListMD:
         self.previous_cells = None
         self.molecular_indices = None
 
-    def _update_required(self, positions, cells, idx_m: torch.tensor, n_molecules: int):
+    def _update_required(
+        self,
+        positions: torch.tensor,
+        cells: torch.tensor,
+        idx_m: torch.tensor,
+        n_molecules: int,
+    ):
+        """
+        Use displacement and cell changes to determine, whether an update of the neighbor list is necessary.
+
+        Args:
+            positions (torch.Tensor): Atom positions.
+            cells (torch.Tensor): Simulation cells.
+            idx_m (torch.Tensor): Molecular indices.
+            n_molecules (int): Number of molecules in simulation
+
+        Returns:
+            bool: Udate is required.
+        """
 
         if self.previous_positions is None:
             # Everything needs to be updated
@@ -65,6 +98,15 @@ class NeighborListMD:
         return update_required
 
     def get_neighbors(self, inputs: Dict[str, torch.Tensor]):
+        """
+        Compute neighbor indices from positions and simulations cells.
+
+        Args:
+            inputs (dict(str, torch.Tensor)): input batch.
+
+        Returns:
+            torch.tensor: indices of neighbors.
+        """
         # TODO: check if this is better or building Rij after the full indices have been generated
         atom_types = inputs[properties.Z]
         positions = inputs[properties.R]
@@ -113,7 +155,14 @@ class NeighborListMD:
 
         return neighbor_idx
 
-    def _update_Rij(self, inputs: Dict[str, torch.tensor], mol_idx):
+    def _update_Rij(self, inputs: Dict[str, torch.tensor], mol_idx: torch.tensor):
+        """
+        Update the interatomic distances.
+
+        Args:
+            inputs (dict(str, torch.Tensor)): Input batch.
+            mol_idx (torch.Tensor): Molecule indices
+        """
         R = inputs[properties.R]
         idx_i = self.molecular_indices[mol_idx][properties.idx_i]
         idx_j = self.molecular_indices[mol_idx][properties.idx_j]
@@ -137,6 +186,19 @@ class NeighborListMD:
         pbc: torch.Tensor,
         n_molecules: int,
     ) -> List[Dict[str, torch.tensor]]:
+        """
+        Split the tensors containing molecular information into the different molecules for neighbor list computation.
+        Args:
+            atom_types (torch.Tensor): Atom type tensor.
+            positions (torch.Tensor): Atomic positions.
+            n_atoms (torch.Tensor): Number of atoms in each molecule.
+            cells (torch.Tensor): Simulation cells.
+            pbc (torch.Tensor): Periodic boundary conditions used for each molecule.
+            n_molecules (int): Number of molecules.
+
+        Returns:
+            list(dict(str, torch.Tensor))): List of input dictionaries for each molecule.
+        """
         input_batch = []
 
         idx_c = 0
