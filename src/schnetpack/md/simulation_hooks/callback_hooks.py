@@ -1,3 +1,6 @@
+"""
+This module contains different hooks for monitoring the simulation and checkpointing.
+"""
 from __future__ import annotations
 from typing import Union, List, Dict, Tuple, Any
 from typing import TYPE_CHECKING

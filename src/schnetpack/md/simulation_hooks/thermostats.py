@@ -1,7 +1,6 @@
 """
-This module contains various thermostat for regulating the temperature of the system during
-molecular dynamics simulations. Apart from standard thermostat for convetional simulations,
-a series of special thermostat developed for ring polymer molecular dynamics is also provided.
+This module contains various thermostats for regulating the temperature of the system during
+molecular dynamics simulations.
 """
 from __future__ import annotations
 import torch
