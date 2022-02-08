@@ -104,12 +104,12 @@ class SchNetPackCalculator(MDCalculator):
             model = torch.jit.script(model)
 
         log.info("Deactivating inference mode for simulation...")
-        self._deactivate_inference_mode(model)
+        self._deactivate_postprocessing(model)
 
         return model
 
     @staticmethod
-    def _deactivate_inference_mode(model: AtomisticModel) -> AtomisticModel:
+    def _deactivate_postprocessing(model: AtomisticModel) -> AtomisticModel:
         if hasattr(model, "postprocessors"):
             for pp in model.postprocessors:
                 if isinstance(pp, schnetpack.transform.AddOffsets):
@@ -119,7 +119,7 @@ class SchNetPackCalculator(MDCalculator):
                             pp.mean.detach().cpu().numpy()
                         )
                     )
-        model.inference_mode = False
+        model.enable_postprocess = False
         return model
 
     @staticmethod

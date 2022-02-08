@@ -11,7 +11,7 @@ from schnetpack.md.calculators import SchNetPackCalculator
 
 from schnetpack import properties
 import schnetpack.nn as snn
-from schnetpack.atomistic import Forces
+from schnetpack.atomistic import Forces, PairwiseDistances, Strain
 
 __all__ = ["LJCalculator", "LJModel"]
 
@@ -133,6 +133,9 @@ class LJModel(nn.Module):
             cutoff_radius=cutoff, healing_length=healing_length
         )
 
+        # Modules for distances, stress tensor and forces
+        self.distances = PairwiseDistances()
+        self.strain = Strain()
         self.force_layer = Forces(
             calc_forces=calc_forces,
             calc_stress=calc_stress,
@@ -151,9 +154,15 @@ class LJModel(nn.Module):
         Returns:
             dict(str, torch.Tensor):  Dictionary of model outputs.
         """
+
         # Activate gradient for force/stress computations
-        if self.calc_forces or self.calc_stress:
-            inputs[properties.Rij].requires_grad_()
+        if self.calc_forces:
+            inputs[properties.R].requires_grad_()
+        if self.calc_stress:
+            inputs = self.strain(inputs)
+
+        # Compute interatomic distances
+        inputs = self.distances(inputs)
 
         vec_ij = inputs[properties.Rij]
         positions = inputs[properties.R]
@@ -223,7 +232,7 @@ class CustomCutoff(nn.Module):
         r = (
             distances - (self.cutoff_radius - self.healing_length)
         ) / self.healing_length
-        r_function = 1.0 + r ** 2 * (2.0 * r - 3.0)
+        r_function = 1.0 + r**2 * (2.0 * r - 3.0)
 
         # Compute second part of cutoff
         switch = torch.where(

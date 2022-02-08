@@ -1,7 +1,6 @@
 """
-This module contains various thermostat for regulating the temperature of the system during
-molecular dynamics simulations. Apart from standard thermostat for convetional simulations,
-a series of special thermostat developed for ring polymer molecular dynamics is also provided.
+This module contains various barostats for controlling the pressure of the system during
+molecular dynamics simulations.
 """
 from __future__ import annotations
 from typing import Optional, Tuple, TYPE_CHECKING
@@ -318,7 +317,7 @@ class NHCBarostatIsotropic(BarostatHook):
         self.b_masses_cell = (
             (self.degrees_of_freedom + 3)
             * self.kb_temperature
-            / self.barostat_frequency ** 2
+            / self.barostat_frequency**2
         )
         # Remaining barostat variables
         self.b_velocities_cell = torch.zeros_like(self.b_masses_cell)
@@ -360,19 +359,19 @@ class NHCBarostatIsotropic(BarostatHook):
         self.t_masses[..., 0] = (
             self.degrees_of_freedom_particles
             * self.kb_temperature
-            / self.frequency ** 2
+            / self.frequency**2
         )
 
         # Get masses of cell
         self.t_masses_cell[..., 0] = (
             self.degrees_of_freedom_cell
             * self.kb_temperature
-            / self.cell_frequency ** 2
+            / self.cell_frequency**2
         )
 
         # Set masses of remaining thermostats
-        self.t_masses[..., 1:] = self.kb_temperature / self.frequency ** 2
-        self.t_masses_cell[..., 1:] = self.kb_temperature / self.cell_frequency ** 2
+        self.t_masses[..., 1:] = self.kb_temperature / self.frequency**2
+        self.t_masses_cell[..., 1:] = self.kb_temperature / self.cell_frequency**2
 
         # Thermostat variables for particles
         self.t_velocities = torch.zeros_like(self.t_masses)
@@ -453,10 +452,10 @@ class NHCBarostatIsotropic(BarostatHook):
 
                 # Recompute forces using scaling to update the kinetic energies
                 self._update_inner_t_forces(
-                    kinetic_energy_particles * scaling_thermostat_particles ** 2
+                    kinetic_energy_particles * scaling_thermostat_particles**2
                 )
                 self._update_inner_t_forces_cell(
-                    kinetic_energy_cell * scaling_thermostat_cell ** 2
+                    kinetic_energy_cell * scaling_thermostat_cell**2
                 )
 
                 # Update velocities and forces of remaining thermostats
@@ -496,7 +495,7 @@ class NHCBarostatIsotropic(BarostatHook):
             torch.tensor: Current kinetic energy of the particles.
         """
         if self.massive:
-            kinetic_energy_particles = system.momenta ** 2 / system.masses
+            kinetic_energy_particles = system.momenta**2 / system.masses
         else:
             kinetic_energy_particles = 2.0 * system.kinetic_energy
 
@@ -509,7 +508,7 @@ class NHCBarostatIsotropic(BarostatHook):
         Returns:
             torch.tensor: Kinetic energy associated with the cells.
         """
-        return self.b_masses_cell * self.b_velocities_cell ** 2
+        return self.b_masses_cell * self.b_velocities_cell**2
 
     def _update_inner_t_forces(self, kinetic_energy_particles: torch.tensor):
         """
@@ -557,11 +556,11 @@ class NHCBarostatIsotropic(BarostatHook):
             )
 
             self.t_velocities[..., chain] = (
-                self.t_velocities[..., chain] * t_coeff ** 2
+                self.t_velocities[..., chain] * t_coeff**2
                 + 0.25 * self.t_forces[..., chain] * t_coeff * time_step
             )
             self.t_velocities_cell[..., chain] = (
-                self.t_velocities_cell[..., chain] * b_coeff ** 2
+                self.t_velocities_cell[..., chain] * b_coeff**2
                 + 0.25 * self.t_forces_cell[..., chain] * b_coeff * time_step
             )
 
@@ -581,11 +580,11 @@ class NHCBarostatIsotropic(BarostatHook):
             )
 
             self.t_velocities[..., chain] = (
-                self.t_velocities[..., chain] * t_coeff ** 2
+                self.t_velocities[..., chain] * t_coeff**2
                 + 0.25 * self.t_forces[..., chain] * t_coeff * time_step
             )
             self.t_velocities_cell[..., chain] = (
-                self.t_velocities_cell[..., chain] * b_coeff ** 2
+                self.t_velocities_cell[..., chain] * b_coeff**2
                 + 0.25 * self.t_forces_cell[..., chain] * b_coeff * time_step
             )
 
@@ -651,7 +650,7 @@ class NHCBarostatIsotropic(BarostatHook):
 
         # Update the particle positions
         system.positions = (
-            system.positions * system.expand_atoms(a_coeff ** 2)
+            system.positions * system.expand_atoms(a_coeff**2)
             + system.momenta
             / system.masses
             * system.expand_atoms(b_coeff)
@@ -685,7 +684,7 @@ class NHCBarostatIsotropic(BarostatHook):
 
         # Update the momenta (using half timestep)
         system.momenta = (
-            system.momenta * system.expand_atoms(a_coeff ** 2)
+            system.momenta * system.expand_atoms(a_coeff**2)
             + system.forces * system.expand_atoms(b_coeff) * self.time_step * 0.5
         )
 
@@ -750,7 +749,7 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         self.b_masses_cell = (
             (self.degrees_of_freedom + 3)
             * self.kb_temperature
-            / self.barostat_frequency ** 2
+            / self.barostat_frequency**2
             / 3.0
         )
         # Remaining barostat variables (forces and velocities are now 3 x 3)
@@ -794,7 +793,7 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
             torch.tensor: Kinetic energy associated with the cells.
         """
         b_velocities_cell_sq = torch.sum(
-            self.b_velocities_cell ** 2, dim=(2, 3), keepdim=True
+            self.b_velocities_cell**2, dim=(2, 3), keepdim=True
         ).squeeze(-1)
         return self.b_masses_cell * b_velocities_cell_sq
 
@@ -840,7 +839,7 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         # Construct matrix operators and update positions using positions and momenta
         operator_a = torch.matmul(
             eigvec_b_velocities,
-            torch.matmul(coeff_a ** 2, eigvec_b_velocities.transpose(2, 3)),
+            torch.matmul(coeff_a**2, eigvec_b_velocities.transpose(2, 3)),
         )
         operator_b = torch.matmul(
             eigvec_b_velocities,
@@ -888,7 +887,7 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         # Construct matrix operators and update positions using positions and momenta
         operator_a = torch.matmul(
             eigvec_b_velocities,
-            torch.matmul(coeff_a ** 2, eigvec_b_velocities.transpose(2, 3)),
+            torch.matmul(coeff_a**2, eigvec_b_velocities.transpose(2, 3)),
         )
         operator_b = torch.matmul(
             eigvec_b_velocities,

@@ -1,7 +1,6 @@
 """
-This module contains various thermostat for regulating the temperature of the system during
-molecular dynamics simulations. Apart from standard thermostat for convetional simulations,
-a series of special thermostat developed for ring polymer molecular dynamics is also provided.
+This module contains various thermostats for regulating the temperature of the system during
+molecular dynamics simulations.
 """
 from __future__ import annotations
 import torch
@@ -230,7 +229,7 @@ class LangevinThermostat(ThermostatHook):
 
         # Initialize coefficient matrices
         c1 = torch.exp(-0.5 * simulator.integrator.time_step * gamma)
-        c2 = torch.sqrt(1 - c1 ** 2)
+        c2 = torch.sqrt(1 - c1**2)
 
         self.c1 = c1[:, None, None]
         self.c2 = c2[:, None, None]
@@ -389,10 +388,10 @@ class NHCThermostat(ThermostatHook):
 
         # Get masses of innermost thermostat
         self.masses[..., 0] = (
-            self.degrees_of_freedom * self.kb_temperature / self.frequency ** 2
+            self.degrees_of_freedom * self.kb_temperature / self.frequency**2
         )
         # Set masses of remaining thermostats
-        self.masses[..., 1:] = self.kb_temperature / self.frequency ** 2
+        self.masses[..., 1:] = self.kb_temperature / self.frequency**2
 
     def _propagate_thermostat(self, kinetic_energy: torch.tensor) -> torch.tensor:
         """
@@ -430,7 +429,7 @@ class NHCThermostat(ThermostatHook):
                         -0.125 * time_step * self.velocities[..., chain + 1]
                     )
                     self.velocities[..., chain] = (
-                        self.velocities[..., chain] * coeff ** 2
+                        self.velocities[..., chain] * coeff**2
                         + 0.25 * self.forces[..., chain] * coeff * time_step
                     )
 
@@ -453,7 +452,7 @@ class NHCThermostat(ThermostatHook):
                         -0.125 * time_step * self.velocities[..., chain + 1]
                     )
                     self.velocities[..., chain] = (
-                        self.velocities[..., chain] * coeff ** 2
+                        self.velocities[..., chain] * coeff**2
                         + 0.25 * self.forces[..., chain] * coeff * time_step
                     )
                     self.forces[..., chain + 1] = (
@@ -482,7 +481,7 @@ class NHCThermostat(ThermostatHook):
         if self.massive:
             # Compute the kinetic energy (factor of 1/2 can be removed, as it
             # cancels with a times 2)
-            kinetic_energy = system.momenta ** 2 / system.masses
+            kinetic_energy = system.momenta**2 / system.masses
             return kinetic_energy
         else:
             return 2.0 * system.kinetic_energy
@@ -687,7 +686,7 @@ class GLEThermostat(ThermostatHook):
                 *simulator.system.momenta.shape,
                 degrees_of_freedom,
                 device=simulator.device,
-                dtype=simulator.dtype
+                dtype=simulator.dtype,
             )
             initial_momenta = torch.matmul(initial_momenta, self.c2)
         else:
@@ -695,7 +694,7 @@ class GLEThermostat(ThermostatHook):
                 *simulator.system.momenta.shape,
                 degrees_of_freedom,
                 device=simulator.device,
-                dtype=simulator.dtype
+                dtype=simulator.dtype,
             )
 
         return initial_momenta
