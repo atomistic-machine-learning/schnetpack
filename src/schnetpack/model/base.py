@@ -59,7 +59,7 @@ class AtomisticModel(nn.Module):
         self,
         postprocessors: Optional[List[Transform]] = None,
         input_dtype: torch.dtype = torch.float32,
-        do_postprocessing: Optional[bool] = None,
+        do_postprocessing: bool = True,
     ):
         """
         Args:
@@ -71,20 +71,10 @@ class AtomisticModel(nn.Module):
         """
         super().__init__()
         self.input_dtype = input_dtype
-        self._do_postprocessing = do_postprocessing
+        self.do_postprocessing = do_postprocessing
         self.postprocessors = nn.ModuleList(postprocessors)
         self.required_derivatives: Optional[List[str]] = None
         self.model_outputs: Optional[List[str]] = None
-
-    @property
-    def do_postprocessing(self) -> bool:
-        if self._do_postprocessing is None:
-            return not self.training
-        return self._do_postprocessing
-
-    @do_postprocessing.setter
-    def do_postprocessing(self, value: Optional[bool]):
-        self._do_postprocessing = value
 
     def collect_derivatives(self) -> List[str]:
         self.required_derivatives = None
