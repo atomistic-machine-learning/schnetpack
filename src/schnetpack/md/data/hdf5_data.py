@@ -113,7 +113,7 @@ class HDF5Loader:
 
         # Extract energies
         entry_start = 0
-        entry_stop = 1
+        entry_stop = self.n_molecules
         self.properties[f"{properties.energy}_system"] = raw_positions[
             :, :, entry_start:entry_stop
         ].reshape(self.entries, self.n_replicas, self.n_molecules)
