@@ -1,9 +1,12 @@
+# @package _global_
+
 device: cuda
-precision: 64
+precision: 32
 seed: null
 simulation_dir: ???
 overwrite: false
 restart: null
+load_config: null
 
 defaults:
   - calculator: spk

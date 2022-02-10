@@ -48,11 +48,15 @@ def simulate(config: DictConfig):
     os.chdir(original_wd)
 
     # Load custom config and use to update defaults
-    if "load_config" in config:
+    if config.load_config is not None:
         config_path = hydra.utils.to_absolute_path(config.load_config)
         logging.info("Loading config from {:s}".format(config_path))
         loaded_config = OmegaConf.load(config_path)
-        config = OmegaConf.merge(config, loaded_config)
+        # config = OmegaConf.merge(config, loaded_config)
+        # TODO: this assumes loaded config will have all necessary entries
+        for p in loaded_config:
+            if p in config:
+                config[p] = loaded_config[p]
 
     print_config(
         config,
