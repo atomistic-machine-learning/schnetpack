@@ -18,12 +18,8 @@ data:
       property: ${globals.property}
       remove_atomrefs: True
       remove_mean: True
-    - _target_: schnetpack.transform.CachedNeighborList
-      cache_path: ${run.work_dir}/cache
-      keep_cache: False
-      neighbor_list:
-        _target_: schnetpack.transform.ASENeighborList
-        cutoff: ${globals.cutoff}
+    - _target_: schnetpack.transform.ASENeighborList
+      cutoff: ${globals.cutoff}
     - _target_: schnetpack.transform.CastTo32
 
 model:

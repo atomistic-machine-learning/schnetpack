@@ -57,12 +57,10 @@ class ModelCheckpoint(BaseModelCheckpoint):
     but also saves the best inference model with activated post-processing
     """
 
-    def __init__(
-        self, inference_path: str, enable_postprocessing=True, *args, **kwargs
-    ):
+    def __init__(self, inference_path: str, do_postprocessing=True, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.inference_path = inference_path
-        self.enable_postprocessing = enable_postprocessing
+        self.do_postprocessing = do_postprocessing
 
     def on_validation_end(self, trainer, pl_module: AtomisticTask) -> None:
         self.trainer = trainer
@@ -83,14 +81,14 @@ class ModelCheckpoint(BaseModelCheckpoint):
             if self.trainer.training_type_plugin.should_rank_save_checkpoint:
                 # remove references to trainer and data loaders to avoid pickle error in ddp
                 model = self.pl_module.model
-                pp_status = model.enable_postprocess
+                pp_status = model.do_postprocessing
 
-                if self.enable_postprocessing:
-                    model.enable_postprocess = True
+                if self.do_postprocessing:
+                    model.do_postprocessing = True
 
                 model.eval()
                 torch.save(model, self.inference_path)
                 model.train()
 
-                if self.enable_postprocessing:
-                    model.enable_postprocess = pp_status
+                if self.do_postprocessing:
+                    model.do_postprocessing = pp_status
