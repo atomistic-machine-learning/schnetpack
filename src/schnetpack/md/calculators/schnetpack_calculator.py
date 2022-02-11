@@ -119,7 +119,7 @@ class SchNetPackCalculator(MDCalculator):
                             pp.mean.detach().cpu().numpy()
                         )
                     )
-        model.enable_postprocess = False
+        model.do_postprocesing = False
         return model
 
     @staticmethod
