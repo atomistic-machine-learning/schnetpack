@@ -20,8 +20,8 @@ class AtomisticModel(nn.Module):
     `submodule.required_derivatives = ["input_key"]`. The model needs to call `self.collect_derivatives()` at the end
     of its `__init__`.
 
-    To make use of postproceesing transform, the model should call `input = self.postprocessing(input)` at the end of
-    its `forward`. The post processors will only be applied if `enable_postprocess=True`.
+    To make use of post-processing transform, the model should call `input = self.postprocess(input)` at the end of
+    its `forward`. The post processors will only be applied if `do_postprocessing=True`.
 
     Example:
          class SimpleModel(AtomisticModel):
@@ -31,12 +31,12 @@ class AtomisticModel(nn.Module):
                 output_module: nn.Module,
                 postprocessors: Optional[List[Transform]] = None,
                 input_dtype: torch.dtype = torch.float32,
-                enable_postprocess: Optional[bool] = None,
+                do_postprocessing: bool = True,
             ):
                 super().__init__(
                     input_dtype=input_dtype,
                     postprocessors=postprocessors,
-                    enable_postprocess=enable_postprocess,
+                    do_postprocessing=do_postprocessing,
                 )
                 self.representation = representation
                 self.output_modules = output_modules
@@ -67,7 +67,6 @@ class AtomisticModel(nn.Module):
                 applied during training.
             input_dtype: The dtype of real inputs.
             do_postprocessing: If true, post-processing is activated.
-                If `do_postprocessing=None`, post-processing is apllied only in eval mode (default).
         """
         super().__init__()
         self.input_dtype = input_dtype
@@ -151,7 +150,6 @@ class NeuralNetworkPotential(AtomisticModel):
                 applied during training.
             input_dtype: The dtype of real inputs.
             do_postprocessing: If true, post-processing is activated.
-                If `do_postprocessing=None`, post-processing is apllied only in eval mode (default).
         """
         super().__init__(
             input_dtype=input_dtype,
