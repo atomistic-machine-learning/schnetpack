@@ -148,6 +148,10 @@ class Simulator(nn.Module):
                 for hook in self.simulator_hooks[::-1]:
                     hook.on_step_end(self)
 
+                # Logging hooks etc
+                for hook in self.simulator_hooks:
+                    hook.on_step_finalize(self)
+
                 self.step += 1
                 self.effective_steps += 1
 
