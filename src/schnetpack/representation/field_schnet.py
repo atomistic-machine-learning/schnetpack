@@ -91,7 +91,6 @@ class DipoleUpdate(nn.Module):
                     n_atom_basis,
                     activation=None,
                     bias=False,
-                    weight_init=zeros_,
                 )
                 for field in external_fields
             }
