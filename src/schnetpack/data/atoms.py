@@ -305,7 +305,7 @@ class ASEAtomsData(BaseAtomsData):
 
         if load_structure is None:
             load_structure = self.load_structure
-            
+
         if self.subset_idx:
             if indices is None:
                 indices = self.subset_idx
