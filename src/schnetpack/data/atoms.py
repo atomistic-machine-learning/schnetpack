@@ -305,11 +305,19 @@ class ASEAtomsData(BaseAtomsData):
 
         if load_structure is None:
             load_structure = self.load_structure
-
-        if indices is None:
-            indices = range(len(self))
-        elif type(indices) is int:
-            indices = [indices]
+            
+        if self.subset_idx:
+            if indices is None:
+                indices = self.subset_idx
+            elif type(indices) is int:
+                indices = [self.subset_idx[indices]]
+            else:
+                indices = [self.subset_idx[i] for i in indices]
+        else:
+            if indices is None:
+                indices = range(len(self))
+            elif type(indices) is int:
+                indices = [indices]
 
         # read from ase db
         with connect(self.datapath, use_lock_file=False) as conn:
