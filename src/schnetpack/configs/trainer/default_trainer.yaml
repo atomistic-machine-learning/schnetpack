@@ -6,7 +6,7 @@ min_epochs: null
 max_epochs: 100000
 
 # prints
-weights_summary: top
+enable_model_summary: True
 progress_bar_refresh_rate: 10
 profiler: null
 
@@ -23,7 +23,7 @@ limit_train_batches: 1.0
 limit_val_batches: 1.0
 limit_test_batches: 1.0
 track_grad_norm: -1
-terminate_on_nan: True
+detect_anomaly: False
 
 amp_backend: "native"
 amp_level: null

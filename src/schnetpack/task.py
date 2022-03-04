@@ -6,6 +6,8 @@ import torch
 from torch import nn as nn
 from torchmetrics import Metric
 
+from torch.autograd import grad
+
 from schnetpack.model.base import AtomisticModel
 
 __all__ = ["ModelOutput", "AtomisticTask"]
@@ -83,8 +85,8 @@ class AtomisticTask(pl.LightningModule):
             scheduler_cls: type of torch learning rate scheduler
             scheduler_args: dict of scheduler keyword arguments
             scheduler_monitor: name of metric to be observed for ReduceLROnPlateau
-            warmup_steps: number of steps used to increase the learning rate from zero linearly to the target learning
-              rate at the beginning of training
+            warmup_steps: number of steps used to increase the learning rate from zero
+              linearly to the target learning rate at the beginning of training
         """
         super().__init__()
         self.model = model

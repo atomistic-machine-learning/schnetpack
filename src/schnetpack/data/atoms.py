@@ -223,12 +223,12 @@ class ASEAtomsData(BaseAtomsData):
         if "_distance_unit" not in md.keys():
             raise AtomsDataError(
                 "Dataset does not have a distance unit set. Please add units to the dataset using"
-                "`spkunits`!"
+                "`spkconvert`!"
             )
         if "_property_unit_dict" not in md.keys():
             raise AtomsDataError(
                 "Dataset does not have a property units set. Please add units to the dataset using"
-                "`spkunits`!"
+                "`spkconvert`!"
             )
 
         if distance_unit:
