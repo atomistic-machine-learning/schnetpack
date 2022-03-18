@@ -19,6 +19,8 @@ from schnetpack.data import (
     BaseAtomsData,
     AtomsLoader,
     calculate_stats,
+    SplittingStrategy,
+    RandomSplit,
 )
 
 
@@ -58,6 +60,7 @@ class AtomsDataModule(pl.LightningDataModule):
         data_workdir: Optional[str] = None,
         cleanup_workdir_stage: Optional[str] = "test",
         pin_memory: Optional[bool] = None,
+        splitting: Optional[SplittingStrategy] = None,
     ):
         """
         Args:
@@ -83,6 +86,7 @@ class AtomsDataModule(pl.LightningDataModule):
             data_workdir: Copy data here as part of setup, e.g. cluster scratch for faster performance.
             cleanup_workdir_after: Determines after which stage to remove the data workdir
             pin_memory: If true, pin memory of loaded data to GPU. Default: Will be set to true, when GPUs are used.
+            splitting: Method to generate train/validation/test partitions (default: RandomSplit)
         """
         super().__init__()
 
@@ -96,6 +100,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self.num_train = num_train
         self.num_val = num_val
         self.num_test = num_test
+        self.splitting = splitting or RandomSplit()
         self.split_file = split_file
         self.datapath, self.format = resolve_format(datapath, format)
         self.load_properties = load_properties
@@ -207,21 +212,6 @@ class AtomsDataModule(pl.LightningDataModule):
             t.teardown()
 
     def load_partitions(self):
-        # TODO: handle IterDatasets
-        # handle relative dataset sizes
-        if self.num_train is not None and self.num_train <= 1.0:
-            self.num_train = round(self.num_train * len(self.dataset))
-        if self.num_val is not None and self.num_val <= 1.0:
-            self.num_val = min(
-                round(self.num_val * len(self.dataset)),
-                len(self.dataset) - self.num_train,
-            )
-        if self.num_test is not None and self.num_test <= 1.0:
-            self.num_test = min(
-                round(self.num_test * len(self.dataset)),
-                len(self.dataset) - self.num_train - self.num_val,
-            )
-
         # split dataset
         lock = fasteners.InterProcessLock("splitting.lock")
 
@@ -256,7 +246,9 @@ class AtomsDataModule(pl.LightningDataModule):
                         + "the sizes of the training and validation partitions need to be set!"
                     )
 
-                self.train_idx, self.val_idx, self.test_idx = self._split_data()
+                self.train_idx, self.val_idx, self.test_idx = self.splitting.split(
+                    self.dataset, self.num_train, self.num_val, self.num_test
+                )
 
                 if self.split_file is not None:
                     self.log_with_rank("Save split")
@@ -281,19 +273,6 @@ class AtomsDataModule(pl.LightningDataModule):
             )
         else:
             logging.debug(">> ", msg)
-
-    def _split_data(self):
-        if self.num_test is None:
-            self.num_test = len(self.dataset) - self.num_train - self.num_val
-
-        lengths = [self.num_train, self.num_val, self.num_test]
-        offsets = torch.cumsum(torch.tensor(lengths), dim=0)
-        indices = torch.randperm(sum(lengths)).tolist()
-        train_idx, val_idx, test_idx = [
-            indices[offset - length : offset]
-            for offset, length in zip(offsets, lengths)
-        ]
-        return train_idx, val_idx, test_idx
 
     def setup_transforms(self):
         # setup transforms

@@ -77,6 +77,9 @@ class BaseAtomsData(ABC):
         self.transforms = transforms
         self.subset_idx = subset_idx
 
+    def __len__(self) -> int:
+        raise NotImplementedError
+
     @property
     def transforms(self):
         return self._transforms
