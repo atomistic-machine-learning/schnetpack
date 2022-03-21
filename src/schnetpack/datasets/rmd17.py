@@ -2,6 +2,7 @@ import logging
 import os
 import shutil
 import tempfile
+import tarfile
 from typing import List, Optional, Dict
 from urllib import request as request
 
@@ -13,16 +14,17 @@ import schnetpack.properties as structure
 
 from schnetpack.data import *
 
-__all__ = ["MD17"]
+__all__ = ["rMD17"]
 
 
-class MD17(AtomsDataModule):
+class rMD17(AtomsDataModule):
     """
-    MD17 benchmark data set for molecular dynamics of small molecules
+    Revised MD17 benchmark data set for molecular dynamics of small molecules
     containing molecular forces.
 
     References:
-        .. [#md17_1] http://quantum-machine.org/gdml/#datasets
+        .. [#md17_1] https://figshare.com/articles/dataset/Revised_MD17_dataset_rMD17_/12672038?file=24013628
+        .. [#md17_2] http://quantum-machine.org/gdml/#datasets
 
     """
 
@@ -30,20 +32,16 @@ class MD17(AtomsDataModule):
     forces = "forces"
 
     datasets_dict = dict(
-        aspirin="aspirin_dft.npz",
-        # aspirin_ccsd='aspirin_ccsd.zip',
-        azobenzene="azobenzene_dft.npz",
-        benzene="benzene_dft.npz",
-        ethanol="ethanol_dft.npz",
-        # ethanol_ccsdt='ethanol_ccsd_t.zip',
-        malonaldehyde="malonaldehyde_dft.npz",
-        # malonaldehyde_ccsdt='malonaldehyde_ccsd_t.zip',
-        naphthalene="naphthalene_dft.npz",
-        paracetamol="paracetamol_dft.npz",
-        salicylic_acid="salicylic_dft.npz",
-        toluene="toluene_dft.npz",
-        # toluene_ccsdt='toluene_ccsd_t.zip',
-        uracil="uracil_dft.npz",
+        aspirin="rmd_aspirin.npz",
+        azobenzene="rmd_azobenzene.npz",
+        benzene="rmd_benzene.npz",
+        ethanol="rmd_ethanol.npz",
+        malonaldehyde="rmd_malonaldehyde.npz",
+        naphthalene="rmd_naphthalene.npz",
+        paracetamol="rmd_paracetamol.npz",
+        salicylic_acid="rmd_salicylic.npz",
+        toluene="rmd_toluene.npz",
+        uracil="rmd_uracil.npz",
     )
     existing_datasets = datasets_dict.keys()
 
@@ -119,7 +117,7 @@ class MD17(AtomsDataModule):
             **kwargs,
         )
 
-        if molecule not in MD17.datasets_dict.keys():
+        if molecule not in rMD17.datasets_dict.keys():
             raise AtomsDataModuleError("Molecule {} is not supported!".format(molecule))
 
         self.molecule = molecule
@@ -127,8 +125,8 @@ class MD17(AtomsDataModule):
     def prepare_data(self):
         if not os.path.exists(self.datapath):
             property_unit_dict = {
-                MD17.energy: "kcal/mol",
-                MD17.forces: "kcal/mol/Ang",
+                rMD17.energy: "kcal/mol",
+                rMD17.forces: "kcal/mol/Ang",
             }
 
             tmpdir = tempfile.mkdtemp("md17")
@@ -162,23 +160,29 @@ class MD17(AtomsDataModule):
         dataset: BaseAtomsData,
     ):
         logging.info("Downloading {} data".format(self.molecule))
-        rawpath = os.path.join(tmpdir, self.datasets_dict[self.molecule])
-        url = (
-            "http://www.quantum-machine.org/gdml/data/npz/"
-            + self.datasets_dict[self.molecule]
-        )
+        raw_path = os.path.join(tmpdir, "rmd17")
+        tar_path = os.path.join(tmpdir, "rmd17.tar.gz")
+        url = "https://figshare.com/ndownloader/files/23950376"
+        request.urlretrieve(url, tar_path)
+        logging.info("Done.")
 
-        request.urlretrieve(url, rawpath)
+        logging.info("Extracting files...")
+        tar = tarfile.open(tar_path)
+        tar.extractall(raw_path)
+        tar.close()
+        logging.info("Done.")
 
         logging.info("Parsing molecule {:s}".format(self.molecule))
 
-        data = np.load(rawpath)
+        data = np.load(os.path.join(raw_path, "npz_data", self.molecule))
 
-        numbers = data["z"]
+        numbers = data["nuclear_charges"]
         property_list = []
-        for positions, energies, forces in zip(data["R"], data["E"], data["F"]):
+        for positions, energies, forces in zip(
+            data["coords"], data["energies"], data["forces"]
+        ):
             ats = Atoms(positions=positions, numbers=numbers)
-            properties = {MD17.energy: energies, MD17.forces: forces}
+            properties = {rMD17.energy: energies, rMD17.forces: forces}
             properties[structure.Z] = ats.numbers
             properties[structure.R] = ats.positions
             properties[structure.cell] = ats.cell

@@ -1,7 +1,7 @@
 defaults:
   - custom
 
-_target_: schnetpack.datasets.MD17
+_target_: schnetpack.datasets.rMD17
 
 datapath: ${run.data_dir}/${data.molecule}.db  # data_dir is specified in train.yaml
 molecule: aspirin

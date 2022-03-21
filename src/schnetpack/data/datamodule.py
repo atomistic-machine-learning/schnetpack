@@ -33,7 +33,8 @@ class AtomsDataModuleError(Exception):
 
 class AtomsDataModule(pl.LightningDataModule):
     """
-    Base class for atoms datamodules.
+    A general ``LightningDataModule`` for SchNetPack datasets.
+
     """
 
     def __init__(
@@ -69,24 +70,35 @@ class AtomsDataModule(pl.LightningDataModule):
             num_train: number of training examples (absolute or relative)
             num_val: number of validation examples (absolute or relative)
             num_test: number of test examples (absolute or relative)
-            split_file: path to npz file with data partitions
+            split_file: path to npz file with testdata partitions
             format: dataset format
             load_properties: subset of properties to load
-            val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
-            test_batch_size: test batch size. If None, use val_batch_size, then batch_size.
-            transforms: Preprocessing transform applied to each system separately before batching.
+            val_batch_size: validation batch size. If None, use test_batch_size, then
+                batch_size.
+            test_batch_size: test batch size. If None, use val_batch_size, then
+                batch_size.
+            transforms: Preprocessing transform applied to each system separately before
+                batching.
             train_transforms: Overrides transform_fn for training.
             val_transforms: Overrides transform_fn for validation.
             test_transforms: Overrides transform_fn for testing.
-            num_workers: Number of data loader workers.
-            num_val_workers: Number of validation data loader workers (overrides num_workers).
-            num_test_workers: Number of test data loader workers (overrides num_workers).
-            property_units: Dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
-            distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
-            data_workdir: Copy data here as part of setup, e.g. cluster scratch for faster performance.
-            cleanup_workdir_after: Determines after which stage to remove the data workdir
-            pin_memory: If true, pin memory of loaded data to GPU. Default: Will be set to true, when GPUs are used.
-            splitting: Method to generate train/validation/test partitions (default: RandomSplit)
+            num_workers: Number of testdata loader workers.
+            num_val_workers: Number of validation testdata loader workers
+                (overrides num_workers).
+            num_test_workers: Number of test testdata loader workers
+                (overrides num_workers).
+            property_units: Dictionary from property to corresponding unit as a string
+                (eV, kcal/mol, ...).
+            distance_unit: Unit of the atom positions and cell as a string
+                (Ang, Bohr, ...).
+            data_workdir: Copy testdata here as part of setup, e.g. to a local file
+                system for faster performance.
+            cleanup_workdir_after: Determines after which stage to remove the testdata
+                workdir
+            pin_memory: If true, pin memory of loaded testdata to GPU. Default: Will be
+                set to true, when GPUs are used.
+            splitting: Method to generate train/validation/test partitions
+                (default: RandomSplit)
         """
         super().__init__()
 
@@ -125,17 +137,25 @@ class AtomsDataModule(pl.LightningDataModule):
 
     @property
     def train_transforms(self):
-        """Optional transforms (or collection of transforms) you can apply to train dataset."""
+        """
+        Optional transforms (or collection of transforms) you can apply to train
+        dataset.
+        """
         return self._train_transforms
 
     @property
     def val_transforms(self):
-        """Optional transforms (or collection of transforms) you can apply to validation dataset."""
+        """
+        Optional transforms (or collection of transforms) you can apply to validation
+        dataset.
+        """
         return self._val_transforms
 
     @property
     def test_transforms(self):
-        """Optional transforms (or collection of transforms) you can apply to test dataset."""
+        """
+        Optional transforms (or collection of transforms) you can apply to test dataset.
+        """
         return self._test_transforms
 
     def setup(self, stage: Optional[str] = None):
@@ -143,35 +163,7 @@ class AtomsDataModule(pl.LightningDataModule):
         if self.data_workdir is None:
             datapath = self.datapath
         else:
-            if not os.path.exists(self.data_workdir):
-                os.makedirs(self.data_workdir, exist_ok=True)
-
-            name = self.datapath.split("/")[-1]
-            datapath = os.path.join(self.data_workdir, name)
-
-            lock = fasteners.InterProcessLock(
-                os.path.join(self.data_workdir, f"dataworkdir_{name}.lock")
-            )
-
-            with lock:
-                self.log_with_rank("Enter lock")
-
-                # retry reading, in case other process finished in the meantime
-                if not os.path.exists(datapath):
-                    self.log_with_rank("Copy data to data workdir")
-                    shutil.copy(self.datapath, datapath)
-
-                # reset datasets in case they need to be reloaded
-                self.dataset = None
-                self._train_dataset = None
-                self._val_dataset = None
-                self._test_dataset = None
-
-                # reset cleanup
-                self._has_teardown_fit = False
-                self._has_teardown_val = False
-                self._has_teardown_test = False
-            self.log_with_rank("Exit lock")
+            datapath = self._copy_to_workdir()
 
         # (re)load datasets
         if self.dataset is None:
@@ -182,15 +174,51 @@ class AtomsDataModule(pl.LightningDataModule):
                 distance_unit=self.distance_unit,
             )
 
-            # generate partitions if needed
+            # load and generate partitions if needed
             if self.train_idx is None:
-                self.load_partitions()
+                self._load_partitions()
 
             # partition dataset
             self._train_dataset = self.dataset.subset(self.train_idx)
             self._val_dataset = self.dataset.subset(self.val_idx)
             self._test_dataset = self.dataset.subset(self.test_idx)
-            self.setup_transforms()
+            self._setup_transforms()
+
+    def _copy_to_workdir(self):
+        """
+        Copies the data to given (fast) working location. Useful for working on cluster
+        with slow shared and fast local file systems.
+
+        Returns:
+            path to data in workdir
+        """
+        if not os.path.exists(self.data_workdir):
+            os.makedirs(self.data_workdir, exist_ok=True)
+        name = self.datapath.split("/")[-1]
+        datapath = os.path.join(self.data_workdir, name)
+        lock = fasteners.InterProcessLock(
+            os.path.join(self.data_workdir, f"dataworkdir_{name}.lock")
+        )
+        with lock:
+            self._log_with_rank("Enter lock")
+
+            # retry reading, in case other process finished in the meantime
+            if not os.path.exists(datapath):
+                self._log_with_rank("Copy testdata to testdata workdir")
+                shutil.copy(self.datapath, datapath)
+
+            # reset datasets in case they need to be reloaded
+            self.dataset = None
+            self._train_dataset = None
+            self._val_dataset = None
+            self._test_dataset = None
+
+            # reset cleanup
+            self._has_teardown_fit = False
+            self._has_teardown_val = False
+            self._has_teardown_test = False
+        self._log_with_rank("Exited lock")
+        return datapath
 
     def teardown(self, stage: Optional[str] = None):
         if self.cleanup_workdir_stage and stage == self.cleanup_workdir_stage:
@@ -211,15 +239,15 @@ class AtomsDataModule(pl.LightningDataModule):
         for t in self.test_transforms:
             t.teardown()
 
-    def load_partitions(self):
+    def _load_partitions(self):
         # split dataset
         lock = fasteners.InterProcessLock("splitting.lock")
 
         with lock:
-            self.log_with_rank("Enter splitting lock")
+            self._log_with_rank("Enter splitting lock")
 
             if self.split_file is not None and os.path.exists(self.split_file):
-                self.log_with_rank("Load split")
+                self._log_with_rank("Load split")
 
                 S = np.load(self.split_file)
                 self.train_idx = S["train_idx"].tolist()
@@ -227,23 +255,26 @@ class AtomsDataModule(pl.LightningDataModule):
                 self.test_idx = S["test_idx"].tolist()
                 if self.num_train and self.num_train != len(self.train_idx):
                     logging.warning(
-                        f"Split file was given, but `num_train ({self.num_train}) != len(train_idx)` ({len(self.train_idx)})!"
+                        f"Split file was given, but `num_train ({self.num_train})"
+                        + f" != len(train_idx)` ({len(self.train_idx)})!"
                     )
                 if self.num_val and self.num_val != len(self.val_idx):
                     logging.warning(
-                        f"Split file was given, but `num_val ({self.num_val}) != len(val_idx)` ({len(self.val_idx)})!"
+                        f"Split file was given, but `num_val ({self.num_val})"
+                        + f" != len(val_idx)` ({len(self.val_idx)})!"
                     )
                 if self.num_test and self.num_test != len(self.test_idx):
                     logging.warning(
-                        f"Split file was given, but `num_test ({self.num_test}) != len(test_idx)` ({len(self.test_idx)})!"
+                        f"Split file was given, but `num_test ({self.num_test})"
+                        + f" != len(test_idx)` ({len(self.test_idx)})!"
                     )
             else:
-                self.log_with_rank("Create split")
+                self._log_with_rank("Create split")
 
                 if not self.num_train or not self.num_val:
                     raise AtomsDataModuleError(
-                        "If no `split_file` is given, "
-                        + "the sizes of the training and validation partitions need to be set!"
+                        "If no `split_file` is given, the sizes of the training and"
+                        + " validation partitions need to be set!"
                     )
 
                 self.train_idx, self.val_idx, self.test_idx = self.splitting.split(
@@ -251,7 +282,7 @@ class AtomsDataModule(pl.LightningDataModule):
                 )
 
                 if self.split_file is not None:
-                    self.log_with_rank("Save split")
+                    self._log_with_rank("Save split")
                     np.savez(
                         self.split_file,
                         train_idx=self.train_idx,
@@ -259,9 +290,9 @@ class AtomsDataModule(pl.LightningDataModule):
                         test_idx=self.test_idx,
                     )
 
-        self.log_with_rank("Exit splitting lock")
+        self._log_with_rank("Exit splitting lock")
 
-    def log_with_rank(self, msg: str):
+    def _log_with_rank(self, msg: str):
         if self.trainer is not None:
             logging.debug(
                 "Global rank:",
@@ -274,8 +305,7 @@ class AtomsDataModule(pl.LightningDataModule):
         else:
             logging.debug(">> ", msg)
 
-    def setup_transforms(self):
-        # setup transforms
+    def _setup_transforms(self):
         for t in self.train_transforms:
             t.datamodule(self)
         for t in self.val_transforms:

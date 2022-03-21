@@ -6,12 +6,12 @@ from schnetpack.datasets import QM9, MD17
 
 @pytest.fixture
 def test_qm9_path():
-    path = os.path.join(os.path.dirname(__file__), "../data/test_qm9.db")
+    path = os.path.join(os.path.dirname(__file__), "../testdata/test_qm9.db")
     return path
 
 
 @pytest.mark.skip(
-    "Run only local, not in CI. Otherwise takes too long and requires downloading the data"
+    "Run only local, not in CI. Otherwise takes too long and requires downloading the testdata"
 )
 def test_qm9(test_qm9_path):
     qm9 = QM9(
@@ -35,12 +35,12 @@ def test_qm9(test_qm9_path):
 
 @pytest.fixture
 def test_md17_path():
-    path = os.path.join(os.path.dirname(__file__), "../data/tmp/test_md17.db")
+    path = os.path.join(os.path.dirname(__file__), "../testdata/tmp/test_md17.db")
     return path
 
 
 @pytest.mark.skip(
-    "Run only local, not in CI. Otherwise takes too long and requires downloading the data"
+    "Run only local, not in CI. Otherwise takes too long and requires downloading the testdata"
 )
 def test_md17(test_md17_path):
     md17 = MD17(
