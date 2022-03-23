@@ -23,7 +23,8 @@ class rMD17(AtomsDataModule):
     containing molecular forces.
 
     References:
-        .. [#md17_1] https://figshare.com/articles/dataset/Revised_MD17_dataset_rMD17_/12672038?file=24013628
+        .. [#md17_1] https://figshare.com/articles/dataset/
+            Revised_MD17_dataset_rMD17_/12672038?file=24013628
         .. [#md17_2] http://quantum-machine.org/gdml/#datasets
 
     """
@@ -32,16 +33,16 @@ class rMD17(AtomsDataModule):
     forces = "forces"
 
     datasets_dict = dict(
-        aspirin="rmd_aspirin.npz",
-        azobenzene="rmd_azobenzene.npz",
-        benzene="rmd_benzene.npz",
-        ethanol="rmd_ethanol.npz",
-        malonaldehyde="rmd_malonaldehyde.npz",
-        naphthalene="rmd_naphthalene.npz",
-        paracetamol="rmd_paracetamol.npz",
-        salicylic_acid="rmd_salicylic.npz",
-        toluene="rmd_toluene.npz",
-        uracil="rmd_uracil.npz",
+        aspirin="rmd17_aspirin.npz",
+        azobenzene="rmd17_azobenzene.npz",
+        benzene="rmd17_benzene.npz",
+        ethanol="rmd17_ethanol.npz",
+        malonaldehyde="rmd17_malonaldehyde.npz",
+        naphthalene="rmd17_naphthalene.npz",
+        paracetamol="rmd17_paracetamol.npz",
+        salicylic_acid="rmd17_salicylic.npz",
+        toluene="rmd17_toluene.npz",
+        uracil="rmd17_uracil.npz",
     )
     existing_datasets = datasets_dict.keys()
 
@@ -81,18 +82,28 @@ class rMD17(AtomsDataModule):
             split_file: path to npz file with data partitions
             format: dataset format
             load_properties: subset of properties to load
-            val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
-            test_batch_size: test batch size. If None, use val_batch_size, then batch_size.
+            val_batch_size: validation batch size. If None, use test_batch_size, then
+                batch_size.
+            test_batch_size: test batch size. If None, use val_batch_size, then
+                batch_size.
             transforms: Transform applied to each system separately before batching.
             train_transforms: Overrides transform_fn for training.
             val_transforms: Overrides transform_fn for validation.
             test_transforms: Overrides transform_fn for testing.
             num_workers: Number of data loader workers.
-            num_val_workers: Number of validation data loader workers (overrides num_workers).
-            num_test_workers: Number of test data loader workers (overrides num_workers).
-            distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
-            data_workdir: Copy data here as part of setup, e.g. cluster scratch for faster performance.
+            num_val_workers: Number of validation data loader workers
+                (overrides num_workers).
+            num_test_workers: Number of test data loader workers
+                (overrides num_workers).
+            distance_unit: Unit of the atom positions and cell as a string
+                (Ang, Bohr, ...).
+            data_workdir: Copy data here as part of setup, e.g. cluster scratch for
+                faster performance.
         """
+
+        splitting = SubsamplePartitions(
+            split_partition_sources=["known", "known", "test"]
+        )
         super().__init__(
             datapath=datapath,
             batch_size=batch_size,
@@ -114,6 +125,7 @@ class rMD17(AtomsDataModule):
             property_units=property_units,
             distance_unit=distance_unit,
             data_workdir=data_workdir,
+            splitting=splitting,
             **kwargs,
         )
 
@@ -146,12 +158,13 @@ class rMD17(AtomsDataModule):
             md = dataset.metadata
             if "molecule" not in md:
                 raise AtomsDataModuleError(
-                    "Not a valid MD17 dataset! The molecule needs to be specified in the metadata."
+                    "Not a valid rMD17 dataset! The molecule needs to be specified in "
+                    + "the metadata."
                 )
             if md["molecule"] != self.molecule:
                 raise AtomsDataModuleError(
-                    f"The dataset at the given location does not contain the specified molecule: "
-                    + f"`{md['molecule']}` instead of `{self.molecule}`"
+                    f"The dataset at the given location does not contain the specified "
+                    + f"molecule: `{md['molecule']}` instead of `{self.molecule}`"
                 )
 
     def _download_data(
@@ -166,15 +179,19 @@ class rMD17(AtomsDataModule):
         request.urlretrieve(url, tar_path)
         logging.info("Done.")
 
-        logging.info("Extracting files...")
+        logging.info("Extracting data...")
         tar = tarfile.open(tar_path)
-        tar.extractall(raw_path)
-        tar.close()
-        logging.info("Done.")
+        tar.extract(
+            path=raw_path, member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}"
+        )
 
         logging.info("Parsing molecule {:s}".format(self.molecule))
 
-        data = np.load(os.path.join(raw_path, "npz_data", self.molecule))
+        data = np.load(
+            os.path.join(
+                raw_path, "rmd17", "npz_data", self.datasets_dict[self.molecule]
+            )
+        )
 
         numbers = data["nuclear_charges"]
         property_list = []
@@ -182,13 +199,46 @@ class rMD17(AtomsDataModule):
             data["coords"], data["energies"], data["forces"]
         ):
             ats = Atoms(positions=positions, numbers=numbers)
-            properties = {rMD17.energy: energies, rMD17.forces: forces}
-            properties[structure.Z] = ats.numbers
-            properties[structure.R] = ats.positions
-            properties[structure.cell] = ats.cell
-            properties[structure.pbc] = ats.pbc
+            properties = {
+                rMD17.energy: np.array([energies]),
+                rMD17.forces: forces,
+                structure.Z: ats.numbers,
+                structure.R: ats.positions,
+                structure.cell: ats.cell,
+                structure.pbc: ats.pbc,
+            }
             property_list.append(properties)
 
         logging.info("Write atoms to db...")
         dataset.add_systems(property_list=property_list)
+        logging.info("Done.")
+
+        train_splits = []
+        test_splits = []
+        for i in range(1, 6):
+            tar.extract(path=raw_path, member=f"rmd17/splits/index_train_0{i}.csv")
+            tar.extract(path=raw_path, member=f"rmd17/splits/index_test_0{i}.csv")
+
+            train_split = (
+                np.loadtxt(
+                    os.path.join(raw_path, "rmd17", "splits", f"index_train_0{i}.csv")
+                )
+                .flatten()
+                .astype(np.int)
+                .tolist()
+            )
+            train_splits.append(train_split)
+            test_split = (
+                np.loadtxt(
+                    os.path.join(raw_path, "rmd17", "splits", f"index_test_0{i}.csv")
+                )
+                .flatten()
+                .astype(np.int)
+                .tolist()
+            )
+            test_splits.append(test_split)
+
+        dataset.update_metadata(splits={"known": train_splits, "test": test_splits})
+
+        tar.close()
         logging.info("Done.")

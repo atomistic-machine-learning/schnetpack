@@ -52,8 +52,8 @@ extension_map = {AtomsDataFormat.ASE: ".db"}
 
 class BaseAtomsData(ABC):
     """
-    Base mixin class for atomistic data. Use together with PyTorch Dataset or IterableDataset
-    to implement concrete data formats.
+    Base mixin class for atomistic data. Use together with PyTorch Dataset or
+    IterableDataset to implement concrete data formats.
     """
 
     def __init__(
@@ -205,8 +205,8 @@ class ASEAtomsData(BaseAtomsData):
             load_properties: If True, load structure properties.
             transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
             subset_idx: List of data indices.
-            units: property-> unit string dictionary that overwrites the native units of the dataset.
-                Units are converted automatically during loading.
+            units: property-> unit string dictionary that overwrites the native units
+                of the dataset. Units are converted automatically during loading.
         """
         self.datapath = datapath
 
@@ -220,18 +220,19 @@ class ASEAtomsData(BaseAtomsData):
 
         self._check_db()
         self.conn = connect(self.datapath, use_lock_file=False)
+        print("####", self.datapath)
 
         # initialize units
         md = self.metadata
         if "_distance_unit" not in md.keys():
             raise AtomsDataError(
-                "Dataset does not have a distance unit set. Please add units to the dataset using"
-                "`spkconvert`!"
+                "Dataset does not have a distance unit set. Please add units to the "
+                + "dataset using `spkconvert`!"
             )
         if "_property_unit_dict" not in md.keys():
             raise AtomsDataError(
-                "Dataset does not have a property units set. Please add units to the dataset using"
-                "`spkconvert`!"
+                "Dataset does not have a property units set. Please add units to the "
+                + "dataset using `spkconvert`!"
             )
 
         if distance_unit:
@@ -253,7 +254,7 @@ class ASEAtomsData(BaseAtomsData):
                 self._units[prop] = unit
 
     def __len__(self) -> int:
-        if self.subset_idx:
+        if self.subset_idx is not None:
             return len(self.subset_idx)
 
         with connect(self.datapath, use_lock_file=False) as conn:
@@ -297,17 +298,14 @@ class ASEAtomsData(BaseAtomsData):
         Args:
             indices: data indices
             load_properties (sequence or None): subset of available properties to load
+            load_structure: load and return structure
 
         Returns:
             properties (dict): dictionary with molecular properties
 
         """
-        # use all available properties if nothing is specified
-        if load_properties is None:
-            load_properties = self.load_properties
-
-        if load_structure is None:
-            load_structure = self.load_structure
+        load_properties = load_properties or self.load_properties
+        load_structure = load_structure or self.load_structure
 
         if indices is None:
             indices = range(len(self))
@@ -405,8 +403,9 @@ class ASEAtomsData(BaseAtomsData):
         Args:
             datapath: Path to ASE DB.
             distance_unit: unit of atom positions and cell
-            property_unit_dict: Defines the available properties of the datasetseta and provides units
-                for ALL properties of the dataset. If a property is unit-less, you can pass "arb. unit" or `None`.
+            property_unit_dict: Defines the available properties of the datasetseta and
+                provides units for ALL properties of the dataset. If a property is
+                unit-less, you can pass "arb. unit" or `None`.
             kwargs: Pass arguments to init.
 
         Returns:
@@ -500,8 +499,9 @@ class ASEAtomsData(BaseAtomsData):
         for prop in properties:
             if prop not in valid_props:
                 logger.warning(
-                    f"Property `{prop}` is not a defined property for this dataset and will be ignored. "
-                    + f"If it should be included, it has to be provided together with its unit when calling "
+                    f"Property `{prop}` is not a defined property for this dataset and "
+                    + f"will be ignored. If it should be included, it has to be "
+                    + f"provided together with its unit when calling "
                     + f"AseAtomsData.create()."
                 )
 
@@ -529,7 +529,8 @@ def create_dataset(
         datapath: file path
         format: atoms data format
         distance_unit: unit of atom positiona etc. as string
-        property_unit_dict: dictionary that maps properties to units, e.g. {"energy": "kcal/mol"}
+        property_unit_dict: dictionary that maps properties to units,
+            e.g. {"energy": "kcal/mol"}
         **kwargs: arguments for passed to AtomsData init
 
     Returns:
@@ -568,8 +569,8 @@ def resolve_format(
     datapath: str, format: Optional[AtomsDataFormat] = None
 ) -> Tuple[str, AtomsDataFormat]:
     """
-    Extract data format from file suffix, check for consistency with (optional) given format,
-    or append suffix to file path.
+    Extract data format from file suffix, check for consistency with (optional) given
+    format, or append suffix to file path.
 
     Args:
         datapath: path to atoms data

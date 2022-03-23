@@ -178,11 +178,14 @@ class MD17(AtomsDataModule):
         property_list = []
         for positions, energies, forces in zip(data["R"], data["E"], data["F"]):
             ats = Atoms(positions=positions, numbers=numbers)
-            properties = {MD17.energy: energies, MD17.forces: forces}
-            properties[structure.Z] = ats.numbers
-            properties[structure.R] = ats.positions
-            properties[structure.cell] = ats.cell
-            properties[structure.pbc] = ats.pbc
+            properties = {
+                MD17.energy: energies,
+                MD17.forces: forces,
+                structure.Z: ats.numbers,
+                structure.R: ats.positions,
+                structure.cell: ats.cell,
+                structure.pbc: ats.pbc,
+            }
             property_list.append(properties)
 
         logging.info("Write atoms to db...")
