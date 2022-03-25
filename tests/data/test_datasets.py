@@ -74,10 +74,10 @@ def test_rmd17_path():
     return path
 
 
-# @pytest.mark.skip(
-#     "Run only local, not in CI. Otherwise takes too long and requires downloading "
-#     + "the data"
-# )
+@pytest.mark.skip(
+    "Run only local, not in CI. Otherwise takes too long and requires downloading "
+    + "the data"
+)
 def test_rmd17(test_rmd17_path):
     md17 = rMD17(
         test_rmd17_path,
