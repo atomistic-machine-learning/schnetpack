@@ -261,7 +261,7 @@ class ASEAtomsData(BaseAtomsData):
             return conn.count()
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        if self.subset_idx:
+        if self.subset_idx is not None:
             idx = self.subset_idx[idx]
 
         props = self._get_properties(
