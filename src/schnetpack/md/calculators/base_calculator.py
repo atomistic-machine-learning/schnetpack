@@ -44,7 +44,7 @@ class MDCalculator(nn.Module):
         stress_label (str, optional): Name of the property corresponding to the stress.
         property_conversion (dict(float, str)): Optional dictionary of conversion factors for other properties predicted
                              by the model. Only changes the units used for logging the various outputs.
-        gradients_rquired (bool): If set to true, enable accumulation of computational graph in calculator.
+        gradients_required (bool): If set to true, enable accumulation of computational graph in calculator.
     """
 
     def __init__(
