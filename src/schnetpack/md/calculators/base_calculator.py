@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import List, Union, Dict, Optional, Tuple
 
 from typing import TYPE_CHECKING
+from contextlib import nullcontext
 
 import numpy as np
 
@@ -54,6 +55,7 @@ class MDCalculator(nn.Module):
         energy_label: Optional[str] = None,
         stress_label: Optional[str] = None,
         property_conversion: Dict[str, Union[str, float]] = {},
+        gradients_required: bool = False,
     ):
         super(MDCalculator, self).__init__()
         # Get required properties and filter non-unique entries
@@ -93,6 +95,12 @@ class MDCalculator(nn.Module):
         self.force_conversion = self.energy_conversion / self.position_conversion
         self.stress_conversion = self.energy_conversion / self.position_conversion**3
 
+        # set up gradient context for passing results
+        if gradients_required:
+            self.grad_context = torch.no_grad()
+        else:
+            self.grad_context = nullcontext()
+
     def calculate(self, system: System):
         """
         Main calculator routine, which needs to be implemented individually.
@@ -116,31 +124,31 @@ class MDCalculator(nn.Module):
         Args:
             system (schnetpack.md.System): System object containing current state of the simulation.
         """
+        with self.grad_context:
+            # Collect all requested properties (including forces)
+            for p in self.required_properties:
+                if p not in self.results:
+                    raise MDCalculatorError(
+                        "Requested property {:s} not in " "results".format(p)
+                    )
+                else:
+                    dim = self.results[p].shape
+                    # Bring to general structure of MD code. Second dimension can be n_mol or n_mol x n_atoms.
+                    system.properties[p] = (
+                        self.results[p].view(system.n_replicas, -1, *dim[1:])
+                        * self.property_conversion[p]
+                    )
 
-        # Collect all requested properties (including forces)
-        for p in self.required_properties:
-            if p not in self.results:
-                raise MDCalculatorError(
-                    "Requested property {:s} not in " "results".format(p)
-                )
-            else:
-                dim = self.results[p].shape
-                # Bring to general structure of MD code. Second dimension can be n_mol or n_mol x n_atoms.
-                system.properties[p] = (
-                    self.results[p].view(system.n_replicas, -1, *dim[1:])
-                    * self.property_conversion[p]
-                )
+            # Set the forces for the system (at this point, already detached)
+            self._set_system_forces(system)
 
-        # Set the forces for the system (at this point, already detached)
-        self._set_system_forces(system)
+            # Store potential energy to system if requested:
+            if self.energy_label is not None:
+                self._set_system_energy(system)
 
-        # Store potential energy to system if requested:
-        if self.energy_label is not None:
-            self._set_system_energy(system)
-
-        # Set stress of the system if requested:
-        if self.stress_label is not None:
-            self._set_system_stress(system)
+            # Set stress of the system if requested:
+            if self.stress_label is not None:
+                self._set_system_stress(system)
 
     def _get_system_molecules(self, system: System):
         """
