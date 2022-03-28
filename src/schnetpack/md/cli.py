@@ -2,11 +2,14 @@ import logging
 import uuid
 import torch
 import os
+import shutil
 
 from datetime import datetime
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
+
+import tempfile
 
 import schnetpack.md
 from schnetpack.utils import str2class, int2precision
@@ -20,6 +23,7 @@ from ase.io import read
 log = logging.getLogger(__name__)
 
 OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()))
+OmegaConf.register_new_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
 
 
 class MDSetupError(Exception):
@@ -302,10 +306,24 @@ def simulate(config: DictConfig):
     #   Finally run simulation
     # ===========================================
 
-    log.info("Running simulation...")
+    log.info("Running simulation in {:s}...".format(hydra_wd))
 
     start = datetime.now()
     simulator.simulate(config.dynamics.n_steps)
     stop = datetime.now()
+
+    final_dir = hydra.utils.to_absolute_path(config.simulation_dir)
+    if final_dir != hydra_wd:
+        logging.info(
+            "Moving simulation output from {:s} to {:s}...".format(hydra_wd, final_dir)
+        )
+
+        if os.path.exists(final_dir):
+            logging.info(
+                "Destination {:s} already exists, moving data to subdirectory...".format(
+                    final_dir
+                )
+            )
+        shutil.move(hydra_wd, final_dir)
 
     log.info("Finished after: {:s}".format(str(stop - start)))
