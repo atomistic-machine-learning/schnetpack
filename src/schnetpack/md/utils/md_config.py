@@ -1,6 +1,6 @@
 import copy
 import logging
-from omegaconf import DictConfig, open_dict
+from omegaconf import DictConfig, open_dict, OmegaConf
 from schnetpack.utils import str2class
 
 from typing import List, Tuple
@@ -38,13 +38,8 @@ class MDConfigMerger:
             DictConfig: basic config updated with entries from the overwrite config and all overrides re-applied.
         """
 
-        merged_config = copy.deepcopy(base_config)
-
-        # basic merge, overwrites all overrides in base config
-        # merges nested configs at top level
-        for p in overwrite_config:
-            if p in base_config:
-                merged_config[p] = overwrite_config[p]
+        # merge overwrite config into basic config
+        merged_config = OmegaConf.merge(base_config, overwrite_config)
 
         # get overrides in list of lists format
         overrides_modify, overrides_delete = self._parse_overrides(overrides)
