@@ -7,6 +7,7 @@ import shutil
 from datetime import datetime
 
 import hydra
+from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
 import tempfile
@@ -14,7 +15,7 @@ import tempfile
 import schnetpack.md
 from schnetpack.utils import str2class, int2precision
 from schnetpack.utils.script import print_config
-from schnetpack.md.utils import get_npt_integrator, is_rpmd_integrator
+from schnetpack.md.utils import get_npt_integrator, is_rpmd_integrator, MDConfigMerger
 
 from pytorch_lightning import seed_everything
 
@@ -56,11 +57,23 @@ def simulate(config: DictConfig):
         config_path = hydra.utils.to_absolute_path(config.load_config)
         logging.info("Loading config from {:s}".format(config_path))
         loaded_config = OmegaConf.load(config_path)
-        # config = OmegaConf.merge(config, loaded_config)
-        # TODO: this assumes loaded config will have all necessary entries
-        for p in loaded_config:
-            if p in config:
-                config[p] = loaded_config[p]
+
+        # get hydra overrides
+        overrides = HydraConfig.get().overrides.task
+
+        # merge base and loaded config and apply overrides
+        new_config = MDConfigMerger().merge_configs(
+            config,
+            loaded_config,
+            overrides,
+        )
+
+        # store new config at corresponding hydra path
+        new_config_path = os.path.join(hydra_wd, ".hydra/config.yaml")
+        OmegaConf.save(new_config, new_config_path, resolve=True)
+
+        # replace base config
+        config = new_config
 
     print_config(
         config,
