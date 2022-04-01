@@ -35,7 +35,7 @@ class Checkpoint(SimulationHook):
         self.every_n_steps = every_n_steps
         self.checkpoint_file = checkpoint_file
 
-    def on_step_end(self, simulator: Simulator):
+    def on_step_finalize(self, simulator: Simulator):
         """
         Store state_dict at specified intervals.
 
@@ -526,7 +526,7 @@ class FileLogger(SimulationHook):
         # Enable single writer, multiple reader flag
         self.file.swmr_mode = True
 
-    def on_step_end(self, simulator: Simulator):
+    def on_step_finalize(self, simulator: Simulator):
         """
         Update the buffer of each stream after each specified interval and flush the buffer to the main file if full.
 
@@ -604,7 +604,7 @@ class BasicTensorboardLogger(SimulationHook):
         self.n_replicas = simulator.system.n_replicas
         self.n_molecules = simulator.system.n_molecules
 
-    def on_step_end(self, simulator):
+    def on_step_finalize(self, simulator: Simulator):
         """
         Routine for collecting and storing scalar properties of replicas and molecules during the simulation. Needs to
         be adapted based on the properties.
@@ -678,7 +678,7 @@ class TensorBoardLogger(BasicTensorboardLogger):
 
         self.properties = properties
 
-    def on_step_end(self, simulator):
+    def on_step_finalize(self, simulator: Simulator):
         """
         Log the systems properties the given intervals.
 

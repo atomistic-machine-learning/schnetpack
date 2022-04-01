@@ -23,20 +23,20 @@ class ModelOutput(nn.Module):
         loss_fn: Optional[nn.Module] = None,
         loss_weight: float = 1.0,
         metrics: Optional[Dict[str, Metric]] = None,
-        target_name: Optional[str] = None,
+        target_property: Optional[str] = None,
     ):
         """
         Args:
             name: name of output in results dict
-            target_name: Name of target in training batch. Only required for supervised training.
+            target_property: Name of target in training batch. Only required for supervised training.
                 If not given, the output name is assumed to also be the target name.
             loss_fn: function to compute the loss
             loss_weight: loss weight in the composite loss: $l = w_1 l_1 + \dots + w_n l_n$
             metrics: dictionary of metrics with names as keys
         """
         super().__init__()
-        self.property = name
-        self.target_name = target_name or name
+        self.name = name
+        self.target_property = target_property or name
         self.loss_fn = loss_fn
         self.loss_weight = loss_weight
         self.metrics = nn.ModuleDict(metrics)
@@ -45,13 +45,13 @@ class ModelOutput(nn.Module):
         if self.loss_weight == 0 or self.loss_fn is None:
             return 0.0
         loss = self.loss_weight * self.loss_fn(
-            pred[self.property], target[self.target_name]
+            pred[self.name], target[self.target_property]
         )
         return loss
 
     def calculate_metrics(self, pred, target):
         metrics = {
-            metric_name: metric(pred[self.property], target[self.target_name])
+            metric_name: metric(pred[self.name], target[self.target_property])
             for metric_name, metric in self.metrics.items()
         }
         return metrics
@@ -59,7 +59,7 @@ class ModelOutput(nn.Module):
 
 class AtomisticTask(pl.LightningModule):
     """
-    Defines a learning task in SchNetPack including model, losses and optimizer.
+    The basic learning task in SchNetPack, which ties model, loss and optimizer together.
 
     """
 
@@ -76,6 +76,7 @@ class AtomisticTask(pl.LightningModule):
     ):
         """
         Args:
+            model: the neural network model
             outputs: list of outputs an optional loss functions
             optimizer_cls: type of torch optimizer,e.g. torch.optim.Adam
             optimizer_args: dict of optimizer keyword arguments
@@ -95,7 +96,6 @@ class AtomisticTask(pl.LightningModule):
         self.outputs = nn.ModuleList(outputs)
 
         self.grad_enabled = len(self.model.required_derivatives) > 0
-        self.inference_mode = False
         self.lr = optimizer_args["lr"]
         self.warmup_steps = warmup_steps
 
@@ -117,7 +117,7 @@ class AtomisticTask(pl.LightningModule):
         for output in self.outputs:
             for metric_name, metric in output.calculate_metrics(pred, targets).items():
                 self.log(
-                    f"{subset}_{output.property}_{metric_name}",
+                    f"{subset}_{output.name}_{metric_name}",
                     metric,
                     on_step=False,
                     on_epoch=True,
@@ -126,9 +126,10 @@ class AtomisticTask(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         targets = {
-            output.target_name: batch[output.target_name] for output in self.outputs
+            output.target_property: batch[output.target_property]
+            for output in self.outputs
         }
-        pred = self(batch)
+        pred = self.predict_without_postprocessing(batch)
         loss = self.loss_fn(pred, targets)
 
         self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
@@ -138,9 +139,10 @@ class AtomisticTask(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         torch.set_grad_enabled(self.grad_enabled)
         targets = {
-            output.target_name: batch[output.target_name] for output in self.outputs
+            output.target_property: batch[output.target_property]
+            for output in self.outputs
         }
-        pred = self(batch)
+        pred = self.predict_without_postprocessing(batch)
         loss = self.loss_fn(pred, targets)
 
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
@@ -151,14 +153,22 @@ class AtomisticTask(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         torch.set_grad_enabled(self.grad_enabled)
         targets = {
-            output.target_name: batch[output.target_name] for output in self.outputs
+            output.target_property: batch[output.target_property]
+            for output in self.outputs
         }
-        pred = self(batch)
+        pred = self.predict_without_postprocessing(batch)
         loss = self.loss_fn(pred, targets)
 
         self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log_metrics(targets, pred, "test")
         return {"test_loss": loss}
+
+    def predict_without_postprocessing(self, batch):
+        pp = self.model.do_postprocessing
+        self.model.do_postprocessing = False
+        pred = self(batch)
+        self.model.do_postprocessing = pp
+        return pred
 
     def configure_optimizers(self):
         optimizer = self.optimizer_cls(
@@ -194,16 +204,3 @@ class AtomisticTask(pl.LightningModule):
 
         # update params
         optimizer.step(closure=optimizer_closure)
-
-    def to_torchscript(
-        self,
-        file_path: Optional[Union[str, Path]] = None,
-        method: Optional[str] = "script",
-        example_inputs: Optional[Any] = None,
-        **kwargs,
-    ) -> Union[torch.ScriptModule, Dict[str, torch.ScriptModule]]:
-        imode = self.inference_mode
-        self.inference_mode = True
-        script = super().to_torchscript(file_path, method, example_inputs, **kwargs)
-        self.inference_mode = imode
-        return script

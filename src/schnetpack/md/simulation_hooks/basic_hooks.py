@@ -25,6 +25,9 @@ class SimulationHook(UninitializedMixin, nn.Module):
     def on_step_end(self, simulator: Simulator):
         pass
 
+    def on_step_finalize(self, simulator: Simulator):
+        pass
+
     def on_step_failed(self, simulator: Simulator):
         pass
 
@@ -51,7 +54,7 @@ class RemoveCOMMotion(SimulationHook):
         self.remove_rotation = remove_rotation
         self.wrap_positions = wrap_positions
 
-    def on_step_end(self, simulator: Simulator):
+    def on_step_finalize(self, simulator: Simulator):
         if simulator.step % self.every_n_steps == 0:
             simulator.system.remove_center_of_mass()
             simulator.system.remove_translation()

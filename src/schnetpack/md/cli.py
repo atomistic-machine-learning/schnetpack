@@ -2,16 +2,20 @@ import logging
 import uuid
 import torch
 import os
+import shutil
 
 from datetime import datetime
 
 import hydra
+from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
+
+import tempfile
 
 import schnetpack.md
 from schnetpack.utils import str2class, int2precision
 from schnetpack.utils.script import print_config
-from schnetpack.md.utils import get_npt_integrator, is_rpmd_integrator
+from schnetpack.md.utils import get_npt_integrator, is_rpmd_integrator, MDConfigMerger
 
 from pytorch_lightning import seed_everything
 
@@ -20,6 +24,7 @@ from ase.io import read
 log = logging.getLogger(__name__)
 
 OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()))
+OmegaConf.register_new_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
 
 
 class MDSetupError(Exception):
@@ -52,11 +57,23 @@ def simulate(config: DictConfig):
         config_path = hydra.utils.to_absolute_path(config.load_config)
         logging.info("Loading config from {:s}".format(config_path))
         loaded_config = OmegaConf.load(config_path)
-        # config = OmegaConf.merge(config, loaded_config)
-        # TODO: this assumes loaded config will have all necessary entries
-        for p in loaded_config:
-            if p in config:
-                config[p] = loaded_config[p]
+
+        # get hydra overrides
+        overrides = HydraConfig.get().overrides.task
+
+        # merge base and loaded config and apply overrides
+        new_config = MDConfigMerger().merge_configs(
+            config,
+            loaded_config,
+            overrides,
+        )
+
+        # store new config at corresponding hydra path
+        new_config_path = os.path.join(hydra_wd, ".hydra/config.yaml")
+        OmegaConf.save(new_config, new_config_path, resolve=True)
+
+        # replace base config
+        config = new_config
 
     print_config(
         config,
@@ -302,10 +319,24 @@ def simulate(config: DictConfig):
     #   Finally run simulation
     # ===========================================
 
-    log.info("Running simulation...")
+    log.info("Running simulation in {:s}...".format(hydra_wd))
 
     start = datetime.now()
     simulator.simulate(config.dynamics.n_steps)
     stop = datetime.now()
+
+    final_dir = hydra.utils.to_absolute_path(config.simulation_dir)
+    if final_dir != hydra_wd:
+        logging.info(
+            "Moving simulation output from {:s} to {:s}...".format(hydra_wd, final_dir)
+        )
+
+        if os.path.exists(final_dir):
+            logging.info(
+                "Destination {:s} already exists, moving data to subdirectory...".format(
+                    final_dir
+                )
+            )
+        shutil.move(hydra_wd, final_dir)
 
     log.info("Finished after: {:s}".format(str(stop - start)))
