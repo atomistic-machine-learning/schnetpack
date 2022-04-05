@@ -82,7 +82,7 @@ class NeighborListMD:
             # Check for changes is positions
             update_positions = (
                 torch.norm(self.previous_positions - positions, dim=1)
-                > self.cutoff_shell
+                > 0.5 * self.cutoff_shell
             ).float()
 
             # Map to individual molecules
