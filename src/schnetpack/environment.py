@@ -214,7 +214,7 @@ def compute_shifts(cell, pbc, cutoff):
     reciprocal_cell = cell.inverse().t()
     inv_distances = reciprocal_cell.norm(2, -1)
     num_repeats = torch.ceil(cutoff * inv_distances).to(torch.long)
-    num_repeats = torch.where(pbc, num_repeats, torch.zeros_like(num_repeats))
+    num_repeats = torch.where(pbc.bool(), num_repeats, torch.zeros_like(num_repeats))
 
     r1 = torch.arange(1, num_repeats[0] + 1, device=cell.device)
     r2 = torch.arange(1, num_repeats[1] + 1, device=cell.device)
