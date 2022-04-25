@@ -81,7 +81,7 @@ class Forces(nn.Module):
             if stress is None:
                 stress = torch.zeros_like(inputs[properties.cell])
 
-            cell = inputs[properties.cell]
+            cell = inputs[properties.cell].view(-1, 3, 3)  # get batch dimension back
             volume = torch.sum(
                 cell[:, 0, :] * torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
                 dim=1,
@@ -213,7 +213,7 @@ class Response(nn.Module):
             if stress is None:
                 stress = torch.zeros_like(inputs[properties.cell])
 
-            cell = inputs[properties.cell]
+            cell = inputs[properties.cell].view(-1, 3, 3)  # get batch dimension back
             volume = torch.sum(
                 cell[:, 0, :] * torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
                 dim=1,
@@ -440,16 +440,22 @@ class Strain(nn.Module):
         strain.requires_grad_()
         inputs[properties.strain] = strain
 
-        # strain cell
+        # THIS DOES NOT WORK ACROSS BATCHES!
+        # Note that the order of terms in the matmul is not trivial,
+        # the thing we call "strain" here is actually strain.T,
+        # and the other transposes cancel due to the fact that the cell
+        # is in row vector format, not column vector format.
+
         inputs[properties.cell] = inputs[properties.cell] + torch.matmul(
-            strain, inputs[properties.cell]
+            inputs[properties.cell], strain
         )
 
-        # strain positions
-        idx_m = inputs[properties.idx_m]
-        strain_i = strain[idx_m]
         inputs[properties.R] = inputs[properties.R] + torch.matmul(
-            strain_i, inputs[properties.R][:, :, None]
-        ).squeeze(-1)
+            inputs[properties.R], strain
+        )
+
+        inputs[properties.offsets] = inputs[properties.offsets] + torch.matmul(
+            inputs[properties.offsets], strain
+        )
 
         return inputs
