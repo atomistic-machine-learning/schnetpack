@@ -190,7 +190,7 @@ class ASENeighborList(NeighborListTransform):
     """
 
     def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
-        at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
+        at = Atoms(numbers=Z.detach().numpy(), positions=positions.detach().numpy(), cell=cell.detach().numpy(), pbc=pbc)
 
         idx_i, idx_j, S = neighbor_list("ijS", at, cutoff, self_interaction=False)
         idx_i = torch.from_numpy(idx_i)
