@@ -3,7 +3,7 @@ _target_: pytorch_lightning.Trainer
 devices: 1
 
 min_epochs: null
-max_epochs: 100000
+max_epochs: 2000
 
 # prints
 enable_model_summary: True

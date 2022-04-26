@@ -70,6 +70,7 @@ class rMD17(AtomsDataModule):
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
         data_workdir: Optional[str] = None,
+        split_id: int = 0,
         **kwargs,
     ):
         """
@@ -102,7 +103,7 @@ class rMD17(AtomsDataModule):
         """
 
         splitting = SubsamplePartitions(
-            split_partition_sources=["known", "known", "test"]
+            split_partition_sources=["known", "known", "test"], split_id=split_id
         )
         super().__init__(
             datapath=datapath,

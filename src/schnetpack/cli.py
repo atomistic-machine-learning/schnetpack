@@ -132,19 +132,6 @@ def train(config: DictConfig):
                 log.info(f"Instantiating logger <{lg_conf._target_}>")
                 l = hydra.utils.instantiate(lg_conf)
 
-                # set run_id for AimLogger
-                if lg_conf["_target_"] == "aim.pytorch_lightning.AimLogger":
-                    from aim import Session
-
-                    sess = Session(
-                        repo=l._repo_path,
-                        experiment=l._experiment_name,
-                        flush_frequency=l._flush_frequency,
-                        system_tracking_interval=l._system_tracking_interval,
-                        run=config.run_id,
-                    )
-                    l._aim_session = sess
-
                 logger.append(l)
 
     # Init Lightning trainer
