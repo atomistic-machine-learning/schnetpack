@@ -6,6 +6,7 @@ from ase.neighborlist import neighbor_list
 from typing import Dict
 from .base import Transform
 from dirsync import sync
+import numpy as np
 
 __all__ = [
     "ASENeighborList",
@@ -15,6 +16,7 @@ __all__ = [
     "CachedNeighborList",
     "NeighborListTransform",
     "WrapPositions",
+    "ASENeighborListWithSkin"
 ]
 
 from schnetpack import properties
@@ -198,6 +200,52 @@ class ASENeighborList(NeighborListTransform):
         S = torch.from_numpy(S).to(dtype=positions.dtype)
         offset = torch.mm(S, cell)
         return idx_i, idx_j, offset
+
+
+class ASENeighborListWithSkin(NeighborListTransform):
+    """
+    Calculate neighbor list with skin using ASE. The skin reduces the number of recalculations of the neighbor lists
+    after each step in MD simulations or structure optimizations.
+    """
+
+    def __init__(self, cutoff: float, skin: float = 0.3):
+        super().__init__(cutoff=cutoff)
+        self.nupdates = 0
+        self.skin = skin
+        self.cutoff = cutoff + skin
+
+    def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
+        _ = self.update(pbc, cell, positions, Z, cutoff)
+        return self.idx_i, self.idx_j, self.offset
+
+    def update(self, pbc, cell, positions, Z, cutoff):
+        """Make sure the list is up to date."""
+        if self.nupdates == 0:
+            self.build(pbc, cell, positions, Z, cutoff)
+            return True
+
+        if ((self.pbc != pbc.numpy()).any() or (self.cell != cell.numpy()).any() or
+            ((self.positions - positions.numpy())**2).sum(1).max() > self.skin**2):
+            self.build(pbc, cell, positions, Z, cutoff)
+            return True
+
+        return False
+
+    def build(self, pbc, cell, positions, Z, cutoff):
+        """Build the list."""
+        self.pbc = np.array(pbc, copy=True)
+        self.cell = np.array(cell, copy=True)
+        self.positions = np.array(positions, copy=True)
+
+        at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
+
+        idx_i, idx_j, S = neighbor_list("ijS", at, cutoff, self_interaction=False)
+        self.idx_i = torch.from_numpy(idx_i)
+        self.idx_j = torch.from_numpy(idx_j)
+        S = torch.from_numpy(S).to(dtype=positions.dtype)
+        self.offset = torch.mm(S, cell)
+
+        self.nupdates += 1
 
 
 class TorchNeighborList(NeighborListTransform):
