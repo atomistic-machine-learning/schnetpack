@@ -23,6 +23,7 @@ class ModelOutput(nn.Module):
         loss_fn: Optional[nn.Module] = None,
         loss_weight: float = 1.0,
         metrics: Optional[Dict[str, Metric]] = None,
+        constraints: Optional[List[torch.nn.Module]] = None,
         target_property: Optional[str] = None,
     ):
         """
@@ -40,6 +41,7 @@ class ModelOutput(nn.Module):
         self.loss_fn = loss_fn
         self.loss_weight = loss_weight
         self.metrics = nn.ModuleDict(metrics)
+        self.constraints = constraints or []
 
     def calculate_loss(self, pred, target):
         if self.loss_weight == 0 or self.loss_fn is None:
@@ -124,43 +126,64 @@ class AtomisticTask(pl.LightningModule):
                     prog_bar=False,
                 )
 
+    def apply_constraints(self, pred, targets):
+        for output in self.outputs:
+            for constraint in output.constraints:
+                pred, targets = constraint(pred, targets, output)
+        return pred, targets
+
     def training_step(self, batch, batch_idx):
+
         targets = {
             output.target_property: batch[output.target_property]
             for output in self.outputs
         }
+        targets["considered_atoms"] = batch["considered_atoms"]
+
         pred = self.predict_without_postprocessing(batch)
+        pred, targets = self.apply_constraints(pred, targets)
+
         loss = self.loss_fn(pred, targets)
 
         self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
-        self.log_metrics(targets, pred, "train")
+        self.log_metrics(pred, targets, "train")
         return loss
 
     def validation_step(self, batch, batch_idx):
         torch.set_grad_enabled(self.grad_enabled)
+
         targets = {
             output.target_property: batch[output.target_property]
             for output in self.outputs
         }
+        targets["considered_atoms"] = batch["considered_atoms"]
+
         pred = self.predict_without_postprocessing(batch)
+        pred, targets = self.apply_constraints(pred, targets)
+
         loss = self.loss_fn(pred, targets)
 
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log_metrics(targets, pred, "val")
+        self.log_metrics(pred, targets, "val")
 
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_idx):
         torch.set_grad_enabled(self.grad_enabled)
+
         targets = {
             output.target_property: batch[output.target_property]
             for output in self.outputs
         }
+        targets["considered_atoms"] = batch["considered_atoms"]
+
         pred = self.predict_without_postprocessing(batch)
+        pred, targets = self.apply_constraints(pred, targets)
+
         loss = self.loss_fn(pred, targets)
 
         self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log_metrics(targets, pred, "test")
+        self.log_metrics(pred, targets, "test")
         return {"test_loss": loss}
 
     def predict_without_postprocessing(self, batch):
@@ -204,3 +227,29 @@ class AtomisticTask(pl.LightningModule):
 
         # update params
         optimizer.step(closure=optimizer_closure)
+
+
+class ConsiderOnlySelectedAtoms(nn.Module):
+    """
+    Constraint that allows to adapt the use of atom-wise targets such as, e.g., atomic forces for model optimization.
+    In the forward pass, a torch tensor is loaded from the dataset, which specifies the considered atoms is. Only the
+    predictions of those atoms are considered for training, validation, and testing.
+    """
+
+    def __init__(self, selection_name):
+        """
+        Args:
+            selection_name: string associated with the list of considered atoms in the dataset
+        """
+        super().__init__()
+        self.selection_name = selection_name
+
+    def forward(self, pred, targets, output):
+
+        considered_atoms = targets[self.selection_name].nonzero()[:, 0]
+
+        # drop neglected atoms
+        pred[output.name] = pred[output.name][considered_atoms]
+        targets[output.target_property] = targets[output.target_property][considered_atoms]
+
+        return pred, targets
