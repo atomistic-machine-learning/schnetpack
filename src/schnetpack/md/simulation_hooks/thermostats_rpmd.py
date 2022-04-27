@@ -84,7 +84,7 @@ class PILELocalThermostat(LangevinThermostat):
 
         # Initialize coefficient matrices
         c1 = torch.exp(-0.5 * simulator.integrator.time_step * gamma_normal)
-        c2 = torch.sqrt(1 - c1 ** 2)
+        c2 = torch.sqrt(1 - c1**2)
 
         self.c1 = c1[:, None, None]
         self.c2 = c2[:, None, None]
@@ -167,7 +167,7 @@ class PILEGlobalThermostat(PILELocalThermostat):
         # Compute kinetic energy of centroid
         kinetic_energy_centroid = simulator.system.sum_atoms(
             torch.sum(
-                momenta_centroid ** 2 / simulator.system.masses, dim=2, keepdim=True
+                momenta_centroid**2 / simulator.system.masses, dim=2, keepdim=True
             )
         )
         kinetic_energy_factor = kinetic_energy_centroid / (
@@ -179,7 +179,7 @@ class PILEGlobalThermostat(PILELocalThermostat):
         alpha_sq = (
             c1_centroid
             + simulator.system.sum_atoms(
-                torch.sum(thermostat_noise_centroid ** 2, dim=2, keepdim=True)
+                torch.sum(thermostat_noise_centroid**2, dim=2, keepdim=True)
             )
             * centroid_factor
             + 2
@@ -461,7 +461,7 @@ class NHCRingPolymerThermostat(NHCThermostat):
         Returns:
             torch.Tensor: Kinetic energy of the innermost NH thermostats.
         """
-        kinetic_energy = system.momenta_normal ** 2 / system.masses
+        kinetic_energy = system.momenta_normal**2 / system.masses
 
         # In case of a global NHC for RPMD, use the whole centroid kinetic
         # energy and broadcast it

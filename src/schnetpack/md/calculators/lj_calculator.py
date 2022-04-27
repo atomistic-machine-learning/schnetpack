@@ -232,7 +232,7 @@ class CustomCutoff(nn.Module):
         r = (
             distances - (self.cutoff_radius - self.healing_length)
         ) / self.healing_length
-        r_function = 1.0 + r ** 2 * (2.0 * r - 3.0)
+        r_function = 1.0 + r**2 * (2.0 * r - 3.0)
 
         # Compute second part of cutoff
         switch = torch.where(

@@ -227,7 +227,7 @@ class ASENeighborListWithSkin(NeighborListTransform):
         if (
             (self.pbc != pbc.numpy()).any()
             or (self.cell != cell.numpy()).any()
-            or ((self.positions - positions.numpy()) ** 2).sum(1).max() > self.skin ** 2
+            or ((self.positions - positions.numpy()) ** 2).sum(1).max() > self.skin**2
         ):
             self.build(pbc, cell, positions, Z, cutoff)
             return True
