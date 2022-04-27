@@ -293,7 +293,7 @@ class HDF5Loader:
 
         # Compute the kinetic energy as 1/2*m*v^2
         kinetic_energy = 0.5 * np.sum(
-            masses[None, :, None] * velocities**2, axis=(1, 2)
+            masses[None, :, None] * velocities ** 2, axis=(1, 2)
         )
 
         return kinetic_energy

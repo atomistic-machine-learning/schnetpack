@@ -94,7 +94,7 @@ class MDCalculator(nn.Module):
 
         # Derived conversions
         self.force_conversion = self.energy_conversion / self.position_conversion
-        self.stress_conversion = self.energy_conversion / self.position_conversion**3
+        self.stress_conversion = self.energy_conversion / self.position_conversion ** 3
 
         # set up gradient context for passing results
         if gradients_required:
