@@ -442,22 +442,23 @@ class Strain(nn.Module):
         strain = torch.zeros_like(inputs[properties.cell])
         strain.requires_grad_()
         inputs[properties.strain] = strain
+        strain = strain.transpose(1, 2)
 
         # strain cell
         inputs[properties.cell] = inputs[properties.cell] + torch.matmul(
-            strain, inputs[properties.cell]
+            inputs[properties.cell], strain
         )
 
         # strain positions
         idx_m = inputs[properties.idx_m]
         strain_i = strain[idx_m]
         inputs[properties.R] = inputs[properties.R] + torch.matmul(
-            strain_i, inputs[properties.R][:, :, None]
-        ).squeeze(-1)
+            inputs[properties.R][:, None, :], strain_i
+        ).squeeze(1)
 
         idx_i = inputs[properties.idx_i]
         strain_ij = strain_i[idx_i]
         inputs[properties.offsets] = inputs[properties.offsets] + torch.matmul(
-            strain_ij, inputs[properties.offsets][:, :, None]
-        ).squeeze(-1)
+            inputs[properties.offsets][:, None, :], strain_ij
+        ).squeeze(1)
         return inputs
