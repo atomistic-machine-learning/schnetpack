@@ -206,12 +206,13 @@ class ASENeighborList(NeighborListTransform):
 class SkinNeighborList(Transform):
     """
     Neighbor list provider utilizing a cutoff skin for computational efficiency. Wrapper around neighbor list classes
-    such as, e.g., ASENeighborList.
+    such as, e.g., ASENeighborList. Designed for use cases with gradual structural changes such ase MD simulations
+    and structure relaxations.
 
     Note:
-        - This class is not meant to be used for training, since the shuffling of training data results in large
+        - Not meant to be used for training, since the shuffling of training data results in large
           structural deviations between subsequent training samples.
-        - This class is not transferable between different molecule conformations or varying atom indexing.
+        - Not transferable between different molecule conformations or varying atom indexing.
         - When using a finite skin value also neighbors outside the cutoff are returned. Hence, to obtain equivalent
           atomic environments with and without the usage of a cutoff skin, the computation of pair wise atomic distances
           in the network must consider the cutoff accordingly. This is the case in the SchNet/PaiNN framework.
