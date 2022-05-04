@@ -277,7 +277,7 @@ class SkinNeighborList(Transform):
             (self.pbc != pbc.numpy()).any()
             or (self.cell != cell.numpy()).any()
             or ((self.positions - positions.numpy()) ** 2).sum(1).max()
-            > self.cutoff_skin**2
+            > 0.25 * self.cutoff_skin**2
         ):
             self._build(inputs)
             return True
