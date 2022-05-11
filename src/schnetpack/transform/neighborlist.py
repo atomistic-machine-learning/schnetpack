@@ -224,6 +224,7 @@ class SkinNeighborList(Transform):
     def __init__(
         self,
         neighbor_list: Transform,
+        cache_location,
         nbh_postprocessing: Optional[List[torch.nn.Module]] = None,
         cutoff_skin: float = 0.3,
     ):
@@ -247,6 +248,7 @@ class SkinNeighborList(Transform):
         self.neighbor_list = neighbor_list
         self.neighbor_list._cutoff = neighbor_list._cutoff + cutoff_skin
         self.nbh_postprocessing = nbh_postprocessing or []
+        self.cache_location = cache_location
 
     # @timeit
     def forward(
@@ -254,51 +256,102 @@ class SkinNeighborList(Transform):
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
 
-        _ = self._update(inputs)
-
-        inputs[properties.idx_i] = self.idx_i
-        inputs[properties.idx_j] = self.idx_j
-        inputs[properties.offsets] = self.offset
-
+        update_required, inputs = self._update(inputs)
         return inputs
+
+    def teardown(self):
+        try:
+            shutil.rmtree(self.cache_location)
+        except:
+            pass
+
+    def _load_cached_nbh_list(self, inputs: Dict[str, torch.Tensor]):
+        cache_file = os.path.join(
+            self.cache_location, f"cache_{inputs[properties.idx][0]}.pt"
+        )
+        # try to read cached neighbor list
+        try:
+            data = torch.load(cache_file)
+            return data
+        except IOError:
+            # acquire lock for caching
+            # TODO: should lock file be removed afterwards?
+            lock = fasteners.InterProcessLock(
+                os.path.join(
+                    self.cache_location, f"cache_{inputs[properties.idx][0]}.lock"
+                )
+            )
+            with lock:
+                # retry reading, in case other process finished in the meantime
+                try:
+                    data = torch.load(cache_file)
+                    return data
+                except IOError:
+                    return None
+                except Exception as e:
+                    print(e)
 
     def _update(self, inputs):
         """Make sure the list is up to date."""
 
-        positions = inputs[properties.R]
-        cell = inputs[properties.cell].view(3, 3)
-        pbc = inputs[properties.pbc]
+        # load previous neighbor list if possible
+        previous_inputs = self._load_cached_nbh_list(inputs)
 
-        if self.nupdates == 0:
-            self._build(inputs)
-            return True
+        # check if previous neighbor list exists and make sure that this is not the first update step
+        if previous_inputs is not None and self.nupdates != 0:
+            # extract previous structure
+            previous_positions = np.array(previous_inputs[properties.R], copy=True)
+            previous_cell = np.array(
+                previous_inputs[properties.cell].view(3, 3), copy=True
+            )
+            previous_pbc = np.array(previous_inputs[properties.pbc], copy=True)
+            # extract current structure
+            positions = inputs[properties.R]
+            cell = inputs[properties.cell].view(3, 3)
+            pbc = inputs[properties.pbc]
+            # check if structure change is sufficiently small to reuse previous neighbor list
+            if (
+                (previous_pbc == pbc.numpy()).any()
+                and (previous_cell == cell.numpy()).any()
+                and ((previous_positions - positions.numpy()) ** 2).sum(1).max()
+                < 0.25 * self.cutoff_skin**2
+            ):
+                # reuse previous neighbor list
+                inputs[properties.idx_i] = (
+                    previous_inputs[properties.idx_i].detach().clone()
+                )
+                inputs[properties.idx_j] = (
+                    previous_inputs[properties.idx_j].detach().clone()
+                )
+                inputs[properties.offsets] = (
+                    previous_inputs[properties.offsets].detach().clone()
+                )
+                return False, inputs
 
-        if (
-            (self.pbc != pbc.numpy()).any()
-            or (self.cell != cell.numpy()).any()
-            or ((self.positions - positions.numpy()) ** 2).sum(1).max()
-            > 0.25 * self.cutoff_skin**2
-        ):
-            self._build(inputs)
-            return True
-
-        return False
+        # build new neighbor list
+        inputs = self._build(inputs)
+        return True, inputs
 
     def _build(self, inputs):
 
-        self.positions = np.array(inputs[properties.R], copy=True)
-        self.cell = np.array(inputs[properties.cell].view(3, 3), copy=True)
-        self.pbc = np.array(inputs[properties.pbc], copy=True)
-
+        # apply all transforms to obtain new neighbor list
         inputs = self.neighbor_list(inputs)
         for postprocess in self.nbh_postprocessing:
             inputs = postprocess(inputs)
 
-        self.idx_i = inputs[properties.idx_i].detach().clone()
-        self.idx_j = inputs[properties.idx_j].detach().clone()
-        self.offset = inputs[properties.offsets].detach().clone()
-
         self.nupdates += 1
+
+        # store new reference conformation and remove old one
+        cache_file = os.path.join(
+            self.cache_location, f"cache_{inputs[properties.idx][0]}.pt"
+        )
+        try:
+            os.remove(cache_file)
+        except:
+            pass
+        torch.save(inputs, cache_file)
+
+        return inputs
 
 
 class TorchNeighborList(NeighborListTransform):
