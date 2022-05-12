@@ -224,13 +224,14 @@ class SkinNeighborList(Transform):
     def __init__(
         self,
         neighbor_list: Transform,
-        cache_location,
+        cache_location: str,
         nbh_postprocessing: Optional[List[torch.nn.Module]] = None,
         cutoff_skin: float = 0.3,
     ):
         """
         Args:
             neighbor_list: the neighbor list to use
+            cache_location: directory where cached model inputs (incl. neighbor list) are stored
             nbh_postprocessing: post-processing transforms for manipulating the neighbor lists provided by neighbor_list
             cutoff_skin: float
                 If no atom has moved more than the skin-distance since the neighborlist has been updated the last time,
