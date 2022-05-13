@@ -20,6 +20,7 @@ __all__ = [
     "SkinNeighborList",
 ]
 
+import schnetpack as spk
 from schnetpack import properties
 import fasteners
 
@@ -244,12 +245,15 @@ class SkinNeighborList(Transform):
         """
 
         super().__init__()
-        self.cutoff_skin = cutoff_skin
+
         self.nupdates = 0
         self.neighbor_list = neighbor_list
-        self.neighbor_list._cutoff = neighbor_list._cutoff + cutoff_skin
+        self.cutoff = neighbor_list._cutoff
+        self.cutoff_skin = cutoff_skin
+        self.neighbor_list._cutoff = self.cutoff + cutoff_skin
         self.nbh_postprocessing = nbh_postprocessing or []
         self.cache_location = cache_location
+        self.distance_calculator = spk.atomistic.PairwiseDistances()
 
     # @timeit
     def forward(
@@ -258,6 +262,29 @@ class SkinNeighborList(Transform):
     ) -> Dict[str, torch.Tensor]:
 
         update_required, inputs = self._update(inputs)
+        inputs = self.distance_calculator(inputs)
+        inputs = self._remove_neighbors_in_skin(inputs)
+
+        return inputs
+
+    def _remove_neighbors_in_skin(
+        self,
+        inputs: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+
+        Rij = inputs[properties.Rij]
+        idx_i = inputs[properties.idx_i]
+        idx_j = inputs[properties.idx_j]
+        offsets = inputs[properties.offsets]
+
+        rij = torch.norm(inputs[properties.Rij], dim=-1)
+        cidx = torch.nonzero(rij <= self.cutoff).squeeze(-1)
+
+        inputs[properties.Rij] = Rij[cidx]
+        inputs[properties.idx_i] = idx_i[cidx]
+        inputs[properties.idx_j] = idx_j[cidx]
+        inputs[properties.offsets] = offsets[cidx]
+
         return inputs
 
     def teardown(self):
