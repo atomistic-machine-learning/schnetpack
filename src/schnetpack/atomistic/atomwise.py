@@ -116,7 +116,6 @@ class DipoleMoment(nn.Module):
         """
         Args:
             n_in: input dimension of representation
-            n_out: output dimension of target property (default: 1)
             n_hidden: size of hidden layers.
                 If an integer, same number of node is used for all hidden layers resulting
                 in a rectangular network.
@@ -232,7 +231,6 @@ class Polarizability(nn.Module):
         """
         Args:
             n_in: input dimension of representation
-            n_out: output dimension of target property (default: 1)
             n_hidden: size of hidden layers.
                 If an integer, same number of node is used for all hidden layers resulting
                 in a rectangular network.
