@@ -181,15 +181,13 @@ class DipoleMoment(nn.Module):
         if self.correct_charges:
             if properties.total_charge in inputs:
                 total_charge = inputs[properties.total_charge]
-            else:
-                total_charge = 0.0
 
-            sum_charge = snn.scatter_add(charges, idx_m, dim_size=maxm)
-            charge_correction = (total_charge[:, None] - sum_charge) / natoms.unsqueeze(
-                -1
-            )
-            charge_correction = charge_correction[idx_m]
-            charges = charges + charge_correction
+                sum_charge = snn.scatter_add(charges, idx_m, dim_size=maxm)
+                charge_correction = (total_charge[:, None] - sum_charge) / natoms.unsqueeze(
+                    -1
+                )
+                charge_correction = charge_correction[idx_m]
+                charges = charges + charge_correction
 
         if self.return_charges:
             inputs[self.charges_key] = charges
