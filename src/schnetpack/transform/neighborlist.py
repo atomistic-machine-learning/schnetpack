@@ -23,7 +23,6 @@ __all__ = [
 import schnetpack as spk
 from schnetpack import properties
 import fasteners
-from copy import deepcopy
 
 
 class CacheException(Exception):
@@ -293,12 +292,12 @@ class SkinNeighborList(Transform):
         """Make sure the list is up to date."""
 
         # get sample index
-        config_idx = inputs[properties.idx].item()
+        sample_idx = inputs[properties.idx].item()
 
         # check if previous neighbor list exists and make sure that this is not the first update step
-        if config_idx in self.previous_inputs.keys() and self.nupdates != 0:
+        if sample_idx in self.previous_inputs.keys() and self.nupdates != 0:
             # load previous inputs
-            previous_inputs = self.previous_inputs[config_idx]
+            previous_inputs = self.previous_inputs[sample_idx]
             # extract previous structure
             previous_positions = np.array(previous_inputs[properties.R], copy=True)
             previous_cell = np.array(
@@ -342,8 +341,16 @@ class SkinNeighborList(Transform):
         self.nupdates += 1
 
         # store new reference conformation and remove old one
-        config_idx = inputs[properties.idx].item()
-        self.previous_inputs[config_idx] = deepcopy(inputs)
+        sample_idx = inputs[properties.idx].item()
+        stored_inputs = {
+            properties.R: inputs[properties.R].clone(),
+            properties.cell: inputs[properties.cell].clone(),
+            properties.pbc: inputs[properties.pbc].clone(),
+            properties.idx_i: inputs[properties.idx_i].clone(),
+            properties.idx_j: inputs[properties.idx_j].clone(),
+            properties.offsets: inputs[properties.offsets].clone(),
+        }
+        self.previous_inputs.update({sample_idx: stored_inputs})
 
         return inputs
 
