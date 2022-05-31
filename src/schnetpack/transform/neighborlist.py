@@ -23,6 +23,7 @@ __all__ = [
 import schnetpack as spk
 from schnetpack import properties
 import fasteners
+from copy import deepcopy
 
 
 class CacheException(Exception):
@@ -254,6 +255,7 @@ class SkinNeighborList(Transform):
         self.nbh_postprocessing = nbh_postprocessing or []
         self.cache_location = cache_location
         self.distance_calculator = spk.atomistic.PairwiseDistances()
+        self.previous_inputs = {}
 
     # @timeit
     def forward(
@@ -287,46 +289,16 @@ class SkinNeighborList(Transform):
 
         return inputs
 
-    def teardown(self):
-        try:
-            shutil.rmtree(self.cache_location)
-        except:
-            pass
-
-    def _load_cached_nbh_list(self, inputs: Dict[str, torch.Tensor]):
-        cache_file = os.path.join(
-            self.cache_location, f"cache_{inputs[properties.idx][0]}.pt"
-        )
-        # try to read cached neighbor list
-        try:
-            data = torch.load(cache_file)
-            return data
-        except IOError:
-            # acquire lock for caching
-            # TODO: should lock file be removed afterwards?
-            lock = fasteners.InterProcessLock(
-                os.path.join(
-                    self.cache_location, f"cache_{inputs[properties.idx][0]}.lock"
-                )
-            )
-            with lock:
-                # retry reading, in case other process finished in the meantime
-                try:
-                    data = torch.load(cache_file)
-                    return data
-                except IOError:
-                    return None
-                except Exception as e:
-                    print(e)
-
     def _update(self, inputs):
         """Make sure the list is up to date."""
 
-        # load previous neighbor list if possible
-        previous_inputs = self._load_cached_nbh_list(inputs)
+        # get sample index
+        config_idx = inputs[properties.idx].item()
 
         # check if previous neighbor list exists and make sure that this is not the first update step
-        if previous_inputs is not None and self.nupdates != 0:
+        if config_idx in self.previous_inputs.keys() and self.nupdates != 0:
+            # load previous inputs
+            previous_inputs = self.previous_inputs[config_idx]
             # extract previous structure
             previous_positions = np.array(previous_inputs[properties.R], copy=True)
             previous_cell = np.array(
@@ -370,14 +342,8 @@ class SkinNeighborList(Transform):
         self.nupdates += 1
 
         # store new reference conformation and remove old one
-        cache_file = os.path.join(
-            self.cache_location, f"cache_{inputs[properties.idx][0]}.pt"
-        )
-        try:
-            os.remove(cache_file)
-        except:
-            pass
-        torch.save(inputs, cache_file)
+        config_idx = inputs[properties.idx].item()
+        self.previous_inputs[config_idx] = deepcopy(inputs)
 
         return inputs
 
