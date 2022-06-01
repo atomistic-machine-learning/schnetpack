@@ -18,6 +18,8 @@ __all__ = [
     "NeighborListTransform",
     "WrapPositions",
     "SkinNeighborList",
+    "NeighborlistWrapper",
+    "RemoveSomeNeighbors",
 ]
 
 import schnetpack as spk
