@@ -272,12 +272,14 @@ class AseInterface:
         working_dir: str,
         model: schnetpack.model.AtomisticModel,
         converter: AtomsConverter,
+        optimizer_class: type = QuasiNewton,
         energy: str = "energy",
         forces: str = "forces",
         stress: str = "stress",
         energy_units: Union[str, float] = "kcal/mol",
         forces_units: Union[str, float] = "kcal/mol/Angstrom",
         stress_units: Union[str, float] = "kcal/mol/Angstrom/Angstrom/Angstrom",
+        fixed_atoms: Optional[List[int]] = None,
     ):
         """
         Args:
@@ -293,6 +295,7 @@ class AseInterface:
             forces_units: force units used by model
             stress_units: stress units used by model
             precision: toggle model precision
+            fixed_atoms: list of indices corresponding to fixed atoms
         """
         # Setup directory
         self.working_dir = working_dir
@@ -301,6 +304,12 @@ class AseInterface:
 
         # Load the molecule
         self.molecule = read(molecule_path)
+        if fixed_atoms:
+            c = FixAtoms(fixed_atoms)
+            self.molecule.set_constraint(constraint=c)
+
+        # Set up optimizer
+        self.optimizer_class = optimizer_class
 
         # Set up calculator
         calculator = SpkCalculator(
@@ -453,7 +462,7 @@ class AseInterface:
         """
         name = "optimization"
         optimize_file = os.path.join(self.working_dir, name)
-        optimizer = QuasiNewton(
+        optimizer = self.optimizer_class(
             self.molecule,
             trajectory="{:s}.traj".format(optimize_file),
             restart="{:s}.pkl".format(optimize_file),
@@ -461,7 +470,7 @@ class AseInterface:
         optimizer.run(fmax, steps)
 
         # Save final geometry in xyz format
-        self.save_molecule(name)
+        self.save_molecule(name, file_format="extxyz")
 
     def compute_normal_modes(self, write_jmol: bool = True):
         """
