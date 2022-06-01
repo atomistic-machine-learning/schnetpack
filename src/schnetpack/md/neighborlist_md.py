@@ -82,7 +82,7 @@ class NeighborListMD:
             # Check for changes is positions
             update_positions = (
                 torch.norm(self.previous_positions - positions, dim=1)
-                > self.cutoff_shell
+                > 0.5 * self.cutoff_shell
             ).float()
 
             # Map to individual molecules
@@ -107,7 +107,7 @@ class NeighborListMD:
         Returns:
             torch.tensor: indices of neighbors.
         """
-        # TODO: check if this is better or building Rij after the full indices have been generated
+        # TODO: check consistent wrapping
         atom_types = inputs[properties.Z]
         positions = inputs[properties.R]
         n_atoms = inputs[properties.n_atoms]
@@ -153,29 +153,40 @@ class NeighborListMD:
         # Move everything to correct device
         neighbor_idx = {p: neighbor_idx[p].to(positions.device) for p in neighbor_idx}
 
+        # filter out all pairs in the buffer zone
+        neighbor_idx = self._filter_indices(positions, neighbor_idx)
+
         return neighbor_idx
 
-    def _update_Rij(self, inputs: Dict[str, torch.tensor], mol_idx: torch.tensor):
+    def _filter_indices(
+        self, positions: torch.Tensor, neighbor_idx: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
         """
-        Update the interatomic distances.
+        Routine for filtering out pair indices and offets due to the buffer region, which would otherwise slow down
+        the calculators.
 
         Args:
-            inputs (dict(str, torch.Tensor)): Input batch.
-            mol_idx (torch.Tensor): Molecule indices
+            positions (torch.Tensor): Tensor of the Cartesian atom positions.
+            neighbor_idx (dict(str, torch.Tensor)): Dictionary containing pair indices and offets
+
+        Returns:
+            dict(str, torch.Tensor): Dictionary containing updated pair indices and offets
         """
-        R = inputs[properties.R]
-        idx_i = self.molecular_indices[mol_idx][properties.idx_i]
-        idx_j = self.molecular_indices[mol_idx][properties.idx_j]
+        offsets = neighbor_idx[properties.offsets]
+        idx_i = neighbor_idx[properties.idx_i]
+        idx_j = neighbor_idx[properties.idx_j]
 
-        new_Rij = R[idx_j] - R[idx_i]
+        Rij = positions[idx_j] - positions[idx_i] + offsets
+        d_ij = torch.linalg.norm(Rij, dim=1)
+        d_ij_filter = d_ij <= self.cutoff
 
-        cell = inputs[properties.cell]
+        neighbor_idx[properties.idx_i] = neighbor_idx[properties.idx_i][d_ij_filter]
+        neighbor_idx[properties.idx_j] = neighbor_idx[properties.idx_j][d_ij_filter]
+        neighbor_idx[properties.offsets] = neighbor_idx[properties.offsets][
+            d_ij_filter, :
+        ]
 
-        if cell is not None:
-            offsets = self.molecular_indices[mol_idx][properties.offsets].to(cell.dtype)
-            new_Rij = new_Rij + offsets.mm(cell)
-
-        self.molecular_indices[mol_idx][properties.Rij] = new_Rij
+        return neighbor_idx
 
     @staticmethod
     def _split_batch(

@@ -92,7 +92,8 @@ class SchNetPackCalculator(MDCalculator):
         """
 
         log.info("Loading model from {:s}".format(model_file))
-        model = torch.load(model_file).to(torch.float64)
+        # load model and keep it on CPU, device can be changed afterwards
+        model = torch.load(model_file, map_location="cpu").to(torch.float64)
         model = model.eval()
 
         if self.stress_label is not None:

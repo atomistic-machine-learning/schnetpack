@@ -1,4 +1,4 @@
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 
 import torch
 import torch.nn as nn
@@ -299,10 +299,12 @@ class Response(nn.Module):
 
         return inputs
 
-    def _construct_properties(self):
+    def _construct_properties(
+        self,
+    ) -> Tuple[Dict[str, str], List[str], Dict[str, bool], Dict[str, bool]]:
         """
-        Routine for automatically determining the computational settings of the response layer based on the requested
-        response properties.
+        Routine for automatically determining the computational settings of the response
+        layer based on the requested response properties.
 
         Based on the requested response properties, determine:
             - which derivatives need to be computed
@@ -310,10 +312,10 @@ class Response(nn.Module):
             - for which derivatives does a graph need to be constructed
 
         Returns:
-            (dict(str, str), list(str), dict(str, bool), dict(str, bool)): dictionary of basic derivatives, list of
-                                                                           variables which need gradients, dictionary
-                                                                           of deriviative instructions, dictionary of
-                                                                           required graphs.
+            - dictionary of basic derivatives
+            - list of variables which need gradients
+            - dictionary of derivative instructions
+            - dictionary of required graphs
         """
         derivative_instructions = {
             "dEdR": False,
@@ -432,24 +434,31 @@ class Response(nn.Module):
 class Strain(nn.Module):
     """
     This is required to calculate the stress as a response property.
-    Adds strain-dependence to relative atomic positions Rij and (optionally) to absolute positions and unit cell.
+    Adds strain-dependence to relative atomic positions Rij and (optionally) to absolute
+    positions and unit cell.
     """
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
         strain = torch.zeros_like(inputs[properties.cell])
         strain.requires_grad_()
         inputs[properties.strain] = strain
+        strain = strain.transpose(1, 2)
 
         # strain cell
         inputs[properties.cell] = inputs[properties.cell] + torch.matmul(
-            strain, inputs[properties.cell]
+            inputs[properties.cell], strain
         )
 
         # strain positions
         idx_m = inputs[properties.idx_m]
         strain_i = strain[idx_m]
         inputs[properties.R] = inputs[properties.R] + torch.matmul(
-            strain_i, inputs[properties.R][:, :, None]
-        ).squeeze(-1)
+            inputs[properties.R][:, None, :], strain_i
+        ).squeeze(1)
 
+        idx_i = inputs[properties.idx_i]
+        strain_ij = strain_i[idx_i]
+        inputs[properties.offsets] = inputs[properties.offsets] + torch.matmul(
+            inputs[properties.offsets][:, None, :], strain_ij
+        ).squeeze(1)
         return inputs
