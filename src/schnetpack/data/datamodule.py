@@ -9,7 +9,7 @@ import numpy as np
 import fasteners
 
 import pytorch_lightning as pl
-from pytorch_lightning.utilities.enums import DeviceType
+from pytorch_lightning.accelerators import GPUAccelerator
 import torch
 
 from schnetpack.data import (
@@ -338,7 +338,7 @@ class AtomsDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=True,
-            pin_memory=self.trainer.on_gpu,
+            pin_memory=self._use_pin_memory(),
         )
 
     def val_dataloader(self) -> AtomsLoader:
@@ -346,7 +346,7 @@ class AtomsDataModule(pl.LightningDataModule):
             self.val_dataset,
             batch_size=self.val_batch_size,
             num_workers=self.num_val_workers,
-            pin_memory=self.trainer.on_gpu,
+            pin_memory=self._use_pin_memory(),
         )
 
     def test_dataloader(self) -> AtomsLoader:
@@ -354,5 +354,8 @@ class AtomsDataModule(pl.LightningDataModule):
             self.test_dataset,
             batch_size=self.test_batch_size,
             num_workers=self.num_test_workers,
-            pin_memory=self.trainer.on_gpu,
+            pin_memory=self._use_pin_memory(),
         )
+
+    def _use_pin_memory(self):
+        return isinstance(self.trainer.accelerator, GPUAccelerator)

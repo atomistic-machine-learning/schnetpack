@@ -6,8 +6,12 @@ min_epochs: null
 max_epochs: 100000
 
 # prints
+<<<<<<< Updated upstream
 weights_summary: top
 progress_bar_refresh_rate: 10
+=======
+enable_model_summary: True
+>>>>>>> Stashed changes
 profiler: null
 
 gradient_clip_val: 0

@@ -6,7 +6,12 @@ min_epochs: 1
 max_epochs: 3
 
 # prints
+<<<<<<< Updated upstream
 progress_bar_refresh_rate: null
 weights_summary: null
 profiler: simple
+=======
+profiler: pytorch
+detect_anomaly: True
+>>>>>>> Stashed changes
 
