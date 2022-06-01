@@ -85,10 +85,10 @@ class TestNeighborLists:
         n_atoms = torch.max(idx_i) + 1
 
         unique_idx = (
-            n_repeats ** 3 * (n_atoms * idx_i + idx_j)
+            n_repeats**3 * (n_atoms * idx_i + idx_j)
             + (offsets[:, 0] + n_max)
             + n_repeats * (offsets[:, 1] + n_max)
-            + n_repeats ** 2 * (offsets[:, 2] + n_max)
+            + n_repeats**2 * (offsets[:, 2] + n_max)
         )
 
         return torch.argsort(unique_idx)

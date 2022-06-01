@@ -38,7 +38,7 @@ def test_smear_gaussian():
             ]
         ]
     )
-    expt = torch.exp(-0.5 * expt ** 2)
+    expt = torch.exp(-0.5 * expt**2)
     assert torch.allclose(expt, smear(dist), atol=0.0, rtol=1.0e-7)
     assert list(smear.parameters()) == []
 
@@ -66,7 +66,7 @@ def test_smear_gaussian_trainable():
             ]
         ]
     )
-    expt = torch.exp((-0.5 / 0.75 ** 2) * expt ** 2)
+    expt = torch.exp((-0.5 / 0.75**2) * expt**2)
     assert torch.allclose(expt, smear(dist), atol=0.0, rtol=1.0e-7)
     params = list(smear.parameters())
     assert len(params) == 2
