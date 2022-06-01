@@ -15,6 +15,7 @@ import os
 
 import ase
 from ase import units
+from ase.constraints import FixAtoms
 from ase.calculators.calculator import Calculator, all_changes
 from ase.io import read, write
 from ase.io.trajectory import Trajectory
