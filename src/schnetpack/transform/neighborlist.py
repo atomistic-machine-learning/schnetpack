@@ -29,6 +29,37 @@ class CacheException(Exception):
     pass
 
 
+class NeighborlistWrapper(Transform):
+    """
+    Wrapper class for neighbor lists. Using this wrapper allows to add multiple postprocessing steps to the neighbor
+    list transform
+    """
+
+    def __init__(
+        self,
+        neighbor_list: Transform,
+        nbh_postprocessing: Optional[List[torch.nn.Module]] = None,
+    ):
+        """
+        Args:
+            neighbor_list: the neighbor list to use
+            nbh_postprocessing: post-processing transforms for manipulating the neighbor lists provided by neighbor_list
+        """
+        super().__init__()
+        self.neighbor_list = neighbor_list
+        self.nbh_postprocessing = nbh_postprocessing or []
+
+    def forward(
+        self,
+        inputs: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+
+        inputs = self.neighbor_list(inputs)
+        for postprocess in self.nbh_postprocessing:
+            inputs = postprocess(inputs)
+        return inputs
+
+
 class CachedNeighborList(Transform):
     """
     Dynamic caching of neighbor lists.
