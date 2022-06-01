@@ -6,7 +6,7 @@ min_epochs: 1
 max_epochs: 1
 
 # prints
-progress_bar_refresh_rate: null
-profiler: pytorch
 detect_anomaly: True
+weights_summary: null
+profiler: simple
 
