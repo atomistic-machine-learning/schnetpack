@@ -273,7 +273,6 @@ class SkinNeighborList(Transform):
 
         super().__init__()
 
-        self.nupdates = 0
         self.neighbor_list = neighbor_list
         self.cutoff = neighbor_list._cutoff
         self.cutoff_skin = cutoff_skin
@@ -293,6 +292,9 @@ class SkinNeighborList(Transform):
         inputs = self._remove_neighbors_in_skin(inputs)
 
         return inputs
+
+    def reset(self):
+        self.previous_inputs = {}
 
     def _remove_neighbors_in_skin(
         self,
@@ -321,7 +323,7 @@ class SkinNeighborList(Transform):
         sample_idx = inputs[properties.idx].item()
 
         # check if previous neighbor list exists and make sure that this is not the first update step
-        if sample_idx in self.previous_inputs.keys() and self.nupdates != 0:
+        if sample_idx in self.previous_inputs.keys():
             # load previous inputs
             previous_inputs = self.previous_inputs[sample_idx]
             # extract previous structure
@@ -363,8 +365,6 @@ class SkinNeighborList(Transform):
         inputs = self.neighbor_list(inputs)
         for postprocess in self.nbh_postprocessing:
             inputs = postprocess(inputs)
-
-        self.nupdates += 1
 
         # store new reference conformation and remove old one
         sample_idx = inputs[properties.idx].item()
