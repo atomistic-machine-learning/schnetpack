@@ -25,6 +25,7 @@ class ModelOutput(nn.Module):
         loss_fn: Optional[nn.Module] = None,
         loss_weight: float = 1.0,
         metrics: Optional[Dict[str, Metric]] = None,
+        constraints: Optional[List[torch.nn.Module]] = None,
         target_property: Optional[str] = None,
     ):
         """
@@ -35,6 +36,12 @@ class ModelOutput(nn.Module):
             loss_fn: function to compute the loss
             loss_weight: loss weight in the composite loss: $l = w_1 l_1 + \dots + w_n l_n$
             metrics: dictionary of metrics with names as keys
+            constraints:
+                constraint class for specifying the usage of model output in the loss function and logged metrics,
+                while not changing the model output itself. Essentially, constraints represent postprocessing transforms
+                that do not affect the model output but only change the loss value. For example, constraints can be used
+                to neglect or weight some atomic forces in the loss function. This may be useful when training on
+                systems, where only some forces are crucial for its dynamics.
         """
         super().__init__()
         self.name = name
@@ -42,6 +49,7 @@ class ModelOutput(nn.Module):
         self.loss_fn = loss_fn
         self.loss_weight = loss_weight
         self.metrics = nn.ModuleDict(metrics)
+        self.constraints = constraints or []
 
     def calculate_loss(self, pred, target):
         if self.loss_weight == 0 or self.loss_fn is None:
@@ -126,43 +134,73 @@ class AtomisticTask(pl.LightningModule):
                     prog_bar=False,
                 )
 
+    def apply_constraints(self, pred, targets):
+        for output in self.outputs:
+            for constraint in output.constraints:
+                pred, targets = constraint(pred, targets, output)
+        return pred, targets
+
     def training_step(self, batch, batch_idx):
+
         targets = {
             output.target_property: batch[output.target_property]
             for output in self.outputs
         }
+        try:
+            targets["considered_atoms"] = batch["considered_atoms"]
+        except:
+            pass
+
         pred = self.predict_without_postprocessing(batch)
+        pred, targets = self.apply_constraints(pred, targets)
+
         loss = self.loss_fn(pred, targets)
 
         self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
-        self.log_metrics(targets, pred, "train")
+        self.log_metrics(pred, targets, "train")
         return loss
 
     def validation_step(self, batch, batch_idx):
         torch.set_grad_enabled(self.grad_enabled)
+
         targets = {
             output.target_property: batch[output.target_property]
             for output in self.outputs
         }
+        try:
+            targets["considered_atoms"] = batch["considered_atoms"]
+        except:
+            pass
+
         pred = self.predict_without_postprocessing(batch)
+        pred, targets = self.apply_constraints(pred, targets)
+
         loss = self.loss_fn(pred, targets)
 
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log_metrics(targets, pred, "val")
+        self.log_metrics(pred, targets, "val")
 
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_idx):
         torch.set_grad_enabled(self.grad_enabled)
+
         targets = {
             output.target_property: batch[output.target_property]
             for output in self.outputs
         }
+        try:
+            targets["considered_atoms"] = batch["considered_atoms"]
+        except:
+            pass
+
         pred = self.predict_without_postprocessing(batch)
+        pred, targets = self.apply_constraints(pred, targets)
+
         loss = self.loss_fn(pred, targets)
 
         self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log_metrics(targets, pred, "test")
+        self.log_metrics(pred, targets, "test")
         return {"test_loss": loss}
 
     def predict_without_postprocessing(self, batch):
@@ -206,3 +244,41 @@ class AtomisticTask(pl.LightningModule):
 
         # update params
         optimizer.step(closure=optimizer_closure)
+
+
+class ConsiderOnlySelectedAtoms(nn.Module):
+    """
+    Constraint that allows to neglect some atomic targets (e.g. forces of some specified atoms) for model optimization,
+    while not affecting the actual model output. The indices of the atoms, which targets to consider in the loss
+    function, must be provided in the dataset for each sample in form of a torch tensor of type boolean
+    (True: considered, False: neglected).
+    """
+
+    def __init__(self, selection_name):
+        """
+        Args:
+            selection_name: string associated with the list of considered atoms in the dataset
+        """
+        super().__init__()
+        self.selection_name = selection_name
+
+    def forward(self, pred, targets, output_module):
+        """
+        A torch tensor is loaded from the dataset, which specifies the considered atoms. Only the
+        predictions of those atoms are considered for training, validation, and testing.
+
+        :param pred: python dictionary containing model outputs
+        :param targets: python dictionary containing targets
+        :param output_module: torch.nn.Module class of a particular property (e.g. forces)
+        :return: model outputs and targets of considered atoms only
+        """
+
+        considered_atoms = targets[self.selection_name].nonzero()[:, 0]
+
+        # drop neglected atoms
+        pred[output_module.name] = pred[output_module.name][considered_atoms]
+        targets[output_module.target_property] = targets[output_module.target_property][
+            considered_atoms
+        ]
+
+        return pred, targets

@@ -70,7 +70,7 @@ spktrain experiment=qm9 model/representation=painn
 
 For the full API reference, visit our [documentation](https://schnetpack.readthedocs.io).
 
-If you are using SchNetPack in you research, please cite:
+If you are using SchNetPack in your research, please cite:
 
 K.T. Schütt, P. Kessel, M. Gastegger, K. Nicoli, A. Tkatchenko, K.-R. Müller.
 SchNetPack: A Deep Learning Toolbox For Atomistic Systems.

@@ -3,7 +3,7 @@ defaults:
 
 gpus: 1
 min_epochs: 1
-max_epochs: 1
+max_epochs: 3
 
 # prints
 detect_anomaly: True

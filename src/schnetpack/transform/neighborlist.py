@@ -3,9 +3,11 @@ import torch
 import shutil
 from ase import Atoms
 from ase.neighborlist import neighbor_list
-from typing import Dict
 from .base import Transform
 from dirsync import sync
+import numpy as np
+from typing import Optional, Dict, List, Type, Any, Union
+
 
 __all__ = [
     "ASENeighborList",
@@ -15,8 +17,10 @@ __all__ = [
     "CachedNeighborList",
     "NeighborListTransform",
     "WrapPositions",
+    "SkinNeighborList",
 ]
 
+import schnetpack as spk
 from schnetpack import properties
 import fasteners
 
@@ -198,6 +202,157 @@ class ASENeighborList(NeighborListTransform):
         S = torch.from_numpy(S).to(dtype=positions.dtype)
         offset = torch.mm(S, cell)
         return idx_i, idx_j, offset
+
+
+class SkinNeighborList(Transform):
+    """
+    Neighbor list provider utilizing a cutoff skin for computational efficiency. Wrapper around neighbor list classes
+    such as, e.g., ASENeighborList. Designed for use cases with gradual structural changes such ase MD simulations
+    and structure relaxations.
+
+    Note:
+        - Not meant to be used for training, since the shuffling of training data results in large
+          structural deviations between subsequent training samples.
+        - Not transferable between different molecule conformations or varying atom indexing.
+        - When using a finite skin value also neighbors outside the cutoff are returned. Hence, to obtain equivalent
+          atomic environments with and without the usage of a cutoff skin, the computation of pair wise atomic distances
+          in the network must consider the cutoff accordingly. This is the case in the SchNet/PaiNN framework.
+    """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
+
+    def __init__(
+        self,
+        neighbor_list: Transform,
+        cache_location: str,
+        nbh_postprocessing: Optional[List[torch.nn.Module]] = None,
+        cutoff_skin: float = 0.3,
+    ):
+        """
+        Args:
+            neighbor_list: the neighbor list to use
+            cache_location: directory where cached model inputs (incl. neighbor list) are stored
+            nbh_postprocessing: post-processing transforms for manipulating the neighbor lists provided by neighbor_list
+            cutoff_skin: float
+                If no atom has moved more than the skin-distance since the neighborlist has been updated the last time,
+                then the neighbor list is reused. This will save some expensive rebuilds of the list, but extra
+                neighbors outside the cutoff will be returned.
+                Note:
+                    Please choose a sufficiently large cutoff_skin value to ensure that between two subsequent samples
+                    no atom can penetrate through the skin into the cutoff sphere of another atom if it is not in the
+                    neighbor list of that atom.
+        """
+
+        super().__init__()
+
+        self.nupdates = 0
+        self.neighbor_list = neighbor_list
+        self.cutoff = neighbor_list._cutoff
+        self.cutoff_skin = cutoff_skin
+        self.neighbor_list._cutoff = self.cutoff + cutoff_skin
+        self.nbh_postprocessing = nbh_postprocessing or []
+        self.cache_location = cache_location
+        self.distance_calculator = spk.atomistic.PairwiseDistances()
+        self.previous_inputs = {}
+
+    # @timeit
+    def forward(
+        self,
+        inputs: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+
+        update_required, inputs = self._update(inputs)
+        inputs = self.distance_calculator(inputs)
+        inputs = self._remove_neighbors_in_skin(inputs)
+
+        return inputs
+
+    def _remove_neighbors_in_skin(
+        self,
+        inputs: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+
+        Rij = inputs[properties.Rij]
+        idx_i = inputs[properties.idx_i]
+        idx_j = inputs[properties.idx_j]
+        offsets = inputs[properties.offsets]
+
+        rij = torch.norm(inputs[properties.Rij], dim=-1)
+        cidx = torch.nonzero(rij <= self.cutoff).squeeze(-1)
+
+        inputs[properties.Rij] = Rij[cidx]
+        inputs[properties.idx_i] = idx_i[cidx]
+        inputs[properties.idx_j] = idx_j[cidx]
+        inputs[properties.offsets] = offsets[cidx]
+
+        return inputs
+
+    def _update(self, inputs):
+        """Make sure the list is up to date."""
+
+        # get sample index
+        sample_idx = inputs[properties.idx].item()
+
+        # check if previous neighbor list exists and make sure that this is not the first update step
+        if sample_idx in self.previous_inputs.keys() and self.nupdates != 0:
+            # load previous inputs
+            previous_inputs = self.previous_inputs[sample_idx]
+            # extract previous structure
+            previous_positions = np.array(previous_inputs[properties.R], copy=True)
+            previous_cell = np.array(
+                previous_inputs[properties.cell].view(3, 3), copy=True
+            )
+            previous_pbc = np.array(previous_inputs[properties.pbc], copy=True)
+            # extract current structure
+            positions = inputs[properties.R]
+            cell = inputs[properties.cell].view(3, 3)
+            pbc = inputs[properties.pbc]
+            # check if structure change is sufficiently small to reuse previous neighbor list
+            if (
+                (previous_pbc == pbc.numpy()).any()
+                and (previous_cell == cell.numpy()).any()
+                and ((previous_positions - positions.numpy()) ** 2).sum(1).max()
+                < 0.25 * self.cutoff_skin**2
+            ):
+                # reuse previous neighbor list
+                inputs[properties.idx_i] = (
+                    previous_inputs[properties.idx_i].detach().clone()
+                )
+                inputs[properties.idx_j] = (
+                    previous_inputs[properties.idx_j].detach().clone()
+                )
+                inputs[properties.offsets] = (
+                    previous_inputs[properties.offsets].detach().clone()
+                )
+                return False, inputs
+
+        # build new neighbor list
+        inputs = self._build(inputs)
+        return True, inputs
+
+    def _build(self, inputs):
+
+        # apply all transforms to obtain new neighbor list
+        inputs = self.neighbor_list(inputs)
+        for postprocess in self.nbh_postprocessing:
+            inputs = postprocess(inputs)
+
+        self.nupdates += 1
+
+        # store new reference conformation and remove old one
+        sample_idx = inputs[properties.idx].item()
+        stored_inputs = {
+            properties.R: inputs[properties.R].clone(),
+            properties.cell: inputs[properties.cell].clone(),
+            properties.pbc: inputs[properties.pbc].clone(),
+            properties.idx_i: inputs[properties.idx_i].clone(),
+            properties.idx_j: inputs[properties.idx_j].clone(),
+            properties.offsets: inputs[properties.offsets].clone(),
+        }
+        self.previous_inputs.update({sample_idx: stored_inputs})
+
+        return inputs
 
 
 class TorchNeighborList(NeighborListTransform):
