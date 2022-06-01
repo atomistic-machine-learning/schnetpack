@@ -42,7 +42,7 @@ from ase import Atoms
 
 log = logging.getLogger(__name__)
 
-__all__ = ["SpkCalculator", "AseInterface", "AtomsConverter"]
+__all__ = ["SpkCalculator", "AseInterface", "AtomsConverter", "BatchWiseAtomsConverter"]
 
 
 class AtomsConverterError(Exception):
