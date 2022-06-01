@@ -214,9 +214,6 @@ class SkinNeighborList(Transform):
         - Not meant to be used for training, since the shuffling of training data results in large
           structural deviations between subsequent training samples.
         - Not transferable between different molecule conformations or varying atom indexing.
-        - When using a finite skin value also neighbors outside the cutoff are returned. Hence, to obtain equivalent
-          atomic environments with and without the usage of a cutoff skin, the computation of pair wise atomic distances
-          in the network must consider the cutoff accordingly. This is the case in the SchNet/PaiNN framework.
     """
 
     is_preprocessor: bool = True
@@ -225,19 +222,16 @@ class SkinNeighborList(Transform):
     def __init__(
         self,
         neighbor_list: Transform,
-        cache_location: str,
         nbh_postprocessing: Optional[List[torch.nn.Module]] = None,
         cutoff_skin: float = 0.3,
     ):
         """
         Args:
             neighbor_list: the neighbor list to use
-            cache_location: directory where cached model inputs (incl. neighbor list) are stored
             nbh_postprocessing: post-processing transforms for manipulating the neighbor lists provided by neighbor_list
             cutoff_skin: float
-                If no atom has moved more than the skin-distance since the neighborlist has been updated the last time,
-                then the neighbor list is reused. This will save some expensive rebuilds of the list, but extra
-                neighbors outside the cutoff will be returned.
+                If no atom has moved more than the skin-distance since the neighbor list has been updated the last time,
+                then the neighbor list is reused. This will save some expensive rebuilds of the list.
                 Note:
                     Please choose a sufficiently large cutoff_skin value to ensure that between two subsequent samples
                     no atom can penetrate through the skin into the cutoff sphere of another atom if it is not in the
@@ -252,7 +246,6 @@ class SkinNeighborList(Transform):
         self.cutoff_skin = cutoff_skin
         self.neighbor_list._cutoff = self.cutoff + cutoff_skin
         self.nbh_postprocessing = nbh_postprocessing or []
-        self.cache_location = cache_location
         self.distance_calculator = spk.atomistic.PairwiseDistances()
         self.previous_inputs = {}
 
