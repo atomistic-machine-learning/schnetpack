@@ -107,7 +107,6 @@ class AtomsConverter:
 class BatchWiseAtomsConverter(AtomsConverter):
     """
     Convert list of ASE atoms to SchNetPack input batch format for model prediction (batch of multiple samples).
-
     """
 
     def __init__(
@@ -120,18 +119,18 @@ class BatchWiseAtomsConverter(AtomsConverter):
         super().__init__(neighbor_list=neighbor_list, device=device, dtype=dtype)
         self.additional_inputs = additional_inputs or {}
 
-    def __call__(self, atoms_list: List[Atoms]):
+    def __call__(self, atoms: List[Atoms]):
         """
 
         Args:
-            atoms_list (list): list containing ASE atoms objects of multiple molecules, respectively.
+            atoms (list): list containing ASE atoms objects of multiple molecules, respectively.
 
         Returns:
             dict[str, torch.Tensor]: input batch for model.
         """
 
         inputs_batch = []
-        for at_idx, at in enumerate(atoms_list):
+        for at_idx, at in enumerate(atoms):
 
             inputs = {
                 properties.n_atoms: torch.tensor([at.get_global_number_of_atoms()]),
