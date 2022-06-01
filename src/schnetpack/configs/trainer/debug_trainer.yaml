@@ -6,7 +6,6 @@ min_epochs: 1
 max_epochs: 3
 
 # prints
-progress_bar_refresh_rate: null
 weights_summary: null
 profiler: simple
 

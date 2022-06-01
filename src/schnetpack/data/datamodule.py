@@ -9,7 +9,7 @@ import numpy as np
 import fasteners
 
 import pytorch_lightning as pl
-from pytorch_lightning.utilities.enums import DeviceType
+from pytorch_lightning.accelerators import GPUAccelerator
 import torch
 
 from schnetpack.data import (
@@ -57,7 +57,6 @@ class AtomsDataModule(pl.LightningDataModule):
         distance_unit: Optional[str] = None,
         data_workdir: Optional[str] = None,
         cleanup_workdir_stage: Optional[str] = "test",
-        pin_memory: Optional[bool] = None,
     ):
         """
         Args:
@@ -108,7 +107,6 @@ class AtomsDataModule(pl.LightningDataModule):
         self._is_setup = False
         self.data_workdir = data_workdir
         self.cleanup_workdir_stage = cleanup_workdir_stage
-        self.pin_memory = pin_memory
 
         self.train_idx = None
         self.val_idx = None
@@ -340,7 +338,7 @@ class AtomsDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=True,
-            pin_memory=self.use_pin_memory(),
+            pin_memory=self._use_pin_memory(),
         )
 
     def val_dataloader(self) -> AtomsLoader:
@@ -348,7 +346,7 @@ class AtomsDataModule(pl.LightningDataModule):
             self.val_dataset,
             batch_size=self.val_batch_size,
             num_workers=self.num_val_workers,
-            pin_memory=self.use_pin_memory(),
+            pin_memory=self._use_pin_memory(),
         )
 
     def test_dataloader(self) -> AtomsLoader:
@@ -356,14 +354,8 @@ class AtomsDataModule(pl.LightningDataModule):
             self.test_dataset,
             batch_size=self.test_batch_size,
             num_workers=self.num_test_workers,
-            pin_memory=self.use_pin_memory(),
+            pin_memory=self._use_pin_memory(),
         )
 
-    def use_pin_memory(self) -> bool:
-        if self.pin_memory is not None:
-            return self.pin_memory
-
-        if self.trainer is not None:
-            return self.trainer._device_type == DeviceType.GPU
-
-        return False
+    def _use_pin_memory(self):
+        return isinstance(self.trainer.accelerator, GPUAccelerator)
