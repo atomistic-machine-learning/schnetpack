@@ -43,7 +43,7 @@ from ase import Atoms
 
 log = logging.getLogger(__name__)
 
-__all__ = ["SpkCalculator", "AseInterface", "AtomsConverter", "BatchWiseAtomsConverter"]
+__all__ = ["SpkCalculator", "AseInterface", "AtomsConverter"]
 
 
 class AtomsConverterError(Exception):
@@ -52,7 +52,7 @@ class AtomsConverterError(Exception):
 
 class AtomsConverter:
     """
-    Convert ASE atoms to SchNetPack input batch format for model prediction (single sample).
+    Convert ASE atoms to SchNetPack input batch format for model prediction.
 
     """
 
@@ -61,10 +61,12 @@ class AtomsConverter:
         neighbor_list: schnetpack.transform.Transform,
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
+        additional_inputs: Dict[str, torch.Tensor] = None,
     ):
         self.neighbor_list = neighbor_list
         self.device = device
         self.dtype = dtype
+        self.additional_inputs = additional_inputs or {}
 
         # get transforms and initialize neighbor list
         self.transforms: List[schnetpack.transform.Transform] = [neighbor_list]
@@ -77,58 +79,27 @@ class AtomsConverter:
         else:
             raise AtomsConverterError(f"Unrecognized precision {dtype}")
 
-    def __call__(self, atoms: Atoms):
+    def __call__(self, atoms: List[Atoms] or Atoms):
         """
 
         Args:
-            atoms (ase.Atoms): ASE atoms object of the molecule.
+            atoms (list or ase.Atoms): list of ASE atoms objects or single ASE atoms object.
 
         Returns:
             dict[str, torch.Tensor]: input batch for model.
         """
-        inputs = {
-            properties.n_atoms: torch.tensor([atoms.get_global_number_of_atoms()]),
-            properties.Z: torch.from_numpy(atoms.get_atomic_numbers()),
-            properties.R: torch.from_numpy(atoms.get_positions()),
-            properties.cell: torch.from_numpy(atoms.get_cell().array),
-            properties.pbc: torch.from_numpy(atoms.get_pbc()),
-        }
 
-        for transform in self.transforms:
-            inputs = transform(inputs)
-
-        inputs = _atoms_collate_fn([inputs])
-
-        # Move input batch to device
-        inputs = {p: inputs[p].to(self.device) for p in inputs}
-
-        return inputs
-
-
-class BatchWiseAtomsConverter(AtomsConverter):
-    """
-    Convert list of ASE atoms to SchNetPack input batch format for model prediction (batch of multiple samples).
-    """
-
-    def __init__(
-        self,
-        neighbor_list: schnetpack.transform.Transform,
-        device: Union[str, torch.device] = "cpu",
-        dtype: torch.dtype = torch.float32,
-        additional_inputs: Dict[str, torch.Tensor] = None,
-    ):
-        super().__init__(neighbor_list=neighbor_list, device=device, dtype=dtype)
-        self.additional_inputs = additional_inputs or {}
-
-    def __call__(self, atoms: List[Atoms]):
-        """
-
-        Args:
-            atoms (list): list containing ASE atoms objects of multiple molecules, respectively.
-
-        Returns:
-            dict[str, torch.Tensor]: input batch for model.
-        """
+        # check input type and prepare for conversion
+        if type(atoms) == list:
+            pass
+        elif type(atoms) == ase.Atoms:
+            atoms = [atoms]
+        else:
+            raise TypeError(
+                "atoms is type {}, but should be either list or ase.Atoms object".format(
+                    type(atoms)
+                )
+            )
 
         inputs_batch = []
         for at_idx, at in enumerate(atoms):
@@ -141,7 +112,9 @@ class BatchWiseAtomsConverter(AtomsConverter):
                 properties.pbc: torch.from_numpy(at.get_pbc()),
             }
 
+            # specify sample index
             inputs.update({properties.idx: torch.tensor([at_idx])})
+            # add additional inputs, which might be required for further transforms
             inputs.update(self.additional_inputs)
 
             for transform in self.transforms:
