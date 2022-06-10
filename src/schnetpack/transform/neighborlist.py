@@ -506,10 +506,10 @@ class TorchNeighborList(NeighborListTransform):
         )
 
 
-class RemoveSomeNeighbors(Transform):
+class FilterNeighbors(Transform):
     """
-    Remove all neighbor list indices corresponding to interactions between a set of specified atoms. Latter must be
-    contained in the input data.
+    Filter out all neighbor list indices corresponding to interactions between a set of atoms. This set of atoms must
+    be specified in the input data.
     """
 
     def __init__(self, selection_name):
