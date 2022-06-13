@@ -11,8 +11,9 @@ if TYPE_CHECKING:
 import torch
 import logging
 
-from schnetpack.md.calculators.base_calculator import MDCalculator, MDCalculatorError
+from schnetpack.md.calculators.base_calculator import MDCalculator
 from schnetpack.md.calculators.ensemble_calculator import EnsembleCalculator
+from schnetpack.md.utils import activate_model_stress
 
 log = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ class SchNetPackCalculator(MDCalculator):
 
         if self.stress_label is not None:
             log.info("Activating stress computation...")
-            model = self._activate_stress(model)
+            model = activate_model_stress(model, self.stress_label)
 
         if self.script_model:
             log.info("Converting model to torch script...")
@@ -121,28 +122,6 @@ class SchNetPackCalculator(MDCalculator):
                         )
                     )
         model.do_postprocessing = False
-        return model
-
-    @staticmethod
-    def _activate_stress(model: AtomisticModel) -> AtomisticModel:
-        """
-        Activate stress computations for simulations in cells.
-
-        Args:
-            model (AtomisticTask): loaded schnetpack model for which stress computation should be activated.
-
-        Returns:
-
-        """
-        stress = False
-        for module in model.output_modules:
-            if isinstance(module, schnetpack.atomistic.response.Forces):
-                if hasattr(module, "calc_stress"):
-                    module.calc_stress = True
-                    stress = True
-        if not stress:
-            raise MDCalculatorError("Failed to activate stress computation")
-
         return model
 
     def calculate(self, system: System):
