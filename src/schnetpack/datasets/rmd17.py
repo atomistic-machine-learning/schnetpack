@@ -32,6 +32,20 @@ class rMD17(AtomsDataModule):
     energy = "energy"
     forces = "forces"
 
+    atomrefs = {
+        energy: [
+            0.0,
+            -313.5150902000774,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -23622.587180094913,
+            -34219.46811826416,
+            -47069.30768969713,
+        ]
+    }
+
     datasets_dict = dict(
         aspirin="rmd17_aspirin.npz",
         azobenzene="rmd17_azobenzene.npz",
@@ -149,6 +163,7 @@ class rMD17(AtomsDataModule):
                 format=self.format,
                 distance_unit="Ang",
                 property_unit_dict=property_unit_dict,
+                atomrefs=rMD17.atomrefs,
             )
             dataset.update_metadata(molecule=self.molecule)
 

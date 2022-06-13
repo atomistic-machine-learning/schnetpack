@@ -324,7 +324,7 @@ class AtomsDataModule(pl.LightningDataModule):
         stats = calculate_stats(
             self.train_dataloader(),
             divide_by_atoms={property: divide_by_atoms},
-            atomref=self.train_dataset.atomrefs,
+            atomref=self.train_dataset.atomrefs if remove_atomref else None,
         )[property]
         self._stats[key] = stats
         return stats

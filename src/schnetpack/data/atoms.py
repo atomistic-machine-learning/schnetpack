@@ -220,7 +220,6 @@ class ASEAtomsData(BaseAtomsData):
 
         self._check_db()
         self.conn = connect(self.datapath, use_lock_file=False)
-        print("####", self.datapath)
 
         # initialize units
         md = self.metadata
