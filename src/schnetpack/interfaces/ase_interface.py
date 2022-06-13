@@ -36,6 +36,7 @@ from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.transform import CastTo32, CastTo64
 from schnetpack.units import convert_units
+from schnetpack.md.utils import activate_model_stress
 
 from typing import Optional, List, Union
 from ase import Atoms
@@ -89,8 +90,8 @@ class AtomsConverter:
             properties.n_atoms: torch.tensor([atoms.get_global_number_of_atoms()]),
             properties.Z: torch.from_numpy(atoms.get_atomic_numbers()),
             properties.R: torch.from_numpy(atoms.get_positions()),
-            properties.cell: torch.from_numpy(atoms.get_cell().array),
-            properties.pbc: torch.from_numpy(atoms.get_pbc()),
+            properties.cell: torch.from_numpy(atoms.get_cell().array).view(1, 3, 3),
+            properties.pbc: torch.from_numpy(atoms.get_pbc()).view(1, 3),
         }
 
         for transform in self.transforms:
@@ -104,21 +105,25 @@ class AtomsConverter:
         return inputs
 
 
+class SpkCalculatorError(Exception):
+    pass
+
+
 class SpkCalculator(Calculator):
     """
     ASE calculator for schnetpack machine learning models.
 
     Args:
-        model: Trained model for calculations
-        neighbor_list: neighbor list for computing interatomic distances.
-        device: select to run calculations on 'cuda' or 'cpu'
-        energy: name of energy property in provided model.
-        forces: name of forces in provided model.
-        stress: name of stress property in provided model.
-        energy_units: energy units used by model
-        forces_units: force units used by model
-        stress_units: stress units used by model
-        precision: toggle model precision
+        model_file (str): path to trained model
+        neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
+        energy_label (str): label of energies in model (default="energy")
+        force_label (str): label of forces in model (default="forces")
+        stress_label (str): label of stress tensor in model. Will not be computed if set to None (default=None)
+        energy_units (str, float): energy units used by model (default="kcal/mol")
+        position_units (str, float): position units used by model (default="Angstrom")
+        device (torch.device): device used for calculations (default="cpu")
+        dtype (torch.dtype): select model precision (default=float32)
+        converter (schnetpack.interfaces.AtomsConverter): converter used to set up input batches
         **kwargs: Additional arguments for basic ase calculator class
     """
 
@@ -129,38 +134,71 @@ class SpkCalculator(Calculator):
 
     def __init__(
         self,
-        model: schnetpack.model.AtomisticModel,
-        converter: AtomsConverter,
-        energy: str = "energy",
-        forces: str = "forces",
-        stress: str = "stress",
+        model_file: str,
+        neighbor_list: schnetpack.transform.Transform,
+        energy_label: str = "energy",
+        force_label: str = "forces",
+        stress_label: Optional[str] = None,
         energy_units: Union[str, float] = "kcal/mol",
-        forces_units: Union[str, float] = "kcal/mol/Angstrom",
-        stress_units: Union[str, float] = "kcal/mol/Angstrom/Angstrom/Angstrom",
+        position_units: Union[str, float] = "Angstrom",
+        device: Union[str, torch.device] = "cpu",
+        dtype: torch.dtype = torch.float32,
+        converter: AtomsConverter = AtomsConverter,
         **kwargs,
     ):
         Calculator.__init__(self, **kwargs)
 
-        self.converter = converter
+        self.converter = converter(neighbor_list, device=device, dtype=dtype)
 
-        self.model = model
-        self.model.to(device=self.converter.device, dtype=self.converter.dtype)
-
-        # TODO: activate computation of stress in model if requested
+        self.energy_label = energy_label
+        self.force_label = force_label
+        self.stress_label = stress_label
 
         # Mapping between ASE names and model outputs
         self.property_map = {
-            self.energy: energy,
-            self.forces: forces,
-            self.stress: stress,
+            self.energy: energy_label,
+            self.forces: force_label,
+            self.stress: stress_label,
         }
+
+        self.model = self._load_model(model_file)
+        self.model.to(device=device, dtype=dtype)
+
+        # set up basic conversion factors
+        self.energy_conversion = convert_units(energy_units, "eV")
+        self.position_conversion = convert_units(position_units, "Angstrom")
 
         # Unit conversion to default ASE units
         self.property_units = {
-            self.energy: convert_units(energy_units, "eV"),
-            self.forces: convert_units(forces_units, "eV/Angstrom"),
-            self.stress: convert_units(stress_units, "eV/Ang/Ang/Ang"),
+            self.energy: self.energy_conversion,
+            self.forces: self.energy_conversion / self.position_conversion,
+            self.stress: self.energy_conversion / self.position_conversion**3,
         }
+
+        # Container for basic ml model ouputs
+        self.model_results = None
+
+    def _load_model(self, model_file: str) -> schnetpack.model.AtomisticModel:
+        """
+        Load an individual model, activate stress computation
+
+        Args:
+            model_file (str): path to model.
+
+        Returns:
+           AtomisticTask: loaded schnetpack model
+        """
+
+        log.info("Loading model from {:s}".format(model_file))
+        # load model and keep it on CPU, device can be changed afterwards
+        model = torch.load(model_file, map_location="cpu").to(torch.float64)
+        model = model.eval()
+
+        if self.stress_label is not None:
+            log.info("Activating stress computation...")
+            model = activate_model_stress(model, self.stress_label)
+
+        return model
 
     def calculate(
         self,
@@ -171,7 +209,7 @@ class SpkCalculator(Calculator):
         """
         Args:
             atoms (ase.Atoms): ASE atoms object.
-            properties (list of str): do not use this, no functionality
+            properties (list of str): select properties computed and stored to results.
             system_changes (list of str): List of changes for ASE.
         """
         # First call original calculator to set atoms attribute
@@ -188,8 +226,9 @@ class SpkCalculator(Calculator):
             # TODO: use index information to slice everything properly
             for prop in properties:
                 model_prop = self.property_map[prop]
+
                 if model_prop in model_results:
-                    if prop == self.energy:
+                    if prop == self.energy or prop == self.stress:
                         # ase calculator should return scalar energy
                         results[prop] = (
                             model_results[model_prop].cpu().data.numpy()[0]
@@ -203,11 +242,12 @@ class SpkCalculator(Calculator):
                 else:
                     raise AtomsConverterError(
                         "'{:s}' is not a property of your model. Please "
-                        "check the model"
-                        "properties!".format(model_prop)
+                        "check the model "
+                        "properties!".format(prop)
                     )
 
             self.results = results
+            self.model_results = model_results
 
 
 class AseInterface:
@@ -219,29 +259,31 @@ class AseInterface:
         self,
         molecule_path: str,
         working_dir: str,
-        model: schnetpack.model.AtomisticModel,
-        converter: AtomsConverter,
-        energy: str = "energy",
-        forces: str = "forces",
-        stress: str = "stress",
+        model_file: str,
+        neighbor_list: schnetpack.transform.Transform,
+        energy_label: str = "energy",
+        force_label: str = "forces",
+        stress_label: Optional[str] = None,
         energy_units: Union[str, float] = "kcal/mol",
-        forces_units: Union[str, float] = "kcal/mol/Angstrom",
-        stress_units: Union[str, float] = "kcal/mol/Angstrom/Angstrom/Angstrom",
+        position_units: Union[str, float] = "Angstrom",
+        device: Union[str, torch.device] = "cpu",
+        dtype: torch.dtype = torch.float32,
+        converter: AtomsConverter = AtomsConverter,
     ):
         """
         Args:
             molecule_path: Path to initial geometry
             working_dir: Path to directory where files should be stored
-            model: Trained model
-            neighbor_list: neighbor list for computing interatomic distances.
-            device: select to run calculations on 'cuda' or 'cpu'
-            energy: name of energy property in provided model.
-            forces: name of forces in provided model.
-            stress: name of stress property in provided model.
-            energy_units: energy units used by model
-            forces_units: force units used by model
-            stress_units: stress units used by model
-            precision: toggle model precision
+            model_file (str): path to trained model
+            neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
+            energy_label (str): label of energies in model (default="energy")
+            force_label (str): label of forces in model (default="forces")
+            stress_label (str): label of stress tensor in model. Will not be computed if set to None (default=None)
+            energy_units (str, float): energy units used by model (default="kcal/mol")
+            position_units (str, float): position units used by model (default="Angstrom")
+            device (torch.device): device used for calculations (default="cpu")
+            dtype (torch.dtype): select model precision (default=float32)
+            converter (schnetpack.interfaces.AtomsConverter): converter used to set up input batches
         """
         # Setup directory
         self.working_dir = working_dir
@@ -253,14 +295,16 @@ class AseInterface:
 
         # Set up calculator
         calculator = SpkCalculator(
-            model,
-            converter=converter,
-            energy=energy,
-            forces=forces,
-            stress=stress,
+            model_file=model_file,
+            neighbor_list=neighbor_list,
+            energy_label=energy_label,
+            force_label=force_label,
+            stress_label=stress_label,
             energy_units=energy_units,
-            forces_units=forces_units,
-            stress_units=stress_units,
+            position_units=position_units,
+            device=device,
+            dtype=dtype,
+            converter=converter,
         )
 
         self.molecule.set_calculator(calculator)
