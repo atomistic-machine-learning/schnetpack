@@ -152,7 +152,7 @@ class MD17(AtomsDataModule):
                 format=self.format,
                 distance_unit="Ang",
                 property_unit_dict=property_unit_dict,
-                atomrefs=atomrefs,
+                atomrefs=MD17.atomrefs,
             )
             dataset.update_metadata(molecule=self.molecule)
 
