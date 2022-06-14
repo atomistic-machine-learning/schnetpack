@@ -12,6 +12,7 @@ __all__ = [
     "SubtractCenterOfGeometry",
     "AddOffsets",
     "RemoveOffsets",
+    "ScalePES",
 ]
 
 
@@ -110,9 +111,42 @@ class RemoveOffsets(Transform):
         return inputs
 
 
+class ScalePES(Transform):
+    """
+    Scale the energy outputs of the network without influencing the gradient.
+    This is equivalent to scaling the labels for training and rescaling afterwards.
+    """
+
+    is_preprocessor: bool = False
+    is_postprocessor: bool = False
+
+    def __init__(self, input_key: str, target_key: str = None, output_key: str = None):
+        super().__init__()
+        self.input_key = input_key
+        self.target_key = target_key or input_key
+        self.output_key = output_key or input_key
+        self.model_outputs = [self.output_key]
+
+        self.register_buffer("scale", torch.ones((1,)))
+
+    def datamodule(self, value):
+        self._datamodule = value
+
+        stats = self._datamodule.get_stats(self.target_key, True, False)
+        self.scale = abs(stats[0]).detach()
+
+    def forward(
+        self,
+        inputs: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+        inputs[self.output_key] = inputs[self.input_key] * self.scale
+        return inputs
+
+
 class AddOffsets(Transform):
     """
-    Add offsets to property based on the mean of the training data and/or the single atom reference calculations.
+    Add offsets to property based on the mean of the training data and/or the single
+    atom reference calculations.
     """
 
     is_preprocessor: bool = True
