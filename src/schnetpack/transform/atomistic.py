@@ -12,7 +12,7 @@ __all__ = [
     "SubtractCenterOfGeometry",
     "AddOffsets",
     "RemoveOffsets",
-    "ScalePES",
+    "ScaleProperty",
 ]
 
 
@@ -111,20 +111,41 @@ class RemoveOffsets(Transform):
         return inputs
 
 
-class ScalePES(Transform):
+class ScaleProperty(Transform):
     """
     Scale the energy outputs of the network without influencing the gradient.
     This is equivalent to scaling the labels for training and rescaling afterwards.
+
+    Hint:
+        If you want to add a bias to the prediction, use the ``AddOffsets``
+        postprocessor and place it after casting to float64 for higher numerical
+        precision.
     """
 
     is_preprocessor: bool = False
     is_postprocessor: bool = False
 
-    def __init__(self, input_key: str, target_key: str = None, output_key: str = None):
+    def __init__(
+        self,
+        input_key: str,
+        target_key: str = None,
+        output_key: str = None,
+        scale_by_mean: bool = False,
+    ):
+        """
+        Args:
+            input_key: dict key of input to be scaled
+            target_key: dict key of target to derive scaling from
+                (either its mean or std dev)
+            output_key: dict key for scaled output
+            scale_by_mean: if true, use the mean of the target variable for scaling,
+                otherwise use its standard deviation
+        """
         super().__init__()
         self.input_key = input_key
-        self.target_key = target_key or input_key
+        self._target_key = target_key or input_key
         self.output_key = output_key or input_key
+        self._scale_by_mean = scale_by_mean
         self.model_outputs = [self.output_key]
 
         self.register_buffer("scale", torch.ones((1,)))
@@ -132,7 +153,8 @@ class ScalePES(Transform):
     def datamodule(self, value):
         self._datamodule = value
 
-        stats = self._datamodule.get_stats(self.target_key, True, False)
+        stats = self._datamodule.get_stats(self._target_key, True, False)
+        scale = stat[0] if self._scale_by_mean else stats[1]
         self.scale = abs(stats[0]).detach()
 
     def forward(
@@ -147,6 +169,10 @@ class AddOffsets(Transform):
     """
     Add offsets to property based on the mean of the training data and/or the single
     atom reference calculations.
+
+    Hint:
+        Place this postprocessor after casting to float64 for higher numerical
+        precision.
     """
 
     is_preprocessor: bool = True
