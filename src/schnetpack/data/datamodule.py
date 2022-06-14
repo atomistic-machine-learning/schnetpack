@@ -61,6 +61,7 @@ class AtomsDataModule(pl.LightningDataModule):
         data_workdir: Optional[str] = None,
         cleanup_workdir_stage: Optional[str] = "test",
         splitting: Optional[SplittingStrategy] = None,
+        pin_memory: Optional[bool] = None,
     ):
         """
         Args:
@@ -69,7 +70,7 @@ class AtomsDataModule(pl.LightningDataModule):
             num_train: number of training examples (absolute or relative)
             num_val: number of validation examples (absolute or relative)
             num_test: number of test examples (absolute or relative)
-            split_file: path to npz file with testdata partitions
+            split_file: path to npz file with data partitions
             format: dataset format
             load_properties: subset of properties to load
             val_batch_size: validation batch size. If None, use test_batch_size, then
@@ -81,23 +82,23 @@ class AtomsDataModule(pl.LightningDataModule):
             train_transforms: Overrides transform_fn for training.
             val_transforms: Overrides transform_fn for validation.
             test_transforms: Overrides transform_fn for testing.
-            num_workers: Number of testdata loader workers.
-            num_val_workers: Number of validation testdata loader workers
+            num_workers: Number of data loader workers.
+            num_val_workers: Number of validation data loader workers
                 (overrides num_workers).
-            num_test_workers: Number of test testdata loader workers
+            num_test_workers: Number of test data loader workers
                 (overrides num_workers).
             property_units: Dictionary from property to corresponding unit as a string
                 (eV, kcal/mol, ...).
             distance_unit: Unit of the atom positions and cell as a string
                 (Ang, Bohr, ...).
-            data_workdir: Copy testdata here as part of setup, e.g. to a local file
+            data_workdir: Copy data here as part of setup, e.g. to a local file
                 system for faster performance.
-            cleanup_workdir_after: Determines after which stage to remove the testdata
+            cleanup_workdir_after: Determines after which stage to remove the data
                 workdir
-            pin_memory: If true, pin memory of loaded testdata to GPU. Default: Will be
-                set to true, when GPUs are used.
             splitting: Method to generate train/validation/test partitions
                 (default: RandomSplit)
+            pin_memory: If true, pin memory of loaded data to GPU. Default: Will be
+                set to true, when GPUs are used.
         """
         super().__init__()
 
@@ -124,6 +125,12 @@ class AtomsDataModule(pl.LightningDataModule):
         self._is_setup = False
         self.data_workdir = data_workdir
         self.cleanup_workdir_stage = cleanup_workdir_stage
+        self._pin_memory = pin_memory
+        if self._pin_memory is None:
+            try:
+                self._pin_memory = isinstance(self.trainer.accelerator, GPUAccelerator)
+            except:
+                self._pin_memory = False
 
         self.train_idx = None
         self.val_idx = None
@@ -202,7 +209,7 @@ class AtomsDataModule(pl.LightningDataModule):
 
             # retry reading, in case other process finished in the meantime
             if not os.path.exists(datapath):
-                self._log_with_rank("Copy testdata to testdata workdir")
+                self._log_with_rank("Copy data to data workdir")
                 shutil.copy(self.datapath, datapath)
 
             # reset datasets in case they need to be reloaded
@@ -347,7 +354,7 @@ class AtomsDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=True,
-            pin_memory=self._use_pin_memory(),
+            pin_memory=self._pin_memory,
         )
 
     def val_dataloader(self) -> AtomsLoader:
@@ -355,7 +362,7 @@ class AtomsDataModule(pl.LightningDataModule):
             self.val_dataset,
             batch_size=self.val_batch_size,
             num_workers=self.num_val_workers,
-            pin_memory=self._use_pin_memory(),
+            pin_memory=self._pin_memory,
         )
 
     def test_dataloader(self) -> AtomsLoader:
@@ -363,8 +370,5 @@ class AtomsDataModule(pl.LightningDataModule):
             self.test_dataset,
             batch_size=self.test_batch_size,
             num_workers=self.num_test_workers,
-            pin_memory=self._use_pin_memory(),
+            pin_memory=self._pin_memory,
         )
-
-    def _use_pin_memory(self):
-        return isinstance(self.trainer.accelerator, GPUAccelerator)
