@@ -15,6 +15,7 @@ import os
 
 import ase
 from ase import units
+from ase.constraints import FixAtoms
 from ase.calculators.calculator import Calculator, all_changes
 from ase.io import read, write
 from ase.io.trajectory import Trajectory
@@ -37,7 +38,7 @@ from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.transform import CastTo32, CastTo64
 from schnetpack.units import convert_units
 
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Dict
 from ase import Atoms
 
 log = logging.getLogger(__name__)
@@ -60,10 +61,12 @@ class AtomsConverter:
         neighbor_list: schnetpack.transform.Transform,
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
+        additional_inputs: Dict[str, torch.Tensor] = None,
     ):
         self.neighbor_list = neighbor_list
         self.device = device
         self.dtype = dtype
+        self.additional_inputs = additional_inputs or {}
 
         # get transforms and initialize neighbor list
         self.transforms: List[schnetpack.transform.Transform] = [neighbor_list]
@@ -76,27 +79,49 @@ class AtomsConverter:
         else:
             raise AtomsConverterError(f"Unrecognized precision {dtype}")
 
-    def __call__(self, atoms: Atoms):
+    def __call__(self, atoms: List[Atoms] or Atoms):
         """
 
         Args:
-            atoms (ase.Atoms): ASE atoms object of the molecule.
+            atoms (list or ase.Atoms): list of ASE atoms objects or single ASE atoms object.
 
         Returns:
             dict[str, torch.Tensor]: input batch for model.
         """
-        inputs = {
-            properties.n_atoms: torch.tensor([atoms.get_global_number_of_atoms()]),
-            properties.Z: torch.from_numpy(atoms.get_atomic_numbers()),
-            properties.R: torch.from_numpy(atoms.get_positions()),
-            properties.cell: torch.from_numpy(atoms.get_cell().array),
-            properties.pbc: torch.from_numpy(atoms.get_pbc()),
-        }
 
-        for transform in self.transforms:
-            inputs = transform(inputs)
+        # check input type and prepare for conversion
+        if type(atoms) == list:
+            pass
+        elif type(atoms) == ase.Atoms:
+            atoms = [atoms]
+        else:
+            raise TypeError(
+                "atoms is type {}, but should be either list or ase.Atoms object".format(
+                    type(atoms)
+                )
+            )
 
-        inputs = _atoms_collate_fn([inputs])
+        inputs_batch = []
+        for at_idx, at in enumerate(atoms):
+
+            inputs = {
+                properties.n_atoms: torch.tensor([at.get_global_number_of_atoms()]),
+                properties.Z: torch.from_numpy(at.get_atomic_numbers()),
+                properties.R: torch.from_numpy(at.get_positions()),
+                properties.cell: torch.from_numpy(at.get_cell().array),
+                properties.pbc: torch.from_numpy(at.get_pbc()),
+            }
+
+            # specify sample index
+            inputs.update({properties.idx: torch.tensor([at_idx])})
+            # add additional inputs, which might be required for further transforms
+            inputs.update(self.additional_inputs)
+
+            for transform in self.transforms:
+                inputs = transform(inputs)
+            inputs_batch.append(inputs)
+
+        inputs = _atoms_collate_fn(inputs_batch)
 
         # Move input batch to device
         inputs = {p: inputs[p].to(self.device) for p in inputs}
@@ -221,12 +246,14 @@ class AseInterface:
         working_dir: str,
         model: schnetpack.model.AtomisticModel,
         converter: AtomsConverter,
+        optimizer_class: type = QuasiNewton,
         energy: str = "energy",
         forces: str = "forces",
         stress: str = "stress",
         energy_units: Union[str, float] = "kcal/mol",
         forces_units: Union[str, float] = "kcal/mol/Angstrom",
         stress_units: Union[str, float] = "kcal/mol/Angstrom/Angstrom/Angstrom",
+        fixed_atoms: Optional[List[int]] = None,
     ):
         """
         Args:
@@ -242,6 +269,7 @@ class AseInterface:
             forces_units: force units used by model
             stress_units: stress units used by model
             precision: toggle model precision
+            fixed_atoms: list of indices corresponding to fixed atoms
         """
         # Setup directory
         self.working_dir = working_dir
@@ -250,6 +278,12 @@ class AseInterface:
 
         # Load the molecule
         self.molecule = read(molecule_path)
+        if fixed_atoms:
+            c = FixAtoms(fixed_atoms)
+            self.molecule.set_constraint(constraint=c)
+
+        # Set up optimizer
+        self.optimizer_class = optimizer_class
 
         # Set up calculator
         calculator = SpkCalculator(
@@ -402,7 +436,7 @@ class AseInterface:
         """
         name = "optimization"
         optimize_file = os.path.join(self.working_dir, name)
-        optimizer = QuasiNewton(
+        optimizer = self.optimizer_class(
             self.molecule,
             trajectory="{:s}.traj".format(optimize_file),
             restart="{:s}.pkl".format(optimize_file),
@@ -410,7 +444,7 @@ class AseInterface:
         optimizer.run(fmax, steps)
 
         # Save final geometry in xyz format
-        self.save_molecule(name)
+        self.save_molecule(name, file_format="extxyz")
 
     def compute_normal_modes(self, write_jmol: bool = True):
         """
