@@ -26,11 +26,11 @@ def absolute_split_sizes(dsize, split_sizes):
             if s < 1:
                 split_sizes[i] = int(math.floor(s * dsize))
 
-            psum += s
+            psum += split_sizes[i]
 
     if none_idx is not None:
         remaining = dsize - psum
-        split_sizes[none_idx] = remaining
+        split_sizes[none_idx] = int(remaining)
 
     return split_sizes
 
