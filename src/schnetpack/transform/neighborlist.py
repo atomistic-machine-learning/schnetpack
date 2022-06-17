@@ -18,6 +18,8 @@ __all__ = [
     "NeighborListTransform",
     "WrapPositions",
     "SkinNeighborList",
+    "NeighborlistWrapper",
+    "FilterNeighbors",
 ]
 
 import schnetpack as spk
@@ -27,6 +29,37 @@ import fasteners
 
 class CacheException(Exception):
     pass
+
+
+class NeighborlistWrapper(Transform):
+    """
+    Wrapper class for neighbor lists. Using this wrapper allows to add multiple postprocessing steps to the neighbor
+    list transform
+    """
+
+    def __init__(
+        self,
+        neighbor_list: Transform,
+        nbh_postprocessing: Optional[List[torch.nn.Module]] = None,
+    ):
+        """
+        Args:
+            neighbor_list: the neighbor list to use
+            nbh_postprocessing: post-processing transforms for manipulating the neighbor lists provided by neighbor_list
+        """
+        super().__init__()
+        self.neighbor_list = neighbor_list
+        self.nbh_postprocessing = nbh_postprocessing or []
+
+    def forward(
+        self,
+        inputs: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+
+        inputs = self.neighbor_list(inputs)
+        for postprocess in self.nbh_postprocessing:
+            inputs = postprocess(inputs)
+        return inputs
 
 
 class CachedNeighborList(Transform):
@@ -214,9 +247,6 @@ class SkinNeighborList(Transform):
         - Not meant to be used for training, since the shuffling of training data results in large
           structural deviations between subsequent training samples.
         - Not transferable between different molecule conformations or varying atom indexing.
-        - When using a finite skin value also neighbors outside the cutoff are returned. Hence, to obtain equivalent
-          atomic environments with and without the usage of a cutoff skin, the computation of pair wise atomic distances
-          in the network must consider the cutoff accordingly. This is the case in the SchNet/PaiNN framework.
     """
 
     is_preprocessor: bool = True
@@ -225,19 +255,16 @@ class SkinNeighborList(Transform):
     def __init__(
         self,
         neighbor_list: Transform,
-        cache_location: str,
         nbh_postprocessing: Optional[List[torch.nn.Module]] = None,
         cutoff_skin: float = 0.3,
     ):
         """
         Args:
             neighbor_list: the neighbor list to use
-            cache_location: directory where cached model inputs (incl. neighbor list) are stored
             nbh_postprocessing: post-processing transforms for manipulating the neighbor lists provided by neighbor_list
             cutoff_skin: float
-                If no atom has moved more than the skin-distance since the neighborlist has been updated the last time,
-                then the neighbor list is reused. This will save some expensive rebuilds of the list, but extra
-                neighbors outside the cutoff will be returned.
+                If no atom has moved more than the skin-distance since the neighbor list has been updated the last time,
+                then the neighbor list is reused. This will save some expensive rebuilds of the list.
                 Note:
                     Please choose a sufficiently large cutoff_skin value to ensure that between two subsequent samples
                     no atom can penetrate through the skin into the cutoff sphere of another atom if it is not in the
@@ -246,13 +273,11 @@ class SkinNeighborList(Transform):
 
         super().__init__()
 
-        self.nupdates = 0
         self.neighbor_list = neighbor_list
         self.cutoff = neighbor_list._cutoff
         self.cutoff_skin = cutoff_skin
         self.neighbor_list._cutoff = self.cutoff + cutoff_skin
         self.nbh_postprocessing = nbh_postprocessing or []
-        self.cache_location = cache_location
         self.distance_calculator = spk.atomistic.PairwiseDistances()
         self.previous_inputs = {}
 
@@ -267,6 +292,9 @@ class SkinNeighborList(Transform):
         inputs = self._remove_neighbors_in_skin(inputs)
 
         return inputs
+
+    def reset(self):
+        self.previous_inputs = {}
 
     def _remove_neighbors_in_skin(
         self,
@@ -295,7 +323,7 @@ class SkinNeighborList(Transform):
         sample_idx = inputs[properties.idx].item()
 
         # check if previous neighbor list exists and make sure that this is not the first update step
-        if sample_idx in self.previous_inputs.keys() and self.nupdates != 0:
+        if sample_idx in self.previous_inputs.keys():
             # load previous inputs
             previous_inputs = self.previous_inputs[sample_idx]
             # extract previous structure
@@ -337,8 +365,6 @@ class SkinNeighborList(Transform):
         inputs = self.neighbor_list(inputs)
         for postprocess in self.nbh_postprocessing:
             inputs = postprocess(inputs)
-
-        self.nupdates += 1
 
         # store new reference conformation and remove old one
         sample_idx = inputs[properties.idx].item()
@@ -478,6 +504,42 @@ class TorchNeighborList(NeighborListTransform):
                 torch.cartesian_prod(o, o, r3),
             ]
         )
+
+
+class FilterNeighbors(Transform):
+    """
+    Filter out all neighbor list indices corresponding to interactions between a set of atoms. This set of atoms must
+    be specified in the input data.
+    """
+
+    def __init__(self, selection_name):
+        """
+        Args:
+            selection_name (str): key in the input data corresponding to the set of atoms between which no interactions
+                should be considered.
+        """
+        self.selection_name = selection_name
+        super().__init__()
+
+    def forward(
+        self,
+        inputs: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+
+        n_neighbors = inputs[properties.idx_i].shape[0]
+        slab_indices = inputs[self.selection_name].tolist()
+        kept_nbh_indices = []
+        for nbh_idx in range(n_neighbors):
+            i = inputs[properties.idx_i][nbh_idx].item()
+            j = inputs[properties.idx_j][nbh_idx].item()
+            if i not in slab_indices or j not in slab_indices:
+                kept_nbh_indices.append(nbh_idx)
+
+        inputs[properties.idx_i] = inputs[properties.idx_i][kept_nbh_indices]
+        inputs[properties.idx_j] = inputs[properties.idx_j][kept_nbh_indices]
+        inputs[properties.offsets] = inputs[properties.offsets][kept_nbh_indices]
+
+        return inputs
 
 
 class CollectAtomTriples(Transform):
