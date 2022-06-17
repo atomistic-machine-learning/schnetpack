@@ -114,6 +114,7 @@ class rMD17(AtomsDataModule):
                 (Ang, Bohr, ...).
             data_workdir: Copy data here as part of setup, e.g. cluster scratch for
                 faster performance.
+            split_id: The id of the predefined rMD17 train/test splits (0-4).
         """
 
         splitting = SubsamplePartitions(

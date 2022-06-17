@@ -6,8 +6,15 @@ import numpy as np
 __all__ = ["SplittingStrategy", "RandomSplit", "SubsamplePartitions"]
 
 
-def absolute_split_sizes(dsize, split_sizes):
-    """Convert partition sizes to absolute values"""
+def absolute_split_sizes(dsize: int, split_sizes: List[int]) -> List[int]:
+    """
+    Convert partition sizes to absolute values
+
+    Args:
+        dsize - Size of dataset.
+        split_sizes - Sizes for each split. One can be set to -1 to assign all
+            remaining data.
+    """
     none_idx = None
     split_sizes = list(split_sizes)
     psum = 0
@@ -35,7 +42,16 @@ def absolute_split_sizes(dsize, split_sizes):
     return split_sizes
 
 
-def random_split(dsize, *split_sizes):
+def random_split(dsize: int, *split_sizes: Union[int, float]) -> List[torch.tensor]:
+    """
+    Randomly split the dataset
+
+    Args:
+        dsize - Size of dataset.
+        split_sizes - Sizes for each split. One can be set to -1 to assign all
+            remaining data. Values in [0, 1] can be used to give relative partition
+            sizes.
+    """
     split_sizes = absolute_split_sizes(dsize, split_sizes)
     offsets = torch.cumsum(torch.tensor(split_sizes), dim=0)
     indices = torch.randperm(sum(split_sizes)).tolist()
@@ -47,19 +63,34 @@ def random_split(dsize, *split_sizes):
 
 
 class SplittingStrategy:
+    """
+    Base class to implement various data splitting methods.
+    """
+
     def __init__(self):
         pass
 
-    def split(self, dataset, *split_sizes):
+    def split(self, dataset, *split_sizes) -> List[torch.tensor]:
+        """
+        Args:
+            dsize - Size of dataset.
+            split_sizes - Sizes for each split. One can be set to -1 to assign all
+                remaining data. Values in [0, 1] can be used to give relative partition
+                sizes.
+
+        Returns:
+            list of partitions, where each one is a torch tensor with indices
+
+        """
         raise NotImplementedError
 
 
 class RandomSplit(SplittingStrategy):
     """
-    Split the data randomly into the given partition sizes
+    Splitting strategy that partitions the data randomly into the given sizes
     """
 
-    def split(self, dataset, *split_sizes):
+    def split(self, dataset, *split_sizes) -> List[torch.tensor]:
         dsize = len(dataset)
         partition_sizes_idx = random_split(dsize, *split_sizes)
         return partition_sizes_idx
@@ -67,7 +98,19 @@ class RandomSplit(SplittingStrategy):
 
 class SubsamplePartitions(SplittingStrategy):
     """
-    Split predefined partitions as defined in the metadata of the atoms dataset.
+    Strategy that splits the atoms dataset into predefined partitions as defined in the
+    metadata. If the split size is smaller then the predefined partition, a given
+    strategy will be used to subsample the partition (default: random).
+
+    An metadata in the atoms dataset might look like this:
+
+    >>> metadata = {
+        my_partition_key : {
+            "known": [0, 1, 2, 3],
+            "test": [5, 6, 7]
+        }
+     }
+
     """
 
     def __init__(
@@ -77,6 +120,17 @@ class SubsamplePartitions(SplittingStrategy):
         base_splitting: Optional[SplittingStrategy] = None,
         partition_key: str = "splits",
     ):
+        """
+        Args:
+            split_partition_sources: names of partitions in metadata in the order of the
+                supplied `split_sizes` in the `split` method. The same source can be
+                used for multiple partitions. In that case the given `base_splitting`
+                handles distribution the further splitting within each of the sources
+                separately.
+            split_id: the id of the predefined splitting
+            base_splitting: method to subsample each partition
+            partition_key: key in the metadata under which teh splitting is stores.
+        """
         self.split_partition_sources = split_partition_sources
         self.partition_key = partition_key
         self.split_id = split_id
