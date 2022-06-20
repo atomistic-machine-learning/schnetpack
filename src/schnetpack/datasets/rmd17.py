@@ -2,6 +2,7 @@ import logging
 import os
 import shutil
 import tempfile
+import tarfile
 from typing import List, Optional, Dict
 from urllib import request as request
 
@@ -13,16 +14,18 @@ import schnetpack.properties as structure
 
 from schnetpack.data import *
 
-__all__ = ["MD17"]
+__all__ = ["rMD17"]
 
 
-class MD17(AtomsDataModule):
+class rMD17(AtomsDataModule):
     """
-    MD17 benchmark data set for molecular dynamics of small molecules
+    Revised MD17 benchmark data set for molecular dynamics of small molecules
     containing molecular forces.
 
     References:
-        .. [#md17_1] http://quantum-machine.org/gdml/#datasets
+        .. [#md17_1] https://figshare.com/articles/dataset/
+            Revised_MD17_dataset_rMD17_/12672038?file=24013628
+        .. [#md17_2] http://quantum-machine.org/gdml/#datasets
 
     """
 
@@ -44,20 +47,16 @@ class MD17(AtomsDataModule):
     }
 
     datasets_dict = dict(
-        aspirin="aspirin_dft.npz",
-        # aspirin_ccsd='aspirin_ccsd.zip',
-        azobenzene="azobenzene_dft.npz",
-        benzene="benzene_dft.npz",
-        ethanol="ethanol_dft.npz",
-        # ethanol_ccsdt='ethanol_ccsd_t.zip',
-        malonaldehyde="malonaldehyde_dft.npz",
-        # malonaldehyde_ccsdt='malonaldehyde_ccsd_t.zip',
-        naphthalene="naphthalene_dft.npz",
-        paracetamol="paracetamol_dft.npz",
-        salicylic_acid="salicylic_dft.npz",
-        toluene="toluene_dft.npz",
-        # toluene_ccsdt='toluene_ccsd_t.zip',
-        uracil="uracil_dft.npz",
+        aspirin="rmd17_aspirin.npz",
+        azobenzene="rmd17_azobenzene.npz",
+        benzene="rmd17_benzene.npz",
+        ethanol="rmd17_ethanol.npz",
+        malonaldehyde="rmd17_malonaldehyde.npz",
+        naphthalene="rmd17_naphthalene.npz",
+        paracetamol="rmd17_paracetamol.npz",
+        salicylic_acid="rmd17_salicylic.npz",
+        toluene="rmd17_toluene.npz",
+        uracil="rmd17_uracil.npz",
     )
     existing_datasets = datasets_dict.keys()
 
@@ -85,6 +84,7 @@ class MD17(AtomsDataModule):
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
         data_workdir: Optional[str] = None,
+        split_id: int = 0,
         **kwargs,
     ):
         """
@@ -97,18 +97,29 @@ class MD17(AtomsDataModule):
             split_file: path to npz file with data partitions
             format: dataset format
             load_properties: subset of properties to load
-            val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
-            test_batch_size: test batch size. If None, use val_batch_size, then batch_size.
+            val_batch_size: validation batch size. If None, use test_batch_size, then
+                batch_size.
+            test_batch_size: test batch size. If None, use val_batch_size, then
+                batch_size.
             transforms: Transform applied to each system separately before batching.
             train_transforms: Overrides transform_fn for training.
             val_transforms: Overrides transform_fn for validation.
             test_transforms: Overrides transform_fn for testing.
             num_workers: Number of data loader workers.
-            num_val_workers: Number of validation data loader workers (overrides num_workers).
-            num_test_workers: Number of test data loader workers (overrides num_workers).
-            distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
-            data_workdir: Copy data here as part of setup, e.g. cluster scratch for faster performance.
+            num_val_workers: Number of validation data loader workers
+                (overrides num_workers).
+            num_test_workers: Number of test data loader workers
+                (overrides num_workers).
+            distance_unit: Unit of the atom positions and cell as a string
+                (Ang, Bohr, ...).
+            data_workdir: Copy data here as part of setup, e.g. cluster scratch for
+                faster performance.
+            split_id: The id of the predefined rMD17 train/test splits (0-4).
         """
+
+        splitting = SubsamplePartitions(
+            split_partition_sources=["known", "known", "test"], split_id=split_id
+        )
         super().__init__(
             datapath=datapath,
             batch_size=batch_size,
@@ -130,10 +141,11 @@ class MD17(AtomsDataModule):
             property_units=property_units,
             distance_unit=distance_unit,
             data_workdir=data_workdir,
+            splitting=splitting,
             **kwargs,
         )
 
-        if molecule not in MD17.datasets_dict.keys():
+        if molecule not in rMD17.datasets_dict.keys():
             raise AtomsDataModuleError("Molecule {} is not supported!".format(molecule))
 
         self.molecule = molecule
@@ -141,8 +153,8 @@ class MD17(AtomsDataModule):
     def prepare_data(self):
         if not os.path.exists(self.datapath):
             property_unit_dict = {
-                MD17.energy: "kcal/mol",
-                MD17.forces: "kcal/mol/Ang",
+                rMD17.energy: "kcal/mol",
+                rMD17.forces: "kcal/mol/Ang",
             }
 
             tmpdir = tempfile.mkdtemp("md17")
@@ -152,7 +164,7 @@ class MD17(AtomsDataModule):
                 format=self.format,
                 distance_unit="Ang",
                 property_unit_dict=property_unit_dict,
-                atomrefs=MD17.atomrefs,
+                atomrefs=rMD17.atomrefs,
             )
             dataset.update_metadata(molecule=self.molecule)
 
@@ -163,12 +175,13 @@ class MD17(AtomsDataModule):
             md = dataset.metadata
             if "molecule" not in md:
                 raise AtomsDataModuleError(
-                    "Not a valid MD17 dataset! The molecule needs to be specified in the metadata."
+                    "Not a valid rMD17 dataset! The molecule needs to be specified in "
+                    + "the metadata."
                 )
             if md["molecule"] != self.molecule:
                 raise AtomsDataModuleError(
-                    f"The dataset at the given location does not contain the specified molecule: "
-                    + f"`{md['molecule']}` instead of `{self.molecule}`"
+                    f"The dataset at the given location does not contain the specified "
+                    + f"molecule: `{md['molecule']}` instead of `{self.molecule}`"
                 )
 
     def _download_data(
@@ -177,25 +190,35 @@ class MD17(AtomsDataModule):
         dataset: BaseAtomsData,
     ):
         logging.info("Downloading {} data".format(self.molecule))
-        rawpath = os.path.join(tmpdir, self.datasets_dict[self.molecule])
-        url = (
-            "http://www.quantum-machine.org/gdml/data/npz/"
-            + self.datasets_dict[self.molecule]
-        )
+        raw_path = os.path.join(tmpdir, "rmd17")
+        tar_path = os.path.join(tmpdir, "rmd17.tar.gz")
+        url = "https://figshare.com/ndownloader/files/23950376"
+        request.urlretrieve(url, tar_path)
+        logging.info("Done.")
 
-        request.urlretrieve(url, rawpath)
+        logging.info("Extracting data...")
+        tar = tarfile.open(tar_path)
+        tar.extract(
+            path=raw_path, member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}"
+        )
 
         logging.info("Parsing molecule {:s}".format(self.molecule))
 
-        data = np.load(rawpath)
+        data = np.load(
+            os.path.join(
+                raw_path, "rmd17", "npz_data", self.datasets_dict[self.molecule]
+            )
+        )
 
-        numbers = data["z"]
+        numbers = data["nuclear_charges"]
         property_list = []
-        for positions, energies, forces in zip(data["R"], data["E"], data["F"]):
+        for positions, energies, forces in zip(
+            data["coords"], data["energies"], data["forces"]
+        ):
             ats = Atoms(positions=positions, numbers=numbers)
             properties = {
-                MD17.energy: energies,
-                MD17.forces: forces,
+                rMD17.energy: np.array([energies]),
+                rMD17.forces: forces,
                 structure.Z: ats.numbers,
                 structure.R: ats.positions,
                 structure.cell: ats.cell,
@@ -205,4 +228,34 @@ class MD17(AtomsDataModule):
 
         logging.info("Write atoms to db...")
         dataset.add_systems(property_list=property_list)
+        logging.info("Done.")
+
+        train_splits = []
+        test_splits = []
+        for i in range(1, 6):
+            tar.extract(path=raw_path, member=f"rmd17/splits/index_train_0{i}.csv")
+            tar.extract(path=raw_path, member=f"rmd17/splits/index_test_0{i}.csv")
+
+            train_split = (
+                np.loadtxt(
+                    os.path.join(raw_path, "rmd17", "splits", f"index_train_0{i}.csv")
+                )
+                .flatten()
+                .astype(np.int)
+                .tolist()
+            )
+            train_splits.append(train_split)
+            test_split = (
+                np.loadtxt(
+                    os.path.join(raw_path, "rmd17", "splits", f"index_test_0{i}.csv")
+                )
+                .flatten()
+                .astype(np.int)
+                .tolist()
+            )
+            test_splits.append(test_split)
+
+        dataset.update_metadata(splits={"known": train_splits, "test": test_splits})
+
+        tar.close()
         logging.info("Done.")

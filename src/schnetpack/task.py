@@ -6,6 +6,8 @@ import torch
 from torch import nn as nn
 from torchmetrics import Metric
 
+from torch.autograd import grad
+
 from schnetpack.model.base import AtomisticModel
 
 __all__ = ["ModelOutput", "AtomisticTask"]
@@ -52,6 +54,7 @@ class ModelOutput(nn.Module):
     def calculate_loss(self, pred, target):
         if self.loss_weight == 0 or self.loss_fn is None:
             return 0.0
+
         loss = self.loss_weight * self.loss_fn(
             pred[self.name], target[self.target_property]
         )
@@ -60,6 +63,27 @@ class ModelOutput(nn.Module):
     def calculate_metrics(self, pred, target):
         metrics = {
             metric_name: metric(pred[self.name], target[self.target_property])
+            for metric_name, metric in self.metrics.items()
+        }
+        return metrics
+
+
+class UnsupervisedModelOutput(ModelOutput):
+    """
+    Defines an unsupervised output of a model, i.e. an unsupervised loss or a regularizer
+    that do not depend on label data. It includes mappings to the loss function,
+    a weight for training and metrics to be logged.
+    """
+
+    def calculate_loss(self, pred, target=None):
+        if self.loss_weight == 0 or self.loss_fn is None:
+            return 0.0
+        loss = self.loss_weight * self.loss_fn(pred[self.name])
+        return loss
+
+    def calculate_metrics(self, pred, target=None):
+        metrics = {
+            metric_name: metric(pred[self.name])
             for metric_name, metric in self.metrics.items()
         }
         return metrics
@@ -91,8 +115,8 @@ class AtomisticTask(pl.LightningModule):
             scheduler_cls: type of torch learning rate scheduler
             scheduler_args: dict of scheduler keyword arguments
             scheduler_monitor: name of metric to be observed for ReduceLROnPlateau
-            warmup_steps: number of steps used to increase the learning rate from zero linearly to the target learning
-              rate at the beginning of training
+            warmup_steps: number of steps used to increase the learning rate from zero
+              linearly to the target learning rate at the beginning of training
         """
         super().__init__()
         self.model = model
@@ -109,7 +133,7 @@ class AtomisticTask(pl.LightningModule):
 
     def setup(self, stage=None):
         if stage == "fit":
-            self.model.initialize_postprocessors(self.trainer.datamodule)
+            self.model.initialize_transforms(self.trainer.datamodule)
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
         results = self.model(inputs)
@@ -143,6 +167,7 @@ class AtomisticTask(pl.LightningModule):
         targets = {
             output.target_property: batch[output.target_property]
             for output in self.outputs
+            if not isinstance(output, UnsupervisedModelOutput)
         }
         try:
             targets["considered_atoms"] = batch["considered_atoms"]
@@ -164,6 +189,7 @@ class AtomisticTask(pl.LightningModule):
         targets = {
             output.target_property: batch[output.target_property]
             for output in self.outputs
+            if not isinstance(output, UnsupervisedModelOutput)
         }
         try:
             targets["considered_atoms"] = batch["considered_atoms"]
@@ -186,6 +212,7 @@ class AtomisticTask(pl.LightningModule):
         targets = {
             output.target_property: batch[output.target_property]
             for output in self.outputs
+            if not isinstance(output, UnsupervisedModelOutput)
         }
         try:
             targets["considered_atoms"] = batch["considered_atoms"]

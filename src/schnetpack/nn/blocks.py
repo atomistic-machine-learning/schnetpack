@@ -14,6 +14,8 @@ def build_mlp(
     n_hidden: Optional[Union[int, Sequence[int]]] = None,
     n_layers: int = 2,
     activation: Callable = F.silu,
+    last_bias: bool = True,
+    last_zero_init: bool = False,
 ) -> nn.Module:
     """
     Build multiple layer fully connected perceptron neural network.
@@ -53,7 +55,21 @@ def build_mlp(
         for i in range(n_layers - 1)
     ]
     # assign a Dense layer (without activation function) to the output layer
-    layers.append(snn.Dense(n_neurons[-2], n_neurons[-1], activation=None))
+
+    if last_zero_init:
+        layers.append(
+            snn.Dense(
+                n_neurons[-2],
+                n_neurons[-1],
+                activation=None,
+                weight_init=torch.nn.init.zeros_,
+                bias=last_bias,
+            )
+        )
+    else:
+        layers.append(
+            snn.Dense(n_neurons[-2], n_neurons[-1], activation=None, bias=last_bias)
+        )
     # put all layers together to make the network
     out_net = nn.Sequential(*layers)
     return out_net

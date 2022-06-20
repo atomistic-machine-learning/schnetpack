@@ -1,0 +1,5 @@
+# @package task
+optimizer_cls: adabelief_pytorch.AdaBelief
+optimizer_args:
+  lr: ${globals.lr}
+  weight_decay: 0.0
