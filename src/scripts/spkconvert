@@ -3,6 +3,7 @@ import schnetpack.data as dat
 import argparse
 
 from ase.db import connect
+import numpy as np
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -28,6 +29,17 @@ if __name__ == "__main__":
 
     if "atomrefs" not in meta.keys():
         meta["atomrefs"] = {}
+    elif "atref_labels" in meta.keys():
+        old_atref = np.array(meta["atomrefs"])
+        new_atomrefs = {}
+        labels = meta["atref_labels"]
+        if type(labels) is str:
+            labels = [labels]
+        for i, label in enumerate(labels):
+            print(i, label, old_atref[:, i])
+            new_atomrefs[label] = list(old_atref[:, i])
+        meta["atomrefs"] = new_atomrefs
+        del meta["atref_labels"]
 
     if args.distunit:
         if args.distunit == "A":

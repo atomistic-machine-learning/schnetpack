@@ -16,7 +16,7 @@ setup(
     url="https://github.com/atomistic-machine-learning/schnetpack",
     packages=find_packages("src"),
     scripts=[
-        "src/scripts/spkunits",
+        "src/scripts/spkconvert",
         "src/scripts/spktrain",
         "src/scripts/spkpredict",
         "src/scripts/spkmd",

@@ -104,9 +104,10 @@ class AtomisticModel(nn.Module):
                 inputs[p].requires_grad_()
         return inputs
 
-    def initialize_postprocessors(self, datamodule):
-        for pp in self.postprocessors:
-            pp.datamodule(datamodule)
+    def initialize_transforms(self, datamodule):
+        for module in self.modules():
+            if isinstance(module, Transform):
+                module.datamodule(datamodule)
 
     def postprocess(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         if self.do_postprocessing:
