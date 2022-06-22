@@ -98,9 +98,9 @@ class MDCalculator(nn.Module):
 
         # set up gradient context for passing results
         if gradients_required:
-            self.grad_context = torch.no_grad()
-        else:
             self.grad_context = nullcontext()
+        else:
+            self.grad_context = torch.no_grad()
 
     def calculate(self, system: System):
         """
