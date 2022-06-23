@@ -116,7 +116,7 @@ class SchNetPackCalculator(MDCalculator):
                 if isinstance(pp, schnetpack.transform.AddOffsets):
                     log.info("Found `AddOffsets` postprocessing module...")
                     log.info(
-                        "Constant offset of {:20.11f} will be removed...".format(
+                        "Constant offset of {:20.11f} per atom  will be removed...".format(
                             pp.mean.detach().cpu().numpy()
                         )
                     )
