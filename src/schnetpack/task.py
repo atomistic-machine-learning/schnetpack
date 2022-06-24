@@ -130,6 +130,7 @@ class AtomisticTask(pl.LightningModule):
         self.grad_enabled = len(self.model.required_derivatives) > 0
         self.lr = optimizer_args["lr"]
         self.warmup_steps = warmup_steps
+        self.save_hyperparameters()
 
     def setup(self, stage=None):
         if stage == "fit":
@@ -269,6 +270,16 @@ class AtomisticTask(pl.LightningModule):
 
         # update params
         optimizer.step(closure=optimizer_closure)
+
+    def save_model(self, path: str, do_postprocessing: Optional[bool] = None):
+        if self.trainer is None or self.trainer.strategy.local_rank == 0:
+            pp_status = self.model.do_postprocessing
+            if do_postprocessing is not None:
+                self.model.do_postprocessing = do_postprocessing
+
+            torch.save(self.model, path)
+
+            self.model.do_postprocessing = pp_status
 
 
 class ConsiderOnlySelectedAtoms(nn.Module):

@@ -2,6 +2,7 @@ import logging
 import os
 import uuid
 import tempfile
+import socket
 from typing import List
 
 import torch
@@ -11,6 +12,7 @@ from pytorch_lightning import LightningModule, LightningDataModule, Callback, Tr
 from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import LightningLoggerBase
 
+import schnetpack as spk
 from schnetpack.utils import str2class
 from schnetpack.utils.script import log_hyperparameters, print_config
 from schnetpack.data import BaseAtomsData, AtomsLoader
@@ -38,6 +40,7 @@ def train(config: DictConfig):
 
     """
     print(header)
+    log.info("Runnning on host:", socket.gethostname())
 
     if OmegaConf.is_missing(config, "run.data_dir"):
         log.error(
@@ -110,7 +113,7 @@ def train(config: DictConfig):
         str2class(config.task.scheduler_cls) if config.task.scheduler_cls else None
     )
 
-    task: LightningModule = hydra.utils.instantiate(
+    task: spk.AtomisticTask = hydra.utils.instantiate(
         config.task,
         model=model,
         optimizer_cls=str2class(config.task.optimizer_cls),
@@ -155,10 +158,16 @@ def train(config: DictConfig):
 
     # Evaluate model on test set after training
     log.info("Starting testing.")
-    trainer.test(model=task, datamodule=datamodule)
+    trainer.test(model=task, datamodule=datamodule, ckpt_path="best")
 
-    # Print path to best checkpoint
-    log.info(f"Best checkpoint path:\n{trainer.checkpoint_callback.best_model_path}")
+    # Store best model
+    best_path = trainer.checkpoint_callback.best_model_path
+    log.info(f"Best checkpoint path:\n{best_path}")
+
+    log.info(f"Store best model")
+    best_task = type(task).load_from_checkpoint(best_path)
+    best_task.save_model("best_model", do_postprocessing=True)
+    log.info(f"Best model stored at {os.path.abspath('best_model')}")
 
 
 @hydra.main(config_path="configs", config_name="predict")
