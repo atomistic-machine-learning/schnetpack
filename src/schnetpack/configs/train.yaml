@@ -18,6 +18,8 @@ print_config: True
 
 # hydra configuration
 hydra:
+    job:
+      chdir: True
     # output paths for hydra logs
     run:
         dir: ${run.path}/${run.id}

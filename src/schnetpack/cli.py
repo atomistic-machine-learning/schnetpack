@@ -33,14 +33,14 @@ header = """
 """
 
 
-@hydra.main(config_path="configs", config_name="train")
+@hydra.main(config_path="configs", config_name="train", version_base="1.2")
 def train(config: DictConfig):
     """
     General training routine for all models defined by the provided hydra configs.
 
     """
     print(header)
-    log.info("Runnning on host:", socket.gethostname())
+    log.info("Runnning on host:", str(socket.gethostname()))
 
     if OmegaConf.is_missing(config, "run.data_dir"):
         log.error(
@@ -170,7 +170,7 @@ def train(config: DictConfig):
     log.info(f"Best model stored at {os.path.abspath('best_model')}")
 
 
-@hydra.main(config_path="configs", config_name="predict")
+@hydra.main(config_path="configs", config_name="predict", version_base="1.2")
 def predict(config: DictConfig):
     log.info(f"Load data from `{config.data.datapath}`")
     dataset: BaseAtomsData = hydra.utils.instantiate(config.data)
