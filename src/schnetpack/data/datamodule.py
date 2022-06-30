@@ -93,7 +93,7 @@ class AtomsDataModule(pl.LightningDataModule):
                 (Ang, Bohr, ...).
             data_workdir: Copy data here as part of setup, e.g. to a local file
                 system for faster performance.
-            cleanup_workdir_after: Determines after which stage to remove the data
+            cleanup_workdir_stage: Determines after which stage to remove the data
                 workdir
             splitting: Method to generate train/validation/test partitions
                 (default: RandomSplit)
