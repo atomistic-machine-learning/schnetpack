@@ -3,11 +3,11 @@ required_properties:
   - energy
   - forces
 model_file: ???
-force_label: forces
-energy_units: kcal / mol
-position_units: Angstrom
-energy_label: energy
-stress_label: null
+force_key: forces
+energy_unit: kcal / mol
+position_unit: Angstrom
+energy_key: energy
+stress_key: null
 script_model: false
 
 defaults:

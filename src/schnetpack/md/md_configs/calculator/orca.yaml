@@ -2,14 +2,14 @@ _target_: schnetpack.md.calculators.OrcaCalculator
 required_properties:
   - energy
   - forces
-force_label: forces
+force_key: forces
 compdir: qm_calculations
 qm_executable: ???
 orca_template: ???
-energy_units: Hartree
-position_units: Bohr
-energy_label: energy
-stress_label: null
+energy_unit: Hartree
+position_unit: Bohr
+energy_key: energy
+stress_key: null
 property_conversion: { }
 overwrite: true
 adaptive: false
