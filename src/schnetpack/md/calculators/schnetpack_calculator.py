@@ -26,16 +26,16 @@ class SchNetPackCalculator(MDCalculator):
 
     Args:
         model_file (str): Path to stored schnetpack model.
-        force_label (str): String indicating the entry corresponding to the molecular forces
-        energy_units (float, float): Conversion factor converting the energies returned by the used model back to
+        force_key (str): String indicating the entry corresponding to the molecular forces
+        energy_unit (float, float): Conversion factor converting the energies returned by the used model back to
                                      internal MD units.
-        position_units (float, float): Conversion factor for converting the system positions to the units required by
+        position_unit (float, float): Conversion factor for converting the system positions to the units required by
                                        the model.
         neighbor_list (schnetpack.md.neighbor_list.MDNeighborList): Neighbor list object for determining which
                                                                     interatomic distances should be computed.
-        energy_label (str, optional): If provided, label is used to store the energies returned by the model to the
+        energy_key (str, optional): If provided, label is used to store the energies returned by the model to the
                                       system.
-        stress_label (str, optional): If provided, label is used to store the stress returned by the model to the
+        stress_key (str, optional): If provided, label is used to store the stress returned by the model to the
                                       system (required for constant pressure simulations).
         required_properties (list): List of properties to be computed by the calculator
         property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
@@ -46,23 +46,23 @@ class SchNetPackCalculator(MDCalculator):
     def __init__(
         self,
         model_file: str,
-        force_label: str,
-        energy_units: Union[str, float],
-        position_units: Union[str, float],
+        force_key: str,
+        energy_unit: Union[str, float],
+        position_unit: Union[str, float],
         neighbor_list: NeighborListMD,
-        energy_label: str = None,
-        stress_label: str = None,
+        energy_key: str = None,
+        stress_key: str = None,
         required_properties: List = [],
         property_conversion: Dict[str, Union[str, float]] = {},
         script_model: bool = False,
     ):
         super(SchNetPackCalculator, self).__init__(
             required_properties=required_properties,
-            force_label=force_label,
-            energy_units=energy_units,
-            position_units=position_units,
-            energy_label=energy_label,
-            stress_label=stress_label,
+            force_key=force_key,
+            energy_unit=energy_unit,
+            position_unit=position_unit,
+            energy_key=energy_key,
+            stress_key=stress_key,
             property_conversion=property_conversion,
         )
         self.script_model = script_model
@@ -97,9 +97,9 @@ class SchNetPackCalculator(MDCalculator):
         model = torch.load(model_file, map_location="cpu").to(torch.float64)
         model = model.eval()
 
-        if self.stress_label is not None:
+        if self.stress_key is not None:
             log.info("Activating stress computation...")
-            model = activate_model_stress(model, self.stress_label)
+            model = activate_model_stress(model, self.stress_key)
 
         if self.script_model:
             log.info("Converting model to torch script...")
@@ -161,12 +161,12 @@ class SchNetPackEnsembleCalculator(EnsembleCalculator, SchNetPackCalculator):
     def __init__(
         self,
         model_files: List[str],
-        force_label: str,
-        energy_units: Union[str, float],
-        position_units: Union[str, float],
+        force_key: str,
+        energy_unit: Union[str, float],
+        position_unit: Union[str, float],
         neighbor_list: NeighborListMD,
-        energy_label: str = None,
-        stress_label: str = None,
+        energy_key: str = None,
+        stress_key: str = None,
         required_properties: List = [],
         property_conversion: Dict[str, Union[str, float]] = {},
         script_model: bool = True,
@@ -174,16 +174,16 @@ class SchNetPackEnsembleCalculator(EnsembleCalculator, SchNetPackCalculator):
         """
         Args:
             model_files (list(str)): List of paths to stored schnetpack model to be used in ensemble.
-            force_label (str): String indicating the entry corresponding to the molecular forces
-            energy_units (float, float): Conversion factor converting the energies returned by the used model back to
+            force_key (str): String indicating the entry corresponding to the molecular forces
+            energy_unit (float, float): Conversion factor converting the energies returned by the used model back to
                                          internal MD units.
-            position_units (float, float): Conversion factor for converting the system positions to the units required by
+            position_unit (float, float): Conversion factor for converting the system positions to the units required by
                                            the model.
             neighbor_list (schnetpack.md.neighbor_list.MDNeighborList): Neighbor list object for determining which
                                                                         interatomic distances should be computed.
-            energy_label (str, optional): If provided, label is used to store the energies returned by the model to the
+            energy_key (str, optional): If provided, label is used to store the energies returned by the model to the
                                           system.
-            stress_label (str, optional): If provided, label is used to store the stress returned by the model to the
+            stress_key (str, optional): If provided, label is used to store the stress returned by the model to the
                                           system (required for constant pressure simulations).
             required_properties (list): List of properties to be computed by the calculator
             property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
@@ -193,12 +193,12 @@ class SchNetPackEnsembleCalculator(EnsembleCalculator, SchNetPackCalculator):
         super(SchNetPackEnsembleCalculator, self).__init__(
             model_file=model_files,
             required_properties=required_properties,
-            force_label=force_label,
-            energy_units=energy_units,
-            position_units=position_units,
+            force_key=force_key,
+            energy_unit=energy_unit,
+            position_unit=position_unit,
             neighbor_list=neighbor_list,
-            energy_label=energy_label,
-            stress_label=stress_label,
+            energy_key=energy_key,
+            stress_key=stress_key,
             property_conversion=property_conversion,
             script_model=script_model,
         )

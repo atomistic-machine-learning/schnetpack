@@ -14,7 +14,7 @@ class CalculatorError(Exception):
 
 
 def activate_model_stress(
-    model: schnetpack.model.AtomisticModel, stress_label: str
+    model: schnetpack.model.AtomisticModel, stress_key: str
 ) -> schnetpack.model.AtomisticModel:
     """
     Utility function for activating computation of stress in models not explicitly trained on the stress tensor.
@@ -22,7 +22,7 @@ def activate_model_stress(
 
     Args:
         model (AtomisticTask): loaded schnetpack model for which stress computation should be activated.
-        stress_label (str): name of stress tensor in model.
+        stress_key (str): name of stress tensor in model.
 
     Returns:
         model (AtomisticTask): schnetpack model with activated stress tensor.
@@ -39,14 +39,14 @@ def activate_model_stress(
                 module.calc_stress = True
 
                 # append stress label to output list and update required derivatives in the module
-                module.model_outputs.append(stress_label)
+                module.model_outputs.append(stress_key)
                 module.required_derivatives.append(schnetpack.properties.strain)
 
                 # if not set in the model, also update output list and required derivatives so that:
                 #   a) required derivatives are computed and
                 #   b) property is added to the model outputs
-                if stress_label not in model.model_outputs:
-                    model.model_outputs.append(stress_label)
+                if stress_key not in model.model_outputs:
+                    model.model_outputs.append(stress_key)
                     model.required_derivatives.append(schnetpack.properties.strain)
 
                 stress = True

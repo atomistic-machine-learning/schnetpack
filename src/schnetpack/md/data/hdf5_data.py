@@ -313,9 +313,9 @@ class HDF5Loader:
         Returns:
             np.array: N_steps array containing the potential energy of every configuration in internal units.
         """
-        energy_label = f"{properties.energy}_system"
+        energy_key = f"{properties.energy}_system"
         return self.get_property(
-            energy_label, atomistic=False, mol_idx=mol_idx, replica_idx=replica_idx
+            energy_key, atomistic=False, mol_idx=mol_idx, replica_idx=replica_idx
         )
 
     def get_temperature(
@@ -375,9 +375,9 @@ class HDF5Loader:
         Returns:
             np.array: N_steps x 3 x 3 array containing the stress tensor of every configuration in internal units.
         """
-        stress_label = f"{properties.stress}_system"
+        stress_key = f"{properties.stress}_system"
         return self.get_property(
-            stress_label, atomistic=False, mol_idx=mol_idx, replica_idx=replica_idx
+            stress_key, atomistic=False, mol_idx=mol_idx, replica_idx=replica_idx
         )
 
     def get_pressure(
