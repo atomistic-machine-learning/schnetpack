@@ -141,9 +141,9 @@ class SpkCalculator(Calculator):
     Args:
         model_file (str): path to trained model
         neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
-        energy_label (str): label of energies in model (default="energy")
-        force_label (str): label of forces in model (default="forces")
-        stress_label (str): label of stress tensor in model. Will not be computed if set to None (default=None)
+        energy_key (str): name of energies in model (default="energy")
+        force_key (str): name of forces in model (default="forces")
+        stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
         energy_units (str, float): energy units used by model (default="kcal/mol")
         position_units (str, float): position units used by model (default="Angstrom")
         device (torch.device): device used for calculations (default="cpu")
@@ -161,9 +161,9 @@ class SpkCalculator(Calculator):
         self,
         model_file: str,
         neighbor_list: schnetpack.transform.Transform,
-        energy_label: str = "energy",
-        force_label: str = "forces",
-        stress_label: Optional[str] = None,
+        energy_key: str = "energy",
+        force_key: str = "forces",
+        stress_key: Optional[str] = None,
         energy_units: Union[str, float] = "kcal/mol",
         position_units: Union[str, float] = "Angstrom",
         device: Union[str, torch.device] = "cpu",
@@ -175,15 +175,15 @@ class SpkCalculator(Calculator):
 
         self.converter = converter(neighbor_list, device=device, dtype=dtype)
 
-        self.energy_label = energy_label
-        self.force_label = force_label
-        self.stress_label = stress_label
+        self.energy_key = energy_key
+        self.force_key = force_key
+        self.stress_key = stress_key
 
         # Mapping between ASE names and model outputs
         self.property_map = {
-            self.energy: energy_label,
-            self.forces: force_label,
-            self.stress: stress_label,
+            self.energy: energy_key,
+            self.forces: force_key,
+            self.stress: stress_key,
         }
 
         self.model = self._load_model(model_file)
@@ -219,9 +219,9 @@ class SpkCalculator(Calculator):
         model = torch.load(model_file, map_location="cpu").to(torch.float64)
         model = model.eval()
 
-        if self.stress_label is not None:
+        if self.stress_key is not None:
             log.info("Activating stress computation...")
-            model = activate_model_stress(model, self.stress_label)
+            model = activate_model_stress(model, self.stress_key)
 
         return model
 
@@ -286,9 +286,9 @@ class AseInterface:
         working_dir: str,
         model_file: str,
         neighbor_list: schnetpack.transform.Transform,
-        energy_label: str = "energy",
-        force_label: str = "forces",
-        stress_label: Optional[str] = None,
+        energy_key: str = "energy",
+        force_key: str = "forces",
+        stress_key: Optional[str] = None,
         energy_units: Union[str, float] = "kcal/mol",
         position_units: Union[str, float] = "Angstrom",
         device: Union[str, torch.device] = "cpu",
@@ -303,9 +303,9 @@ class AseInterface:
             working_dir: Path to directory where files should be stored
             model_file (str): path to trained model
             neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
-            energy_label (str): label of energies in model (default="energy")
-            force_label (str): label of forces in model (default="forces")
-            stress_label (str): label of stress tensor in model. Will not be computed if set to None (default=None)
+            energy_key (str): name of energies in model (default="energy")
+            force_key (str): name of forces in model (default="forces")
+            stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
             energy_units (str, float): energy units used by model (default="kcal/mol")
             position_units (str, float): position units used by model (default="Angstrom")
             device (torch.device): device used for calculations (default="cpu")
@@ -334,9 +334,9 @@ class AseInterface:
         calculator = SpkCalculator(
             model_file=model_file,
             neighbor_list=neighbor_list,
-            energy_label=energy_label,
-            force_label=force_label,
-            stress_label=stress_label,
+            energy_key=energy_key,
+            force_key=force_key,
+            stress_key=stress_key,
             energy_units=energy_units,
             position_units=position_units,
             device=device,
