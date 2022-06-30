@@ -73,7 +73,7 @@ class SplittingStrategy:
     def split(self, dataset, *split_sizes) -> List[torch.tensor]:
         """
         Args:
-            dsize - Size of dataset.
+            dataset - The dataset that is supposed to be split (an instance of BaseAtomsData).
             split_sizes - Sizes for each split. One can be set to -1 to assign all
                 remaining data. Values in [0, 1] can be used to give relative partition
                 sizes.
