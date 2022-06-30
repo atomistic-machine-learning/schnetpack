@@ -144,8 +144,8 @@ class SpkCalculator(Calculator):
         energy_key (str): name of energies in model (default="energy")
         force_key (str): name of forces in model (default="forces")
         stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
-        energy_units (str, float): energy units used by model (default="kcal/mol")
-        position_units (str, float): position units used by model (default="Angstrom")
+        energy_unit (str, float): energy units used by model (default="kcal/mol")
+        position_unit (str, float): position units used by model (default="Angstrom")
         device (torch.device): device used for calculations (default="cpu")
         dtype (torch.dtype): select model precision (default=float32)
         converter (schnetpack.interfaces.AtomsConverter): converter used to set up input batches
@@ -164,8 +164,8 @@ class SpkCalculator(Calculator):
         energy_key: str = "energy",
         force_key: str = "forces",
         stress_key: Optional[str] = None,
-        energy_units: Union[str, float] = "kcal/mol",
-        position_units: Union[str, float] = "Angstrom",
+        energy_unit: Union[str, float] = "kcal/mol",
+        position_unit: Union[str, float] = "Angstrom",
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
         converter: AtomsConverter = AtomsConverter,
@@ -190,8 +190,8 @@ class SpkCalculator(Calculator):
         self.model.to(device=device, dtype=dtype)
 
         # set up basic conversion factors
-        self.energy_conversion = convert_units(energy_units, "eV")
-        self.position_conversion = convert_units(position_units, "Angstrom")
+        self.energy_conversion = convert_units(energy_unit, "eV")
+        self.position_conversion = convert_units(position_unit, "Angstrom")
 
         # Unit conversion to default ASE units
         self.property_units = {
@@ -289,8 +289,8 @@ class AseInterface:
         energy_key: str = "energy",
         force_key: str = "forces",
         stress_key: Optional[str] = None,
-        energy_units: Union[str, float] = "kcal/mol",
-        position_units: Union[str, float] = "Angstrom",
+        energy_unit: Union[str, float] = "kcal/mol",
+        position_unit: Union[str, float] = "Angstrom",
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
         converter: AtomsConverter = AtomsConverter,
@@ -306,8 +306,8 @@ class AseInterface:
             energy_key (str): name of energies in model (default="energy")
             force_key (str): name of forces in model (default="forces")
             stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
-            energy_units (str, float): energy units used by model (default="kcal/mol")
-            position_units (str, float): position units used by model (default="Angstrom")
+            energy_unit (str, float): energy units used by model (default="kcal/mol")
+            position_unit (str, float): position units used by model (default="Angstrom")
             device (torch.device): device used for calculations (default="cpu")
             dtype (torch.dtype): select model precision (default=float32)
             converter (schnetpack.interfaces.AtomsConverter): converter used to set up input batches
@@ -337,8 +337,8 @@ class AseInterface:
             energy_key=energy_key,
             force_key=force_key,
             stress_key=stress_key,
-            energy_units=energy_units,
-            position_units=position_units,
+            energy_unit=energy_unit,
+            position_unit=position_unit,
             device=device,
             dtype=dtype,
             converter=converter,
