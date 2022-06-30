@@ -34,14 +34,14 @@ class MDCalculator(nn.Module):
 
     Args:
         required_properties (list): List of the property names which will be passed to the simulator
-        force_label (str): Name of the property corresponding to the forces.
-        energy_units (str, float): Energy units returned by the internal computation model.
-        position_units (str, float): Unit conversion for the length used in the model computing all properties. E.g. if
+        force_key (str): Name of the property corresponding to the forces.
+        energy_unit (str, float): Energy units returned by the internal computation model.
+        position_unit (str, float): Unit conversion for the length used in the model computing all properties. E.g. if
                              the model needs Angstrom, one has to provide the conversion factor converting from the
                              atomic units used internally (Bohr) to Angstrom: 0.529177.
-                             Is used together with `energy_units` to determine units of force and stress.
-        energy_label (str, optional): Name of the property corresponding to the energy.
-        stress_label (str, optional): Name of the property corresponding to the stress.
+                             Is used together with `energy_unit` to determine units of force and stress.
+        energy_key (str, optional): Name of the property corresponding to the energy.
+        stress_key (str, optional): Name of the property corresponding to the stress.
         property_conversion (dict(float, str)): Optional dictionary of conversion factors for other properties predicted
                              by the model. Only changes the units used for logging the various outputs.
         gradients_required (bool): If set to true, enable accumulation of computational graph in calculator.
@@ -50,11 +50,11 @@ class MDCalculator(nn.Module):
     def __init__(
         self,
         required_properties: List,
-        force_label: str,
-        energy_units: Union[str, float],
-        position_units: Union[str, float],
-        energy_label: Optional[str] = None,
-        stress_label: Optional[str] = None,
+        force_key: str,
+        energy_unit: Union[str, float],
+        position_unit: Union[str, float],
+        energy_key: Optional[str] = None,
+        stress_key: Optional[str] = None,
         property_conversion: Dict[str, Union[str, float]] = {},
         gradients_required: bool = False,
     ):
@@ -62,20 +62,20 @@ class MDCalculator(nn.Module):
         # Get required properties and filter non-unique entries
         self.required_properties = list(set(required_properties))
 
-        if force_label not in self.required_properties:
-            self.required_properties.append(force_label)
+        if force_key not in self.required_properties:
+            self.required_properties.append(force_key)
 
-        if energy_label is not None and energy_label not in self.required_properties:
-            self.required_properties.append(energy_label)
+        if energy_key is not None and energy_key not in self.required_properties:
+            self.required_properties.append(energy_key)
 
-        if stress_label is not None and stress_label not in self.required_properties:
-            self.required_properties.append(stress_label)
+        if stress_key is not None and stress_key not in self.required_properties:
+            self.required_properties.append(stress_key)
 
         self.results = {}
 
-        self.energy_label = energy_label
-        self.force_label = force_label
-        self.stress_label = stress_label
+        self.energy_key = energy_key
+        self.force_key = force_key
+        self.stress_key = stress_key
 
         # Default conversion (1.0) for all units
         self.property_conversion = {p: 1.0 for p in self.required_properties}
@@ -87,9 +87,9 @@ class MDCalculator(nn.Module):
             )
 
         # Special unit conversions
-        self.energy_conversion = spk_units.convert_units(energy_units, spk_units.energy)
+        self.energy_conversion = spk_units.convert_units(energy_unit, spk_units.energy)
         self.position_conversion = spk_units.convert_units(
-            position_units, spk_units.length
+            position_unit, spk_units.length
         )
 
         # Derived conversions
@@ -144,11 +144,11 @@ class MDCalculator(nn.Module):
             self._set_system_forces(system)
 
             # Store potential energy to system if requested:
-            if self.energy_label is not None:
+            if self.energy_key is not None:
                 self._set_system_energy(system)
 
             # Set stress of the system if requested:
-            if self.stress_label is not None:
+            if self.stress_key is not None:
                 self._set_system_stress(system)
 
     def _get_system_molecules(self, system: System):
@@ -202,21 +202,21 @@ class MDCalculator(nn.Module):
         Args:
             system (schnetpack.md.System): System object containing current state of the simulation.
         """
-        forces = self.results[self.force_label]
+        forces = self.results[self.force_key]
         system.forces = (
             forces.view(system.n_replicas, system.total_n_atoms, 3)
             * self.force_conversion
         )
 
     def _set_system_energy(self, system: System):
-        energy = self.results[self.energy_label]
+        energy = self.results[self.energy_key]
         system.energy = (
             energy.view(system.n_replicas, system.n_molecules, 1)
             * self.energy_conversion
         )
 
     def _set_system_stress(self, system: System):
-        stress = self.results[self.stress_label]
+        stress = self.results[self.stress_key]
         system.stress = (
             stress.view(system.n_replicas, system.n_molecules, 3, 3)
             * self.stress_conversion
@@ -248,16 +248,16 @@ class QMCalculator(MDCalculator):
 
     Args:
         required_properties (list): List of the property names which will be passed to the simulator
-        force_label (str): Name of the property corresponding to the forces.
+        force_key (str): Name of the property corresponding to the forces.
         compdir (str): Directory in which computations are performed.
         qm_executable (str): Path to the ORCA executable.
-        energy_units (str, float): Energy units returned by the internal computation model.
-        position_units (str, float): Unit conversion for the length used in the model computing all properties. E.g. if
+        energy_unit (str, float): Energy units returned by the internal computation model.
+        position_unit (str, float): Unit conversion for the length used in the model computing all properties. E.g. if
                              the model needs Angstrom, one has to provide the conversion factor converting from the
                              atomic units used internally (Bohr) to Angstrom: 0.529177.
-                             Is used together with `energy_units` to determine units of force and stress.
-        energy_label (str, optional): Name of the property corresponding to the energy.
-        stress_label (str, optional): Name of the property corresponding to the stress.
+                             Is used together with `energy_unit` to determine units of force and stress.
+        energy_key (str, optional): Name of the property corresponding to the energy.
+        stress_key (str, optional): Name of the property corresponding to the stress.
         property_conversion (dict(float, str)): Optional dictionary of conversion factors for other properties predicted
                              by the model. Only changes the units used for logging the various outputs.
         overwrite (bool): Overwrite previous computation results. Default is true.
@@ -269,24 +269,24 @@ class QMCalculator(MDCalculator):
     def __init__(
         self,
         required_properties: List,
-        force_label: str,
+        force_key: str,
         compdir: str,
         qm_executable: str,
-        energy_units: Union[str, float],
-        position_units: Union[str, float],
-        energy_label: Optional[str] = None,
-        stress_label: Optional[str] = None,
+        energy_unit: Union[str, float],
+        position_unit: Union[str, float],
+        energy_key: Optional[str] = None,
+        stress_key: Optional[str] = None,
         property_conversion: Dict[str, Union[str, float]] = {},
         overwrite: bool = True,
         adaptive: bool = False,
     ):
         super(QMCalculator, self).__init__(
             required_properties=required_properties,
-            force_label=force_label,
-            energy_units=energy_units,
-            position_units=position_units,
-            energy_label=energy_label,
-            stress_label=stress_label,
+            force_key=force_key,
+            energy_unit=energy_unit,
+            position_unit=position_unit,
+            energy_key=energy_key,
+            stress_key=stress_key,
             property_conversion=property_conversion,
         )
 

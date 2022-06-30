@@ -23,16 +23,16 @@ class LJCalculator(SchNetPackCalculator):
     Args:
         r_equilibrium (float): equilibrium distance in position units
         well_depth (float): depth of the Lennard-Jones potential in energy units.
-        force_label (str): String indicating the entry corresponding to the molecular forces
-        energy_units (float, float): Conversion factor converting the energies returned by the used model back to
+        force_key (str): String indicating the entry corresponding to the molecular forces
+        energy_unit (float, float): Conversion factor converting the energies returned by the used model back to
                                      internal MD units.
-        position_units (float, float): Conversion factor for converting the system positions to the units required by
+        position_unit (float, float): Conversion factor for converting the system positions to the units required by
                                        the model.
         neighbor_list (schnetpack.md.neighbor_list.MDNeighborList): Neighbor list object for determining which
                                                                     interatomic distances should be computed.
-        energy_label (str, optional): If provided, label is used to store the energies returned by the model to the
+        energy_key (str, optional): If provided, label is used to store the energies returned by the model to the
                                       system.
-        stress_label (str, optional): If provided, label is used to store the stress returned by the model to the
+        stress_key (str, optional): If provided, label is used to store the stress returned by the model to the
                                       system (required for constant pressure simulations).
         property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
                                            the model. Only changes the units used for logging the various outputs.
@@ -43,12 +43,12 @@ class LJCalculator(SchNetPackCalculator):
         self,
         r_equilibrium: float,
         well_depth: float,
-        force_label: str,
-        energy_units: Union[str, float],
-        position_units: Union[str, float],
+        force_key: str,
+        energy_unit: Union[str, float],
+        position_unit: Union[str, float],
         neighbor_list: NeighborListMD,
-        energy_label: str = None,
-        stress_label: str = None,
+        energy_key: str = None,
+        stress_key: str = None,
         property_conversion: Dict[str, Union[str, float]] = {},
         healing_length: float = 3.0,
     ):
@@ -58,20 +58,20 @@ class LJCalculator(SchNetPackCalculator):
             cutoff=neighbor_list.cutoff,
             healing_length=healing_length,
             calc_forces=True,
-            calc_stress=(stress_label is not None),
-            energy_key=energy_label,
-            force_key=force_label,
-            stress_key=stress_label,
+            calc_stress=(stress_key is not None),
+            energy_key=energy_key,
+            force_key=force_key,
+            stress_key=stress_key,
         )
 
         super(LJCalculator, self).__init__(
             model,
-            force_label=force_label,
-            energy_units=energy_units,
-            position_units=position_units,
+            force_key=force_key,
+            energy_unit=energy_unit,
+            position_unit=position_unit,
             neighbor_list=neighbor_list,
-            energy_label=energy_label,
-            stress_label=stress_label,
+            energy_key=energy_key,
+            stress_key=stress_key,
             property_conversion=property_conversion,
         )
 

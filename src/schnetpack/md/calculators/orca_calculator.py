@@ -31,19 +31,19 @@ class OrcaCalculator(QMCalculator):
 
     Args:
         required_properties (list): List of the property names which will be passed to the simulator
-        force_label (str): Name of the property corresponding to the forces.
+        force_key (str): Name of the property corresponding to the forces.
         compdir (str): Directory in which computations are performed.
         qm_executable (str): Path to the ORCA executable.
         orca_template (str): Path to an ORCA template which will be used to generate input files. This should be a full
                              ORCA input, where the geometry section between *xyz and * is replaced by the string
                              `{geometry}`.
-        energy_units (str, float): Energy units returned by the internal computation model.
-        position_units (str, float): Unit conversion for the length used in the model computing all properties. E.g. if
+        energy_unit (str, float): Energy units returned by the internal computation model.
+        position_unit (str, float): Unit conversion for the length used in the model computing all properties. E.g. if
                              the model needs Angstrom, one has to provide the conversion factor converting from the
                              atomic units used internally (Bohr) to Angstrom: 0.529177.
-                             Is used together with `energy_units` to determine units of force and stress.
-        energy_label (str, optional): Name of the property corresponding to the energy.
-        stress_label (str, optional): Name of the property corresponding to the stress.
+                             Is used together with `energy_unit` to determine units of force and stress.
+        energy_key (str, optional): Name of the property corresponding to the energy.
+        stress_key (str, optional): Name of the property corresponding to the stress.
         property_conversion (dict, optional): Convert properties to requested units. If left empty, no conversion
                                               is performed.
         overwrite (bool): Overwrite previous computation results. Default is true.
@@ -61,14 +61,14 @@ class OrcaCalculator(QMCalculator):
     def __init__(
         self,
         required_properties: List,
-        force_label: str,
+        force_key: str,
         compdir: str,
         qm_executable: str,
         orca_template: str,
-        energy_units: Union[str, float],
-        position_units: Union[str, float],
-        energy_label: Optional[str] = None,
-        stress_label: Optional[str] = None,
+        energy_unit: Union[str, float],
+        position_unit: Union[str, float],
+        energy_key: Optional[str] = None,
+        stress_key: Optional[str] = None,
         property_conversion: Dict[str, Union[str, float]] = {},
         overwrite: bool = True,
         adaptive: bool = False,
@@ -77,13 +77,13 @@ class OrcaCalculator(QMCalculator):
     ):
         super(OrcaCalculator, self).__init__(
             required_properties=required_properties,
-            force_label=force_label,
+            force_key=force_key,
             compdir=compdir,
             qm_executable=qm_executable,
-            energy_units=energy_units,
-            position_units=position_units,
-            energy_label=energy_label,
-            stress_label=stress_label,
+            energy_unit=energy_unit,
+            position_unit=position_unit,
+            energy_key=energy_key,
+            stress_key=stress_key,
             property_conversion=property_conversion,
             overwrite=overwrite,
             adaptive=adaptive,
