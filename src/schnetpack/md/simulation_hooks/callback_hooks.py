@@ -720,7 +720,7 @@ class TensorBoardLogger(BasicTensorboardLogger):
     def _get_energies(system: System):
         """
         Instructions for obtaining kinetic, potential and total energy. If the potential energy has not been requested
-        explicitly in the calculator (`energy_label`) it will be constantly 0.
+        explicitly in the calculator (`energy_key`) it will be constantly 0.
 
         Args:
             system (schnetpack.md.System): System class.

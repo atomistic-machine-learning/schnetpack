@@ -422,7 +422,7 @@ class System(UninitializedMixin, nn.Module):
     @property
     def potential_energy(self):
         """
-        Property for accessing potential energy pf system. The energy array is only populated if a `energy_label` is
+        Property for accessing potential energy pf system. The energy array is only populated if a `energy_key` is
         given in the calculator, energies will be 0 otherwise.
 
         Returns:
