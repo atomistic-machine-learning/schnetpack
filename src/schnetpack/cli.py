@@ -166,7 +166,7 @@ def train(config: DictConfig):
 
     log.info(f"Store best model")
     best_task = type(task).load_from_checkpoint(best_path)
-    best_task.save_model("best_model", do_postprocessing=True)
+    best_task.save_model(config.globals.model_path, do_postprocessing=True)
     log.info(f"Best model stored at {os.path.abspath('best_model')}")
 
 
