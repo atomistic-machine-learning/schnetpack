@@ -59,11 +59,11 @@ class EnsembleCalculator(ABC, MDCalculator):
 
         return ensemble_results
 
-    def _activate_stress(self, stress_label: Optional[str] = None):
+    def _activate_stress(self, stress_key: Optional[str] = None):
         """
         Routine for activating stress computations
         Args:
-            stress_label (str, optional): stess label.
+            stress_key (str, optional): stess label.
         """
         raise NotImplementedError
 
