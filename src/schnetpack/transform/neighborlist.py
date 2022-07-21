@@ -204,8 +204,8 @@ class NeighborListTransform(Transform):
         pbc = inputs[properties.pbc]
 
         idx_i, idx_j, offset = self._build_neighbor_list(Z, R, cell, pbc, self._cutoff)
-        inputs[properties.idx_i] = idx_i.detach().long()
-        inputs[properties.idx_j] = idx_j.detach().long()
+        inputs[properties.idx_i] = idx_i.detach()
+        inputs[properties.idx_j] = idx_j.detach()
         inputs[properties.offsets] = offset
         return inputs
 
@@ -258,8 +258,8 @@ class MatScipyNeighborList(NeighborListTransform):
 
         # Compute neighborhood
         idx_i, idx_j, S = msp_neighbor_list("ijS", at, cutoff)
-        idx_i = torch.from_numpy(idx_i)
-        idx_j = torch.from_numpy(idx_j)
+        idx_i = torch.from_numpy(idx_i).long()
+        idx_j = torch.from_numpy(idx_j).long()
         S = torch.from_numpy(S).to(dtype=positions.dtype)
         offset = torch.mm(S, cell)
 
