@@ -35,6 +35,7 @@ setup(
         "rich",
         "fasteners",
         "dirsync",
+        "matscipy @ git+ssh://git@github.com/libAtoms/matscipy.git",
     ],
     include_package_data=True,
     extras_require={"test": ["pytest", "pytest-datadir", "pytest-benchmark"]},
