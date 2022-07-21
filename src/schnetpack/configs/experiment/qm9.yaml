@@ -18,7 +18,7 @@ data:
       property: ${globals.property}
       remove_atomrefs: True
       remove_mean: True
-    - _target_: schnetpack.transform.ASENeighborList
+    - _target_: schnetpack.transform.MatScipyNeighborList
       cutoff: ${globals.cutoff}
     - _target_: schnetpack.transform.CastTo32
 

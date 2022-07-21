@@ -22,7 +22,7 @@ data:
     - _target_: schnetpack.transform.RemoveOffsets
       property: energy
       remove_mean: True
-    - _target_: schnetpack.transform.ASENeighborList
+    - _target_: schnetpack.transform.MatScipyNeighborList
       cutoff: ${globals.cutoff}
     - _target_: schnetpack.transform.CastTo32
 
