@@ -2,15 +2,16 @@ import os
 import torch
 import shutil
 from ase import Atoms
-from ase.neighborlist import neighbor_list
+from ase.neighborlist import neighbor_list as ase_neighbor_list
+from matscipy.neighbours import neighbour_list as msp_neighbor_list
 from .base import Transform
 from dirsync import sync
 import numpy as np
 from typing import Optional, Dict, List, Type, Any, Union
 
-
 __all__ = [
     "ASENeighborList",
+    "MatScipyNeighborList",
     "TorchNeighborList",
     "CountNeighbors",
     "CollectAtomTriples",
@@ -55,7 +56,6 @@ class NeighborlistWrapper(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-
         inputs = self.neighbor_list(inputs)
         for postprocess in self.nbh_postprocessing:
             inputs = postprocess(inputs)
@@ -229,11 +229,40 @@ class ASENeighborList(NeighborListTransform):
     def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
         at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
 
-        idx_i, idx_j, S = neighbor_list("ijS", at, cutoff, self_interaction=False)
+        idx_i, idx_j, S = ase_neighbor_list("ijS", at, cutoff, self_interaction=False)
         idx_i = torch.from_numpy(idx_i)
         idx_j = torch.from_numpy(idx_j)
         S = torch.from_numpy(S).to(dtype=positions.dtype)
         offset = torch.mm(S, cell)
+        return idx_i, idx_j, offset
+
+
+class MatScipyNeighborList(NeighborListTransform):
+    """
+    Neighborlist using the efficient implementation of the Matscipy package
+    (https://github.com/libAtoms/matscipy).
+    """
+
+    def _build_neighbor_list(
+        self, Z, positions, cell, pbc, cutoff, eps=1e-6, buffer=1.0
+    ):
+        at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
+
+        # Add cell if none is present (volume = 0)
+        if at.cell.volume < eps:
+            # max values - min values along xyz augmented by small buffer for stability
+            new_cell = np.ptp(at.positions, axis=0) + buffer
+            # Set cell and center
+            at.set_cell(new_cell, scale_atoms=False)
+            at.center()
+
+        # Compute neighborhood
+        idx_i, idx_j, S = msp_neighbor_list("ijS", at, cutoff)
+        idx_i = torch.from_numpy(idx_i).long()
+        idx_j = torch.from_numpy(idx_j).long()
+        S = torch.from_numpy(S).to(dtype=positions.dtype)
+        offset = torch.mm(S, cell)
+
         return idx_i, idx_j, offset
 
 
