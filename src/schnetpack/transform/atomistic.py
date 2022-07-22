@@ -85,15 +85,14 @@ class RemoveOffsets(Transform):
         if self.remove_mean:
             self.register_buffer("mean", torch.zeros((1,)))
 
-    def datamodule(self, value):
-        self._datamodule = value
+    def datamodule(self, _datamodule):
 
         if self.remove_atomrefs:
-            atrefs = self._datamodule.train_dataset.atomrefs
+            atrefs = _datamodule.train_dataset.atomrefs
             self.atomref = atrefs[self._property].detach()
 
         if self.remove_mean:
-            stats = self._datamodule.get_stats(
+            stats = _datamodule.get_stats(
                 self._property, self.is_extensive, self.remove_atomrefs
             )
             self.mean = stats[0].detach()
@@ -150,10 +149,9 @@ class ScaleProperty(Transform):
 
         self.register_buffer("scale", torch.ones((1,)))
 
-    def datamodule(self, value):
-        self._datamodule = value
+    def datamodule(self, _datamodule):
 
-        stats = self._datamodule.get_stats(self._target_key, True, False)
+        stats = _datamodule.get_stats(self._target_key, True, False)
         scale = stat[0] if self._scale_by_mean else stats[1]
         self.scale = abs(stats[0]).detach()
 

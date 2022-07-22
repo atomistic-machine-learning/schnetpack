@@ -7,4 +7,4 @@ model_checkpoint:
     verbose: False
     dirpath: 'checkpoints/'
     filename: '{epoch:02d}'
-    inference_path: 'best_inference_model'
+    model_path: ${globals.model_path}

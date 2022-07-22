@@ -2,6 +2,7 @@ import logging
 import os
 import uuid
 import tempfile
+import socket
 from typing import List
 
 import torch
@@ -11,6 +12,7 @@ from pytorch_lightning import LightningModule, LightningDataModule, Callback, Tr
 from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import LightningLoggerBase
 
+import schnetpack as spk
 from schnetpack.utils import str2class
 from schnetpack.utils.script import log_hyperparameters, print_config
 from schnetpack.data import BaseAtomsData, AtomsLoader
@@ -31,13 +33,14 @@ header = """
 """
 
 
-@hydra.main(config_path="configs", config_name="train")
+@hydra.main(config_path="configs", config_name="train", version_base="1.2")
 def train(config: DictConfig):
     """
     General training routine for all models defined by the provided hydra configs.
 
     """
     print(header)
+    log.info("Runnning on host: " + str(socket.gethostname()))
 
     if OmegaConf.is_missing(config, "run.data_dir"):
         log.error(
@@ -110,7 +113,7 @@ def train(config: DictConfig):
         str2class(config.task.scheduler_cls) if config.task.scheduler_cls else None
     )
 
-    task: LightningModule = hydra.utils.instantiate(
+    task: spk.AtomisticTask = hydra.utils.instantiate(
         config.task,
         model=model,
         optimizer_cls=str2class(config.task.optimizer_cls),
@@ -155,13 +158,19 @@ def train(config: DictConfig):
 
     # Evaluate model on test set after training
     log.info("Starting testing.")
-    trainer.test(model=task, datamodule=datamodule)
+    trainer.test(model=task, datamodule=datamodule, ckpt_path="best")
 
-    # Print path to best checkpoint
-    log.info(f"Best checkpoint path:\n{trainer.checkpoint_callback.best_model_path}")
+    # Store best model
+    best_path = trainer.checkpoint_callback.best_model_path
+    log.info(f"Best checkpoint path:\n{best_path}")
+
+    log.info(f"Store best model")
+    best_task = type(task).load_from_checkpoint(best_path)
+    best_task.save_model(config.globals.model_path, do_postprocessing=True)
+    log.info(f"Best model stored at {os.path.abspath(config.globals.model_path)}")
 
 
-@hydra.main(config_path="configs", config_name="predict")
+@hydra.main(config_path="configs", config_name="predict", version_base="1.2")
 def predict(config: DictConfig):
     log.info(f"Load data from `{config.data.datapath}`")
     dataset: BaseAtomsData = hydra.utils.instantiate(config.data)

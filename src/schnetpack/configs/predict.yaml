@@ -22,6 +22,9 @@ data:
 
 # hydra configuration
 hydra:
+    job:
+      chdir: True
+
     # output paths for hydra logs
     run:
         dir: ${modeldir}
