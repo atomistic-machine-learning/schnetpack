@@ -40,7 +40,7 @@ def train(config: DictConfig):
 
     """
     print(header)
-    log.info("Runnning on host:", str(socket.gethostname()))
+    log.info("Runnning on host: " + str(socket.gethostname()))
 
     if OmegaConf.is_missing(config, "run.data_dir"):
         log.error(
@@ -167,7 +167,7 @@ def train(config: DictConfig):
     log.info(f"Store best model")
     best_task = type(task).load_from_checkpoint(best_path)
     best_task.save_model(config.globals.model_path, do_postprocessing=True)
-    log.info(f"Best model stored at {os.path.abspath('best_model')}")
+    log.info(f"Best model stored at {os.path.abspath(config.globals.model_path)}")
 
 
 @hydra.main(config_path="configs", config_name="predict", version_base="1.2")
