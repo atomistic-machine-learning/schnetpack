@@ -23,13 +23,11 @@ idx_i_lr = "_idx_i_lr"  #: indices of center atoms for long-range
 idx_j_lr = "_idx_j_lr"  #: indices of neighboring atoms for long-range
 
 lidx_i = "_idx_i_local"  #: local indices of center atoms (within system)
-lidx_j: Final[
-    str
-] = "_idx_j_local"  #: local indices of neighboring atoms (within system)
+lidx_j = "_idx_j_local"  #: local indices of neighboring atoms (within system)
 Rij = "_Rij"  #: vectors pointing from center atoms to neighboring atoms
-Rij_lr: Final[
-    str
-] = "_Rij_lr"  #: vectors pointing from center atoms to neighboring atoms for long range
+Rij_lr = (
+    "_Rij_lr"  #: vectors pointing from center atoms to neighboring atoms for long range
+)
 n_atoms = "_n_atoms"  #: number of atoms
 offsets = "_offsets"  #: cell offset vectors
 offsets_lr = "_offsets_lr"  #: cell offset vectors for long range
