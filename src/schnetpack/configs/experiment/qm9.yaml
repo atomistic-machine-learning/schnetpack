@@ -4,7 +4,7 @@ defaults:
   - override /model: nnp
   - override /data: qm9
 
-run_dir: runs/qm9_${property}
+run.path: runs/qm9_${globals.property}
 
 globals:
   cutoff: 5.

@@ -7,6 +7,5 @@ max_epochs: 3
 
 # prints
 detect_anomaly: True
-weights_summary: null
 profiler: simple
 
