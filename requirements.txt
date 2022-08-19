@@ -1,10 +1,14 @@
 PyYAML
 --index-url https://pypi.python.org/simple/
 
-torch>=1.8.0
+torch>=1.9
+pytorch_lightning>=1.6.0
+protobuf==3.20.1
+hydra-core>=1.1.0
+hydra-colorlog>=1.1.0
 numpy
-ase>=3.19
-tensorboardX
+ase>=3.21
+torchmetrics
 h5py
 tqdm
 pytest

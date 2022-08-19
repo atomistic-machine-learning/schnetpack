@@ -1,0 +1,10 @@
+defaults:
+  - custom
+
+_target_: schnetpack.datasets.OrganicMaterialsDatabase
+
+datapath: ${run.data_dir}/omdb.db  # data_dir is specified in train.yaml
+batch_size: 32
+num_train: 0.8
+num_val: 0.1
+raw_path: null

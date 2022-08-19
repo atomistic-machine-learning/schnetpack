@@ -1,0 +1,8 @@
+defaults:
+  - representation: painn
+
+_target_: schnetpack.model.NeuralNetworkPotential
+
+input_modules:
+  - _target_: schnetpack.atomistic.PairwiseDistances
+output_modules: ???

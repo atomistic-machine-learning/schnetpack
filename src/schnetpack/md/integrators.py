@@ -6,14 +6,22 @@ integrator simulates multiple replicas of the system coupled by harmonic springs
 a certain extent of nuclear quantum effects (e.g. tunneling).
 """
 import torch
+import torch.nn as nn
 import numpy as np
 
-from schnetpack.md.utils import NormalModeTransformer, MDUnits
+import schnetpack as spk
+from schnetpack.md import System
+from schnetpack.md.simulation_hooks import BarostatHook
+
+from ase import units as ase_units
+from schnetpack import units as spk_units
 
 __all__ = ["VelocityVerlet", "RingPolymer", "NPTVelocityVerlet", "NPTRingPolymer"]
 
 
-class Integrator:
+class Integrator(nn.Module):
+    ring_polymer = False
+    pressure_control = False
     """
     Basic integrator class template. Uses the typical scheme of propagating
     system momenta in two half steps and system positions in one main step.
@@ -25,18 +33,16 @@ class Integrator:
 
     Args:
         time_step (float): Integration time step in femto seconds.
-        detach (bool): If set to true, torch graphs of the propagation are
-                       detached after every step (recommended, due to extreme
-                       memory usage). This functionality could in theory be used
-                       to formulate differentiable MD.
     """
 
-    def __init__(self, time_step, detach=True, device="cuda"):
-        self.time_step = time_step * MDUnits.fs2internal
-        self.detach = detach
-        self.device = device
+    def __init__(self, time_step: float):
+        super(Integrator, self).__init__()
+        # Convert fs to internal time units.
+        self.time_step = time_step * spk.units.convert_units(
+            ase_units.fs, spk_units.time
+        )
 
-    def main_step(self, system):
+    def main_step(self, system: System):
         """
         Main integration step wrapper routine to make a default detach
         behavior possible. Calls upon _main_step to perform the actual
@@ -47,11 +53,8 @@ class Integrator:
                              replicas.
         """
         self._main_step(system)
-        if self.detach:
-            system.positions = system.positions.detach()
-            system.momenta = system.momenta.detach()
 
-    def half_step(self, system):
+    def half_step(self, system: System):
         """
         Half steps propagating the system momenta according to:
 
@@ -59,15 +62,12 @@ class Integrator:
             p = p + \frac{1}{2} F \delta t
 
         Args:
-            system (object): System class containing all molecules and their
+            system (schnetpack.md.System): System class containing all molecules and their
                              replicas.
         """
         system.momenta = system.momenta + 0.5 * system.forces * self.time_step
 
-        if self.detach:
-            system.momenta = system.momenta.detach()
-
-    def _main_step(self, system):
+    def _main_step(self, system: System):
         """
         Main integration step to be implemented in derived routines.
 
@@ -79,6 +79,8 @@ class Integrator:
 
 
 class VelocityVerlet(Integrator):
+    ring_polymer = False
+    pressure_control = False
     """
     Standard velocity Verlet integrator for non ring-polymer simulations.
 
@@ -86,10 +88,10 @@ class VelocityVerlet(Integrator):
         time_step (float): Integration time step in femto seconds.
     """
 
-    def __init__(self, time_step, device="cuda"):
-        super(VelocityVerlet, self).__init__(time_step, device=device)
+    def __init__(self, time_step: float):
+        super(VelocityVerlet, self).__init__(time_step)
 
-    def _main_step(self, system):
+    def _main_step(self, system: System):
         """
         Propagate the positions of the system according to:
 
@@ -104,11 +106,10 @@ class VelocityVerlet(Integrator):
             system.positions + self.time_step * system.momenta / system.masses
         )
 
-        if self.detach:
-            system.positions = system.positions.detach()
-
 
 class RingPolymer(Integrator):
+    ring_polymer = True
+    pressure_control = False
     """
     Integrator for ring polymer molecular dynamics, as e.g. described in
     [#rpmd1]_
@@ -122,11 +123,9 @@ class RingPolymer(Integrator):
     Uses atomic units of time internally.
 
     Args:
-        n_beads (int): Number of beads in the ring polymer.
         time_step (float): Time step in femto seconds.
+        n_beads (int): Number of beads in the ring polymer.
         temperature (float): Ring polymer temperature in Kelvin.
-        transformation (schnetpack.md.utils.NormalModeTransformer): Normal mode transformer class.
-        device (str): Device used for computations, default is GPU ('cuda')
 
     References
     ----------
@@ -135,41 +134,26 @@ class RingPolymer(Integrator):
        The Journal of Chemical Physics, 133, 124105. 2010.
     """
 
-    def __init__(
-        self,
-        n_beads,
-        time_step,
-        temperature,
-        transformation=NormalModeTransformer,
-        device="cuda",
-    ):
-        super(RingPolymer, self).__init__(time_step, device=device)
+    def __init__(self, time_step: float, n_beads: int, temperature: float):
+        super(RingPolymer, self).__init__(time_step)
 
         self.n_beads = n_beads
 
         # Compute the ring polymer frequency
-        self.omega = MDUnits.kB * n_beads * temperature / MDUnits.hbar
-        self.transformation = transformation(n_beads, device=self.device)
+        self.omega = spk_units.kB * n_beads * temperature / spk_units.hbar
 
-        # Set up omega_normal, the ring polymer frequencies in normal mode
-        # representation
-        self.omega_normal = (
-            2
-            * self.omega
-            * torch.sin(
-                torch.arange(self.n_beads, device=device).float() * np.pi / self.n_beads
-            )
-        )
-
-        # Initialize the propagator matrices
-        self.propagator = self._init_propagator()
+        # Initialize the propagator matrices and normal mode frequencies
+        omega_normal, propagator = self._init_propagator()
+        self.register_buffer("omega_normal", omega_normal)
+        self.register_buffer("propagator", propagator)
 
     def _init_propagator(self):
         """
-        Constructs the ring polymer propagator in normal mode representation
+        Computes the ring polymer normal mode frequencies and constructs propagator in normal mode representation
         as for example given in [#rpmd2]_.
 
         Returns:
+            torch.Tensor: ring polymer frequencies in normal mode representation
             torch.Tensor: Propagator with the dimension n_beads x 2 x 2,
                           where the last two dimensions mix the systems
                           momenta and positions in normal mode representation.
@@ -182,31 +166,38 @@ class RingPolymer(Integrator):
            The Journal of Chemical Physics, 133, 124105. 2010.
         """
 
+        # Set up omega_normal, the ring polymer frequencies in normal mode
+        omega_normal = (
+            2.0
+            * self.omega
+            * torch.sin(torch.arange(self.n_beads).float() * np.pi / self.n_beads)
+        )
+
         # Compute basic terms
-        omega_dt = self.omega_normal * self.time_step
+        omega_dt = omega_normal * self.time_step
         cos_dt = torch.cos(omega_dt)
         sin_dt = torch.sin(omega_dt)
 
         # Initialize the propagator
-        propagator = torch.zeros(self.n_beads, 2, 2, device=self.device)
+        propagator = torch.zeros(self.n_beads, 2, 2)
 
         # Define the propagator elements, the central normal mode is treated
         # special
         propagator[:, 0, 0] = cos_dt
         propagator[:, 1, 1] = cos_dt
-        propagator[:, 0, 1] = -sin_dt * self.omega_normal
-        propagator[1:, 1, 0] = sin_dt[1:] / self.omega_normal[1:]
+        propagator[:, 0, 1] = -sin_dt * omega_normal
+        propagator[1:, 1, 0] = sin_dt[1:] / omega_normal[1:]
 
         # Centroid normal mode is special as reverts to standard velocity
         # Verlet for one bead.
         propagator[0, 1, 0] = self.time_step
 
         # Expand dimensions to avoid broadcasting in main_step
-        propagator = propagator[..., None, None, None]
+        propagator = propagator[..., None, None]
 
-        return propagator
+        return omega_normal, propagator
 
-    def _main_step(self, system):
+    def _main_step(self, system: System):
         """
         Main propagation step for ring polymer dynamics. First transforms
         positions and momenta to their normal mode representations,
@@ -216,33 +207,27 @@ class RingPolymer(Integrator):
         current system state.
 
         Args:
-            system (object): System class containing all molecules and their
+            system (schnetpack.md.System): System class containing all molecules and their
                              replicas.
         """
         # Transform to normal mode representation
-        positions_normal = self.transformation.beads2normal(system.positions)
-        momenta_normal = self.transformation.beads2normal(system.momenta)
+        positions_normal = system.positions_normal
+        momenta_normal = system.momenta_normal
 
         # Propagate ring polymer
-        momenta_normal = (
+        system.momenta_normal = (
             self.propagator[:, 0, 0] * momenta_normal
             + self.propagator[:, 0, 1] * positions_normal * system.masses
         )
-        positions_normal = (
+        system.positions_normal = (
             self.propagator[:, 1, 0] * momenta_normal / system.masses
             + self.propagator[:, 1, 1] * positions_normal
         )
 
-        # Transform back to bead representation
-        system.positions = self.transformation.normal2beads(positions_normal)
-        system.momenta = self.transformation.normal2beads(momenta_normal)
-
-        if self.detach:
-            system.positions = system.positions.detach()
-            system.momenta = system.momenta.detach()
-
 
 class NPTVelocityVerlet(VelocityVerlet):
+    ring_polymer = False
+    pressure_control = True
     """
     Verlet integrator for constant pressure dynamics (NPT). Since barostats modify the position update,
     a routine defined in the respectve barostat class is called every main step.
@@ -252,54 +237,11 @@ class NPTVelocityVerlet(VelocityVerlet):
         barostat (schnetpack.md.simulation_hooks.BarostatHook): Barostat used for constant pressure dynamics.
     """
 
-    def __init__(self, time_step, barostat, device="cuda"):
-        super(NPTVelocityVerlet, self).__init__(time_step, device=device)
+    def __init__(self, time_step: float, barostat: BarostatHook):
+        super(NPTVelocityVerlet, self).__init__(time_step)
         self.barostat = barostat
 
-    def _main_step(self, system):
-        """
-        Main integrator step, where the barostat routine is used to propagate the system positions and cells.
-        """
-        self.barostat.propagate_system(system)
-
-        if self.detach:
-            system.positions = system.positions.detach()
-            system.cells = system.cells.detach()
-
-
-class NPTRingPolymer(RingPolymer):
-    """
-    Ring polymer integrator for constant pressure dynamics (NPT). Here, the barostat modifies the main and the
-    half steps.
-
-    Args:
-        n_beads (int): Number of beads in the ring polymer.
-        time_step (float): Time step in femto seconds.
-        temperature (float): Ring polymer temperature in Kelvin.
-        barostat (schnetpack.md.simulation_hooks.BarostatHook): Barostat used for constant pressure dynamics.
-        transformation (schnetpack.md.utils.NormalModeTransformer): Normal mode transformer class.
-        device (str): Device used for computations, default is GPU ('cuda')
-    """
-
-    def __init__(
-        self,
-        n_beads,
-        time_step,
-        temperature,
-        barostat,
-        transformation=NormalModeTransformer,
-        device="cuda",
-    ):
-        super(NPTRingPolymer, self).__init__(
-            n_beads,
-            time_step,
-            temperature,
-            transformation=transformation,
-            device=device,
-        )
-        self.barostat = barostat
-
-    def half_step(self, system):
+    def half_step(self, system: System):
         """
         Half steps propagating the system and barostat momenta.
 
@@ -307,14 +249,46 @@ class NPTRingPolymer(RingPolymer):
             system (object): System class containing all molecules and their
                              replicas.
         """
-        self.barostat.propagate_barostat_half_step(system)
+        self.barostat.propagate_half_step(system)
 
-        system.momenta = system.momenta + 0.5 * system.forces * self.time_step
+    def _main_step(self, system: System):
+        """
+        Main integrator step, where the barostat routine is used to propagate the system positions and cells.
+        """
+        self.barostat.propagate_main_step(system)
 
-        if self.detach:
-            system.momenta = system.momenta.detach()
 
-    def _main_step(self, system):
+class NPTRingPolymer(RingPolymer):
+    ring_polymer = True
+    pressure_control = True
+    """
+    Ring polymer integrator for constant pressure dynamics (NPT). Here, the barostat modifies the main and the
+    half steps.
+
+    Args:
+        time_step (float): Time step in femto seconds.
+        n_beads (int): Number of beads in the ring polymer.
+        temperature (float): Ring polymer temperature in Kelvin.
+        barostat (schnetpack.md.simulation_hooks.BarostatHook): Barostat used for constant pressure dynamics.
+    """
+
+    def __init__(
+        self, time_step: float, n_beads: int, temperature: float, barostat: BarostatHook
+    ):
+        super(NPTRingPolymer, self).__init__(time_step, n_beads, temperature)
+        self.barostat = barostat
+
+    def half_step(self, system: System):
+        """
+        Half steps propagating the system and barostat momenta.
+
+        Args:
+            system (object): System class containing all molecules and their
+                             replicas.
+        """
+        self.barostat.propagate_half_step(system)
+
+    def _main_step(self, system: System):
         """
         Perform the main update using the barostat routine.
 
@@ -322,9 +296,4 @@ class NPTRingPolymer(RingPolymer):
             system (object): System class containing all molecules and their
                              replicas.
         """
-        self.barostat.propagate_system(system)
-
-        if self.detach:
-            system.positions = system.positions.detach()
-            system.momenta = system.momenta.detach()
-            system.cells = system.cells.detach()
+        self.barostat.propagate_main_step(system)

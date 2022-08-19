@@ -1,6 +1,7 @@
 # SchNetPack - Deep Neural Networks for Atomistic Systems
 [![Build Status](https://travis-ci.com/atomistic-machine-learning/schnetpack.svg?branch=master)](https://travis-ci.com/atomistic-machine-learning/schnetpack)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/python/black)
+[![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
 
 
 SchNetPack aims to provide accessible atomistic neural networks
@@ -12,14 +13,14 @@ extensible to custom atomistic architectures.
 - SchNet - an end-to-end continuous-filter CNN for molecules and materials [1-3]
 - wACSF - weighted atom-centered symmetry functions [4,5]
 
-_**Note: This is the last version before a major update. In the next version, we plan to adopt Hydra and PyTorch Lightning, switch to indexing instead of masking and make the networks compatible with TorchScript. Therefore, there will be breaking changes.**_
+_** Major update! Breaking changes! Under construction! **_
 
 ##### Requirements:
+- python 3.8
 - ASE
 - numpy
-- PyTorch (>=1.8)
-- h5py
-- Optional: tensorboardX
+- PyTorch 1.9
+- hydra
 
 _**Note: We recommend using a GPU for training the neural networks.**_
 
@@ -55,55 +56,32 @@ pip install .
 You're ready to go!
 
 ## Getting started
-
-The best place to start is training a SchNetPack model on a common benchmark dataset. 
-The example scripts provided by SchNetPack are inserted into your PATH during installation. 
+ 
 
 ### QM9 example
 
-The QM9 example scripts allows to train and evaluate both SchNet and wACSF neural networks.
-The training can be started using:
+Under construction. For a first test, use:
 
 ```
-spk_run.py train <schnet/wacsf> qm9 <dbpath> <modeldir> --split num_train num_val [--cuda]
+spktrain experiment=qm9 model/representation=painn
 ```
-
-where num_train and num_val need to be replaced by the number of training and validation datapoints respectively.
-
-You can choose between SchNet and wACSF networks and have to provide a path to the database file and a path to a directory which will be used to store the model. If the database path does not exist, the data is downloaded and stored there. Please note that the database path must include the file extension .db.
-With the `--cuda` flag, you can activate GPU training.
-The default hyper-parameters should work fine, however, you can change them through command-line arguments. 
-Please refer to the help at `spk_run.py train <schnet/wacsf> --help`. 
-
-The training progress will be logged in `<modeldir>/log`, either as CSV 
-(default) or as TensorBoard event files. For the latter, TensorBoard needs to be installed to view the event files.
-This can be done by installing the version included in TensorFlow 
-
-```
-pip install tensorflow
-```
-
-or the [standalone version](https://github.com/dmlc/tensorboard).
-
-To evaluate the trained model with the best validation error, call
-
-```
-spk_run.py eval <datapath> <modeldir> --split test [--cuda]
-```
-
-which will run on the specified `--split` and write a result file `evaluation.txt` into the model directory.
 
 ## Documentation
 
 For the full API reference, visit our [documentation](https://schnetpack.readthedocs.io).
 
-If you are using SchNetPack in you research, please cite:
+If you are using SchNetPack in your research, please cite:
 
 K.T. Schütt, P. Kessel, M. Gastegger, K. Nicoli, A. Tkatchenko, K.-R. Müller.
 SchNetPack: A Deep Learning Toolbox For Atomistic Systems.
 J. Chem. Theory Comput.
 [10.1021/acs.jctc.8b00908](http://dx.doi.org/10.1021/acs.jctc.8b00908)
 [arXiv:1809.01072](https://arxiv.org/abs/1809.01072). (2018)
+
+
+## Acknowledgements
+
+CLI and hydra configs for PyTorch Lightning are adapted from this template: [![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
 
 
 ## References

@@ -1,0 +1,10 @@
+defaults:
+  - custom
+
+_target_: schnetpack.datasets.MaterialsProject
+
+datapath: ${run.data_dir}/materials_project.db  # data_dir is specified in train.yaml
+batch_size: 32
+num_train: 60000
+num_val: 2000
+apikey: ???

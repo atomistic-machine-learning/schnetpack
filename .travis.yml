@@ -1,10 +1,8 @@
 language: python
 
 install:
-  - pip install -r docs/sphinx-requirements.txt
   - pip install codecov
   - pip install tox
-  - pip install pytest-datadir
 
 matrix:
   include:

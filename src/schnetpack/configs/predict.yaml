@@ -1,0 +1,61 @@
+# @package _global_
+defaults:
+  - trainer: default_trainer
+
+datapath: ???
+modeldir: ???
+outputdir: ???
+cutoff: ???
+batch_size: 100
+write_interval: batch_and_epoch
+
+
+data:
+  _target_: schnetpack.data.ASEAtomsData
+  datapath: ${datapath}
+  transforms:
+    - _target_: schnetpack.transform.SubtractCenterOfMass
+    - _target_: schnetpack.transform.MatScipyNeighborList
+      cutoff: ${cutoff}
+    - _target_: schnetpack.transform.CastTo32
+
+
+# hydra configuration
+hydra:
+    job:
+      chdir: True
+
+    # output paths for hydra logs
+    run:
+        dir: ${modeldir}
+
+    # disable hydra config storage, since handled manually
+    output_subdir: null
+
+    help:
+      app_name: SchNetPack Predict
+
+      template: |-
+        SchNetPack
+
+        == Configuration groups ==
+        Compose your configuration from those groups (db=mysql)
+
+        $APP_CONFIG_GROUPS
+
+        == Config ==
+        This is the config generated for this run.
+        You can change the config file to be loaded to a predefined one
+        > spktrain --config-name=train_qm9
+
+        or your own:
+        > spktrain --config-dir=./my_configs --config-name=my_config
+
+        You can override everything, for example:
+        > spktrain --config-name=train_qm9 data_dir=/path/to/datadir data.batch_size=50 --help
+
+        -------
+        $CONFIG
+        -------
+
+        ${hydra.help.footer}

@@ -1,0 +1,8 @@
+# @package task
+optimizer_cls: torch.optim.SGD
+optimizer_args:
+  lr: ${globals.lr}
+  weight_decay: 0.0
+  momentum: 0.0
+  nesterov: False
+  dampening: 0.0

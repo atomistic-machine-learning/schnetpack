@@ -10,778 +10,593 @@ References
    The atomic simulation environment -- a Python library for working with atoms.
    Journal of Physics: Condensed Matter, 9, 27. 2017.
 """
-
 import logging
 import os
-import warnings
-import bisect
+from abc import ABC, abstractmethod
+from enum import Enum
+from typing import Optional, List, Dict, Any, Iterable, Union, Tuple
 
-import numpy as np
 import torch
+import copy
+from ase import Atoms
 from ase.db import connect
-from torch.utils.data import Dataset, ConcatDataset, Subset
 
 import schnetpack as spk
-from schnetpack import Properties
-from schnetpack.environment import SimpleEnvironmentProvider, collect_atom_triples
-
-from tqdm import tqdm
+import schnetpack.properties as structure
+from schnetpack.transform import Transform
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "AtomsData",
-    "AtomsDataSubset",
-    "ConcatAtomsData",
-    "AtomsDataError",
-    "AtomsConverter",
-    "get_center_of_mass",
-    "get_center_of_geometry",
+    "ASEAtomsData",
+    "BaseAtomsData",
+    "AtomsDataFormat",
+    "resolve_format",
+    "create_dataset",
+    "load_dataset",
 ]
 
 
-def get_center_of_mass(atoms):
-    """
-    Computes center of mass.
+class AtomsDataFormat(Enum):
+    """Enumeration of data formats"""
 
-    Args:
-        atoms (ase.Atoms): atoms object of molecule
-
-    Returns:
-        center of mass
-    """
-    masses = atoms.get_masses()
-    return np.dot(masses, atoms.arrays["positions"]) / masses.sum()
-
-
-def get_center_of_geometry(atoms):
-    """
-    Computes center of geometry.
-
-    Args:
-        atoms (ase.Atoms): atoms object of molecule
-
-    Returns:
-        center of geometry
-    """
-    return atoms.arrays["positions"].mean(0)
+    ASE = "ase"
 
 
 class AtomsDataError(Exception):
     pass
 
 
-class AtomsData(Dataset):
-    """
-    PyTorch dataset for atomistic data. The raw data is stored in the specified
-    ASE database. Use together with schnetpack.data.AtomsLoader to feed data
-    to your model.
+extension_map = {AtomsDataFormat.ASE: ".db"}
 
-    Args:
-        dbpath (str): path to directory containing database.
-        subset (list, optional): Deprecated! Do not use! Subsets are created with
-            AtomsDataSubset class.
-        available_properties (list, optional): complete set of physical properties
-            that are contained in the database.
-        load_only (list, optional): reduced set of properties to be loaded
-        units (list, optional): definition of units for all available properties
-        environment_provider (spk.environment.BaseEnvironmentProvider): define how
-            neighborhood is calculated
-            (default=spk.environment.SimpleEnvironmentProvider).
-        collect_triples (bool, optional): Set to True if angular features are needed.
-        centering_function (callable or None): Function for calculating center of
-            molecule (center of mass/geometry/...). Center will be subtracted from
-            positions.
-    """
 
-    ENCODING = "utf-8"
+class BaseAtomsData(ABC):
+    """
+    Base mixin class for atomistic data. Use together with PyTorch Dataset or
+    IterableDataset to implement concrete data formats.
+    """
 
     def __init__(
         self,
-        dbpath,
-        subset=None,
-        available_properties=None,
-        load_only=None,
-        units=None,
-        environment_provider=SimpleEnvironmentProvider(),
-        collect_triples=False,
-        centering_function=get_center_of_mass,
+        load_properties: Optional[List[str]] = None,
+        load_structure: bool = True,
+        transforms: Optional[List[Transform]] = None,
+        subset_idx: Optional[List[int]] = None,
     ):
-        # checks
-        if not dbpath.endswith(".db"):
-            raise AtomsDataError(
-                "Invalid dbpath! Please make sure to add the file extension '.db' to "
-                "your dbpath."
-            )
-        if subset is not None:
-            raise AtomsDataError(
-                "The subset argument is deprecated and can not be used anymore! "
-                "Please use spk.data.partitioning.create_subset or "
-                "spk.data.AtomsDataSubset to build subsets."
-            )
+        """
+        Args:
+            load_properties: Set of properties to be loaded and returned.
+                If None, all properties in the ASE dB will be returned.
+            load_properties: If True, load structure properties.
+            transforms: preprocessing transforms (see schnetpack.data.transforms)
+            subset: List of data indices.
+        """
+        self._transform_module = None
+        self.load_properties = load_properties
+        self.load_structure = load_structure
+        self.transforms = transforms
+        self.subset_idx = subset_idx
 
-        # database
-        self.dbpath = dbpath
+    def __len__(self) -> int:
+        raise NotImplementedError
 
-        # check if database is deprecated:
-        if self._is_deprecated():
-            self._deprecation_update()
+    @property
+    def transforms(self):
+        return self._transforms
 
-        self._load_only = load_only
-        self._available_properties = self._get_available_properties(
-            available_properties
+    @transforms.setter
+    def transforms(self, value: Optional[List[Transform]]):
+        self._transforms = []
+        self._transform_module = None
+
+        if value is not None:
+            for tf in value:
+                self._transforms.append(tf)
+            self._transform_module = torch.nn.Sequential(*self._transforms)
+
+    def subset(self, subset_idx: List[int]):
+        assert (
+            subset_idx is not None
+        ), "Indices for creation of the subset need to be provided!"
+        ds = copy.copy(self)
+        if ds.subset_idx:
+            ds.subset_idx = [ds.subset_idx[i] for i in subset_idx]
+        else:
+            ds.subset_idx = subset_idx
+        return ds
+
+    @property
+    @abstractmethod
+    def available_properties(self) -> List[str]:
+        """Available properties in the dataset"""
+        pass
+
+    @property
+    @abstractmethod
+    def units(self) -> Dict[str, str]:
+        """Property to unit dict"""
+        pass
+
+    @property
+    def load_properties(self) -> List[str]:
+        """Properties to be loaded"""
+        return self._load_properties or self.available_properties
+
+    @load_properties.setter
+    def load_properties(self, val: List[str]):
+        if val is not None:
+            props = self.available_properties
+            assert all(
+                [p in props for p in val]
+            ), "Not all given properties are available in the dataset!"
+        self._load_properties = val
+
+    @property
+    @abstractmethod
+    def metadata(self) -> Dict[str, Any]:
+        """Global metadata"""
+        pass
+
+    @property
+    @abstractmethod
+    def atomrefs(self) -> Dict[str, torch.Tensor]:
+        """Single-atom reference values for properties"""
+        pass
+
+    @abstractmethod
+    def update_metadata(self, **kwargs):
+        pass
+
+    @abstractmethod
+    def iter_properties(
+        self,
+        indices: Union[int, Iterable[int]] = None,
+        load_properties: List[str] = None,
+        load_structure: Optional[bool] = None,
+    ):
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def create(
+        datapath: str,
+        position_unit: str,
+        property_unit_dict: Dict[str, str],
+        atomrefs: Dict[str, List[float]],
+        **kwargs,
+    ) -> "BaseAtomsData":
+        pass
+
+    @abstractmethod
+    def add_systems(
+        self,
+        property_list: List[Dict[str, Any]],
+        atoms_list: Optional[List[Atoms]] = None,
+    ):
+        pass
+
+    @abstractmethod
+    def add_system(self, atoms: Optional[Atoms] = None, **properties):
+        pass
+
+
+class ASEAtomsData(BaseAtomsData):
+    """
+    PyTorch dataset for atomistic data. The raw data is stored in the specified
+    ASE database.
+
+    """
+
+    def __init__(
+        self,
+        datapath: str,
+        load_properties: Optional[List[str]] = None,
+        load_structure: bool = True,
+        transforms: Optional[List[torch.nn.Module]] = None,
+        subset_idx: Optional[List[int]] = None,
+        property_units: Optional[Dict[str, str]] = None,
+        distance_unit: Optional[str] = None,
+    ):
+        """
+        Args:
+            datapath: Path to ASE DB.
+            load_properties: Set of properties to be loaded and returned.
+                If None, all properties in the ASE dB will be returned.
+            load_properties: If True, load structure properties.
+            transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
+            subset_idx: List of data indices.
+            units: property-> unit string dictionary that overwrites the native units
+                of the dataset. Units are converted automatically during loading.
+        """
+        self.datapath = datapath
+
+        BaseAtomsData.__init__(
+            self,
+            load_properties=load_properties,
+            load_structure=load_structure,
+            transforms=transforms,
+            subset_idx=subset_idx,
         )
 
-        if units is None:
-            units = [1.0] * len(self.available_properties)
-        self.units = dict(zip(self.available_properties, units))
+        self._check_db()
+        self.conn = connect(self.datapath, use_lock_file=False)
 
-        if len(units) != len(self.available_properties):
+        # initialize units
+        md = self.metadata
+        if "_distance_unit" not in md.keys():
             raise AtomsDataError(
-                "The length of available properties and units does not match!"
+                "Dataset does not have a distance unit set. Please add units to the "
+                + "dataset using `spkconvert`!"
+            )
+        if "_property_unit_dict" not in md.keys():
+            raise AtomsDataError(
+                "Dataset does not have a property units set. Please add units to the "
+                + "dataset using `spkconvert`!"
             )
 
-        # environment
-        self.environment_provider = environment_provider
-        self.collect_triples = collect_triples
-        self.centering_function = centering_function
+        if distance_unit:
+            self.distance_conversion = spk.units.convert_units(
+                md["_distance_unit"], distance_unit
+            )
+            self.distance_unit = distance_unit
+        else:
+            self.distance_conversion = 1.0
+            self.distance_unit = md["_distance_unit"]
 
-    @property
-    def available_properties(self):
-        return self._available_properties
+        self._units = md["_property_unit_dict"]
+        self.conversions = {prop: 1.0 for prop in self._units}
+        if property_units is not None:
+            for prop, unit in property_units.items():
+                self.conversions[prop] = spk.units.convert_units(
+                    self._units[prop], unit
+                )
+                self._units[prop] = unit
 
-    @property
-    def load_only(self):
-        if self._load_only is None:
-            return self.available_properties
-        return self._load_only
+    def __len__(self) -> int:
+        if self.subset_idx is not None:
+            return len(self.subset_idx)
 
-    @property
-    def atomref(self):
-        return self.get_atomref(self.load_only)
+        with connect(self.datapath, use_lock_file=False) as conn:
+            return conn.count()
 
-    # metadata
-    def get_metadata(self, key=None):
+    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+        if self.subset_idx is not None:
+            idx = self.subset_idx[idx]
+
+        props = self._get_properties(
+            self.conn, idx, self.load_properties, self.load_structure
+        )
+        props = self._apply_transforms(props)
+
+        return props
+
+    def _apply_transforms(self, props):
+        if self._transform_module is not None:
+            props = self._transform_module(props)
+        return props
+
+    def _check_db(self):
+        if not os.path.exists(self.datapath):
+            raise AtomsDataError(f"ASE DB does not exists at {self.datapath}")
+
+        if self.subset_idx:
+            with connect(self.datapath, use_lock_file=False) as conn:
+                n_structures = conn.count()
+
+            assert max(self.subset_idx) < n_structures
+
+    def iter_properties(
+        self,
+        indices: Union[int, Iterable[int]] = None,
+        load_properties: List[str] = None,
+        load_structure: Optional[bool] = None,
+    ):
         """
-        Returns an entry from the metadata dictionary of the ASE db.
+        Return property dictionary at given indices.
 
         Args:
-            key: Name of metadata entry. Return full dict if `None`.
+            indices: data indices
+            load_properties (sequence or None): subset of available properties to load
+            load_structure: load and return structure
 
         Returns:
-            value: Value of metadata entry or full metadata dict, if key is `None`.
-
-        """
-        with connect(self.dbpath) as conn:
-            if key is None:
-                return conn.metadata
-            if key in conn.metadata.keys():
-                return conn.metadata[key]
-        return None
-
-    def set_metadata(self, metadata=None, **kwargs):
-        """
-        Sets the metadata dictionary of the ASE db.
-
-        Args:
-            metadata (dict): dictionary of metadata for the ASE db
-            kwargs: further key-value pairs for convenience
-        """
-
-        # merge all metadata
-        if metadata is not None:
-            kwargs.update(metadata)
-
-        with connect(self.dbpath) as conn:
-            conn.metadata = kwargs
-
-    def update_metadata(self, data):
-        with connect(self.dbpath) as conn:
-            metadata = conn.metadata
-        metadata.update(data)
-        self.set_metadata(metadata)
-
-    def get_atomref(self, properties):
-        """
-        Return multiple single atom reference values as a dictionary.
-
-        Args:
-            properties (list or str): Desired properties for which the atomrefs are
-                calculated.
-
-        Returns:
-            dict: atomic references
-        """
-        if type(properties) is not list:
-            properties = [properties]
-        return {p: self._get_atomref(p) for p in properties}
-
-    # get atoms and properties
-    def get_properties(self, idx, load_only=None):
-        """
-        Return property dictionary at given index.
-
-        Args:
-            idx (int): data index
-            load_only (sequence or None): subset of available properties to load
-
-        Returns:
-            at (ase.Atoms): atoms object
             properties (dict): dictionary with molecular properties
 
         """
-        # use all available properties if nothing is specified
-        if load_only is None:
-            load_only = self.available_properties
+        load_properties = load_properties or self.load_properties
+        load_structure = load_structure or self.load_structure
 
-        # read from ase-database
-        with connect(self.dbpath) as conn:
-            row = conn.get(idx + 1)
-        at = row.toatoms()
+        if self.subset_idx:
+            if indices is None:
+                indices = self.subset_idx
+            elif type(indices) is int:
+                indices = [self.subset_idx[indices]]
+            else:
+                indices = [self.subset_idx[i] for i in indices]
+        else:
+            if indices is None:
+                indices = range(len(self))
+            elif type(indices) is int:
+                indices = [indices]
+
+        # read from ase db
+        with connect(self.datapath, use_lock_file=False) as conn:
+            for i in indices:
+                yield self._get_properties(
+                    conn,
+                    i,
+                    load_properties=load_properties,
+                    load_structure=load_structure,
+                )
+
+    def _get_properties(
+        self, conn, idx: int, load_properties: List[str], load_structure: bool
+    ):
+        row = conn.get(idx + 1)
 
         # extract properties
+        # TODO: can the copies be avoided?
         properties = {}
-        for pname in load_only:
-            properties[pname] = row.data[pname]
+        properties[structure.idx] = torch.tensor([idx])
+        for pname in load_properties:
+            properties[pname] = (
+                torch.tensor(row.data[pname].copy()) * self.conversions[pname]
+            )
 
-        # extract/calculate structure
-        properties = _convert_atoms(
-            at,
-            environment_provider=self.environment_provider,
-            collect_triples=self.collect_triples,
-            centering_function=self.centering_function,
-            output=properties,
-        )
+        Z = row["numbers"].copy()
+        properties[structure.n_atoms] = torch.tensor([Z.shape[0]])
 
-        return at, properties
+        if load_structure:
+            properties[structure.Z] = torch.tensor(Z, dtype=torch.long)
+            properties[structure.position] = (
+                torch.tensor(row["positions"].copy()) * self.distance_conversion
+            )
+            properties[structure.cell] = (
+                torch.tensor(row["cell"][None].copy()) * self.distance_conversion
+            )
+            properties[structure.pbc] = torch.tensor(row["pbc"])
 
-    def get_atoms(self, idx):
+        return properties
+
+    # Metadata
+
+    @property
+    def metadata(self):
+        with connect(self.datapath) as conn:
+            return conn.metadata
+
+    def _set_metadata(self, val: Dict[str, Any]):
+        with connect(self.datapath) as conn:
+            conn.metadata = val
+
+    def update_metadata(self, **kwargs):
+        assert all(
+            key[0] != 0 for key in kwargs
+        ), "Metadata keys starting with '_' are protected!"
+
+        md = self.metadata
+        md.update(kwargs)
+        self._set_metadata(md)
+
+    @property
+    def available_properties(self) -> List[str]:
+        md = self.metadata
+        return list(md["_property_unit_dict"].keys())
+
+    @property
+    def units(self) -> Dict[str, str]:
+        """Dictionary of properties to units"""
+        return self._units
+
+    @property
+    def atomrefs(self) -> Dict[str, torch.Tensor]:
+        md = self.metadata
+        arefs = md["atomrefs"]
+        arefs = {k: self.conversions[k] * torch.tensor(v) for k, v in arefs.items()}
+        return arefs
+
+    ## Creation
+
+    @staticmethod
+    def create(
+        datapath: str,
+        distance_unit: str,
+        property_unit_dict: Dict[str, str],
+        atomrefs: Optional[Dict[str, List[float]]] = None,
+        **kwargs,
+    ) -> "ASEAtomsData":
         """
-        Return atoms of provided index.
 
         Args:
-            idx (int): atoms index
+            datapath: Path to ASE DB.
+            distance_unit: unit of atom positions and cell
+            property_unit_dict: Defines the available properties of the datasetseta and
+                provides units for ALL properties of the dataset. If a property is
+                unit-less, you can pass "arb. unit" or `None`.
+            kwargs: Pass arguments to init.
 
         Returns:
-            ase.Atoms: atoms data
+            newly created ASEAtomsData
 
         """
-        with connect(self.dbpath) as conn:
-            row = conn.get(idx + 1)
-        at = row.toatoms()
-        return at
+        if not datapath.endswith(".db"):
+            raise AtomsDataError(
+                "Invalid datapath! Please make sure to add the file extension '.db' to "
+                "your dbpath."
+            )
+
+        if os.path.exists(datapath):
+            raise AtomsDataError(f"Dataset already exists: {datapath}")
+
+        atomrefs = atomrefs or {}
+
+        with connect(datapath) as conn:
+            conn.metadata = {
+                "_property_unit_dict": property_unit_dict,
+                "_distance_unit": distance_unit,
+                "atomrefs": atomrefs,
+            }
+
+        return ASEAtomsData(datapath, **kwargs)
 
     # add systems
-    def add_system(self, atoms, properties=dict(), key_value_pairs=dict()):
+    def add_system(self, atoms: Optional[Atoms] = None, **properties):
         """
         Add atoms data to the dataset.
 
         Args:
-            atoms (ase.Atoms): system composition and geometry
+            atoms: System composition and geometry. If Atoms are None,
+                the structure needs to be given as part of the property dict
+                (using structure.Z, structure.R, structure.cell, structure.pbc)
             **properties: properties as key-value pairs. Keys have to match the
                 `available_properties` of the dataset.
 
         """
-        with connect(self.dbpath) as conn:
-            self._add_system(conn, atoms, properties, key_value_pairs)
+        with connect(self.datapath) as conn:
+            self._add_system(conn, atoms, **properties)
 
-    def add_systems(self, atoms_list, property_list=None, key_value_pairs_list=None):
+    def add_systems(
+        self,
+        property_list: List[Dict[str, Any]],
+        atoms_list: Optional[List[Atoms]] = None,
+    ):
         """
         Add atoms data to the dataset.
 
         Args:
-            atoms_list (list of ase.Atoms): system composition and geometry
-            property_list (list): Properties as list of key-value pairs in the same
+            atoms_list: System composition and geometry. If Atoms are None,
+                the structure needs to be given as part of the property dicts
+                (using structure.Z, structure.R, structure.cell, structure.pbc)
+            property_list: Properties as list of key-value pairs in the same
                 order as corresponding list of `atoms`.
-                Keys have to match the `available_properties` of the dataset.
-
+                Keys have to match the `available_properties` of the dataset
+                plus additional structure properties, if atoms is None.
         """
-        # build empty dicts if property/kv_pairs list is None
-        if property_list is None:
-            property_list = [dict() for _ in range(len(atoms_list))]
-        if key_value_pairs_list is None:
-            key_value_pairs_list = [dict() for _ in range(len(atoms_list))]
+        if atoms_list is None:
+            atoms_list = [None] * len(property_list)
 
-        # write systems to database
-        with connect(self.dbpath) as conn:
-            for at, prop, kv_pair in zip(
-                atoms_list, property_list, key_value_pairs_list
-            ):
-                self._add_system(conn, at, prop, kv_pair)
+        with connect(self.datapath) as conn:
+            for at, prop in zip(atoms_list, property_list):
+                self._add_system(conn, at, **prop)
 
-    # deprecated
-    def create_subset(self, subset):
-        warnings.warn(
-            "create_subset is deprecated! Please use "
-            "spk.data.partitioning.create_subset.",
-            DeprecationWarning,
-        )
-        from .partitioning import create_subset
+    def _add_system(self, conn, atoms: Optional[Atoms] = None, **properties):
+        """Add systems to DB"""
+        if atoms is None:
+            try:
+                Z = properties[structure.Z]
+                R = properties[structure.R]
+                cell = properties[structure.cell]
+                pbc = properties[structure.pbc]
+                atoms = Atoms(numbers=Z, positions=R, cell=cell, pbc=pbc)
+            except KeyError as e:
+                raise AtomsDataError(
+                    "Property dict does not contain all necessary structure keys"
+                ) from e
 
-        return create_subset(self, subset)
-
-    # __functions__
-    def __len__(self):
-        with connect(self.dbpath) as conn:
-            return conn.count()
-
-    def __getitem__(self, idx):
-        _, properties = self.get_properties(idx, self.load_only)
-        properties["_idx"] = np.array([idx], dtype=np.int)
-
-        return torchify_dict(properties)
-
-    def __add__(self, other):
-        return ConcatAtomsData([self, other])
-
-    # private methods
-    def _add_system(self, conn, atoms, properties=dict(), key_value_pairs=dict()):
-        """
-        Write systems to the database. Floats, ints and np.ndarrays without dimension are transformed to np.ndarrays with dimension 1.
-
-        """
-        data = {}
         # add available properties to database
-        for pname in self.available_properties:
+        valid_props = set().union(
+            conn.metadata["_property_unit_dict"].keys(),
+            [
+                structure.Z,
+                structure.R,
+                structure.cell,
+                structure.pbc,
+            ],
+        )
+        for prop in properties:
+            if prop not in valid_props:
+                logger.warning(
+                    f"Property `{prop}` is not a defined property for this dataset and "
+                    + f"will be ignored. If it should be included, it has to be "
+                    + f"provided together with its unit when calling "
+                    + f"AseAtomsData.create()."
+                )
+
+        data = {}
+        for pname in conn.metadata["_property_unit_dict"].keys():
             try:
                 data[pname] = properties[pname]
             except:
                 raise AtomsDataError("Required property missing:" + pname)
 
-        # transform to np.ndarray
-        data = numpyfy_dict(data)
-
-        conn.write(atoms, data=data, key_value_pairs=key_value_pairs)
-
-    def _get_atomref(self, property):
-        """
-        Returns single atom reference values for specified `property`.
-
-        Args:
-            property (str): property name
-
-        Returns:
-            list: list of atomrefs
-        """
-        labels = self.get_metadata("atref_labels")
-        if labels is None:
-            return None
-
-        col = [i for i, l in enumerate(labels) if l == property]
-        assert len(col) <= 1
-
-        if len(col) == 1:
-            col = col[0]
-            atomref = np.array(self.get_metadata("atomrefs"))[:, col : col + 1]
-        else:
-            atomref = None
-
-        return atomref
-
-    def _get_available_properties(self, properties):
-        """
-        Get available properties from argument or database.
-
-        Returns:
-            (list): all properties of the dataset
-        """
-        # read database properties
-        if os.path.exists(self.dbpath) and len(self) != 0:
-            with connect(self.dbpath) as conn:
-                atmsrw = conn.get(1)
-                db_properties = list(atmsrw.data.keys())
-        else:
-            db_properties = None
-
-        # use the provided list
-        if properties is not None:
-            if db_properties is None or set(db_properties) == set(properties):
-                return properties
-
-            # raise error if available properties do not match database
-            raise AtomsDataError(
-                "The available_properties {} do not match the "
-                "properties in the database {}!".format(properties, db_properties)
-            )
-
-        # return database properties
-        if db_properties is not None:
-            return db_properties
-
-        raise AtomsDataError(
-            "Please define available_properties or set db_path to an existing database!"
-        )
-
-    def _is_deprecated(self):
-        """
-        Check if database is deprecated.
-
-        Returns:
-            (bool): True if ase db is deprecated.
-        """
-        # check if db exists
-        if not os.path.exists(self.dbpath):
-            return False
-
-        # get properties of first atom
-        with connect(self.dbpath) as conn:
-            data = conn.get(1).data
-
-        # check byte style deprecation
-        if True in [pname.startswith("_dtype_") for pname in data.keys()]:
-            return True
-        # fallback for properties stored directly in the row
-        if True in [type(val) != np.ndarray for val in data.values()]:
-            return True
-
-        return False
-
-    def _deprecation_update(self):
-        """
-        Update deprecated database to a valid ase database.
-        """
-        warnings.warn(
-            "The database is deprecated and will be updated automatically. "
-            "The old database is moved to {}.deprecated!".format(self.dbpath)
-        )
-
-        # read old database
-        (
-            atoms_list,
-            properties_list,
-            key_value_pairs_list,
-        ) = spk.utils.read_deprecated_database(self.dbpath)
-        metadata = self.get_metadata()
-
-        # move old database
-        os.rename(self.dbpath, self.dbpath + ".deprecated")
-
-        # write updated database
-        self.set_metadata(metadata=metadata)
-        with connect(self.dbpath) as conn:
-            for atoms, properties, key_value_pairs in tqdm(
-                zip(atoms_list, properties_list, key_value_pairs_list),
-                "Updating new database",
-                total=len(atoms_list),
-            ):
-                conn.write(
-                    atoms,
-                    data=numpyfy_dict(properties),
-                    key_value_pairs=key_value_pairs,
-                )
+        conn.write(atoms, data=data)
 
 
-class ConcatAtomsData(ConcatDataset):
-    r"""
-    Dataset as a concatenation of multiple atomistic datasets.
-    Args:
-        datasets (sequence): list of datasets to be concatenated
+def create_dataset(
+    datapath: str,
+    format: AtomsDataFormat,
+    distance_unit: str,
+    property_unit_dict: Dict[str, str],
+    **kwargs,
+) -> BaseAtomsData:
     """
-
-    def __init__(self, datasets):
-        # checks
-        for dataset in datasets:
-            if not any(
-                [
-                    isinstance(dataset, dataset_class)
-                    for dataset_class in [AtomsData, AtomsDataSubset, ConcatDataset]
-                ]
-            ):
-                raise AtomsDataError(
-                    "{} is not an instance of AtomsData, AtomsDataSubset or "
-                    "ConcatAtomsData!".format(dataset)
-                )
-        super(ConcatAtomsData, self).__init__(datasets)
-        self._load_only = None
-
-    @property
-    def load_only(self):
-        if self._load_only:
-            return self._load_only
-        load_onlys = [set(dataset.load_only) for dataset in self.datasets]
-        return list(load_onlys[0].intersection(*load_onlys[1:]))
-
-    @property
-    def available_properties(self):
-        all_available_properties = [
-            set(dataset.available_properties) for dataset in self.datasets
-        ]
-        return list(
-            all_available_properties[0].intersection(*all_available_properties[1:])
-        )
-
-    @property
-    def atomref(self):
-        r"""
-        Atomic reference values for a set of properties. Since the dataset
-        concatenates different datasets which could eventually have different atomic
-        reference values, the atomref values of the first dataset are returned.
-
-        """
-
-        # get atomref values
-        atomrefs = {}
-        for pname in self.load_only:
-            atomref_all = [dataset.atomref[pname] for dataset in self.datasets]
-
-            # warn if not all atomrefs are equal
-            equal_atomref = False in [
-                np.array_equal(atomref_all[0], atomref) for atomref in atomref_all
-            ]
-            if not equal_atomref:
-                warnings.warn(
-                    "Different atomic reference values detected over for {} "
-                    "property. ConcatAtomsData uses only the atomref values "
-                    "of the first dataset!".format(pname)
-                )
-            atomrefs[pname] = atomref_all[0]
-
-        return atomrefs
-
-    def get_properties(self, idx, load_only=None):
-        if idx < 0:
-            if -idx > len(self):
-                raise ValueError(
-                    "absolute value of index should not exceed dataset length"
-                )
-            idx = len(self) + idx
-        dataset_idx = bisect.bisect_right(self.cumulative_sizes, idx)
-        if dataset_idx == 0:
-            sample_idx = idx
-        else:
-            sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
-
-        return self.datasets[dataset_idx].get_properties(sample_idx, load_only)
-
-    def set_load_only(self, load_only):
-        # check if properties are available
-        for pname in load_only:
-            if pname not in self.available_properties:
-                raise AtomsDataError(
-                    "The property '{}' is not an available property and can therefore "
-                    "not be loaded!".format(pname)
-                )
-
-        # update load_only parameter
-        self._load_only = list(load_only)
-
-    def __getitem__(self, idx):
-        _, properties = self.get_properties(idx, self.load_only)
-        properties["_idx"] = np.array([idx], dtype=np.int)
-
-        return torchify_dict(properties)
-
-    def __add__(self, other):
-        return ConcatAtomsData([self, other])
-
-
-class AtomsDataSubset(Subset):
-    r"""
-    Subset of an atomistic dataset at specified indices.
-    Arguments:
-        dataset (torch.utils.data.Dataset): atomistic dataset
-        indices (sequence): subset indices
-    """
-
-    def __init__(self, dataset, indices):
-        super(AtomsDataSubset, self).__init__(dataset, indices)
-        self._load_only = None
-
-    @property
-    def available_properties(self):
-        return self.dataset.available_properties
-
-    @property
-    def load_only(self):
-        if self._load_only is None:
-            return self.dataset.load_only
-        return self._load_only
-
-    @property
-    def atomref(self):
-        return self.dataset.atomref
-
-    def get_atomref(self, properties):
-        return self.dataset.get_atomref(properties)
-
-    def get_properties(self, idx, load_only=None):
-        return self.dataset.get_properties(self.indices[idx], load_only)
-
-    def set_load_only(self, load_only):
-        # check if properties are available
-        for pname in load_only:
-            if pname not in self.available_properties:
-                raise AtomsDataError(
-                    "The property '{}' is not an available property and can therefore "
-                    "not be loaded!".format(pname)
-                )
-
-        # update load_only parameter
-        self._load_only = list(load_only)
-
-    # deprecated
-    def create_subset(self, subset):
-        warnings.warn(
-            "create_subset is deprecated! Please use "
-            "spk.data.partitioning.create_subset.",
-            DeprecationWarning,
-        )
-        from .partitioning import create_subset
-
-        return create_subset(self, subset)
-
-    def __getitem__(self, idx):
-        _, properties = self.get_properties(idx, self.load_only)
-        properties["_idx"] = np.array([idx], dtype=np.int)
-
-        return torchify_dict(properties)
-
-    def __add__(self, other):
-        return ConcatAtomsData([self, other])
-
-
-def _convert_atoms(
-    atoms,
-    environment_provider=SimpleEnvironmentProvider(),
-    collect_triples=False,
-    centering_function=None,
-    output=None,
-):
-    """
-    Helper function to convert ASE atoms object to SchNetPack input format.
+    Create a new atoms dataset.
 
     Args:
-        atoms (ase.Atoms): Atoms object of molecule
-        environment_provider (callable): Neighbor list provider.
-        collect_triples (bool, optional): Set to True if angular features are needed.
-        centering_function (callable or None): Function for calculating center of
-            molecule (center of mass/geometry/...). Center will be subtracted from
-            positions.
-        output (dict): Destination for converted atoms, if not None
+        datapath: file path
+        format: atoms data format
+        distance_unit: unit of atom positiona etc. as string
+        property_unit_dict: dictionary that maps properties to units,
+            e.g. {"energy": "kcal/mol"}
+        **kwargs: arguments for passed to AtomsData init
 
     Returns:
-        dict of torch.Tensor: Properties including neighbor lists and masks
-            reformated into SchNetPack input format.
 
     """
-    if output is None:
-        inputs = {}
+    if format is AtomsDataFormat.ASE:
+        dataset = ASEAtomsData.create(
+            datapath=datapath,
+            distance_unit=distance_unit,
+            property_unit_dict=property_unit_dict,
+            **kwargs,
+        )
     else:
-        inputs = output
-
-    # Elemental composition
-    inputs[Properties.Z] = atoms.numbers.astype(np.int)
-    positions = atoms.positions.astype(np.float32)
-    if centering_function:
-        positions -= centering_function(atoms)
-    inputs[Properties.R] = positions
-
-    # get atom environment
-    nbh_idx, offsets = environment_provider.get_environment(atoms)
-
-    # Get neighbors and neighbor mask
-    inputs[Properties.neighbors] = nbh_idx.astype(np.int)
-
-    # Get cells
-    inputs[Properties.cell] = np.array(atoms.cell.array, dtype=np.float32)
-    inputs[Properties.cell_offset] = offsets.astype(np.float32)
-
-    # If requested get neighbor lists for triples
-    if collect_triples:
-        nbh_idx_j, nbh_idx_k, offset_idx_j, offset_idx_k = collect_atom_triples(nbh_idx)
-        inputs[Properties.neighbor_pairs_j] = nbh_idx_j.astype(np.int)
-        inputs[Properties.neighbor_pairs_k] = nbh_idx_k.astype(np.int)
-
-        inputs[Properties.neighbor_offsets_j] = offset_idx_j.astype(np.int)
-        inputs[Properties.neighbor_offsets_k] = offset_idx_k.astype(np.int)
-
-    return inputs
+        raise AtomsDataError(f"Unknown format: {format}")
+    return dataset
 
 
-def torchify_dict(data):
+def load_dataset(datapath: str, format: AtomsDataFormat, **kwargs) -> BaseAtomsData:
     """
-    Transform np.ndarrays to torch.tensors.
-
-    """
-    torch_properties = {}
-    for pname, prop in data.items():
-
-        if prop.dtype in [np.int, np.int32, np.int64]:
-            torch_properties[pname] = torch.LongTensor(prop)
-        elif prop.dtype in [np.float, np.float32, np.float64]:
-            torch_properties[pname] = torch.FloatTensor(prop.copy())
-        else:
-            raise AtomsDataError(
-                "Invalid datatype {} for property {}!".format(type(prop), pname)
-            )
-    return torch_properties
-
-
-def numpyfy_dict(data):
-    """
-    Transform floats, ints and dimensionless numpy in a dict to arrays to numpy arrays with dimenison.
-
-    """
-    for k, v in data.items():
-        if type(v) in [int, float]:
-            v = np.array([v])
-        if v.shape == ():
-            v = v[np.newaxis]
-        data[k] = v
-    return data
-
-
-class AtomsConverter:
-    """
-    Convert ASE atoms object to an input suitable for the SchNetPack
-    ML models.
+    Load dataset.
 
     Args:
-        environment_provider (callable): Neighbor list provider.
-        collect_triples (bool, optional): Set to True if angular features are needed.
-        device (str): Device for computation (default='cpu')
+        datapath: file path
+        format: atoms data format
+        **kwargs: arguments for passed to AtomsData init
+
     """
+    if format is AtomsDataFormat.ASE:
+        dataset = ASEAtomsData(datapath=datapath, **kwargs)
+    else:
+        raise AtomsDataError(f"Unknown format: {format}")
+    return dataset
 
-    def __init__(
-        self,
-        environment_provider=SimpleEnvironmentProvider(),
-        collect_triples=False,
-        device=torch.device("cpu"),
-    ):
-        self.environment_provider = environment_provider
-        self.collect_triples = collect_triples
 
-        # Get device
-        self.device = device
+def resolve_format(
+    datapath: str, format: Optional[AtomsDataFormat] = None
+) -> Tuple[str, AtomsDataFormat]:
+    """
+    Extract data format from file suffix, check for consistency with (optional) given
+    format, or append suffix to file path.
 
-    def __call__(self, atoms):
-        """
-        Args:
-            atoms (ase.Atoms): Atoms object of molecule
+    Args:
+        datapath: path to atoms data
+        format: atoms data format
 
-        Returns:
-            dict of torch.Tensor: Properties including neighbor lists and masks
-                reformated into SchNetPack input format.
-        """
-        inputs = _convert_atoms(atoms, self.environment_provider, self.collect_triples)
-        inputs = torchify_dict(inputs)
-
-        # Calculate masks
-        inputs[Properties.atom_mask] = torch.ones_like(inputs[Properties.Z]).float()
-        mask = inputs[Properties.neighbors] >= 0
-        inputs[Properties.neighbor_mask] = mask.float()
-        inputs[Properties.neighbors] = (
-            inputs[Properties.neighbors] * inputs[Properties.neighbor_mask].long()
+    """
+    file, suffix = os.path.splitext(datapath)
+    if suffix == ".db":
+        if format is None:
+            format = AtomsDataFormat.ASE
+        assert (
+            format is AtomsDataFormat.ASE
+        ), f"File extension {suffix} is not compatible with chosen format {format}"
+    elif len(suffix) == 0 and format:
+        datapath = datapath + extension_map[format]
+    elif len(suffix) == 0 and format is None:
+        raise AtomsDataError(
+            "If format is not given, `datapath` needs a supported file extension!"
         )
-
-        if self.collect_triples:
-            mask_triples = torch.ones_like(inputs[Properties.neighbor_pairs_j])
-            mask_triples[inputs[Properties.neighbor_pairs_j] < 0] = 0
-            mask_triples[inputs[Properties.neighbor_pairs_k] < 0] = 0
-            inputs[Properties.neighbor_pairs_mask] = mask_triples.float()
-
-        # Add batch dimension and move to CPU/GPU
-        for key, value in inputs.items():
-            inputs[key] = value.unsqueeze(0).to(self.device)
-
-        return inputs
+    else:
+        raise AtomsDataError(f"Unsupported file extension: {suffix}")
+    return datapath, format

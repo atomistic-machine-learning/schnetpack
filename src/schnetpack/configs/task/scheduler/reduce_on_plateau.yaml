@@ -1,0 +1,12 @@
+# @package task
+scheduler_cls: schnetpack.train.ReduceLROnPlateau
+scheduler_monitor: val_loss
+scheduler_args:
+  mode: min
+  factor: 0.8
+  patience: 80
+  threshold: 1e-4
+  threshold_mode: rel
+  cooldown: 10
+  min_lr: 0.0
+  smoothing_factor: 0.0

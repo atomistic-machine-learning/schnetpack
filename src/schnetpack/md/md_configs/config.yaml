@@ -1,0 +1,29 @@
+# @package _global_
+
+device: cuda
+precision: 32
+seed: null
+simulation_dir: ???
+overwrite: false
+restart: null
+load_config: null
+
+defaults:
+  - calculator: spk
+  - system: system
+  - dynamics: base
+  - callbacks:
+      - checkpoint
+      - hdf5
+      - tensorboard
+
+hydra:
+  run:
+    dir: ${simulation_dir}
+  job:
+    config:
+      override_dirname:
+        exclude_keys:
+          - basename
+        kv_sep: '='
+        item_sep: '_'

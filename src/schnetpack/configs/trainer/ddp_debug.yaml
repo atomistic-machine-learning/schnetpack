@@ -1,0 +1,7 @@
+defaults:
+  - debug_trainer
+
+devices: 2
+accelerator: cpu
+strategy: ddp
+num_nodes: 1

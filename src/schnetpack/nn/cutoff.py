@@ -1,26 +1,40 @@
-import numpy as np
+import math
 import torch
 from torch import nn
 
+__all__ = [
+    "CosineCutoff",
+    "MollifierCutoff",
+    "mollifier_cutoff",
+    "cosine_cutoff",
+    "SwitchFunction",
+]
 
-__all__ = ["CosineCutoff", "MollifierCutoff", "HardCutoff", "get_cutoff_by_string"]
 
+def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
+    """ Behler-style cosine cutoff.
 
-def get_cutoff_by_string(key):
-    # build cutoff module
-    if key == "hard":
-        cutoff_network = HardCutoff
-    elif key == "cosine":
-        cutoff_network = CosineCutoff
-    elif key == "mollifier":
-        cutoff_network = MollifierCutoff
-    else:
-        raise NotImplementedError("cutoff_function {} is unknown".format(key))
-    return cutoff_network
+        .. math::
+           f(r) = \begin{cases}
+            0.5 \times \left[1 + \cos\left(\frac{\pi r}{r_\text{cutoff}}\right)\right]
+              & r < r_\text{cutoff} \\
+            0 & r \geqslant r_\text{cutoff} \\
+            \end{cases}
+
+        Args:
+            cutoff (float, optional): cutoff radius.
+
+        """
+
+    # Compute values of cutoff function
+    input_cut = 0.5 * (torch.cos(input * math.pi / cutoff) + 1.0)
+    # Remove contributions beyond the cutoff radius
+    input_cut *= (input < cutoff).float()
+    return input_cut
 
 
 class CosineCutoff(nn.Module):
-    r"""Class of Behler cosine cutoff.
+    r""" Behler-style cosine cutoff module.
 
     .. math::
        f(r) = \begin{cases}
@@ -29,34 +43,22 @@ class CosineCutoff(nn.Module):
         0 & r \geqslant r_\text{cutoff} \\
         \end{cases}
 
-    Args:
-        cutoff (float, optional): cutoff radius.
-
     """
 
-    def __init__(self, cutoff=5.0):
+    def __init__(self, cutoff: float):
+        """
+        Args:
+            cutoff (float, optional): cutoff radius.
+        """
         super(CosineCutoff, self).__init__()
         self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
 
-    def forward(self, distances):
-        """Compute cutoff.
-
-        Args:
-            distances (torch.Tensor): values of interatomic distances.
-
-        Returns:
-            torch.Tensor: values of cutoff function.
-
-        """
-        # Compute values of cutoff function
-        cutoffs = 0.5 * (torch.cos(distances * np.pi / self.cutoff) + 1.0)
-        # Remove contributions beyond the cutoff radius
-        cutoffs *= (distances < self.cutoff).float()
-        return cutoffs
+    def forward(self, input: torch.Tensor):
+        return cosine_cutoff(input, self.cutoff)
 
 
-class MollifierCutoff(nn.Module):
-    r"""Class for mollifier cutoff scaled to have a value of 1 at :math:`r=0`.
+def mollifier_cutoff(input: torch.Tensor, cutoff: torch.Tensor, eps: torch.Tensor):
+    r""" Mollifier cutoff scaled to have a value of 1 at :math:`r=0`.
 
     .. math::
        f(r) = \begin{cases}
@@ -66,60 +68,91 @@ class MollifierCutoff(nn.Module):
         \end{cases}
 
     Args:
-        cutoff (float, optional): Cutoff radius.
-        eps (float, optional): offset added to distances for numerical stability.
+        cutoff: Cutoff radius.
+        eps: Offset added to distances for numerical stability.
 
     """
+    mask = (input + eps < cutoff).float()
+    exponent = 1.0 - 1.0 / (1.0 - torch.pow(input * mask / cutoff, 2))
+    cutoffs = torch.exp(exponent)
+    cutoffs = cutoffs * mask
+    return cutoffs
 
-    def __init__(self, cutoff=5.0, eps=1.0e-7):
+
+class MollifierCutoff(nn.Module):
+    r""" Mollifier cutoff module scaled to have a value of 1 at :math:`r=0`.
+
+    .. math::
+       f(r) = \begin{cases}
+        \exp\left(1 - \frac{1}{1 - \left(\frac{r}{r_\text{cutoff}}\right)^2}\right)
+          & r < r_\text{cutoff} \\
+        0 & r \geqslant r_\text{cutoff} \\
+        \end{cases}
+    """
+
+    def __init__(self, cutoff: float, eps: float = 1.0e-7):
+        """
+        Args:
+            cutoff: Cutoff radius.
+            eps: Offset added to distances for numerical stability.
+        """
         super(MollifierCutoff, self).__init__()
         self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
         self.register_buffer("eps", torch.FloatTensor([eps]))
 
-    def forward(self, distances):
-        """Compute cutoff.
-
-        Args:
-            distances (torch.Tensor): values of interatomic distances.
-
-        Returns:
-            torch.Tensor: values of cutoff function.
-
-        """
-        mask = (distances + self.eps < self.cutoff).float()
-        exponent = 1.0 - 1.0 / (1.0 - torch.pow(distances * mask / self.cutoff, 2))
-        cutoffs = torch.exp(exponent)
-        cutoffs = cutoffs * mask
-        return cutoffs
+    def forward(self, input: torch.Tensor):
+        return mollifier_cutoff(input, self.cutoff, self.eps)
 
 
-class HardCutoff(nn.Module):
-    r"""Class of hard cutoff.
-
-    .. math::
-       f(r) = \begin{cases}
-        1 & r \leqslant r_\text{cutoff} \\
-        0 & r > r_\text{cutoff} \\
-        \end{cases}
+def _switch_component(
+    x: torch.Tensor, ones: torch.Tensor, zeros: torch.Tensor
+) -> torch.Tensor:
+    """
+    Basic component of switching functions.
 
     Args:
-        cutoff (float): cutoff radius.
+        x (torch.Tensor): Switch functions.
+        ones (torch.Tensor): Tensor with ones.
+        zeros (torch.Tensor): Zero tensor
 
+    Returns:
+        torch.Tensor: Output tensor.
+    """
+    x_ = torch.where(x <= 0, ones, x)
+    return torch.where(x <= 0, zeros, torch.exp(-ones / x_))
+
+
+class SwitchFunction(nn.Module):
+    """
+    Decays from 1 to 0 between `switch_on` and `switch_off`.
     """
 
-    def __init__(self, cutoff=5.0):
-        super(HardCutoff, self).__init__()
-        self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
-
-    def forward(self, distances):
-        """Compute cutoff.
+    def __init__(self, switch_on: float, switch_off: float):
+        """
 
         Args:
-            distances (torch.Tensor): values of interatomic distances.
+            switch_on (float): Onset of switch.
+            switch_off (float): Value from which on switch is 0.
+        """
+        super(SwitchFunction, self).__init__()
+        self.register_buffer("switch_on", torch.Tensor([switch_on]))
+        self.register_buffer("switch_off", torch.Tensor([switch_off]))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+
+        Args:
+            x (torch.Tensor): tensor to which switching function should be applied to.
 
         Returns:
-            torch.Tensor: values of cutoff function.
-
+            torch.Tensor: switch output
         """
-        mask = (distances <= self.cutoff).float()
-        return mask
+        x = (x - self.switch_on) / (self.switch_off - self.switch_on)
+
+        ones = torch.ones_like(x)
+        zeros = torch.zeros_like(x)
+        fp = _switch_component(x, ones, zeros)
+        fm = _switch_component(1 - x, ones, zeros)
+
+        f_switch = torch.where(x <= 0, ones, torch.where(x >= 1, zeros, fm / (fp + fm)))
+        return f_switch

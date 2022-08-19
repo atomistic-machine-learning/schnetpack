@@ -1,0 +1,10 @@
+_target_: schnetpack.md.simulation_hooks.NHCBarostatIsotropic
+target_pressure: 1000.0 # bar
+temperature_bath: 300.0 # K
+time_constant: 100.0 # fs
+time_constant_cell: 1000.0
+time_constant_barostat: 500.0
+chain_length: 4
+multi_step: 4
+integration_order: 7
+massive: true

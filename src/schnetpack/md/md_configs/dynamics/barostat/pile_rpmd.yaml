@@ -1,0 +1,4 @@
+_target_: schnetpack.md.simulation_hooks.PILEBarostat
+target_pressure: 1000.0 # bar
+temperature_bath: 300.0 # K
+time_constant: 500.0 # fs

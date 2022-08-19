@@ -1,215 +1,155 @@
+from typing import Union, Sequence, Callable, Optional
+
 import torch
-from torch import nn
+import torch.nn as nn
+import torch.nn.functional as F
+import schnetpack.nn as snn
 
-from schnetpack import Properties
-from schnetpack.nn import shifted_softplus, Dense
-
-__all__ = ["MLP", "TiledMultiLayerNN", "ElementalGate", "GatedNetwork"]
+__all__ = ["build_mlp", "build_gated_equivariant_mlp"]
 
 
-class MLP(nn.Module):
-    """Multiple layer fully connected perceptron neural network.
+def build_mlp(
+    n_in: int,
+    n_out: int,
+    n_hidden: Optional[Union[int, Sequence[int]]] = None,
+    n_layers: int = 2,
+    activation: Callable = F.silu,
+    last_bias: bool = True,
+    last_zero_init: bool = False,
+) -> nn.Module:
+    """
+    Build multiple layer fully connected perceptron neural network.
 
     Args:
-        n_in (int): number of input nodes.
-        n_out (int): number of output nodes.
-        n_hidden (list of int or int, optional): number hidden layer nodes.
+        n_in: number of input nodes.
+        n_out: number of output nodes.
+        n_hidden: number hidden layer nodes.
             If an integer, same number of node is used for all hidden layers resulting
             in a rectangular network.
             If None, the number of neurons is divided by two after each layer starting
             n_in resulting in a pyramidal network.
-        n_layers (int, optional): number of layers.
-        activation (callable, optional): activation function. All hidden layers would
+        n_layers: number of layers.
+        activation: activation function. All hidden layers would
             the same activation function except the output layer that does not apply
             any activation function.
-
     """
-
-    def __init__(
-        self, n_in, n_out, n_hidden=None, n_layers=2, activation=shifted_softplus
-    ):
-        super(MLP, self).__init__()
-        # get list of number of nodes in input, hidden & output layers
-        if n_hidden is None:
-            c_neurons = n_in
-            self.n_neurons = []
-            for i in range(n_layers):
-                self.n_neurons.append(c_neurons)
-                c_neurons = max(n_out, c_neurons // 2)
-            self.n_neurons.append(n_out)
+    # get list of number of nodes in input, hidden & output layers
+    if n_hidden is None:
+        c_neurons = n_in
+        n_neurons = []
+        for i in range(n_layers):
+            n_neurons.append(c_neurons)
+            c_neurons = max(n_out, c_neurons // 2)
+        n_neurons.append(n_out)
+    else:
+        # get list of number of nodes hidden layers
+        if type(n_hidden) is int:
+            n_hidden = [n_hidden] * (n_layers - 1)
         else:
-            # get list of number of nodes hidden layers
-            if type(n_hidden) is int:
-                n_hidden = [n_hidden] * (n_layers - 1)
-            self.n_neurons = [n_in] + n_hidden + [n_out]
+            n_hidden = list(n_hidden)
+        n_neurons = [n_in] + n_hidden + [n_out]
 
-        # assign a Dense layer (with activation function) to each hidden layer
-        layers = [
-            Dense(self.n_neurons[i], self.n_neurons[i + 1], activation=activation)
-            for i in range(n_layers - 1)
-        ]
-        # assign a Dense layer (without activation function) to the output layer
-        layers.append(Dense(self.n_neurons[-2], self.n_neurons[-1], activation=None))
-        # put all layers together to make the network
-        self.out_net = nn.Sequential(*layers)
+    # assign a Dense layer (with activation function) to each hidden layer
+    layers = [
+        snn.Dense(n_neurons[i], n_neurons[i + 1], activation=activation)
+        for i in range(n_layers - 1)
+    ]
+    # assign a Dense layer (without activation function) to the output layer
 
-    def forward(self, inputs):
-        """Compute neural network output.
-
-        Args:
-            inputs (torch.Tensor): network input.
-
-        Returns:
-            torch.Tensor: network output.
-
-        """
-        return self.out_net(inputs)
-
-
-class TiledMultiLayerNN(nn.Module):
-    """
-    Tiled multilayer networks which are applied to the input and produce n_tiled different outputs.
-    These outputs are then stacked and returned. Used e.g. to construct element-dependent prediction
-    networks of the Behler-Parrinello type.
-
-    Args:
-        n_in (int): number of input nodes
-        n_out (int): number of output nodes
-        n_tiles (int): number of networks to be tiled
-        n_hidden (int): number of nodes in hidden nn (default 50)
-        n_layers (int): number of layers (default: 3)
-    """
-
-    def __init__(
-        self, n_in, n_out, n_tiles, n_hidden=50, n_layers=3, activation=shifted_softplus
-    ):
-        super(TiledMultiLayerNN, self).__init__()
-        self.mlps = nn.ModuleList(
-            [
-                MLP(
-                    n_in,
-                    n_out,
-                    n_hidden=n_hidden,
-                    n_layers=n_layers,
-                    activation=activation,
-                )
-                for _ in range(n_tiles)
-            ]
+    if last_zero_init:
+        layers.append(
+            snn.Dense(
+                n_neurons[-2],
+                n_neurons[-1],
+                activation=None,
+                weight_init=torch.nn.init.zeros_,
+                bias=last_bias,
+            )
         )
-
-    def forward(self, inputs):
-        """
-        Args:
-            inputs (torch.Tensor): Network inputs.
-
-        Returns:
-            torch.Tensor: Tiled network outputs.
-
-        """
-        return torch.cat([net(inputs) for net in self.mlps], 2)
+    else:
+        layers.append(
+            snn.Dense(n_neurons[-2], n_neurons[-1], activation=None, bias=last_bias)
+        )
+    # put all layers together to make the network
+    out_net = nn.Sequential(*layers)
+    return out_net
 
 
-class ElementalGate(nn.Module):
+def build_gated_equivariant_mlp(
+    n_in: int,
+    n_out: int,
+    n_hidden: Optional[Union[int, Sequence[int]]] = None,
+    n_gating_hidden: Optional[Union[int, Sequence[int]]] = None,
+    n_layers: int = 2,
+    activation: Callable = F.silu,
+    sactivation: Callable = F.silu,
+):
     """
-    Produces a Nbatch x Natoms x Nelem mask depending on the nuclear charges passed as an argument.
-    If onehot is set, mask is one-hot mask, else a random embedding is used.
-    If the trainable flag is set to true, the gate values can be adapted during training.
+    Build neural network analog to MLP with `GatedEquivariantBlock`s instead of dense layers.
 
     Args:
-        elements (set of int): Set of atomic number present in the data
-        onehot (bool): Use one hit encoding for elemental gate. If set to False, random embedding is used instead.
-        trainable (bool): If set to true, gate can be learned during training (default False)
+        n_in: number of input nodes.
+        n_out: number of output nodes.
+        n_hidden: number hidden layer nodes.
+            If an integer, same number of node is used for all hidden layers resulting
+            in a rectangular network.
+            If None, the number of neurons is divided by two after each layer starting
+            n_in resulting in a pyramidal network.
+        n_layers: number of layers.
+        activation: Activation function for gating function.
+        sactivation: Activation function for scalar outputs. All hidden layers would
+            the same activation function except the output layer that does not apply
+            any activation function.
     """
+    # get list of number of nodes in input, hidden & output layers
+    if n_hidden is None:
+        c_neurons = n_in
+        n_neurons = []
+        for i in range(n_layers):
+            n_neurons.append(c_neurons)
+            c_neurons = max(n_out, c_neurons // 2)
+        n_neurons.append(n_out)
+    else:
+        # get list of number of nodes hidden layers
+        if type(n_hidden) is int:
+            n_hidden = [n_hidden] * (n_layers - 1)
+        else:
+            n_hidden = list(n_hidden)
+        n_neurons = [n_in] + n_hidden + [n_out]
 
-    def __init__(self, elements, onehot=True, trainable=False):
-        super(ElementalGate, self).__init__()
-        self.trainable = trainable
+    if n_gating_hidden is None:
+        n_gating_hidden = n_neurons[:-1]
+    elif type(n_gating_hidden) is int:
+        n_gating_hidden = [n_gating_hidden] * n_layers
+    else:
+        n_gating_hidden = list(n_gating_hidden)
 
-        # Get the number of elements, as well as the highest nuclear charge to use in the embedding vector
-        self.nelems = len(elements)
-        maxelem = int(max(elements) + 1)
-
-        self.gate = nn.Embedding(maxelem, self.nelems)
-
-        # if requested, initialize as one hot gate for all elements
-        if onehot:
-            weights = torch.zeros(maxelem, self.nelems)
-            for idx, Z in enumerate(elements):
-                weights[Z, idx] = 1.0
-            self.gate.weight.data = weights
-
-        # Set trainable flag
-        if not trainable:
-            self.gate.weight.requires_grad = False
-
-    def forward(self, atomic_numbers):
-        """
-        Args:
-            atomic_numbers (torch.Tensor): Tensor containing atomic numbers of each atom.
-
-        Returns:
-            torch.Tensor: One-hot vector which is one at the position of the element and zero otherwise.
-
-        """
-        return self.gate(atomic_numbers)
-
-
-class GatedNetwork(nn.Module):
-    """
-    Combines the TiledMultiLayerNN with the elemental gate to obtain element specific atomistic networks as in typical
-    Behler--Parrinello networks [#behler1]_.
-
-    Args:
-        nin (int): number of input nodes
-        nout (int): number of output nodes
-        nnodes (int): number of nodes in hidden nn (default 50)
-        nlayers (int): number of layers (default 3)
-        elements (set of ints): Set of atomic number present in the data
-        onehot (bool): Use one hit encoding for elemental gate. If set to False, random embedding is used instead.
-        trainable (bool): If set to true, gate can be learned during training (default False)
-        activation (callable): activation function
-
-    References
-    ----------
-    .. [#behler1] Behler, Parrinello:
-       Generalized Neural-Network Representation of High-Dimensional Potential-Energy Surfaces.
-       Phys. Rev. Lett. 98, 146401. 2007.
-
-    """
-
-    def __init__(
-        self,
-        nin,
-        nout,
-        elements,
-        n_hidden=50,
-        n_layers=3,
-        trainable=False,
-        onehot=True,
-        activation=shifted_softplus,
-    ):
-        super(GatedNetwork, self).__init__()
-        self.nelem = len(elements)
-        self.gate = ElementalGate(elements, trainable=trainable, onehot=onehot)
-        self.network = TiledMultiLayerNN(
-            nin,
-            nout,
-            self.nelem,
-            n_hidden=n_hidden,
-            n_layers=n_layers,
+    # assign a GatedEquivariantBlock (with activation function) to each hidden layer
+    layers = [
+        snn.GatedEquivariantBlock(
+            n_sin=n_neurons[i],
+            n_vin=n_neurons[i],
+            n_sout=n_neurons[i + 1],
+            n_vout=n_neurons[i + 1],
+            n_hidden=n_gating_hidden[i],
             activation=activation,
+            sactivation=sactivation,
         )
-
-    def forward(self, inputs):
-        """
-        Args:
-            inputs (dict of torch.Tensor): SchNetPack format dictionary of input tensors.
-
-        Returns:
-            torch.Tensor: Output of the gated network.
-        """
-        # At this point, inputs should be the general schnetpack container
-        atomic_numbers = inputs[Properties.Z]
-        representation = inputs["representation"]
-        gated_network = self.gate(atomic_numbers) * self.network(representation)
-        return torch.sum(gated_network, -1, keepdim=True)
+        for i in range(n_layers - 1)
+    ]
+    # assign a GatedEquivariantBlock (without scalar activation function)
+    # to the output layer
+    layers.append(
+        snn.GatedEquivariantBlock(
+            n_sin=n_neurons[-2],
+            n_vin=n_neurons[-2],
+            n_sout=n_neurons[-1],
+            n_vout=n_neurons[-1],
+            n_hidden=n_gating_hidden[-1],
+            activation=activation,
+            sactivation=None,
+        )
+    )
+    # put all layers together to make the network
+    out_net = nn.Sequential(*layers)
+    return out_net

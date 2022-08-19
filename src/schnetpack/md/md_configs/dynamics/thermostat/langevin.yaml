@@ -1,0 +1,3 @@
+_target_: schnetpack.md.simulation_hooks.LangevinThermostat
+temperature_bath: 300.0 # K
+time_constant: 100.0 # fs

@@ -1,0 +1,38 @@
+name: CI Dev
+
+on:
+  push:
+    branches: [ master, dev ]
+  pull_request:
+    branches: [ master, dev ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.8]
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install black pytest
+        python -m pip install -r docs/sphinx-requirements.txt
+        python -m pip install pytest-datadir
+    - name: Black
+      run: |
+        black -v -l 88 --check --diff src/schnetpack
+    - name: Install
+      run: |
+        pip install -e .[test]
+    - name: PyTest
+      run: |
+        pytest

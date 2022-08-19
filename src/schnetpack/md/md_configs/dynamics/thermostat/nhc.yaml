@@ -1,0 +1,7 @@
+_target_: schnetpack.md.simulation_hooks.NHCThermostat
+temperature_bath: 300.0 # K
+time_constant: 100.0 # fs
+chain_length: 3
+massive: false
+multi_step: 2
+integration_order: 3

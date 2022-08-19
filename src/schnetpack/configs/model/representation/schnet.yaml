@@ -1,0 +1,10 @@
+_target_: schnetpack.representation.SchNet
+n_atom_basis: 128
+n_interactions: 6
+radial_basis:
+  _target_: schnetpack.nn.radial.GaussianRBF
+  n_rbf: 20
+  cutoff: ${globals.cutoff}
+cutoff_fn:
+  _target_: schnetpack.nn.cutoff.CosineCutoff
+  cutoff: ${globals.cutoff}

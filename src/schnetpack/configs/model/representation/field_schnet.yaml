@@ -1,0 +1,13 @@
+_target_: schnetpack.representation.FieldSchNet
+n_atom_basis: 128
+n_interactions: 5
+external_fields: []
+response_properties: ${globals.response_properties}
+shared_interactions: False
+radial_basis:
+  _target_: schnetpack.nn.radial.GaussianRBF
+  n_rbf: 20
+  cutoff: ${globals.cutoff}
+cutoff_fn:
+  _target_: schnetpack.nn.cutoff.CosineCutoff
+  cutoff: ${globals.cutoff}

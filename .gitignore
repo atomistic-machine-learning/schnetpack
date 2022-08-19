@@ -5,16 +5,14 @@ __pycache__/
 .idea
 *.DS_Store
 
-# test data
-src/sacred_scripts/data/*
-src/sacred_scripts/models/*
-src/sacred_scripts/experiments/*
-src/scripts/data/
-src/scripts/training/
-
 docs/tutorials/*.db
 docs/tutorials/*.xyz
 docs/tutorials/qm9tut
+
+# hydra stuff
+outputs
+logs
+generated
 
 # C extensions
 *.so
@@ -77,6 +75,7 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+docs/api/generated/
 
 # PyBuilder
 target/
@@ -113,3 +112,7 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# experiments
+runs/
+tests/testdata/tmp/test*

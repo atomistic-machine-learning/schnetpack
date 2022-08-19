@@ -1,0 +1,4 @@
+checkpoint:
+  _target_: schnetpack.md.simulation_hooks.Checkpoint
+  checkpoint_file: checkpoint.chk
+  every_n_steps: 10

@@ -1,0 +1,15 @@
+_target_: schnetpack.md.calculators.SchNetPackEnsembleCalculator
+required_properties:
+  - energy
+  - forces
+model_files:
+  - ???
+force_key: forces
+energy_unit: kcal / mol
+position_unit: Angstrom
+energy_key: energy
+stress_key: null
+script_model: false
+
+defaults:
+  - neighbor_list: matscipy

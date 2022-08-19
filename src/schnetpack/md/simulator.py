@@ -4,10 +4,18 @@ This class collects the atomistic system (:obj:`schnetpack.md.System`), calculat
 integrators (:obj:`schnetpack.md.integrators`) and various simulation hooks (:obj:`schnetpack.md.simulation_hooks`)
 and performs the time integration.
 """
-from tqdm import tqdm
+import torch
+import torch.nn as nn
+from contextlib import nullcontext
+
+from tqdm import trange
+
+from schnetpack.md import System
+
+__all__ = ["Simulator"]
 
 
-class Simulator:
+class Simulator(nn.Module):
     """
     Main driver of the molecular dynamics simulation. Uses an integrator to
     propagate the molecular system defined in the system class according to
@@ -15,11 +23,11 @@ class Simulator:
 
     In addition, hooks can be applied at five different stages of each
     simulation step:
-     - Start of the simulation (e.g. for initializing thermostats)
-     - Before first integrator half step (e.g. thermostats)
+     - Start of the simulation (e.g. for initializing thermostat)
+     - Before first integrator half step (e.g. thermostat)
      - After computation of the forces and before main integrator step (e.g.
       for accelerated MD)
-     - After second integrator half step (e.g. thermostats, output routines)
+     - After second integrator half step (e.g. thermostat, output routines)
      - At the end of the simulation (e.g. general wrap up of file writes, etc.)
 
     This routine has a state dict which can be used to restart a previous
@@ -38,83 +46,118 @@ class Simulator:
                              various other properties.
         simulator_hooks (list(object)): List of different hooks to be applied
                                         during simulations. Examples would be
-                                        file loggers and thermostats.
+                                        file loggers and thermostat.
         step (int): Index of the initial simulation step.
         restart (bool): Indicates, whether the simulation is restarted. E.g. if set to True, the simulator tries to
                         continue logging in the previously created dataset. (default=False)
                         This is set automatically by the restart_simulation function. Enabling it without the function
                         currently only makes sense if independent simulations should be written to the same file.
+        progress (bool): show progress bar during simulation. Can be deactivated e.g. for cluster runs.
     """
 
     def __init__(
-        self, system, integrator, calculator, simulator_hooks=[], step=0, restart=False
+        self,
+        system: System,
+        integrator,
+        calculator,
+        simulator_hooks: list = [],
+        step: int = 0,
+        restart: bool = False,
+        gradients_required: bool = False,
+        progress: bool = True,
     ):
+        super(Simulator, self).__init__()
 
         self.system = system
         self.integrator = integrator
         self.calculator = calculator
-        self.simulator_hooks = simulator_hooks
+        self.simulator_hooks = torch.nn.ModuleList(simulator_hooks)
         self.step = step
         self.n_steps = None
         self.restart = restart
+        self.gradients_required = gradients_required
+        self.progress = progress
 
         # Keep track of the actual simulation steps performed with simulate calls
         self.effective_steps = 0
 
-    def simulate(self, n_steps=10000):
+    @property
+    def device(self):
+        return self.system.device
+
+    @property
+    def dtype(self):
+        return self.system.dtype
+
+    def simulate(self, n_steps: int):
         """
         Main simulation function. Propagates the system for a certain number
         of steps.
 
         Args:
-            n_steps (int): Number of simulation steps to be performed (
-                           default=10000)
+            n_steps (int): Number of simulation steps to be performed.
         """
 
         self.n_steps = n_steps
 
-        # Perform initial computation of forces
-        if self.system.forces is None:
+        # Determine iterator
+        if self.progress:
+            iterator = trange
+        else:
+            iterator = range
+
+        # Check, if computational graph should be built
+        if self.gradients_required:
+            grad_context = torch.no_grad()
+        else:
+            grad_context = nullcontext()
+
+        with grad_context:
+            # Perform initial computation of forces
             self.calculator.calculate(self.system)
 
-        # Call hooks at the simulation start
-        for hook in self.simulator_hooks:
-            hook.on_simulation_start(self)
-
-        for _ in tqdm(range(n_steps), ncols=120):
-
-            # Call hook berfore first half step
+            # Call hooks at the simulation start
             for hook in self.simulator_hooks:
-                hook.on_step_begin(self)
+                hook.on_simulation_start(self)
 
-            # Do half step momenta
-            self.integrator.half_step(self.system)
+            for _ in iterator(n_steps):
 
-            # Do propagation MD/PIMD
-            self.integrator.main_step(self.system)
+                # Call hook before first half step
+                for hook in self.simulator_hooks:
+                    hook.on_step_begin(self)
 
-            # Compute new forces
-            self.calculator.calculate(self.system)
+                # Do half step momenta
+                self.integrator.half_step(self.system)
 
-            # Call hook after forces
+                # Do propagation MD/PIMD
+                self.integrator.main_step(self.system)
+
+                # Compute new forces
+                self.calculator.calculate(self.system)
+
+                # Call hook after forces
+                for hook in self.simulator_hooks:
+                    hook.on_step_middle(self)
+
+                # Do half step momenta
+                self.integrator.half_step(self.system)
+
+                # Call hooks after second half step
+                # Hooks are called in reverse order to guarantee symmetry of
+                # the propagator when using thermostat and barostats
+                for hook in self.simulator_hooks[::-1]:
+                    hook.on_step_end(self)
+
+                # Logging hooks etc
+                for hook in self.simulator_hooks:
+                    hook.on_step_finalize(self)
+
+                self.step += 1
+                self.effective_steps += 1
+
+            # Call hooks at the simulation end
             for hook in self.simulator_hooks:
-                hook.on_step_middle(self)
-
-            # Do half step momenta
-            self.integrator.half_step(self.system)
-
-            # Call hooks after second half step
-            # Hooks are called in reverse order to guarantee symmetry of
-            # the propagator when using thermostats and barostats
-            for hook in self.simulator_hooks[::-1]:
-                hook.on_step_end(self)
-
-            self.step += 1
-            self.effective_steps += 1
-
-        # Call hooks at the simulation end
-        for hook in self.simulator_hooks:
-            hook.on_simulation_end(self)
+                hook.on_simulation_end(self)
 
     @property
     def state_dict(self):
@@ -136,9 +179,9 @@ class Simulator:
         """
         state_dict = {
             "step": self.step,
-            "system": self.system.state_dict,
+            "system": self.system.state_dict(),
             "simulator_hooks": {
-                hook.__class__: hook.state_dict for hook in self.simulator_hooks
+                hook.__class__: hook.state_dict() for hook in self.simulator_hooks
             },
         }
         return state_dict
@@ -157,12 +200,12 @@ class Simulator:
 
         """
         self.step = state_dict["step"]
-        self.system.state_dict = state_dict["system"]
+        self.system.load_state_dict(state_dict["system"])
 
         # Set state dicts of all hooks
         for hook in self.simulator_hooks:
             if hook.__class__ in state_dict["simulator_hooks"]:
-                hook.state_dict = state_dict["simulator_hooks"][hook.__class__]
+                hook.load_state_dict(state_dict["simulator_hooks"][hook.__class__])
 
     def restart_simulation(self, state_dict, soft=False):
         """
@@ -171,9 +214,9 @@ class Simulator:
         simulation hooks, only the states of the thermostat hooks are
         restored, as all other hooks do not depend on previous simulations.
 
-        If the soft option is chosen, only restores states of thermostats if
+        If the soft option is chosen, only restores states of thermostat if
         they are present in the current simulation and the state dict.
-        Otherwise, all thermostats found in the state dict are required to be
+        Otherwise, all thermostat found in the state dict are required to be
         present in the current simulation.
 
         Args:
@@ -182,16 +225,17 @@ class Simulator:
                          default=False)
 
         """
+        # TODO: restart with metadynamics hooks etc, ?
         self.step = state_dict["step"]
-        self.system.state_dict = state_dict["system"]
+        self.system.load_system_state(state_dict["system"])
 
         if soft:
             # Do the same as in a basic state dict setting
             for hook in self.simulator_hooks:
                 if hook.__class__ in state_dict["simulator_hooks"]:
-                    hook.state_dict = state_dict["simulator_hooks"][hook.__class__]
+                    hook.load_state_dict(state_dict["simulator_hooks"][hook.__class__])
         else:
-            # Hard restart, require all thermostats to be there
+            # Hard restart, require all thermostat to be there
             for hook in self.simulator_hooks:
                 # Check if hook is thermostat
                 if hasattr(hook, "temperature_bath"):
@@ -200,18 +244,9 @@ class Simulator:
                             f"Could not find restart information for {hook.__class__} in state dict."
                         )
                     else:
-                        hook.state_dict = state_dict["simulator_hooks"][hook.__class__]
+                        hook.load_state_dict(
+                            state_dict["simulator_hooks"][hook.__class__]
+                        )
 
         # In this case, set restart flag automatically
         self.restart = True
-
-    def load_system_state(self, state_dict):
-        """
-        Routine for only loading the system state of previous simulations.
-        This can e.g. be used for production runs, where an equilibrated system
-        is loaded, but the thermostat is changed.
-
-        Args:
-            state_dict (dict): State dict of the current simulation
-        """
-        self.system.state_dict = state_dict["system"]

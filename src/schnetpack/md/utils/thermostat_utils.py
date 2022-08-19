@@ -1,48 +1,64 @@
-import numpy as np
 import torch
-from ase import units
+import numpy as np
+import schnetpack.units as spk_units
 
-from schnetpack.md.utils import MDUnits
+from typing import Optional
 
-
-# __all__ = [
-#     "load_gle_matrices",
-#     "GLEMatrixParser",
-#     "YSWeights"
-# ]
+__all__ = ["YSWeights", "load_gle_matrices", "StableSinhDiv"]
 
 
-def load_gle_matrices(filename):
+class YSWeights:
     """
-    Load GLE thermostat files formatted in raw format as generated via http://gle4md.org/index.html?page=matrix
-    The generated matrices are torch tensors of the shape normal_modes x s+1 x s+1, where normal_modes is 1 except in
-    the case of the PIGLET thermostat and s is the number of degrees of freedom added via GLE. Automatically recognizes
-    used units and converts them to atomic units.
+    Weights for Yoshida-Suzuki integration used in propagating the Nose-Hoover chain thermostats.
 
     Args:
-        filename (str): Path to the file the GLE thermostat parameters should be loaded from.
-
-    Returns:
-        tuple: Tuple of two square torch tensors containing the a_matrix and c_matrix parameters required to
-               initialize GLE type thermostats.
+        device (str): Device used for computation (default='cuda').
     """
-    a_matrix = GLEMatrixParser(
-        "A MATRIX:", stop="C MATRIX:", split="Matrix for normal mode"
-    )
-    c_matrix = GLEMatrixParser("C MATRIX:", split="Matrix for normal mode")
 
-    try:
-        with open(filename) as glefile:
-            for line in glefile:
-                a_matrix.read_line(line)
-                c_matrix.read_line(line)
-    except FileNotFoundError:
-        raise FileNotFoundError(
-            "Could not open {:s} for reading. Please use GLE parameter files "
-            "generated via http://gle4md.org/index.html?page=matrix".format(filename)
-        )
+    YS_weights = {
+        3: torch.tensor(
+            [1.35120719195966, -1.70241438391932, 1.35120719195966], dtype=torch.float64
+        ),
+        5: torch.tensor(
+            [
+                0.41449077179438,
+                0.41449077179438,
+                -0.65796308717750,
+                0.41449077179438,
+                0.41449077179438,
+            ],
+            dtype=torch.float64,
+        ),
+        7: torch.tensor(
+            [
+                0.78451361047756,
+                0.23557321335936,
+                -1.17767998417887,
+                1.31518632068390,
+                -1.17767998417887,
+                0.23557321335936,
+                0.78451361047756,
+            ],
+            dtype=torch.float64,
+        ),
+    }
 
-    return a_matrix.matrix, c_matrix.matrix
+    def get_weights(self, order):
+        """
+        Get the weights required for an integration scheme of the desired order.
+
+        Args:
+            order (int): Desired order of the integration scheme.
+
+        Returns:
+            torch.tensor: Tensor of the integration weights
+        """
+        if order not in self.YS_weights:
+            raise ValueError(
+                "Order {:d} not supported for YS integration weights".format(order)
+            )
+        else:
+            return self.YS_weights[order]
 
 
 class GLEMatrixParser:
@@ -59,15 +75,14 @@ class GLEMatrixParser:
     """
 
     # Automatically recognized format and converts to units
-    # TODO: think about this carefully
     unit_conversions = {
-        "atomic time units^-1": 1.0 / MDUnits.unit2internal("aut"),
-        "seconds^-1": 1.0 / MDUnits.unit2internal("s"),
-        "femtoseconds^-1": 1.0 / MDUnits.unit2internal("fs"),
-        "picoseconds^-1": 1.0 / 1000.0 / MDUnits.unit2internal("fs"),
-        "eV": MDUnits.unit2internal("eV"),
-        "atomic energy units": MDUnits.unit2internal("Ha"),
-        "K": MDUnits.kB,
+        "atomic time units^-1": 1.0 / spk_units.unit2internal("aut"),
+        "seconds^-1": 1.0 / spk_units.unit2internal("s"),
+        "femtoseconds^-1": 1.0 / spk_units.unit2internal("fs"),
+        "picoseconds^-1": 1e-3 / spk_units.unit2internal("fs"),
+        "eV": spk_units.unit2internal("eV"),
+        "atomic energy units": spk_units.unit2internal("Ha"),
+        "K": spk_units.kB,
     }
 
     def __init__(self, start, stop=None, split=None):
@@ -79,7 +94,7 @@ class GLEMatrixParser:
         self._matrix = []
         self._tmp_matrix = []
 
-    def read_line(self, line):
+    def read_line(self, line: str):
         """
         Read and parse a line obtained from an open file object containing GLE parameters.
 
@@ -130,60 +145,37 @@ class GLEMatrixParser:
             return None
 
 
-class YSWeights:
+def load_gle_matrices(filename: str):
     """
-    Weights for Yoshida-Suzuki integration used in propagating the Nose-Hoover chain thermostats.
+    Load GLE thermostat files formatted in raw format as generated via http://gle4md.org/index.html?page=matrix
+    The generated matrices are torch tensors of the shape normal_modes x s+1 x s+1, where normal_modes is 1 except in
+    the case of the PIGLET thermostat and s is the number of degrees of freedom added via GLE. Automatically recognizes
+    used units and converts them to atomic units.
 
     Args:
-        device (str): Device used for computation (default='cuda').
+        filename (str): Path to the file the GLE thermostat parameters should be loaded from.
+
+    Returns:
+        tuple: Tuple of two square torch tensors containing the a_matrix and c_matrix parameters required to
+               initialize GLE type thermostats.
     """
+    a_matrix = GLEMatrixParser(
+        "A MATRIX:", stop="C MATRIX:", split="Matrix for normal mode"
+    )
+    c_matrix = GLEMatrixParser("C MATRIX:", split="Matrix for normal mode")
 
-    YS_weights = {
-        3: np.array([1.35120719195966, -1.70241438391932, 1.35120719195966]),
-        5: np.array(
-            [
-                0.41449077179438,
-                0.41449077179438,
-                -0.65796308717750,
-                0.41449077179438,
-                0.41449077179438,
-            ]
-        ),
-        7: np.array(
-            [
-                0.78451361047756,
-                0.23557321335936,
-                -1.17767998417887,
-                1.31518632068390,
-                -1.17767998417887,
-                0.23557321335936,
-                0.78451361047756,
-            ]
-        ),
-    }
+    try:
+        with open(filename) as glefile:
+            for line in glefile:
+                a_matrix.read_line(line)
+                c_matrix.read_line(line)
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            "Could not open {:s} for reading. Please use GLE parameter files "
+            "generated via http://gle4md.org/index.html?page=matrix".format(filename)
+        )
 
-    def __init__(self, device):
-        self.device = device
-
-    def get_weights(self, order):
-        """
-        Get the weights required for an integration scheme of the desired order.
-
-        Args:
-            order (int): Desired order of the integration scheme.
-
-        Returns:
-            torch.Tensor: Tensor of the integration weights
-        """
-        if order not in self.YS_weights:
-            raise ValueError(
-                "Order {:d} not supported for YS integration weights".format(order)
-            )
-        else:
-            ys_weights = (
-                torch.from_numpy(self.YS_weights[order]).float().to(self.device)
-            )
-        return ys_weights
+    return a_matrix.matrix, c_matrix.matrix
 
 
 class StableSinhDiv:
@@ -191,7 +183,7 @@ class StableSinhDiv:
     McLaurin series of sinh(x)/x around zero to avoid numerical instabilities
     """
 
-    def __init__(self, eps=1e-4):
+    def __init__(self, eps: Optional[float] = 1e-4):
         self.e0 = 1.0
         self.e2 = self.e0 / 6.0
         self.e4 = self.e2 / 20.0
@@ -199,9 +191,11 @@ class StableSinhDiv:
         self.e8 = self.e6 / 72.0
         self.eps = eps
 
-    def f(self, x):
-        if torch.min(torch.abs(x)) < self.eps:
-            x = x ** 2
-            return (((self.e8 * x + self.e6) * x + self.e4) * x + self.e2) * x + self.e0
-        else:
-            return torch.sinh(x) / x
+    def f(self, x: torch.tensor):
+        x2 = x * x
+        sinh_div = torch.where(
+            x < self.eps,
+            (((self.e8 * x2 + self.e6) * x2 + self.e4) * x + self.e2) * x2 + self.e0,
+            torch.sinh(x) / x,
+        )
+        return sinh_div

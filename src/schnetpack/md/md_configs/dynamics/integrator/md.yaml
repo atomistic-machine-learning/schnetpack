@@ -1,0 +1,2 @@
+_target_: schnetpack.md.integrators.VelocityVerlet
+time_step: 0.5 # fs
