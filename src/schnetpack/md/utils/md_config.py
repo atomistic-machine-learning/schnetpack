@@ -37,9 +37,13 @@ class MDConfigMerger:
         Returns:
             DictConfig: basic config updated with entries from the overwrite config and all overrides re-applied.
         """
-
         # merge overwrite config into basic config
-        merged_config = OmegaConf.merge(base_config, overwrite_config)
+        # basic merge is not operating properly, so the basic config needs to be updated on a field by field basis
+        merged_config = copy.deepcopy(base_config)
+
+        for k, v in overwrite_config.items():
+            # force add ensures new values (e.g. temperature in RPMD integrator are still inserted into config block)
+            OmegaConf.update(merged_config, k, v, merge=True, force_add=True)
 
         # get overrides in list of lists format
         overrides_modify, overrides_delete = self._parse_overrides(overrides)
