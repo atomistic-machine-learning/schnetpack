@@ -541,7 +541,9 @@ class FilterNeighbors(Transform):
     be specified in the input data.
     """
 
-    def __init__(self, selection_name, additional_inputs=None):
+    def __init__(
+        self, selection_name: str, additional_inputs: Dict[str, torch.Tensor] = None
+    ):
         """
         Args:
             selection_name (str): key in the input data corresponding to the set of atoms between which no interactions
@@ -550,7 +552,7 @@ class FilterNeighbors(Transform):
                 those additional inputs will be stored to the input batch.
         """
         self.selection_name = selection_name
-        self.additional_inputs = additional_inputs
+        self.additional_inputs = additional_inputs or {}
         super().__init__()
 
     def forward(
