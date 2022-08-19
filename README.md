@@ -4,16 +4,21 @@
 [![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
 
 
+
 SchNetPack aims to provide accessible atomistic neural networks
 that can be trained and applied out-of-the-box, while still being
 extensible to custom atomistic architectures. 
 
-##### Currently provided models:
+##### *Major update! Breaking changes!*
+*You can find the old SchNetPack 1.0 in the **schnetpack1.0** branch*
+
+##### Features
 
 - SchNet - an end-to-end continuous-filter CNN for molecules and materials [1-3]
-- wACSF - weighted atom-centered symmetry functions [4,5]
-
-_** Major update! Breaking changes! Under construction! **_
+- PaiNN - equivariant message-passing for molecules and materials [4]
+- Output modules for dipole moments, polarizability, stress, and general response properties
+- Modules for electrostatics, Ewald summation, ZBL repulsion
+- GPU-accelerated molecular dynamics code incl. path-integral MD, thermostats, barostats
 
 ##### Requirements:
 - python 3.8
@@ -93,16 +98,12 @@ Nature Communications **8**. 13890 (2017)
 
 * [2] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.  
 *SchNet: A continuous-filter convolutional neural network for modeling quantum interactions.*
-Advances in Neural Information Processing Systems 30, pp. 992-1002 (2017) [link](http://papers.nips.cc/paper/6700-schnet-a-continuous-filter-convolutional-neural-network-for-modeling-quantum-interactions)
+Advances in Neural Information Processing Systems 30, pp. 992-1002 (2017) [Paper](http://papers.nips.cc/paper/6700-schnet-a-continuous-filter-convolutional-neural-network-for-modeling-quantum-interactions)
 
 * [3] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.  
 *SchNet - a deep learning architecture for molecules and materials.* 
 The Journal of Chemical Physics 148(24), 241722 (2018) [10.1063/1.5019779](https://doi.org/10.1063/1.5019779)
 
-* [4] M. Gastegger, L. Schwiedrzik, M. Bittermann, F. Berzsenyi, P. Marquetand.
-*wACSF—Weighted atom-centered symmetry functions as descriptors in machine learning potentials.*
-The Journal of Chemical Physics, 148(24), 241709. (2018) [10.1063/1.5019667](https://doi.org/10.1063/1.5019667)
-
-* [5] J. Behler, M. Parrinello. 
-*Generalized neural-network representation of high-dimensional potential-energy surfaces.*
-Physical Review Letters, 98(14), 146401. (2007) [10.1103/PhysRevLett.98.146401](https://doi.org/10.1103/PhysRevLett.98.146401)
+* [4] K. T. Schütt, O. T. Unke, M. Gastegger  
+*Equivariant message passing for the prediction of tensorial properties and molecular spectra.* 
+International Conference on Machine Learning (pp. 9377-9388). PMLR, [Paper](https://proceedings.mlr.press/v139/schutt21a.html).
