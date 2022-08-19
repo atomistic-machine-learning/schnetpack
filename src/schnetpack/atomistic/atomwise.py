@@ -179,15 +179,14 @@ class DipoleMoment(nn.Module):
             atomic_dipoles = 0.0
 
         if self.correct_charges:
-            if properties.total_charge in inputs:
-                total_charge = inputs[properties.total_charge]
-            else:
-                total_charge = 0.0
-
             sum_charge = snn.scatter_add(charges, idx_m, dim_size=maxm)
-            charge_correction = (total_charge[:, None] - sum_charge) / natoms.unsqueeze(
-                -1
-            )
+
+            if properties.total_charge in inputs:
+                total_charge = inputs[properties.total_charge][:, None]
+            else:
+                total_charge = torch.zeros_like(sum_charge)
+
+            charge_correction = (total_charge - sum_charge) / natoms.unsqueeze(-1)
             charge_correction = charge_correction[idx_m]
             charges = charges + charge_correction
 
