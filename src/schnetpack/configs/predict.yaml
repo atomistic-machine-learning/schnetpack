@@ -15,7 +15,7 @@ data:
   datapath: ${datapath}
   transforms:
     - _target_: schnetpack.transform.SubtractCenterOfMass
-    - _target_: schnetpack.transform.ASENeighborList
+    - _target_: schnetpack.transform.MatScipyNeighborList
       cutoff: ${cutoff}
     - _target_: schnetpack.transform.CastTo32
 
