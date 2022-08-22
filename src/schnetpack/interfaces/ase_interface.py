@@ -62,10 +62,12 @@ class AtomsConverter:
         neighbor_list: schnetpack.transform.Transform,
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
+        additional_inputs: Dict[str, torch.Tensor] = None,
     ):
         self.neighbor_list = neighbor_list
         self.device = device
         self.dtype = dtype
+        self.additional_inputs = additional_inputs or {}
 
         # get transforms and initialize neighbor list
         self.transforms: List[schnetpack.transform.Transform] = [neighbor_list]
@@ -114,6 +116,8 @@ class AtomsConverter:
             # specify sample index
             inputs.update({properties.idx: torch.tensor([at_idx])})
 
+            # add additional inputs (specified in AtomsConverter __init__)
+            inputs.update(self.additional_inputs)
             # add additional inputs, which might be required for further transforms
             if hasattr(self.neighbor_list, "nbh_postprocessing"):
                 for nbh_postprocessing in self.neighbor_list.nbh_postprocessing:
