@@ -115,8 +115,13 @@ class AtomsConverter:
 
             # specify sample index
             inputs.update({properties.idx: torch.tensor([at_idx])})
-            # add additional inputs, which might be required for further transforms
+
+            # add additional inputs (specified in AtomsConverter __init__)
             inputs.update(self.additional_inputs)
+            # add additional inputs, which might be required for further transforms
+            if hasattr(self.neighbor_list, "nbh_postprocessing"):
+                for nbh_postprocessing in self.neighbor_list.nbh_postprocessing:
+                    inputs.update(nbh_postprocessing.additional_inputs)
 
             for transform in self.transforms:
                 inputs = transform(inputs)
