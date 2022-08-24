@@ -63,8 +63,7 @@ def print_config(
         resolve (bool, optional): Whether to resolve reference fields of DictConfig.
     """
 
-    # style = "black on white"
-    style = "none"
+    style = "dim"
     tree = Tree(
         f":gear: Running with the following config:", style=style, guide_style=style
     )
@@ -77,6 +76,6 @@ def print_config(
         if isinstance(config_section, DictConfig):
             branch_content = OmegaConf.to_yaml(config_section, resolve=resolve)
 
-        branch.add(Syntax(branch_content, "yaml"))
+        branch.add(Syntax(branch_content, "yaml"), style=style, guide_style=style)
 
     rich.print(tree)
