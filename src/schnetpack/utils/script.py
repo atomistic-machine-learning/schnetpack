@@ -63,7 +63,8 @@ def print_config(
         resolve (bool, optional): Whether to resolve reference fields of DictConfig.
     """
 
-    style = "black on white"
+    # style = "black on white"
+    style = None
     tree = Tree(
         f":gear: Running with the following config:", style=style, guide_style=style
     )
