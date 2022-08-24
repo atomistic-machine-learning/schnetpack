@@ -76,6 +76,10 @@ def print_config(
         if isinstance(config_section, DictConfig):
             branch_content = OmegaConf.to_yaml(config_section, resolve=resolve)
 
-        branch.add(Syntax(branch_content, "yaml"), style=style, guide_style=style)
+        branch.add(
+            Syntax(branch_content, "yaml", background_color="white"),
+            style=style,
+            guide_style=style,
+        )
 
     rich.print(tree)
