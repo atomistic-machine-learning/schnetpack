@@ -64,7 +64,7 @@ def print_config(
     """
 
     # style = "black on white"
-    style = None
+    style = "none"
     tree = Tree(
         f":gear: Running with the following config:", style=style, guide_style=style
     )
