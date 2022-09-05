@@ -130,7 +130,7 @@ class AtomisticTask(pl.LightningModule):
         self.grad_enabled = len(self.model.required_derivatives) > 0
         self.lr = optimizer_args["lr"]
         self.warmup_steps = warmup_steps
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=["model"])
 
     def setup(self, stage=None):
         if stage == "fit":
