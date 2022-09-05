@@ -227,6 +227,6 @@ class AddOffsets(Transform):
             if not self.is_extensive:
                 y0 /= inputs[structure.n_atoms]
 
-            inputs[self._property] -= y0
+            inputs[self._property] += y0
 
         return inputs
