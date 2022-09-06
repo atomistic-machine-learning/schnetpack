@@ -61,7 +61,7 @@ class AtomsDataModule(pl.LightningDataModule):
         data_workdir: Optional[str] = None,
         cleanup_workdir_stage: Optional[str] = "test",
         splitting: Optional[SplittingStrategy] = None,
-        pin_memory: Optional[bool] = None,
+        pin_memory: Optional[bool] = False,
     ):
         """
         Args:
@@ -126,11 +126,6 @@ class AtomsDataModule(pl.LightningDataModule):
         self.data_workdir = data_workdir
         self.cleanup_workdir_stage = cleanup_workdir_stage
         self._pin_memory = pin_memory
-        if self._pin_memory is None:
-            try:
-                self._pin_memory = isinstance(self.trainer.accelerator, GPUAccelerator)
-            except:
-                self._pin_memory = False
 
         self.train_idx = None
         self.val_idx = None
@@ -139,6 +134,10 @@ class AtomsDataModule(pl.LightningDataModule):
         self._train_dataset = None
         self._val_dataset = None
         self._test_dataset = None
+
+        self._train_dataloader = None
+        self._val_dataloader = None
+        self._test_dataloader = None
 
     @property
     def train_transforms(self):
@@ -349,26 +348,32 @@ class AtomsDataModule(pl.LightningDataModule):
         return self._test_dataset
 
     def train_dataloader(self) -> AtomsLoader:
-        return AtomsLoader(
-            self.train_dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            shuffle=True,
-            pin_memory=self._pin_memory,
-        )
+        if self._train_dataloader is None:
+            self._train_dataloader = AtomsLoader(
+                self.train_dataset,
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                shuffle=True,
+                pin_memory=self._pin_memory,
+            )
+        return self._train_dataloader
 
     def val_dataloader(self) -> AtomsLoader:
-        return AtomsLoader(
-            self.val_dataset,
-            batch_size=self.val_batch_size,
-            num_workers=self.num_val_workers,
-            pin_memory=self._pin_memory,
-        )
+        if self._val_dataloader is None:
+            self._val_dataloader = AtomsLoader(
+                self.val_dataset,
+                batch_size=self.val_batch_size,
+                num_workers=self.num_val_workers,
+                pin_memory=self._pin_memory,
+            )
+        return self._val_dataloader
 
     def test_dataloader(self) -> AtomsLoader:
-        return AtomsLoader(
-            self.test_dataset,
-            batch_size=self.test_batch_size,
-            num_workers=self.num_test_workers,
-            pin_memory=self._pin_memory,
-        )
+        if self._test_dataloader is None:
+            self._test_dataloader = AtomsLoader(
+                self.test_dataset,
+                batch_size=self.test_batch_size,
+                num_workers=self.num_test_workers,
+                pin_memory=self._pin_memory,
+            )
+        return self._test_dataloader
