@@ -1,21 +1,10 @@
 import torch
-import pickle
-import time
 import logging
-import numpy as np
-from math import sqrt
 from tqdm import tqdm
-from os.path import isfile
 from schnetpack import properties
 
-from ase.optimize.optimize import Dynamics
-from ase.calculators.calculator import PropertyNotImplementedError
-from ase.parallel import world, barrier
-from ase.io import write
-from ase import Atoms
 
-
-__all__ = ["TorchLBFGS", "ASELBFGS"]
+__all__ = ["TorchLBFGS"]
 
 
 class TorchLBFGS(torch.optim.LBFGS):
@@ -90,9 +79,7 @@ class TorchLBFGS(torch.optim.LBFGS):
         if not self.converged():
             logging.info("NOT CONVERGED")
         logging.info(
-            "max. atomic force: {} eV/Ang".format(
-                torch.sqrt((forces**2).sum(axis=1).max())
-            )
+            "max. atomic force: {}".format(torch.sqrt((forces**2).sum(axis=1).max()))
         )
 
     def converged(self, forces=None):
