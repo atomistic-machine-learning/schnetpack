@@ -196,7 +196,7 @@ class ANI1(AtomsDataModule):
 
     def _create_atomrefs(self):
         atref = np.zeros((100,))
-        labels = self.load_properties
+        # labels = self.load_properties
 
         # converts units to eV (which are set to one in ase)
         atref[1] = self.self_energies["H"]
@@ -204,4 +204,4 @@ class ANI1(AtomsDataModule):
         atref[7] = self.self_energies["N"]
         atref[8] = self.self_energies["O"]
 
-        return {labels: atref.tolist()}
+        return {ANI1.energy: atref.tolist()}
