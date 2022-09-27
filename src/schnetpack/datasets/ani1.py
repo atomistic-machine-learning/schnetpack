@@ -173,7 +173,7 @@ class ANI1(AtomsDataModule):
                 for i in range(energies.shape[0]):
                     atm = Atoms(species, positions[i])
                     energy = energies[i]
-                    properties = {self.energy: energy}
+                    properties = {self.energy: np.array([energy])}
                     atoms_list.append(atm)
                     properties_list.append(properties)
 
@@ -187,7 +187,8 @@ class ANI1(AtomsDataModule):
                     for i in range(high_energies.shape[0]):
                         atm = Atoms(species, high_energy_positions[i])
                         high_energy = high_energies[i]
-                        properties = {self.energy: high_energy}
+                        print(high_energy)
+                        properties = {self.energy: np.array([high_energy])}
                         atoms_list.append(atm)
                         properties_list.append(properties)
 
