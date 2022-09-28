@@ -118,7 +118,7 @@ class ANI1(AtomsDataModule):
     def prepare_data(self):
         if not os.path.exists(self.datapath):
             property_unit_dict = {
-                ANI1.energy: "hartree",
+                ANI1.energy: "Hartree",
             }
             atomrefs = self._create_atomrefs()
 
