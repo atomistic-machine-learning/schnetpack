@@ -9,3 +9,8 @@ num_train: 10000000
 num_val: 100000
 num_heavy_atoms: 8
 high_energies: False
+
+# convert to typically used units
+distance_unit: Ang
+property_units:
+  energy: eV
