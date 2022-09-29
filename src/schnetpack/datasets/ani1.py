@@ -187,7 +187,6 @@ class ANI1(AtomsDataModule):
                     for i in range(high_energies.shape[0]):
                         atm = Atoms(species, high_energy_positions[i])
                         high_energy = high_energies[i]
-                        print(high_energy)
                         properties = {self.energy: np.array([high_energy])}
                         atoms_list.append(atm)
                         properties_list.append(properties)
@@ -197,7 +196,6 @@ class ANI1(AtomsDataModule):
 
     def _create_atomrefs(self):
         atref = np.zeros((100,))
-        # labels = self.load_properties
 
         # converts units to eV (which are set to one in ase)
         atref[1] = self.self_energies["H"]

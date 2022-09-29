@@ -4,15 +4,21 @@ from tqdm import tqdm
 from schnetpack import properties
 
 
-__all__ = ["TorchLBFGS"]
+__all__ = ["TorchStructureLBFGS"]
 
 
-class TorchLBFGS(torch.optim.LBFGS):
+class TorchStructureLBFGS(torch.optim.LBFGS):
     """
     LBFGS optimizer that allows for relaxation of multiple structures in parallel. The approximation of the inverse
     hessian is shared across the entire batch (all structures). Hence, it is recommended to use this optimizer
     preferably for batches of similar structures/compositions. In other cases, please utilize the ASELBFGS optimizer,
     which is particularly constructed for batches of different structures/compositions.
+
+    This optimizer is an extension/adaptation of the torch.optim.LBFGS optimizer particularly designed for relaxation
+    of atomic structures. In addition to the inherited features, this optimizer allows for fixing the positions of a
+    set of atoms during the relaxation and a method to run the optimizer. Latter allows for setting a convergence
+    criterium. Furthermore, we implemented a logging method that prints out the largest force in the system after each
+    optimization iteration.
     """
 
     def __init__(
