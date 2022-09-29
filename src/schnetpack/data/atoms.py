@@ -413,6 +413,10 @@ class ASEAtomsData(BaseAtomsData):
             property_unit_dict: Defines the available properties of the datasetseta and
                 provides units for ALL properties of the dataset. If a property is
                 unit-less, you can pass "arb. unit" or `None`.
+            atomrefs: dictionary mapping properies (the keys) to lists of single-atom
+                reference values of the property. This is especially useful for
+                extensive properties such as the energy, where the single atom energies
+                contribute a major part to the overall value.
             kwargs: Pass arguments to init.
 
         Returns:
