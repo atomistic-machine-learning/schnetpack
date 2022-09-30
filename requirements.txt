@@ -3,7 +3,7 @@ PyYAML
 
 torch>=1.9
 pytorch_lightning>=1.6.0
-protobuf==3.20.1
+protobuf==3.20.2
 hydra-core>=1.1.0
 hydra-colorlog>=1.1.0
 numpy
