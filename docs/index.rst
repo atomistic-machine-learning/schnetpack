@@ -25,13 +25,20 @@ Contents
 
 .. toctree::
    :glob:
-   :caption: SchNetPack from Python
+   :caption: Tutorials
    :maxdepth: 1
 
    tutorials/tutorial_01_preparing_data
    tutorials/tutorial_02_qm9
    tutorials/tutorial_03_force_models
    tutorials/tutorial_04_molecular_dynamics
+
+.. toctree::
+   :glob:
+   :caption: How-To
+   :maxdepth: 1
+
+   howtos/howto_batchwise_relaxations
 
 .. toctree::
    :glob:
