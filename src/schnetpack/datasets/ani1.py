@@ -118,7 +118,7 @@ class ANI1(AtomsDataModule):
     def prepare_data(self):
         if not os.path.exists(self.datapath):
             property_unit_dict = {
-                ANI1.energy: "hartree",
+                ANI1.energy: "Hartree",
             }
             atomrefs = self._create_atomrefs()
 
@@ -173,7 +173,7 @@ class ANI1(AtomsDataModule):
                 for i in range(energies.shape[0]):
                     atm = Atoms(species, positions[i])
                     energy = energies[i]
-                    properties = {self.energy: energy}
+                    properties = {self.energy: np.array([energy])}
                     atoms_list.append(atm)
                     properties_list.append(properties)
 
@@ -187,7 +187,7 @@ class ANI1(AtomsDataModule):
                     for i in range(high_energies.shape[0]):
                         atm = Atoms(species, high_energy_positions[i])
                         high_energy = high_energies[i]
-                        properties = {self.energy: high_energy}
+                        properties = {self.energy: np.array([high_energy])}
                         atoms_list.append(atm)
                         properties_list.append(properties)
 
@@ -196,7 +196,6 @@ class ANI1(AtomsDataModule):
 
     def _create_atomrefs(self):
         atref = np.zeros((100,))
-        labels = self.load_properties
 
         # converts units to eV (which are set to one in ase)
         atref[1] = self.self_energies["H"]
@@ -204,4 +203,4 @@ class ANI1(AtomsDataModule):
         atref[7] = self.self_energies["N"]
         atref[8] = self.self_energies["O"]
 
-        return {labels: atref.tolist()}
+        return {ANI1.energy: atref.tolist()}
