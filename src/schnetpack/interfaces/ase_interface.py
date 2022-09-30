@@ -492,6 +492,7 @@ class AseInterface:
             self.molecule,
             trajectory="{:s}.traj".format(optimize_file),
             restart="{:s}.pkl".format(optimize_file),
+            # maxstep=0.01,
         )
         optimizer.run(fmax, steps)
 

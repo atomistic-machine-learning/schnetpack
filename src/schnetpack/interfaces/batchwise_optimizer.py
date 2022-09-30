@@ -3,7 +3,6 @@ import logging
 from tqdm import tqdm
 from schnetpack import properties
 
-
 __all__ = ["TorchStructureLBFGS"]
 
 
@@ -26,6 +25,7 @@ class TorchStructureLBFGS(torch.optim.LBFGS):
         model,
         model_inputs,
         fixed_atoms_mask,
+        maxstep=None,
         logging_function=None,
         lr: float = 1.0,
         energy_key: str = "energy",
@@ -36,6 +36,7 @@ class TorchStructureLBFGS(torch.optim.LBFGS):
             model (schnetpack.model.AtomisticModel): ml force field model
             model_inputs: input batch containing all structures
             fixed_atoms_mask (list(bool)): list of booleans indicating to atoms with positions fixed in space.
+            maxstep (float): how far is a single atom allowed to move. (default: None)
             logging_function: function that logs the structure of the systems during the relaxation
             lr (float): learning rate (default: 1)
             energy_key (str): name of energies in model (default="energy")
@@ -49,6 +50,7 @@ class TorchStructureLBFGS(torch.optim.LBFGS):
         self.model_inputs = model_inputs
         self.logging_function = logging_function
         self.fmax = None
+        self.maxstep = maxstep
 
         R = self.model_inputs[self.position_key]
         R.requires_grad = True
@@ -70,6 +72,35 @@ class TorchStructureLBFGS(torch.optim.LBFGS):
             flat_grad[self.fixed_atoms_mask] = 0.0
         self.flat_grad = flat_grad
         return flat_grad
+
+    def _add_grad(self, step_size, update):
+        offset = 0
+
+        if self.maxstep is not None:
+            step_size = self.determine_step_size(step_size, update)
+
+        for p in self._params:
+            numel = p.numel()
+            # view as to avoid deprecated pointwise semantics
+            p.add_(update[offset : offset + numel].view_as(p), alpha=step_size)
+            offset += numel
+        assert offset == self._numel()
+
+    def determine_step_size(self, step_size, update):
+        """Determine step to take according to maxstep
+
+        Normalize all steps as the largest step. This way
+        we still move along the eigendirection.
+        """
+        reshaped_update = update.view(-1, 3)
+        steplengths = ((step_size * reshaped_update) ** 2).sum(1) ** 0.5
+        longest_step = torch.max(steplengths)
+        # check if any step in entire batch is greater than maxstep
+        if longest_step >= self.maxstep:
+            # rescale all steps
+            logging.info("normalized integration step")
+            step_size *= self.maxstep / longest_step
+        return step_size
 
     def closure(self):
         results = self.model(self.model_inputs)
