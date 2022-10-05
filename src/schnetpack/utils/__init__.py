@@ -4,6 +4,20 @@ from typing import Type, Union, List
 
 from schnetpack import properties as spk_properties
 
+TORCH_DTYPES = {
+    "float32": torch.float32,
+    "float64": torch.float64,
+    "torch.float32": torch.float32,
+    "torch.float64": torch.float64,
+    "int32": torch.int32,
+    "int64": torch.int64,
+}
+
+
+def as_dtype(dtype_str: str) -> torch.dtype:
+    """Convert a string to torch.dtype"""
+    return TORCH_DTYPES[dtype_str]
+
 
 def int2precision(precision: Union[int, torch.dtype]):
     """

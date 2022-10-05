@@ -4,6 +4,7 @@ from typing import Dict, Optional, List
 
 from schnetpack.transform import Transform
 import schnetpack.properties as properties
+from schnetpack.utils import as_dtype
 
 import torch
 import torch.nn as nn
@@ -30,11 +31,11 @@ class AtomisticModel(nn.Module):
                 representation: nn.Module,
                 output_module: nn.Module,
                 postprocessors: Optional[List[Transform]] = None,
-                input_dtype: torch.dtype = torch.float32,
+                input_dtype_str: str = "float32",
                 do_postprocessing: bool = True,
             ):
                 super().__init__(
-                    input_dtype=input_dtype,
+                    input_dtype_str=input_dtype_str,
                     postprocessors=postprocessors,
                     do_postprocessing=do_postprocessing,
                 )
@@ -58,18 +59,18 @@ class AtomisticModel(nn.Module):
     def __init__(
         self,
         postprocessors: Optional[List[Transform]] = None,
-        input_dtype: torch.dtype = torch.float32,
+        input_dtype_str: str = "float32",
         do_postprocessing: bool = True,
     ):
         """
         Args:
-            postprocessors: Post-processing transforms tha may be initialized using te `datamodule`, but are not
-                applied during training.
-            input_dtype: The dtype of real inputs.
+            postprocessors: Post-processing transforms tha may be initialized using the
+                `datamodule`, but are not applied during training.
+            input_dtype_str: The dtype of real inputs as string.
             do_postprocessing: If true, post-processing is activated.
         """
         super().__init__()
-        self.input_dtype = input_dtype
+        self.input_dtype_str = input_dtype_str
         self.do_postprocessing = do_postprocessing
         self.postprocessors = nn.ModuleList(postprocessors)
         self.required_derivatives: Optional[List[str]] = None
@@ -138,7 +139,7 @@ class NeuralNetworkPotential(AtomisticModel):
         input_modules: List[nn.Module] = None,
         output_modules: List[nn.Module] = None,
         postprocessors: Optional[List[Transform]] = None,
-        input_dtype: torch.dtype = torch.float32,
+        input_dtype_str: str = "float32",
         do_postprocessing: Optional[bool] = None,
     ):
         """
@@ -149,11 +150,11 @@ class NeuralNetworkPotential(AtomisticModel):
             output_modules: Modules that predict output properties from the representation.
             postprocessors: Post-processing transforms that may be initialized using te `datamodule`, but are not
                 applied during training.
-            input_dtype: The dtype of real inputs.
+            input_dtype_str: The dtype of real inputs.
             do_postprocessing: If true, post-processing is activated.
         """
         super().__init__(
-            input_dtype=input_dtype,
+            input_dtype_str=input_dtype_str,
             postprocessors=postprocessors,
             do_postprocessing=do_postprocessing,
         )
