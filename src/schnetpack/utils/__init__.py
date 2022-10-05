@@ -7,10 +7,12 @@ from schnetpack import properties as spk_properties
 TORCH_DTYPES = {
     "float32": torch.float32,
     "float64": torch.float64,
-    "torch.float32": torch.float32,
-    "torch.float64": torch.float64,
     "int32": torch.int32,
     "int64": torch.int64,
+    "torch.float32": torch.float32,
+    "torch.float64": torch.float64,
+    "torch.int32": torch.int32,
+    "torch.int64": torch.int64,
 }
 
 
