@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 from typing import Optional, Dict, List, Type, Any, Union
 
@@ -247,6 +248,17 @@ class AtomisticTask(pl.LightningModule):
             optimconf = {"scheduler": schedule, "name": "lr_schedule"}
             if self.schedule_monitor:
                 optimconf["monitor"] = self.schedule_monitor
+            # incase model is validated before epoch end (not recommended use of val_check_interval)
+            if self.trainer.val_check_interval < 1.0:
+                warnings.warn(
+                    "Learning rate is scheduled after epoch end. To enable scheduling before epoch end, "
+                    "please specify val_check_interval by the number of training epochs after which the "
+                    "model is validated."
+                )
+            # incase model is validated before epoch end (recommended use of val_check_interval)
+            if self.trainer.val_check_interval > 1.0:
+                optimconf["interval"] = "step"
+                optimconf["frequency"] = self.trainer.val_check_interval
             schedulers.append(optimconf)
             return [optimizer], schedulers
         else:
