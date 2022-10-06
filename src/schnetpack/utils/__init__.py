@@ -27,8 +27,6 @@ TORCH_DTYPES = {
     "qint8": torch.qint8,
     "qint32": torch.qint32,
     "bool": torch.bool,
-    "quint4x2": torch.quint4x2,
-    "quint2x4": torch.quint2x4,
 }
 
 TORCH_DTYPES.update({"torch." + k: v for k, v in TORCH_DTYPES.items()})
