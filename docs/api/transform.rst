@@ -39,8 +39,11 @@ Neighbor lists
     :nosignatures:
     :template: classtemplate.rst
 
+    MatScipyNeighborList
     ASENeighborList
     TorchNeighborList
     CachedNeighborList
     CountNeighbors
+    FilterNeighbors
+    WrapPositions
     CollectAtomTriples
