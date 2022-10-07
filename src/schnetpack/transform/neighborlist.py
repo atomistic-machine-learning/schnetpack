@@ -7,7 +7,7 @@ from matscipy.neighbours import neighbour_list as msp_neighbor_list
 from .base import Transform
 from dirsync import sync
 import numpy as np
-from typing import Optional, Dict, List, Type, Any, Union
+from typing import Optional, Dict, List
 
 __all__ = [
     "ASENeighborList",
@@ -34,8 +34,8 @@ class CacheException(Exception):
 
 class NeighborlistWrapper(Transform):
     """
-    Wrapper class for neighbor lists. Using this wrapper allows to add multiple postprocessing steps to the neighbor
-    list transform
+    Wrapper class for neighbor lists. Using this wrapper allows to add multiple
+    postprocessing steps to the neighbor list transform
     """
 
     def __init__(
@@ -46,7 +46,8 @@ class NeighborlistWrapper(Transform):
         """
         Args:
             neighbor_list: the neighbor list to use
-            nbh_postprocessing: post-processing transforms for manipulating the neighbor lists provided by neighbor_list
+            nbh_postprocessing: post-processing transforms for manipulating the neighbor
+                lists provided by neighbor_list
         """
         super().__init__()
         self.neighbor_list = neighbor_list
@@ -68,6 +69,7 @@ class CachedNeighborList(Transform):
     This wraps a neighbor list and stores the results the first time it is called
     for a dataset entry with the pid provided by AtomsDataset. Particularly,
     for large systems, this speeds up training significantly.
+
     Note:
         The provided cache location should be unique to the used dataset. Otherwise,
         wrong neighborhoods will be provided. The caching location can be reused
@@ -88,12 +90,15 @@ class CachedNeighborList(Transform):
         Args:
             cache_path: Path of caching directory.
             neighbor_list: the neighbor list to use
-            keep_cache: Keep cache at `cache_location` at the end of training, or copy built/updated cache there from
-                `cache_workdir` (if set). A pre-existing cache at `cache_location` will not be deleted, while a
-                 temporary cache at `cache_workdir` will always be removed.
-            cache_workdir: If this is set, the cache will be build here, e.g. a cluster scratch space
-                for faster performance. An existing cache at `cache_location` is copied here at the beginning of
-                training, and afterwards (if `keep_cache=True`) the final cache is copied to `cache_workdir`.
+            keep_cache: Keep cache at `cache_location` at the end of training, or copy
+                built/updated cache there from `cache_workdir` (if set). A pre-existing
+                cache at `cache_location` will not be deleted, while a temporary cache
+                at `cache_workdir` will always be removed.
+            cache_workdir: If this is set, the cache will be build here, e.g. a cluster
+                scratch space for faster performance. An existing cache at
+                `cache_location` is copied here at the beginning of training, and
+                afterwards (if `keep_cache=True`) the final cache is copied to
+                `cache_workdir`.
         """
         super().__init__()
         self.neighbor_list = neighbor_list
@@ -240,7 +245,9 @@ class ASENeighborList(NeighborListTransform):
 class MatScipyNeighborList(NeighborListTransform):
     """
     Neighborlist using the efficient implementation of the Matscipy package
-    (https://github.com/libAtoms/matscipy).
+
+    References:
+        https://github.com/libAtoms/matscipy
     """
 
     def _build_neighbor_list(
@@ -268,14 +275,15 @@ class MatScipyNeighborList(NeighborListTransform):
 
 class SkinNeighborList(Transform):
     """
-    Neighbor list provider utilizing a cutoff skin for computational efficiency. Wrapper around neighbor list classes
-    such as, e.g., ASENeighborList. Designed for use cases with gradual structural changes such ase MD simulations
-    and structure relaxations.
+    Neighbor list provider utilizing a cutoff skin for computational efficiency. Wrapper
+    around neighbor list classes such as, e.g., ASENeighborList. Designed for use cases
+    with gradual structural changes such ase MD simulations and structure relaxations.
 
     Note:
-        - Not meant to be used for training, since the shuffling of training data results in large
-          structural deviations between subsequent training samples.
-        - Not transferable between different molecule conformations or varying atom indexing.
+        - Not meant to be used for training, since the shuffling of training data
+            results in large structural deviations between subsequent training samples.
+        - Not transferable between different molecule conformations or varying atom
+            indexing.
     """
 
     is_preprocessor: bool = True
@@ -290,14 +298,17 @@ class SkinNeighborList(Transform):
         """
         Args:
             neighbor_list: the neighbor list to use
-            nbh_postprocessing: post-processing transforms for manipulating the neighbor lists provided by neighbor_list
+            nbh_postprocessing: post-processing transforms for manipulating the neighbor
+                lists provided by neighbor_list
             cutoff_skin: float
-                If no atom has moved more than the skin-distance since the neighbor list has been updated the last time,
-                then the neighbor list is reused. This will save some expensive rebuilds of the list.
-                Note:
-                    Please choose a sufficiently large cutoff_skin value to ensure that between two subsequent samples
-                    no atom can penetrate through the skin into the cutoff sphere of another atom if it is not in the
-                    neighbor list of that atom.
+                If no atom has moved more than the skin-distance since the neighbor list
+                    has been updated the last time, then the neighbor list is reused.
+                    This will save some expensive rebuilds of the list.
+
+        Note:
+            Please choose a sufficiently large cutoff_skin value to ensure that between
+            two subsequent samples no atom can penetrate through the skin into the
+            cutoff sphere of another atom if it is not in the neighbor list of that atom.
         """
 
         super().__init__()
@@ -346,12 +357,13 @@ class SkinNeighborList(Transform):
         return inputs
 
     def _update(self, inputs):
-        """Make sure the list is up to date."""
+        """Make sure the list is up-to-date."""
 
         # get sample index
         sample_idx = inputs[properties.idx].item()
 
-        # check if previous neighbor list exists and make sure that this is not the first update step
+        # check if previous neighbor list exists and make sure that this is not the
+        # first update step
         if sample_idx in self.previous_inputs.keys():
             # load previous inputs
             previous_inputs = self.previous_inputs[sample_idx]
@@ -365,7 +377,8 @@ class SkinNeighborList(Transform):
             positions = inputs[properties.R]
             cell = inputs[properties.cell].view(3, 3)
             pbc = inputs[properties.pbc]
-            # check if structure change is sufficiently small to reuse previous neighbor list
+            # check if structure change is sufficiently small to reuse previous neighbor
+            # list
             if (
                 (previous_pbc == pbc.numpy()).any()
                 and (previous_cell == cell.numpy()).any()
@@ -413,8 +426,11 @@ class SkinNeighborList(Transform):
 class TorchNeighborList(NeighborListTransform):
     """
     Environment provider making use of neighbor lists as implemented in TorchAni
-    (https://github.com/aiqm/torchani/blob/master/torchani/aev.py).
+
     Supports cutoffs and PBCs and can be performed on either CPU or GPU.
+
+    References:
+        https://github.com/aiqm/torchani/blob/master/torchani/aev.py
     """
 
     def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
@@ -537,8 +553,8 @@ class TorchNeighborList(NeighborListTransform):
 
 class FilterNeighbors(Transform):
     """
-    Filter out all neighbor list indices corresponding to interactions between a set of atoms. This set of atoms must
-    be specified in the input data.
+    Filter out all neighbor list indices corresponding to interactions between a set of
+    atoms. This set of atoms must be specified in the input data.
     """
 
     def __init__(
@@ -546,10 +562,11 @@ class FilterNeighbors(Transform):
     ):
         """
         Args:
-            selection_name (str): key in the input data corresponding to the set of atoms between which no interactions
-                should be considered.
-            additional_inputs (dict): additional inputs required for this transform. When setting up the AtomsConverter,
-                those additional inputs will be stored to the input batch.
+            selection_name (str): key in the input data corresponding to the set of
+                atoms between which no interactions should be considered.
+            additional_inputs (dict): additional inputs required for this transform.
+                When setting up the AtomsConverter, those additional inputs will be
+                stored to the input batch.
         """
         self.selection_name = selection_name
         self.additional_inputs = additional_inputs or {}
@@ -589,10 +606,11 @@ class CollectAtomTriples(Transform):
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
         """
-        Using the neighbors contained within the cutoff shell, generate all unique pairs of neighbors and convert
-        them to index arrays. Applied to the neighbor arrays, these arrays generate the indices involved in the atom
-        triples.
-        E.g.:
+        Using the neighbors contained within the cutoff shell, generate all unique pairs
+        of neighbors and convert them to index arrays. Applied to the neighbor arrays,
+        these arrays generate the indices involved in the atom triples.
+
+        Example:
             idx_j[idx_j_triples] -> j atom in triple
             idx_j[idx_k_triples] -> k atom in triple
             Rij[idx_j_triples] -> Rij vector in triple
@@ -635,7 +653,8 @@ class CountNeighbors(Transform):
     def __init__(self, sorted: bool = True):
         """
         Args:
-            sorted: Set to false if chosen neighbor list yields unsorted center indices (idx_i).
+            sorted: Set to false if chosen neighbor list yields unsorted center indices
+                (idx_i).
         """
         super(CountNeighbors, self).__init__()
         self.sorted = sorted
