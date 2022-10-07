@@ -5,7 +5,6 @@ schnetpack.transform
 .. currentmodule:: transform
 .. autoclass:: Transform
 
-
 Atomistic
 ---------
 
