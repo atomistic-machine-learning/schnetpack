@@ -16,12 +16,19 @@ Contents
 
 .. toctree::
    :glob:
-   :caption: Getting Started
+   :caption: Get Started
    :maxdepth: 1
 
-   getstarted/firststeps
-   getstarted/train_cli
-   getstarted/md
+   getstarted
+
+.. toctree::
+   :glob:
+   :caption: User guide
+   :maxdepth: 1
+
+   userguide/overview
+   userguide/configs
+   userguide/md
 
 .. toctree::
    :glob:
@@ -49,6 +56,8 @@ Contents
    api/atomistic
    api/data
    api/datasets
+   api/task
+   api/model
    api/representation
    api/nn
    api/train
