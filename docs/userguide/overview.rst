@@ -23,8 +23,7 @@ provide an additional interface to store metadata, e.g. property units and
 single-atom reference values.
 
 An important aspect are the transforms that can be passed to the data classes. Those
-are PyTorch modules that perform example-wise preprocessing task on the data,
-i.e. *before* batching.
+are PyTorch modules that perform preprocessing task on the data *before* batching.
 Typically, this is performed on the CPU as part of the multi-processing of PyTorch
 dataloaders.
 Important preprocessing :class:`Transform`s include removing of offsets from target properties

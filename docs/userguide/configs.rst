@@ -227,7 +227,7 @@ shown above.
 
 The config groups ``data``, ``model``, ``task``, ``trainer``, ``callback`` and
 ``logger`` directly define objects using the special key ``_target_``, which specifies
-a class, whiles the remaining key-value pairs define the arguments passed to the
+a class, while the remaining key-value pairs define the arguments passed to the
 ``__init__``.
 
 Defining experiments
@@ -314,7 +314,7 @@ and data loaded above are overridden::
 
 All parameters not set here are kept from the default configs.
 The data config is altered by setting a custom list of pre-processing transforms.
-These are suitable for prediction the energy and similar extensive targets.
+These are suitable for prediction of the energy and similar extensive targets.
 The list includes removing of the single atom reference and the mean energy per atom,
 computing the neighborlist and finally casting to ``float32``.
 The output-specific part of the model is set to predict the energy as a sum of atomwise

@@ -71,7 +71,7 @@ First, create a working directory, where all data and runs will be stored::
     $ mkdir spk_workdir
     $ cd spk_workdir
 
-Them, the training of a SchNet model with default settings for QM9 can be started by::
+Then, the training of a SchNet model with default settings for QM9 can be started by::
 
    $ spktrain experiment=qm9_energy
 
