@@ -1,11 +1,3 @@
-===========
-First steps
-===========
-
-SchNetPack aims to provide accessible atomistic neural networks
-that can be trained and applied out-of-the-box, while still being
-extensible to custom atomistic architectures.
-
 Installation
 ============
 
@@ -57,8 +49,8 @@ The default logger is Tensorboard, which can be installed via::
    $ pip install tensorboard
 
 
-Training pre-defined models
-===========================
+Training your first models
+==========================
 
 The best place to get started is training a SchNetPack model on a common benchmark dataset via the command line
 interface (CLI).
@@ -79,11 +71,11 @@ First, create a working directory, where all data and runs will be stored::
     $ mkdir spk_workdir
     $ cd spk_workdir
 
-Them, the training of a SchNet model with default settings for QM9 can be started by::
+Then, the training of a SchNet model with default settings for QM9 can be started by::
 
-   $ spktrain experiment=qm9
+   $ spktrain experiment=qm9_energy
 
-The script prints the defaults for the experiment config ``qm9``.
+The script prints the defaults for the experiment config ``qm9_energy``.
 The dataset will be downloaded automatically to ``spk_workdir/data``, if it does not exist yet.
 Then, the training will be started.
 
@@ -97,13 +89,13 @@ If you call ``spktrain experiment=qm9 --help``, you can see the full config with
 that can be changed.
 Nested parameters can be changed as follows::
 
-   $ spktrain experiment=qm9 data_dir=<path> data.batch_size=64
+   $ spktrain experiment=qm9_energy data_dir=<path> data.batch_size=64
 
 Hydra organizes parameters in config groups which allows hierarchical configurations consisting of multiple
 yaml files. This allows to easily change the whole dataset, model or representation.
 For instance, changing from the default SchNet representation to PaiNN, use::
 
-   $ spktrain experiment=qm9 data_dir=<path> model/representation=painn
+   $ spktrain experiment=qm9_energy data_dir=<path> model/representation=painn
 
 It is a bit confusing at first when to use "." or "/". The slash is used, if you are loading a preconfigured config
 group, while the dot is used changing individual values. For example, the config group "model/representation"
@@ -126,7 +118,7 @@ corresponds to the following part of the config: ::
 
 If you would want to additionally change some value of this group, you could use: ::
 
-    $ spktrain experiment=qm9 data_dir=<path> model/representation=painn model.representation.n_interactions=5
+    $ spktrain experiment=qm9_energy data_dir=<path> model/representation=painn model.representation.n_interactions=5
 
 For more details on config groups, have a look at the
 `Hydra docs <https://hydra.cc/docs/next/tutorials/basic/your_first_app/config_groups>`_.
@@ -199,8 +191,7 @@ These can be selected as follows::
    $ spktrain experiment=md17 logger=csv
 
 
-References
-==========
+**References**
 
 .. [#schnetpack] K.T. Schütt, P. Kessel, M. Gastegger, K.A. Nicoli, A. Tkatchenko, K.-R. Müller.
    `SchNetPack: A Deep Learning Toolbox For Atomistic Systems <https://doi.org/10.1021/acs.jctc.8b00908>`_.
