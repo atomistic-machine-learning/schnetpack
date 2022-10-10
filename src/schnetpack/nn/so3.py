@@ -6,6 +6,14 @@ from .ops.so3 import generate_clebsch_gordan_rsh, sparsify_clebsch_gordon, sh_in
 from .ops.math import binom
 from schnetpack.utils import as_dtype
 
+__all__ = [
+    "RealSphericalHarmonics",
+    "SO3Convolution",
+    "SO3GatedNonlinearity",
+    "SO3ParametricGatedNonlinearity",
+    "SO3SelfInteraction",
+]
+
 
 class RealSphericalHarmonics(nn.Module):
     """
@@ -174,8 +182,7 @@ class SO3Convolution(nn.Module):
 
     .. math::
 
-        y_{i,s,f} = \sum_{j,s_1,s_2} x_{j,s_2,f} W_{s_1,f}(r_{ij}) Y_{s_1}(\vec{r}_{ij})
-            C_{s_1,s_2}^{s}
+        y_{i,s,f} = \sum_{j,s_1,s_2} x_{j,s_2,f} W_{s_1,f}(r_{ij}) Y_{s_1}(r_{ij}) C_{s_1,s_2}^{s}
 
     """
 
