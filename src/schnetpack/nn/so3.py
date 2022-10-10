@@ -2,14 +2,17 @@ import math
 import torch
 import torch.nn as nn
 import schnetpack.nn as snn
-from .ops.so3 import generate_clebsch_gordan_rsh, sh_indices
+from .ops.so3 import generate_clebsch_gordan_rsh, sparsify_clebsch_gordon, sh_indices
 from .ops.math import binom
 from schnetpack.utils import as_dtype
 
 
 class RealSphericalHarmonics(nn.Module):
     """
-    Generates the real spherical harmonics for a batch of (normalized) vectors.
+    Generates the real spherical harmonics for a batch of vectors.
+
+    Note:
+        The vectors passed to this layer are assumed to be normalized to unit length.
 
     Spherical harmonics are generated up to angular momentum `lmax` in dimension 1,
     according to the following order:
@@ -23,6 +26,11 @@ class RealSphericalHarmonics(nn.Module):
     """
 
     def __init__(self, lmax: int, dtype_str: str = "float32"):
+        """
+        Args:
+            lmax: maximum angular momentum
+            dtype_str: dtype for spherical harmonics coefficients
+        """
         super().__init__()
         self.lmax = lmax
 
@@ -32,7 +40,7 @@ class RealSphericalHarmonics(nn.Module):
             cAm,
             cBm,
             cPi,
-        ) = self.generate_Ylm_coefficients(lmax)
+        ) = self._generate_Ylm_coefficients(lmax)
 
         dtype = as_dtype(dtype_str)
         self.register_buffer("powers", powers.to(dtype=dtype), False)
@@ -48,7 +56,7 @@ class RealSphericalHarmonics(nn.Module):
 
         self.register_buffer("flidx", self.lidx.to(dtype=dtype), False)
 
-    def generate_Ylm_coefficients(self, lmax: int):
+    def _generate_Ylm_coefficients(self, lmax: int):
         # see: https://en.wikipedia.org/wiki/Spherical_harmonics#Real_forms
 
         # calculate Am/Bm coefficients
@@ -82,14 +90,21 @@ class RealSphericalHarmonics(nn.Module):
 
         return powers, zpow, cAm, cBm, cPi
 
-    def forward(self, R: torch.Tensor):
+    def forward(self, directions: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            directions: batch of unit-length 3D vectors (Nx3)
+
+        Returns:
+            real spherical harmonics up ton angular momentum `lmax`
+        """
         target_shape = [
-            R.shape[0],
+            directions.shape[0],
             self.powers.shape[0],
             self.powers.shape[1],
             2,
         ]
-        Rs = torch.broadcast_to(R[:, None, None, :2], target_shape)
+        Rs = torch.broadcast_to(directions[:, None, None, :2], target_shape)
         pows = torch.broadcast_to(self.powers[None], target_shape)
 
         Rs = torch.where(pows == 0, torch.ones_like(Rs), Rs)
@@ -102,7 +117,7 @@ class RealSphericalHarmonics(nn.Module):
         ABm = torch.cat(
             [
                 torch.flip(Bm, (1,)),
-                math.sqrt(0.5) * torch.ones((Am.shape[0], 1), device=R.device),
+                math.sqrt(0.5) * torch.ones((Am.shape[0], 1), device=directions.device),
                 Am,
             ],
             dim=1,
@@ -110,12 +125,12 @@ class RealSphericalHarmonics(nn.Module):
         ABm = ABm[:, self.midx + self.lmax]
 
         target_shape = [
-            R.shape[0],
+            directions.shape[0],
             self.zpow.shape[0],
             self.zpow.shape[1],
             self.zpow.shape[2],
         ]
-        z = torch.broadcast_to(R[:, 2, None, None, None], target_shape)
+        z = torch.broadcast_to(directions[:, 2, None, None, None], target_shape)
         zpows = torch.broadcast_to(self.zpow[None], target_shape)
         z = torch.where(zpows == 0, torch.ones_like(z), z)
         zk = z**zpows
@@ -129,6 +144,13 @@ class RealSphericalHarmonics(nn.Module):
 def scalar2rsh(x: torch.Tensor, lmax: int) -> torch.Tensor:
     """
     Expand scalar tensor to spherical harmonics shape with angular momentum up to `lmax`
+
+    Args:
+        x: tensor of shape [N, *]
+        lmax: maximum angular momentum
+
+    Returns:
+        zero-padded tensor to shape [N, (lmax+1)^2, *]
     """
     y = torch.cat(
         [
@@ -144,72 +166,11 @@ def scalar2rsh(x: torch.Tensor, lmax: int) -> torch.Tensor:
     return y
 
 
-class BaseSO3Convolution(nn.Module):
+class SO3Convolution(nn.Module):
     """
-    Base class for SO3-equivariant convolutions.
-    """
+    SO3-equivariant convolution using Clebsch-Gordon tensor product.
 
-    def __init__(self, lmax: int, n_atom_basis: int, n_radial: int):
-        super().__init__()
-        self.lmax = lmax
-        self.n_atom_basis = n_atom_basis
-        self.n_radial = n_radial
-
-        cg = torch.from_numpy(generate_clebsch_gordan_rsh(lmax))
-        cg = cg.to(torch.float32)
-
-        idx = torch.nonzero(cg)
-        idx_in_1, idx_in_2, idx_out = torch.split(idx, 1, dim=1)
-        idx_in_1, idx_in_2, idx_out = (
-            idx_in_1[:, 0],
-            idx_in_2[:, 0],
-            idx_out[:, 0],
-        )
-
-        self.register_buffer("idx_in_1", idx_in_1, persistent=False)
-        self.register_buffer("idx_in_2", idx_in_2, persistent=False)
-        self.register_buffer("idx_out", idx_out, persistent=False)
-
-        self.register_buffer(
-            "clebsch_gordan",
-            cg[self.idx_in_1, self.idx_in_2, self.idx_out],
-            persistent=False,
-        )
-
-    def compute_radial_filter(
-        self, radial_ij: torch.Tensor, cutoff_ij: torch.Tensor
-    ) -> torch.Tensor:
-        raise NotImplementedError
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        radial_ij: torch.Tensor,
-        dir_ij: torch.Tensor,
-        cutoff_ij: torch.Tensor,
-        idx_i: torch.Tensor,
-        idx_j: torch.Tensor,
-        n_atoms: int,
-    ) -> torch.Tensor:
-        xj = x[idx_j[:, None], self.idx_in_2[None, :], :]
-        Wij = self.compute_radial_filter(radial_ij, cutoff_ij)
-
-        v = (
-            Wij
-            * dir_ij[:, self.idx_in_1, None]
-            * self.clebsch_gordan[None, :, None]
-            * xj
-        )
-        yij = snn.scatter_add(v, self.idx_out, dim_size=(self.lmax + 1) ** 2, dim=1)
-        y = snn.scatter_add(yij, idx_i, dim_size=n_atoms)
-        return y
-
-
-class SO3Convolution(BaseSO3Convolution):
-    r"""
-    SO3-equivariant convolution
-
-    y - shape: atom, spherical harmonic, feature
+    With combined indexing s=(l,m), this can be written as:
 
     .. math::
 
@@ -219,31 +180,85 @@ class SO3Convolution(BaseSO3Convolution):
     """
 
     def __init__(self, lmax: int, n_atom_basis: int, n_radial: int):
-        super().__init__(lmax, n_atom_basis, n_radial)
+        super().__init__()
+        self.lmax = lmax
+        self.n_atom_basis = n_atom_basis
+        self.n_radial = n_radial
+
+        cg = generate_clebsch_gordan_rsh(lmax).to(torch.float32)
+        cg, idx_in_1, idx_in_2, idx_out = sparsify_clebsch_gordon(cg)
+        self.register_buffer("idx_in_1", idx_in_1, persistent=False)
+        self.register_buffer("idx_in_2", idx_in_2, persistent=False)
+        self.register_buffer("idx_out", idx_out, persistent=False)
+        self.register_buffer("clebsch_gordan", cg, persistent=False)
 
         self.filternet = snn.Dense(
             n_radial, n_atom_basis * (self.lmax + 1), activation=None
         )
 
-        ls = torch.arange(0, lmax + 1)
-        nls = 2 * ls + 1
-        lidx = torch.repeat_interleave(ls, nls)
+        lidx, _ = sh_indices(lmax)
         self.register_buffer("Widx", lidx[self.idx_in_1])
 
-    def compute_radial_filter(
+    def _compute_radial_filter(
         self, radial_ij: torch.Tensor, cutoff_ij: torch.Tensor
     ) -> torch.Tensor:
+        """
+        Compute radial (rotationally-invariant) filter
+
+        Args:
+            radial_ij: radial basis functions with shape [n_neighbors, n_radial_basis]
+            cutoff_ij: cutoff function with shape [n_neighbors, 1]
+
+        Returns:
+            Wij: radial filters with shape [n_neighbors, n_clebsch_gordon, n_features]
+        """
         Wij = self.filternet(radial_ij) * cutoff_ij
         Wij = torch.reshape(Wij, (-1, self.lmax + 1, self.n_atom_basis))
         Wij = Wij[:, self.Widx]
         return Wij
 
+    def forward(
+        self,
+        x: torch.Tensor,
+        radial_ij: torch.Tensor,
+        dir_ij: torch.Tensor,
+        cutoff_ij: torch.Tensor,
+        idx_i: torch.Tensor,
+        idx_j: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Args:
+            x: atom-wise SO3 features, shape: [n_atoms, (l_max+1)^2, n_atom_basis]
+            radial_ij: radial basis functions with shape [n_neighbors, n_radial_basis]
+            dir_ij: direction from atom i to atom j, scaled to unit length
+                [n_neighbors, 3]
+            cutoff_ij: cutoff function with shape [n_neighbors, 1]
+            idx_i: indices for atom i
+            idx_j: indices for atom j
+
+        Returns:
+            y: convolved SO3 features
+
+        """
+        xj = x[idx_j[:, None], self.idx_in_2[None, :], :]
+        Wij = self._compute_radial_filter(radial_ij, cutoff_ij)
+
+        v = (
+            Wij
+            * dir_ij[:, self.idx_in_1, None]
+            * self.clebsch_gordan[None, :, None]
+            * xj
+        )
+        yij = snn.scatter_add(v, self.idx_out, dim_size=(self.lmax + 1) ** 2, dim=1)
+        y = snn.scatter_add(yij, idx_i, dim_size=x.shape[0])
+        return y
+
 
 class SO3SelfInteraction(nn.Module):
     r"""
-    Self-interaction between spherical harmonics on the same atom
+    SO3-equivariant coupling of irreps located at the same atom.
 
-    y - shape: atom, spherical harmonic, feature
+    With combined indexing s=(l,m), this can be written as:
 
     .. math::
 
@@ -254,35 +269,17 @@ class SO3SelfInteraction(nn.Module):
     def __init__(self, lmax: int, device=None, dtype=None):
         super().__init__()
         self.lmax = lmax
-        cg = generate_clebsch_gordan_rsh(lmax)
-        cg = cg.to(torch.float32)
 
-        idx = torch.nonzero(cg)
-        idx_1, idx_2, idx_out = torch.split(idx, 1, dim=1)
-        idx_1, idx_2, idx_out = (
-            idx_1[:, 0],
-            idx_2[:, 0],
-            idx_out[:, 0],
-        )
-
-        self.register_buffer("idx_1", idx_1, persistent=False)
-        self.register_buffer("idx_2", idx_2, persistent=False)
+        cg = generate_clebsch_gordan_rsh(lmax).to(torch.float32)
+        cg, idx_in_1, idx_in_2, idx_out = sparsify_clebsch_gordon(cg)
+        self.register_buffer("idx_in_1", idx_in_1, persistent=False)
+        self.register_buffer("idx_in_2", idx_in_2, persistent=False)
         self.register_buffer("idx_out", idx_out, persistent=False)
+        self.register_buffer("clebsch_gordan", cg, persistent=False)
 
-        self.register_buffer(
-            "clebsch_gordan",
-            cg[self.idx_1, self.idx_2, self.idx_out],
-            persistent=False,
-        )
-
-        ls = torch.arange(0, lmax + 1)
-        nls = 2 * ls + 1
-        self.lidx = torch.repeat_interleave(ls, nls)
-
-        widx_1 = self.lidx[self.idx_1]
-        widx_2 = self.lidx[self.idx_2]
-        self.register_buffer("widx_1", widx_1, persistent=False)
-        self.register_buffer("widx_2", widx_2, persistent=False)
+        lidx, _ = sh_indices(lmax)
+        self.register_buffer("widx_1", lidx[self.idx_in_1], persistent=False)
+        self.register_buffer("widx_2", lidx[self.idx_in_2], persistent=False)
 
         self.weight = nn.Parameter(
             torch.empty((lmax + 1, lmax + 1), device=device, dtype=dtype)
@@ -293,17 +290,27 @@ class SO3SelfInteraction(nn.Module):
         torch.nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: atom-wise SO3 features, shape: [n_atoms, (l_max+1)^2, n_atom_basis]
+
+        Returns:
+            y: updated SO3 features, shape: [n_atoms, (l_max+1)^2, n_atom_basis]
+
+        """
         W = self.weight[self.widx_1, self.widx_2]
         Wcg = W * self.clebsch_gordan
 
-        temp = x[:, self.idx_1, :] * x[:, self.idx_2, :] * Wcg[None, :, None]
+        temp = x[:, self.idx_in_1, :] * x[:, self.idx_in_2, :] * Wcg[None, :, None]
         y = snn.scatter_add(temp, self.idx_out, dim_size=(self.lmax + 1) ** 2, dim=1)
         return y
 
 
 class SO3ParametricGatedNonlinearity(nn.Module):
     """
-    SO3-equivariant parametric gated nonlinearity
+    SO3-equivariant parametric gated nonlinearity.
+
+    With combined indexing s=(l,m), this can be written as:
 
     .. math::
 
@@ -315,9 +322,7 @@ class SO3ParametricGatedNonlinearity(nn.Module):
         super().__init__()
         self.lmax = lmax
         self.n_in = n_in
-        ls = torch.arange(0, lmax + 1)
-        nls = 2 * ls + 1
-        self.lidx = torch.repeat_interleave(ls, nls)
+        self.lidx, _ = sh_indices(lmax)
         self.scaling = nn.Linear(n_in, n_in * (lmax + 1))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -330,7 +335,9 @@ class SO3ParametricGatedNonlinearity(nn.Module):
 
 class SO3GatedNonlinearity(nn.Module):
     """
-    SO3-equivariant gated nonlinearity
+    SO3-equivariant gated nonlinearity.
+
+    With combined indexing s=(l,m), this can be written as:
 
     .. math::
 
@@ -341,9 +348,7 @@ class SO3GatedNonlinearity(nn.Module):
     def __init__(self, lmax: int):
         super().__init__()
         self.lmax = lmax
-        ls = torch.arange(0, lmax + 1)
-        nls = 2 * ls + 1
-        self.lidx = torch.repeat_interleave(ls, nls)
+        self.lidx, _ = sh_indices(lmax)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         s0 = x[:, 0, :]

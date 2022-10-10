@@ -16,13 +16,15 @@ class AtomisticModel(nn.Module):
     """
     Base class for all SchNetPack models.
 
-    SchNetPack models should subclass `AtomisticModel` implement the forward method. To use the automatic collection of
-    required derivatives, each submodule that requires gradients w.r.t to the input, should list them as strings in
-    `submodule.required_derivatives = ["input_key"]`. The model needs to call `self.collect_derivatives()` at the end
-    of its `__init__`.
+    SchNetPack models should subclass `AtomisticModel` implement the forward method.
+    To use the automatic collection of required derivatives, each submodule that
+    requires gradients w.r.t to the input, should list them as strings in
+    `submodule.required_derivatives = ["input_key"]`. The model needs to call
+    `self.collect_derivatives()` at the end of its `__init__`.
 
-    To make use of post-processing transform, the model should call `input = self.postprocess(input)` at the end of
-    its `forward`. The post processors will only be applied if `do_postprocessing=True`.
+    To make use of post-processing transform, the model should call
+    `input = self.postprocess(input)` at the end of its `forward`. The post processors
+    will only be applied if `do_postprocessing=True`.
 
     Example:
          class SimpleModel(AtomisticModel):
@@ -126,11 +128,11 @@ class AtomisticModel(nn.Module):
 
 class NeuralNetworkPotential(AtomisticModel):
     """
-    A generic neural network potential class that sequentially applies a list of input modules, a representation module
-    and a list of output modules.
+    A generic neural network potential class that sequentially applies a list of input
+    modules, a representation module and a list of output modules.
 
-    This can be flexibly configured for various, e.g. property prediction or potential energy sufaces with response
-    properties.
+    This can be flexibly configured for various, e.g. property prediction or potential
+    energy sufaces with response properties.
     """
 
     def __init__(
@@ -145,11 +147,12 @@ class NeuralNetworkPotential(AtomisticModel):
         """
         Args:
             representation: The module that builds representation from inputs.
-            input_modules: Modules that are applied before representation, e.g. to modify input or add additional tensors for response
-                properties.
-            output_modules: Modules that predict output properties from the representation.
-            postprocessors: Post-processing transforms that may be initialized using te `datamodule`, but are not
-                applied during training.
+            input_modules: Modules that are applied before representation, e.g. to
+                modify input or add additional tensors for response properties.
+            output_modules: Modules that predict output properties from the
+                representation.
+            postprocessors: Post-processing transforms that may be initialized using the
+                `datamodule`, but are not applied during training.
             input_dtype_str: The dtype of real inputs.
             do_postprocessing: If true, post-processing is activated.
         """

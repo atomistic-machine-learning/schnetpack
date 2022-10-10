@@ -1,13 +1,13 @@
 import math
-import numpy as np
 import torch
 from sympy.physics.wigner import clebsch_gordan
 
 from functools import lru_cache
+from typing import Tuple
 
 
 @lru_cache(maxsize=10)
-def sh_indices(lmax: int):
+def sh_indices(lmax: int) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Build index arrays for spherical harmonics
 
@@ -22,7 +22,7 @@ def sh_indices(lmax: int):
 
 
 @lru_cache(maxsize=10)
-def generate_sh_to_rsh(lmax: int) -> np.ndarray:
+def generate_sh_to_rsh(lmax: int) -> torch.Tensor:
     """
     Generate transformation matrix to convert (complex) spherical harmonics to real form
 
@@ -45,7 +45,7 @@ def generate_sh_to_rsh(lmax: int) -> np.ndarray:
 
 
 @lru_cache(maxsize=10)
-def generate_clebsch_gordan(lmax: int) -> np.ndarray:
+def generate_clebsch_gordan(lmax: int) -> torch.Tensor:
     """
     Generate standard Clebsch-Gordan coefficients for complex spherical harmonics
 
@@ -70,7 +70,7 @@ def generate_clebsch_gordan(lmax: int) -> np.ndarray:
 
 
 @lru_cache(maxsize=10)
-def generate_clebsch_gordan_rsh(lmax: int, parity_mode: str = "mask") -> np.ndarray:
+def generate_clebsch_gordan_rsh(lmax: int, parity_mode: str = "mask") -> torch.Tensor:
     """
     Generate Clebsch-Gordan coefficients for real spherical harmonics
 
@@ -99,3 +99,30 @@ def generate_clebsch_gordan_rsh(lmax: int, parity_mode: str = "mask") -> np.ndar
     # cast to real
     cg_rsh = cg_rsh.real.to(torch.float64)
     return cg_rsh
+
+
+def sparsify_clebsch_gordon(
+    cg: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Convert Clebsch-Gordon tensor to sparse format.
+
+    Args:
+        cg: dense tensor Clebsch-Gordon coefficients
+            [(lmax_1+1)^2, (lmax_2+1)^2, (lmax_out+1)^2]
+
+    Returns:
+        cg_sparse: vector of non-zeros CG coefficients
+        idx_in_1: indices for first set of irreps
+        idx_in_2: indices for second set of irreps
+        idx_out: indices for output set of irreps
+    """
+    idx = torch.nonzero(cg)
+    idx_in_1, idx_in_2, idx_out = torch.split(idx, 1, dim=1)
+    idx_in_1, idx_in_2, idx_out = (
+        idx_in_1[:, 0],
+        idx_in_2[:, 0],
+        idx_out[:, 0],
+    )
+    cg_sparse = cg[idx_in_1, idx_in_2, idx_out]
+    return cg_sparse, idx_in_1, idx_in_2, idx_out
