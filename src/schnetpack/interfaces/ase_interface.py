@@ -60,18 +60,24 @@ class AtomsConverter:
 
     def __init__(
         self,
-        neighbor_list: Union[
+        neighbor_list: Union[schnetpack.transform.Transform, None],
+        transforms: Union[
             schnetpack.transform.Transform, List[schnetpack.transform.Transform]
-        ],
+        ] = None,
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
         additional_inputs: Dict[str, torch.Tensor] = None,
     ):
         """
         Args:
-            neighbor_list (schnetpack.transform.Transform, list): either single neighbor list transform or,
-                in case postprocessing of the neighbor list is required, list that contains the neighbor list
-                together with some transforms for postprocessing.
+            neighbor_list (schnetpack.transform.Transform, None): neighbor list transform. Can be set to None incase
+                that the neighbor list is contained in transforms.
+            transforms: transforms for manipulating the neighbor lists. This can be either a single transform or a list
+                of transforms that will be executed after the neighbor list is calculated. Such transforms may be
+                useful, e.g., for filtering out certain neighbors. In case transforms are required before the neighbor
+                list is calculated, neighbor_list argument can be set to None and a list of transforms including the
+                neighbor list can be passed as transform argument. The transforms will be executed in the order of
+                their appearance in the list.
             device (str, torch.device): device on which the model operates (default: cpu).
             dtype (torch.dtype): required data type for the model input (default: torch.float32).
             additional_inputs (dict): additional inputs required for some transforms.
@@ -79,22 +85,21 @@ class AtomsConverter:
                 stored to the input batch.
         """
 
-        if not type(neighbor_list) == list:
-            neighbor_list = [neighbor_list]
-        elif type(neighbor_list) == list:
-            pass
-        else:
-            raise TypeError(
-                "neighbor_list is type {}, but should be either list "
-                "or schnetpack.transform.Transform object".format(type(neighbor_list))
-            )
         self.neighbor_list = deepcopy(neighbor_list)
         self.device = device
         self.dtype = dtype
         self.additional_inputs = additional_inputs or {}
 
+        # convert transforms and neighbor_list to list
+        transforms = transforms or []
+        if type(transforms) != list:
+            transforms = [transforms]
+        neighbor_list = [] if neighbor_list is None else [neighbor_list]
+
         # get transforms and initialize neighbor list
-        self.transforms: List[schnetpack.transform.Transform] = neighbor_list
+        self.transforms: List[schnetpack.transform.Transform] = (
+            neighbor_list + transforms
+        )
 
         # Set numerical precision
         if dtype == torch.float32:

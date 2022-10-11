@@ -260,13 +260,13 @@ class SkinNeighborList(Transform):
     def __init__(
         self,
         neighbor_list: Transform,
-        nbh_postprocessing: Optional[List[torch.nn.Module]] = None,
+        nbh_transforms: Optional[List[torch.nn.Module]] = None,
         cutoff_skin: float = 0.3,
     ):
         """
         Args:
             neighbor_list: the neighbor list to use
-            nbh_postprocessing: post-processing transforms for manipulating the neighbor
+            nbh_transforms: post-processing transforms for manipulating the neighbor
                 lists provided by neighbor_list
             cutoff_skin: float
                 If no atom has moved more than the skin-distance since the neighbor list
@@ -285,7 +285,7 @@ class SkinNeighborList(Transform):
         self.cutoff = neighbor_list._cutoff
         self.cutoff_skin = cutoff_skin
         self.neighbor_list._cutoff = self.cutoff + cutoff_skin
-        self.nbh_postprocessing = nbh_postprocessing or []
+        self.nbh_transforms = nbh_transforms or []
         self.distance_calculator = spk.atomistic.PairwiseDistances()
         self.previous_inputs = {}
 
@@ -373,8 +373,8 @@ class SkinNeighborList(Transform):
 
         # apply all transforms to obtain new neighbor list
         inputs = self.neighbor_list(inputs)
-        for postprocess in self.nbh_postprocessing:
-            inputs = postprocess(inputs)
+        for nbh_transform in self.nbh_transforms:
+            inputs = nbh_transform(inputs)
 
         # store new reference conformation and remove old one
         sample_idx = inputs[properties.idx].item()
