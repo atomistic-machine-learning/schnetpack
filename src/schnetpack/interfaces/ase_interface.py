@@ -179,6 +179,9 @@ class SpkCalculator(Calculator):
         device (torch.device): device used for calculations (default="cpu")
         dtype (torch.dtype): select model precision (default=float32)
         converter (schnetpack.interfaces.AtomsConverter): converter used to set up input batches
+        transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
+            can be found in the AtomsConverter docstring.
+        additional_inputs (dict): additional inputs required for some transforms in the converter.
         **kwargs: Additional arguments for basic ase calculator class
     """
 
@@ -199,11 +202,21 @@ class SpkCalculator(Calculator):
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
         converter: AtomsConverter = AtomsConverter,
+        transforms: Union[
+            schnetpack.transform.Transform, List[schnetpack.transform.Transform]
+        ] = None,
+        additional_inputs: Dict[str, torch.Tensor] = None,
         **kwargs,
     ):
         Calculator.__init__(self, **kwargs)
 
-        self.converter = converter(neighbor_list, device=device, dtype=dtype)
+        self.converter = converter(
+            neighbor_list=neighbor_list,
+            device=device,
+            dtype=dtype,
+            transforms=transforms,
+            additional_inputs=additional_inputs,
+        )
 
         self.energy_key = energy_key
         self.force_key = force_key
