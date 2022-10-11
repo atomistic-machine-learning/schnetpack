@@ -31,6 +31,7 @@ from ase.vibrations import Vibrations
 import torch
 import schnetpack
 import logging
+from copy import deepcopy
 
 import schnetpack.task
 from schnetpack import properties
@@ -59,18 +60,41 @@ class AtomsConverter:
 
     def __init__(
         self,
-        neighbor_list: schnetpack.transform.Transform,
+        neighbor_list: Union[
+            schnetpack.transform.Transform, List[schnetpack.transform.Transform]
+        ],
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
         additional_inputs: Dict[str, torch.Tensor] = None,
     ):
-        self.neighbor_list = neighbor_list
+        """
+        Args:
+            neighbor_list (schnetpack.transform.Transform, list): either single neighbor list transform or,
+                in case postprocessing of the neighbor list is required, list that contains the neighbor list
+                together with some transforms for postprocessing.
+            device (str, torch.device): device on which the model operates (default: cpu).
+            dtype (torch.dtype): required data type for the model input (default: torch.float32).
+            additional_inputs (dict): additional inputs required for some transforms.
+                When setting up the AtomsConverter, those additional inputs will be
+                stored to the input batch.
+        """
+
+        if not type(neighbor_list) == list:
+            neighbor_list = [neighbor_list]
+        elif type(neighbor_list) == list:
+            pass
+        else:
+            raise TypeError(
+                "neighbor_list is type {}, but should be either list "
+                "or schnetpack.transform.Transform object".format(type(neighbor_list))
+            )
+        self.neighbor_list = deepcopy(neighbor_list)
         self.device = device
         self.dtype = dtype
         self.additional_inputs = additional_inputs or {}
 
         # get transforms and initialize neighbor list
-        self.transforms: List[schnetpack.transform.Transform] = [neighbor_list]
+        self.transforms: List[schnetpack.transform.Transform] = neighbor_list
 
         # Set numerical precision
         if dtype == torch.float32:
@@ -118,10 +142,6 @@ class AtomsConverter:
 
             # add additional inputs (specified in AtomsConverter __init__)
             inputs.update(self.additional_inputs)
-            # add additional inputs, which might be required for further transforms
-            if hasattr(self.neighbor_list, "nbh_postprocessing"):
-                for nbh_postprocessing in self.neighbor_list.nbh_postprocessing:
-                    inputs.update(nbh_postprocessing.additional_inputs)
 
             for transform in self.transforms:
                 inputs = transform(inputs)
