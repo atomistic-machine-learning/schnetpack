@@ -168,21 +168,6 @@ class SpkCalculator(Calculator):
     """
     ASE calculator for schnetpack machine learning models.
 
-    Args:
-        model_file (str): path to trained model
-        neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
-        energy_key (str): name of energies in model (default="energy")
-        force_key (str): name of forces in model (default="forces")
-        stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
-        energy_unit (str, float): energy units used by model (default="kcal/mol")
-        position_unit (str, float): position units used by model (default="Angstrom")
-        device (torch.device): device used for calculations (default="cpu")
-        dtype (torch.dtype): select model precision (default=float32)
-        converter (schnetpack.interfaces.AtomsConverter): converter used to set up input batches
-        transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
-            can be found in the AtomsConverter docstring.
-        additional_inputs (dict): additional inputs required for some transforms in the converter.
-        **kwargs: Additional arguments for basic ase calculator class
     """
 
     energy = "energy"
@@ -208,6 +193,24 @@ class SpkCalculator(Calculator):
         additional_inputs: Dict[str, torch.Tensor] = None,
         **kwargs,
     ):
+
+        """
+        Args:
+            model_file (str): path to trained model
+            neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
+            energy_key (str): name of energies in model (default="energy")
+            force_key (str): name of forces in model (default="forces")
+            stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
+            energy_unit (str, float): energy units used by model (default="kcal/mol")
+            position_unit (str, float): position units used by model (default="Angstrom")
+            device (torch.device): device used for calculations (default="cpu")
+            dtype (torch.dtype): select model precision (default=float32)
+            converter (schnetpack.interfaces.AtomsConverter): converter used to set up input batches
+            transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
+                can be found in the AtomsConverter docstring.
+            additional_inputs (dict): additional inputs required for some transforms in the converter.
+            **kwargs: Additional arguments for basic ase calculator class
+        """
         Calculator.__init__(self, **kwargs)
 
         self.converter = converter(
@@ -339,6 +342,10 @@ class AseInterface:
         converter: AtomsConverter = AtomsConverter,
         optimizer_class: type = QuasiNewton,
         fixed_atoms: Optional[List[int]] = None,
+        transforms: Union[
+            schnetpack.transform.Transform, List[schnetpack.transform.Transform]
+        ] = None,
+        additional_inputs: Dict[str, torch.Tensor] = None,
     ):
         """
         Args:
@@ -356,6 +363,9 @@ class AseInterface:
             converter (schnetpack.interfaces.AtomsConverter): converter used to set up input batches
             optimizer_class (ase.optimize.optimizer): ASE optimizer used for structure relaxation.
             fixed_atoms (list(int)): list of indices corresponding to atoms with positions fixed in space.
+            transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
+                can be found in the AtomsConverter docstring.
+            additional_inputs (dict): additional inputs required for some transforms in the converter.
         """
         # Setup directory
         self.working_dir = working_dir
@@ -385,6 +395,8 @@ class AseInterface:
             device=device,
             dtype=dtype,
             converter=converter,
+            transforms=transforms,
+            additional_inputs=additional_inputs,
         )
 
         self.molecule.set_calculator(calculator)
