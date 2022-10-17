@@ -174,6 +174,50 @@ def scalar2rsh(x: torch.Tensor, lmax: int) -> torch.Tensor:
     return y
 
 
+class SO3TensorProduct(nn.Module):
+    """
+    SO3-equivariant Clebsch-Gordon tensor product.
+
+    With combined indexing s=(l,m), this can be written as:
+
+    .. math::
+
+        y_{s,f} = \sum_{s_1,s_2} x_{1,s_2,f} x_{1,s_2,f}  C_{s_1,s_2}^{s}
+
+    """
+
+    def __init__(self, lmax: int):
+        super().__init__()
+        self.lmax = lmax
+
+        cg = generate_clebsch_gordan_rsh(lmax).to(torch.float32)
+        cg, idx_in_1, idx_in_2, idx_out = sparsify_clebsch_gordon(cg)
+        self.register_buffer("idx_in_1", idx_in_1, persistent=False)
+        self.register_buffer("idx_in_2", idx_in_2, persistent=False)
+        self.register_buffer("idx_out", idx_out, persistent=False)
+        self.register_buffer("clebsch_gordan", cg, persistent=False)
+
+    def forward(
+        self,
+        x1: torch.Tensor,
+        x2: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Args:
+            x1: atom-wise SO3 features, shape: [n_atoms, (l_max+1)^2, n_features]
+            x2: atom-wise SO3 features, shape: [n_atoms, (l_max+1)^2, n_features]
+
+        Returns:
+            y: product of SO3 features
+
+        """
+        x1 = x1[:, self.idx_in_1[None, :], :]
+        x2 = x2[:, self.idx_in_2[None, :], :]
+        y = x1 * x2 * self.clebsch_gordan[None, :, None]
+        y = snn.scatter_add(y, self.idx_out, dim_size=(self.lmax + 1) ** 2, dim=1)
+        return y
+
+
 class SO3Convolution(nn.Module):
     """
     SO3-equivariant convolution using Clebsch-Gordon tensor product.
@@ -258,58 +302,6 @@ class SO3Convolution(nn.Module):
         )
         yij = snn.scatter_add(v, self.idx_out, dim_size=(self.lmax + 1) ** 2, dim=1)
         y = snn.scatter_add(yij, idx_i, dim_size=x.shape[0])
-        return y
-
-
-class SO3SelfInteraction(nn.Module):
-    r"""
-    SO3-equivariant coupling of irreps located at the same atom.
-
-    With combined indexing s=(l,m), this can be written as:
-
-    .. math::
-
-        y_{i,s,f} = \sum_{s_1,s_2} x_{j,s_1,f} x_{j,s_2,f} W_{s_1,s_2,f} C_{s_1,s_2}^{s}
-
-    """
-
-    def __init__(self, lmax: int, device=None, dtype=None):
-        super().__init__()
-        self.lmax = lmax
-
-        cg = generate_clebsch_gordan_rsh(lmax).to(torch.float32)
-        cg, idx_in_1, idx_in_2, idx_out = sparsify_clebsch_gordon(cg)
-        self.register_buffer("idx_in_1", idx_in_1, persistent=False)
-        self.register_buffer("idx_in_2", idx_in_2, persistent=False)
-        self.register_buffer("idx_out", idx_out, persistent=False)
-        self.register_buffer("clebsch_gordan", cg, persistent=False)
-
-        lidx, _ = sh_indices(lmax)
-        self.register_buffer("widx_1", lidx[self.idx_in_1], persistent=False)
-        self.register_buffer("widx_2", lidx[self.idx_in_2], persistent=False)
-
-        self.weight = nn.Parameter(
-            torch.empty((lmax + 1, lmax + 1), device=device, dtype=dtype)
-        )
-        self.reset_parameters()
-
-    def reset_parameters(self) -> None:
-        torch.nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x: atom-wise SO3 features, shape: [n_atoms, (l_max+1)^2, n_atom_basis]
-
-        Returns:
-            y: updated SO3 features, shape: [n_atoms, (l_max+1)^2, n_atom_basis]
-
-        """
-        W = self.weight[self.widx_1, self.widx_2]
-        Wcg = W * self.clebsch_gordan
-
-        temp = x[:, self.idx_in_1, :] * x[:, self.idx_in_2, :] * Wcg[None, :, None]
-        y = snn.scatter_add(temp, self.idx_out, dim_size=(self.lmax + 1) ** 2, dim=1)
         return y
 
 

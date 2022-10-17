@@ -53,8 +53,9 @@ def generate_clebsch_gordan(lmax: int) -> torch.Tensor:
         lmax: maximum angular momentum
     """
     lidx, midx = sh_indices(lmax)
-
     cg = torch.zeros((lidx.shape[0], lidx.shape[0], lidx.shape[0]))
+    lidx = lidx.numpy()
+    midx = midx.numpy()
     for c1, (l1, m1) in enumerate(zip(lidx, midx)):
         for c2, (l2, m2) in enumerate(zip(lidx, midx)):
             for c3, (l3, m3) in enumerate(zip(lidx, midx)):
@@ -70,31 +71,36 @@ def generate_clebsch_gordan(lmax: int) -> torch.Tensor:
 
 
 @lru_cache(maxsize=10)
-def generate_clebsch_gordan_rsh(lmax: int, parity_mode: str = "mask") -> torch.Tensor:
+def generate_clebsch_gordan_rsh(
+    lmax: int, parity_invariance: bool = True
+) -> torch.Tensor:
     """
     Generate Clebsch-Gordan coefficients for real spherical harmonics
 
     Args:
         lmax: maximum angular momentum
-        parity_mode: treatment of odd parity:
-            * 'mask': set to zero
-            * 'realize': convert imaginary values to real
+        parity_invariance: whether to enforce parity invariance, i.e. only allow
+            non-zero coefficients if :math:`-1^l_1 -1^l_2 = -1^l_3`
 
     """
-    cg = generate_clebsch_gordan(lmax).to(dtype=torch.complex64)
-    U = generate_sh_to_rsh(lmax)
-    cg_rsh = torch.einsum("ijk,mi,nj,ok->mno", cg, U, U, U.conj())
-
     lidx, _ = sh_indices(lmax)
-    if parity_mode == "mask":
+    cg = generate_clebsch_gordan(lmax).to(dtype=torch.complex64)
+    complex_to_real = generate_sh_to_rsh(lmax)  # (real, complex)
+    cg_rsh = torch.einsum(
+        "ijk,mi,nj,ok->mno",
+        cg,
+        complex_to_real,
+        complex_to_real,
+        complex_to_real.conj(),
+    )
+
+    if parity_invariance:
         parity = (-1.0) ** lidx
         pmask = parity[:, None, None] * parity[None, :, None] == parity[None, None, :]
         cg_rsh *= pmask
-    elif parity_mode == "realize":
+    else:
         lsum = lidx[:, None, None] + lidx[None, :, None] - lidx[None, None, :]
         cg_rsh *= 1.0j**lsum
-    else:
-        raise ValueError('Argument `parity_mode` has to be one of ["mask", "realize"]')
 
     # cast to real
     cg_rsh = cg_rsh.real.to(torch.float64)
@@ -126,3 +132,9 @@ def sparsify_clebsch_gordon(
     )
     cg_sparse = cg[idx_in_1, idx_in_2, idx_out]
     return cg_sparse, idx_in_1, idx_in_2, idx_out
+
+
+def round_cmp(x: torch.Tensor, decimals: int = 1):
+    return torch.round(x.real, decimals=decimals) + 1j * torch.round(
+        x.imag, decimals=decimals
+    )
