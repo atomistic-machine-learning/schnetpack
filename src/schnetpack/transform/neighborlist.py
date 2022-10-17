@@ -19,7 +19,6 @@ __all__ = [
     "NeighborListTransform",
     "WrapPositions",
     "SkinNeighborList",
-    "NeighborlistWrapper",
     "FilterNeighbors",
 ]
 
@@ -30,37 +29,6 @@ import fasteners
 
 class CacheException(Exception):
     pass
-
-
-class NeighborlistWrapper(Transform):
-    """
-    Wrapper class for neighbor lists. Using this wrapper allows to add multiple
-    postprocessing steps to the neighbor list transform
-    """
-
-    def __init__(
-        self,
-        neighbor_list: Transform,
-        nbh_postprocessing: Optional[List[torch.nn.Module]] = None,
-    ):
-        """
-        Args:
-            neighbor_list: the neighbor list to use
-            nbh_postprocessing: post-processing transforms for manipulating the neighbor
-                lists provided by neighbor_list
-        """
-        super().__init__()
-        self.neighbor_list = neighbor_list
-        self.nbh_postprocessing = nbh_postprocessing or []
-
-    def forward(
-        self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
-        inputs = self.neighbor_list(inputs)
-        for postprocess in self.nbh_postprocessing:
-            inputs = postprocess(inputs)
-        return inputs
 
 
 class CachedNeighborList(Transform):
@@ -292,13 +260,13 @@ class SkinNeighborList(Transform):
     def __init__(
         self,
         neighbor_list: Transform,
-        nbh_postprocessing: Optional[List[torch.nn.Module]] = None,
+        nbh_transforms: Optional[List[torch.nn.Module]] = None,
         cutoff_skin: float = 0.3,
     ):
         """
         Args:
             neighbor_list: the neighbor list to use
-            nbh_postprocessing: post-processing transforms for manipulating the neighbor
+            nbh_transforms: post-processing transforms for manipulating the neighbor
                 lists provided by neighbor_list
             cutoff_skin: float
                 If no atom has moved more than the skin-distance since the neighbor list
@@ -317,7 +285,7 @@ class SkinNeighborList(Transform):
         self.cutoff = neighbor_list._cutoff
         self.cutoff_skin = cutoff_skin
         self.neighbor_list._cutoff = self.cutoff + cutoff_skin
-        self.nbh_postprocessing = nbh_postprocessing or []
+        self.nbh_transforms = nbh_transforms or []
         self.distance_calculator = spk.atomistic.PairwiseDistances()
         self.previous_inputs = {}
 
@@ -405,8 +373,8 @@ class SkinNeighborList(Transform):
 
         # apply all transforms to obtain new neighbor list
         inputs = self.neighbor_list(inputs)
-        for postprocess in self.nbh_postprocessing:
-            inputs = postprocess(inputs)
+        for nbh_transform in self.nbh_transforms:
+            inputs = nbh_transform(inputs)
 
         # store new reference conformation and remove old one
         sample_idx = inputs[properties.idx].item()
@@ -557,19 +525,13 @@ class FilterNeighbors(Transform):
     atoms. This set of atoms must be specified in the input data.
     """
 
-    def __init__(
-        self, selection_name: str, additional_inputs: Dict[str, torch.Tensor] = None
-    ):
+    def __init__(self, selection_name: str):
         """
         Args:
             selection_name (str): key in the input data corresponding to the set of
                 atoms between which no interactions should be considered.
-            additional_inputs (dict): additional inputs required for this transform.
-                When setting up the AtomsConverter, those additional inputs will be
-                stored to the input batch.
         """
         self.selection_name = selection_name
-        self.additional_inputs = additional_inputs or {}
         super().__init__()
 
     def forward(
