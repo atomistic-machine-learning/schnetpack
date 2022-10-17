@@ -11,7 +11,6 @@ __all__ = [
     "SO3Convolution",
     "SO3GatedNonlinearity",
     "SO3ParametricGatedNonlinearity",
-    "SO3SelfInteraction",
 ]
 
 
