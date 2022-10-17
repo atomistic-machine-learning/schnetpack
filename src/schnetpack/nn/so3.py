@@ -182,7 +182,7 @@ class SO3TensorProduct(nn.Module):
 
     .. math::
 
-        y_{s,f} = \sum_{s_1,s_2} x_{1,s_2,f} x_{1,s_2,f}  C_{s_1,s_2}^{s}
+        y_{s,f} = \sum_{s_1,s_2} x_{2,s_2,f} x_{1,s_2,f}  C_{s_1,s_2}^{s}
 
     """
 
