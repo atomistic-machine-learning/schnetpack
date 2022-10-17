@@ -8,6 +8,7 @@ from schnetpack.utils import as_dtype
 
 __all__ = [
     "RealSphericalHarmonics",
+    "SO3TensorProduct",
     "SO3Convolution",
     "SO3GatedNonlinearity",
     "SO3ParametricGatedNonlinearity",
@@ -210,8 +211,8 @@ class SO3TensorProduct(nn.Module):
             y: product of SO3 features
 
         """
-        x1 = x1[:, self.idx_in_1[None, :], :]
-        x2 = x2[:, self.idx_in_2[None, :], :]
+        x1 = x1[:, self.idx_in_1, :]
+        x2 = x2[:, self.idx_in_2, :]
         y = x1 * x2 * self.clebsch_gordan[None, :, None]
         y = snn.scatter_add(y, self.idx_out, dim_size=(self.lmax + 1) ** 2, dim=1)
         return y

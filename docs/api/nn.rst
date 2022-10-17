@@ -34,10 +34,10 @@ Irreps:
     :template: classtemplate.rst
 
     RealSphericalHarmonics
+    SO3TensorProduct
     SO3Convolution
     SO3GatedNonlinearity
     SO3ParametricGatedNonlinearity
-    SO3SelfInteraction
 
 
 Radial basis
