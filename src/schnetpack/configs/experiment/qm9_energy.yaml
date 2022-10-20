@@ -4,7 +4,7 @@ defaults:
   - override /model: nnp
   - override /data: qm9
 
-run.path: runs/qm9_${globals.property}
+run.experiment: qm9_${globals.property}
 
 globals:
   cutoff: 5.
@@ -44,6 +44,7 @@ task:
       metrics:
         mae:
           _target_: torchmetrics.regression.MeanAbsoluteError
-        mse:
+        rmse:
           _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
       loss_weight: 1.
