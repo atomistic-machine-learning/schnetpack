@@ -99,7 +99,7 @@ class RandomSplit(SplittingStrategy):
 class SubsamplePartitions(SplittingStrategy):
     """
     Strategy that splits the atoms dataset into predefined partitions as defined in the
-    metadata. If the split size is smaller then the predefined partition, a given
+    metadata. If the split size is smaller than the predefined partition, a given
     strategy will be used to subsample the partition (default: random).
 
     An metadata in the atoms dataset might look like this:

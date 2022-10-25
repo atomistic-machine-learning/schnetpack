@@ -1,0 +1,3 @@
+lr_monitor:
+    _target_: schnetpack.train.ExponentialMovingAverage
+    decay: 0.995

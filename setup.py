@@ -36,6 +36,7 @@ setup(
         "rich",
         "fasteners",
         "dirsync",
+        "torch-ema",
         "matscipy @ git+https://github.com/libAtoms/matscipy.git",
     ],
     include_package_data=True,

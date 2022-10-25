@@ -4,7 +4,8 @@ defaults:
   - override /model: nnp
   - override /data: qm9
 
-run.experiment: qm9_${globals.property}
+run:
+  experiment: qm9_${globals.property}
 
 globals:
   cutoff: 5.

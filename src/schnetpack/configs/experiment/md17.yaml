@@ -4,7 +4,8 @@ defaults:
   - override /model: nnp
   - override /data: md17
 
-run.experiment: md17_${data.molecule}
+run:
+  experiment: md17_${data.molecule}
 
 globals:
   cutoff: 5.
