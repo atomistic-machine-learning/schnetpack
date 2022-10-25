@@ -1,7 +1,10 @@
 from copy import copy
 from typing import Dict
 
+from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.callbacks import ModelCheckpoint as BaseModelCheckpoint
+
+from torch_ema import ExponentialMovingAverage as EMA
 
 import torch
 import os
@@ -9,7 +12,7 @@ from pytorch_lightning.callbacks import BasePredictionWriter
 from typing import List, Any
 from schnetpack.task import AtomisticTask
 
-__all__ = ["ModelCheckpoint", "PredictionWriter"]
+__all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
 
 
 class PredictionWriter(BasePredictionWriter):
@@ -81,3 +84,41 @@ class ModelCheckpoint(BaseModelCheckpoint):
             if self.trainer.strategy.local_rank == 0:
                 # remove references to trainer and data loaders to avoid pickle error in ddp
                 self.task.save_model(self.model_path, do_postprocessing=True)
+
+
+class ExponentialMovingAverage(Callback):
+    def __init__(self, decay, *args, **kwargs):
+        self.decay = decay
+        self.ema = None
+        self._to_load = None
+
+    def on_fit_start(self, trainer, pl_module: AtomisticTask):
+        if self.ema is None:
+            self.ema = EMA(pl_module.model.parameters(), decay=self.decay)
+        if self._to_load is not None:
+            self.ema.load_state_dict(self._to_load)
+            self._to_load = None
+
+    def on_train_batch_end(self, trainer, pl_module: AtomisticTask, *args, **kwargs):
+        self.ema.update()
+
+    def on_validation_start(
+        self, trainer: "pl.Trainer", pl_module: AtomisticTask, *args, **kwargs
+    ):
+        self.ema.store()
+        self.ema.copy_to()
+
+    def on_validation_end(
+        self, trainer: "pl.Trainer", pl_module: AtomisticTask, *args, **kwargs
+    ):
+        self.ema.restore()
+
+    def load_state_dict(self, state_dict):
+        if "ema" in state_dict:
+            if self.ema is None:
+                self._to_load = state_dict["ema"]
+            else:
+                self.ema.load_state_dict(state_dict["ema"])
+
+    def state_dict(self):
+        return {"ema": self.ema.state_dict()}

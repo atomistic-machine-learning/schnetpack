@@ -4,7 +4,7 @@ scheduler_monitor: val_loss
 scheduler_args:
   mode: min
   factor: 0.8
-  patience: 80
+  patience: 50
   threshold: 1e-4
   threshold_mode: rel
   cooldown: 10

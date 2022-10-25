@@ -8,6 +8,7 @@ defaults:
       - checkpoint
       - earlystopping
       - lrmonitor
+      - ema
   - task: default_task
   - model: null
   - data: custom
