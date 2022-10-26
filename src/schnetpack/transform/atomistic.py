@@ -152,8 +152,8 @@ class ScaleProperty(Transform):
     def datamodule(self, _datamodule):
 
         stats = _datamodule.get_stats(self._target_key, True, False)
-        scale = stat[0] if self._scale_by_mean else stats[1]
-        self.scale = abs(stats[0]).detach()
+        scale = stats[0] if self._scale_by_mean else stats[1]
+        self.scale = torch.abs(scale).detach()
 
     def forward(
         self,
