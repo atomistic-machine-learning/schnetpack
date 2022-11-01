@@ -57,7 +57,17 @@ class SO3net(nn.Module):
             self.n_interactions,
             shared_interactions,
         )
-        self.mixings = snn.replicate_module(
+        self.mixings1 = snn.replicate_module(
+            lambda: nn.Linear(n_atom_basis, n_atom_basis, bias=False),
+            self.n_interactions,
+            shared_interactions,
+        )
+        self.mixings2 = snn.replicate_module(
+            lambda: nn.Linear(n_atom_basis, n_atom_basis, bias=False),
+            self.n_interactions,
+            shared_interactions,
+        )
+        self.mixings3 = snn.replicate_module(
             lambda: nn.Linear(n_atom_basis, n_atom_basis, bias=False),
             self.n_interactions,
             shared_interactions,
@@ -100,9 +110,11 @@ class SO3net(nn.Module):
 
         for i in range(self.n_interactions):
             dx = self.so3convs[i](x, radial_ij, Yij, cutoff_ij, idx_i, idx_j)
-            ddx = self.mixings[i](dx)
+            ddx = self.mixings1[i](dx)
             dx = self.so3product(dx, ddx)
+            dx = self.mixings2[i](dx)
             dx = self.gatings[i](dx)
+            dx = self.mixings3[i](dx)
             x = x + dx
 
         inputs["scalar_representation"] = x[:, 0]
