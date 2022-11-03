@@ -176,6 +176,7 @@ class AtomsDataModule(pl.LightningDataModule):
                 self.format,
                 property_units=self.property_units,
                 distance_unit=self.distance_unit,
+                load_properties=self.load_properties,
             )
 
             # load and generate partitions if needed
