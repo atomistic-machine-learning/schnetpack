@@ -80,11 +80,8 @@ class UnsupervisedModelOutput(ModelOutput):
         return loss
 
     def update_metrics(self, pred, target=None):
-        metrics = {
-            metric_name: metric(pred[self.name])
-            for metric_name, metric in self.metrics.items()
-        }
-        return metrics
+        for metric in self.metrics.values():
+            metric(pred[self.name])
 
 
 class AtomisticTask(pl.LightningModule):
