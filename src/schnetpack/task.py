@@ -1,13 +1,10 @@
 import warnings
-from pathlib import Path
-from typing import Optional, Dict, List, Type, Any, Union
+from typing import Optional, Dict, List, Type, Any
 
 import pytorch_lightning as pl
 import torch
 from torch import nn as nn
 from torchmetrics import Metric
-
-from torch.autograd import grad
 
 from schnetpack.model.base import AtomisticModel
 
@@ -49,7 +46,14 @@ class ModelOutput(nn.Module):
         self.target_property = target_property or name
         self.loss_fn = loss_fn
         self.loss_weight = loss_weight
-        self.metrics = nn.ModuleDict(metrics)
+        self.train_metrics = nn.ModuleDict(metrics)
+        self.val_metrics = nn.ModuleDict({k: v.clone() for k, v in metrics.items()})
+        self.test_metrics = nn.ModuleDict({k: v.clone() for k, v in metrics.items()})
+        self.metrics = {
+            "train": self.train_metrics,
+            "val": self.val_metrics,
+            "test": self.test_metrics,
+        }
         self.constraints = constraints or []
 
     def calculate_loss(self, pred, target):
@@ -61,8 +65,8 @@ class ModelOutput(nn.Module):
         )
         return loss
 
-    def update_metrics(self, pred, target):
-        for metric in self.metrics.values():
+    def update_metrics(self, pred, target, subset):
+        for metric in self.metrics[subset].values():
             metric(pred[self.name], target[self.target_property])
 
 
@@ -79,8 +83,8 @@ class UnsupervisedModelOutput(ModelOutput):
         loss = self.loss_weight * self.loss_fn(pred[self.name])
         return loss
 
-    def update_metrics(self, pred, target=None):
-        for metric in self.metrics.values():
+    def update_metrics(self, pred, target, subset):
+        for metric in self.metrics[subset].values():
             metric(pred[self.name])
 
 
@@ -143,13 +147,13 @@ class AtomisticTask(pl.LightningModule):
 
     def log_metrics(self, pred, targets, subset):
         for output in self.outputs:
-            output.update_metrics(pred, targets)
-            for metric_name, metric in output.metrics.items():
+            output.update_metrics(pred, targets, subset)
+            for metric_name, metric in output.metrics[subset].items():
                 self.log(
                     f"{subset}_{output.name}_{metric_name}",
                     metric,
-                    on_step=False,
-                    on_epoch=True,
+                    on_step=(subset == "train"),
+                    on_epoch=(subset != "train"),
                     prog_bar=False,
                 )
 
