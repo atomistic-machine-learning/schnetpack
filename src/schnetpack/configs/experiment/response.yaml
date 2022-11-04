@@ -32,7 +32,7 @@ data:
     - _target_: schnetpack.transform.MatScipyNeighborList
       cutoff: ${globals.cutoff}
     - _target_: schnetpack.transform.CastTo32
-    - _target_: schnetpack.transform.PreprocessShielding
+    - _target_: schnetpack.transform.SplitShielding
       shielding_key: ${globals.shielding_key}
       atomic_numbers: ${globals.shielding_elements}
 
@@ -52,7 +52,7 @@ model:
     - _target_: schnetpack.atomistic.Response
       energy_key: ${globals.energy_key}
       response_properties: ${globals.response_properties}
-    - _target_: schnetpack.atomistic.response.SplitShielding
+    - _target_: schnetpack.transform.SplitShielding
       shielding_key: ${globals.shielding_key}
       atomic_numbers: ${globals.shielding_elements}
   postprocessors:
