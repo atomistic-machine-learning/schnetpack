@@ -1,13 +1,10 @@
 import warnings
-from pathlib import Path
-from typing import Optional, Dict, List, Type, Any, Union
+from typing import Optional, Dict, List, Type, Any
 
 import pytorch_lightning as pl
 import torch
 from torch import nn as nn
 from torchmetrics import Metric
-
-from copy import deepcopy
 
 from schnetpack.model.base import AtomisticModel
 
