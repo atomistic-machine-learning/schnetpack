@@ -49,9 +49,9 @@ class ModelOutput(nn.Module):
         self.target_property = target_property or name
         self.loss_fn = loss_fn
         self.loss_weight = loss_weight
-        self.train_metrics = nn.ModuleDict(deepcopy(metrics))
-        self.val_metrics = nn.ModuleDict(deepcopy(metrics))
-        self.test_metrics = nn.ModuleDict(deepcopy(metrics))
+        self.train_metrics = nn.ModuleDict(metrics)
+        self.val_metrics = nn.ModuleDict({k: v.clone() for k, v in metrics.items()})
+        self.test_metrics = nn.ModuleDict({k: v.clone() for k, v in metrics.items()})
         self.metrics = {
             "train": self.train_metrics,
             "val": self.val_metrics,
