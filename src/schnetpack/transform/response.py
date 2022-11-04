@@ -5,10 +5,10 @@ from schnetpack import properties
 
 from typing import Dict, List
 
-__all__ = ["PreprocessShielding"]
+__all__ = ["SplitShielding"]
 
 
-class PreprocessShielding(Transform):
+class SplitShielding(Transform):
     """
     Transform for splitting shielding tensors by atom types.
     """
@@ -26,10 +26,15 @@ class PreprocessShielding(Transform):
             shielding_key (str): name of the shielding tensor in the model inputs.
             atomic_numbers (list(int)): list of atomic numbers used to split the shielding tensor.
         """
-        super(PreprocessShielding, self).__init__()
+        super(SplitShielding, self).__init__()
 
         self.shielding_key = shielding_key
         self.atomic_numbers = atomic_numbers
+
+        self.model_outputs = [
+            "{:s}_{:d}".format(self.shielding_key, atomic_number)
+            for atomic_number in self.atomic_numbers
+        ]
 
     def forward(
         self,
