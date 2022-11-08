@@ -41,7 +41,7 @@ class CachedNeighborList(Transform):
     Note:
         The provided cache location should be unique to the used dataset. Otherwise,
         wrong neighborhoods will be provided. The caching location can be reused
-        across multiple runs, by setting `cleanup_cache=False`.
+        across multiple runs, by setting `keep_cache=True`.
     """
 
     is_preprocessor: bool = True
@@ -51,6 +51,7 @@ class CachedNeighborList(Transform):
         self,
         cache_path: str,
         neighbor_list: Transform,
+        nbh_transforms: Optional[List[torch.nn.Module]] = None,
         keep_cache: bool = False,
         cache_workdir: str = None,
     ):
@@ -58,6 +59,8 @@ class CachedNeighborList(Transform):
         Args:
             cache_path: Path of caching directory.
             neighbor_list: the neighbor list to use
+            nbh_transforms: transforms for manipulating the neighbor lists
+                provided by neighbor_list
             keep_cache: Keep cache at `cache_location` at the end of training, or copy
                 built/updated cache there from `cache_workdir` (if set). A pre-existing
                 cache at `cache_location` will not be deleted, while a temporary cache
@@ -70,6 +73,7 @@ class CachedNeighborList(Transform):
         """
         super().__init__()
         self.neighbor_list = neighbor_list
+        self.nbh_transforms = nbh_transforms or []
         self.keep_cache = keep_cache
         self.cache_path = cache_path
         self.cache_workdir = cache_workdir
@@ -118,6 +122,8 @@ class CachedNeighborList(Transform):
                 except IOError:
                     # now it is save to calculate and cache
                     inputs = self.neighbor_list(inputs)
+                    for nbh_transform in self.nbh_transforms:
+                        inputs = nbh_transform(inputs)
                     data = {
                         properties.idx_i: inputs[properties.idx_i],
                         properties.idx_j: inputs[properties.idx_j],
@@ -266,8 +272,8 @@ class SkinNeighborList(Transform):
         """
         Args:
             neighbor_list: the neighbor list to use
-            nbh_transforms: post-processing transforms for manipulating the neighbor
-                lists provided by neighbor_list
+            nbh_transforms: transforms for manipulating the neighbor lists
+                provided by neighbor_list
             cutoff_skin: float
                 If no atom has moved more than the skin-distance since the neighbor list
                     has been updated the last time, then the neighbor list is reused.
