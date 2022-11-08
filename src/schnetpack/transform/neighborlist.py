@@ -59,8 +59,8 @@ class CachedNeighborList(Transform):
         Args:
             cache_path: Path of caching directory.
             neighbor_list: the neighbor list to use
-            nbh_transforms: post-processing transforms for manipulating the neighbor
-                lists provided by neighbor_list
+            nbh_transforms: transforms for manipulating the neighbor lists
+                provided by neighbor_list
             keep_cache: Keep cache at `cache_location` at the end of training, or copy
                 built/updated cache there from `cache_workdir` (if set). A pre-existing
                 cache at `cache_location` will not be deleted, while a temporary cache
@@ -272,8 +272,8 @@ class SkinNeighborList(Transform):
         """
         Args:
             neighbor_list: the neighbor list to use
-            nbh_transforms: post-processing transforms for manipulating the neighbor
-                lists provided by neighbor_list
+            nbh_transforms: transforms for manipulating the neighbor lists
+                provided by neighbor_list
             cutoff_skin: float
                 If no atom has moved more than the skin-distance since the neighbor list
                     has been updated the last time, then the neighbor list is reused.
