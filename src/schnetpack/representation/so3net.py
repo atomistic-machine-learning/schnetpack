@@ -118,5 +118,6 @@ class SO3net(nn.Module):
             x = x + dx
 
         inputs["scalar_representation"] = x[:, 0]
+        inputs["vector_representation"] = torch.roll(x[:, 1:4], 1, 1)
         inputs["multipole_representation"] = x
         return inputs

@@ -127,7 +127,7 @@ class DipoleMoment(nn.Module):
             return_charges: If true, return latent partial charges
             dipole_key: the key under which the dipoles will be stored
             charges_key: the key under which partial charges will be stored
-            correct_charges: If true, forces the sum of partial charges to be the the total charge, if provided,
+            correct_charges: If true, forces the sum of partial charges to be the total charge, if provided,
                 and zero otherwise.
             use_vector_representation: If true, use vector representation to predict local,
                 atomic dipoles.

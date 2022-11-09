@@ -166,5 +166,4 @@ class SubsamplePartitions(SplittingStrategy):
             )
             for i, split_idx in zip(split_partition_idx[src], partition_split_indices):
                 split_indices[i] = np.array(partition)[split_idx].tolist()
-
         return split_indices
