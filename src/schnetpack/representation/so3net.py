@@ -118,6 +118,7 @@ class SO3net(nn.Module):
             x = x + dx
 
         inputs["scalar_representation"] = x[:, 0]
+        # extract cartesian vector from multipoles: [y, z, x] -> [x, y, z]
         inputs["vector_representation"] = torch.roll(x[:, 1:4], 1, 1)
         inputs["multipole_representation"] = x
         return inputs
