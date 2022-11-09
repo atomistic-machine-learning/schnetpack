@@ -40,7 +40,7 @@ def train(config: DictConfig):
 
     """
     print(header)
-    log.info("Runnning on host: " + str(socket.gethostname()))
+    log.info("Running on host: " + str(socket.gethostname()))
 
     if OmegaConf.is_missing(config, "run.data_dir"):
         log.error(

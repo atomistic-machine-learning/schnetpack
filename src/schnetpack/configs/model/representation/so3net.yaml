@@ -1,13 +1,12 @@
+defaults:
+  - radial_basis: gaussian
+
 _target_: schnetpack.representation.SO3net
 _recursive_: False
 n_atom_basis: 64
 n_interactions: 3
 lmax: 2
 shared_interactions: False
-radial_basis:
-  _target_: schnetpack.nn.radial.GaussianRBF
-  n_rbf: 20
-  cutoff: ${globals.cutoff}
 cutoff_fn:
   _target_: schnetpack.nn.cutoff.CosineCutoff
   cutoff: ${globals.cutoff}

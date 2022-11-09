@@ -10,31 +10,24 @@ run:
 globals:
   cutoff: 5.
   lr: 5e-4
-  property: energy_U0
+  property: dipole_moment
 
 data:
   transforms:
     - _target_: schnetpack.transform.SubtractCenterOfMass
-    - _target_: schnetpack.transform.RemoveOffsets
-      property: ${globals.property}
-      remove_atomrefs: True
-      remove_mean: True
     - _target_: schnetpack.transform.MatScipyNeighborList
       cutoff: ${globals.cutoff}
     - _target_: schnetpack.transform.CastTo32
 
 model:
   output_modules:
-    - _target_: schnetpack.atomistic.Atomwise
-      output_key: ${globals.property}
+    - _target_: schnetpack.atomistic.DipoleMoment
+      dipole_key: ${globals.property}
       n_in: ${model.representation.n_atom_basis}
-      aggregation_mode: sum
+      predict_magnitude: True
+      use_vector_representation: False
   postprocessors:
     - _target_: schnetpack.transform.CastTo64
-    - _target_: schnetpack.transform.AddOffsets
-      property: ${globals.property}
-      add_mean: True
-      add_atomrefs: True
 
 task:
   outputs:
