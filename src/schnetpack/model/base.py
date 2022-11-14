@@ -169,7 +169,7 @@ class NeuralNetworkPotential(AtomisticModel):
         self.collect_outputs()
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        # inititalize derivatives for response properties
+        # initialize derivatives for response properties
         inputs = self.initialize_derivatives(inputs)
 
         for m in self.input_modules:

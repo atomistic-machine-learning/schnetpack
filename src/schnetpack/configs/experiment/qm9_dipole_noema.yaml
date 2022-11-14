@@ -1,0 +1,44 @@
+# @package _global_
+
+defaults:
+  - override /model: nnp
+  - override /data: qm9
+
+run:
+  experiment: qm9_${globals.property}
+
+globals:
+  cutoff: 5.
+  lr: 5e-4
+  property: dipole_moment
+
+data:
+  transforms:
+    - _target_: schnetpack.transform.SubtractCenterOfMass
+    - _target_: schnetpack.transform.MatScipyNeighborList
+      cutoff: ${globals.cutoff}
+    - _target_: schnetpack.transform.CastTo32
+
+model:
+  output_modules:
+    - _target_: schnetpack.atomistic.DipoleMoment
+      dipole_key: ${globals.property}
+      n_in: ${model.representation.n_atom_basis}
+      predict_magnitude: True
+      use_vector_representation: False
+  postprocessors:
+    - _target_: schnetpack.transform.CastTo64
+
+task:
+  outputs:
+    - _target_: schnetpack.task.ModelOutput
+      name: ${globals.property}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 1.

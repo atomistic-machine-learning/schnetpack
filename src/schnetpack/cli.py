@@ -166,6 +166,8 @@ def train(config: DictConfig):
 
     log.info(f"Store best model")
     best_task = type(task).load_from_checkpoint(best_path)
+    torch.save(best_task, config.globals.model_path + ".task")
+
     best_task.save_model(config.globals.model_path, do_postprocessing=True)
     log.info(f"Best model stored at {os.path.abspath(config.globals.model_path)}")
 
@@ -176,7 +178,15 @@ def predict(config: DictConfig):
     dataset: BaseAtomsData = hydra.utils.instantiate(config.data)
     loader = AtomsLoader(dataset, batch_size=config.batch_size, num_workers=8)
 
-    model = torch.load("best_inference_model")
+    model = torch.load("best_model")
+
+    class WrapperLM(LightningModule):
+        def __init__(self, model):
+            super().__init__()
+            self.model = model
+
+        def forward(self, x):
+            return model(x)
 
     log.info(f"Instantiating trainer <{config.trainer._target_}>")
     trainer: Trainer = hydra.utils.instantiate(
@@ -190,4 +200,4 @@ def predict(config: DictConfig):
         resume_from_checkpoint="checkpoints/last.ckpt",
         _convert_="partial",
     )
-    trainer.predict(model, dataloaders=loader, ckpt_path="best")
+    trainer.predict(WrapperLM(model), dataloaders=loader)

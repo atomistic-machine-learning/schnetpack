@@ -274,7 +274,7 @@ class AtomisticTask(pl.LightningModule):
         using_native_amp: bool = None,
         using_lbfgs: bool = None,
     ):
-        if self.trainer.global_step < self.warmup_steps:
+        if self.global_step < self.warmup_steps:
             lr_scale = min(1.0, float(self.trainer.global_step + 1) / self.warmup_steps)
             for pg in optimizer.param_groups:
                 pg["lr"] = lr_scale * self.lr
@@ -283,7 +283,7 @@ class AtomisticTask(pl.LightningModule):
         optimizer.step(closure=optimizer_closure)
 
     def save_model(self, path: str, do_postprocessing: Optional[bool] = None):
-        if self.trainer is None or self.trainer.strategy.local_rank == 0:
+        if self.global_rank == 0:
             pp_status = self.model.do_postprocessing
             if do_postprocessing is not None:
                 self.model.do_postprocessing = do_postprocessing

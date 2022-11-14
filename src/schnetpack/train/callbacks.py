@@ -99,19 +99,23 @@ class ExponentialMovingAverage(Callback):
             self.ema.load_state_dict(self._to_load)
             self._to_load = None
 
+        # load average parameters, to have same starting point as after validation
+        self.ema.store()
+        self.ema.copy_to()
+
+    def on_train_epoch_start(
+        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
+    ) -> None:
+        self.ema.restore()
+
     def on_train_batch_end(self, trainer, pl_module: AtomisticTask, *args, **kwargs):
         self.ema.update()
 
-    def on_validation_start(
+    def on_train_epoch_end(
         self, trainer: "pl.Trainer", pl_module: AtomisticTask, *args, **kwargs
     ):
         self.ema.store()
         self.ema.copy_to()
-
-    def on_validation_end(
-        self, trainer: "pl.Trainer", pl_module: AtomisticTask, *args, **kwargs
-    ):
-        self.ema.restore()
 
     def load_state_dict(self, state_dict):
         if "ema" in state_dict:

@@ -7,8 +7,8 @@ modeldir: ???
 outputdir: ???
 cutoff: ???
 batch_size: 100
-write_interval: batch_and_epoch
-
+write_interval: epoch
+task_cls: schnetpack.AtomisticTask
 
 data:
   _target_: schnetpack.data.ASEAtomsData

@@ -11,7 +11,7 @@ def read(fname):
 
 setup(
     name="schnetpack",
-    version="1.0.0-dev0",
+    version="2.0.0-dev0",
     author="Kristof T. Schuett, Michael Gastegger, Pan Kessel, Kim Nicoli",
     url="https://github.com/atomistic-machine-learning/schnetpack",
     packages=find_packages("src"),
@@ -30,7 +30,7 @@ setup(
         "h5py",
         "pyyaml",
         "hydra-core>=1.1.0",
-        "pytorch_lightning>=1.6.0",
+        "pytorch_lightning>=1.8.1",
         "torchmetrics",
         "hydra-colorlog>=1.1.0",
         "rich",
