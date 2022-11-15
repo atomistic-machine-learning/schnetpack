@@ -111,7 +111,7 @@ class ExponentialMovingAverage(Callback):
     def on_train_batch_end(self, trainer, pl_module: AtomisticTask, *args, **kwargs):
         self.ema.update()
 
-    def on_train_epoch_end(
+    def on_validation_epoch_start(
         self, trainer: "pl.Trainer", pl_module: AtomisticTask, *args, **kwargs
     ):
         self.ema.store()
