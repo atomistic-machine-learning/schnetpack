@@ -3,7 +3,7 @@ defaults:
 
 _target_: schnetpack.representation.SO3net
 _recursive_: False
-n_atom_basis: 64
+n_atom_basis: 128
 n_interactions: 3
 lmax: 2
 shared_interactions: False
