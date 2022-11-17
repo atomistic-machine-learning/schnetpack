@@ -30,5 +30,6 @@ accelerator: auto
 num_nodes: 1
 tpu_cores: null
 deterministic: False
+inference_mode: False
 
 resume_from_checkpoint: null

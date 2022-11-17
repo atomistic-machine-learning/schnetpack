@@ -3,7 +3,7 @@ scheduler_cls: schnetpack.train.ReduceLROnPlateau
 scheduler_monitor: val_loss
 scheduler_args:
   mode: min
-  factor: 0.8
+  factor: 0.5
   patience: 75
   threshold: 0.0
   threshold_mode: rel

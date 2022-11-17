@@ -9,7 +9,7 @@ ipykernel
 nbsphinx
 sphinx-autoapi
 
-pytorch_lightning>=1.6
+pytorch_lightning>=1.8.1
 hydra-core==1.1.0
 hydra-colorlog==1.1.0
 torchmetrics>=0.4.1
