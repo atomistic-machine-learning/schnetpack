@@ -1,0 +1,10 @@
+defaults:
+  - custom
+
+_target_: schnetpack.datasets.MD22
+
+datapath: ${run.data_dir}/${data.molecule}.db  # data_dir is specified in train.yaml
+molecule: Ac-Ala3-NHMe
+batch_size: 10
+num_train: 5700
+num_val: 300

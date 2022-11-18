@@ -1,5 +1,6 @@
 from .qm9 import *
 from .md17 import *
+from .md22 import *
 from .rmd17 import *
 from .iso17 import *
 from .ani1 import *
