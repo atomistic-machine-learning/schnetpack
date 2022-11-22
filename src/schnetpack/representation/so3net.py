@@ -111,7 +111,7 @@ class SO3net(nn.Module):
         for i in range(self.n_interactions):
             dx = self.so3convs[i](x, radial_ij, Yij, cutoff_ij, idx_i, idx_j)
             ddx = self.mixings1[i](dx)
-            dx = self.so3product(dx, ddx)
+            dx = dx + self.so3product(dx, ddx)
             dx = self.mixings2[i](dx)
             dx = self.gatings[i](dx)
             dx = self.mixings3[i](dx)
