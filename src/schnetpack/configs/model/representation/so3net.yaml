@@ -7,6 +7,7 @@ n_atom_basis: 128
 n_interactions: 3
 lmax: 2
 shared_interactions: False
+return_vector_representation: False
 cutoff_fn:
   _target_: schnetpack.nn.cutoff.CosineCutoff
   cutoff: ${globals.cutoff}

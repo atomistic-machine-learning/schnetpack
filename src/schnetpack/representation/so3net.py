@@ -27,6 +27,7 @@ class SO3net(nn.Module):
         cutoff_fn: Optional[Callable] = None,
         shared_interactions: bool = False,
         max_z: int = 100,
+        return_vector_representation: bool = False,
     ):
         """
         Args:
@@ -39,6 +40,8 @@ class SO3net(nn.Module):
             shared_interactions:
             max_z:
             conv_layer:
+            return_vector_representation: return l=1 features in Cartesian XYZ order
+                (e.g. for DipoleMoment output module)
         """
         super(SO3net, self).__init__()
 
@@ -48,6 +51,7 @@ class SO3net(nn.Module):
         self.cutoff_fn = hydra.utils.instantiate(cutoff_fn)
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = hydra.utils.instantiate(radial_basis)
+        self.return_vector_representation = return_vector_representation
 
         self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
         self.sphharm = so3.RealSphericalHarmonics(lmax=lmax)
@@ -118,7 +122,10 @@ class SO3net(nn.Module):
             x = x + dx
 
         inputs["scalar_representation"] = x[:, 0]
-        # extract cartesian vector from multipoles: [y, z, x] -> [x, y, z]
-        inputs["vector_representation"] = torch.roll(x[:, 1:4], 1, 1)
         inputs["multipole_representation"] = x
+
+        # extract cartesian vector from multipoles: [y, z, x] -> [x, y, z]
+        if self.return_vector_representation:
+            inputs["vector_representation"] = torch.roll(x[:, 1:4], 1, 1)
+
         return inputs
