@@ -117,20 +117,20 @@ class DipoleMoment(nn.Module):
         Args:
             n_in: input dimension of representation
             n_hidden: size of hidden layers.
-                If an integer, same number of node is used for all hidden layers resulting
-                in a rectangular network.
-                If None, the number of neurons is divided by two after each layer starting
-                n_in resulting in a pyramidal network.
+                If an integer, same number of node is used for all hidden layers
+                resulting in a rectangular network.
+                If None, the number of neurons is divided by two after each layer
+                starting n_in resulting in a pyramidal network.
             n_layers: number of layers.
             activation: activation function
             predict_magnitude: If true, calculate magnitude of dipole
             return_charges: If true, return latent partial charges
             dipole_key: the key under which the dipoles will be stored
             charges_key: the key under which partial charges will be stored
-            correct_charges: If true, forces the sum of partial charges to be the total charge, if provided,
-                and zero otherwise.
-            use_vector_representation: If true, use vector representation to predict local,
-                atomic dipoles.
+            correct_charges: If true, forces the sum of partial charges to be the total
+                charge, if provided, and zero otherwise.
+            use_vector_representation: If true, use vector representation to predict
+                local, atomic dipoles.
         """
         super().__init__()
 

@@ -18,7 +18,8 @@ class TransformException(Exception):
 class Transform(nn.Module):
     """
     Base class for all transforms.
-    The base class ensures that the reference to the data and datamodule attributes are initialized.
+    The base class ensures that the reference to the data and datamodule attributes are
+    initialized.
     Transforms can be used as pre- or post-processing layers.
     They can also be used for other parts of a model, that need to be
     initialized based on data.
@@ -31,7 +32,9 @@ class Transform(nn.Module):
 
     def datamodule(self, value):
         """
-        Extract all required information from data module.
+        Extract all required information from data module automatically when using
+        PyTorch Lightning integration. The transform should also implement a way to
+        set these things manually, to make it usable independent of PL.
 
         Do not store the datamodule, as this does not work with torchscript conversion!
         """

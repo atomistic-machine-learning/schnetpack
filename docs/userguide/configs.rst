@@ -12,7 +12,7 @@ extensive information.
 We will explain the structure of the config at the example of training PaiNN on QM9
 with the command::
 
-   $ spktrain experiment=qm9_energy
+   $ spktrain experiment=qm9_atomwise
 
 Before going through the config step-by-step, we show the full config as printed by
 the command::
