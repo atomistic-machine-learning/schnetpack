@@ -97,6 +97,16 @@ class RemoveOffsets(Transform):
             remove_atomrefs or remove_mean
         ), "You should set at least one of `remove_mean` and `remove_atomrefs` to true!"
 
+        if atomrefs is not None:
+            self._atomrefs_initialized = True
+        else:
+            self._atomrefs_initialized = False
+
+        if propery_mean is not None:
+            self._mean_initialized = True
+        else:
+            self._mean_initialized = False
+
         if self.remove_atomrefs:
             atomrefs = atomrefs or torch.zeros((zmax,))
             self.register_buffer("atomref", atomrefs)
@@ -108,11 +118,11 @@ class RemoveOffsets(Transform):
         """
         Sets mean and atomref automatically when using PyTorchLightning integration.
         """
-        if self.remove_atomrefs:
+        if self.remove_atomrefs and not self._atomrefs_initialized:
             atrefs = _datamodule.train_dataset.atomrefs
             self.atomref = atrefs[self._property].detach()
 
-        if self.remove_mean:
+        if self.remove_mean and not self._mean_initialized:
             stats = _datamodule.get_stats(
                 self._property, self.is_extensive, self.remove_atomrefs
             )
@@ -133,16 +143,15 @@ class RemoveOffsets(Transform):
 
 class ScaleProperty(Transform):
     """
-    Scale the energy outputs of the network without influencing the gradient.
-    This is equivalent to scaling the labels for training and rescaling afterwards.
+    Scale an entry of the input or results dioctionary.
 
-    The `scale` is automatically obtained from the AtomsDataModule,
+    The `scale` can be automatically obtained from the AtomsDataModule,
     when it is used. Otherwise, it has to be provided in the init manually.
 
     """
 
-    is_preprocessor: bool = False
-    is_postprocessor: bool = False
+    is_preprocessor: bool = True
+    is_postprocessor: bool = True
 
     def __init__(
         self,
@@ -169,14 +178,19 @@ class ScaleProperty(Transform):
         self._scale_by_mean = scale_by_mean
         self.model_outputs = [self.output_key]
 
+        if scale is not None:
+            self._initialized = True
+        else:
+            self._initialized = False
+
         scale = scale or torch.ones((1,))
         self.register_buffer("scale", scale)
 
     def datamodule(self, _datamodule):
-
-        stats = _datamodule.get_stats(self._target_key, True, False)
-        scale = stats[0] if self._scale_by_mean else stats[1]
-        self.scale = torch.abs(scale).detach()
+        if not self._initialized:
+            stats = _datamodule.get_stats(self._target_key, True, False)
+            scale = stats[0] if self._scale_by_mean else stats[1]
+            self.scale = torch.abs(scale).detach()
 
     def forward(
         self,
@@ -235,17 +249,27 @@ class AddOffsets(Transform):
             add_mean or add_atomrefs
         ), "You should set at least one of `add_mean` and `add_atomrefs` to true!"
 
+        if atomrefs is not None:
+            self._atomrefs_initialized = True
+        else:
+            self._atomrefs_initialized = False
+
+        if propery_mean is not None:
+            self._mean_initialized = True
+        else:
+            self._mean_initialized = False
+
         atomrefs = atomrefs or torch.zeros((zmax,))
         propery_mean = propery_mean or torch.zeros((1,))
         self.register_buffer("atomref", atomrefs)
         self.register_buffer("mean", propery_mean)
 
     def datamodule(self, value):
-        if self.add_atomrefs:
+        if self.add_atomrefs and not self._atomrefs_initialized:
             atrefs = value.train_dataset.atomrefs
             self.atomref = atrefs[self._property].detach()
 
-        if self.add_mean:
+        if self.add_mean and not self._mean_initialized:
             stats = value.get_stats(
                 self._property, self.is_extensive, self.add_atomrefs
             )
