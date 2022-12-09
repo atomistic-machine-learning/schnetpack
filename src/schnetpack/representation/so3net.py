@@ -1,6 +1,5 @@
 from typing import Callable, Dict, Optional
 
-import hydra
 import torch
 import torch.nn as nn
 
@@ -48,9 +47,9 @@ class SO3net(nn.Module):
         self.n_atom_basis = n_atom_basis
         self.n_interactions = n_interactions
         self.lmax = lmax
-        self.cutoff_fn = hydra.utils.instantiate(cutoff_fn)
+        self.cutoff_fn = cutoff_fn
         self.cutoff = cutoff_fn.cutoff
-        self.radial_basis = hydra.utils.instantiate(radial_basis)
+        self.radial_basis = radial_basis
         self.return_vector_representation = return_vector_representation
 
         self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
