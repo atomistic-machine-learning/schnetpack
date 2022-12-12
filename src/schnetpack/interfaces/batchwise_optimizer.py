@@ -93,9 +93,9 @@ class BatchwiseDynamics(Dynamics):
             f[self.fixed_atoms_mask] *= 0.0
         return f
 
-    def _get_potential_energy(self, model_inputs):
+    def _get_potential_energy(self, inputs):
         if self._requires_calculation(property_keys=[self.energy_key]):
-            self.model_results = self.model(model_inputs)
+            self.model_results = self.model(inputs)
         return (
             self.model_results[self.energy_key].detach().cpu().numpy()
             * self.property_units[self.energy]
@@ -313,17 +313,9 @@ class BatchwiseOptimizer(BatchwiseDynamics):
                     append=False if self.nsteps == 0 else True,
                 )
 
-    def get_relaxed_structures(self):
-        return self.atoms
-
     def get_relaxation_results(self):
-        self.model.do_postprocessing = True
-        # one more forward pass to get forces and energy of relaxed structure
-        model_out = self.model(self.model_inputs)
-        # prepare relaxation results for output parser
-        relaxation_results = {"positions": self.model_inputs[properties.R]}
-        relaxation_results.update(model_out)
-        return relaxation_results
+        self._get_forces(self.model_inputs)
+        return self.atoms, self.model_results
 
     def dump(self, data):
         if world.rank == 0 and self.restart is not None:
