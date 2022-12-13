@@ -536,20 +536,18 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
 
         # store in ase Atoms object
         ats = []
-        at_nums = self.model_inputs[properties.Z].detach().cpu().numpy()
         indices_m = self.model_inputs[properties.idx_m].detach().cpu().numpy()
-        for struc_idx, previous_at in zip(
-            self.model_inputs[properties.idx], self.atoms
-        ):
-
-            pos_updated_m = pos_updated[indices_m == struc_idx.item()]
-            at_nums_m = at_nums[indices_m == struc_idx.item()]
-
-            at = Atoms(positions=pos_updated_m, numbers=at_nums_m)
+        for struc_idx, previous_at in enumerate(self.atoms):
+            # get atom positions for respective structure
+            pos_updated_m = pos_updated[indices_m == struc_idx]
+            # update ase Atoms object
+            at = Atoms(
+                positions=pos_updated_m, numbers=previous_at.get_atomic_numbers()
+            )
             at.pbc = previous_at.pbc
             at.cell = previous_at.cell
-
             ats.append(at)
+        # store
         self.atoms = ats
 
         self.iteration += 1
