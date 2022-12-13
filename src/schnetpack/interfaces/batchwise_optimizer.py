@@ -18,7 +18,7 @@ __all__ = ["ASEBatchwiseLBFGS"]
 
 
 class BatchwiseDynamics(Dynamics):
-    """Base-class for batchwise MD and structure optimization classes."""
+    """Base-class for batch-wise MD and structure optimization classes."""
 
     energy = "energy"
     forces = "forces"
@@ -40,6 +40,56 @@ class BatchwiseDynamics(Dynamics):
         position_unit="Ang",
         log_every_step=False,
     ):
+        """Structure dynamics object.
+
+        Parameters:
+
+        model: torch.nn.Module
+            The force field model used to calculate the respective atomic forces
+
+        atoms: list of Atoms objects
+            The Atoms objects to relax.
+
+        converter: schnetpack.interfaces.AtomsConverter
+            Class used to convert ase Atoms objects to schnetpack input
+
+        restart: str
+            Filename for restart file.  Default value is *None*.
+
+        logfile: file object or str
+            If *logfile* is a string, a file with that name will be opened.
+            Use '-' for stdout.
+
+        trajectory: Trajectory object or str
+            Attach trajectory object.  If *trajectory* is a string a
+            Trajectory will be constructed.  Use *None* for no
+            trajectory.
+
+        fixed_atoms list(int):
+            list of indices corresponding to atoms with positions fixed in space.
+
+        append_trajectory: boolean
+            Appended to the trajectory file instead of overwriting it.
+
+        master: boolean
+            Defaults to None, which causes only rank 0 to save files.  If
+            set to true,  this rank will save files.
+
+        energy_key: str
+            name of energies in model (default="energy")
+
+        force_key: str
+            name of forces in model (default="forces")
+
+        energy_unit: str, float
+            energy units used by model (default="eV")
+
+        position_unit: str, float
+            position units used by model (default="Angstrom")
+
+        log_every_step: bool
+            set to True to log Dynamics after each step (default=False)
+        """
         super().__init__(None, logfile, trajectory, append_trajectory, master)
 
         self.model = model
@@ -51,7 +101,6 @@ class BatchwiseDynamics(Dynamics):
         self.energy_key = energy_key
         self.force_key = force_key
         self.trajectory = trajectory
-
         self.log_every_step = log_every_step
 
         # set up basic conversion factors
@@ -65,6 +114,7 @@ class BatchwiseDynamics(Dynamics):
             self.stress: self.energy_conversion / self.position_conversion**3,
         }
 
+        # get initial model inputs and set device
         self._update_model_inputs()
         self.device = (
             torch.device("cuda")
@@ -196,6 +246,12 @@ class BatchwiseOptimizer(BatchwiseDynamics):
         atoms: list of Atoms objects
             The Atoms objects to relax.
 
+        converter: schnetpack.interfaces.AtomsConverter
+            Class used to convert ase Atoms objects to schnetpack input
+
+        fixed_atoms list(int):
+            list of indices corresponding to atoms with positions fixed in space.
+
         restart: str
             Filename for restart file.  Default value is *None*.
 
@@ -214,6 +270,21 @@ class BatchwiseOptimizer(BatchwiseDynamics):
 
         append_trajectory: boolean
             Appended to the trajectory file instead of overwriting it.
+
+        energy_key: str
+            name of energies in model (default="energy")
+
+        force_key: str
+            name of forces in model (default="forces")
+
+        energy_unit: str, float
+            energy units used by model (default="eV")
+
+        position_unit: str, float
+            position units used by model (default="Angstrom")
+
+        log_every_step: bool
+            set to True to log Dynamics after each step (default=False)
         """
         BatchwiseDynamics.__init__(
             self,
@@ -355,6 +426,12 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         atoms: list of Atoms objects
             The Atoms objects to relax.
 
+        converter: schnetpack.interfaces.AtomsConverter
+            Class used to convert ase Atoms objects to schnetpack input
+
+        fixed_atoms list(int):
+            list of indices corresponding to atoms with positions fixed in space.
+
         restart: string
             Pickle file used to store vectors for updating the inverse of
             Hessian matrix. If set, file with such a name will be searched
@@ -389,6 +466,21 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         master: boolean
             Defaults to None, which causes only rank 0 to save files.  If
             set to true, this rank will save files.
+
+        energy_key: str
+            name of energies in model (default="energy")
+
+        force_key: str
+            name of forces in model (default="forces")
+
+        energy_unit: str, float
+            energy units used by model (default="eV")
+
+        position_unit: str, float
+            position units used by model (default="Angstrom")
+
+        log_every_step: bool
+            set to True to log Dynamics after each step (default=False)
         """
 
         BatchwiseOptimizer.__init__(
