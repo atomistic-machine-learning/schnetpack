@@ -83,6 +83,10 @@ J. Chem. Theory Comput.
 [10.1021/acs.jctc.8b00908](http://dx.doi.org/10.1021/acs.jctc.8b00908)
 [arXiv:1809.01072](https://arxiv.org/abs/1809.01072). (2018)
 
+K. T. Schütt, S. S. P. Hessmann, N. W. A. Gebauer, J. Lederer, M. Gastegger.
+SchNetPack 2.0: A neural network toolbox for atomistic machine learning.
+[arXiv:2212.05517](https://arxiv.org/abs/2212.05517). (2022)
+
 
 ## Acknowledgements
 
