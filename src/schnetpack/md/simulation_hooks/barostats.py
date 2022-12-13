@@ -28,8 +28,6 @@ class BarostatError(Exception):
 
 
 class BarostatHook(SimulationHook):
-    ring_polymer = False
-    temperature_control = False
     """
     Basic barostat hook for simulator class. This class is initialized based on the simulator and system
     specifications during the first MD step. Barostats are applied before and after each MD step. In addition,
@@ -40,6 +38,9 @@ class BarostatHook(SimulationHook):
         temperature_bath (float): Target temperature applied to the cell fluctuations (in K).
         time_constant (float): Time constant used for thermostatting if available (in fs).
     """
+
+    ring_polymer = False
+    temperature_control = False
 
     def __init__(
         self, target_pressure: float, temperature_bath: float, time_constant: float
@@ -158,8 +159,6 @@ class BarostatHook(SimulationHook):
 
 
 class NHCBarostatIsotropic(BarostatHook):
-    temperature_control = True
-    ring_polymer = False
     """
     Nose Hoover chain thermostat/barostat for isotropic cell fluctuations. This barostat already contains a built in
     thermostat, so no further temperature control is necessary. As suggested in [#nhc_barostat1]_, two separate chains
@@ -177,8 +176,6 @@ class NHCBarostatIsotropic(BarostatHook):
         multi_step (int): Number of steps used for integrating the NH equations of motion (default=2)
         integration_order (int): Order of the Yoshida-Suzuki integrator used for propagating the thermostat (default=3).
         massive (bool): Apply individual thermostat chains to all particle degrees of freedom (default=False).
-        detach (bool): Whether the computational graph should be detached after each simulation step. Default is true,
-                       should be changed if differentiable MD is desired.
 
     References
     ----------
@@ -186,6 +183,9 @@ class NHCBarostatIsotropic(BarostatHook):
        Explicit reversible integrators for extended systems dynamics.
        Molecular Physics, 87(5), 1117-1157. 1996.
     """
+
+    temperature_control = True
+    ring_polymer = False
 
     def __init__(
         self,
@@ -708,6 +708,31 @@ class NHCBarostatIsotropic(BarostatHook):
 
 
 class NHCBarostatAnisotropic(NHCBarostatIsotropic):
+    """
+    Nose Hoover chain thermostat/barostat for anisotropic cell fluctuations. This barostat already contains a built in
+    thermostat, so no further temperature control is necessary. As suggested in [#nhc_barostat1]_, two separate chains
+    are used to thermostat particle and cell momenta.
+
+    Args:
+        target_pressure (float): Target pressure in bar.
+        temperature_bath (float): Temperature of the external heat bath in Kelvin.
+        time_constant (float): Particle thermostat time constant in fs
+        time_constant_cell (float): Cell thermostat time constant in fs. If None is given (default), the same time
+                                    constant as for the thermostat component is used.
+        time_constant_barostat (float): Barostat time constant in fs. If None is given (default), the same time constant
+                                        as for the thermostat component is used.
+        chain_length (int): Number of Nose-Hoover thermostats applied in the chain.
+        multi_step (int): Number of steps used for integrating the NH equations of motion (default=2)
+        integration_order (int): Order of the Yoshida-Suzuki integrator used for propagating the thermostat (default=3).
+        massive (bool): Apply individual thermostat chains to all particle degrees of freedom (default=False).
+
+    References
+    ----------
+    .. [#nhc_barostat1] Martyna, Tuckerman, Tobias, Klein:
+       Explicit reversible integrators for extended systems dynamics.
+       Molecular Physics, 87(5), 1117-1157. 1996.
+    """
+
     temperature_control = True
     ring_polymer = False
 

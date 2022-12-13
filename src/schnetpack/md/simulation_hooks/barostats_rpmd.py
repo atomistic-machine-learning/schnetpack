@@ -18,8 +18,6 @@ __all__ = ["PILEBarostat"]
 
 
 class PILEBarostat(BarostatHook):
-    temperature_control = False
-    ring_polymer = True
     """
     Barostat for ring polymer molecular dynamics simulations. This barostat is based on the algorithm introduced in
     [#rpmd_barostat1]_ and uses a PILE thermostat for the cell. It can be combined with any RPMD thermostat for
@@ -38,6 +36,9 @@ class PILEBarostat(BarostatHook):
                          i-PI 2.0: A universal force engine for advanced molecular simulations.
                          Computer Physics Communications, 236, 214-223. 2019.
     """
+
+    temperature_control = False
+    ring_polymer = True
 
     def __init__(
         self, target_pressure: float, temperature_bath: float, time_constant: float
