@@ -50,6 +50,7 @@ class BatchwiseDynamics(Dynamics):
         self.model_results = None
         self.energy_key = energy_key
         self.force_key = force_key
+        self.trajectory = trajectory
 
         self.log_every_step = log_every_step
 
@@ -291,26 +292,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
             self.logfile.flush()
 
         if self.trajectory is not None:
-            for struc_idx, _ in enumerate(self.model_inputs[properties.n_atoms]):
-                R_m = self.model_inputs[properties.R][
-                    self.model_inputs[properties.idx_m] == struc_idx
-                ]
-                Z_m = self.model_inputs[properties.Z][
-                    self.model_inputs[properties.idx_m] == struc_idx
-                ]
-                at = Atoms(
-                    positions=R_m.detach().cpu().numpy(),
-                    numbers=Z_m.detach().cpu().numpy(),
-                )
-                at.pbc = (
-                    self.model_inputs[properties.pbc][struc_idx].detach().cpu().numpy()
-                )
-                at.cell = (
-                    torch.diag(self.model_inputs[properties.cell][struc_idx])
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
+            for struc_idx, at in enumerate(self.atoms):
                 # store in trajectory
                 write(
                     self.trajectory + "_{}.xyz".format(struc_idx),
@@ -446,7 +428,6 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         self.p = None
         self.function_calls = 0
         self.force_calls = 0
-        self.trajectory = trajectory
         self.n_configs = None
 
         if use_line_search:
@@ -550,19 +531,25 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             self.function_calls += 1
             dr = self.determine_step(self.p) * self.damping
 
+        # update positions
+        pos_updated = self.model_inputs[properties.R].detach().cpu().numpy() + dr
+
+        # store in ase Atoms object
         ats = []
-        for struc_idx, previous_at in enumerate(self.atoms):
+        at_nums = self.model_inputs[properties.Z].detach().cpu().numpy()
+        indices_m = self.model_inputs[properties.idx_m].detach().cpu().numpy()
+        for struc_idx, previous_at in zip(
+            self.model_inputs[properties.idx], self.atoms
+        ):
 
-            indices_m = self.model_inputs[properties.idx_m].detach().cpu().numpy()
+            pos_updated_m = pos_updated[indices_m == struc_idx.item()]
+            at_nums_m = at_nums[indices_m == struc_idx.item()]
 
-            pos = previous_at.get_positions() + dr[indices_m == struc_idx]
-            at_nums = previous_at.get_atomic_numbers()
-
-            at = Atoms(positions=pos, numbers=at_nums)
+            at = Atoms(positions=pos_updated_m, numbers=at_nums_m)
             at.pbc = previous_at.pbc
             at.cell = previous_at.cell
-            ats.append(at)
 
+            ats.append(at)
         self.atoms = ats
 
         self.iteration += 1
