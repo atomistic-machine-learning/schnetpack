@@ -25,7 +25,7 @@ extensible to custom atomistic architectures.
 - ASE
 - numpy
 - PyTorch 1.9
-- hydra
+- hydra 1.1
 
 _**Note: We recommend using a GPU for training the neural networks.**_
 
