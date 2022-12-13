@@ -22,10 +22,10 @@ extensible to custom atomistic architectures.
 
 ##### Requirements:
 - python 3.8
-- ASE
-- numpy
+- Atomic Simulation Environment (ASE) 3.21
+- NumPy
 - PyTorch 1.9
-- hydra 1.1
+- Hydra 1.1
 
 _**Note: We recommend using a GPU for training the neural networks.**_
 
