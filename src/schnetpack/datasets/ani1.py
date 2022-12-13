@@ -25,7 +25,7 @@ class ANI1(AtomsDataModule):
 
     References:
 
-        .. [#ani1a] https://arxiv.org/abs/1708.04987
+        .. [#ani1] https://arxiv.org/abs/1708.04987
 
     """
 
