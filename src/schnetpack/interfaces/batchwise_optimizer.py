@@ -38,6 +38,7 @@ class BatchwiseDynamics(Dynamics):
         force_key="forces",
         energy_unit="eV",
         position_unit="Ang",
+        log_every_step=False,
     ):
         super().__init__(None, logfile, trajectory, append_trajectory, master)
 
@@ -49,6 +50,8 @@ class BatchwiseDynamics(Dynamics):
         self.model_results = None
         self.energy_key = energy_key
         self.force_key = force_key
+
+        self.log_every_step = log_every_step
 
         # set up basic conversion factors
         self.energy_conversion = convert_units(energy_unit, "eV")
@@ -138,7 +141,8 @@ class BatchwiseDynamics(Dynamics):
             yield False
 
             # log the step
-            self.log()
+            if self.log_every_step:
+                self.log()
 
         # log last step
         self.log()
@@ -179,6 +183,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
         force_key="forces",
         energy_unit="eV",
         position_unit="Ang",
+        log_every_step=False,
     ):
         """Structure optimizer object.
 
@@ -223,6 +228,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
             force_key=force_key,
             energy_unit=energy_unit,
             position_unit=position_unit,
+            log_every_step=log_every_step,
         )
 
         self.restart = restart
@@ -356,6 +362,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         force_key="forces",
         energy_unit="eV",
         position_unit="Ang",
+        log_every_step=False,
     ):
 
         """Parameters:
@@ -416,6 +423,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             force_key=force_key,
             energy_unit=energy_unit,
             position_unit=position_unit,
+            log_every_step=log_every_step,
         )
 
         if maxstep is not None:
