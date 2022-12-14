@@ -13,6 +13,10 @@ h5py
 tqdm
 pytest
 pytest-datadir
+sympy
+torch_ema
+rich
+fasteners
 
 pre-commit
 black
