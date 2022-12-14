@@ -13,6 +13,7 @@ h5py
 tqdm
 pytest
 pytest-datadir
+sympy
 
 pre-commit
 black
