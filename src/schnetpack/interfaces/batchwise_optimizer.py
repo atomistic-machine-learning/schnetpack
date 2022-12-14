@@ -18,7 +18,7 @@ __all__ = ["ASEBatchwiseLBFGS"]
 
 
 class BatchwiseDynamics(Dynamics):
-    """Base-class for batchwise MD and structure optimization classes."""
+    """Base-class for batch-wise MD and structure optimization classes."""
 
     energy = "energy"
     forces = "forces"
@@ -38,7 +38,58 @@ class BatchwiseDynamics(Dynamics):
         force_key="forces",
         energy_unit="eV",
         position_unit="Ang",
+        log_every_step=False,
     ):
+        """Structure dynamics object.
+
+        Parameters:
+
+        model: torch.nn.Module
+            The force field model used to calculate the respective atomic forces
+
+        atoms: list of Atoms objects
+            The Atoms objects to relax.
+
+        converter: schnetpack.interfaces.AtomsConverter
+            Class used to convert ase Atoms objects to schnetpack input
+
+        restart: str
+            Filename for restart file.  Default value is *None*.
+
+        logfile: file object or str
+            If *logfile* is a string, a file with that name will be opened.
+            Use '-' for stdout.
+
+        trajectory: Trajectory object or str
+            Attach trajectory object.  If *trajectory* is a string a
+            Trajectory will be constructed.  Use *None* for no
+            trajectory.
+
+        fixed_atoms list(int):
+            list of indices corresponding to atoms with positions fixed in space.
+
+        append_trajectory: boolean
+            Appended to the trajectory file instead of overwriting it.
+
+        master: boolean
+            Defaults to None, which causes only rank 0 to save files.  If
+            set to true,  this rank will save files.
+
+        energy_key: str
+            name of energies in model (default="energy")
+
+        force_key: str
+            name of forces in model (default="forces")
+
+        energy_unit: str, float
+            energy units used by model (default="eV")
+
+        position_unit: str, float
+            position units used by model (default="Angstrom")
+
+        log_every_step: bool
+            set to True to log Dynamics after each step (default=False)
+        """
         super().__init__(None, logfile, trajectory, append_trajectory, master)
 
         self.model = model
@@ -49,6 +100,8 @@ class BatchwiseDynamics(Dynamics):
         self.model_results = None
         self.energy_key = energy_key
         self.force_key = force_key
+        self.trajectory = trajectory
+        self.log_every_step = log_every_step
 
         # set up basic conversion factors
         self.energy_conversion = convert_units(energy_unit, "eV")
@@ -61,6 +114,7 @@ class BatchwiseDynamics(Dynamics):
             self.stress: self.energy_conversion / self.position_conversion**3,
         }
 
+        # get initial model inputs and set device
         self._update_model_inputs()
         self.device = (
             torch.device("cuda")
@@ -93,9 +147,9 @@ class BatchwiseDynamics(Dynamics):
             f[self.fixed_atoms_mask] *= 0.0
         return f
 
-    def _get_potential_energy(self, model_inputs):
+    def _get_potential_energy(self, inputs):
         if self._requires_calculation(property_keys=[self.energy_key]):
-            self.model_results = self.model(model_inputs)
+            self.model_results = self.model(inputs)
         return (
             self.model_results[self.energy_key].detach().cpu().numpy()
             * self.property_units[self.energy]
@@ -138,7 +192,8 @@ class BatchwiseDynamics(Dynamics):
             yield False
 
             # log the step
-            self.log()
+            if self.log_every_step:
+                self.log()
 
         # log last step
         self.log()
@@ -179,6 +234,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
         force_key="forces",
         energy_unit="eV",
         position_unit="Ang",
+        log_every_step=False,
     ):
         """Structure optimizer object.
 
@@ -189,6 +245,12 @@ class BatchwiseOptimizer(BatchwiseDynamics):
 
         atoms: list of Atoms objects
             The Atoms objects to relax.
+
+        converter: schnetpack.interfaces.AtomsConverter
+            Class used to convert ase Atoms objects to schnetpack input
+
+        fixed_atoms list(int):
+            list of indices corresponding to atoms with positions fixed in space.
 
         restart: str
             Filename for restart file.  Default value is *None*.
@@ -208,6 +270,21 @@ class BatchwiseOptimizer(BatchwiseDynamics):
 
         append_trajectory: boolean
             Appended to the trajectory file instead of overwriting it.
+
+        energy_key: str
+            name of energies in model (default="energy")
+
+        force_key: str
+            name of forces in model (default="forces")
+
+        energy_unit: str, float
+            energy units used by model (default="eV")
+
+        position_unit: str, float
+            position units used by model (default="Angstrom")
+
+        log_every_step: bool
+            set to True to log Dynamics after each step (default=False)
         """
         BatchwiseDynamics.__init__(
             self,
@@ -223,6 +300,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
             force_key=force_key,
             energy_unit=energy_unit,
             position_unit=position_unit,
+            log_every_step=log_every_step,
         )
 
         self.restart = restart
@@ -285,26 +363,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
             self.logfile.flush()
 
         if self.trajectory is not None:
-            for struc_idx, _ in enumerate(self.model_inputs[properties.n_atoms]):
-                R_m = self.model_inputs[properties.R][
-                    self.model_inputs[properties.idx_m] == struc_idx
-                ]
-                Z_m = self.model_inputs[properties.Z][
-                    self.model_inputs[properties.idx_m] == struc_idx
-                ]
-                at = Atoms(
-                    positions=R_m.detach().cpu().numpy(),
-                    numbers=Z_m.detach().cpu().numpy(),
-                )
-                at.pbc = (
-                    self.model_inputs[properties.pbc][struc_idx].detach().cpu().numpy()
-                )
-                at.cell = (
-                    torch.diag(self.model_inputs[properties.cell][struc_idx])
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
+            for struc_idx, at in enumerate(self.atoms):
                 # store in trajectory
                 write(
                     self.trajectory + "_{}.xyz".format(struc_idx),
@@ -313,17 +372,9 @@ class BatchwiseOptimizer(BatchwiseDynamics):
                     append=False if self.nsteps == 0 else True,
                 )
 
-    def get_relaxed_structures(self):
-        return self.atoms
-
     def get_relaxation_results(self):
-        self.model.do_postprocessing = True
-        # one more forward pass to get forces and energy of relaxed structure
-        model_out = self.model(self.model_inputs)
-        # prepare relaxation results for output parser
-        relaxation_results = {"positions": self.model_inputs[properties.R]}
-        relaxation_results.update(model_out)
-        return relaxation_results
+        self._get_forces(self.model_inputs)
+        return self.atoms, self.model_results
 
     def dump(self, data):
         if world.rank == 0 and self.restart is not None:
@@ -364,6 +415,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         force_key="forces",
         energy_unit="eV",
         position_unit="Ang",
+        log_every_step=False,
     ):
 
         """Parameters:
@@ -373,6 +425,12 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
 
         atoms: list of Atoms objects
             The Atoms objects to relax.
+
+        converter: schnetpack.interfaces.AtomsConverter
+            Class used to convert ase Atoms objects to schnetpack input
+
+        fixed_atoms list(int):
+            list of indices corresponding to atoms with positions fixed in space.
 
         restart: string
             Pickle file used to store vectors for updating the inverse of
@@ -408,6 +466,21 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         master: boolean
             Defaults to None, which causes only rank 0 to save files.  If
             set to true, this rank will save files.
+
+        energy_key: str
+            name of energies in model (default="energy")
+
+        force_key: str
+            name of forces in model (default="forces")
+
+        energy_unit: str, float
+            energy units used by model (default="eV")
+
+        position_unit: str, float
+            position units used by model (default="Angstrom")
+
+        log_every_step: bool
+            set to True to log Dynamics after each step (default=False)
         """
 
         BatchwiseOptimizer.__init__(
@@ -424,6 +497,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             force_key=force_key,
             energy_unit=energy_unit,
             position_unit=position_unit,
+            log_every_step=log_every_step,
         )
 
         if maxstep is not None:
@@ -446,7 +520,6 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         self.p = None
         self.function_calls = 0
         self.force_calls = 0
-        self.trajectory = trajectory
         self.n_configs = None
 
         if use_line_search:
@@ -550,19 +623,23 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             self.function_calls += 1
             dr = self.determine_step(self.p) * self.damping
 
+        # update positions
+        pos_updated = self.model_inputs[properties.R].detach().cpu().numpy() + dr
+
+        # store in ase Atoms object
         ats = []
+        indices_m = self.model_inputs[properties.idx_m].detach().cpu().numpy()
         for struc_idx, previous_at in enumerate(self.atoms):
-
-            indices_m = self.model_inputs[properties.idx_m].detach().cpu().numpy()
-
-            pos = previous_at.get_positions() + dr[indices_m == struc_idx]
-            at_nums = previous_at.get_atomic_numbers()
-
-            at = Atoms(positions=pos, numbers=at_nums)
+            # get atom positions for respective structure
+            pos_updated_m = pos_updated[indices_m == struc_idx]
+            # update ase Atoms object
+            at = Atoms(
+                positions=pos_updated_m, numbers=previous_at.get_atomic_numbers()
+            )
             at.pbc = previous_at.pbc
             at.cell = previous_at.cell
             ats.append(at)
-
+        # store
         self.atoms = ats
 
         self.iteration += 1
