@@ -17,6 +17,7 @@ sympy
 torch_ema
 rich
 fasteners
+matscipy
 
 pre-commit
 black
