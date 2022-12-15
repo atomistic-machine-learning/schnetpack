@@ -37,7 +37,7 @@ setup(
         "fasteners",
         "dirsync",
         "torch-ema",
-        "matscipy @ git+https://github.com/libAtoms/matscipy.git",
+        "matscipy",
     ],
     include_package_data=True,
     extras_require={"test": ["pytest", "pytest-datadir", "pytest-benchmark"]},
