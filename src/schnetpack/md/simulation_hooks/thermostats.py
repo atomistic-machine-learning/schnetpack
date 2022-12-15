@@ -38,7 +38,6 @@ class ThermostatError(Exception):
 
 
 class ThermostatHook(SimulationHook):
-    ring_polymer = False
     """
     Basic thermostat hook for simulator class. This class is initialized based on the simulator and system
     specifications during the first MD step. Thermostats are applied before and after each MD step.
@@ -46,9 +45,9 @@ class ThermostatHook(SimulationHook):
     Args:
         temperature_bath (float): Temperature of the heat bath in Kelvin.
         time_constant (float): Thermostat time constant in fs.
-        nm_transformation (bool): Auxiliary flag which can be used to switch between bead and normal mode representation
-                                  in RPMD. (default=False)
     """
+
+    ring_polymer = False
 
     def __init__(self, temperature_bath: float, time_constant: float):
         super(ThermostatHook, self).__init__()
@@ -147,7 +146,6 @@ class ThermostatHook(SimulationHook):
 
 
 class BerendsenThermostat(ThermostatHook):
-    ring_polymer = False
     """
     Berendsen velocity rescaling thermostat, as described in [#berendsen1]_. Simple thermostat for e.g. equilibrating
     the system, does not sample the canonical ensemble.
@@ -162,6 +160,8 @@ class BerendsenThermostat(ThermostatHook):
        Molecular dynamics with coupling to an external bath.
        The Journal of Chemical Physics, 81 (8), 3684-3690. 1984.
     """
+
+    ring_polymer = False
 
     def __init__(self, temperature_bath: float, time_constant: float):
         super(BerendsenThermostat, self).__init__(
@@ -189,7 +189,6 @@ class BerendsenThermostat(ThermostatHook):
 
 
 class LangevinThermostat(ThermostatHook):
-    ring_polymer = False
     """
     Basic stochastic Langevin thermostat, see e.g. [#langevin_thermostat1]_ for more details.
 
@@ -203,6 +202,8 @@ class LangevinThermostat(ThermostatHook):
        Accurate sampling using Langevin dynamics.
        Physical Review E, 75(5), 056707. 2007.
     """
+
+    ring_polymer = False
 
     def __init__(self, temperature_bath: float, time_constant: float):
         super(LangevinThermostat, self).__init__(
@@ -523,7 +524,6 @@ class NHCThermostat(ThermostatHook):
 
 
 class GLEThermostat(ThermostatHook):
-    ring_polymer = False
     """
     Stochastic generalized Langevin colored noise thermostat by Ceriotti et. al. as described in [#gle_thermostat1]_.
     This thermostat requires specially parametrized matrices, which can be obtained online from:
@@ -544,6 +544,8 @@ class GLEThermostat(ThermostatHook):
        Colored-noise thermostats à la carte.
        Journal of Chemical Theory and Computation 6 (4), 1170-1180. 2010.
     """
+
+    ring_polymer = False
 
     def __init__(
         self,

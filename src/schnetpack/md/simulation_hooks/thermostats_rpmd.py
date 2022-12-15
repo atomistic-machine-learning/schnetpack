@@ -30,7 +30,6 @@ __all__ = [
 
 
 class PILELocalThermostat(LangevinThermostat):
-    ring_polymer = True
     """
     Langevin thermostat for ring polymer molecular dynamics as introduced in [#stochastic_thermostats2]_.
     Applies specially initialized Langevin thermostats to the beads of the ring polymer in normal mode representation.
@@ -49,6 +48,8 @@ class PILELocalThermostat(LangevinThermostat):
        Efficient stochastic thermostatting of path integral molecular dynamics.
        The Journal of Chemical Physics, 133 (12), 124104. 2010.
     """
+
+    ring_polymer = True
 
     def __init__(
         self,
@@ -233,8 +234,6 @@ class TRPMDThermostat(PILELocalThermostat):
 
 
 class RPMDGLEThermostat(GLEThermostat):
-    # TODO: this does not seem to give the proper temperature average
-    ring_polymer = True
     """
     Stochastic generalized Langevin colored noise thermostat for RPMD by Ceriotti et. al. as described in
     [#gle_thermostat1]_. This thermostat requires specially parametrized matrices, which can be obtained online from:
@@ -252,6 +251,9 @@ class RPMDGLEThermostat(GLEThermostat):
        Colored-noise thermostats à la carte.
        Journal of Chemical Theory and Computation 6 (4), 1170-1180. 2010.
     """
+
+    # TODO: this does not seem to give the proper temperature average
+    ring_polymer = True
 
     def __init__(
         self,
@@ -368,7 +370,6 @@ class PIGLETThermostat(RPMDGLEThermostat):
 
 
 class NHCRingPolymerThermostat(NHCThermostat):
-    ring_polymer = True
     """
     Nose-Hoover chain thermostat for ring polymer molecular dynamics simulations as e.g. described in
     [#stochastic_thermostats4]_. This is based on the massive setting of the standard NHC thermostat but operates in
@@ -390,6 +391,8 @@ class NHCRingPolymerThermostat(NHCThermostat):
        Efficient stochastic thermostatting of path integral molecular dynamics.
        The Journal of Chemical Physics, 133 (12), 124104. 2010.
     """
+
+    ring_polymer = True
 
     def __init__(
         self,
