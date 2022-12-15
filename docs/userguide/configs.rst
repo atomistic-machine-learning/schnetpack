@@ -420,4 +420,8 @@ set your own implementations as ``_target_``, as long as they conform with the r
 interface, e.g. are subclasses of SchNetPack base classes. Unfortunately, this can not
 be checked statically at the time, but will lead to errors when calling ``spktrain``.
 This kind of flexibilty enables a convenient extension of SchNetPack with your own
-config and code.
+config and code. As an example, you can check out the package 
+`schnetpack-gschnet <https://github.com/atomistic-machine-learning/schnetpack-gschnet/>`_,
+which implements new classes and integrates them in a custom config to build generative 
+neural networks for molecules.
+
