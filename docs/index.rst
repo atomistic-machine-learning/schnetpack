@@ -39,6 +39,7 @@ Contents
    tutorials/tutorial_02_qm9
    tutorials/tutorial_03_force_models
    tutorials/tutorial_04_molecular_dynamics
+   tutorials/tutorial_05_materials
 
 .. toctree::
    :glob:
