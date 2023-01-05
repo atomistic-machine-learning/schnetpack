@@ -256,20 +256,20 @@ class MD17(GDMLDataModule):
         }
 
         datasets_dict = dict(
-            aspirin="aspirin_dft.npz",
+            aspirin="md17_aspirin.npz",
             # aspirin_ccsd='aspirin_ccsd.zip',
             azobenzene="azobenzene_dft.npz",
-            benzene="benzene_dft.npz",
-            ethanol="ethanol_dft.npz",
+            benzene="md17_benzene2017.npz", #Unsure if this should be benzene2018_dft.npz
+            ethanol="md17_ethanol.npz",
             # ethanol_ccsdt='ethanol_ccsd_t.zip',
-            malonaldehyde="malonaldehyde_dft.npz",
+            malonaldehyde="md17_malonaldehyde.npz",
             # malonaldehyde_ccsdt='malonaldehyde_ccsd_t.zip',
-            naphthalene="naphthalene_dft.npz",
+            naphthalene="md17_naphthalene.npz",
             paracetamol="paracetamol_dft.npz",
-            salicylic_acid="salicylic_dft.npz",
-            toluene="toluene_dft.npz",
+            salicylic_acid="md17_salicylic.npz",
+            toluene="md17_toluene.npz",
             # toluene_ccsdt='toluene_ccsd_t.zip',
-            uracil="uracil_dft.npz",
+            uracil="md17_uracil.npz",
         )
 
         super(MD17, self).__init__(
