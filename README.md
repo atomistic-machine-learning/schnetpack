@@ -68,7 +68,7 @@ You're ready to go!
 Under construction. For a first test, use:
 
 ```
-spktrain experiment=qm9 model/representation=painn
+spktrain experiment=qm9_atomwise model/representation=painn
 ```
 
 ## Documentation
