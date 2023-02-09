@@ -10,7 +10,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
 from pytorch_lightning import seed_everything
-from pytorch_lightning.loggers import LightningLoggerBase
+from pytorch_lightning.loggers.logger import Logger
 
 import schnetpack as spk
 from schnetpack.utils import str2class
@@ -129,7 +129,7 @@ def train(config: DictConfig):
                 callbacks.append(hydra.utils.instantiate(cb_conf))
 
     # Init Lightning loggers
-    logger: List[LightningLoggerBase] = []
+    logger: List[Logger] = []
 
     if "logger" in config:
         for _, lg_conf in config["logger"].items():
