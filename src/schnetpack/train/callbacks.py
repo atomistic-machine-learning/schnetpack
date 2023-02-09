@@ -11,6 +11,9 @@ import os
 from pytorch_lightning.callbacks import BasePredictionWriter
 from typing import List, Any
 from schnetpack.task import AtomisticTask
+from schnetpack import properties
+from collections import defaultdict
+
 
 __all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
 
@@ -20,14 +23,22 @@ class PredictionWriter(BasePredictionWriter):
     Callback to store prediction results using ``torch.save``.
     """
 
-    def __init__(self, output_dir: str, write_interval: str):
+    def __init__(
+            self,
+            output_dir: str,
+            write_interval: str,
+            write_idx: bool = False,
+    ):
         """
         Args:
             output_dir: output directory for prediction files
             write_interval: can be one of ["batch", "epoch", "batch_and_epoch"]
+            write_idx: Write molecular ids for all atoms. This is needed for
+                atomic properties like forces.
         """
         super().__init__(write_interval)
         self.output_dir = output_dir
+        self.write_idx = write_idx
         os.makedirs(output_dir, exist_ok=True)
 
     def write_on_batch_end(
@@ -51,7 +62,23 @@ class PredictionWriter(BasePredictionWriter):
         predictions: List[Any],
         batch_indices: List[Any],
     ):
-        torch.save(predictions, os.path.join(self.output_dir, "predictions.pt"))
+        # collect batches of predictions and restructure
+        concatenated_predictions = defaultdict(list)
+        for batch_prediction in predictions[0]:
+            for property_name, data in batch_prediction.items():
+                if not self.write_idx and property_name == properties.idx_m:
+                    continue
+                concatenated_predictions[property_name].append(data)
+        concatenated_predictions = {
+            property_name: torch.concat(data)
+            for property_name, data in concatenated_predictions.items()
+        }
+
+        # save concatenated predictions
+        torch.save(
+            concatenated_predictions,
+            os.path.join(self.output_dir, "predictions.pt"),
+        )
 
 
 class ModelCheckpoint(BaseModelCheckpoint):
