@@ -30,7 +30,7 @@ setup(
         "h5py",
         "pyyaml",
         "hydra-core>=1.1.0",
-        "pytorch_lightning>=1.8.1",
+        "pytorch_lightning>=1.9.0",
         "torchmetrics",
         "hydra-colorlog>=1.1.0",
         "rich",
