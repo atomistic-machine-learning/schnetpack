@@ -182,7 +182,7 @@ def predict(config: DictConfig):
     model = torch.load("best_model")
 
     class WrapperLM(LightningModule):
-        def __init__(self, model, enable_grad=False):
+        def __init__(self, model, enable_grad=config.enable_grad):
             super().__init__()
             self.model = model
             self.enable_grad = enable_grad
