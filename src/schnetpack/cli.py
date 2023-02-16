@@ -194,6 +194,7 @@ def predict(config: DictConfig):
             torch.set_grad_enabled(self.enable_grad)
             results = self(batch)
             results[properties.idx_m] = batch[properties.idx][batch[properties.idx_m]]
+            results = {k: v.detach().cpu() for k, v in results.items()}
             return results
 
 
