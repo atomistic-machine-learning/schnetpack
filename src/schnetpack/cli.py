@@ -182,7 +182,7 @@ def predict(config: DictConfig):
     model = torch.load("best_model")
 
     class WrapperLM(LightningModule):
-        def __init__(self, model, enable_grad=False):
+        def __init__(self, model, enable_grad=config.enable_grad):
             super().__init__()
             self.model = model
             self.enable_grad = enable_grad
@@ -194,6 +194,7 @@ def predict(config: DictConfig):
             torch.set_grad_enabled(self.enable_grad)
             results = self(batch)
             results[properties.idx_m] = batch[properties.idx][batch[properties.idx_m]]
+            results = {k: v.detach().cpu() for k, v in results.items()}
             return results
 
 
