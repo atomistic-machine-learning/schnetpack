@@ -109,15 +109,17 @@ class SO3net(nn.Module):
         cutoff_ij = self.cutoff_fn(d_ij)[..., None]
 
         x0 = self.embedding(atomic_numbers)[:, None]
-        x = so3.scalar2rsh(x0, self.lmax)
+        x = so3.scalar2rsh(x0, int(self.lmax))
 
-        for i in range(self.n_interactions):
-            dx = self.so3convs[i](x, radial_ij, Yij, cutoff_ij, idx_i, idx_j)
-            ddx = self.mixings1[i](dx)
+        for so3conv, mixing1, mixing2, gating, mixing3 in zip(
+                self.so3convs, self.mixings1, self.mixings2, self.gatings, self.mixings3
+        ):
+            dx = so3conv(x, radial_ij, Yij, cutoff_ij, idx_i, idx_j)
+            ddx = mixing1(dx)
             dx = dx + self.so3product(dx, ddx)
-            dx = self.mixings2[i](dx)
-            dx = self.gatings[i](dx)
-            dx = self.mixings3[i](dx)
+            dx = mixing2(dx)
+            dx = gating(dx)
+            dx = mixing3(dx)
             x = x + dx
 
         inputs["scalar_representation"] = x[:, 0]
