@@ -20,6 +20,7 @@ setup(
         "src/scripts/spktrain",
         "src/scripts/spkpredict",
         "src/scripts/spkmd",
+        "src/scripts/spkdeploy",
     ],
     package_dir={"": "src"},
     python_requires=">=3.6",
