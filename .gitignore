@@ -116,3 +116,9 @@ ENV/
 # experiments
 runs/
 tests/testdata/tmp/test*
+
+# lammps example outputs
+interfaces/lammps/examples/aspirin/*.lammpstrj
+interfaces/lammps/examples/aspirin/*.lammps
+interfaces/lammps/examples/aspirin/*.dump
+interfaces/lammps/examples/aspirin/*.dat
