@@ -103,6 +103,13 @@ class MaterialsProject(AtomsDataModule):
             distance_unit=distance_unit,
             **kwargs
         )
+        if len(apikey) != 16:
+            raise AtomsDataModuleError(
+                "Invalid API-key. ScheNetPack uses the legacy API of MaterialsProject, "
+                f"which requires a 16 character long API-key. Your API-key contains {len(apikey)} "
+                f"characters. In order to generate a valid API-key please use "
+                f"https://legacy.materialsproject.org/open."
+            )
         self.apikey = apikey
         self.timestamp = timestamp
 
