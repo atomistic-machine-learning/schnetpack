@@ -21,7 +21,6 @@ setup(
         "src/scripts/spkpredict",
         "src/scripts/spkmd",
         "src/scripts/spkdeploy",
-        "interfaces/lammps/patch_lammps",
     ],
     package_dir={"": "src"},
     python_requires=">=3.6",

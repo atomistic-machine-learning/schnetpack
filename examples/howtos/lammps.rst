@@ -3,16 +3,18 @@ LAMMPS Interface
 ================
 .. _lammps:
 
+The interface is designed according to the custom pair style approach for
+LAMMPs https://docs.lammps.org/Modify_pair.html [1] and it is adapted from the
+pair_nequip github repository https://github.com/mir-group/pair_nequip [2].
+
 
 Requirements
 ============
 For the installation of the LAMMPS interface we need the following pre-requisites:
 
-* **CUDA** 11.7 or higher
+* **CUDA** 11.7 (or higher)
 * **cuDNN**
-* **python** 3.9 or higher
-* **pytorch** 1.10 or higher
-* **mkl-include**
+* **python** 3.9 (or higher) with **pytorch** 1.10 (or higher) and **mkl-include**
 
 In this installation guide we will use CUDA 11.7, python 3.9 and pytorch 1.13. If you want to use different
 versions, make sure that the cuda versions of standalone CUDA and pytorch-CUDA are matching! This installation guide
@@ -48,7 +50,7 @@ We provide a simple patching script for including our interface into LAMMPS.
 
 If you have downloaded the schnetpack repository from Github, move to::
 
-    cd <path-to-schnetpack>/interfaces/lammps
+    cd <path/to/schnetpack>/interfaces/lammps
 
 **Or** if you do not know where the schnetpack repository is located, download the files directly::
 
@@ -60,13 +62,13 @@ If you have downloaded the schnetpack repository from Github, move to::
 
 Now we can run the patching script::
 
-    patch_lammps <path-to-lammps>/lammps/src
+    patch_lammps <path/to/lammps>/lammps/src
 
 Configure LAMMPS
 ================
 In order to configure and build LAMMPS, we need to move to the location of our LAMMPS folder::
 
-    cd <path-to-lammps>
+    cd <path/to/lammps>
 
 Next we create the build folder and :code:`cd` into it::
 
@@ -88,16 +90,17 @@ Build LAMMPS
 Finally we can install our patched LAMMPS with::
 
     make -j$(nproc)
-This will create a runfile located at `lmp`. By calling this runfile we can now start experiments in LAMMPS.
+
+This will create a runfile called `lmp` in the build folder. By calling this runfile we can now start experiments in LAMMPS.
 
 Creating a deployed Model
 =========================
-Since standard :code:`pytroch` models can not directly be used within LAMMPS, we need to deploy our trained model first. For
-this we provide a script, that has already been installed with :code:`schnetpack`. A model on on Aspirin can either be found
-in the SchNetPack folder or downloaded directly.
+Since standard :code:`pytroch` models cannot directly be used within LAMMPS, we need to deploy our trained model first. For
+this purpose, we provide a script, that has already been installed with :code:`schnetpack`. A model trained on the rMD17 dataset
+for Aspirin can be found in the SchNetPack repository.
 If you have downloaded the schnetpack repository from Github, move to the Aspirin examples folder::
 
-        cd <path-to-schnetpack>/interfaces/lammps/examples/aspirin
+        cd <path/to/schnetpack>/interfaces/lammps/examples/aspirin
 
 **Or** if you do not know where the SchNetPack folder is located, create an empty folder and download the example files
 with::
@@ -111,6 +114,8 @@ with::
 Next we can run the deploy script::
 
     spkdeploy best_model deployed_model
+
+:code:`best_model` denotes the path to the trained SchNetPack model and :code:`deployed_model` is the target path of the deployed model
 
 Running LAMMPS with SchNetPack Models
 =====================================
@@ -130,5 +135,9 @@ For the example of `aspirin.data` we match atom type 1 to carbon, atom type 2 to
 The order of atom types in the input file must be known by the user, that runs the experiment. Finally we can run our
 first MD simulation in LAMMPS with the use of the :code:`schnetpack` interface::
 
-    <path-to-lmp> -in aspirin_md.in
+    <path/to/lmp> -in aspirin_md.in
 
+References
+==========
+* [1] A. P. Thompson, H. M. Aktulga, R. Berger. et. al. LAMMPS - a flexible simulation tool for particle-based materials modeling at the atomic, meso, and continuum scales. Comp. Phys. Comm. **271**. 108171 (2022).
+* [2] Batzner, S., Musaelian, A., Sun, L. et al. E(3)-equivariant graph neural networks for data-efficient and accurate interatomic potentials. Nat Commun **13**. 2453 (2022). https://doi.org/10.1038/s41467-022-29939-5
