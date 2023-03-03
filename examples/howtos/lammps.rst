@@ -79,7 +79,7 @@ Next we create the build folder and :code:`cd` into it::
 Now the build-files can be created.
 With conda (`recommended`)::
 
-    cmake ../cmake -DCMAKE_PREFIX_PATH=python -c 'import torch;print(torch.utils.cmake_prefix_path)' -DMKL_INCLUDE_DIR="$CONDA_PREFIX/include
+    cmake ../cmake -DCMAKE_PREFIX_PATH=`python -c 'import torch;print(torch.utils.cmake_prefix_path)'` -DMKL_INCLUDE_DIR="$CONDA_PREFIX/include"
 
 **Or** with pip::
 
