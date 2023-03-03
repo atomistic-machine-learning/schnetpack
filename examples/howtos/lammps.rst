@@ -58,11 +58,12 @@ If you have downloaded the schnetpack repository from Github, move to::
     cd spk_lammps
     wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/pair_schnetpack.cpp
     wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/pair_schnetpack.h
-    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/patch_lammps
+    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/patch_lammps.sh
+    chmod u+x patch_lammps.sh
 
 Now we can run the patching script::
 
-    patch_lammps <path/to/lammps>/lammps/src
+    ./patch_lammps.sh <path/to/lammps>
 
 Configure LAMMPS
 ================
