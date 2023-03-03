@@ -75,9 +75,8 @@ spktrain experiment=qm9_atomwise model/representation=painn
 
 SchNetPack comes with an interface to LAMMPS. The necessary code and the corresponding readme.md can be found in 
 ```
-schnetpack/lammps_interface
+schnetpack/interfaces/lammps
 ```
-The interface is adapted from the pair_nequip github repository https://github.com/mir-group/pair_nequip [5].
 
 
 ## Documentation
@@ -120,9 +119,3 @@ The Journal of Chemical Physics 148(24), 241722 (2018) [10.1063/1.5019779](https
 * [4] K. T. Schütt, O. T. Unke, M. Gastegger  
 *Equivariant message passing for the prediction of tensorial properties and molecular spectra.* 
 International Conference on Machine Learning (pp. 9377-9388). PMLR, [Paper](https://proceedings.mlr.press/v139/schutt21a.html).
-
-* [5] Batzner, S., Musaelian, A., Sun, L. et al.  
-*E(3)-equivariant graph neural networks for data-efficient and accurate interatomic potentials.*
-Nat Commun **13**. 2453 (2022)   
-[Paper](https://doi.org/10.1038/s41467-022-29939-5)
-

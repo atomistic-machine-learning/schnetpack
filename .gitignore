@@ -117,8 +117,10 @@ ENV/
 runs/
 tests/testdata/tmp/test*
 
-# lammps example outputs
-interfaces/lammps/examples/aspirin/*.lammpstrj
-interfaces/lammps/examples/aspirin/*.lammps
-interfaces/lammps/examples/aspirin/*.dump
-interfaces/lammps/examples/aspirin/*.dat
+# lammps examples
+interfaces/lammps/examples/*/*.lammpstrj
+interfaces/lammps/examples/*/*.lammps
+interfaces/lammps/examples/*/*.dump
+interfaces/lammps/examples/*/*.dat
+interfaces/lammps/examples/*/deployed_model
+
