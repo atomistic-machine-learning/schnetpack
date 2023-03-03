@@ -1,0 +1,134 @@
+================
+LAMMPS Interface
+================
+.. _lammps:
+
+
+Requirements
+============
+For the installation of the LAMMPS interface we need the following pre-requisites:
+
+* **CUDA** 11.7 or higher
+* **cuDNN**
+* **python** 3.9 or higher
+* **pytorch** 1.10 or higher
+* **mkl-include**
+
+In this installation guide we will use CUDA 11.7, python 3.9 and pytorch 1.13. If you want to use different
+versions, make sure that the cuda versions of standalone CUDA and pytorch-CUDA are matching! This installation guide
+will focus on the installation within a conda environment, but pip environments should generally also work.
+
+The installation of standalone CUDA can be done according to this installation guide: https://developer.nvidia.com/cuda-11-7-0-download-archive.
+
+Afterwards we install cuDNN with the help of this installation guide: https://docs.nvidia.com/deeplearning/cudnn/install-guide/index.html.
+cuDNN can be downloaded from: https://developer.nvidia.com/rdp/cudnn-archive.
+
+Finally we either create or activate our conda environment with :code:`python>=3.9` and :code:`pytorch>=1.10`.
+If you have the conda environment already installed, you can activate it with::
+
+    conda activate <your-environment>
+
+**Or** the environment can be created with::
+
+    conda create --name schnetpack-lammps python=3.9
+    conda activate schnetpack-lammps
+    conda install pytorch pytorch-cuda=11.7 -c pytorch -c nvidia
+    conda install mkl-include
+
+
+Downloading LAMMPS
+==================
+If LAMMPS is not installed, it can be downloaded directly from Github::
+
+    git clone git@github.com:lammps/lammps
+
+Patching SchNetPack into LAMMPS
+===============================
+We provide a simple patching script for including our interface into LAMMPS.
+
+If you have downloaded the schnetpack repository from Github, move to::
+
+    cd <path-to-schnetpack>/interfaces/lammps
+
+**Or** if you do not know where the schnetpack repository is located, download the files directly::
+
+    mkdir spk_lammps
+    cd spk_lammps
+    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/sh-jl/lammps/interfaces/lammps/pair_schnetpack.cpp
+    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/sh-jl/lammps/interfaces/lammps/pair_schnetpack.h
+    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/sh-jl/lammps/interfaces/lammps/patch_lammps
+
+Now we can run the patching script::
+
+    patch_lammps <path-to-lammps>/lammps/src
+
+Configure LAMMPS
+================
+In order to configure and build LAMMPS, we need to move to the location of our LAMMPS folder::
+
+    cd <path-to-lammps>
+
+Next we create the build folder and :code:`cd` into it::
+
+    mkdir build
+    cd build
+
+Now the build-files can be created.
+With conda (`recommended`)::
+
+    cmake ../cmake -DCMAKE_PREFIX_PATH=python -c 'import torch;print(torch.utils.cmake_prefix_path)' -DMKL_INCLUDE_DIR="$CONDA_PREFIX/include
+
+**Or** with pip::
+
+    cmake ../cmake -DCMAKE_PREFIX_PATH=python -c 'import torch;print(torch.utils.cmake_prefix_path)'
+    -DMKL_INCLUDE_DIR=python -c "import sysconfig;from pathlib import Path;print(Path(sysconfig.get_paths()[\"include\"]).parent)"
+
+Build LAMMPS
+============
+Finally we can install our patched LAMMPS with::
+
+    make -j$(nproc)
+This will create a runfile located at `lmp`. By calling this runfile we can now start experiments in LAMMPS.
+
+Creating a deployed Model
+=========================
+Since standard :code:`pytroch` models can not directly be used within LAMMPS, we need to deploy our trained model first. For
+this we provide a script, that has already been installed with :code:`schnetpack`. A model on on Aspirin can either be found
+in the SchNetPack folder or downloaded directly.
+If you have downloaded the schnetpack repository from Github, move to the Aspirin examples folder::
+
+        cd <path-to-schnetpack>/interfaces/lammps/examples/aspirin
+
+**Or** if you do not know where the SchNetPack folder is located, create an empty folder and download the example files
+with::
+
+    mkdir aspirin-example
+    cd aspirin-example
+    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/sh-jl/lammps/interfaces/lammps/examples/aspirin/aspirin_md.in
+    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/sh-jl/lammps/interfaces/lammps/examples/aspirin/aspirin.data
+    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/sh-jl/lammps/interfaces/lammps/examples/aspirin/best_model
+
+Next we can run the deploy script::
+
+    spkdeploy best_model deployed_model
+
+Running LAMMPS with SchNetPack Models
+=====================================
+After installing LAMMPS and deploying the trained model, we are ready to run some experiments. For this we have prepared
+an input file and an input structure in the examples folder. The input file is configured to run a small MD simulation
+starting with the aspirin structure, that is defined in `aspirin.data`. The new :code:`schnetpack` interface can be used
+by setting the :code:`pair_style` and the :code:`pair_coeff` in the input file::
+
+    pair_style	schnetpack
+    pair_coeff	* * deployed_model 6 1 8
+
+The :code:`pair_style` argument tells LAMMPS to use the new :code:`schnetpack` interface and with :code:`pair_coeff` we
+can define the settings for the interface. :code:`deployed_model` indicates the path to our deployed model. The
+arguments after the model path  indicate, in order, the atomic numbers corresponding to the LAMMPS atom types defined in
+`aspirin.data`. We need to provide exactly as many atomic numbers, as we have atom types in the structure input file.
+For the example of `aspirin.data` we match atom type 1 to carbon, atom type 2 to hydrogen and atom type 3 to oxygen.
+The order of atom types in the input file must be known by the user, that runs the experiment. Finally we can run our
+first MD simulation in LAMMPS with the use of the :code:`schnetpack` interface::
+
+    <path-to-lmp> -in aspirin_md.in
+
