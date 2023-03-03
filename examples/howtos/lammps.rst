@@ -83,7 +83,7 @@ With conda (`recommended`)::
 
 **Or** with pip::
 
-    cmake ../cmake -DCMAKE_PREFIX_PATH=python -c 'import torch;print(torch.utils.cmake_prefix_path)'
+    cmake ../cmake -DCMAKE_PREFIX_PATH=`python -c 'import torch;print(torch.utils.cmake_prefix_path)'`
     -DMKL_INCLUDE_DIR=python -c "import sysconfig;from pathlib import Path;print(Path(sysconfig.get_paths()[\"include\"]).parent)"
 
 Build LAMMPS
