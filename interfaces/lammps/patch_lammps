@@ -1,5 +1,10 @@
 #!/bin/bash
-# patch_lammps.sh [-e] /path/to/lammps/
+# usage: patch_lammps.sh [-e] /path/to/lammps/
+#
+#
+# References:
+#
+#    .. [#pair_nequip] https://github.com/mir-group/pair_nequip
 
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )

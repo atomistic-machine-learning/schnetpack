@@ -1,16 +1,9 @@
 /* ----------------------------------------------------------------------
-   LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   https://lammps.sandia.gov/, Sandia National Laboratories
-   Steve Plimpton, sjplimp@sandia.gov
-   Copyright (2003) Sandia Corporation.  Under the terms of Contract
-   DE-AC04-94AL85000 with Sandia Corporation, the U.S. Government retains
-   certain rights in this software.  This software is distributed under
-   the GNU General Public License.
-   See the README file in the top-level LAMMPS directory.
-------------------------------------------------------------------------- */
+References:
 
-/* ----------------------------------------------------------------------
-   Contributing author: Anders Johansson (Harvard)
+   .. [#pair_nequip] https://github.com/mir-group/pair_nequip
+   .. [#lammps] https://github.com/lammps/lammps
+
 ------------------------------------------------------------------------- */
 
 #include <pair_schnetpack.h>
@@ -36,7 +29,6 @@
 #include <torch/torch.h>
 #include <torch/script.h>
 #include <torch/csrc/jit/runtime/graph_executor.h>
-//#include <c10/cuda/CUDACachingAllocator.h>
 
 
 using namespace LAMMPS_NS;
@@ -137,89 +129,11 @@ void PairSCHNETPACK::coeff(int narg, char **arg) {
 
   
   std::unordered_map<std::string, std::string> metadata = {
-    //{"config", ""},
-    //{"schnetpack_version", ""},
     {"cutoff", ""},
-    //{"n_species", ""},
-    //{"type_names", ""},
-    //{"_jit_bailout_depth", ""},
-    //{"_jit_fusion_strategy", ""},
-    //{"allow_tf32", ""}
   };
   model = torch::jit::load(std::string(arg[2]), device, metadata);
   model.eval();
 
-  
-  /*
-  // Check if model is a SchNetPack model
-  if (metadata["schnetpack_version"].empty()) {
-    error->all(FLERR, "The indicated TorchScript file does not appear to be a deployed SchNetPack model; did you forget to run `schnetpack-deploy`?");
-  }
-
-  // If the model is not already frozen, we should freeze it:
-  // This is the check used by PyTorch: https://github.com/pytorch/pytorch/blob/master/torch/csrc/jit/api/module.cpp#L476
-  if (model.hasattr("training")) {
-    std::cout << "Freezing TorchScript model...\n";
-    #ifdef DO_TORCH_FREEZE_HACK
-      // Do the hack
-      // Copied from the implementation of torch::jit::freeze,
-      // except without the broken check
-      // See https://github.com/pytorch/pytorch/blob/dfbd030854359207cb3040b864614affeace11ce/torch/csrc/jit/api/module.cpp
-      bool optimize_numerics = true;  // the default
-      // the {} is preserved_attrs
-      auto out_mod = freeze_module(
-        model, {}
-      );
-      // See 1.11 bugfix in https://github.com/pytorch/pytorch/pull/71436
-      auto graph = out_mod.get_method("forward").graph();
-      OptimizeFrozenGraph(graph, optimize_numerics);
-      model = out_mod;
-    #else
-      // Do it normally
-      model = torch::jit::freeze(model);
-    #endif
-  }
-
-  #if (TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR <= 10)
-    // Set JIT bailout to avoid long recompilations for many steps
-    size_t jit_bailout_depth;
-    if (metadata["_jit_bailout_depth"].empty()) {
-      // This is the default used in the Python code
-      jit_bailout_depth = 2;
-    } else {
-      jit_bailout_depth = std::stoi(metadata["_jit_bailout_depth"]);
-    }
-    torch::jit::getBailoutDepth() = jit_bailout_depth;
-  #else
-    // In PyTorch >=1.11, this is now set_fusion_strategy
-    torch::jit::FusionStrategy strategy;
-    if (metadata["_jit_fusion_strategy"].empty()) {
-      // This is the default used in the Python code
-      strategy = {{torch::jit::FusionBehavior::DYNAMIC, 3}};
-    } else {
-      std::stringstream strat_stream(metadata["_jit_fusion_strategy"]);
-      std::string fusion_type, fusion_depth;
-      while(std::getline(strat_stream, fusion_type, ',')) {
-        std::getline(strat_stream, fusion_depth, ';');
-        strategy.push_back({fusion_type == "STATIC" ? torch::jit::FusionBehavior::STATIC : torch::jit::FusionBehavior::DYNAMIC, std::stoi(fusion_depth)});
-      }
-    }
-    torch::jit::setFusionStrategy(strategy);
-  #endif
-
-  // Set whether to allow TF32:
-  bool allow_tf32;
-  if (metadata["allow_tf32"].empty()) {
-    // Better safe than sorry
-    allow_tf32 = false;
-  } else {
-    // It gets saved as an int 0/1
-    allow_tf32 = std::stoi(metadata["allow_tf32"]);
-  }
-  // See https://pytorch.org/docs/stable/notes/cuda.html
-  at::globalContext().setAllowTF32CuBLAS(allow_tf32);
-  at::globalContext().setAllowTF32CuDNN(allow_tf32);
-  */
 
   cutoff = std::stod(metadata["cutoff"]);
 
@@ -266,7 +180,7 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
   int newton_pair = force->newton_pair;
   // Should probably be off.
   if (newton_pair==1)
-    error->all(FLERR,"Pair style SCHNETPACK requires 'newton off'");
+    error->all(FLERR, "Pair style SCHNETPACK requires 'newton off'");
 
   // Number of local/real atoms
   int inum = list->inum;
@@ -324,14 +238,6 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
   cell[2][1] = domain->yz;
   cell[2][2] = domain->boxhi[2] - domain->boxlo[2];
 
-  /*
-  std::cout << "cell: " << cell_tensor << "\n";
-  std::cout << "tag2i: " << "\n";
-  for(int itag = 0; itag < inum; itag++){
-    std::cout << tag2i[itag] << " ";
-  }
-  std::cout << std::endl;
-  */
 
   auto cell_inv = cell_tensor.inverse().transpose(0,1);
 
@@ -445,16 +351,11 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
 
   // store the total energy where LAMMPS wants it
   eng_vdwl = total_energy_tensor.data_ptr<float>()[0];
-  
-  //torch::Tensor atomic_energy_tensor = output.at("atomic_energy").toTensor().cpu();
-  //auto atomic_energies = atomic_energy_tensor.accessor<float, 2>();
-  //float atomic_energy_sum = atomic_energy_tensor.sum().data_ptr<float>()[0];
 
   if(debug_mode){
     std::cout << "SchNetPack model output:\n";
     std::cout << "forces: " << forces_tensor << "\n";
     std::cout << "energy: " << total_energy_tensor << "\n";
-    //std::cout << "atomic_energy: " << atomic_energy_tensor << "\n";
   }
   
   // Write forces and per-atom energies (0-based tags here)
