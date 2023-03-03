@@ -73,11 +73,11 @@ spktrain experiment=qm9_atomwise model/representation=painn
 
 ## LAMMPS interface
 
-SchNetPack comes with an interface to LAMMPS. The necessary code and the corresponding readme.md can be found in 
+SchNetPack comes with an interface to LAMMPS. The necessary code can be found in 
 ```
 schnetpack/interfaces/lammps
 ```
-
+and a detailed installation guide is linked in the HowTo-section of the Documentation.
 
 ## Documentation
 
