@@ -77,7 +77,7 @@ SchNetPack comes with an interface to LAMMPS. The necessary code can be found in
 ```
 schnetpack/interfaces/lammps
 ```
-and a detailed installation guide is linked in the HowTo-section of the Documentation.
+and a detailed installation guide is linked in the HowTo-section of our documentation.
 
 ## Documentation
 
