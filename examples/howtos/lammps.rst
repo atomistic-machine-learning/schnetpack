@@ -56,9 +56,9 @@ If you have downloaded the schnetpack repository from Github, move to::
 
     mkdir spk_lammps
     cd spk_lammps
-    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/sh-jl/lammps/interfaces/lammps/pair_schnetpack.cpp
-    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/sh-jl/lammps/interfaces/lammps/pair_schnetpack.h
-    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/sh-jl/lammps/interfaces/lammps/patch_lammps
+    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/pair_schnetpack.cpp
+    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/pair_schnetpack.h
+    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/patch_lammps
 
 Now we can run the patching script::
 
@@ -107,9 +107,9 @@ with::
 
     mkdir aspirin-example
     cd aspirin-example
-    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/sh-jl/lammps/interfaces/lammps/examples/aspirin/aspirin_md.in
-    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/sh-jl/lammps/interfaces/lammps/examples/aspirin/aspirin.data
-    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/sh-jl/lammps/interfaces/lammps/examples/aspirin/best_model
+    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/examples/aspirin/aspirin_md.in
+    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/examples/aspirin/aspirin.data
+    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/examples/aspirin/best_model
 
 Next we can run the deploy script::
 
