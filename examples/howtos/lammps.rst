@@ -25,12 +25,13 @@ The installation of standalone CUDA can be done according to this installation g
 Afterwards, install cuDNN with the help of this installation guide: https://docs.nvidia.com/deeplearning/cudnn/install-guide/index.html.
 cuDNN can be downloaded from: https://developer.nvidia.com/rdp/cudnn-archive.
 
-Finally, activate your environment with :code:`schnetpack` and :code:`pytorch` or refer to the `installation instuctions <https://github.com/atomistic-machine-learning/schnetpack#installation>`_ if you have not installed SchNetPack yet.
-In your environment, install mkl-include and the same version of pytorch-CUDA as the standalone CUDA::
+We recommend to create a new environment to install the matching version of pytorch-CUDA together with schnetpack and all dependencies.
+For example, the following commands will set up a corresponding conda environment called :code:`spk_lammps`::
 
-    conda activate <your-environment>
-    conda install mkl-include pytorch pytorch-cuda=11.7 -c pytorch -c nvidia
-
+    conda create -n spk_lammps python=3.9 pytorch-cuda=11.7 pytorch mkl-include numpy -c pytorch -c nvidia
+    conda activate spk_lammps
+    pip install schnetpack
+    
 
 Downloading LAMMPS
 ==================
