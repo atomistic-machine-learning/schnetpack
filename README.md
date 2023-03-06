@@ -5,12 +5,7 @@
 
 
 
-SchNetPack aims to provide accessible atomistic neural networks
-that can be trained and applied out-of-the-box, while still being
-extensible to custom atomistic architectures. 
-
-##### *Major update! Breaking changes!*
-*You can find the old SchNetPack 1.0 in the **schnetpack1.0** branch*
+SchNetPack is a toolbox for the development and application of deep neural networks to the prediction of potential energy surfaces and other quantum-chemical properties of molecules and materials. It contains basic building blocks of atomistic neural networks, manages their training and provides simple access to common benchmark datasets. This allows for an easy implementation and evaluation of new models.
 
 ##### Features
 
@@ -25,6 +20,7 @@ extensible to custom atomistic architectures.
 - Atomic Simulation Environment (ASE) 3.21
 - NumPy
 - PyTorch 1.9
+- PyTorch Lightning 1.4.5
 - Hydra 1.1
 
 _**Note: We recommend using a GPU for training the neural networks.**_
@@ -39,45 +35,184 @@ pip install schnetpack
 
 ### Install from source
 
-#### Clone the repository
+You can also install the most recent code from our repository:
 
 ```
 git clone https://github.com/atomistic-machine-learning/schnetpack.git
 cd schnetpack
-```
-
-#### Install requirements
-
-```
-pip install -r requirements.txt
-```
-
-#### Install SchNetPack
-
-```
 pip install .
 ```
 
-You're ready to go!
+
+### Visualization with Tensorboard
+
+SchNetPack supports multiple logging backends over PyTorch Lightning. The default logger is Tensorboard, which can be installed via:
+```
+pip install tensorboard
+```
 
 ## Getting started
  
+The best place to get started is training a SchNetPack model on a common benchmark dataset via the command line
+interface (CLI).
+When installing SchNetPack, the training script `spktrain` is added to your PATH.
+The CLI is based on [Hydra](https://hydra.cc/) and oriented on the PyTorch Lightning/Hydra template that can be found
+[here](https://github.com/ashleve/lightning-hydra-template).
+This enables a flexible configuration of the model, data and training process.
+To fully take advantage of these features, it might be helpful for have a look at the Hydra and PyTorch Lightning docs.
 
-### QM9 example
+### Example 1: QM9
 
-Under construction. For a first test, use:
+In the following, we focus on using the CLI to train on the QM9 dataset, but the same
+procedure applies for the other benchmark datasets as well.
+First, create a working directory, where all data and runs will be stored:
 
 ```
-spktrain experiment=qm9_atomwise model/representation=painn
+mkdir spk_workdir
+cd spk_workdir
+```
+
+Then, the training of a SchNet model with default settings for QM9 can be started by:
+
+```
+spktrain experiment=qm9_energy
+```
+
+The script prints the defaults for the experiment config `qm9_energy`.
+The dataset will be downloaded automatically to `spk_workdir/data`, if it does not exist yet.
+Then, the training will be started.
+
+All values of the config can be changed from the command line, including the directories for run and data.
+By default, the model is stored in a directory with a unique run id hash as a subdirectory of `spk_workdir/runs`.
+This can be changed as follows:
+
+```
+spktrain experiment=qm9 run.data_dir=/my/data/dir run.path=~/all_my_runs run.id=this_run
+```
+
+If you call `spktrain experiment=qm9 --help`, you can see the full config with all the parameters
+that can be changed.
+Nested parameters can be changed as follows:
+
+```
+spktrain experiment=qm9_energy data_dir=<path> data.batch_size=64
+```
+
+Hydra organizes parameters in config groups which allows hierarchical configurations consisting of multiple
+yaml files. This allows to easily change the whole dataset, model or representation.
+For instance, changing from the default SchNet representation to PaiNN, use:
+
+```
+spktrain experiment=qm9_energy data_dir=<path> model/representation=painn
+```
+
+It is a bit confusing at first when to use "." or "/". The slash is used, if you are loading a preconfigured config
+group, while the dot is used changing individual values. For example, the config group "model/representation"
+corresponds to the following part of the config:
+
+```
+    model:
+      representation:
+        _target_: schnetpack.representation.PaiNN
+        n_atom_basis: 128
+        n_interactions: 3
+        shared_interactions: false
+        shared_filters: false
+        radial_basis:
+          _target_: schnetpack.nn.radial.GaussianRBF
+          n_rbf: 20
+          cutoff: ${globals.cutoff}
+        cutoff_fn:
+          _target_: schnetpack.nn.cutoff.CosineCutoff
+          cutoff: ${globals.cutoff}
+```
+
+If you would want to additionally change some value of this group, you could use:
+
+```
+spktrain experiment=qm9_energy data_dir=<path> model/representation=painn model.representation.n_interactions=5
+```
+
+For more details on config groups, have a look at the
+[Hydra docs](https://hydra.cc/docs/next/tutorials/basic/your_first_app/config_groups).
+
+
+### Example 2: Potential energy surfaces
+
+The example above uses `AtomisticModel` internally, which is a
+`pytorch_lightning.LightningModule`, to predict single properties.
+The following example will use the same class to predict potential energy surfaces,
+in particular energies with the appropriate derivates to obtain forces and stress tensors.
+This works since the pre-defined configuration for the MD17 dataset,
+provided from the command line by `experiment=md17`, is selecting the representation and output modules that
+`AtomisticModel` is using.
+A more detailed description of the configuration and how to build your custom configs can be
+found [here](https://schnetpack.readthedocs.io/en/latest/userguide/configs.html).
+
+The `spktrain` script can be used to train a model for a molecule from the MD17 datasets
+
+```
+spktrain experiment=md17 data.molecule=uracil
+```
+
+In the case of MD17, reference calculations of energies and forces are available.
+Therefore, one needs to set weights for the losses of those properties.
+The losses are defined as part of output definitions in the `task` config group:
+
+```
+    task:
+      outputs:
+        - _target_: schnetpack.task.ModelOutput
+          name: ${globals.energy_key}
+          loss_fn:
+            _target_: torch.nn.MSELoss
+          metrics:
+            mae:
+              _target_: torchmetrics.regression.MeanAbsoluteError
+            mse:
+              _target_: torchmetrics.regression.MeanSquaredError
+          loss_weight: 0.005
+        - _target_: schnetpack.task.ModelOutput
+          name: ${globals.forces_key}
+          loss_fn:
+            _target_: torch.nn.MSELoss
+          metrics:
+            mae:
+              _target_: torchmetrics.regression.MeanAbsoluteError
+            mse:
+              _target_: torchmetrics.regression.MeanSquaredError
+          loss_weight: 0.995
+```
+
+For a training on *energies** and *forces*, we recommend to put a stronger
+weight on the loss of the force prediction during training.
+By default, the loss weights are set to 0.005 for the energy and 0.995 for forces.
+This can be changed as follow:
+
+```
+spktrain experiment=md17 data.molecule=uracil task.outputs.0.loss_weight=0.005 task.outputs.1.loss_weight=0.995
+```
+
+### Logging
+
+Beyond the output of the command line, SchNetPack supports multiple logging backends over PyTorch Lightning.
+By default, the Tensosboard logger is activated.
+If TensorBoard is installed, the results can be shown by calling:
+
+```
+tensorboard --logdir=<rundir>
+```
+
+Furthermore, SchNetPack comes with configs for a CSV logger and [Aim](https://github.com/aimhubio/aim).
+These can be selected as follows:
+
+```
+spktrain experiment=md17 logger=csv
 ```
 
 ## LAMMPS interface
 
-SchNetPack comes with an interface to LAMMPS. The necessary code can be found in 
-```
-schnetpack/interfaces/lammps
-```
-and a detailed installation guide is linked in the HowTo-section of our documentation.
+SchNetPack comes with an interface to LAMMPS. A detailed installation guide is linked in the [How-To section of our documentation](https://schnetpack.readthedocs.io/en/latest/howtos/lammps.html).
 
 ## Documentation
 
