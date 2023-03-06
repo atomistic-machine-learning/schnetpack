@@ -10,39 +10,33 @@ pair_nequip github repository https://github.com/mir-group/pair_nequip [2].
 
 Requirements
 ============
-For the installation of the LAMMPS interface we need the following pre-requisites:
+For the installation of the LAMMPS interface we need the following pre-requisites (in the versions displayed or higher):
 
-* **CUDA** 11.7 (or higher)
+* **CUDA** 11.7
 * **cuDNN**
-* **python** 3.9 (or higher) with **pytorch** 1.10 (or higher) and **mkl-include**
+* **python** 3.9 with **schnetpack** 2.0, **pytorch** 1.10, and **mkl-include**
 
-In this installation guide we will use CUDA 11.7, python 3.9 and pytorch 1.13. If you want to use different
+In this installation guide we use CUDA 11.7 and pytorch 1.13. If you want to use different
 versions, make sure that the cuda versions of standalone CUDA and pytorch-CUDA are matching! This installation guide
 will focus on the installation within a conda environment, but pip environments should generally also work.
 
 The installation of standalone CUDA can be done according to this installation guide: https://developer.nvidia.com/cuda-11-7-0-download-archive.
 
-Afterwards we install cuDNN with the help of this installation guide: https://docs.nvidia.com/deeplearning/cudnn/install-guide/index.html.
+Afterwards, install cuDNN with the help of this installation guide: https://docs.nvidia.com/deeplearning/cudnn/install-guide/index.html.
 cuDNN can be downloaded from: https://developer.nvidia.com/rdp/cudnn-archive.
 
-Finally we either create or activate our conda environment with :code:`python>=3.9` and :code:`pytorch>=1.10`.
-If you have the conda environment already installed, you can activate it with::
+Finally, activate your environment with :code:`schnetpack` and :code:`pytorch` or refer to the `installation instuctions <https://github.com/atomistic-machine-learning/schnetpack#installation>`_ if you have not installed SchNetPack yet.
+In your environment, install mkl-include and the same version of pytorch-CUDA as the standalone CUDA::
 
     conda activate <your-environment>
-
-**Or** the environment can be created with::
-
-    conda create --name schnetpack-lammps python=3.9
-    conda activate schnetpack-lammps
-    conda install pytorch pytorch-cuda=11.7 -c pytorch -c nvidia
-    conda install mkl-include
+    conda install mkl-include pytorch pytorch-cuda=11.7 -c pytorch -c nvidia
 
 
 Downloading LAMMPS
 ==================
-If LAMMPS is not installed, it can be downloaded directly from Github::
+Please download the following version of LAMMPS directly from Github::
 
-    git clone git@github.com:lammps/lammps
+    git clone -b stable_29Sep2021_update2 --depth 1 git@github.com:lammps/lammps
 
 Patching SchNetPack into LAMMPS
 ===============================
@@ -114,9 +108,9 @@ with::
 
 Next we can run the deploy script::
 
-    spkdeploy best_model deployed_model
+    spkdeploy ./best_model ./deployed_model
 
-:code:`best_model` denotes the path to the trained SchNetPack model and :code:`deployed_model` is the target path of the deployed model
+:code:`./best_model` denotes the path to the trained SchNetPack model and :code:`./deployed_model` is the target path of the deployed model
 
 Running LAMMPS with SchNetPack Models
 =====================================
@@ -136,7 +130,7 @@ For the example of `aspirin.data` we match atom type 1 to carbon, atom type 2 to
 The order of atom types in the input file must be known by the user, that runs the experiment. Finally we can run our
 first MD simulation in LAMMPS with the use of the :code:`schnetpack` interface::
 
-    <path/to/lmp> -in aspirin_md.in
+    <path/to/lmp> -in ./aspirin_md.in
 
 References
 ==========
