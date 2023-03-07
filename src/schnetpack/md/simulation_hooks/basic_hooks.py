@@ -63,7 +63,7 @@ class RemoveCOMMotion(SimulationHook):
 
 class WrapPositions(SimulationHook):
     """
-    Periodically wrap atoms back into siomulation cell.
+    Periodically wrap atoms back into simulation cell.
 
     Args:
         every_n_steps (int): Frequency with which atoms should be wrapped.
