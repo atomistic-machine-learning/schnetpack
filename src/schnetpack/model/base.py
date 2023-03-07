@@ -142,7 +142,7 @@ class NeuralNetworkPotential(AtomisticModel):
         output_modules: List[nn.Module] = None,
         postprocessors: Optional[List[Transform]] = None,
         input_dtype_str: str = "float32",
-        do_postprocessing: Optional[bool] = None,
+        do_postprocessing: bool = True,
     ):
         """
         Args:

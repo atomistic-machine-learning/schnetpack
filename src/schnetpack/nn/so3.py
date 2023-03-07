@@ -164,7 +164,7 @@ def scalar2rsh(x: torch.Tensor, lmax: int) -> torch.Tensor:
         [
             x,
             torch.zeros(
-                (x.shape[0], (lmax + 1) ** 2 - 1, x.shape[2]),
+                (x.shape[0], int((lmax + 1) ** 2 - 1), x.shape[2]),
                 device=x.device,
                 dtype=x.dtype,
             ),
@@ -214,7 +214,7 @@ class SO3TensorProduct(nn.Module):
         x1 = x1[:, self.idx_in_1, :]
         x2 = x2[:, self.idx_in_2, :]
         y = x1 * x2 * self.clebsch_gordan[None, :, None]
-        y = snn.scatter_add(y, self.idx_out, dim_size=(self.lmax + 1) ** 2, dim=1)
+        y = snn.scatter_add(y, self.idx_out, dim_size=int((self.lmax + 1) ** 2), dim=1)
         return y
 
 
@@ -300,7 +300,7 @@ class SO3Convolution(nn.Module):
             * self.clebsch_gordan[None, :, None]
             * xj
         )
-        yij = snn.scatter_add(v, self.idx_out, dim_size=(self.lmax + 1) ** 2, dim=1)
+        yij = snn.scatter_add(v, self.idx_out, dim_size=int((self.lmax + 1) ** 2), dim=1)
         y = snn.scatter_add(yij, idx_i, dim_size=x.shape[0])
         return y
 

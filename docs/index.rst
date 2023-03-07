@@ -47,6 +47,7 @@ Contents
    :maxdepth: 1
 
    howtos/howto_batchwise_relaxations
+   howtos/lammps
 
 .. toctree::
    :glob:
