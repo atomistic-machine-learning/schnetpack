@@ -66,9 +66,10 @@ class AtomisticModel(nn.Module):
     ):
         """
         Args:
-            postprocessors: Post-processing transforms tha may be initialized using the
-                `datamodule`, but are not applied during training.
-            input_dtype_str: The dtype of real inputs as string.
+            postprocessors: Post-processing transforms that may be
+                initialized using the `datamodule`, but are not
+                applied during training.
+            input_dtype: The dtype of real inputs as string.
             do_postprocessing: If true, post-processing is activated.
         """
         super().__init__()
