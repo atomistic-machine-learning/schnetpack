@@ -5,6 +5,7 @@ from typing import List, Optional, Dict
 from ase import Atoms
 
 import torch
+import numpy as np
 from schnetpack.data import *
 from schnetpack.data import AtomsDataModuleError, AtomsDataModule
 
@@ -102,6 +103,13 @@ class MaterialsProject(AtomsDataModule):
             distance_unit=distance_unit,
             **kwargs
         )
+        if len(apikey) != 16:
+            raise AtomsDataModuleError(
+                "Invalid API-key. ScheNetPack uses the legacy API of MaterialsProject, "
+                f"which requires a 16 character long API-key. Your API-key contains {len(apikey)} "
+                f"characters. In order to generate a valid API-key please use "
+                f"https://legacy.materialsproject.org/open."
+            )
         self.apikey = apikey
         self.timestamp = timestamp
 
@@ -189,14 +197,14 @@ class MaterialsProject(AtomsDataModule):
                             )
                             properties_list.append(
                                 {
-                                    MaterialsProject.EPerAtom: q["energy_per_atom"],
-                                    MaterialsProject.EformationPerAtom: q[
+                                    MaterialsProject.EPerAtom: np.array([q["energy_per_atom"]]),
+                                    MaterialsProject.EformationPerAtom: np.array([q[
                                         "formation_energy_per_atom"
-                                    ],
-                                    MaterialsProject.TotalMagnetization: q[
+                                    ]]),
+                                    MaterialsProject.TotalMagnetization: np.array([q[
                                         "total_magnetization"
-                                    ],
-                                    MaterialsProject.BandGap: q["band_gap"],
+                                    ]]),
+                                    MaterialsProject.BandGap: np.array([q["band_gap"]]),
                                 }
                             )
                             # todo: use key-value-pairs or not?

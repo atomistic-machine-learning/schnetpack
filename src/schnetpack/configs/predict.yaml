@@ -8,6 +8,8 @@ outputdir: ???
 cutoff: ???
 batch_size: 100
 write_interval: epoch
+enable_grad: false
+write_idx_m: false
 
 data:
   _target_: schnetpack.data.ASEAtomsData

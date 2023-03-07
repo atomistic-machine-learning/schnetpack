@@ -10,13 +10,14 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
 from pytorch_lightning import seed_everything
-from pytorch_lightning.loggers import LightningLoggerBase
+from pytorch_lightning.loggers.logger import Logger
 
 import schnetpack as spk
 from schnetpack.utils import str2class
 from schnetpack.utils.script import log_hyperparameters, print_config
 from schnetpack.data import BaseAtomsData, AtomsLoader
 from schnetpack.train import PredictionWriter
+from schnetpack import properties
 
 log = logging.getLogger(__name__)
 
@@ -129,7 +130,7 @@ def train(config: DictConfig):
                 callbacks.append(hydra.utils.instantiate(cb_conf))
 
     # Init Lightning loggers
-    logger: List[LightningLoggerBase] = []
+    logger: List[Logger] = []
 
     if "logger" in config:
         for _, lg_conf in config["logger"].items():
@@ -181,23 +182,32 @@ def predict(config: DictConfig):
     model = torch.load("best_model")
 
     class WrapperLM(LightningModule):
-        def __init__(self, model):
+        def __init__(self, model, enable_grad=config.enable_grad):
             super().__init__()
             self.model = model
+            self.enable_grad = enable_grad
 
         def forward(self, x):
             return model(x)
+
+        def predict_step(self, batch, batch_idx: int, dataloader_idx: int = 0):
+            torch.set_grad_enabled(self.enable_grad)
+            results = self(batch)
+            results[properties.idx_m] = batch[properties.idx][batch[properties.idx_m]]
+            results = {k: v.detach().cpu() for k, v in results.items()}
+            return results
+
 
     log.info(f"Instantiating trainer <{config.trainer._target_}>")
     trainer: Trainer = hydra.utils.instantiate(
         config.trainer,
         callbacks=[
             PredictionWriter(
-                output_dir=config.outputdir, write_interval=config.write_interval
+                output_dir=config.outputdir, write_interval=config.write_interval, write_idx=config.write_idx_m
             )
         ],
         default_root_dir=".",
         resume_from_checkpoint="checkpoints/last.ckpt",
         _convert_="partial",
     )
-    trainer.predict(WrapperLM(model), dataloaders=loader)
+    trainer.predict(WrapperLM(model, config.enable_grad), dataloaders=loader)
