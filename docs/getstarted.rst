@@ -8,21 +8,18 @@ Requirements
 
 * `Python <http://www.python.org/>`_ (>=3.8)
 * `PyTorch <https://pytorch.org/docs/stable/index.html>`_ (>=1.9)
-* `PyTorchLightning <https://www.pytorchlightning.ai/>`_ (>=1.4.5)
+* `PyTorchLightning <https://www.pytorchlightning.ai/>`_ (>=1.9.0)
 * `Hydra <https://hydra.cc/>`_ (>=1.1.0)
 * `ASE <https://wiki.fysik.dtu.dk/ase/index.html>`_ (>=3.21)
 
-..
-    Installing using pip
-    ^^^^^^^^^^^^^^^^^^^^
-    .. highlight:: bash
+Installing using pip
+^^^^^^^^^^^^^^^^^^^^
+.. highlight:: bash
 
 
-    The simplest way to install SchNetPack is through pip which will automatically get the source code from PyPI_::
+The simplest way to install SchNetPack is through pip which will automatically get the source code from PyPI::
 
-        $ pip install --upgrade schnetpack
-
-    Now, once all the requirements are satisfied, you should be ready to use SchNetPack.
+    $ pip install --upgrade schnetpack
 
 
 Building from source
@@ -32,10 +29,6 @@ You can also install the most recent code from our repository::
 
    $ git clone https://github.com/atomistic-machine-learning/schnetpack.git <dest_dir>
    $ cd <dest_dir>
-
-Install both requirements and SchNetPack::
-
-   $ pip install -r requirements.txt
    $ pip install .
 
 You are ready to go!
@@ -180,7 +173,7 @@ This can be changed as follow::
 Logging
 ^^^^^^^
 Beyond the output of the command line, SchNetPack supports multiple logging backends over PyTorch Lightning.
-By default, the Tensosboard logger is activated.
+By default, the Tensorboard logger is activated.
 If TensorBoard is installed, the results can be shown by calling::
 
     $ tensorboard --logdir=<rundir>
