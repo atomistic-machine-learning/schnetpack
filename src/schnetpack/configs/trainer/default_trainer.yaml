@@ -23,13 +23,9 @@ limit_test_batches: 1.0
 track_grad_norm: -1
 detect_anomaly: False
 
-amp_backend: "native"
-amp_level: null
 precision: 32
 accelerator: auto
 num_nodes: 1
 tpu_cores: null
 deterministic: False
 inference_mode: False
-
-resume_from_checkpoint: null

@@ -6,6 +6,7 @@ datapath: ???
 modeldir: ???
 outputdir: ???
 cutoff: ???
+ckpt_path: null
 batch_size: 100
 write_interval: epoch
 enable_grad: false
