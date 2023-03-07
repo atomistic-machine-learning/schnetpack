@@ -218,7 +218,7 @@ SchNetPack comes with an interface to LAMMPS. A detailed installation guide is l
 ## Extensions
 
 SchNetPack can be used as a base for implementations of advanced atomistic neural networks and training tasks.
-For example, there exists an [extension package](https://github.com/atomistic-machine-learning/schnetpack-gschnet) called `schnetpack-gschnet` for the most recent version of cG-SchNet, a conditional generative model for molecules.
+For example, there exists an [extension package](https://github.com/atomistic-machine-learning/schnetpack-gschnet) called `schnetpack-gschnet` for the most recent version of cG-SchNet [5], a conditional generative model for molecules.
 It demonstrates how a complex training task can be implemented in a few custom classes while leveraging the hierarchical configuration and automated training procedure of the SchNetPack framework.
 
 ## Documentation
@@ -247,8 +247,7 @@ CLI and hydra configs for PyTorch Lightning are adapted from this template: [![]
 
 * [1] K.T. Schütt. F. Arbabzadah. S. Chmiela, K.-R. Müller, A. Tkatchenko.  
 *Quantum-chemical insights from deep tensor neural networks.*
-Nature Communications **8**. 13890 (2017)   
-[10.1038/ncomms13890](http://dx.doi.org/10.1038/ncomms13890)
+Nature Communications **8**. 13890 (2017) [10.1038/ncomms13890](http://dx.doi.org/10.1038/ncomms13890)
 
 * [2] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.  
 *SchNet: A continuous-filter convolutional neural network for modeling quantum interactions.*
@@ -261,3 +260,7 @@ The Journal of Chemical Physics 148(24), 241722 (2018) [10.1063/1.5019779](https
 * [4] K. T. Schütt, O. T. Unke, M. Gastegger  
 *Equivariant message passing for the prediction of tensorial properties and molecular spectra.* 
 International Conference on Machine Learning (pp. 9377-9388). PMLR, [Paper](https://proceedings.mlr.press/v139/schutt21a.html).
+
+* [5] N. W. A. Gebauer, M. Gastegger, S. S. P. Hessmann, K.-R. Müller, K. T. Schütt  
+*Inverse design of 3d molecular structures with conditional generative neural networks.*
+Nature Communications **13**. 973 (2022) [10.1038/s41467-022-28526-y](https://doi.org/10.1038/s41467-022-28526-y)
