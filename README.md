@@ -76,10 +76,10 @@ cd spk_workdir
 Then, the training of a SchNet model with default settings for QM9 can be started by:
 
 ```
-spktrain experiment=qm9_energy
+spktrain experiment=qm9_atomwise
 ```
 
-The script prints the defaults for the experiment config `qm9_energy`.
+The script prints the defaults for the experiment config `qm9_atomwise`.
 The dataset will be downloaded automatically to `spk_workdir/data`, if it does not exist yet.
 Then, the training will be started.
 
@@ -96,7 +96,7 @@ that can be changed.
 Nested parameters can be changed as follows:
 
 ```
-spktrain experiment=qm9_energy data_dir=<path> data.batch_size=64
+spktrain experiment=qm9_atomwise data_dir=<path> data.batch_size=64
 ```
 
 Hydra organizes parameters in config groups which allows hierarchical configurations consisting of multiple
@@ -104,7 +104,7 @@ yaml files. This allows to easily change the whole dataset, model or representat
 For instance, changing from the default SchNet representation to PaiNN, use:
 
 ```
-spktrain experiment=qm9_energy data_dir=<path> model/representation=painn
+spktrain experiment=qm9_atomwise data_dir=<path> model/representation=painn
 ```
 
 It is a bit confusing at first when to use "." or "/". The slash is used, if you are loading a preconfigured config
@@ -131,7 +131,7 @@ corresponds to the following part of the config:
 If you would want to additionally change some value of this group, you could use:
 
 ```
-spktrain experiment=qm9_energy data_dir=<path> model/representation=painn model.representation.n_interactions=5
+spktrain experiment=qm9_atomwise data_dir=<path> model/representation=painn model.representation.n_interactions=5
 ```
 
 For more details on config groups, have a look at the

@@ -355,12 +355,12 @@ directly at the command line instead of creating a separate config file for each
 them. When changing a single value, such as the learning rate, you can use the following
 notation::
 
-   $ spktrain experiment=qm9_energy globals.lr=1e-4
+   $ spktrain experiment=qm9_atomwise globals.lr=1e-4
 
 Alternatively, one can also change a whole config group. The syntax for this is slightly
 different::
 
-   $ spktrain experiment=qm9_energy model/representation=schnet
+   $ spktrain experiment=qm9_atomwise model/representation=schnet
 
 The difference here is that ``schnet`` refers to a pre-defined subconfig, instead of a
 single value. The config would be changed by this as follows::
