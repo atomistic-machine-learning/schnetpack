@@ -7,7 +7,7 @@ datapath: ${run.data_dir}/qm9.db  # data_dir is specified in train.yaml
 batch_size: 100
 num_train: 110000
 num_val: 10000
-remove_uncharacterized: False
+remove_uncharacterized: True
 
 # convert to typically used units
 distance_unit: Ang

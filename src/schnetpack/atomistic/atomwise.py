@@ -117,20 +117,20 @@ class DipoleMoment(nn.Module):
         Args:
             n_in: input dimension of representation
             n_hidden: size of hidden layers.
-                If an integer, same number of node is used for all hidden layers resulting
-                in a rectangular network.
-                If None, the number of neurons is divided by two after each layer starting
-                n_in resulting in a pyramidal network.
+                If an integer, same number of node is used for all hidden layers
+                resulting in a rectangular network.
+                If None, the number of neurons is divided by two after each layer
+                starting n_in resulting in a pyramidal network.
             n_layers: number of layers.
             activation: activation function
             predict_magnitude: If true, calculate magnitude of dipole
             return_charges: If true, return latent partial charges
             dipole_key: the key under which the dipoles will be stored
             charges_key: the key under which partial charges will be stored
-            correct_charges: If true, forces the sum of partial charges to be the the total charge, if provided,
-                and zero otherwise.
-            use_vector_representation: If true, use vector representation to predict local,
-                atomic dipoles.
+            correct_charges: If true, forces the sum of partial charges to be the total
+                charge, if provided, and zero otherwise.
+            use_vector_representation: If true, use vector representation to predict
+                local, atomic dipoles.
         """
         super().__init__()
 
@@ -179,15 +179,14 @@ class DipoleMoment(nn.Module):
             atomic_dipoles = 0.0
 
         if self.correct_charges:
-            if properties.total_charge in inputs:
-                total_charge = inputs[properties.total_charge]
-            else:
-                total_charge = 0.0
-
             sum_charge = snn.scatter_add(charges, idx_m, dim_size=maxm)
-            charge_correction = (total_charge[:, None] - sum_charge) / natoms.unsqueeze(
-                -1
-            )
+
+            if properties.total_charge in inputs:
+                total_charge = inputs[properties.total_charge][:, None]
+            else:
+                total_charge = torch.zeros_like(sum_charge)
+
+            charge_correction = (total_charge - sum_charge) / natoms.unsqueeze(-1)
             charge_correction = charge_correction[idx_m]
             charges = charges + charge_correction
 

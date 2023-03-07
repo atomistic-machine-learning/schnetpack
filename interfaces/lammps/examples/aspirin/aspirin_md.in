@@ -1,0 +1,23 @@
+units		real
+atom_style	atomic
+newton off
+thermo 1
+dump mydmp all atom 10 dump.lammpstrj
+boundary s s s
+read_data aspirin.data
+pair_style	schnetpack
+pair_coeff	* * deployed_model 6 1 8
+mass 1 1.0
+mass 2 1.0
+mass 3 1.0
+neighbor	1.0 bin
+neigh_modify    delay 0 every 1 check no
+fix		1 all nve
+timestep	0.5
+compute atomicenergies all pe/atom
+compute totalatomicenergy all reduce sum c_atomicenergies
+thermo_style custom step time temp pe c_totalatomicenergy etotal press spcpu cpuremain
+run 5000
+print $(0.000001 * pe) file pe.dat
+print $(0.000001 * c_totalatomicenergy) file totalatomicenergy.dat
+write_dump all custom output.dump id type x y z fx fy fz c_atomicenergies modify format float %20.15g

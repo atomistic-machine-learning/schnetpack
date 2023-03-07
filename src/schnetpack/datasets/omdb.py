@@ -139,5 +139,5 @@ class OrganicMaterialsDatabase(AtomsDataModule):
         property_list = []
         for i, at in enumerate(structures):
             atoms_list.append(at)
-            property_list.append({OrganicMaterialsDatabase.BandGap: Y[i]})
+            property_list.append({OrganicMaterialsDatabase.BandGap: np.array([Y[i]])})
         dataset.add_systems(atoms_list=atoms_list, property_list=property_list)

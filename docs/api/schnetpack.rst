@@ -1,7 +1,6 @@
 schnetpack
 ==========
 
-
 Structure attributes
 --------------------
 .. autosummary::

@@ -15,12 +15,12 @@ def calculate_stats(
     atomref: Dict[str, torch.Tensor] = None,
 ) -> Dict[str, Tuple[torch.Tensor, torch.Tensor]]:
     """
-    Use the incremental Welford algorithm described in [1]_ to accumulate
+    Use the incremental Welford algorithm described in [h1]_ to accumulate
     the mean and standard deviation over a set of samples.
 
     References:
     -----------
-    .. [1] https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+    .. [h1] https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
 
     Args:
         dataset: atoms data set

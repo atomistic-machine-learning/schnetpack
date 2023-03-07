@@ -1,12 +1,10 @@
-from pathlib import Path
-from typing import Optional, Dict, List, Type, Any, Union
+import warnings
+from typing import Optional, Dict, List, Type, Any
 
 import pytorch_lightning as pl
 import torch
 from torch import nn as nn
 from torchmetrics import Metric
-
-from torch.autograd import grad
 
 from schnetpack.model.base import AtomisticModel
 
@@ -48,7 +46,14 @@ class ModelOutput(nn.Module):
         self.target_property = target_property or name
         self.loss_fn = loss_fn
         self.loss_weight = loss_weight
-        self.metrics = nn.ModuleDict(metrics)
+        self.train_metrics = nn.ModuleDict(metrics)
+        self.val_metrics = nn.ModuleDict({k: v.clone() for k, v in metrics.items()})
+        self.test_metrics = nn.ModuleDict({k: v.clone() for k, v in metrics.items()})
+        self.metrics = {
+            "train": self.train_metrics,
+            "val": self.val_metrics,
+            "test": self.test_metrics,
+        }
         self.constraints = constraints or []
 
     def calculate_loss(self, pred, target):
@@ -60,12 +65,9 @@ class ModelOutput(nn.Module):
         )
         return loss
 
-    def calculate_metrics(self, pred, target):
-        metrics = {
-            metric_name: metric(pred[self.name], target[self.target_property])
-            for metric_name, metric in self.metrics.items()
-        }
-        return metrics
+    def update_metrics(self, pred, target, subset):
+        for metric in self.metrics[subset].values():
+            metric(pred[self.name], target[self.target_property])
 
 
 class UnsupervisedModelOutput(ModelOutput):
@@ -81,12 +83,9 @@ class UnsupervisedModelOutput(ModelOutput):
         loss = self.loss_weight * self.loss_fn(pred[self.name])
         return loss
 
-    def calculate_metrics(self, pred, target=None):
-        metrics = {
-            metric_name: metric(pred[self.name])
-            for metric_name, metric in self.metrics.items()
-        }
-        return metrics
+    def update_metrics(self, pred, target, subset):
+        for metric in self.metrics[subset].values():
+            metric(pred[self.name])
 
 
 class AtomisticTask(pl.LightningModule):
@@ -130,6 +129,7 @@ class AtomisticTask(pl.LightningModule):
         self.grad_enabled = len(self.model.required_derivatives) > 0
         self.lr = optimizer_args["lr"]
         self.warmup_steps = warmup_steps
+        self.save_hyperparameters()
 
     def setup(self, stage=None):
         if stage == "fit":
@@ -147,12 +147,13 @@ class AtomisticTask(pl.LightningModule):
 
     def log_metrics(self, pred, targets, subset):
         for output in self.outputs:
-            for metric_name, metric in output.calculate_metrics(pred, targets).items():
+            output.update_metrics(pred, targets, subset)
+            for metric_name, metric in output.metrics[subset].items():
                 self.log(
                     f"{subset}_{output.name}_{metric_name}",
                     metric,
-                    on_step=False,
-                    on_epoch=True,
+                    on_step=(subset == "train"),
+                    on_epoch=(subset != "train"),
                     prog_bar=False,
                 )
 
@@ -246,6 +247,17 @@ class AtomisticTask(pl.LightningModule):
             optimconf = {"scheduler": schedule, "name": "lr_schedule"}
             if self.schedule_monitor:
                 optimconf["monitor"] = self.schedule_monitor
+            # incase model is validated before epoch end (not recommended use of val_check_interval)
+            if self.trainer.val_check_interval < 1.0:
+                warnings.warn(
+                    "Learning rate is scheduled after epoch end. To enable scheduling before epoch end, "
+                    "please specify val_check_interval by the number of training epochs after which the "
+                    "model is validated."
+                )
+            # incase model is validated before epoch end (recommended use of val_check_interval)
+            if self.trainer.val_check_interval > 1.0:
+                optimconf["interval"] = "step"
+                optimconf["frequency"] = self.trainer.val_check_interval
             schedulers.append(optimconf)
             return [optimizer], schedulers
         else:
@@ -262,13 +274,23 @@ class AtomisticTask(pl.LightningModule):
         using_native_amp: bool = None,
         using_lbfgs: bool = None,
     ):
-        if self.trainer.global_step < self.warmup_steps:
+        if self.global_step < self.warmup_steps:
             lr_scale = min(1.0, float(self.trainer.global_step + 1) / self.warmup_steps)
             for pg in optimizer.param_groups:
                 pg["lr"] = lr_scale * self.lr
 
         # update params
         optimizer.step(closure=optimizer_closure)
+
+    def save_model(self, path: str, do_postprocessing: Optional[bool] = None):
+        if self.global_rank == 0:
+            pp_status = self.model.do_postprocessing
+            if do_postprocessing is not None:
+                self.model.do_postprocessing = do_postprocessing
+
+            torch.save(self.model, path)
+
+            self.model.do_postprocessing = pp_status
 
 
 class ConsiderOnlySelectedAtoms(nn.Module):

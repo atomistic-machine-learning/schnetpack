@@ -20,8 +20,6 @@ __all__ = ["VelocityVerlet", "RingPolymer", "NPTVelocityVerlet", "NPTRingPolymer
 
 
 class Integrator(nn.Module):
-    ring_polymer = False
-    pressure_control = False
     """
     Basic integrator class template. Uses the typical scheme of propagating
     system momenta in two half steps and system positions in one main step.
@@ -34,6 +32,9 @@ class Integrator(nn.Module):
     Args:
         time_step (float): Integration time step in femto seconds.
     """
+
+    ring_polymer = False
+    pressure_control = False
 
     def __init__(self, time_step: float):
         super(Integrator, self).__init__()
@@ -79,14 +80,15 @@ class Integrator(nn.Module):
 
 
 class VelocityVerlet(Integrator):
-    ring_polymer = False
-    pressure_control = False
     """
     Standard velocity Verlet integrator for non ring-polymer simulations.
 
     Args:
         time_step (float): Integration time step in femto seconds.
     """
+
+    ring_polymer = False
+    pressure_control = False
 
     def __init__(self, time_step: float):
         super(VelocityVerlet, self).__init__(time_step)
@@ -108,8 +110,6 @@ class VelocityVerlet(Integrator):
 
 
 class RingPolymer(Integrator):
-    ring_polymer = True
-    pressure_control = False
     """
     Integrator for ring polymer molecular dynamics, as e.g. described in
     [#rpmd1]_
@@ -133,6 +133,9 @@ class RingPolymer(Integrator):
        Efficient stochastic thermostatting of path integral molecular dynamics.
        The Journal of Chemical Physics, 133, 124105. 2010.
     """
+
+    ring_polymer = True
+    pressure_control = False
 
     def __init__(self, time_step: float, n_beads: int, temperature: float):
         super(RingPolymer, self).__init__(time_step)
@@ -226,8 +229,6 @@ class RingPolymer(Integrator):
 
 
 class NPTVelocityVerlet(VelocityVerlet):
-    ring_polymer = False
-    pressure_control = True
     """
     Verlet integrator for constant pressure dynamics (NPT). Since barostats modify the position update,
     a routine defined in the respectve barostat class is called every main step.
@@ -236,6 +237,9 @@ class NPTVelocityVerlet(VelocityVerlet):
         time_step (float): Integration time step in femto seconds.
         barostat (schnetpack.md.simulation_hooks.BarostatHook): Barostat used for constant pressure dynamics.
     """
+
+    ring_polymer = False
+    pressure_control = True
 
     def __init__(self, time_step: float, barostat: BarostatHook):
         super(NPTVelocityVerlet, self).__init__(time_step)
@@ -259,8 +263,6 @@ class NPTVelocityVerlet(VelocityVerlet):
 
 
 class NPTRingPolymer(RingPolymer):
-    ring_polymer = True
-    pressure_control = True
     """
     Ring polymer integrator for constant pressure dynamics (NPT). Here, the barostat modifies the main and the
     half steps.
@@ -271,6 +273,9 @@ class NPTRingPolymer(RingPolymer):
         temperature (float): Ring polymer temperature in Kelvin.
         barostat (schnetpack.md.simulation_hooks.BarostatHook): Barostat used for constant pressure dynamics.
     """
+
+    ring_polymer = True
+    pressure_control = True
 
     def __init__(
         self, time_step: float, n_beads: int, temperature: float, barostat: BarostatHook

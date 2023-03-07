@@ -9,4 +9,4 @@ stress_key: stress
 healing_length: 4.0 #0.3405
 
 defaults:
-  - neighbor_list: ase
+  - neighbor_list: matscipy

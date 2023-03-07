@@ -16,12 +16,28 @@ Basic layers
 
 Equivariant layers
 ------------------
+
+Cartesian:
+
 .. autosummary::
     :toctree: generated
     :nosignatures:
     :template: classtemplate.rst
 
     GatedEquivariantBlock
+
+Irreps:
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+    :template: classtemplate.rst
+
+    RealSphericalHarmonics
+    SO3TensorProduct
+    SO3Convolution
+    SO3GatedNonlinearity
+    SO3ParametricGatedNonlinearity
 
 
 Radial basis

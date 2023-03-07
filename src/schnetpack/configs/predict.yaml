@@ -7,21 +7,25 @@ modeldir: ???
 outputdir: ???
 cutoff: ???
 batch_size: 100
-write_interval: batch_and_epoch
-
+write_interval: epoch
+enable_grad: false
+write_idx_m: false
 
 data:
   _target_: schnetpack.data.ASEAtomsData
   datapath: ${datapath}
   transforms:
     - _target_: schnetpack.transform.SubtractCenterOfMass
-    - _target_: schnetpack.transform.ASENeighborList
+    - _target_: schnetpack.transform.MatScipyNeighborList
       cutoff: ${cutoff}
     - _target_: schnetpack.transform.CastTo32
 
 
 # hydra configuration
 hydra:
+    job:
+      chdir: True
+
     # output paths for hydra logs
     run:
         dir: ${modeldir}

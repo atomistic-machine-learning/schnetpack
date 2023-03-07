@@ -11,4 +11,4 @@ stress_key: null
 script_model: false
 
 defaults:
-  - neighbor_list: ase
+  - neighbor_list: matscipy

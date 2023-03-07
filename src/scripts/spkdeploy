@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+import torch
+import torch.nn as nn
+from schnetpack.transform import CastTo64, CastTo32, AddOffsets
+import argparse
+
+
+def get_jit_model(model):
+    # fix invalid operations in postprocessing
+    jit_postprocessors = nn.ModuleList()
+    for postprocessor in model.postprocessors:
+        # ignore type casting
+        if type(postprocessor) in [CastTo64, CastTo32]:
+            continue
+        # ensure offset mean is float
+        if type(postprocessor) == AddOffsets:
+            postprocessor.mean = postprocessor.mean.float()
+
+        jit_postprocessors.append(postprocessor)
+    model.postprocessors = jit_postprocessors
+
+    return torch.jit.script(model)
+
+
+def save_jit_model(model, model_path):
+    jit_model = get_jit_model(model)
+
+    # add metadata
+    metadata = dict()
+    metadata["cutoff"] = str(jit_model.representation.cutoff.item()).encode("ascii")
+
+    torch.jit.save(jit_model, model_path, _extra_files=metadata)
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("model_path")
+    parser.add_argument("deployed_model_path")
+    args = parser.parse_args()
+
+    model = torch.load(args.model_path, map_location="cpu")
+    save_jit_model(model, args.deployed_model_path)
+
+    print(f"stored deployed model at {args.deployed_model_path}.")

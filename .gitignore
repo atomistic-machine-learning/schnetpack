@@ -116,3 +116,11 @@ ENV/
 # experiments
 runs/
 tests/testdata/tmp/test*
+
+# lammps examples
+interfaces/lammps/examples/*/*.lammpstrj
+interfaces/lammps/examples/*/*.lammps
+interfaces/lammps/examples/*/*.dump
+interfaces/lammps/examples/*/*.dat
+interfaces/lammps/examples/*/deployed_model
+

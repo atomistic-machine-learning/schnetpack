@@ -1,6 +1,6 @@
-# TensorBoard
+# Aim Logger
 
 aim:
     _target_: aim.pytorch_lightning.AimLogger
     repo: ${hydra:runtime.cwd}/${run.path}
-    experiment: ${run.id}
+    experiment: ${run.experiment}

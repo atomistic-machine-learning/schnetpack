@@ -8,6 +8,7 @@ defaults:
       - checkpoint
       - earlystopping
       - lrmonitor
+      - ema
   - task: default_task
   - model: null
   - data: custom
@@ -18,6 +19,8 @@ print_config: True
 
 # hydra configuration
 hydra:
+    job:
+      chdir: True
     # output paths for hydra logs
     run:
         dir: ${run.path}/${run.id}

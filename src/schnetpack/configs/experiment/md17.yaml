@@ -4,11 +4,12 @@ defaults:
   - override /model: nnp
   - override /data: md17
 
-run.path: runs/md17_${data.molecule}
+run:
+  experiment: md17_${data.molecule}
 
 globals:
   cutoff: 5.
-  lr: 5e-4
+  lr: 1e-3
   energy_key: energy
   forces_key: forces
 
@@ -22,7 +23,7 @@ data:
     - _target_: schnetpack.transform.RemoveOffsets
       property: energy
       remove_mean: True
-    - _target_: schnetpack.transform.ASENeighborList
+    - _target_: schnetpack.transform.MatScipyNeighborList
       cutoff: ${globals.cutoff}
     - _target_: schnetpack.transform.CastTo32
 
@@ -50,9 +51,10 @@ task:
       metrics:
         mae:
           _target_: torchmetrics.regression.MeanAbsoluteError
-        mse:
+        rmse:
           _target_: torchmetrics.regression.MeanSquaredError
-      loss_weight: 0.005
+          squared: False
+      loss_weight: 0.01
     - _target_: schnetpack.task.ModelOutput
       name: ${globals.forces_key}
       loss_fn:
@@ -60,6 +62,7 @@ task:
       metrics:
         mae:
           _target_: torchmetrics.regression.MeanAbsoluteError
-        mse:
+        rmse:
           _target_: torchmetrics.regression.MeanSquaredError
-      loss_weight: 0.995
+          squared: False
+      loss_weight: 0.99

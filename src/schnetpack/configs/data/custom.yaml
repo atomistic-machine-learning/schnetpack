@@ -6,6 +6,6 @@ batch_size: 10
 num_train: ???
 num_val: ???
 num_test: null
-num_workers: 4
-num_val_workers: 1
-num_test_workers: 1
+num_workers: 8
+num_val_workers: null
+num_test_workers: null
