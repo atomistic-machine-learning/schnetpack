@@ -212,5 +212,5 @@ def predict(config: DictConfig):
     trainer.predict(
         WrapperLM(model, config.enable_grad),
         dataloaders=loader,
-        ckpt_path="checkpoints/last.ckpt",
+        ckpt_path=config.ckpt_path,
     )
