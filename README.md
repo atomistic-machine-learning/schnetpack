@@ -29,6 +29,7 @@ _**Note: We recommend using a GPU for training the neural networks.**_
 
 ### Install with pip
 
+The simplest way to install SchNetPack is through pip which will automatically get the source code from PyPI:
 ```
 pip install schnetpack
 ```
@@ -59,7 +60,7 @@ When installing SchNetPack, the training script `spktrain` is added to your PATH
 The CLI is based on [Hydra](https://hydra.cc/) and oriented on the PyTorch Lightning/Hydra template that can be found
 [here](https://github.com/ashleve/lightning-hydra-template).
 This enables a flexible configuration of the model, data and training process.
-To fully take advantage of these features, it might be helpful for have a look at the Hydra and PyTorch Lightning docs.
+To fully take advantage of these features, it might be helpful to have a look at the Hydra and PyTorch Lightning docs.
 
 ### Example 1: QM9
 
@@ -213,6 +214,12 @@ spktrain experiment=md17 logger=csv
 ## LAMMPS interface
 
 SchNetPack comes with an interface to LAMMPS. A detailed installation guide is linked in the [How-To section of our documentation](https://schnetpack.readthedocs.io/en/latest/howtos/lammps.html).
+
+## Extensions
+
+SchNetPack can be used as a base for implementations of advanced atomistic neural networks and training tasks.
+For example, there exists an [extension package](https://github.com/atomistic-machine-learning/schnetpack-gschnet) called `schnetpack-gschnet` for the most recent version of cG-SchNet, a conditional generative model for molecules.
+It demonstrates how a complex training task can be implemented in a few custom classes while leveraging the hierarchical configuration and automated training procedure of the SchNetPack framework.
 
 ## Documentation
 
