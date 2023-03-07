@@ -3,3 +3,4 @@ data_dir: ${run.work_dir}/data
 path: ${run.work_dir}/runs
 experiment: default
 id: ${uuid:1}
+ckpt_path: null

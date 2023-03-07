@@ -74,13 +74,13 @@ def train(config: DictConfig):
             OmegaConf.save(old_config, f, resolve=False)
 
         # resume from latest checkpoint
-        if config.trainer.resume_from_checkpoint is None:
+        if config.run.ckpt_path is None:
             if os.path.exists("checkpoints/last.ckpt"):
-                config.trainer.resume_from_checkpoint = "checkpoints/last.ckpt"
+                config.run.ckpt_path = "checkpoints/last.ckpt"
 
-        if config.trainer.resume_from_checkpoint is not None:
+        if config.run.ckpt_path is not None:
             log.info(
-                f"Resuming from checkpoint {os.path.abspath(config.trainer.resume_from_checkpoint)}"
+                f"Resuming from checkpoint {os.path.abspath(config.run.ckpt_path)}"
             )
     else:
         with open("config.yaml", "w") as f:
@@ -155,7 +155,7 @@ def train(config: DictConfig):
 
     # Train the model
     log.info("Starting training.")
-    trainer.fit(model=task, datamodule=datamodule)
+    trainer.fit(model=task, datamodule=datamodule, ckpt_path=config.run.ckpt_path)
 
     # Evaluate model on test set after training
     log.info("Starting testing.")
@@ -207,7 +207,10 @@ def predict(config: DictConfig):
             )
         ],
         default_root_dir=".",
-        resume_from_checkpoint="checkpoints/last.ckpt",
         _convert_="partial",
     )
-    trainer.predict(WrapperLM(model, config.enable_grad), dataloaders=loader)
+    trainer.predict(
+        WrapperLM(model, config.enable_grad),
+        dataloaders=loader,
+        ckpt_path="checkpoints/last.ckpt",
+    )
