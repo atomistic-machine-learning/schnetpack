@@ -137,14 +137,14 @@ class HDF5Loader:
         if structures.attrs["has_cells"]:
             # Get simulation cells
             entry_start = entry_stop
-            entry_stop += 9
+            entry_stop += 9 * self.n_molecules
             self.properties[properties.cell] = raw_positions[
                 :, :, entry_start:entry_stop
             ].reshape(self.entries, self.n_replicas, self.n_molecules, 3, 3)
 
             # Get stress tensor
             entry_start = entry_stop
-            entry_stop += 9
+            entry_stop += 9 * self.n_molecules
             self.properties[f"{properties.stress}_system"] = raw_positions[
                 :, :, entry_start:entry_stop
             ].reshape(self.entries, self.n_replicas, self.n_molecules, 3, 3)

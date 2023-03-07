@@ -293,14 +293,14 @@ class MoleculeStream(DataStream):
         if self.cells:
             # Get cells
             start = stop
-            stop += 9
+            stop += 9 * simulator.system.n_molecules
             self.buffer[
                 buffer_position : buffer_position + 1, :, start:stop
             ] = simulator.system.cells.view(simulator.system.n_replicas, -1).detach()
 
             # Get stress tensors
             start = stop
-            stop += 9
+            stop += 9 * simulator.system.n_molecules
             self.buffer[
                 buffer_position : buffer_position + 1, :, start:stop
             ] = simulator.system.stress.view(simulator.system.n_replicas, -1).detach()

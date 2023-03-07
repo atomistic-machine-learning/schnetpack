@@ -34,9 +34,35 @@ def activate_model_stress(
         if isinstance(module, schnetpack.atomistic.response.Forces) or isinstance(
             module, schnetpack.atomistic.Response
         ):
+            # for `Forces` module
             if hasattr(module, "calc_stress"):
                 # activate internal stress computation flag
                 module.calc_stress = True
+
+                # append stress label to output list and update required derivatives in the module
+                module.model_outputs.append(stress_key)
+                module.required_derivatives.append(schnetpack.properties.strain)
+
+                # if not set in the model, also update output list and required derivatives so that:
+                #   a) required derivatives are computed and
+                #   b) property is added to the model outputs
+                if stress_key not in model.model_outputs:
+                    model.model_outputs.append(stress_key)
+                    model.required_derivatives.append(schnetpack.properties.strain)
+
+                stress = True
+
+            # for `Response` module
+            if hasattr(module, "basic_derivatives"):
+                # activate internal stress computation flag
+                module.calc_stress = True
+                module.basic_derivatives["dEds"] = schnetpack.properties.strain
+                module.derivative_instructions["dEds"] = True
+                module.basic_derivatives["dEds"] = schnetpack.properties.strain
+
+                module.map_properties[
+                    schnetpack.properties.stress
+                ] = schnetpack.properties.stress
 
                 # append stress label to output list and update required derivatives in the module
                 module.model_outputs.append(stress_key)

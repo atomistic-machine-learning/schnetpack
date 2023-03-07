@@ -692,6 +692,9 @@ class System(UninitializedMixin, nn.Module):
         """
         self.load_state_dict(state_dict, strict=False)
 
+        # Set PBC to bool for periodic boundary conditions
+        self.pbc = self.pbc.bool()
+
         # Set derived properties for restarting
         self.n_replicas = self.positions.shape[0]
         self.total_n_atoms = self.positions.shape[1]
