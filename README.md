@@ -20,7 +20,7 @@ SchNetPack is a toolbox for the development and application of deep neural netwo
 - Atomic Simulation Environment (ASE) 3.21
 - NumPy
 - PyTorch 1.9
-- PyTorch Lightning 1.4.5
+- PyTorch Lightning 1.9.0
 - Hydra 1.1
 
 _**Note: We recommend using a GPU for training the neural networks.**_
@@ -196,7 +196,7 @@ spktrain experiment=md17 data.molecule=uracil task.outputs.0.loss_weight=0.005 t
 ### Logging
 
 Beyond the output of the command line, SchNetPack supports multiple logging backends over PyTorch Lightning.
-By default, the Tensosboard logger is activated.
+By default, the Tensorboard logger is activated.
 If TensorBoard is installed, the results can be shown by calling:
 
 ```
