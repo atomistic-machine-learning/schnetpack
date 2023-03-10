@@ -1,4 +1,3 @@
-import torch
 import pickle
 import time
 import numpy as np
@@ -9,9 +8,6 @@ from ase.optimize.optimize import Dynamics
 from ase.parallel import world, barrier
 from ase.io import write
 from ase import Atoms
-
-from schnetpack import properties
-
 
 __all__ = ["ASEBatchwiseLBFGS"]
 
@@ -65,14 +61,18 @@ class BatchwiseDynamics(Dynamics):
         fixed_atoms list(int):
             list of indices corresponding to atoms with positions fixed in space.
         """
-        super().__init__(None, logfile, trajectory, append_trajectory, master)
+        super().__init__(
+            atoms=atoms,
+            logfile=logfile,
+            trajectory=trajectory,
+            append_trajectory=append_trajectory,
+            master=master,
+        )
 
         self.calculator = calculator
-        self.atoms = atoms
         self.trajectory = trajectory
         self.log_every_step = log_every_step
         self.fixed_atoms_mask = fixed_atoms_mask
-
         self.n_configs = len(self.atoms)
         self.n_atoms = len(self.atoms[0])
 
