@@ -30,8 +30,9 @@ class BatchwiseDynamics(Dynamics):
 
         Parameters:
 
-        model: torch.nn.Module
-            The force field model used to calculate the respective atomic forces
+        calculator:
+            This calculator provides properties such as forces and energy, which can be used for MD simulations or
+            relaxations
 
         atoms: list of Atoms objects
             The Atoms objects to relax.
@@ -142,8 +143,9 @@ class BatchwiseOptimizer(BatchwiseDynamics):
 
         Parameters:
 
-        model: torch.nn.Module
-            The force field model used to calculate the respective atomic forces
+        calculator:
+            This calculator provides properties such as forces and energy, which can be used for MD simulations or
+            relaxations
 
         atoms: list of Atoms objects
             The Atoms objects to relax.
@@ -301,8 +303,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
 
         """Parameters:
 
-        model: torch.nn.Module
-            The force field model used to calculate the respective atomic forces
+        calculator:
+            This calculator provides properties such as forces and energy, which can be used for MD simulations or
+            relaxations
 
         atoms: list of Atoms objects
             The Atoms objects to relax.
