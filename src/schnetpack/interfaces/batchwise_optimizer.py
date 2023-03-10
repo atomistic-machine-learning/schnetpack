@@ -23,12 +23,12 @@ class BatchwiseDynamics(Dynamics):
         self,
         calculator,
         atoms,
-        converter,
         logfile,
         trajectory,
         append_trajectory=False,
         master=None,
         log_every_step=False,
+        fixed_atoms_mask=None,
     ):
         """Structure dynamics object.
 
@@ -39,9 +39,6 @@ class BatchwiseDynamics(Dynamics):
 
         atoms: list of Atoms objects
             The Atoms objects to relax.
-
-        converter: schnetpack.interfaces.AtomsConverter
-            Class used to convert ase Atoms objects to schnetpack input
 
         restart: str
             Filename for restart file.  Default value is *None*.
@@ -64,35 +61,27 @@ class BatchwiseDynamics(Dynamics):
 
         log_every_step: bool
             set to True to log Dynamics after each step (default=False)
+
+        fixed_atoms list(int):
+            list of indices corresponding to atoms with positions fixed in space.
         """
         super().__init__(None, logfile, trajectory, append_trajectory, master)
 
         self.calculator = calculator
         self.atoms = atoms
-        self.converter = converter
         self.trajectory = trajectory
         self.log_every_step = log_every_step
-
-        # get initial model inputs and set device
-        self._update_model_inputs()
-        self.device = (
-            torch.device("cuda")
-            if self.model_inputs[properties.R].is_cuda
-            else torch.device("cpu")
-        )
-
-    def _update_model_inputs(self):
-        self.model_inputs = self.converter(self.atoms)
+        self.fixed_atoms_mask = fixed_atoms_mask
 
     def irun(self):
         # compute initial structure and log the first step
-        self.calculator.get_forces(self.model_inputs)
+        self.calculator.get_forces(self.atoms, fixed_atoms_mask=self.fixed_atoms_mask)
 
         # in the following we are assuming that index_m is sorted in ascending order
         # this is required since the flat tensors are reshaped to tensors of dimension batch_size x n_atoms x 3
         dev_from_sorted_index_m = (
-            self.model_inputs[properties.idx_m].sort()[0]
-            - self.model_inputs[properties.idx_m]
+            self.calculator.model_inputs[properties.idx_m].sort()[0]
+            - self.calculator.model_inputs[properties.idx_m]
         )
         if abs(dev_from_sorted_index_m).sum() > 0.0:
             raise ValueError(
@@ -112,9 +101,6 @@ class BatchwiseDynamics(Dynamics):
             # compute the next step
             self.step()
             self.nsteps += 1
-
-            # update the model inputs (needed to get new nbh list)
-            self._update_model_inputs()
 
             # let the user inspect the step and change things before logging
             # and predicting the next step
@@ -152,13 +138,13 @@ class BatchwiseOptimizer(BatchwiseDynamics):
         self,
         calculator,
         atoms,
-        converter,
         restart,
         logfile,
         trajectory,
         master=None,
         append_trajectory=False,
         log_every_step=False,
+        fixed_atoms_mask=None,
     ):
         """Structure optimizer object.
 
@@ -169,9 +155,6 @@ class BatchwiseOptimizer(BatchwiseDynamics):
 
         atoms: list of Atoms objects
             The Atoms objects to relax.
-
-        converter: schnetpack.interfaces.AtomsConverter
-            Class used to convert ase Atoms objects to schnetpack input
 
         restart: str
             Filename for restart file.  Default value is *None*.
@@ -194,17 +177,20 @@ class BatchwiseOptimizer(BatchwiseDynamics):
 
         log_every_step: bool
             set to True to log Dynamics after each step (default=False)
+
+        fixed_atoms list(int):
+            list of indices corresponding to atoms with positions fixed in space.
         """
         BatchwiseDynamics.__init__(
             self,
             calculator=calculator,
             atoms=atoms,
-            converter=converter,
             logfile=logfile,
             trajectory=trajectory,
             master=master,
             append_trajectory=append_trajectory,
             log_every_step=log_every_step,
+            fixed_atoms_mask=fixed_atoms_mask,
         )
 
         self.restart = restart
@@ -245,12 +231,16 @@ class BatchwiseOptimizer(BatchwiseDynamics):
     def converged(self, forces=None):
         """Did the optimization converge?"""
         if forces is None:
-            forces = self.calculator.get_forces(self.model_inputs)
+            forces = self.calculator.get_forces(
+                self.atoms, fixed_atoms_mask=self.fixed_atoms_mask
+            )
         return (forces**2).sum(axis=1).max() < self.fmax**2
 
     def log(self, forces=None):
         if forces is None:
-            forces = self.calculator.get_forces(self.model_inputs)
+            forces = self.calculator.get_forces(
+                self.atoms, fixed_atoms_mask=self.fixed_atoms_mask
+            )
         fmax = sqrt((forces**2).sum(axis=1).max())
         T = time.localtime()
         if self.logfile is not None:
@@ -277,7 +267,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
                 )
 
     def get_relaxation_results(self):
-        self.calculator.get_forces(self.model_inputs)
+        self.calculator.get_forces(self.atoms)
         return self.atoms, self.calculator.model_results
 
     def dump(self, data):
@@ -304,7 +294,6 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         self,
         calculator,
         atoms,
-        converter,
         restart=None,
         logfile="-",
         trajectory=None,
@@ -315,6 +304,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         use_line_search=False,
         master=None,
         log_every_step=False,
+        fixed_atoms_mask=None,
     ):
 
         """Parameters:
@@ -324,9 +314,6 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
 
         atoms: list of Atoms objects
             The Atoms objects to relax.
-
-        converter: schnetpack.interfaces.AtomsConverter
-            Class used to convert ase Atoms objects to schnetpack input
 
         restart: string
             Pickle file used to store vectors for updating the inverse of
@@ -365,18 +352,21 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
 
         log_every_step: bool
             set to True to log Dynamics after each step (default=False)
+
+        fixed_atoms list(int):
+            list of indices corresponding to atoms with positions fixed in space.
         """
 
         BatchwiseOptimizer.__init__(
             self,
             calculator=calculator,
             atoms=atoms,
-            converter=converter,
             restart=restart,
             logfile=logfile,
             trajectory=trajectory,
             master=master,
             log_every_step=log_every_step,
+            fixed_atoms_mask=fixed_atoms_mask,
         )
 
         if maxstep is not None:
@@ -400,6 +390,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         self.function_calls = 0
         self.force_calls = 0
         self.n_configs = None
+        self.n_normalizations = 0
 
         if use_line_search:
             raise NotImplementedError("Lines search has not been implemented yet")
@@ -439,10 +430,12 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         Use the given forces, update the history and calculate the next step --
         then take it"""
 
-        self.n_configs = self.model_inputs[properties.n_atoms].shape[0]
+        self.n_configs = len(self.atoms)
 
         if f is None:
-            f = self.calculator.get_forces(self.model_inputs)
+            f = self.calculator.get_forces(
+                self.atoms, fixed_atoms_mask=self.fixed_atoms_mask
+            )
 
         # check if updates for respective structures are required
         q_euclidean = -f.reshape(self.n_configs, -1, 3)
@@ -454,7 +447,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             .repeat(q_euclidean.shape[2], 1)
         )
 
-        r = self.model_inputs[properties.R].detach().cpu().numpy()
+        r = self.calculator.model_inputs[properties.R].detach().cpu().numpy()
 
         self.update(r, f, self.r0, self.f0, configs_mask)
 
@@ -495,7 +488,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             e = self.func(r)
             self.line_search(r, g, e)
             dr = (self.alpha_k * self.p).reshape(
-                self.model_inputs[properties.n_atoms].item(), -1
+                self.calculator.model_inputs[properties.n_atoms].item(), -1
             )
         else:
             self.force_calls += 1
@@ -503,11 +496,15 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             dr = self.determine_step(self.p) * self.damping
 
         # update positions
-        pos_updated = self.model_inputs[properties.R].detach().cpu().numpy() + dr
+        pos_updated = (
+            self.calculator.model_inputs[properties.R].detach().cpu().numpy() + dr
+        )
 
         # store in ase Atoms object
         ats = []
-        indices_m = self.model_inputs[properties.idx_m].detach().cpu().numpy()
+        indices_m = (
+            self.calculator.model_inputs[properties.idx_m].detach().cpu().numpy()
+        )
         for struc_idx, previous_at in enumerate(self.atoms):
             # get atom positions for respective structure
             pos_updated_m = pos_updated[indices_m == struc_idx]
@@ -550,14 +547,17 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             for idx_m in range(self.n_configs):
                 longest_step = np.max(
                     steplengths[
-                        self.model_inputs[properties.idx_m].detach().cpu() == idx_m
+                        self.calculator.model_inputs[properties.idx_m].detach().cpu()
+                        == idx_m
                     ]
                 )
                 if longest_step >= self.maxstep:
                     print("normalized integration step")
-                    dr[self.model_inputs[properties.idx_m].detach().cpu() == idx_m] *= (
-                        self.maxstep / longest_step
-                    )
+                    self.n_normalizations += 1
+                    dr[
+                        self.calculator.model_inputs[properties.idx_m].detach().cpu()
+                        == idx_m
+                    ] *= (self.maxstep / longest_step)
         return dr
 
     def update(self, r, f, r0, f0, configs_mask):

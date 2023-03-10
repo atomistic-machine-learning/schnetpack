@@ -302,6 +302,8 @@ class SkinNeighborList(Transform):
     ) -> Dict[str, torch.Tensor]:
 
         update_required, inputs = self._update(inputs)
+        if update_required:
+            print("updating nbh")
         inputs = self.distance_calculator(inputs)
         inputs = self._remove_neighbors_in_skin(inputs)
 
