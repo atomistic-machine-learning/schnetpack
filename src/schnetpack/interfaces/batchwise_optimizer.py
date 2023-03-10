@@ -73,20 +73,12 @@ class BatchwiseDynamics(Dynamics):
         self.log_every_step = log_every_step
         self.fixed_atoms_mask = fixed_atoms_mask
 
+        self.n_configs = len(self.atoms)
+        self.n_atoms = len(self.atoms[0])
+
     def irun(self):
         # compute initial structure and log the first step
         self.calculator.get_forces(self.atoms, fixed_atoms_mask=self.fixed_atoms_mask)
-
-        # in the following we are assuming that index_m is sorted in ascending order
-        # this is required since the flat tensors are reshaped to tensors of dimension batch_size x n_atoms x 3
-        dev_from_sorted_index_m = (
-            self.calculator.model_inputs[properties.idx_m].sort()[0]
-            - self.calculator.model_inputs[properties.idx_m]
-        )
-        if abs(dev_from_sorted_index_m).sum() > 0.0:
-            raise ValueError(
-                "idx_m is assumed to be sorted in ascending order, this is not the case here!"
-            )
 
         # yield the first time to inspect before logging
         yield False
@@ -389,7 +381,6 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         self.p = None
         self.function_calls = 0
         self.force_calls = 0
-        self.n_configs = None
         self.n_normalizations = 0
 
         if use_line_search:
@@ -430,8 +421,6 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         Use the given forces, update the history and calculate the next step --
         then take it"""
 
-        self.n_configs = len(self.atoms)
-
         if f is None:
             f = self.calculator.get_forces(
                 self.atoms, fixed_atoms_mask=self.fixed_atoms_mask
@@ -446,8 +435,11 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             .repeat(q_euclidean.shape[1], 0)
             .repeat(q_euclidean.shape[2], 1)
         )
-
-        r = self.calculator.model_inputs[properties.R].detach().cpu().numpy()
+        r = np.zeros((self.n_atoms * self.n_configs, 3), dtype=np.float32)
+        for config_idx, at in enumerate(self.atoms):
+            first_idx = config_idx * self.n_atoms
+            last_idx = config_idx * self.n_atoms + self.n_atoms
+            r[first_idx:last_idx] = at.get_positions()
 
         self.update(r, f, self.r0, self.f0, configs_mask)
 
@@ -487,35 +479,27 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         if self.use_line_search is True:
             e = self.func(r)
             self.line_search(r, g, e)
-            dr = (self.alpha_k * self.p).reshape(
-                self.calculator.model_inputs[properties.n_atoms].item(), -1
-            )
+            dr = (self.alpha_k * self.p).reshape(self.n_atoms * self.n_configs, -1)
         else:
             self.force_calls += 1
             self.function_calls += 1
             dr = self.determine_step(self.p) * self.damping
 
         # update positions
-        pos_updated = (
-            self.calculator.model_inputs[properties.R].detach().cpu().numpy() + dr
-        )
+        pos_updated = r + dr
 
-        # store in ase Atoms object
+        # create new list of ase Atoms objects with updated positions
         ats = []
-        indices_m = (
-            self.calculator.model_inputs[properties.idx_m].detach().cpu().numpy()
-        )
-        for struc_idx, previous_at in enumerate(self.atoms):
-            # get atom positions for respective structure
-            pos_updated_m = pos_updated[indices_m == struc_idx]
-            # update ase Atoms object
+        for config_idx, at in enumerate(self.atoms):
+            first_idx = config_idx * self.n_atoms
+            last_idx = config_idx * self.n_atoms + self.n_atoms
             at = Atoms(
-                positions=pos_updated_m, numbers=previous_at.get_atomic_numbers()
+                positions=pos_updated[first_idx:last_idx],
+                numbers=self.atoms[config_idx].get_atomic_numbers(),
             )
-            at.pbc = previous_at.pbc
-            at.cell = previous_at.cell
+            at.pbc = self.atoms[config_idx].pbc
+            at.cell = self.atoms[config_idx].cell
             ats.append(at)
-        # store
         self.atoms = ats
 
         self.iteration += 1
@@ -544,20 +528,14 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         # check if any step in entire batch is greater than maxstep
         if np.max(steplengths) >= self.maxstep:
             # rescale steps for each config separately
-            for idx_m in range(self.n_configs):
-                longest_step = np.max(
-                    steplengths[
-                        self.calculator.model_inputs[properties.idx_m].detach().cpu()
-                        == idx_m
-                    ]
-                )
+            for config_idx in range(self.n_configs):
+                first_idx = config_idx * self.n_atoms
+                last_idx = config_idx * self.n_atoms + self.n_atoms
+                longest_step = np.max(steplengths[first_idx:last_idx])
                 if longest_step >= self.maxstep:
                     print("normalized integration step")
                     self.n_normalizations += 1
-                    dr[
-                        self.calculator.model_inputs[properties.idx_m].detach().cpu()
-                        == idx_m
-                    ] *= (self.maxstep / longest_step)
+                    dr[first_idx:last_idx] *= self.maxstep / longest_step
         return dr
 
     def update(self, r, f, r0, f0, configs_mask):
