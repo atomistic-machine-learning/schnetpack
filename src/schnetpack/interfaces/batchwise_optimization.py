@@ -9,7 +9,167 @@ from ase.parallel import world, barrier
 from ase.io import write
 from ase import Atoms
 
-__all__ = ["ASEBatchwiseLBFGS"]
+import torch
+from schnetpack.units import convert_units
+
+__all__ = ["ASEBatchwiseLBFGS", "BatchwiseCalculator"]
+
+
+class Calculator:
+    """
+    Base class for ase calculators.
+    """
+
+    def __init__(self):
+        self.results = None
+        self.atoms = None
+
+    def calculation_required(self, atoms, properties=None):
+        if self.atoms is None or not self.atoms == atoms:
+            return True
+        return False
+
+    def get_forces(
+        self,
+        atoms,
+    ):
+        if self.calculation_required(atoms):
+            self.calculate(atoms)
+        return self.results["forces"]
+
+    def get_potential_energy(
+        self,
+        atoms,
+    ):
+        if self.calculation_required(atoms):
+            self.calculate(atoms)
+        return self.results["energy"]
+
+    def get_stress(
+        self,
+        atoms,
+    ):
+        if self.calculation_required(atoms):
+            self.calculate(atoms)
+        return self.results["stress"]
+
+    def calculate(self, atoms):
+        pass
+
+
+class BatchwiseCalculator(Calculator):
+    """
+    Calculator for neural network models for batchwise optimization.
+    """
+
+    energy = "energy"
+    forces = "forces"
+    stress = "stress"
+
+    def __init__(
+        self,
+        model_file,
+        atoms_converter,
+        device="cpu",
+        auxiliary_output_modules=None,
+        energy_key="energy",
+        force_key="forces",
+        energy_unit="eV",
+        position_unit="Ang",
+    ):
+        """
+        model_file: str
+            path to trained model
+
+        atoms_converter: schnetpack.interfaces.AtomsConverter
+            Class used to convert ase Atoms objects to schnetpack input
+
+        device: torch.device
+            device used for calculations (default="cpu")
+
+        energy_key: str
+            name of energies in model (default="energy")
+
+        force_key: str
+            name of forces in model (default="forces")
+
+        energy_unit: str, float
+            energy units used by model (default="eV")
+
+        position_unit: str, float
+            position units used by model (default="Angstrom")
+        """
+
+        super(BatchwiseCalculator, self).__init__()
+
+        self.device = device
+        self.atoms_converter = atoms_converter
+        self.model_results = None
+        self.model_file = model_file
+        self.auxiliary_output_modules = auxiliary_output_modules or []
+
+        self.energy_key = energy_key
+        self.force_key = force_key
+
+        # set up basic conversion factors
+        self.energy_conversion = convert_units(energy_unit, "eV")
+        self.position_conversion = convert_units(position_unit, "Angstrom")
+
+        # Unit conversion to default ASE units
+        self.property_units = {
+            self.energy: self.energy_conversion,
+            self.forces: self.energy_conversion / self.position_conversion,
+            self.stress: self.energy_conversion / self.position_conversion**3,
+        }
+
+        self._load_model(model_file)
+
+    def _load_model(self, model_file):
+        self.model = torch.load(model_file, map_location=self.device)
+        for auxiliary_output_module in self.auxiliary_output_modules:
+            self.model.output_modules.insert(1, auxiliary_output_module)
+        self.model.eval()
+
+    def _update_model_inputs(self, atoms):
+        self.model_inputs = self.atoms_converter(atoms)
+
+    def _requires_calculation(self, property_keys, atoms):
+        if self.model_results is None:
+            return True
+        for name in property_keys:
+            if name not in self.model_results:
+                return True
+        if len(self.atoms) != len(atoms):
+            return True
+        for atom, atom_ref in zip(atoms, self.atoms):
+            if atom != atom_ref:
+                return True
+
+    def get_forces(self, atoms, fixed_atoms_mask=None):
+        if self._requires_calculation(
+            property_keys=[self.energy_key, self.force_key], atoms=atoms
+        ):
+            self.calculate(atoms)
+        f = (
+            self.model_results[self.force_key].detach().cpu().numpy()
+            * self.property_units[self.forces]
+        )
+        if fixed_atoms_mask is not None:
+            f[fixed_atoms_mask] *= 0.0
+        return f
+
+    def get_potential_energy(self, atoms):
+        if self._requires_calculation(property_keys=[self.energy_key], atoms=atoms):
+            self.calculate(atoms)
+        return (
+            self.model_results[self.energy_key].detach().cpu().numpy()
+            * self.property_units[self.energy]
+        )
+
+    def calculate(self, atoms):
+        self._update_model_inputs(atoms)
+        self.model_results = self.model(self.model_inputs)
+        self.atoms = atoms
 
 
 class BatchwiseDynamics(Dynamics):
