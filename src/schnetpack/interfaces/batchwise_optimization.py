@@ -1,3 +1,5 @@
+from copy import deepcopy
+import os
 import pickle
 import time
 import numpy as np
@@ -9,10 +11,51 @@ from ase.parallel import world, barrier
 from ase.io import write
 from ase import Atoms
 
+from typing import Dict, Optional, List
+from pytorch_lightning import LightningModule
+
 import torch
+from torch import nn
 from schnetpack.units import convert_units
 
 __all__ = ["ASEBatchwiseLBFGS", "BatchwiseCalculator"]
+
+
+class NNEnsemble(LightningModule):
+    def __init__(self, models: nn.ModuleList, properties: List[str]):
+        super(NNEnsemble, self).__init__()
+        self.models = models
+        if type(properties) == str:
+            properties = [properties]
+        self.properties = properties
+
+    def setup(self, stage: Optional[str] = None) -> None:
+        for model in self.models:
+            model.setup(stage)
+
+    def forward(
+        self,
+        x,
+    ):
+        results = {}
+        for p in self.properties:
+            results[p] = []
+
+        inputs = deepcopy(x)
+        for model in self.models:
+            x = deepcopy(inputs)
+            predictions = model(x)
+            for prop, values in predictions.items():
+                if prop in self.properties:
+                    results[prop].append(values)
+
+        postprocessed_results = {}
+        for prop, values in results.items():
+            stacked_values = torch.stack(values)
+            postprocessed_results[prop] = stacked_values.mean(dim=0)
+            postprocessed_results["{}_std".format(prop)] = stacked_values.mean(dim=0)
+
+        return postprocessed_results
 
 
 class Calculator:
@@ -72,6 +115,7 @@ class BatchwiseCalculator(Calculator):
         atoms_converter,
         device="cpu",
         auxiliary_output_modules=None,
+        use_ensemble=False,
         energy_key="energy",
         force_key="forces",
         energy_unit="eV",
@@ -86,6 +130,9 @@ class BatchwiseCalculator(Calculator):
 
         device: torch.device
             device used for calculations (default="cpu")
+
+        auxiliary_output_modules: torch.nn.Module
+            auxiliary module to manipulate output properties (e.g., prior energy or forces)
 
         energy_key: str
             name of energies in model (default="energy")
@@ -107,6 +154,7 @@ class BatchwiseCalculator(Calculator):
         self.model_results = None
         self.model_file = model_file
         self.auxiliary_output_modules = auxiliary_output_modules or []
+        self.use_ensemble = use_ensemble
 
         self.energy_key = energy_key
         self.force_key = force_key
@@ -125,10 +173,34 @@ class BatchwiseCalculator(Calculator):
         self._load_model(model_file)
 
     def _load_model(self, model_file):
-        self.model = torch.load(model_file, map_location=self.device)
-        for auxiliary_output_module in self.auxiliary_output_modules:
-            self.model.output_modules.insert(1, auxiliary_output_module)
-        self.model.eval()
+        if self.use_ensemble:
+            # load nn model ensemble
+            model_names = os.listdir(model_file)
+            model_paths = [
+                os.path.join(model_file, model_name) for model_name in model_names
+            ]
+            models = torch.nn.ModuleList(
+                [
+                    torch.load(
+                        os.path.join(path, "best_model"), map_location=self.device
+                    )
+                    for path in model_paths
+                ]
+            )
+            for m in models:
+                for auxiliary_output_module in self.auxiliary_output_modules:
+                    m.output_modules.insert(1, auxiliary_output_module)
+                m.eval()
+            self.model = NNEnsemble(
+                models=models, properties=[self.energy_key, self.force_key]
+            )
+            self.model.eval()
+        else:
+            # Load single model
+            self.model = torch.load(model_file, map_location=self.device)
+            for auxiliary_output_module in self.auxiliary_output_modules:
+                self.model.output_modules.insert(1, auxiliary_output_module)
+            self.model.eval()
 
     def _update_model_inputs(self, atoms):
         self.model_inputs = self.atoms_converter(atoms)
