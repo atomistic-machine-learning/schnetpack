@@ -670,7 +670,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             .repeat(q_euclidean.shape[1], 0)
             .repeat(q_euclidean.shape[2], 1)
         )
-        r = np.zeros((self.n_atoms * self.n_configs, 3), dtype=np.float32)
+        r = np.zeros((self.n_atoms * self.n_configs, 3), dtype=np.float64)
         for config_idx, at in enumerate(self.atoms):
             first_idx = config_idx * self.n_atoms
             last_idx = config_idx * self.n_atoms + self.n_atoms
