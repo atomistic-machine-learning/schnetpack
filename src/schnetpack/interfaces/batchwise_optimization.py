@@ -1,4 +1,3 @@
-import torch
 import pickle
 import time
 import numpy as np
@@ -10,15 +9,58 @@ from ase.parallel import world, barrier
 from ase.io import write
 from ase import Atoms
 
-from schnetpack import properties
+import torch
 from schnetpack.units import convert_units
 
+__all__ = ["ASEBatchwiseLBFGS", "BatchwiseCalculator"]
 
-__all__ = ["ASEBatchwiseLBFGS"]
+
+class Calculator:
+    """
+    Base class for ase calculators.
+    """
+
+    def __init__(self):
+        self.results = None
+        self.atoms = None
+
+    def calculation_required(self, atoms, properties=None):
+        if self.atoms is None or not self.atoms == atoms:
+            return True
+        return False
+
+    def get_forces(
+        self,
+        atoms,
+    ):
+        if self.calculation_required(atoms):
+            self.calculate(atoms)
+        return self.results["forces"]
+
+    def get_potential_energy(
+        self,
+        atoms,
+    ):
+        if self.calculation_required(atoms):
+            self.calculate(atoms)
+        return self.results["energy"]
+
+    def get_stress(
+        self,
+        atoms,
+    ):
+        if self.calculation_required(atoms):
+            self.calculate(atoms)
+        return self.results["stress"]
+
+    def calculate(self, atoms):
+        pass
 
 
-class BatchwiseDynamics(Dynamics):
-    """Base-class for batch-wise MD and structure optimization classes."""
+class BatchwiseCalculator(Calculator):
+    """
+    Calculator for neural network models for batchwise optimization.
+    """
 
     energy = "energy"
     forces = "forces"
@@ -26,32 +68,134 @@ class BatchwiseDynamics(Dynamics):
 
     def __init__(
         self,
-        model,
-        atoms,
-        converter,
-        logfile,
-        trajectory,
-        fixed_atoms_mask=None,
-        append_trajectory=False,
-        master=None,
+        model_file,
+        atoms_converter,
+        device="cpu",
+        auxiliary_output_modules=None,
         energy_key="energy",
         force_key="forces",
         energy_unit="eV",
         position_unit="Ang",
+    ):
+        """
+        model_file: str
+            path to trained model
+
+        atoms_converter: schnetpack.interfaces.AtomsConverter
+            Class used to convert ase Atoms objects to schnetpack input
+
+        device: torch.device
+            device used for calculations (default="cpu")
+
+        energy_key: str
+            name of energies in model (default="energy")
+
+        force_key: str
+            name of forces in model (default="forces")
+
+        energy_unit: str, float
+            energy units used by model (default="eV")
+
+        position_unit: str, float
+            position units used by model (default="Angstrom")
+        """
+
+        super(BatchwiseCalculator, self).__init__()
+
+        self.device = device
+        self.atoms_converter = atoms_converter
+        self.model_results = None
+        self.model_file = model_file
+        self.auxiliary_output_modules = auxiliary_output_modules or []
+
+        self.energy_key = energy_key
+        self.force_key = force_key
+
+        # set up basic conversion factors
+        self.energy_conversion = convert_units(energy_unit, "eV")
+        self.position_conversion = convert_units(position_unit, "Angstrom")
+
+        # Unit conversion to default ASE units
+        self.property_units = {
+            self.energy: self.energy_conversion,
+            self.forces: self.energy_conversion / self.position_conversion,
+            self.stress: self.energy_conversion / self.position_conversion**3,
+        }
+
+        self._load_model(model_file)
+
+    def _load_model(self, model_file):
+        self.model = torch.load(model_file, map_location=self.device)
+        for auxiliary_output_module in self.auxiliary_output_modules:
+            self.model.output_modules.insert(1, auxiliary_output_module)
+        self.model.eval()
+
+    def _update_model_inputs(self, atoms):
+        self.model_inputs = self.atoms_converter(atoms)
+
+    def _requires_calculation(self, property_keys, atoms):
+        if self.model_results is None:
+            return True
+        for name in property_keys:
+            if name not in self.model_results:
+                return True
+        if len(self.atoms) != len(atoms):
+            return True
+        for atom, atom_ref in zip(atoms, self.atoms):
+            if atom != atom_ref:
+                return True
+
+    def get_forces(self, atoms, fixed_atoms_mask=None):
+        if self._requires_calculation(
+            property_keys=[self.energy_key, self.force_key], atoms=atoms
+        ):
+            self.calculate(atoms)
+        f = (
+            self.model_results[self.force_key].detach().cpu().numpy()
+            * self.property_units[self.forces]
+        )
+        if fixed_atoms_mask is not None:
+            f[fixed_atoms_mask] *= 0.0
+        return f
+
+    def get_potential_energy(self, atoms):
+        if self._requires_calculation(property_keys=[self.energy_key], atoms=atoms):
+            self.calculate(atoms)
+        return (
+            self.model_results[self.energy_key].detach().cpu().numpy()
+            * self.property_units[self.energy]
+        )
+
+    def calculate(self, atoms):
+        self._update_model_inputs(atoms)
+        self.model_results = self.model(self.model_inputs)
+        self.atoms = atoms
+
+
+class BatchwiseDynamics(Dynamics):
+    """Base-class for batch-wise MD and structure optimization classes."""
+
+    def __init__(
+        self,
+        calculator,
+        atoms,
+        logfile,
+        trajectory,
+        append_trajectory=False,
+        master=None,
         log_every_step=False,
+        fixed_atoms_mask=None,
     ):
         """Structure dynamics object.
 
         Parameters:
 
-        model: torch.nn.Module
-            The force field model used to calculate the respective atomic forces
+        calculator:
+            This calculator provides properties such as forces and energy, which can be used for MD simulations or
+            relaxations
 
         atoms: list of Atoms objects
             The Atoms objects to relax.
-
-        converter: schnetpack.interfaces.AtomsConverter
-            Class used to convert ase Atoms objects to schnetpack input
 
         restart: str
             Filename for restart file.  Default value is *None*.
@@ -65,9 +209,6 @@ class BatchwiseDynamics(Dynamics):
             Trajectory will be constructed.  Use *None* for no
             trajectory.
 
-        fixed_atoms list(int):
-            list of indices corresponding to atoms with positions fixed in space.
-
         append_trajectory: boolean
             Appended to the trajectory file instead of overwriting it.
 
@@ -75,100 +216,30 @@ class BatchwiseDynamics(Dynamics):
             Defaults to None, which causes only rank 0 to save files.  If
             set to true,  this rank will save files.
 
-        energy_key: str
-            name of energies in model (default="energy")
-
-        force_key: str
-            name of forces in model (default="forces")
-
-        energy_unit: str, float
-            energy units used by model (default="eV")
-
-        position_unit: str, float
-            position units used by model (default="Angstrom")
-
         log_every_step: bool
             set to True to log Dynamics after each step (default=False)
-        """
-        super().__init__(None, logfile, trajectory, append_trajectory, master)
 
-        self.model = model
-        self.atoms = atoms
-        self.converter = converter
-        self.fixed_atoms_mask = fixed_atoms_mask
-        self.previous_pos = None
-        self.model_results = None
-        self.energy_key = energy_key
-        self.force_key = force_key
+        fixed_atoms list(int):
+            list of indices corresponding to atoms with positions fixed in space.
+        """
+        super().__init__(
+            atoms=atoms,
+            logfile=logfile,
+            trajectory=trajectory,
+            append_trajectory=append_trajectory,
+            master=master,
+        )
+
+        self.calculator = calculator
         self.trajectory = trajectory
         self.log_every_step = log_every_step
-
-        # set up basic conversion factors
-        self.energy_conversion = convert_units(energy_unit, "eV")
-        self.position_conversion = convert_units(position_unit, "Angstrom")
-
-        # Unit conversion to default ASE units
-        self.property_units = {
-            self.energy: self.energy_conversion,
-            self.forces: self.energy_conversion / self.position_conversion,
-            self.stress: self.energy_conversion / self.position_conversion**3,
-        }
-
-        # get initial model inputs and set device
-        self._update_model_inputs()
-        self.device = (
-            torch.device("cuda")
-            if self.model_inputs[properties.R].is_cuda
-            else torch.device("cpu")
-        )
-
-    def _update_model_inputs(self):
-        self.model_inputs = self.converter(self.atoms)
-
-    def _requires_calculation(self, property_keys):
-        if self.model_results is None or self.previous_pos is None:
-            return True
-        for name in property_keys:
-            if name not in self.model_results:
-                return True
-        return not np.array_equal(
-            self.previous_pos, self.model_inputs[properties.R].detach().cpu().numpy()
-        )
-
-    def _get_forces(self, inputs):
-        if self._requires_calculation(property_keys=[self.energy_key, self.force_key]):
-            self.model_results = self.model(inputs)
-            self.previous_pos = self.model_inputs[properties.R].detach().cpu().numpy()
-        f = (
-            self.model_results[self.force_key].detach().cpu().numpy()
-            * self.property_units[self.forces]
-        )
-        if self.fixed_atoms_mask is not None:
-            f[self.fixed_atoms_mask] *= 0.0
-        return f
-
-    def _get_potential_energy(self, inputs):
-        if self._requires_calculation(property_keys=[self.energy_key]):
-            self.model_results = self.model(inputs)
-        return (
-            self.model_results[self.energy_key].detach().cpu().numpy()
-            * self.property_units[self.energy]
-        )
+        self.fixed_atoms_mask = fixed_atoms_mask
+        self.n_configs = len(self.atoms)
+        self.n_atoms = len(self.atoms[0])
 
     def irun(self):
         # compute initial structure and log the first step
-        self._get_forces(self.model_inputs)
-
-        # in the following we are assuming that index_m is sorted in ascending order
-        # this is required since the flat tensors are reshaped to tensors of dimension batch_size x n_atoms x 3
-        dev_from_sorted_index_m = (
-            self.model_inputs[properties.idx_m].sort()[0]
-            - self.model_inputs[properties.idx_m]
-        )
-        if abs(dev_from_sorted_index_m).sum() > 0.0:
-            raise ValueError(
-                "idx_m is assumed to be sorted in ascending order, this is not the case here!"
-            )
+        self.calculator.get_forces(self.atoms, fixed_atoms_mask=self.fixed_atoms_mask)
 
         # yield the first time to inspect before logging
         yield False
@@ -183,9 +254,6 @@ class BatchwiseDynamics(Dynamics):
             # compute the next step
             self.step()
             self.nsteps += 1
-
-            # update the model inputs (needed to get new nbh list)
-            self._update_model_inputs()
 
             # let the user inspect the step and change things before logging
             # and predicting the next step
@@ -221,36 +289,26 @@ class BatchwiseOptimizer(BatchwiseDynamics):
 
     def __init__(
         self,
-        model,
+        calculator,
         atoms,
-        converter,
-        fixed_atoms_mask,
         restart,
         logfile,
         trajectory,
         master=None,
         append_trajectory=False,
-        energy_key="energy",
-        force_key="forces",
-        energy_unit="eV",
-        position_unit="Ang",
         log_every_step=False,
+        fixed_atoms_mask=None,
     ):
         """Structure optimizer object.
 
         Parameters:
 
-        model: torch.nn.Module
-            The force field model used to calculate the respective atomic forces
+        calculator:
+            This calculator provides properties such as forces and energy, which can be used for MD simulations or
+            relaxations
 
         atoms: list of Atoms objects
             The Atoms objects to relax.
-
-        converter: schnetpack.interfaces.AtomsConverter
-            Class used to convert ase Atoms objects to schnetpack input
-
-        fixed_atoms list(int):
-            list of indices corresponding to atoms with positions fixed in space.
 
         restart: str
             Filename for restart file.  Default value is *None*.
@@ -271,36 +329,22 @@ class BatchwiseOptimizer(BatchwiseDynamics):
         append_trajectory: boolean
             Appended to the trajectory file instead of overwriting it.
 
-        energy_key: str
-            name of energies in model (default="energy")
-
-        force_key: str
-            name of forces in model (default="forces")
-
-        energy_unit: str, float
-            energy units used by model (default="eV")
-
-        position_unit: str, float
-            position units used by model (default="Angstrom")
-
         log_every_step: bool
             set to True to log Dynamics after each step (default=False)
+
+        fixed_atoms list(int):
+            list of indices corresponding to atoms with positions fixed in space.
         """
         BatchwiseDynamics.__init__(
             self,
-            model=model,
+            calculator=calculator,
             atoms=atoms,
-            converter=converter,
-            fixed_atoms_mask=fixed_atoms_mask,
             logfile=logfile,
             trajectory=trajectory,
             master=master,
             append_trajectory=append_trajectory,
-            energy_key=energy_key,
-            force_key=force_key,
-            energy_unit=energy_unit,
-            position_unit=position_unit,
             log_every_step=log_every_step,
+            fixed_atoms_mask=fixed_atoms_mask,
         )
 
         self.restart = restart
@@ -341,12 +385,16 @@ class BatchwiseOptimizer(BatchwiseDynamics):
     def converged(self, forces=None):
         """Did the optimization converge?"""
         if forces is None:
-            forces = self._get_forces(self.model_inputs)
+            forces = self.calculator.get_forces(
+                self.atoms, fixed_atoms_mask=self.fixed_atoms_mask
+            )
         return (forces**2).sum(axis=1).max() < self.fmax**2
 
     def log(self, forces=None):
         if forces is None:
-            forces = self._get_forces(self.model_inputs)
+            forces = self.calculator.get_forces(
+                self.atoms, fixed_atoms_mask=self.fixed_atoms_mask
+            )
         fmax = sqrt((forces**2).sum(axis=1).max())
         T = time.localtime()
         if self.logfile is not None:
@@ -373,8 +421,8 @@ class BatchwiseOptimizer(BatchwiseDynamics):
                 )
 
     def get_relaxation_results(self):
-        self._get_forces(self.model_inputs)
-        return self.atoms, self.model_results
+        self.calculator.get_forces(self.atoms)
+        return self.atoms, self.calculator.model_results
 
     def dump(self, data):
         if world.rank == 0 and self.restart is not None:
@@ -398,10 +446,8 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
 
     def __init__(
         self,
-        model,
+        calculator,
         atoms,
-        converter,
-        fixed_atoms_mask=None,
         restart=None,
         logfile="-",
         trajectory=None,
@@ -411,26 +457,18 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         alpha=70.0,
         use_line_search=False,
         master=None,
-        energy_key="energy",
-        force_key="forces",
-        energy_unit="eV",
-        position_unit="Ang",
         log_every_step=False,
+        fixed_atoms_mask=None,
     ):
 
         """Parameters:
 
-        model: torch.nn.Module
-            The force field model used to calculate the respective atomic forces
+        calculator:
+            This calculator provides properties such as forces and energy, which can be used for MD simulations or
+            relaxations
 
         atoms: list of Atoms objects
             The Atoms objects to relax.
-
-        converter: schnetpack.interfaces.AtomsConverter
-            Class used to convert ase Atoms objects to schnetpack input
-
-        fixed_atoms list(int):
-            list of indices corresponding to atoms with positions fixed in space.
 
         restart: string
             Pickle file used to store vectors for updating the inverse of
@@ -467,37 +505,23 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             Defaults to None, which causes only rank 0 to save files.  If
             set to true, this rank will save files.
 
-        energy_key: str
-            name of energies in model (default="energy")
-
-        force_key: str
-            name of forces in model (default="forces")
-
-        energy_unit: str, float
-            energy units used by model (default="eV")
-
-        position_unit: str, float
-            position units used by model (default="Angstrom")
-
         log_every_step: bool
             set to True to log Dynamics after each step (default=False)
+
+        fixed_atoms list(int):
+            list of indices corresponding to atoms with positions fixed in space.
         """
 
         BatchwiseOptimizer.__init__(
             self,
-            model=model,
+            calculator=calculator,
             atoms=atoms,
-            converter=converter,
-            fixed_atoms_mask=fixed_atoms_mask,
             restart=restart,
             logfile=logfile,
             trajectory=trajectory,
             master=master,
-            energy_key=energy_key,
-            force_key=force_key,
-            energy_unit=energy_unit,
-            position_unit=position_unit,
             log_every_step=log_every_step,
+            fixed_atoms_mask=fixed_atoms_mask,
         )
 
         if maxstep is not None:
@@ -520,7 +544,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         self.p = None
         self.function_calls = 0
         self.force_calls = 0
-        self.n_configs = None
+        self.n_normalizations = 0
 
         if use_line_search:
             raise NotImplementedError("Lines search has not been implemented yet")
@@ -560,10 +584,10 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         Use the given forces, update the history and calculate the next step --
         then take it"""
 
-        self.n_configs = self.model_inputs[properties.n_atoms].shape[0]
-
         if f is None:
-            f = self._get_forces(self.model_inputs)
+            f = self.calculator.get_forces(
+                self.atoms, fixed_atoms_mask=self.fixed_atoms_mask
+            )
 
         # check if updates for respective structures are required
         q_euclidean = -f.reshape(self.n_configs, -1, 3)
@@ -574,8 +598,11 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             .repeat(q_euclidean.shape[1], 0)
             .repeat(q_euclidean.shape[2], 1)
         )
-
-        r = self.model_inputs[properties.R].detach().cpu().numpy()
+        r = np.zeros((self.n_atoms * self.n_configs, 3), dtype=np.float32)
+        for config_idx, at in enumerate(self.atoms):
+            first_idx = config_idx * self.n_atoms
+            last_idx = config_idx * self.n_atoms + self.n_atoms
+            r[first_idx:last_idx] = at.get_positions()
 
         self.update(r, f, self.r0, self.f0, configs_mask)
 
@@ -615,31 +642,27 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         if self.use_line_search is True:
             e = self.func(r)
             self.line_search(r, g, e)
-            dr = (self.alpha_k * self.p).reshape(
-                self.model_inputs[properties.n_atoms].item(), -1
-            )
+            dr = (self.alpha_k * self.p).reshape(self.n_atoms * self.n_configs, -1)
         else:
             self.force_calls += 1
             self.function_calls += 1
             dr = self.determine_step(self.p) * self.damping
 
         # update positions
-        pos_updated = self.model_inputs[properties.R].detach().cpu().numpy() + dr
+        pos_updated = r + dr
 
-        # store in ase Atoms object
+        # create new list of ase Atoms objects with updated positions
         ats = []
-        indices_m = self.model_inputs[properties.idx_m].detach().cpu().numpy()
-        for struc_idx, previous_at in enumerate(self.atoms):
-            # get atom positions for respective structure
-            pos_updated_m = pos_updated[indices_m == struc_idx]
-            # update ase Atoms object
+        for config_idx, at in enumerate(self.atoms):
+            first_idx = config_idx * self.n_atoms
+            last_idx = config_idx * self.n_atoms + self.n_atoms
             at = Atoms(
-                positions=pos_updated_m, numbers=previous_at.get_atomic_numbers()
+                positions=pos_updated[first_idx:last_idx],
+                numbers=self.atoms[config_idx].get_atomic_numbers(),
             )
-            at.pbc = previous_at.pbc
-            at.cell = previous_at.cell
+            at.pbc = self.atoms[config_idx].pbc
+            at.cell = self.atoms[config_idx].cell
             ats.append(at)
-        # store
         self.atoms = ats
 
         self.iteration += 1
@@ -668,17 +691,14 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         # check if any step in entire batch is greater than maxstep
         if np.max(steplengths) >= self.maxstep:
             # rescale steps for each config separately
-            for idx_m in range(self.n_configs):
-                longest_step = np.max(
-                    steplengths[
-                        self.model_inputs[properties.idx_m].detach().cpu() == idx_m
-                    ]
-                )
+            for config_idx in range(self.n_configs):
+                first_idx = config_idx * self.n_atoms
+                last_idx = config_idx * self.n_atoms + self.n_atoms
+                longest_step = np.max(steplengths[first_idx:last_idx])
                 if longest_step >= self.maxstep:
                     print("normalized integration step")
-                    dr[self.model_inputs[properties.idx_m].detach().cpu() == idx_m] *= (
-                        self.maxstep / longest_step
-                    )
+                    self.n_normalizations += 1
+                    dr[first_idx:last_idx] *= self.maxstep / longest_step
         return dr
 
     def update(self, r, f, r0, f0, configs_mask):

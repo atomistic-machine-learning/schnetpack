@@ -1,2 +1,2 @@
 from .ase_interface import *
-from .batchwise_optimizer import *
+from .batchwise_optimization import *
