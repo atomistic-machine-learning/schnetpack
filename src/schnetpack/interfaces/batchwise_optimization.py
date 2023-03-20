@@ -18,7 +18,11 @@ import torch
 from torch import nn
 from schnetpack.units import convert_units
 
-__all__ = ["ASEBatchwiseLBFGS", "BatchwiseCalculator"]
+__all__ = ["ASEBatchwiseLBFGS", "BatchwiseCalculator", "NNEnsemble"]
+
+
+class AtomsConverterError(Exception):
+    pass
 
 
 class NNEnsemble(LightningModule):
@@ -49,13 +53,14 @@ class NNEnsemble(LightningModule):
                 if prop in self.properties:
                     results[prop].append(values)
 
-        postprocessed_results = {}
+        means = {}
+        stds = {}
         for prop, values in results.items():
             stacked_values = torch.stack(values)
-            postprocessed_results[prop] = stacked_values.mean(dim=0)
-            postprocessed_results["{}_std".format(prop)] = stacked_values.mean(dim=0)
+            means[prop] = stacked_values.mean(dim=0)
+            stds[prop] = stacked_values.std(dim=0)
 
-        return postprocessed_results
+        return means, stds
 
 
 class Calculator:
@@ -120,6 +125,7 @@ class BatchwiseCalculator(Calculator):
         force_key="forces",
         energy_unit="eV",
         position_unit="Ang",
+        dtype=torch.float32,
     ):
         """
         model_file: str
@@ -150,14 +156,21 @@ class BatchwiseCalculator(Calculator):
         super(BatchwiseCalculator, self).__init__()
 
         self.device = device
+        self.dtype = dtype
         self.atoms_converter = atoms_converter
-        self.model_results = None
+        self.results = None
         self.model_file = model_file
         self.auxiliary_output_modules = auxiliary_output_modules or []
         self.use_ensemble = use_ensemble
 
         self.energy_key = energy_key
         self.force_key = force_key
+
+        # Mapping between ASE names and model outputs
+        self.property_map = {
+            self.energy: energy_key,
+            self.forces: force_key,
+        }
 
         # set up basic conversion factors
         self.energy_conversion = convert_units(energy_unit, "eV")
@@ -179,37 +192,36 @@ class BatchwiseCalculator(Calculator):
             model_paths = [
                 os.path.join(model_file, model_name) for model_name in model_names
             ]
-            models = torch.nn.ModuleList(
-                [
-                    torch.load(
-                        os.path.join(path, "best_model"), map_location=self.device
-                    )
-                    for path in model_paths
-                ]
-            )
-            for m in models:
+
+            models = []
+            for m_path in model_paths:
+                m = torch.load(
+                    os.path.join(m_path, "best_model"), map_location="cpu"
+                ).to(torch.float64)
                 for auxiliary_output_module in self.auxiliary_output_modules:
                     m.output_modules.insert(1, auxiliary_output_module)
-                m.eval()
+                m = m.eval()
+                m.to(device=self.device, dtype=self.dtype)
+                models.append(m)
+            models = torch.nn.ModuleList(models)
+
             self.model = NNEnsemble(
                 models=models, properties=[self.energy_key, self.force_key]
             )
-            self.model.eval()
+            self.model = self.model.eval()
         else:
             # Load single model
-            self.model = torch.load(model_file, map_location=self.device)
+            model = torch.load(model_file, map_location="cpu").to(torch.float64)
             for auxiliary_output_module in self.auxiliary_output_modules:
-                self.model.output_modules.insert(1, auxiliary_output_module)
-            self.model.eval()
-
-    def _update_model_inputs(self, atoms):
-        self.model_inputs = self.atoms_converter(atoms)
+                model.output_modules.insert(1, auxiliary_output_module)
+            self.model = model.eval()
+            self.model.to(device=self.device, dtype=self.dtype)
 
     def _requires_calculation(self, property_keys, atoms):
-        if self.model_results is None:
+        if self.results is None:
             return True
         for name in property_keys:
-            if name not in self.model_results:
+            if name not in self.results:
                 return True
         if len(self.atoms) != len(atoms):
             return True
@@ -222,26 +234,57 @@ class BatchwiseCalculator(Calculator):
             property_keys=[self.energy_key, self.force_key], atoms=atoms
         ):
             self.calculate(atoms)
-        f = (
-            self.model_results[self.force_key].detach().cpu().numpy()
-            * self.property_units[self.forces]
-        )
+        f = self.results[self.force_key]
         if fixed_atoms_mask is not None:
-            f[fixed_atoms_mask] *= 0.0
+            f[fixed_atoms_mask] = 0.0
         return f
 
     def get_potential_energy(self, atoms):
         if self._requires_calculation(property_keys=[self.energy_key], atoms=atoms):
             self.calculate(atoms)
-        return (
-            self.model_results[self.energy_key].detach().cpu().numpy()
-            * self.property_units[self.energy]
-        )
+        return self.results[self.energy_key]
 
     def calculate(self, atoms):
-        self._update_model_inputs(atoms)
-        self.model_results = self.model(self.model_inputs)
-        self.atoms = atoms
+        property_keys = [
+            self.energy_key,
+            self.force_key,
+        ]  # TODO: make property_keys variable
+
+        inputs = self.atoms_converter(atoms)
+
+        if self.use_ensemble:
+            model_results, stds = self.model(inputs)
+
+            results = {}
+            for prop in property_keys:
+                model_prop = self.property_map[prop]
+                if model_prop in model_results:
+                    results["{}_uncertainty".format(prop)] = (
+                        stds[model_prop].detach().cpu().numpy()
+                        * self.property_units[prop]
+                    )
+        else:
+            model_results = self.model(inputs)
+            results = {}
+
+        # store model results in calculator
+        # TODO: use index information to slice everything properly
+        for prop in property_keys:
+            model_prop = self.property_map[prop]
+            if model_prop in model_results:
+                results[prop] = (
+                    model_results[model_prop].detach().cpu().numpy()
+                    * self.property_units[prop]
+                )
+            else:
+                raise AtomsConverterError(
+                    "'{:s}' is not a property of your model. Please "
+                    "check the model "
+                    "properties!".format(prop)
+                )
+
+        self.results = results
+        self.atoms = atoms.copy()
 
 
 class BatchwiseDynamics(Dynamics):
@@ -494,7 +537,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
 
     def get_relaxation_results(self):
         self.calculator.get_forces(self.atoms)
-        return self.atoms, self.calculator.model_results
+        return self.atoms, self.calculator.results
 
     def dump(self, data):
         if world.rank == 0 and self.restart is not None:
@@ -771,6 +814,8 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
                     print("normalized integration step")
                     self.n_normalizations += 1
                     dr[first_idx:last_idx] *= self.maxstep / longest_step
+                    # dr[first_idx:last_idx] *= 0.
+            # self.initialize()
         return dr
 
     def update(self, r, f, r0, f0, configs_mask):
@@ -786,7 +831,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             y0 = f0.reshape(self.n_configs, 1, -1) - f.reshape(self.n_configs, 1, -1)
             self.y.append(y0)
 
-            ys0 = np.matmul(y0, np.transpose(s0, axes=(0, 2, 1))) + 1e-10
+            ys0 = np.matmul(y0, np.transpose(s0, axes=(0, 2, 1)))  # + 1e-10
             rho0 = np.where(configs_mask[:, None, None], np.ones_like(ys0), 1.0 / ys0)
             self.rho.append(rho0)
 
