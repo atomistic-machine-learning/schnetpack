@@ -719,7 +719,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             last_idx = config_idx * self.n_atoms + self.n_atoms
             r[first_idx:last_idx] = at.get_positions()
 
-        self.update(r, f, self.r0, self.f0, configs_mask)
+        self.update(r, f, self.r0, self.f0)
 
         s = self.s
         y = self.y
@@ -802,7 +802,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         Normalize all steps as the largest step. This way
         we still move along the eigendirection.
         """
-        steplengths = (dr**2).sum(1) ** 0.5
+        steplengths = (dr**2).sum(-1) ** 0.5
         # check if any step in entire batch is greater than maxstep
         if np.max(steplengths) >= self.maxstep:
             # rescale steps for each config separately
@@ -818,7 +818,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             # self.initialize()
         return dr
 
-    def update(self, r, f, r0, f0, configs_mask):
+    def update(self, r, f, r0, f0):
         """Update everything that is kept in memory
 
         This function is mostly here to allow for replay_trajectory.
@@ -831,8 +831,11 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             y0 = f0.reshape(self.n_configs, 1, -1) - f.reshape(self.n_configs, 1, -1)
             self.y.append(y0)
 
-            ys0 = np.matmul(y0, np.transpose(s0, axes=(0, 2, 1)))  # + 1e-10
-            rho0 = np.where(configs_mask[:, None, None], np.ones_like(ys0), 1.0 / ys0)
+            rho0 = np.ones((self.n_configs, 1, 1), dtype=np.float64)
+            for config_idx in range(self.n_configs):
+                ys0 = np.dot(y0[config_idx, 0], s0[config_idx, 0])
+                if ys0 > 1e-8:
+                    rho0[config_idx, 0, 0] = 1.0 / ys0
             self.rho.append(rho0)
 
         if self.iteration > self.memory:
