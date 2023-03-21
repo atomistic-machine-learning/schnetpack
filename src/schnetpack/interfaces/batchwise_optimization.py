@@ -814,8 +814,6 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
                     print("normalized integration step")
                     self.n_normalizations += 1
                     dr[first_idx:last_idx] *= self.maxstep / longest_step
-                    # dr[first_idx:last_idx] *= 0.
-            # self.initialize()
         return dr
 
     def update(self, r, f, r0, f0):
