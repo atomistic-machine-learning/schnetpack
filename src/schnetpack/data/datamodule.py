@@ -117,8 +117,12 @@ class AtomsDataModule(pl.LightningDataModule):
         self.datapath, self.format = resolve_format(datapath, format)
         self.load_properties = load_properties
         self.num_workers = num_workers
-        self.num_val_workers = num_val_workers or self.num_workers
-        self.num_test_workers = num_test_workers or self.num_workers
+        self.num_val_workers = self.num_workers
+        self.num_test_workers = self.num_workers
+        if num_val_workers is not None:
+            self.num_val_workers = num_val_workers
+        if num_test_workers is not None:
+            self.num_test_workers = num_test_workers
         self.property_units = property_units
         self.distance_unit = distance_unit
         self._stats = {}
