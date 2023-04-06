@@ -20,12 +20,10 @@ overfit_batches: 0
 limit_train_batches: 1.0
 limit_val_batches: 1.0
 limit_test_batches: 1.0
-track_grad_norm: -1
 detect_anomaly: False
 
 precision: 32
 accelerator: auto
 num_nodes: 1
-tpu_cores: null
 deterministic: False
 inference_mode: False

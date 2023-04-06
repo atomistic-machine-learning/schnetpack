@@ -268,11 +268,7 @@ class AtomisticTask(pl.LightningModule):
         epoch: int = None,
         batch_idx: int = None,
         optimizer=None,
-        optimizer_idx: int = None,
         optimizer_closure=None,
-        on_tpu: bool = None,
-        using_native_amp: bool = None,
-        using_lbfgs: bool = None,
     ):
         if self.global_step < self.warmup_steps:
             lr_scale = min(1.0, float(self.trainer.global_step + 1) / self.warmup_steps)
