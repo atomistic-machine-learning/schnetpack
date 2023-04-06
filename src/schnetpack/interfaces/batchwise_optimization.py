@@ -245,7 +245,7 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
             position units used by model (default="Angstrom")
         """
 
-        super(BatchwiseCalculator, self).__init__(
+        super(BatchwiseEnsembleCalculator, self).__init__(
             model_file=None,
             atoms_converter=atoms_converter,
             device=device,
