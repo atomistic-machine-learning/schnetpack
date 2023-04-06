@@ -110,10 +110,6 @@ class BatchwiseCalculator(Calculator):
     Calculator for neural network models for batchwise optimization.
     """
 
-    energy = "energy"
-    forces = "forces"
-    stress = "stress"
-
     def __init__(
         self,
         model_file,
@@ -123,6 +119,7 @@ class BatchwiseCalculator(Calculator):
         use_ensemble=False,
         energy_key="energy",
         force_key="forces",
+        stress_key: Optional[str] = None,
         energy_unit="eV",
         position_unit="Ang",
         dtype=torch.float32,
@@ -165,12 +162,7 @@ class BatchwiseCalculator(Calculator):
 
         self.energy_key = energy_key
         self.force_key = force_key
-
-        # Mapping between ASE names and model outputs
-        self.property_map = {
-            self.energy: energy_key,
-            self.forces: force_key,
-        }
+        self.stress_key = stress_key
 
         # set up basic conversion factors
         self.energy_conversion = convert_units(energy_unit, "eV")
@@ -178,9 +170,9 @@ class BatchwiseCalculator(Calculator):
 
         # Unit conversion to default ASE units
         self.property_units = {
-            self.energy: self.energy_conversion,
-            self.forces: self.energy_conversion / self.position_conversion,
-            self.stress: self.energy_conversion / self.position_conversion**3,
+            self.energy_key: self.energy_conversion,
+            self.force_key: self.energy_conversion / self.position_conversion,
+            self.stress_key: self.energy_conversion / self.position_conversion**3,
         }
 
         self._load_model(model_file)
@@ -230,9 +222,7 @@ class BatchwiseCalculator(Calculator):
                 return True
 
     def get_forces(self, atoms, fixed_atoms_mask=None):
-        if self._requires_calculation(
-            property_keys=[self.energy_key, self.force_key], atoms=atoms
-        ):
+        if self._requires_calculation(property_keys=[self.energy_key, self.force_key], atoms=atoms):
             self.calculate(atoms)
         f = self.results[self.force_key]
         if fixed_atoms_mask is not None:
@@ -257,10 +247,9 @@ class BatchwiseCalculator(Calculator):
 
             results = {}
             for prop in property_keys:
-                model_prop = self.property_map[prop]
-                if model_prop in model_results:
+                if prop in model_results:
                     results["{}_uncertainty".format(prop)] = (
-                        stds[model_prop].detach().cpu().numpy()
+                        stds[prop].detach().cpu().numpy()
                         * self.property_units[prop]
                     )
         else:
@@ -270,10 +259,9 @@ class BatchwiseCalculator(Calculator):
         # store model results in calculator
         # TODO: use index information to slice everything properly
         for prop in property_keys:
-            model_prop = self.property_map[prop]
-            if model_prop in model_results:
+            if prop in model_results:
                 results[prop] = (
-                    model_results[model_prop].detach().cpu().numpy()
+                    model_results[prop].detach().cpu().numpy()
                     * self.property_units[prop]
                 )
             else:
