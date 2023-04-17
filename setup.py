@@ -32,7 +32,7 @@ setup(
         "pyyaml",
         "hydra-core>=1.1.0",
         "torch>=1.9",
-        "pytorch_lightning>=1.9.0",
+        "pytorch_lightning>=2.0.0",
         "torchmetrics",
         "hydra-colorlog>=1.1.0",
         "rich",
