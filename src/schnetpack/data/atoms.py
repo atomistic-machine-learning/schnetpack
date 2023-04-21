@@ -67,7 +67,7 @@ class BaseAtomsData(ABC):
         Args:
             load_properties: Set of properties to be loaded and returned.
                 If None, all properties in the ASE dB will be returned.
-            load_properties: If True, load structure properties.
+            load_structure: If True, load structure properties.
             transforms: preprocessing transforms (see schnetpack.data.transforms)
             subset: List of data indices.
         """
@@ -120,7 +120,10 @@ class BaseAtomsData(ABC):
     @property
     def load_properties(self) -> List[str]:
         """Properties to be loaded"""
-        return self._load_properties or self.available_properties
+        if self._load_properties is None:
+            return self.available_properties
+        else:
+            return self._load_properties
 
     @load_properties.setter
     def load_properties(self, val: List[str]):
@@ -202,7 +205,7 @@ class ASEAtomsData(BaseAtomsData):
             datapath: Path to ASE DB.
             load_properties: Set of properties to be loaded and returned.
                 If None, all properties in the ASE dB will be returned.
-            load_properties: If True, load structure properties.
+            load_structure: If True, load structure properties.
             transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
             subset_idx: List of data indices.
             units: property-> unit string dictionary that overwrites the native units
@@ -303,7 +306,8 @@ class ASEAtomsData(BaseAtomsData):
             properties (dict): dictionary with molecular properties
 
         """
-        load_properties = load_properties or self.load_properties
+        if load_properties is None:
+            load_properties = self.load_properties
         load_structure = load_structure or self.load_structure
 
         if self.subset_idx:
