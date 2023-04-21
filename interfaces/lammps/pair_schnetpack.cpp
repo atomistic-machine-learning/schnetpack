@@ -63,13 +63,7 @@ void PairSCHNETPACK::init_style(){
   if (atom->tag_enable == 0)
     error->all(FLERR,"Pair style SchNetPack requires atom IDs");
 
-  // need a full neighbor list
-  int irequest = neighbor->request(this,instance_me);
-  neighbor->requests[irequest]->half = 0;
-  neighbor->requests[irequest]->full = 1;
-
-  // TODO: probably also
-  neighbor->requests[irequest]->ghost = 0;
+  neighbor->add_request(this, NeighConst::REQ_FULL);
 
   // TODO: I think Newton should be off, enforce this.
   // The network should just directly compute the total forces
