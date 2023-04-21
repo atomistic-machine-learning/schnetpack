@@ -26,6 +26,7 @@ class AtomsConverterError(Exception):
 
 
 class NNEnsemble(LightningModule):
+    # TODO: integrate this into EnsembleCalculator directly
     def __init__(self, models: nn.ModuleList, properties: List[str]):
         super(NNEnsemble, self).__init__()
         self.models = models
@@ -108,6 +109,9 @@ class BatchwiseCalculator:
 
         position_unit: str, float
             position units used by model (default="Angstrom")
+
+        dtype: torch.dtype
+            required data type for the model input (default: torch.float32)
         """
 
         self.results = None
@@ -200,9 +204,9 @@ class BatchwiseCalculator:
 
 class BatchwiseEnsembleCalculator(BatchwiseCalculator):
     """
-    Calculator for neural network models for batchwise optimization.
+    Calculator for ensemble of neural network models for batchwise optimization.
     """
-
+    # TODO: inherit from SpkEnsembleCalculator
     def __init__(
         self,
         models_dir,
@@ -243,6 +247,9 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
 
         position_unit: str, float
             position units used by model (default="Angstrom")
+
+        dtype: torch.dtype
+            required data type for the model input (default: torch.float32)
         """
 
         super(BatchwiseEnsembleCalculator, self).__init__(
@@ -648,6 +655,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             conservative value of 70.0 is the default, but number of needed
             steps to converge might be less if a lower value is used. However,
             a lower value also means risk of instability.
+
+        use_line_search: boolean
+            Not implemented yet.
 
         master: boolean
             Defaults to None, which causes only rank 0 to save files.  If
