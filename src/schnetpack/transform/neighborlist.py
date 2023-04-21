@@ -275,14 +275,9 @@ class SkinNeighborList(Transform):
             nbh_transforms: transforms for manipulating the neighbor lists
                 provided by neighbor_list
             cutoff_skin: float
-                If no atom has moved more than the skin-distance since the neighbor list
-                    has been updated the last time, then the neighbor list is reused.
-                    This will save some expensive rebuilds of the list.
-
-        Note:
-            Please choose a sufficiently large cutoff_skin value to ensure that between
-            two subsequent samples no atom can penetrate through the skin into the
-            cutoff sphere of another atom if it is not in the neighbor list of that atom.
+                If no atom has moved more than cutoff_skin/2 since the neighbor list
+                has been updated the last time, then the neighbor list is reused.
+                This will save some expensive rebuilds of the list.
         """
 
         super().__init__()
@@ -361,13 +356,13 @@ class SkinNeighborList(Transform):
             ):
                 # reuse previous neighbor list
                 inputs[properties.idx_i] = (
-                    previous_inputs[properties.idx_i].detach().clone()
+                    previous_inputs[properties.idx_i].clone()
                 )
                 inputs[properties.idx_j] = (
-                    previous_inputs[properties.idx_j].detach().clone()
+                    previous_inputs[properties.idx_j].clone()
                 )
                 inputs[properties.offsets] = (
-                    previous_inputs[properties.offsets].detach().clone()
+                    previous_inputs[properties.offsets].clone()
                 )
                 return False, inputs
 
@@ -385,12 +380,12 @@ class SkinNeighborList(Transform):
         # store new reference conformation and remove old one
         sample_idx = inputs[properties.idx].item()
         stored_inputs = {
-            properties.R: inputs[properties.R].clone(),
-            properties.cell: inputs[properties.cell].clone(),
-            properties.pbc: inputs[properties.pbc].clone(),
-            properties.idx_i: inputs[properties.idx_i].clone(),
-            properties.idx_j: inputs[properties.idx_j].clone(),
-            properties.offsets: inputs[properties.offsets].clone(),
+            properties.R: inputs[properties.R].detach().clone(),
+            properties.cell: inputs[properties.cell].detach().clone(),
+            properties.pbc: inputs[properties.pbc].detach().clone(),
+            properties.idx_i: inputs[properties.idx_i].detach().clone(),
+            properties.idx_j: inputs[properties.idx_j].detach().clone(),
+            properties.offsets: inputs[properties.offsets].detach().clone(),
         }
         self.previous_inputs.update({sample_idx: stored_inputs})
 

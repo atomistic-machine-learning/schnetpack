@@ -46,7 +46,7 @@ We provide a simple patching script for including our interface into LAMMPS.
 
 If you have downloaded the schnetpack repository from Github, move to::
 
-    cd <path/to/schnetpack>/interfaces/lammps
+    cd <path/to/schnetpack/interfaces/lammps>
 
 **Or** if you do not know where the schnetpack repository is located, download the files directly::
 
