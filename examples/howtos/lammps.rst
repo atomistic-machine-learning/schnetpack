@@ -10,8 +10,8 @@ pair_nequip github repository https://github.com/mir-group/pair_nequip [2].
 
 Requirements
 ============
-For the installation of the LAMMPS interface we need the following pre-requisites. Different versions for CUDA might
-cause unknown errors during the installation:
+For the installation of the LAMMPS interface we need the following pre-requisites. Different versions for CUDA
+might cause unknown errors during the installation:
 
 * **CUDA** 11.7
 * **cuDNN**
@@ -29,7 +29,7 @@ cuDNN can be downloaded from: https://developer.nvidia.com/rdp/cudnn-archive.
 We recommend to create a new environment to install the matching version of pytorch-CUDA together with schnetpack and all dependencies.
 For example, the following commands will set up a corresponding conda environment called :code:`spk_lammps`::
 
-    conda create -n spk_lammps python=3.9 pytorch-cuda=11.7 pytorch mkl-include numpy -c pytorch -c nvidia
+    conda create -n spk_lammps python=3.9 cuda-toolkit=11.7 pytorch mkl-include numpy -c pytorch -c nvidia
     conda activate spk_lammps
     pip install schnetpack
     
