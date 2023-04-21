@@ -25,7 +25,7 @@ class AtomsConverterError(Exception):
     pass
 
 
-class NNEnsemble(LightningModule):
+class NNEnsemble(nn.Module):
     # TODO: integrate this into EnsembleCalculator directly
     def __init__(self, models: nn.ModuleList, properties: List[str]):
         super(NNEnsemble, self).__init__()
@@ -102,7 +102,7 @@ class BatchwiseCalculator:
             name of forces in model (default="forces")
 
         stress_key: str
-            name of stress in model (default="stress")
+            name of stress in model (default=None)
 
         energy_unit: str, float
             energy units used by model (default="eV")
@@ -135,8 +135,9 @@ class BatchwiseCalculator:
         self.property_units = {
             self.energy_key: self.energy_conversion,
             self.force_key: self.energy_conversion / self.position_conversion,
-            self.stress_key: self.energy_conversion / self.position_conversion**3,
         }
+        if self.stress_key is not None:
+            self.property_units[self.stress_key] = self.energy_conversion / self.position_conversion ** 3
 
         if model_file:
             self._load_model(model_file)
@@ -161,6 +162,12 @@ class BatchwiseCalculator:
                 return True
 
     def get_forces(self, atoms, fixed_atoms_mask=None):
+        """
+        atoms: List[ase.Atoms]
+
+        fixed_atoms_mask: list(int)
+            list of indices corresponding to atoms with positions fixed in space.
+        """
         if self._requires_calculation(property_keys=[self.energy_key, self.force_key], atoms=atoms):
             self.calculate(atoms)
         f = self.results[self.force_key]
@@ -174,16 +181,11 @@ class BatchwiseCalculator:
         return self.results[self.energy_key]
 
     def calculate(self, atoms):
-        property_keys = [
-            self.energy_key,
-            self.force_key,
-        ]  # TODO: make property_keys variable
-
+        property_keys = list(self.property_units.keys())
         inputs = self.atoms_converter(atoms)
-
         model_results = self.model(inputs)
-        results = {}
 
+        results = {}
         # store model results in calculator
         for prop in property_keys:
             if prop in model_results:
@@ -243,7 +245,7 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
             energy units used by model (default="eV")
 
         stress_key: str
-            name of stress in model (default="stress")
+            name of stress in model (default=None)
 
         position_unit: str, float
             position units used by model (default="Angstrom")
@@ -291,13 +293,8 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
         self.model = self.model.eval()
 
     def calculate(self, atoms):
-        property_keys = [
-            self.energy_key,
-            self.force_key,
-        ]  # TODO: make property_keys variable
-
+        property_keys = list(self.property_units.keys())
         inputs = self.atoms_converter(atoms)
-
         model_results, stds = self.model(inputs)
 
         results = {}
