@@ -227,16 +227,17 @@ For the full API reference, visit our [documentation](https://schnetpack.readthe
 
 If you are using SchNetPack in your research, please cite:
 
+K.T. Schütt, S.S.P. Hessmann, N.W.A. Gebauer, J. Lederer, M. Gastegger.
+SchNetPack 2.0: A neural network toolbox for atomistic machine learning.
+J. Chem. Phys. 2023, 158 (14): 144801. 
+[10.1063/5.0138367](https://doi.org/10.1063/5.0138367)
+[arXiv:2212.05517](https://arxiv.org/abs/2212.05517).
+
 K.T. Schütt, P. Kessel, M. Gastegger, K. Nicoli, A. Tkatchenko, K.-R. Müller.
 SchNetPack: A Deep Learning Toolbox For Atomistic Systems.
-J. Chem. Theory Comput.
+J. Chem. Theory Comput. 2019, 15 (1): 448-455. 
 [10.1021/acs.jctc.8b00908](http://dx.doi.org/10.1021/acs.jctc.8b00908)
-[arXiv:1809.01072](https://arxiv.org/abs/1809.01072). (2018)
-
-K. T. Schütt, S. S. P. Hessmann, N. W. A. Gebauer, J. Lederer, M. Gastegger.
-SchNetPack 2.0: A neural network toolbox for atomistic machine learning.
-[arXiv:2212.05517](https://arxiv.org/abs/2212.05517). (2022)
-
+[arXiv:1809.01072](https://arxiv.org/abs/1809.01072).
 
 ## Acknowledgements
 
