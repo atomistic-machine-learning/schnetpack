@@ -253,7 +253,7 @@ J. Chem. Theory Comput. 2019, 15 (1): 448-455.
         note = {144801},
         eprint = {https://pubs.aip.org/aip/jcp/article-pdf/doi/10.1063/5.0138367/16825487/144801\_1\_5.0138367.pdf},
     }
-    @article{doi:10.1021/acs.jctc.8b00908,
+    @article{schutt2019schnetpack,
         author = {Sch{\"u}tt, Kristof T. and Kessel, Pan and Gastegger, Michael and Nicoli, Kim A. and Tkatchenko, Alexandre and Müller, Klaus-Robert},
         title = "{SchNetPack: A Deep Learning Toolbox For Atomistic Systems}",
         journal = {Journal of Chemical Theory and Computation},
