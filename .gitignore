@@ -126,3 +126,11 @@ interfaces/lammps/examples/*/deployed_model
 
 # batchwise optimizer examples
 examples/howtos/howto_batchwise_relaxations_outputs/*
+tests/testdata/testing_qmugs.py
+tests/testdata/test_ensemble_calculator.py
+tests/testdata/compare_performance.py
+.gitignore
+tests/testdata/batchwise_ensemble_with_average_strategy.npz
+tests/testdata/batchwise_ensemble_without_strategy.npz
+tests/testdata/batchwise_single.npz
+src/schnetpack/datasets/qmugs.py
