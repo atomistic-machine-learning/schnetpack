@@ -74,9 +74,9 @@ class BatchwiseCalculator:
 
     def __init__(
         self,
-        model_file: str or None,
+        model: nn.Module or str,
         atoms_converter: AtomsConverter,
-        device: str = "cpu",
+        device: str or torch.device = "cpu",
         auxiliary_output_modules: Optional[List] = None,
         energy_key: str = "energy",
         force_key: str = "forces",
@@ -86,8 +86,8 @@ class BatchwiseCalculator:
         dtype: torch.dtype = torch.float32,
     ):
         """
-        model_file:
-            path to trained model
+        model:
+            path to trained model or trained model
 
         atoms_converter:
             Class used to convert ase Atoms objects to schnetpack input
@@ -120,10 +120,11 @@ class BatchwiseCalculator:
         self.results = None
         self.atoms = None
 
+        if type(device) == str:
+            device = torch.device(device)
         self.device = device
         self.dtype = dtype
         self.atoms_converter = atoms_converter
-        self.model_file = model_file
         self.auxiliary_output_modules = auxiliary_output_modules or []
 
         self.energy_key = energy_key
@@ -142,11 +143,16 @@ class BatchwiseCalculator:
         if self.stress_key is not None:
             self.property_units[self.stress_key] = self.energy_conversion / self.position_conversion ** 3
 
-        if model_file:
-            self._load_model(model_file)
+        # load model from path if needed
+        if type(model) == str:
+            model = self._load_model(model)
 
-    def _load_model(self, model_file: str) -> None:
-        model = torch.load(model_file, map_location="cpu").to(torch.float64)
+        self._initialize_model(model)
+
+    def _load_model(self, model: str) -> nn.Module:
+        return torch.load(model, map_location="cpu").to(torch.float64)
+
+    def _initialize_model(self, model: nn.Module) -> None:
         for auxiliary_output_module in self.auxiliary_output_modules:
             model.output_modules.insert(1, auxiliary_output_module)
         self.model = model.eval()
@@ -214,7 +220,7 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
     # TODO: inherit from SpkEnsembleCalculator
     def __init__(
         self,
-        models_dir: str,
+        model: str or nn.ModuleList,
         atoms_converter: AtomsConverter,
         device: str = "cpu",
         auxiliary_output_modules: Optional[List[nn.Module]] = None,
@@ -226,8 +232,8 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
         dtype: torch.dtype = torch.float32,
     ):
         """
-        models_dir:
-            directory of trained models
+        model:
+            Path to trained models or module list of trained models
 
         atoms_converter:
             Class used to convert ase Atoms objects to schnetpack input
@@ -256,9 +262,8 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
         dtype:
             required data type for the model input (default: torch.float32)
         """
-
         super(BatchwiseEnsembleCalculator, self).__init__(
-            model_file=None,
+            model=model,
             atoms_converter=atoms_converter,
             device=device,
             auxiliary_output_modules=auxiliary_output_modules,
@@ -269,31 +274,36 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
             position_unit=position_unit,
             dtype=dtype,
         )
-        self._load_model(models_dir)
 
-    def _load_model(self, models_dir: str) -> None:
-        # load nn model ensemble
-        model_names = os.listdir(models_dir)
+    def _load_model(self, model: str) -> nn.ModuleList:
+        # get model paths
+        model_names = os.listdir(model)
         model_paths = [
-            os.path.join(models_dir, model_name) for model_name in model_names
+            os.path.join(model, model_name) for model_name in model_names
         ]
 
-        models = []
+        # create module list
+        models = torch.nn.ModuleList()
         for m_path in model_paths:
             m = torch.load(
                 os.path.join(m_path, "best_model"), map_location="cpu"
             ).to(torch.float64)
+            models.append(m)
+
+        return models
+
+    def _initialize_model(self, model: nn.ModuleList) -> None:
+        # add auxiliary output modules
+        for m in model:
             for auxiliary_output_module in self.auxiliary_output_modules:
                 m.output_modules.insert(1, auxiliary_output_module)
-            m = m.eval()
-            m.to(device=self.device, dtype=self.dtype)
-            models.append(m)
-        models = torch.nn.ModuleList(models)
 
+        # initialize ensemble
         self.model = NNEnsemble(
-            models=models, properties=[self.energy_key, self.force_key]
+            models=model, properties=list(self.property_units.keys())
         )
-        self.model = self.model.eval()
+        self.model = model.eval()
+        self.model.to(device=self.device, dtype=self.dtype)
 
     def calculate(self, atoms: List[ase.Atoms]) -> None:
         property_keys = list(self.property_units.keys())
