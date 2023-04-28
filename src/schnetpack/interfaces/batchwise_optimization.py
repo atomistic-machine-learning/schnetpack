@@ -299,11 +299,10 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
                 m.output_modules.insert(1, auxiliary_output_module)
 
         # initialize ensemble
-        self.model = NNEnsemble(
+        ensemble = NNEnsemble(
             models=model, properties=list(self.property_units.keys())
         )
-        self.model = model.eval()
-        self.model.to(device=self.device, dtype=self.dtype)
+        self.model = ensemble.eval().to(device=self.device, dtype=self.dtype)
 
     def calculate(self, atoms: List[ase.Atoms]) -> None:
         property_keys = list(self.property_units.keys())
