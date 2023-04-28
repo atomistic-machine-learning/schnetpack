@@ -624,6 +624,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         master: Optional[str] = None,
         log_every_step: bool = False,
         fixed_atoms_mask: Optional[List[int]] = None,
+        verbose: bool = False,
     ):
 
         """Parameters:
@@ -713,6 +714,8 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         self.function_calls = 0
         self.force_calls = 0
         self.n_normalizations = 0
+
+        self.verbose = verbose
 
         if use_line_search:
             raise NotImplementedError("Lines search has not been implemented yet")
@@ -864,7 +867,8 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
                 last_idx = config_idx * self.n_atoms + self.n_atoms
                 longest_step = np.max(steplengths[first_idx:last_idx])
                 if longest_step >= self.maxstep:
-                    print("normalized integration step")
+                    if self.verbose:
+                        print("normalized integration step")
                     self.n_normalizations += 1
                     dr[first_idx:last_idx] *= self.maxstep / longest_step
         return dr
