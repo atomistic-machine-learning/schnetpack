@@ -143,7 +143,7 @@ class MD22(GDMLDataModule):
         for positions, energies, forces in zip(data["R"], data["E"], data["F"]):
             ats = Atoms(positions=positions, numbers=numbers)
             properties = {
-                self.energy: np.array([energies]),
+                self.energy: energies if type(energies) is np.ndarray else np.array([energies]),
                 self.forces: forces,
                 structure.Z: ats.numbers,
                 structure.R: ats.positions,
