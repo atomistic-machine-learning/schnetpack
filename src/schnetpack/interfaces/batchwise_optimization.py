@@ -222,7 +222,7 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
         self,
         model: str or nn.ModuleList,
         atoms_converter: AtomsConverter,
-        device: str = "cpu",
+        device: str or torch.device = "cpu",
         auxiliary_output_modules: Optional[List[nn.Module]] = None,
         energy_key: str = "energy",
         force_key: str = "forces",
@@ -233,7 +233,7 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
     ):
         """
         model:
-            Path to trained models or module list of trained models
+            Directory of trained models or module list of trained models
 
         atoms_converter:
             Class used to convert ase Atoms objects to schnetpack input
@@ -616,7 +616,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         restart: Optional[bool] = None,
         logfile: str = "-",
         trajectory: Optional[str] = None,
-        maxstep: Optional[int] = None,
+        maxstep: Optional[float] = None,
         memory: int = 100,
         damping: float = 1.0,
         alpha: float = 70.0,
