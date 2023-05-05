@@ -45,8 +45,10 @@ class Atomwise(nn.Module):
         """
         super(Atomwise, self).__init__()
         self.output_key = output_key
-        self.model_outputs = [output_key, per_atom_output_key]
+        self.model_outputs = [output_key]
         self.per_atom_output_key = per_atom_output_key
+        if self.per_atom_output_key is not None:
+            self.model_outputs.append(self.per_atom_output_key)
         self.n_out = n_out
 
         if aggregation_mode is None and self.per_atom_output_key is None:
