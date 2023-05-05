@@ -274,7 +274,6 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
             position_unit=position_unit,
             dtype=dtype,
         )
-        self.model = self.model.eval()
 
     def _load_model(self, model: str) -> nn.ModuleList:
         # get model paths
