@@ -116,6 +116,7 @@ ENV/
 # experiments
 runs/
 tests/testdata/tmp/test*
+examples/tutorials/forcetut
 
 # lammps examples
 interfaces/lammps/examples/*/*.lammpstrj
