@@ -23,7 +23,7 @@ from schnetpack.data import (
     #WeightedSampler,
 )
 
-from schnetpack.data.sampler import WeightedSampler, StratifiedSampler
+from schnetpack.data.sampler import WeightedSampler, StratifiedSampler, tip_heights
 
 
 __all__ = ["AtomsDataModule", "AtomsDataModuleError"]
@@ -360,6 +360,7 @@ class AtomsDataModule(pl.LightningDataModule):
         #self.train_sampler = None
         self.train_sampler = StratifiedSampler(
             data_source=self.train_dataset,
+            partition_criterion=tip_heights,
             num_samples=100,
         )
         shuffle = False
