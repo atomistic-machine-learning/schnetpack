@@ -10,6 +10,7 @@ import fasteners
 
 import pytorch_lightning as pl
 import torch
+from torch.utils.data import Dataset, Sampler, WeightedRandomSampler, BatchSampler
 
 from schnetpack.data import (
     AtomsDataFormat,
@@ -23,7 +24,7 @@ from schnetpack.data import (
     #WeightedSampler,
 )
 
-from schnetpack.data.sampler import WeightedSampler, StratifiedSampler, tip_heights
+from schnetpack.data.sampler import WeightedSampler, StratifiedSampler, tip_heights, stratified_weights
 
 
 __all__ = ["AtomsDataModule", "AtomsDataModuleError"]
@@ -144,6 +145,8 @@ class AtomsDataModule(pl.LightningDataModule):
         self._train_dataloader = None
         self._val_dataloader = None
         self._test_dataloader = None
+
+        self.train_sampler = None
 
     @property
     def train_transforms(self):
@@ -356,24 +359,44 @@ class AtomsDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> AtomsLoader:
 
-        #shuffle = True
-        #self.train_sampler = None
-        self.train_sampler = StratifiedSampler(
-            data_source=self.train_dataset,
+        sampler_weights = stratified_weights(
+            dataset=self.train_dataset,
             partition_criterion=tip_heights,
-            num_samples=100,
+            num_bins=10,
         )
-        shuffle = False
+        weighted_sampler = WeightedRandomSampler(
+            weights=sampler_weights,
+            num_samples=len(self.train_dataset),
+            replacement=True,
+        )
+        self.train_sampler = BatchSampler(
+            weighted_sampler,
+            batch_size=10,
+            drop_last=True,
+        )
+
+        #self.train_sampler = StratifiedSampler(
+        #    data_source=self.train_dataset,
+        #    partition_criterion=tip_heights,
+        #    num_samples=100,
+        #)
 
         if self._train_dataloader is None:
-            self._train_dataloader = AtomsLoader(
-                self.train_dataset,
-                sampler=self.train_sampler,
-                batch_size=self.batch_size,
-                num_workers=self.num_workers,
-                shuffle=shuffle,
-                pin_memory=self._pin_memory,
-            )
+            if self.train_sampler is None:
+                self._train_dataloader = AtomsLoader(
+                    self.train_dataset,
+                    batch_size=self.batch_size,
+                    num_workers=self.num_workers,
+                    shuffle=True,
+                    pin_memory=self._pin_memory,
+                )
+            else:
+                self._train_dataloader = AtomsLoader(
+                    self.train_dataset,
+                    batch_sampler=self.train_sampler,
+                    num_workers=self.num_workers,
+                    pin_memory=self._pin_memory,
+                )
         return self._train_dataloader
 
     def val_dataloader(self) -> AtomsLoader:
