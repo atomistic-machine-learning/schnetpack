@@ -1,17 +1,17 @@
-from torch.utils.data import Sampler
-from typing import Iterator, Optional, Sequence, List, TypeVar, Generic, Sized
+from typing import Iterator, Optional, Sequence, List, TypeVar, Generic, Sized, Callable
 import torch
 import random
 from schnetpack import properties
 from tqdm import tqdm
 import numpy as np
 from torch.utils.data import Dataset, Sampler
-from torch.utils.data.dataloader import _collate_fn_t, T_co
 import matplotlib.pyplot as plt
+from schnetpack.data import BaseAtomsData
 
 
 __all__ = [
     "StratifiedSampler",
+    "tip_heights",
     "WeightedSampler",
     "TrajectorySampler",
     "WeightedTrajectorySampler",
@@ -19,38 +19,51 @@ __all__ = [
 ]
 
 
+def tip_heights(dataset: BaseAtomsData) -> list:
+    at_idx = 114
+
+    values = []
+    for spl_idx in range(len(dataset)):
+        data = dataset[spl_idx]
+        values.append(data[properties.R][at_idx, 2])
+    return values
+
+
 class StratifiedSampler(Sampler):
+    """
+    Note: make sure that num_bins is chosen sufficiently small to avoid too many empty bins.
+    """
     def __init__(
-            self, data_source, feature_name=properties.R, num_samples=100, num_bins=10, replacement: bool = False
+            self,
+            data_source: BaseAtomsData,
+            partition_criterion: Callable[[BaseAtomsData], List],
+            num_samples: int,
+            num_bins: int = 10,
+            replacement: bool = False,
+            verbose: bool = True,
     ) -> None:
-
-        self.replacement = replacement
-        self._sample_counter = [0 for _ in range(len(data_source))]
-
         self.data_source = data_source
-        self.feature_name = feature_name
         self.num_samples = num_samples
         self.num_bins = num_bins
-        self.at_idx = 2  # 114
-        self.weights = self.calculate_weights()
+        self.replacement = replacement
+        self.verbose = verbose
 
-    def calculate_weights(self):
+        self.weights = self.calculate_weights(partition_criterion)
+        self._sample_counter = [0 for _ in range(len(data_source))]
 
-        feature_values = []
-        for spl_idx in range(len(self.data_source)):
-            data = self.data_source[spl_idx]
-            feature_values.append(data[self.feature_name][self.at_idx, 2])
+    def calculate_weights(self, partition_criterion):
+
+        feature_values = partition_criterion(self.data_source)
         min_value = min(feature_values)
         max_value = max(feature_values)
 
         bins_array = np.linspace(min_value, max_value, num=self.num_bins + 1)[1:]
         bins_array[-1] += 0.1
-
-        #bin_indices = np.digitize(feature_values, np.linspace(min_value, max_value, num=self.num_bins+1)) - 1
         bin_indices = np.digitize(feature_values, bins_array)
         bin_counts = np.bincount(bin_indices, minlength=self.num_bins)
-        #bin_weights = 1.0 / (bin_counts * len(self.data_source))
-        bin_weights = min(bin_counts) / bin_counts
+
+        min_counts = min(bin_counts[bin_counts != 0])
+        bin_weights = np.where(bin_counts == 0, 0, min_counts / bin_counts)
 
         weights = np.zeros(len(self.data_source))
         for i, idx in enumerate(bin_indices):
@@ -63,24 +76,21 @@ class StratifiedSampler(Sampler):
         print("iter=======================")
 
         # compute weighted selection of ids
-        #max_counts = max(self._sample_counter)
-        #weights = [1 - 0.5*w/(max_counts+1) for w in self._sample_counter]
-        #weights *= self.weights
-        #ids = torch.multinomial(torch.tensor(weights), self.num_samples, self.replacement)
         ids = torch.multinomial(torch.tensor(self.weights), self.num_samples, self.replacement)
 
-        # print selection
-        selection = [0 for _ in range(len(self._sample_counter))]
+        if self.verbose:
+            # print selection
+            selection = [0 for _ in range(len(self._sample_counter))]
 
-        # update id counts
-        for idx in ids:
-            self._sample_counter[idx] += 1
-            selection[idx] += 1
+            # update id counts
+            for idx in ids:
+                self._sample_counter[idx] += 1
+                selection[idx] += 1
 
-        print("selection:")
-        print(selection)
-        print("total used:")
-        print(self._sample_counter)
+            print("selection:")
+            print(selection)
+            print("total used:")
+            print(self._sample_counter)
 
         yield from iter(ids.tolist())
 
