@@ -4,7 +4,7 @@ import random
 from schnetpack import properties
 from tqdm import tqdm
 import numpy as np
-from torch.utils.data import Dataset, Sampler
+from torch.utils.data import Dataset, Sampler, WeightedRandomSampler
 import matplotlib.pyplot as plt
 from schnetpack.data import BaseAtomsData
 
@@ -12,11 +12,32 @@ from schnetpack.data import BaseAtomsData
 __all__ = [
     "StratifiedSampler",
     "tip_heights",
+    "stratified_weights",
     "WeightedSampler",
     "TrajectorySampler",
     "WeightedTrajectorySampler",
     "TrajectoryFirstDatapointSampler",
 ]
+
+
+def stratified_weights(dataset, partition_criterion, num_bins=10):
+    feature_values = partition_criterion(dataset)
+    min_value = min(feature_values)
+    max_value = max(feature_values)
+
+    bins_array = np.linspace(min_value, max_value, num=num_bins + 1)[1:]
+    bins_array[-1] += 0.1
+    bin_indices = np.digitize(feature_values, bins_array)
+    bin_counts = np.bincount(bin_indices, minlength=num_bins)
+
+    min_counts = min(bin_counts[bin_counts != 0])
+    bin_weights = np.where(bin_counts == 0, 0, min_counts / bin_counts)
+
+    weights = np.zeros(len(dataset))
+    for i, idx in enumerate(bin_indices):
+        weights[i] = bin_weights[idx]
+
+    return weights
 
 
 def tip_heights(dataset: BaseAtomsData) -> list:
