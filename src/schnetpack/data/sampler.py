@@ -14,82 +14,20 @@ __all__ = [
     "TrajectorySampler",
     "WeightedTrajectorySampler",
     "TrajectoryFirstDatapointSampler",
-    "StratumWeights",
-    "TipHeightWeights",
+    "StratifiedSampler",
+    "tip_heights",
 ]
 
 
-class StratumWeights:
+def uniform_values(self) -> list:
     """
     Dummy Calculator for stratum weights that returns an uniform weights distribution for all samples (weight of each
     sample is close to 1).
     """
-    def __init__(self, dataset, num_bins):
-        self.dataset = dataset
-        self.num_bins = num_bins
-
-    def calculate(self):
-        feature_values = self._partition_criterion()
-        min_value = min(feature_values)
-        max_value = max(feature_values)
-
-        bins_array = np.linspace(min_value, max_value, num=self.num_bins + 1)[1:]
-        bins_array[-1] += 0.1
-        bin_indices = np.digitize(feature_values, bins_array)
-        bin_counts = np.bincount(bin_indices, minlength=self.num_bins)
-
-        min_counts = min(bin_counts[bin_counts != 0])
-        bin_weights = np.where(bin_counts == 0, 0, min_counts / bin_counts)
-
-        weights = np.zeros(len(self.dataset))
-        for i, idx in enumerate(bin_indices):
-            weights[i] = bin_weights[idx]
-
-        return weights
-
-    def _partition_criterion(self) -> list:
-        values = []
-        for spl_idx in range(len(self.dataset)):
-            values.append(spl_idx)
-        return values
-
-
-class TipHeightWeights(StratumWeights):
-    """
-    ...
-    """
-    def __init__(self, dataset, num_bins):
-        super().__init__(dataset=dataset, num_bins=num_bins)
-
-    def _partition_criterion(self) -> list:
-
-        at_idx = 114
-
-        values = []
-        for spl_idx in range(len(self.dataset)):
-            data = self.dataset[spl_idx]
-            values.append(data[properties.R][at_idx, 2])
-        return values
-
-
-def stratified_weights(dataset, partition_criterion, num_bins=10):
-    feature_values = partition_criterion(dataset)
-    min_value = min(feature_values)
-    max_value = max(feature_values)
-
-    bins_array = np.linspace(min_value, max_value, num=num_bins + 1)[1:]
-    bins_array[-1] += 0.1
-    bin_indices = np.digitize(feature_values, bins_array)
-    bin_counts = np.bincount(bin_indices, minlength=num_bins)
-
-    min_counts = min(bin_counts[bin_counts != 0])
-    bin_weights = np.where(bin_counts == 0, 0, min_counts / bin_counts)
-
-    weights = np.zeros(len(dataset))
-    for i, idx in enumerate(bin_indices):
-        weights[i] = bin_weights[idx]
-
-    return weights
+    values = []
+    for spl_idx in range(len(self.dataset)):
+        values.append(spl_idx)
+    return values
 
 
 def tip_heights(dataset: BaseAtomsData) -> list:
@@ -102,7 +40,7 @@ def tip_heights(dataset: BaseAtomsData) -> list:
     return values
 
 
-class StratifiedSampler(Sampler):
+class StratifiedSampler(WeightedRandomSampler):
     """
     Note: make sure that num_bins is chosen sufficiently small to avoid too many empty bins.
     """
@@ -116,13 +54,12 @@ class StratifiedSampler(Sampler):
             verbose: bool = True,
     ) -> None:
         self.data_source = data_source
-        self.num_samples = num_samples
         self.num_bins = num_bins
-        self.replacement = replacement
         self.verbose = verbose
 
-        self.weights = self.calculate_weights(partition_criterion)
-        self._sample_counter = [0 for _ in range(len(data_source))]
+        weights = self.calculate_weights(partition_criterion)
+        super().__init__(weights=weights, num_samples=num_samples, replacement=replacement)
+        #self._sample_counter = [0 for _ in range(len(data_source))]
 
     def calculate_weights(self, partition_criterion):
 
@@ -144,31 +81,31 @@ class StratifiedSampler(Sampler):
 
         return weights
 
-    def __iter__(self) -> Iterator[int]:
+    #def __iter__(self) -> Iterator[int]:
 
-        print("iter=======================")
+    #    print("iter=======================")
 
-        # compute weighted selection of ids
-        ids = torch.multinomial(torch.tensor(self.weights), self.num_samples, self.replacement)
+    #    # compute weighted selection of ids
+    #    ids = torch.multinomial(torch.tensor(self.weights), self.num_samples, self.replacement)
 
-        if self.verbose:
-            # print selection
-            selection = [0 for _ in range(len(self._sample_counter))]
+    #    if self.verbose:
+    #        # print selection
+    #        selection = [0 for _ in range(len(self._sample_counter))]
 
-            # update id counts
-            for idx in ids:
-                self._sample_counter[idx] += 1
-                selection[idx] += 1
+    #        # update id counts
+    #        for idx in ids:
+    #            self._sample_counter[idx] += 1
+    #            selection[idx] += 1
 
-            print("selection:")
-            print(selection)
-            print("total used:")
-            print(self._sample_counter)
+    #        print("selection:")
+    #        print(selection)
+    #        print("total used:")
+    #        print(self._sample_counter)
 
-        yield from iter(ids.tolist())
+    #    yield from iter(ids.tolist())
 
-    def __len__(self):
-        return self.num_samples
+    #def __len__(self):
+    #    return self.num_samples
 
 
 class WeightedSampler(Sampler):
