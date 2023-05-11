@@ -10,14 +10,66 @@ from schnetpack.data import BaseAtomsData
 
 
 __all__ = [
-    "StratifiedSampler",
-    "tip_heights",
-    "stratified_weights",
     "WeightedSampler",
     "TrajectorySampler",
     "WeightedTrajectorySampler",
     "TrajectoryFirstDatapointSampler",
+    "StratumWeights",
+    "TipHeightWeights",
 ]
+
+
+class StratumWeights:
+    """
+    Dummy Calculator for stratum weights that returns an uniform weights distribution for all samples (weight of each
+    sample is close to 1).
+    """
+    def __init__(self, dataset, num_bins):
+        self.dataset = dataset
+        self.num_bins = num_bins
+
+    def calculate(self):
+        feature_values = self._partition_criterion()
+        min_value = min(feature_values)
+        max_value = max(feature_values)
+
+        bins_array = np.linspace(min_value, max_value, num=self.num_bins + 1)[1:]
+        bins_array[-1] += 0.1
+        bin_indices = np.digitize(feature_values, bins_array)
+        bin_counts = np.bincount(bin_indices, minlength=self.num_bins)
+
+        min_counts = min(bin_counts[bin_counts != 0])
+        bin_weights = np.where(bin_counts == 0, 0, min_counts / bin_counts)
+
+        weights = np.zeros(len(self.dataset))
+        for i, idx in enumerate(bin_indices):
+            weights[i] = bin_weights[idx]
+
+        return weights
+
+    def _partition_criterion(self) -> list:
+        values = []
+        for spl_idx in range(len(self.dataset)):
+            values.append(spl_idx)
+        return values
+
+
+class TipHeightWeights(StratumWeights):
+    """
+    ...
+    """
+    def __init__(self, dataset, num_bins):
+        super().__init__(dataset=dataset, num_bins=num_bins)
+
+    def _partition_criterion(self) -> list:
+
+        at_idx = 114
+
+        values = []
+        for spl_idx in range(len(self.dataset)):
+            data = self.dataset[spl_idx]
+            values.append(data[properties.R][at_idx, 2])
+        return values
 
 
 def stratified_weights(dataset, partition_criterion, num_bins=10):
