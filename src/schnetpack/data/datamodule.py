@@ -2,7 +2,7 @@ import logging
 import os
 import shutil
 from copy import copy
-from typing import Optional, List, Dict, Tuple, Union
+from typing import Optional, List, Dict, Tuple, Union, Sequence, Type, Any
 
 
 import numpy as np
@@ -24,6 +24,7 @@ from schnetpack.data import (
 )
 
 from schnetpack.data.sampler import StratifiedSampler, tip_heights
+from schnetpack.utils import str2class
 
 
 __all__ = ["AtomsDataModule", "AtomsDataModuleError"]
@@ -55,6 +56,10 @@ class AtomsDataModule(pl.LightningDataModule):
         train_transforms: Optional[List[torch.nn.Module]] = None,
         val_transforms: Optional[List[torch.nn.Module]] = None,
         test_transforms: Optional[List[torch.nn.Module]] = None,
+
+        train_sampler_cls: str = None,  #Type[torch.utils.data.Sampler] = None,
+        train_sampler_args: Optional[Dict[str, Any]] = None,
+
         num_workers: int = 8,
         num_val_workers: Optional[int] = None,
         num_test_workers: Optional[int] = None,
@@ -103,7 +108,6 @@ class AtomsDataModule(pl.LightningDataModule):
                 set to true, when GPUs are used.
         """
         super().__init__()
-
         self._train_transforms = train_transforms or copy(transforms) or []
         self._val_transforms = val_transforms or copy(transforms) or []
         self._test_transforms = test_transforms or copy(transforms) or []
@@ -145,7 +149,12 @@ class AtomsDataModule(pl.LightningDataModule):
         self._val_dataloader = None
         self._test_dataloader = None
 
-        self.train_sampler = None
+        self.train_sampler_cls = train_sampler_cls
+        self.train_sampler_args = train_sampler_args
+        self.val_sampler_cls = None
+        self.val_sampler_args = None
+        self.test_sampler_cls = None
+        self.test_sampler_args = None
 
     @property
     def train_transforms(self):
@@ -318,6 +327,26 @@ class AtomsDataModule(pl.LightningDataModule):
         else:
             logging.debug(">> ", msg)
 
+    def _setup_sampler(self, sampler_cls, sampler_args, dataset):
+        sampler_cls = str2class(sampler_cls)
+
+        # convert hydra config strings to classes
+        for k, v in sampler_args.items():
+            if type(v) == str:
+                sampler_args[k] = str2class(v)
+
+        # using batch sampler as default
+        batch_sampler = BatchSampler(
+            sampler=sampler_cls(
+                data_source=dataset,
+                num_samples=len(dataset),
+                **sampler_args,
+            ),
+            batch_size=self.batch_size,
+            drop_last=True,
+        )
+        return batch_sampler
+
     def _setup_transforms(self):
         for t in self.train_transforms:
             t.datamodule(self)
@@ -357,21 +386,8 @@ class AtomsDataModule(pl.LightningDataModule):
         return self._test_dataset
 
     def train_dataloader(self) -> AtomsLoader:
-
-        self.train_sampler = BatchSampler(
-            sampler=StratifiedSampler(
-                data_source=self.train_dataset,
-                partition_criterion=tip_heights,
-                num_samples=len(self.train_dataset),
-                num_bins=10,
-                replacement=True,
-            ),
-            batch_size=10,
-            drop_last=True,
-        )
-
         if self._train_dataloader is None:
-            if self.train_sampler is None:
+            if self.train_sampler_cls is None:
                 self._train_dataloader = AtomsLoader(
                     self.train_dataset,
                     batch_size=self.batch_size,
@@ -380,9 +396,14 @@ class AtomsDataModule(pl.LightningDataModule):
                     pin_memory=self._pin_memory,
                 )
             else:
+                train_batch_sampler = self._setup_sampler(
+                    sampler_cls=self.train_sampler_cls,
+                    sampler_args=self.train_sampler_args,
+                    dataset=self.train_dataset
+                )
                 self._train_dataloader = AtomsLoader(
                     self.train_dataset,
-                    batch_sampler=self.train_sampler,
+                    batch_sampler=train_batch_sampler,
                     num_workers=self.num_workers,
                     pin_memory=self._pin_memory,
                 )

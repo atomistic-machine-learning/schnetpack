@@ -18,7 +18,6 @@ __all__ = [
     "tip_heights",
 ]
 
-
 def uniform_values(self) -> list:
     """
     Dummy Calculator for stratum weights that returns an uniform weights distribution for all samples (weight of each
@@ -43,6 +42,7 @@ def tip_heights(dataset: BaseAtomsData) -> list:
 class StratifiedSampler(WeightedRandomSampler):
     """
     Note: make sure that num_bins is chosen sufficiently small to avoid too many empty bins.
+    All str arguments must correspond to python classes
     """
     def __init__(
             self,
