@@ -1,11 +1,9 @@
-from typing import Iterator, Optional, Sequence, List, TypeVar, Generic, Sized, Callable
+from typing import Iterator, List, Callable
 import torch
 import random
 from schnetpack import properties
-from tqdm import tqdm
 import numpy as np
-from torch.utils.data import Dataset, Sampler, WeightedRandomSampler
-import matplotlib.pyplot as plt
+from torch.utils.data import Sampler, WeightedRandomSampler
 from schnetpack.data import BaseAtomsData
 
 
@@ -17,6 +15,7 @@ __all__ = [
     "StratifiedSampler",
     "tip_heights",
 ]
+
 
 def uniform_values(self) -> list:
     """
