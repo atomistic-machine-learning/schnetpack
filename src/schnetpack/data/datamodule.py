@@ -4,13 +4,12 @@ import shutil
 from copy import copy
 from typing import Optional, List, Dict, Tuple, Union, Sequence, Type, Any
 
-
 import numpy as np
 import fasteners
 
 import pytorch_lightning as pl
 import torch
-from torch.utils.data import Dataset, Sampler, WeightedRandomSampler, BatchSampler
+from torch.utils.data import BatchSampler
 
 from schnetpack.data import (
     AtomsDataFormat,
@@ -22,8 +21,6 @@ from schnetpack.data import (
     SplittingStrategy,
     RandomSplit,
 )
-
-from schnetpack.data.sampler import StratifiedSampler, tip_heights
 from schnetpack.utils import str2class
 
 
@@ -56,10 +53,8 @@ class AtomsDataModule(pl.LightningDataModule):
         train_transforms: Optional[List[torch.nn.Module]] = None,
         val_transforms: Optional[List[torch.nn.Module]] = None,
         test_transforms: Optional[List[torch.nn.Module]] = None,
-
-        train_sampler_cls: str = None,  #Type[torch.utils.data.Sampler] = None,
+        train_sampler_cls: str = None,
         train_sampler_args: Optional[Dict[str, Any]] = None,
-
         num_workers: int = 8,
         num_val_workers: Optional[int] = None,
         num_test_workers: Optional[int] = None,
