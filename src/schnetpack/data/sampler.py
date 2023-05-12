@@ -49,7 +49,7 @@ class StratifiedSampler(WeightedRandomSampler):
             partition_criterion: Callable[[BaseAtomsData], List],
             num_samples: int,
             num_bins: int = 10,
-            replacement: bool = False,
+            replacement: bool = True,
             verbose: bool = True,
     ) -> None:
         self.data_source = data_source
