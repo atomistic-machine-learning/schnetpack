@@ -1,15 +1,8 @@
-import os
 import torch
-import logging
-import numpy as np
+from typing import Optional, Dict, List
 
 from schnetpack.data import *
 from schnetpack.datasets.md17 import GDMLDataModule
-import schnetpack.properties as structure
-
-from typing import Optional, Dict, List
-from urllib import request as request
-from ase import Atoms
 
 
 all = ["MD22"]
@@ -122,36 +115,3 @@ class MD22(GDMLDataModule):
             atomrefs=atomrefs,
             **kwargs,
         )
-
-    def _download_data(
-        self,
-        tmpdir,
-        dataset: BaseAtomsData,
-    ):
-        logging.info("Downloading {} data".format(self.molecule))
-        rawpath = os.path.join(tmpdir, self.datasets_dict[self.molecule])
-        url = self.download_url + self.datasets_dict[self.molecule]
-
-        request.urlretrieve(url, rawpath)
-
-        logging.info("Parsing molecule {:s}".format(self.molecule))
-
-        data = np.load(rawpath)
-
-        numbers = data["z"]
-        property_list = []
-        for positions, energies, forces in zip(data["R"], data["E"], data["F"]):
-            ats = Atoms(positions=positions, numbers=numbers)
-            properties = {
-                self.energy: np.array([energies]),
-                self.forces: forces,
-                structure.Z: ats.numbers,
-                structure.R: ats.positions,
-                structure.cell: ats.cell,
-                structure.pbc: ats.pbc,
-            }
-            property_list.append(properties)
-
-        logging.info("Write atoms to db...")
-        dataset.add_systems(property_list=property_list)
-        logging.info("Done.")

@@ -186,7 +186,7 @@ class SpkCalculator(Calculator):
         position_unit: Union[str, float] = "Angstrom",
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
-        converter: AtomsConverter = AtomsConverter,
+        converter: callable = AtomsConverter,
         transforms: Union[
             schnetpack.transform.Transform, List[schnetpack.transform.Transform]
         ] = None,
@@ -205,7 +205,7 @@ class SpkCalculator(Calculator):
             position_unit (str, float): position units used by model (default="Angstrom")
             device (torch.device): device used for calculations (default="cpu")
             dtype (torch.dtype): select model precision (default=float32)
-            converter (schnetpack.interfaces.AtomsConverter): converter used to set up input batches
+            converter (callable): converter used to set up input batches
             transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
                 can be found in the AtomsConverter docstring.
             additional_inputs (dict): additional inputs required for some transforms in the converter.
@@ -302,7 +302,7 @@ class SpkCalculator(Calculator):
                     if prop == self.energy or prop == self.stress:
                         # ase calculator should return scalar energy
                         results[prop] = (
-                            model_results[model_prop].cpu().data.numpy()[0]
+                            model_results[model_prop].cpu().data.numpy().item()
                             * self.property_units[prop]
                         )
                     else:
