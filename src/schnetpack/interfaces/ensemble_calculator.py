@@ -10,6 +10,7 @@ from ase.optimize.optimize import Dynamics
 from ase.parallel import world, barrier
 from ase.io import write
 from ase import Atoms
+from ase.calculators.calculator import Calculator, all_changes
 
 import torch
 from torch import nn
@@ -154,52 +155,6 @@ class SimpleEnsembleAverage(EnsembleAverageStrategy):
 
 
         return torch.mean(processed_input,dim=0)
-
-
-
-class Calculator:
-
-    """
-    Base class for ase calculators.
-    """
-
-    def __init__(self):
-        self.results = None
-        self.atoms = None
-
-    def calculation_required(self, atoms, properties=None):
-        if self.atoms is None or not self.atoms == atoms:
-            return True
-        return False
-
-    def get_forces(
-        self,
-        atoms,
-    ):
-        if self.calculation_required(atoms):
-            self.calculate(atoms)
-        return self.results["forces"]
-
-    def get_potential_energy(
-        self,
-        atoms,
-    ):
-        if self.calculation_required(atoms):
-            self.calculate(atoms)
-        return self.results["energy"]
-
-    # TODO not implemented and I am not sure how to implement it
-    # if view(mol) or Trajcetory writer of ASE called, this causes an error, if not uncommented
-    # def get_stress(
-    #     self,
-    #     atoms,
-    # ):
-    #     if self.calculation_required(atoms):
-    #         self.calculate(atoms)
-    #     return self.results["stress"]
-
-    def calculate(self, atoms):
-        pass
 
 
 
@@ -377,3 +332,51 @@ class EnsembleCalculator(Calculator):
 
         self.atoms = atoms.copy()
     
+
+
+
+
+
+# class Calculator:
+
+#     """
+#     Base class for ase calculators.
+#     """
+
+#     def __init__(self):
+#         self.results = None
+#         self.atoms = None
+
+#     def calculation_required(self, atoms, properties=None):
+#         if self.atoms is None or not self.atoms == atoms:
+#             return True
+#         return False
+
+#     def get_forces(
+#         self,
+#         atoms,
+#     ):
+#         if self.calculation_required(atoms):
+#             self.calculate(atoms)
+#         return self.results["forces"]
+
+#     def get_potential_energy(
+#         self,
+#         atoms,
+#     ):
+#         if self.calculation_required(atoms):
+#             self.calculate(atoms)
+#         return self.results["energy"]
+
+#     # TODO not implemented and I am not sure how to implement it
+#     #if view(mol) or Trajcetory writer of ASE called, this causes an error, if not uncommented
+#     def get_stress(
+#         self,
+#         atoms,
+#     ):
+#         if self.calculation_required(atoms):
+#             self.calculate(atoms)
+#         return self.results["stress"]
+
+#     def calculate(self, atoms):
+#         pass
