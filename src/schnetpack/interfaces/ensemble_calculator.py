@@ -319,7 +319,7 @@ class EnsembleCalculator(Calculator):
         ):
             self.calculate(atoms)
         f = (
-            self.model_results[self.force_key].detach().cpu().numpy()
+            self.model_results[self.force_key]
             * self.property_units[self.forces]
         )
         if fixed_atoms_mask is not None:
@@ -330,7 +330,7 @@ class EnsembleCalculator(Calculator):
         if self._requires_calculation(property_keys=[self.energy_key], atoms=atoms):
             self.calculate(atoms)
         return (
-            self.model_results[self.energy_key].detach().cpu().numpy()
+            self.model_results[self.energy_key]
             * self.property_units[self.energy]
         )
 
@@ -358,7 +358,7 @@ class EnsembleCalculator(Calculator):
                     device=self.device
                     ) 
             
-                self.model_results[p] = stacked_prop
+                self.model_results[p] = stacked_prop.detach().cpu().numpy()
 
             else:
 
@@ -368,11 +368,11 @@ class EnsembleCalculator(Calculator):
 
                 if stacked_prop.dim() == 2:
 
-                    self.model_results[p] = torch.mean(stacked_prop,dim=0)[0]
-                    self.model_results[p+"_std"] = torch.std(stacked_prop,dim=0)[0] 
+                    self.model_results[p] = torch.mean(stacked_prop,dim=0)[0].detach().cpu().numpy()
+                    self.model_results[p+"_std"] = torch.std(stacked_prop,dim=0)[0].detach().cpu().numpy()
                 else:
-                   self.model_results[p] = torch.mean(stacked_prop,dim=0)
-                   self.model_results[p+"_std"] = torch.std(stacked_prop,dim=0) 
+                   self.model_results[p] = torch.mean(stacked_prop,dim=0).detach().cpu().numpy()
+                   self.model_results[p+"_std"] = torch.std(stacked_prop,dim=0).detach().cpu().numpy() 
 
 
         self.atoms = atoms.copy()
