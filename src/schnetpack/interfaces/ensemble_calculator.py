@@ -15,8 +15,9 @@ from ase.calculators.calculator import Calculator, all_changes
 import torch
 from torch import nn
 from schnetpack.units import convert_units
+from schnetpack.model import NeuralNetworkPotential
 
-from typing import List, Optional, Dict, Callable
+from typing import List, Optional, Dict, Callable, Union
 
 class EnsembleAverageStrategy:
 
@@ -170,7 +171,7 @@ class EnsembleCalculator(Calculator):
 
     def __init__(
         self,
-        model_file: List[str],
+        model_file: Union[List[str],List[nn.Module]],
         atoms_converter,
         device="cpu",
         auxiliary_output_modules=None,
@@ -185,6 +186,8 @@ class EnsembleCalculator(Calculator):
         model_file: str
             path to trained models
             has to be a list of paths
+            OR
+            list of preloaded models
 
         atoms_converter: schnetpack.interfaces.AtomsConverter
             Class used to convert ase Atoms objects to schnetpack input
@@ -238,15 +241,22 @@ class EnsembleCalculator(Calculator):
         self._load_model(model_file)
 
     def _load_model(self, model_file):
-        #self.model = torch.load(model_file, map_location=self.device)
         
+        if isinstance(model_file[0],NeuralNetworkPotential):
+
+            # TODO
+            model = nn.ModuleDict(
+                {"model"+str(n): model_file[n].to(self.device) for n in range(len(model_file))}
+            )
+
         # TODO test if better with nn.ModuleDict or nn.ModuleList, idea behind dict was that in the 
         # specific user uncertainity calculation function an uncertainity for every model could be provided
-        model = nn.ModuleDict(
-            {"model"+str(n): torch.load(model_file[n],map_location=self.device) for n in range(len(model_file))}
-        )
-        for n in range(len(model_file)):
-            model["model"+str(n)].output_modules[1].calc_stress = True
+        else:
+            model = nn.ModuleDict(
+                {"model"+str(n): torch.load(model_file[n],map_location=self.device) for n in range(len(model_file))}
+            )
+            #for n in range(len(model_file)):
+            #    model["model"+str(n)].output_modules[1].calc_stress = True
         # for now outcommented because will be checked later
         #for auxiliary_output_module in self.auxiliary_output_modules:
             #self.model.output_modules.insert(1, auxiliary_output_module)
