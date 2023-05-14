@@ -150,3 +150,5 @@ tests/testdata/fitted_trajs/ensemble-cpu-opt_psa003.xyz
 tests/testdata/fitted_trajs/ensemble-cuda-opt_psa005.xyz
 tests/testdata/fitted_trajs/ensemble-cuda-opt_psa006.xyz
 initial_structures.xyz
+tests/testdata/jl_compare.py
+tests/testdata/jl_compare.py

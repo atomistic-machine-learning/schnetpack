@@ -311,7 +311,7 @@ class EnsembleCalculator(Calculator):
 
             
             # applying user defined ensemble average strategy based on uncertainty estimation
-            stacked_prop = torch.stack([ (self.accumulated_results[result][p] *torch.tensor(random.uniform(1.0,1.10))) for result in self.accumulated_results])
+            stacked_prop = torch.stack([ self.accumulated_results[result][p] for result in self.accumulated_results])
             
             if self.ensemble_average_strategy:
 
