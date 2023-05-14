@@ -399,7 +399,7 @@ class AseInterface:
             additional_inputs=additional_inputs,
         )
 
-        self.molecule.set_calculator(calculator)
+        self.molecule.calc = calculator
 
         self.dynamics = None
 
