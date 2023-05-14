@@ -126,3 +126,27 @@ interfaces/lammps/examples/*/deployed_model
 
 # batchwise optimizer examples
 examples/howtos/howto_batchwise_relaxations_outputs/*
+tests/testdata/testing_qmugs.py
+tests/testdata/test_ensemble_calculator.py
+tests/testdata/compare_performance.py
+.gitignore
+tests/testdata/batchwise_ensemble_with_average_strategy.npz
+tests/testdata/batchwise_ensemble_without_strategy.npz
+tests/testdata/batchwise_single.npz
+src/schnetpack/datasets/qmugs.py
+tests/testdata/testing_batchwise_ensemble.py
+tests/testdata/psa_labels.pkl
+tests/testdata/psa_orig-traj-names.pkl
+tests/testdata/psa_top-name.pkl
+tests/testdata/fitted_trajs/ase-cpu-opt_psa001.xyz
+tests/testdata/fitted_trajs/ase-cuda-opt_psa003.xyz
+tests/testdata/fitted_trajs/ase-cuda-opt_psa004.xyz
+tests/testdata/fitted_trajs/batchwise-cpu-opt_psa001.xyz
+tests/testdata/fitted_trajs/batchwise-cuda-opt_psa004.xyz
+tests/testdata/fitted_trajs/batchwise-cpu-opt_psa002.xyz
+tests/testdata/fitted_trajs/batchwise-cuda-opt_psa005.xyz
+tests/testdata/fitted_trajs/ensemble-cpu-opt_psa002.xyz
+tests/testdata/fitted_trajs/ensemble-cpu-opt_psa003.xyz
+tests/testdata/fitted_trajs/ensemble-cuda-opt_psa005.xyz
+tests/testdata/fitted_trajs/ensemble-cuda-opt_psa006.xyz
+initial_structures.xyz
