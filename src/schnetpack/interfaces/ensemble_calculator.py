@@ -244,22 +244,19 @@ class EnsembleCalculator(Calculator):
         
         if isinstance(model_file[0],NeuralNetworkPotential):
 
-            # TODO
             model = nn.ModuleDict(
                 {"model"+str(n): model_file[n].to(self.device) for n in range(len(model_file))}
             )
 
-        # TODO test if better with nn.ModuleDict or nn.ModuleList, idea behind dict was that in the 
         # specific user uncertainity calculation function an uncertainity for every model could be provided
         else:
             model = nn.ModuleDict(
                 {"model"+str(n): torch.load(model_file[n],map_location=self.device) for n in range(len(model_file))}
             )
-            #for n in range(len(model_file)):
-            #    model["model"+str(n)].output_modules[1].calc_stress = True
-        # for now outcommented because will be checked later
-        #for auxiliary_output_module in self.auxiliary_output_modules:
-            #self.model.output_modules.insert(1, auxiliary_output_module)
+
+        for auxiliary_output_module in self.auxiliary_output_modules:
+            for key in self.model.keys():
+                self.model[key].output_modules.insert(1, auxiliary_output_module)
         self.model = model.eval()
         self.model.to(device=self.device,dtype=self.dtype)
 
@@ -327,7 +324,7 @@ class EnsembleCalculator(Calculator):
 
             else:
 
-                # tmp fix for ase-gui error: setting an rray element with a sequence. The requested array would exceed
+                # tmp fix for ase-gui error: setting an array element with a sequence. The requested array would exceed
                 # the maximum number of dimension of 1
                 # only effects energy
 
