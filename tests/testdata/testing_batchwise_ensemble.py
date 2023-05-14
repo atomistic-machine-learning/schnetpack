@@ -11,6 +11,7 @@ from ase.io import read,Trajectory, write
 from ase.visualize import view
 from ase.geometry.analysis import get_rdf
 from ase.optimize import LBFGS
+from ase.vibrations import Vibrations
 from copy import deepcopy
 import numpy as np
 
@@ -24,13 +25,13 @@ Test cases:
 
 '''
 
-calc_names = ["ensemble","batchwise","ase"]
+calc_names = ["ase","ensemble","batchwise","ase"]
 
 for c in calc_names:
     for d in ["cpu","cuda"]:
 
         device = torch.device(d)
-        path = "tests/testdata/md_ethanol.model"
+        path = "tests/testdata/md_ethanol2.model"
         xyz_path = "tests/testdata/md_ethanol.xyz"
         models = [path] * 5
 
@@ -51,11 +52,11 @@ for c in calc_names:
         pos = mol[0].get_positions()
         random.seed(42)
         ats = []
-        for a in range(1):
+        for a in range(30):
 
             for n in range(pos.shape[0]):
 
-                pos[n] = pos[n] * random.uniform(0.9,1.10)
+                pos[n] = pos[n] * random.uniform(0.95,1.15)
 
             ats.append(Atoms(positions = pos, numbers = mol[0].get_atomic_numbers()))
             pos = mol[0].get_positions()
@@ -76,9 +77,11 @@ for c in calc_names:
 
                 a.set_calculator(calculator)
                 optimizer = LBFGS(a)
-                optimizer.run(fmax=0.0005, steps=100)
+                optimizer.run(fmax=0.0005, steps=1000)
 
                 positions[str(i)] = a.get_positions()
+
+
 
             atoms = [Atoms(numbers=numbers,positions=positions[i]) for i in list(positions.keys())]
             write(filename = c+"-"+d+"-opt.xyz",images = atoms)
@@ -106,7 +109,7 @@ for c in calc_names:
             )
 
             # run optimization
-            optimizer.run(fmax=0.0005, steps=100)
+            optimizer.run(fmax=0.0005, steps=1000)
             opt_atoms, opt_props = optimizer.get_relaxation_results()
 
             positions = {str(n): opt_atoms[n].get_positions() for n in range(len(opt_atoms))}
@@ -131,7 +134,7 @@ for c in calc_names:
             )
 
             # run optimization
-            optimizer.run(fmax=0.0005, steps=100)
+            optimizer.run(fmax=0.0005, steps=1000)
             opt_atoms, opt_props = optimizer.get_relaxation_results()
 
             positions = {str(n): opt_atoms[n].get_positions() for n in range(len(opt_atoms))}
