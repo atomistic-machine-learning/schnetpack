@@ -19,80 +19,75 @@ from schnetpack.model import NeuralNetworkPotential
 
 from typing import List, Optional, Dict, Callable, Union
 
+
 class EnsembleAverageStrategy:
-
-    '''
-    base class for Ensemble Average Stragies
-    '''
-
+    """
+    base class for Ensemble Average Strategies
+    """
     def __init__(self):
-
         pass
 
-
-    def uncertainty_estimation(self,inputs,device,**kwargs):
-        
-        '''
+    def uncertainty_estimation(self, inputs: torch.Tensor, device: torch.device = torch.device("cpu")):#, **kwargs):
+        """
         Args:
-            inputs: kwargs["inputs"] torch.Tensor
-            stacked output tensors of predicted property (e.g Energy or Forces)
+            inputs:
+                stacked output tensors of predicted property (e.g Energy or Forces)
 
-            device: kwargs["device"] torch.device
-            device used for calculations (default="cpu") 
+            device:
+                device used for calculations (default="cpu")
 
         Returns:
-            ensemble averages based on user defined uncertainty estimation 
-        
-        '''
+            custom uncertainty estimation
+        """
         raise NotImplementedError
 
 
-
 class SimpleEnsembleAverage(EnsembleAverageStrategy):
-
-    '''
-    simply ensemble average function, mostly for testing only
+    """
+    Simply ensemble average function, mostly for testing only
     Model outputs are dropped if exceeding mean +/- factor*standarddeviation
-    
-    '''
+    """
     def __init__(self,
-                 mode="single",
-                 batchsize = torch.tensor([1],dtype=torch.int8),
+                 mode: str = "single",
                  criteria: Optional[torch.Tensor] = torch.tensor([1.])):
+        """
+        Args:
+            criteria: torch.Tensor
+                factor to be multiplied with standard deviation default value 1
+        """
 
         self.criteria = torch.Tensor([criteria])
         self.mode = mode
-        self.batchsize = batchsize 
+        super().__init__()
 
     def uncertainty_estimation(
             self,
-            inputs,
-            device
+            inputs: torch.Tensor,
+            device: torch.device = torch.device("cpu")
             ):
+        """
+        Args:
+            inputs:
+                stacked output tensors of predicted property (e.g Energy or Forces)
 
-        '''
-        inputs: torch.Tensor
-            stacked output tensors of predicted property (e.g Energy or Forces)
+            device:
+                device used for calculations (default="cpu")
 
-        device: torch.device
-            device used for calculations (default="cpu")  
-
-        criteria: torch.Tensor
-            factor to be multiplied with standard deviation default value 1
-        '''
+        Returns:
+            ...
+        """
 
         num_dim = inputs.size()[-1]
-        batchsize = self.batchsize.to(device)
         criteria = self.criteria.to(device)
-        mean = torch.mean(inputs,dim=0)
-        std = torch.std(inputs,dim=0) * criteria
+        mean = torch.mean(inputs, dim=0)
+        std = torch.std(inputs, dim=0) * criteria
 
-        condition = torch.logical_and(inputs >= (mean-std), inputs <= (mean + std))
+        condition = torch.logical_and(inputs >= (mean - std), inputs <= (mean + std))
 
         if self.mode == "single":
             if num_dim > 1:
                 num_models, num_atoms, num_dim = inputs.size()
-                N = torch.tensor(condition.size()[1] * condition.size()[2],device=device)
+                N = torch.tensor(condition.size()[1] * condition.size()[2], device=device)
 
                 new_dim = 0
                 for n in range(condition.size()[0]):
@@ -107,11 +102,8 @@ class SimpleEnsembleAverage(EnsembleAverageStrategy):
 
             else:
                 processed_input = inputs[condition]
-        
 
         if self.mode == "batchwise":
-
-
             if inputs.dim() == 2:
                 num_models, batchsize = inputs.size()
                 N = torch.tensor(num_models,device=device)
@@ -129,18 +121,14 @@ class SimpleEnsembleAverage(EnsembleAverageStrategy):
                                                 (int(inputs[condition].size()[0] / (batchsize)),
                                                 batchsize))
 
-
-
             if inputs.dim() == 3:
-
-
-                num_models, (num_atoms) , num_dim = inputs.size()
-                mean = torch.mean(inputs,dim=0)
-                std = torch.std(inputs,dim=0) * criteria
+                num_models, (num_atoms), num_dim = inputs.size()
+                mean = torch.mean(inputs, dim=0)
+                std = torch.std(inputs, dim=0) * criteria
 
                 condition = torch.logical_and(inputs >= (mean-std), inputs <= (mean + std))
                 
-                N = torch.tensor(condition.size()[1] * condition.size()[2],device=device)
+                N = torch.tensor(condition.size()[1] * condition.size()[2], device=device)
 
                 new_dim = 0
                 for n in range(condition.size()[0]):
@@ -151,12 +139,9 @@ class SimpleEnsembleAverage(EnsembleAverageStrategy):
                     else:
                         condition[n].fill_(False)
 
-                processed_input = torch.reshape(inputs[condition],(new_dim,num_atoms,num_dim))
+                processed_input = torch.reshape(inputs[condition], (new_dim, num_atoms, num_dim))
 
-
-
-        return torch.mean(processed_input,dim=0)
-
+        return torch.mean(processed_input, dim=0)
 
 
 class EnsembleCalculator(Calculator):
@@ -170,18 +155,19 @@ class EnsembleCalculator(Calculator):
     stress = "stress"
 
     def __init__(
-        self,
-        model_file: Union[List[str],List[nn.Module]],
-        atoms_converter,
-        device="cpu",
-        auxiliary_output_modules=None,
-        energy_key="energy",
-        force_key="forces",
-        stress_key="stress",
-        energy_unit="kcal/mol",
-        position_unit="Ang",
-        dtype = torch.float32,
-        ensemble_average_strategy : Optional[EnsembleAverageStrategy] = None):
+            self,
+            model_file: Union[List[str], List[nn.Module]],
+            atoms_converter,
+            device="cpu",
+            auxiliary_output_modules=None,
+            energy_key="energy",
+            force_key="forces",
+            stress_key="stress",
+            energy_unit="kcal/mol",
+            position_unit="Ang",
+            dtype=torch.float32,
+            ensemble_average_strategy: Optional[EnsembleAverageStrategy] = None
+    ):
         """
         model_file: str
             path to trained models
@@ -251,7 +237,7 @@ class EnsembleCalculator(Calculator):
         # specific user uncertainity calculation function an uncertainity for every model could be provided
         else:
             model = nn.ModuleDict(
-                {"model"+str(n): torch.load(model_file[n],map_location=self.device) for n in range(len(model_file))}
+                {"model"+str(n): torch.load(model_file[n], map_location=self.device) for n in range(len(model_file))}
             )
 
         for auxiliary_output_module in self.auxiliary_output_modules:
@@ -309,7 +295,6 @@ class EnsembleCalculator(Calculator):
         props = list(self.accumulated_results[list(self.accumulated_results.keys())[0]].keys())
         for p in props:
 
-            
             # applying user defined ensemble average strategy based on uncertainty estimation
             stacked_prop = torch.stack([ self.accumulated_results[result][p] for result in self.accumulated_results])
             
@@ -338,52 +323,3 @@ class EnsembleCalculator(Calculator):
 
 
         self.atoms = atoms.copy()
-    
-
-
-
-
-
-# class Calculator:
-
-#     """
-#     Base class for ase calculators.
-#     """
-
-#     def __init__(self):
-#         self.results = None
-#         self.atoms = None
-
-#     def calculation_required(self, atoms, properties=None):
-#         if self.atoms is None or not self.atoms == atoms:
-#             return True
-#         return False
-
-#     def get_forces(
-#         self,
-#         atoms,
-#     ):
-#         if self.calculation_required(atoms):
-#             self.calculate(atoms)
-#         return self.results["forces"]
-
-#     def get_potential_energy(
-#         self,
-#         atoms,
-#     ):
-#         if self.calculation_required(atoms):
-#             self.calculate(atoms)
-#         return self.results["energy"]
-
-#     # TODO not implemented and I am not sure how to implement it
-#     #if view(mol) or Trajcetory writer of ASE called, this causes an error, if not uncommented
-#     def get_stress(
-#         self,
-#         atoms,
-#     ):
-#         if self.calculation_required(atoms):
-#             self.calculate(atoms)
-#         return self.results["stress"]
-
-#     def calculate(self, atoms):
-#         pass
