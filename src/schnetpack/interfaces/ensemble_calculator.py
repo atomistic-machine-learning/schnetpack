@@ -220,8 +220,6 @@ class EnsembleCalculator(Calculator):
         }
 
         self.device = device
-        #self.model_results = None
-        #self.model_file = model_file
         self.dtype = dtype
         self.ensemble_average_strategy = ensemble_average_strategy
 
@@ -326,7 +324,6 @@ class EnsembleCalculator(Calculator):
                         results[prop] = mean.detach().cpu().numpy()
                         results[prop + "_std"] = std.detach().cpu().numpy()
 
-            #self.model_results = model_results
             self.results = results
             self.atoms = atoms.copy()
 
