@@ -2,11 +2,9 @@ import logging
 import os
 import shutil
 from copy import copy
-from typing import Optional, List, Dict, Tuple, Union, Sequence, Type, Any
-
+from typing import Optional, List, Dict, Tuple, Union, Any, Type
 import numpy as np
 import fasteners
-
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import BatchSampler
@@ -21,7 +19,6 @@ from schnetpack.data import (
     SplittingStrategy,
     RandomSplit,
 )
-from schnetpack.utils import str2class
 
 
 __all__ = ["AtomsDataModule", "AtomsDataModuleError"]
@@ -53,7 +50,7 @@ class AtomsDataModule(pl.LightningDataModule):
         train_transforms: Optional[List[torch.nn.Module]] = None,
         val_transforms: Optional[List[torch.nn.Module]] = None,
         test_transforms: Optional[List[torch.nn.Module]] = None,
-        train_sampler_cls: str = None,
+        train_sampler_cls: Optional[Type] = None,
         train_sampler_args: Optional[Dict[str, Any]] = None,
         num_workers: int = 8,
         num_val_workers: Optional[int] = None,
@@ -84,6 +81,9 @@ class AtomsDataModule(pl.LightningDataModule):
             train_transforms: Overrides transform_fn for training.
             val_transforms: Overrides transform_fn for validation.
             test_transforms: Overrides transform_fn for testing.
+            train_sampler_cls: type of torch training sampler.
+                This is by default wrapped into a torch.utils.data.BatchSampler.
+            train_sampler_args: dict of train_sampler keyword arguments.
             num_workers: Number of data loader workers.
             num_val_workers: Number of validation data loader workers
                 (overrides num_workers).
@@ -323,14 +323,6 @@ class AtomsDataModule(pl.LightningDataModule):
             logging.debug(">> ", msg)
 
     def _setup_sampler(self, sampler_cls, sampler_args, dataset):
-        sampler_cls = str2class(sampler_cls)
-
-        # convert hydra config strings to classes
-        for k, v in sampler_args.items():
-            if type(v) == str:
-                sampler_args[k] = str2class(v)
-
-        # using batch sampler as default
         batch_sampler = BatchSampler(
             sampler=sampler_cls(
                 data_source=dataset,
