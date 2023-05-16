@@ -15,6 +15,7 @@ Atoms data
     AtomsLoader
     resolve_format
     AtomsDataFormat
+    StratifiedSampler
 
 
 Creation
@@ -46,3 +47,4 @@ Statistics
     :template: classtemplate.rst
 
     calculate_stats
+    number_of_atoms
