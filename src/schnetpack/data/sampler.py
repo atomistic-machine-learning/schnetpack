@@ -42,6 +42,16 @@ class PropertyCriterion:
         return property_values
 
 
+def tip_heights(dataset: BaseAtomsData) -> list:
+    at_idx = 114
+
+    values = []
+    for spl_idx in range(len(dataset)):
+        data = dataset[spl_idx]
+        values.append(data[properties.R][at_idx, 2])
+    return values
+
+
 class StratifiedSampler(WeightedRandomSampler):
     """
     A custom sampler that performs stratified sampling based on a partition criterion.
