@@ -163,7 +163,7 @@ class EnsembleCalculator(Calculator):
 
     def __init__(
             self,
-            model_file: Union[List[str], List[nn.Module]],
+            model: Union[List[str], List[nn.Module]],
             neighbor_list: schnetpack.transform.Transform,
             energy_key: str = "energy",
             force_key: str = "forces",
@@ -236,23 +236,23 @@ class EnsembleCalculator(Calculator):
             self.stress: self.energy_conversion / self.position_conversion**3,
         }
 
-        self._load_model(model_file)
+        self._load_model(model)
 
-    def _load_model(self, model_file):
+    def _load_model(self, model):
         
-        if isinstance(model_file[0], NeuralNetworkPotential):
-            model = nn.ModuleDict(
-                {"model"+str(n): model_file[n].to(self.device) for n in range(len(model_file))}
+        if isinstance(model[0], NeuralNetworkPotential):
+            self.model = nn.ModuleDict(
+                {"model"+str(n): model[n].to(self.device) for n in range(len(model))}
             )
 
         # specific user uncertainity calculation function an uncertainity for every model could be provided
         else:
-            model = nn.ModuleDict(
-                {"model"+str(n): torch.load(model_file[n], map_location=self.device) for n in range(len(model_file))}
+            self.model = nn.ModuleDict(
+                {"model"+str(n): torch.load(model[n], map_location=self.device) for n in range(len(model))}
             )
 
-        self.model = model.eval()
-        self.model.to(device=self.device, dtype=self.dtype)
+        self.model = self.model.eval()
+        #self.model.to(device=self.device, dtype=self.dtype)
 
     def _requires_calculation(self, property_keys: List[str], atoms: List[ase.Atoms]):
         if self.results is None:
@@ -260,11 +260,8 @@ class EnsembleCalculator(Calculator):
         for name in property_keys:
             if name not in self.results:
                 return True
-        if len(self.atoms) != len(atoms):
+        if atoms != self.atoms:
             return True
-        for atom, atom_ref in zip(atoms, self.atoms):
-            if atom != atom_ref:
-                return True
 
     def calculate(
             self,
@@ -332,7 +329,6 @@ class EnsembleCalculator(Calculator):
             #self.model_results = model_results
             self.results = results
             self.atoms = atoms.copy()
-
 
 
 class EnsembleCalculatorOld(Calculator):
