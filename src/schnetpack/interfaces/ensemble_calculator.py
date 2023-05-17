@@ -250,6 +250,21 @@ class EnsembleCalculator(Calculator):
             self.model.update({"model{}".format(model_idx): m})
         self.model = self.model.eval()
 
+    def _default_average_strategy(self, prop, stacked_model_results):
+
+        mean = torch.mean(stacked_model_results, dim=0) * self.property_units[prop]
+        std = torch.std(stacked_model_results, dim=0) * self.property_units[prop]
+
+        results = {}
+        if prop == self.energy or prop == self.stress:
+            # ase calculator should return scalar energy
+            results[prop] = mean.detach().cpu().numpy().item()
+            results[prop + "_std"] = std.detach().cpu().numpy().item()
+        else:
+            results[prop] = mean.detach().cpu().numpy()
+            results[prop + "_std"] = std.detach().cpu().numpy()
+        return results
+
     def _calculate(self, atoms: Union[ase.Atoms, List[ase.Atoms]], properties: List[str]) -> None:
         inputs = self.atoms_converter(atoms)
 
@@ -286,17 +301,7 @@ class EnsembleCalculator(Calculator):
                     device=self.device
                 ).detach().cpu().numpy()
             else:
-
-                mean = torch.mean(stacked_model_results, dim=0) * self.property_units[prop]
-                std = torch.std(stacked_model_results, dim=0) * self.property_units[prop]
-
-                if prop == self.energy or prop == self.stress:
-                    # ase calculator should return scalar energy
-                    results[prop] = mean.detach().cpu().numpy().item()
-                    results[prop + "_std"] = std.detach().cpu().numpy().item()
-                else:
-                    results[prop] = mean.detach().cpu().numpy()
-                    results[prop + "_std"] = std.detach().cpu().numpy()
+                results.update(self._default_average_strategy(prop, stacked_model_results))
 
         self.results = results
         # self.atoms = atoms.copy()
@@ -327,10 +332,7 @@ class BatchwiseEnsembleCalculator(EnsembleCalculator):
     Requires multiple models
     """
     # TODO: Doc string
-    #       set calc when logging structure to
-    #energy = "energy"
-    #forces = "forces"
-    #stress = "stress"
+    #       set calc when logging structure to visualize energy with ase gui
 
     def __init__(
             self,
@@ -411,26 +413,23 @@ class BatchwiseEnsembleCalculator(EnsembleCalculator):
             if atom != atom_ref:
                 return True
 
-    #def get_forces(self, atoms=None, force_consistent=False, fixed_atoms_mask=None):
-    #    if self._requires_calculation(
-    #            property_keys=[self.energy_key, self.force_key], atoms=atoms
-    #    ):
-    #        self.calculate(atoms)
-    #    f = (
-    #            self.model_results[self.force_key]
-    #            * self.property_units[self.forces]
-    #    )
-    #    if fixed_atoms_mask is not None:
-    #        f[fixed_atoms_mask] *= 0.0
-    #    return f
+    def get_forces(self, atoms=None, force_consistent=False, fixed_atoms_mask=None):
+        self.calculate(atoms, properties=[self.forces, self.energy])
+        f = self.results[self.forces]
+        if fixed_atoms_mask is not None:
+            f[fixed_atoms_mask] *= 0.0
+        return f
 
-    #def get_potential_energy(self, atoms):
-    #    if self._requires_calculation(property_keys=[self.energy_key], atoms=atoms):
-    #        self.calculate(atoms)
-    #    return (
-    #            self.model_results[self.energy_key]
-    #            * self.property_units[self.energy]
-    #    )
+    def _default_average_strategy(self, prop, stacked_model_results):
+
+        mean = torch.mean(stacked_model_results, dim=0) * self.property_units[prop]
+        std = torch.std(stacked_model_results, dim=0) * self.property_units[prop]
+
+        results = {
+            prop: mean.detach().cpu().numpy(),
+            prop + "_std": std.detach().cpu().numpy()
+        }
+        return results
 
     def calculate(
             self,
