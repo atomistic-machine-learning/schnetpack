@@ -171,8 +171,8 @@ class SpkCalculator(Calculator):
 
     """
     # TODO: test relaxation
-    #       fix type casting of model
-    #       update doc string
+    #       fix model type casting issue
+
     energy = "energy"
     forces = "forces"
     stress = "stress"
@@ -213,6 +213,7 @@ class SpkCalculator(Calculator):
             transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
                 can be found in the AtomsConverter docstring.
             additional_inputs (dict): additional inputs required for some transforms in the converter.
+            auxiliary_output_modules: auxiliary module to manipulate output properties (e.g., prior energy or forces)
             **kwargs: Additional arguments for basic ase calculator class
         """
         Calculator.__init__(self, **kwargs)
@@ -256,7 +257,7 @@ class SpkCalculator(Calculator):
         # Container for basic ml model ouputs
         self.model_results = None
 
-    def _load_model(self, model: str) -> schnetpack.model.AtomisticModel:
+    def _load_model(self, model: str or nn.ModuleList) -> schnetpack.model.AtomisticModel:
         """
         Load an individual model, activate stress computation
 
@@ -285,6 +286,18 @@ class SpkCalculator(Calculator):
         return model
 
     def _calculate(self, atoms: Union[ase.Atoms, List[ase.Atoms]], properties: List[str]) -> None:
+        """
+        Internal method to collect model outputs and apply unit convertions.
+
+        Args:
+            atoms (ase.Atoms or list): ASE atoms object or list of ASE atoms objects.
+            properties (list of str): Properties to compute.
+            system_changes (list of str): List of changes for ASE.
+
+        Returns:
+            None
+
+        """
         # Convert to schnetpack input format
         model_inputs = self.converter(atoms)
         model_results = self.model(model_inputs)
@@ -323,10 +336,16 @@ class SpkCalculator(Calculator):
         system_changes: List[str] = all_changes,
     ):
         """
+        Calculate the properties for the given atoms.
+
         Args:
-            atoms (ase.Atoms): ASE atoms object.
-            properties (list of str): select properties computed and stored to results.
+            atoms (ase.Atoms or list): ASE atoms object.
+            properties (list of str): Properties to compute.
             system_changes (list of str): List of changes for ASE.
+
+        Returns:
+            None
+
         """
 
         if self.calculation_required(atoms=atoms, properties=properties):

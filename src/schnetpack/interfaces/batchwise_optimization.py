@@ -1,89 +1,56 @@
-from copy import deepcopy
-import os
 import pickle
 import time
-
 import ase
 import numpy as np
 from math import sqrt
 from os.path import isfile
+from typing import Dict, Optional, List, Tuple, Union
 
 from ase.optimize.optimize import Dynamics
 from ase.parallel import world, barrier
 from ase.io import write
 from ase import Atoms
-
-from typing import Dict, Optional, List, Tuple
+from ase.calculators.calculator import all_changes
 
 import torch
 from torch import nn
-from schnetpack.units import convert_units
-from schnetpack.interfaces.ase_interface import AtomsConverter
+
+import schnetpack
+from schnetpack.interfaces.ase_interface import AtomsConverter, SpkCalculator
+from schnetpack.interfaces.ensemble_calculator import EnsembleCalculator, EnsembleAverageStrategy
 
 
-__all__ = ["ASEBatchwiseLBFGS", "BatchwiseCalculator", "BatchwiseEnsembleCalculator", "NNEnsemble"]
+__all__ = ["ASEBatchwiseLBFGS", "BatchwiseCalculator", "BatchwiseEnsembleCalculator"]
 
 
 class AtomsConverterError(Exception):
     pass
 
 
-class NNEnsemble(nn.Module):
-    # TODO: integrate this into EnsembleCalculator directly
-    def __init__(self, models: nn.ModuleList, properties: List[str]):
-        super(NNEnsemble, self).__init__()
-        self.models = models
-        if type(properties) == str:
-            properties = [properties]
-        self.properties = properties
-
-    def setup(self, stage: Optional[str] = None) -> None:
-        for model in self.models:
-            model.setup(stage)
-
-    def forward(
-        self,
-        x: Dict,
-    ) -> Tuple:
-        results = {}
-        for p in self.properties:
-            results[p] = []
-
-        inputs = deepcopy(x)
-        for model in self.models:
-            x = deepcopy(inputs)
-            predictions = model(x)
-            for prop, values in predictions.items():
-                if prop in self.properties:
-                    results[prop].append(values)
-
-        means = {}
-        stds = {}
-        for prop, values in results.items():
-            stacked_values = torch.stack(values)
-            means[prop] = stacked_values.mean(dim=0)
-            stds[prop] = stacked_values.std(dim=0)
-
-        return means, stds
-
-
-class BatchwiseCalculator:
+class BatchwiseCalculator(SpkCalculator):
     """
     Calculator for neural network models for batchwise optimization.
     """
-
+    # TODO: docstring
+    #       maybe calculate function should calculate all properties always
     def __init__(
-        self,
-        model: nn.Module or str,
-        atoms_converter: AtomsConverter,
-        device: str or torch.device = "cpu",
-        auxiliary_output_modules: Optional[List] = None,
-        energy_key: str = "energy",
-        force_key: str = "forces",
-        stress_key: Optional[str] = None,
-        energy_unit: str = "eV",
-        position_unit: str = "Ang",
-        dtype: torch.dtype = torch.float32,
+            self,
+            model: nn.Module or str,
+            neighbor_list: schnetpack.transform.Transform,
+            energy_key: str = "energy",
+            force_key: str = "forces",
+            stress_key: Optional[str] = None,
+            energy_unit: str = "eV",
+            position_unit: str = "Ang",
+            device: str or torch.device = "cpu",
+            dtype: torch.dtype = torch.float32,
+            converter: callable = AtomsConverter,
+            transforms: Union[
+                schnetpack.transform.Transform, List[schnetpack.transform.Transform]
+            ] = None,
+            additional_inputs: Dict[str, torch.Tensor] = None,
+            auxiliary_output_modules: Optional[List] = None,
+            **kwargs,
     ):
         """
         model:
@@ -117,51 +84,28 @@ class BatchwiseCalculator:
             required data type for the model input (default: torch.float32)
         """
 
-        self.results = None
-        self.atoms = None
+        SpkCalculator.__init__(
+            self,
+            model=model,
+            neighbor_list=neighbor_list,
+            energy_key=energy_key,
+            force_key=force_key,
+            stress_key=stress_key,
+            energy_unit=energy_unit,
+            position_unit=position_unit,
+            device=device,
+            dtype=dtype,
+            converter=converter,
+            transforms=transforms,
+            additional_inputs=additional_inputs,
+            auxiliary_output_modules=auxiliary_output_modules,
+            **kwargs
+        )
 
-        if type(device) == str:
-            device = torch.device(device)
-        self.device = device
-        self.dtype = dtype
-        self.atoms_converter = atoms_converter
-        self.auxiliary_output_modules = auxiliary_output_modules or []
-
-        self.energy_key = energy_key
-        self.force_key = force_key
-        self.stress_key = stress_key
-
-        # set up basic conversion factors
-        self.energy_conversion = convert_units(energy_unit, "eV")
-        self.position_conversion = convert_units(position_unit, "Angstrom")
-
-        # Unit conversion to default ASE units
-        self.property_units = {
-            self.energy_key: self.energy_conversion,
-            self.force_key: self.energy_conversion / self.position_conversion,
-        }
-        if self.stress_key is not None:
-            self.property_units[self.stress_key] = self.energy_conversion / self.position_conversion ** 3
-
-        # load model from path if needed
-        if type(model) == str:
-            model = self._load_model(model)
-
-        self._initialize_model(model)
-
-    def _load_model(self, model: str) -> nn.Module:
-        return torch.load(model, map_location="cpu").to(torch.float64)
-
-    def _initialize_model(self, model: nn.Module) -> None:
-        for auxiliary_output_module in self.auxiliary_output_modules:
-            model.output_modules.insert(1, auxiliary_output_module)
-        self.model = model.eval()
-        self.model.to(device=self.device, dtype=self.dtype)
-
-    def _requires_calculation(self, property_keys: List[str], atoms: List[ase.Atoms]):
+    def calculation_required(self, atoms: List[ase.Atoms], properties: List[str]) -> bool:
         if self.results is None:
             return True
-        for name in property_keys:
+        for name in properties:
             if name not in self.results:
                 return True
         if len(self.atoms) != len(atoms):
@@ -170,37 +114,27 @@ class BatchwiseCalculator:
             if atom != atom_ref:
                 return True
 
-    def get_forces(self, atoms: List[ase.Atoms], fixed_atoms_mask: Optional[List[int]] = None) -> np.array:
-        """
-        atoms:
-
-        fixed_atoms_mask:
-            list of indices corresponding to atoms with positions fixed in space.
-        """
-        if self._requires_calculation(property_keys=[self.energy_key, self.force_key], atoms=atoms):
-            self.calculate(atoms)
-        f = self.results[self.force_key]
+    def get_forces(self, atoms=None, force_consistent=False, fixed_atoms_mask=None):
+        self.calculate(atoms, properties=[self.forces, self.energy])
+        f = self.results[self.forces]
         if fixed_atoms_mask is not None:
-            f[fixed_atoms_mask] = 0.0
+            f[fixed_atoms_mask] *= 0.0
         return f
 
-    def get_potential_energy(self, atoms: List[ase.Atoms]) -> float:
-        if self._requires_calculation(property_keys=[self.energy_key], atoms=atoms):
-            self.calculate(atoms)
-        return self.results[self.energy_key]
-
-    def calculate(self, atoms: List[ase.Atoms]) -> None:
-        property_keys = list(self.property_units.keys())
-        inputs = self.atoms_converter(atoms)
-        model_results = self.model(inputs)
+    def _calculate(self, atoms: Union[ase.Atoms, List[ase.Atoms]], properties: List[str]) -> None:
+        # Convert to schnetpack input format
+        model_inputs = self.converter(atoms)
+        model_results = self.model(model_inputs)
 
         results = {}
-        # store model results in calculator
-        for prop in property_keys:
-            if prop in model_results:
+        # TODO: use index information to slice everything properly
+        for prop in properties:
+            model_prop = self.property_map[prop]
+
+            if model_prop in model_results:
                 results[prop] = (
-                    model_results[prop].detach().cpu().numpy()
-                    * self.property_units[prop]
+                        model_results[model_prop].cpu().data.numpy()
+                        * self.property_units[prop]
                 )
             else:
                 raise AtomsConverterError(
@@ -210,130 +144,135 @@ class BatchwiseCalculator:
                 )
 
         self.results = results
-        self.atoms = atoms.copy()
+        self.model_results = model_results
+
+    def calculate(
+            self,
+            atoms: List[ase.Atoms] = None,
+            properties: List[str] = ["energy"],
+            system_changes: List[str] = all_changes,
+    ) -> None:
+
+        if self.calculation_required(atoms=atoms, properties=properties):
+            self._calculate(atoms=atoms, properties=properties)
+            self.atoms = atoms.copy()
 
 
-class BatchwiseEnsembleCalculator(BatchwiseCalculator):
+class BatchwiseEnsembleCalculator(EnsembleCalculator):
     """
-    Calculator for ensemble of neural network models for batchwise optimization.
+    Calculator for neural network models for ensemble calculations.
+    Requires multiple models
     """
-    # TODO: inherit from SpkEnsembleCalculator
+    # TODO: Doc string
+    #       set calc when logging structure to visualize energy with ase gui
+
     def __init__(
-        self,
-        model: str or nn.ModuleList,
-        atoms_converter: AtomsConverter,
-        device: str or torch.device = "cpu",
-        auxiliary_output_modules: Optional[List[nn.Module]] = None,
-        energy_key: str = "energy",
-        force_key: str = "forces",
-        stress_key: Optional[str] = None,
-        energy_unit: str = "eV",
-        position_unit: str = "Ang",
-        dtype: torch.dtype = torch.float32,
+            self,
+            model: Union[List[str], List[nn.Module]],
+            neighbor_list: schnetpack.transform.Transform,
+            energy_key: str = "energy",
+            force_key: str = "forces",
+            stress_key: Optional[str] = None,
+            energy_unit: Union[str, float] = "kcal/mol",
+            position_unit: Union[str, float] = "Angstrom",
+            device: Union[str, torch.device] = "cpu",
+            dtype: torch.dtype = torch.float32,
+            converter: callable = AtomsConverter,
+            transforms: Union[
+                schnetpack.transform.Transform, List[schnetpack.transform.Transform]
+            ] = None,
+            additional_inputs: Dict[str, torch.Tensor] = None,
+            auxiliary_output_modules=None,
+            ensemble_average_strategy: Optional[EnsembleAverageStrategy] = None,
+            ** kwargs,
     ):
         """
-        model:
-            Directory of trained models or module list of trained models
+        model_file: str
+            path to trained models
+            has to be a list of paths
+            OR
+            list of preloaded models
 
-        atoms_converter:
+        atoms_converter: schnetpack.interfaces.AtomsConverter
             Class used to convert ase Atoms objects to schnetpack input
 
-        device:
+        device: torch.device
             device used for calculations (default="cpu")
 
-        auxiliary_output_modules:
-            auxiliary module to manipulate output properties (e.g., prior energy or forces)
-
-        energy_key:
+        energy_key: str
             name of energies in model (default="energy")
 
-        force_key:
+        force_key: str
             name of forces in model (default="forces")
 
-        energy_unit:
+        energy_unit: str, float
             energy units used by model (default="eV")
 
-        stress_key:
-            name of stress in model (default=None)
-
-        position_unit:
+        position_unit: str, float
             position units used by model (default="Angstrom")
 
-        dtype:
-            required data type for the model input (default: torch.float32)
+        ensemble_average_strategy : User defined class to
+            to calculate ensemble average
         """
+
         super(BatchwiseEnsembleCalculator, self).__init__(
             model=model,
-            atoms_converter=atoms_converter,
-            device=device,
-            auxiliary_output_modules=auxiliary_output_modules,
+            neighbor_list=neighbor_list,
             energy_key=energy_key,
             force_key=force_key,
             stress_key=stress_key,
             energy_unit=energy_unit,
             position_unit=position_unit,
+            device=device,
             dtype=dtype,
+            converter=converter,
+            transforms=transforms,
+            additional_inputs=additional_inputs,
+            auxiliary_output_modules=auxiliary_output_modules,
+            ensemble_average_strategy=ensemble_average_strategy,
+            **kwargs,
         )
 
-    def _load_model(self, model: str) -> nn.ModuleList:
-        # get model paths
-        model_names = os.listdir(model)
-        model_paths = [
-            os.path.join(model, model_name) for model_name in model_names
-        ]
+    def calculation_required(self, atoms: List[ase.Atoms], properties: List[str]) -> bool:
+        if self.results is None:
+            return True
+        for name in properties:
+            if name not in self.results:
+                return True
+        if len(self.atoms) != len(atoms):
+            return True
+        for atom, atom_ref in zip(atoms, self.atoms):
+            if atom != atom_ref:
+                return True
 
-        # create module list
-        models = torch.nn.ModuleList()
-        for m_path in model_paths:
-            m = torch.load(
-                os.path.join(m_path, "best_model"), map_location="cpu"
-            ).to(torch.float64)
-            models.append(m)
+    def get_forces(self, atoms=None, force_consistent=False, fixed_atoms_mask=None):
+        self.calculate(atoms, properties=[self.forces, self.energy])
+        f = self.results[self.forces]
+        if fixed_atoms_mask is not None:
+            f[fixed_atoms_mask] *= 0.0
+        return f
 
-        return models
+    def _default_average_strategy(self, prop, stacked_model_results):
 
-    def _initialize_model(self, model: nn.ModuleList) -> None:
-        # add auxiliary output modules
-        for m in model:
-            for auxiliary_output_module in self.auxiliary_output_modules:
-                m.output_modules.insert(1, auxiliary_output_module)
+        mean = torch.mean(stacked_model_results, dim=0) * self.property_units[prop]
+        std = torch.std(stacked_model_results, dim=0) * self.property_units[prop]
 
-        # initialize ensemble
-        ensemble = NNEnsemble(
-            models=model, properties=list(self.property_units.keys())
-        )
-        self.model = ensemble.eval().to(device=self.device, dtype=self.dtype)
+        results = {
+            prop: mean.detach().cpu().numpy(),
+            prop + "_std": std.detach().cpu().numpy()
+        }
+        return results
 
-    def calculate(self, atoms: List[ase.Atoms]) -> None:
-        property_keys = list(self.property_units.keys())
-        inputs = self.atoms_converter(atoms)
-        model_results, stds = self.model(inputs)
+    def calculate(
+            self,
+            atoms: List[ase.Atoms] = None,
+            properties: List[str] = ["energy"],
+            system_changes: List[str] = all_changes,
+    ) -> None:
 
-        results = {}
-        # store model uncertainties in calculator
-        for prop in property_keys:
-            if prop in model_results:
-                results["{}_uncertainty".format(prop)] = (
-                    stds[prop].detach().cpu().numpy()
-                    * self.property_units[prop]
-                )
-
-        # store model results in calculator
-        for prop in property_keys:
-            if prop in model_results:
-                results[prop] = (
-                    model_results[prop].detach().cpu().numpy()
-                    * self.property_units[prop]
-                )
-            else:
-                raise AtomsConverterError(
-                    "'{:s}' is not a property of your model. Please "
-                    "check the model "
-                    "properties!".format(prop)
-                )
-
-        self.results = results
-        self.atoms = atoms.copy()
+        if self.calculation_required(atoms=atoms, properties=properties):
+            self._calculate(atoms=atoms, properties=properties)
+            self.atoms = atoms.copy()
 
 
 class BatchwiseDynamics(Dynamics):
