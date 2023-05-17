@@ -170,8 +170,8 @@ class SpkCalculator(Calculator):
     ASE calculator for schnetpack machine learning models.
 
     """
-    # TODO: fix type casting of model
-    #       add auxiliary_output_modules
+    # TODO: test relaxation
+    #       fix type casting of model
     #       update doc string
     energy = "energy"
     forces = "forces"
@@ -194,6 +194,7 @@ class SpkCalculator(Calculator):
             schnetpack.transform.Transform, List[schnetpack.transform.Transform]
         ] = None,
         additional_inputs: Dict[str, torch.Tensor] = None,
+        auxiliary_output_modules: Optional[List] = None,
         **kwargs,
     ):
 
@@ -235,6 +236,9 @@ class SpkCalculator(Calculator):
             self.stress: stress_key,
         }
 
+        # auxiliary output modules could, e.g., be additional potential functions based on prior knowledge
+        self.auxiliary_output_modules = auxiliary_output_modules or []
+
         self.model = self._load_model(model)
         self.model.to(device=device, dtype=dtype)
 
@@ -267,6 +271,11 @@ class SpkCalculator(Calculator):
         if type(model) is str:
             # load model and keep it on CPU, device can be changed afterwards
             model = torch.load(model, map_location="cpu").to(torch.float64)
+
+        # add auxiliary output modules before CastTo62
+        for auxiliary_output_module in self.auxiliary_output_modules:
+            model.output_modules.insert(1, auxiliary_output_module)
+
         model = model.eval()
 
         if self.stress_key is not None:

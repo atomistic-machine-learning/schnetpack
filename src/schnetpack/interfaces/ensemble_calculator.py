@@ -195,7 +195,6 @@ class EnsembleCalculator(SpkCalculator):
             **kwargs: Additional arguments for basic ase calculator class
         """
 
-        self.auxiliary_output_modules = auxiliary_output_modules or []
         self.ensemble_average_strategy = ensemble_average_strategy
 
         SpkCalculator.__init__(
@@ -212,6 +211,7 @@ class EnsembleCalculator(SpkCalculator):
             converter=converter,
             transforms=transforms,
             additional_inputs=additional_inputs,
+            auxiliary_output_modules=auxiliary_output_modules,
             **kwargs
         )
 
@@ -222,7 +222,6 @@ class EnsembleCalculator(SpkCalculator):
                 m = torch.load(m)
             for auxiliary_output_module in self.auxiliary_output_modules:
                 m.output_modules.insert(1, auxiliary_output_module)
-            #m.to(self.device, dtype=self.dtype)
             ensemble_model.update({"model{}".format(model_idx): m})
         ensemble_model = ensemble_model.eval()
         return ensemble_model
@@ -387,6 +386,136 @@ class BatchwiseEnsembleCalculator(EnsembleCalculator):
             prop + "_std": std.detach().cpu().numpy()
         }
         return results
+
+    def calculate(
+            self,
+            atoms: List[ase.Atoms] = None,
+            properties: List[str] = ["energy"],
+            system_changes: List[str] = all_changes,
+    ) -> None:
+
+        if self.calculation_required(atoms=atoms, properties=properties):
+            self._calculate(atoms=atoms, properties=properties)
+            self.atoms = atoms.copy()
+
+
+class BatchwiseCalculator(SpkCalculator):
+    """
+    Calculator for neural network models for batchwise optimization.
+    """
+    # TODO: docstring
+    def __init__(
+            self,
+            model: nn.Module or str,
+            neighbor_list: schnetpack.transform.Transform,
+            energy_key: str = "energy",
+            force_key: str = "forces",
+            stress_key: Optional[str] = None,
+            energy_unit: str = "eV",
+            position_unit: str = "Ang",
+            device: str or torch.device = "cpu",
+            dtype: torch.dtype = torch.float32,
+            converter: callable = AtomsConverter,
+            transforms: Union[
+                schnetpack.transform.Transform, List[schnetpack.transform.Transform]
+            ] = None,
+            additional_inputs: Dict[str, torch.Tensor] = None,
+            auxiliary_output_modules: Optional[List] = None,
+            **kwargs,
+    ):
+        """
+        model:
+            path to trained model or trained model
+
+        atoms_converter:
+            Class used to convert ase Atoms objects to schnetpack input
+
+        device:
+            device used for calculations (default="cpu")
+
+        auxiliary_output_modules:
+            auxiliary module to manipulate output properties (e.g., prior energy or forces)
+
+        energy_key:
+            name of energies in model (default="energy")
+
+        force_key:
+            name of forces in model (default="forces")
+
+        stress_key:
+            name of stress in model (default=None)
+
+        energy_unit:
+            energy units used by model (default="eV")
+
+        position_unit:
+            position units used by model (default="Angstrom")
+
+        dtype:
+            required data type for the model input (default: torch.float32)
+        """
+
+        SpkCalculator.__init__(
+            self,
+            model=model,
+            neighbor_list=neighbor_list,
+            energy_key=energy_key,
+            force_key=force_key,
+            stress_key=stress_key,
+            energy_unit=energy_unit,
+            position_unit=position_unit,
+            device=device,
+            dtype=dtype,
+            converter=converter,
+            transforms=transforms,
+            additional_inputs=additional_inputs,
+            auxiliary_output_modules=auxiliary_output_modules,
+            **kwargs
+        )
+
+    def calculation_required(self, atoms: List[ase.Atoms], properties: List[str]) -> bool:
+        if self.results is None:
+            return True
+        for name in properties:
+            if name not in self.results:
+                return True
+        if len(self.atoms) != len(atoms):
+            return True
+        for atom, atom_ref in zip(atoms, self.atoms):
+            if atom != atom_ref:
+                return True
+
+    def get_forces(self, atoms=None, force_consistent=False, fixed_atoms_mask=None):
+        self.calculate(atoms, properties=[self.forces, self.energy])
+        f = self.results[self.forces]
+        if fixed_atoms_mask is not None:
+            f[fixed_atoms_mask] *= 0.0
+        return f
+
+    def _calculate(self, atoms: Union[ase.Atoms, List[ase.Atoms]], properties: List[str]) -> None:
+        # Convert to schnetpack input format
+        model_inputs = self.converter(atoms)
+        model_results = self.model(model_inputs)
+
+        results = {}
+        # TODO: use index information to slice everything properly
+        for prop in properties:
+            model_prop = self.property_map[prop]
+
+            if model_prop in model_results:
+                results[prop] = (
+                        model_results[model_prop].cpu().data.numpy()
+                        * self.property_units[prop]
+                )
+            else:
+                raise AtomsConverterError(
+                    "'{:s}' is not a property of your model. Please "
+                    "check the model "
+                    "properties!".format(prop)
+                )
+
+        self.results = results
+        self.model_results = model_results
 
     def calculate(
             self,
