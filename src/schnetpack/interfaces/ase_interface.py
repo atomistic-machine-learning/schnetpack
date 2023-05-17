@@ -29,6 +29,7 @@ from ase.optimize import QuasiNewton
 from ase.vibrations import Vibrations
 
 import torch
+from torch import nn
 import schnetpack
 import logging
 from copy import deepcopy
@@ -169,7 +170,9 @@ class SpkCalculator(Calculator):
     ASE calculator for schnetpack machine learning models.
 
     """
-
+    # TODO: fix type casting of model
+    #       add auxiliary_output_modules
+    #       update doc string
     energy = "energy"
     forces = "forces"
     stress = "stress"
@@ -177,7 +180,7 @@ class SpkCalculator(Calculator):
 
     def __init__(
         self,
-        model_file: str,
+        model: str or nn.ModuleList,
         neighbor_list: schnetpack.transform.Transform,
         energy_key: str = "energy",
         force_key: str = "forces",
@@ -196,7 +199,7 @@ class SpkCalculator(Calculator):
 
         """
         Args:
-            model_file (str): path to trained model
+            model: path to trained model
             neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
             energy_key (str): name of energies in model (default="energy")
             force_key (str): name of forces in model (default="forces")
@@ -232,7 +235,7 @@ class SpkCalculator(Calculator):
             self.stress: stress_key,
         }
 
-        self.model = self._load_model(model_file)
+        self.model = self._load_model(model)
         self.model.to(device=device, dtype=dtype)
 
         # set up basic conversion factors
@@ -249,20 +252,21 @@ class SpkCalculator(Calculator):
         # Container for basic ml model ouputs
         self.model_results = None
 
-    def _load_model(self, model_file: str) -> schnetpack.model.AtomisticModel:
+    def _load_model(self, model: str) -> schnetpack.model.AtomisticModel:
         """
         Load an individual model, activate stress computation
 
         Args:
-            model_file (str): path to model.
+            model: path to model.
 
         Returns:
            AtomisticTask: loaded schnetpack model
         """
 
-        log.info("Loading model from {:s}".format(model_file))
-        # load model and keep it on CPU, device can be changed afterwards
-        model = torch.load(model_file, map_location="cpu").to(torch.float64)
+        log.info("Loading model from {:s}".format(model))
+        if type(model) is str:
+            # load model and keep it on CPU, device can be changed afterwards
+            model = torch.load(model, map_location="cpu").to(torch.float64)
         model = model.eval()
 
         if self.stress_key is not None:
@@ -270,6 +274,38 @@ class SpkCalculator(Calculator):
             model = activate_model_stress(model, self.stress_key)
 
         return model
+
+    def _calculate(self, atoms: Union[ase.Atoms, List[ase.Atoms]], properties: List[str]) -> None:
+        # Convert to schnetpack input format
+        model_inputs = self.converter(atoms)
+        model_results = self.model(model_inputs)
+
+        results = {}
+        # TODO: use index information to slice everything properly
+        for prop in properties:
+            model_prop = self.property_map[prop]
+
+            if model_prop in model_results:
+                if prop == self.energy or prop == self.stress:
+                    # ase calculator should return scalar energy
+                    results[prop] = (
+                            model_results[model_prop].cpu().data.numpy().item()
+                            * self.property_units[prop]
+                    )
+                else:
+                    results[prop] = (
+                            model_results[model_prop].cpu().data.numpy()
+                            * self.property_units[prop]
+                    )
+            else:
+                raise AtomsConverterError(
+                    "'{:s}' is not a property of your model. Please "
+                    "check the model "
+                    "properties!".format(prop)
+                )
+
+        self.results = results
+        self.model_results = model_results
 
     def calculate(
         self,
@@ -283,42 +319,12 @@ class SpkCalculator(Calculator):
             properties (list of str): select properties computed and stored to results.
             system_changes (list of str): List of changes for ASE.
         """
-        # First call original calculator to set atoms attribute
-        # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
 
-        if self.calculation_required(atoms, properties):
+        if self.calculation_required(atoms=atoms, properties=properties):
+            # First call original calculator to set atoms attribute
+            # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
             Calculator.calculate(self, atoms)
-
-            # Convert to schnetpack input format
-            model_inputs = self.converter(atoms)
-            model_results = self.model(model_inputs)
-
-            results = {}
-            # TODO: use index information to slice everything properly
-            for prop in properties:
-                model_prop = self.property_map[prop]
-
-                if model_prop in model_results:
-                    if prop == self.energy or prop == self.stress:
-                        # ase calculator should return scalar energy
-                        results[prop] = (
-                            model_results[model_prop].cpu().data.numpy().item()
-                            * self.property_units[prop]
-                        )
-                    else:
-                        results[prop] = (
-                            model_results[model_prop].cpu().data.numpy()
-                            * self.property_units[prop]
-                        )
-                else:
-                    raise AtomsConverterError(
-                        "'{:s}' is not a property of your model. Please "
-                        "check the model "
-                        "properties!".format(prop)
-                    )
-
-            self.results = results
-            self.model_results = model_results
+            self._calculate(atoms=atoms, properties=properties)
 
 
 class AseInterface:
@@ -385,7 +391,7 @@ class AseInterface:
 
         # Set up calculator
         calculator = SpkCalculator(
-            model_file=model_file,
+            model=model_file,
             neighbor_list=neighbor_list,
             energy_key=energy_key,
             force_key=force_key,

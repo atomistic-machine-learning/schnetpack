@@ -18,7 +18,7 @@ from torch import nn
 from schnetpack.units import convert_units
 from schnetpack.model import NeuralNetworkPotential
 import schnetpack
-from schnetpack.interfaces.ase_interface import AtomsConverter
+from schnetpack.interfaces.ase_interface import AtomsConverter, SpkCalculator
 
 from typing import List, Optional, Dict, Callable, Union
 
@@ -150,18 +150,12 @@ class SimpleEnsembleAverage(EnsembleAverageStrategy):
         return torch.mean(processed_input, dim=0)
 
 
-class EnsembleCalculator(Calculator):
+class EnsembleCalculator(SpkCalculator):
     """
     Calculator for neural network models for ensemble calculations.
     Requires multiple models
     """
-    # TODO: type casting of model
-    #       maybe calculate function should calculate all properties always
-    energy = "energy"
-    forces = "forces"
-    stress = "stress"
-    implemented_properties = [energy, forces, stress]
-
+    # TODO: maybe calculate function should calculate all properties always
     def __init__(
             self,
             model: Union[List[str], List[nn.Module]],
@@ -200,55 +194,38 @@ class EnsembleCalculator(Calculator):
             ensemble_average_strategy : User defined class to calculate ensemble average
             **kwargs: Additional arguments for basic ase calculator class
         """
-        Calculator.__init__(self, **kwargs)
 
-        self.atoms_converter = converter(
-            neighbor_list=neighbor_list,
-            device=device,
-            dtype=dtype,
-            transforms=transforms,
-            additional_inputs=additional_inputs,
-        )
-
-        self.energy_key = energy_key
-        self.force_key = force_key
-        self.stress_key = stress_key
-
-        # Mapping between ASE names and model outputs
-        self.property_map = {
-            self.energy: energy_key,
-            self.forces: force_key,
-            self.stress: stress_key,
-        }
-
-        self.device = device
-        self.dtype = dtype
         self.auxiliary_output_modules = auxiliary_output_modules or []
         self.ensemble_average_strategy = ensemble_average_strategy
 
-        # set up basic conversion factors
-        self.energy_conversion = convert_units(energy_unit, "eV")
-        self.position_conversion = convert_units(position_unit, "Angstrom")
-
-        # Unit conversion to default ASE units
-        self.property_units = {
-            self.energy: self.energy_conversion,
-            self.forces: self.energy_conversion / self.position_conversion,
-            self.stress: self.energy_conversion / self.position_conversion**3,
-        }
-
-        self._load_model(model)
+        SpkCalculator.__init__(
+            self,
+            model=model,
+            neighbor_list=neighbor_list,
+            energy_key=energy_key,
+            force_key=force_key,
+            stress_key=stress_key,
+            energy_unit=energy_unit,
+            position_unit=position_unit,
+            device=device,
+            dtype=dtype,
+            converter=converter,
+            transforms=transforms,
+            additional_inputs=additional_inputs,
+            **kwargs
+        )
 
     def _load_model(self, model):
-        self.model = nn.ModuleDict()
+        ensemble_model = nn.ModuleDict()
         for model_idx, m in enumerate(model):
             if type(m) is str:
                 m = torch.load(m)
             for auxiliary_output_module in self.auxiliary_output_modules:
                 m.output_modules.insert(1, auxiliary_output_module)
-            m.to(self.device),  # dtype=self.dtype)
-            self.model.update({"model{}".format(model_idx): m})
-        self.model = self.model.eval()
+            #m.to(self.device, dtype=self.dtype)
+            ensemble_model.update({"model{}".format(model_idx): m})
+        ensemble_model = ensemble_model.eval()
+        return ensemble_model
 
     def _default_average_strategy(self, prop, stacked_model_results):
 
@@ -266,7 +243,7 @@ class EnsembleCalculator(Calculator):
         return results
 
     def _calculate(self, atoms: Union[ase.Atoms, List[ase.Atoms]], properties: List[str]) -> None:
-        inputs = self.atoms_converter(atoms)
+        inputs = self.converter(atoms)
 
         # empty dict for model results
         model_results = {}
@@ -298,32 +275,12 @@ class EnsembleCalculator(Calculator):
             if self.ensemble_average_strategy:
                 results[prop] = self.ensemble_average_strategy.uncertainty_estimation(
                     inputs=stacked_model_results,
-                    device=self.device
+                    #device=self.device
                 ).detach().cpu().numpy()
             else:
                 results.update(self._default_average_strategy(prop, stacked_model_results))
 
         self.results = results
-        # self.atoms = atoms.copy()
-
-    def calculate(
-            self,
-            atoms: ase.Atoms = None,
-            properties: List[str] = ["energy"],
-            system_changes: List[str] = all_changes,
-    ):
-        """
-        Args:
-            atoms (ase.Atoms): ASE atoms object.
-            properties (list of str): select properties computed and stored to results.
-            system_changes (list of str): List of changes for ASE.
-        """
-
-        if self.calculation_required(atoms=atoms, properties=properties):
-            # First call original calculator to set atoms attribute
-            # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
-            Calculator.calculate(self, atoms)
-            self._calculate(atoms=atoms, properties=properties)
 
 
 class BatchwiseEnsembleCalculator(EnsembleCalculator):
