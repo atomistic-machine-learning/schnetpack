@@ -1,6 +1,4 @@
-import pickle
-import time
-import random
+import logging
 from copy import deepcopy
 import numpy as np
 from math import sqrt
@@ -34,121 +32,136 @@ class EnsembleAverageStrategy:
     def __init__(self):
         pass
 
-    def uncertainty_estimation(self, inputs: torch.Tensor, device: torch.device = torch.device("cpu")):#, **kwargs):
+    def correct_dimension(self,num_atoms,inputs:torch.Tensor):
+
         """
         Args:
             inputs:
                 stacked output tensors of predicted property (e.g Energy or Forces)
+            num_atoms:
+                number of atoms in mol. Needed for correct dimension reshaping
 
+        Returns:
+            correct dimension for reshaping the inputs accordingly
+            [num_models, num_mols in batch, num_atoms in mol, property dimension]
+            this way no distinction between single point and batchwise optimization has to be done in Ensemble
+        """
+
+
+        n_models = inputs.shape[0]
+        batch_size = num_atoms.size()[0]
+        n_atoms = num_atoms.unique()[0].item()
+        property_dim = inputs.shape[-1]
+
+        if len(inputs.shape) == 2:
+            n_atoms = 1
+            property_dim = 1
+    
+
+        return (n_models,batch_size,n_atoms,property_dim)
+
+
+    def uncertainty_estimation(self, inputs: torch.Tensor, num_atoms):
+        """
+        Args:
+            inputs:
+                stacked output tensors of predicted property (e.g Energy or Forces)
             device:
                 device used for calculations (default="cpu")
+            num_atoms:
+                number of atoms in mol. Needed for correct dimension reshaping
 
         Returns:
             custom uncertainty estimation
         """
         raise NotImplementedError
+    
+    def fallback(self,conditions):
 
+        if conditions.sum() == 0:
+
+            logging.info(f"All models fail to predict properties with the given filter criteria: {self.filter_criteria.item()}\n"
+                     f"Please consider to change the filter criteria or" 
+                     f"to lower the applied model drop threshold of currently {self.model_drop_threshold * 100} % "
+                     f"Per default now only the first model is considered for the current step"
+                     )
+            conditions[0] = True
+
+        else:
+            pass
+
+        return conditions
 
 class SimpleEnsembleAverage(EnsembleAverageStrategy):
     """
-    Simply ensemble average function, mostly for testing only
-    Model outputs are dropped if exceeding mean +/- factor*standarddeviation
+
+    Simply ensemble average class
+    Model output is dropped if output exceeds mean +/- factor*standarddeviation
+    Models are dropped if number of dropped model outputs exceeds threshold
+
     """
-    def __init__(self,
-                 mode: str = "single",
-                 criteria: Optional[torch.Tensor] = torch.tensor([1.])):
+    def __init__(
+            self,
+            filter_criteria : Optional[float] = 1.,
+            model_drop_threshold : Optional[float] = 0.5
+            ):
         """
         Args:
-            criteria: torch.Tensor
-                factor to be multiplied with standard deviation default value 1
+            filter_criteria:
+                numerical criteria applied to inputs
+            model_drop_threshold:
+                threshold when to drop specific model (default = 0.5)
         """
+        self.filter_criteria = filter_criteria
+        self.model_drop_threshold = model_drop_threshold
 
-        self.criteria = torch.Tensor([criteria])
-        self.mode = mode
         super().__init__()
 
     def uncertainty_estimation(
             self,
-            inputs: torch.Tensor,
-            device: torch.device = torch.device("cpu")
+            num_atoms,
+            inputs: torch.Tensor
             ):
         """
         Args:
             inputs:
                 stacked output tensors of predicted property (e.g Energy or Forces)
-
-            device:
-                device used for calculations (default="cpu")
-
         Returns:
             ...
         """
 
-        num_dim = inputs.size()[-1]
-        criteria = self.criteria.to(device)
-        mean = torch.mean(inputs, dim=0)
-        std = torch.std(inputs, dim=0) * criteria
+        n_models, batch_size, n_atoms, property_dim = self.correct_dimension(num_atoms,inputs)
 
-        condition = torch.logical_and(inputs >= (mean - std), inputs <= (mean + std))
+        # consistent with _default_average_strategy, detach avoids num precision error in mean
+        inputs = torch.reshape(inputs,(n_models,batch_size,n_atoms,property_dim)).detach().cpu().numpy()
+        conditions = np.zeros(shape=(n_models,batch_size),dtype=bool)
 
-        if self.mode == "single":
-            if num_dim > 1:
-                num_models, num_atoms, num_dim = inputs.size()
-                N = torch.tensor(condition.size()[1] * condition.size()[2], device=device)
+        for batch in range(batch_size):
+            mean = np.mean(inputs[:,batch,:,:],axis=0)
+            std =  np.std(inputs[:,batch,:,:],axis=0) * self.filter_criteria
 
-                new_dim = 0
-                for n in range(condition.size()[0]):
+            for model in range(n_models):
 
-                    if torch.round(condition[n].sum()) > torch.round(N/2):
-                        condition[n].fill_(True)
-                        new_dim +=1
-                    else:
-                        condition[n].fill_(False)
-
-                processed_input = torch.reshape(inputs[condition],(new_dim,num_atoms,num_dim))
-
-            else:
-                processed_input = inputs[condition]
-
-        if self.mode == "batchwise":
-            if inputs.dim() == 2:
-                num_models, batchsize = inputs.size()
-                N = torch.tensor(num_models,device=device)
-                idx = tuple(range(num_models))
-                new_dim = 0
-                for n in range(batchsize):
-
-                    if torch.round(condition[idx,n].sum()) >= torch.round(N/2):
-                        condition[idx,n].fill_(True)
-                        new_dim +=1
-                    else:
-                        condition[idx,n].fill_(False)
-
-                processed_input = torch.reshape(inputs[condition],
-                                                (int(inputs[condition].size()[0] / (batchsize)),
-                                                batchsize))
-
-            if inputs.dim() == 3:
-                num_models, (num_atoms), num_dim = inputs.size()
-                mean = torch.mean(inputs, dim=0)
-                std = torch.std(inputs, dim=0) * criteria
-
-                condition = torch.logical_and(inputs >= (mean-std), inputs <= (mean + std))
+                check = np.logical_and(
+                    inputs[model,batch,:,:]  >= (mean - std),
+                    inputs[model,batch,:,:]  <=  (mean + std)).sum() > round( n_atoms*property_dim * self.model_drop_threshold)
                 
-                N = torch.tensor(condition.size()[1] * condition.size()[2], device=device)
+                conditions[model,batch] = check
 
-                new_dim = 0
-                for n in range(condition.size()[0]):
+        # needed for batch optimization mode
+        if batch_size > 1:
+            conditions = conditions.sum(axis=1) >= round(batch_size *self.model_drop_threshold)     
 
-                    if torch.round(condition[n].sum()) > torch.round(N/2):
-                        condition[n].fill_(True)
-                        new_dim +=1
-                    else:
-                        condition[n].fill_(False)
 
-                processed_input = torch.reshape(inputs[condition], (new_dim, num_atoms, num_dim))
+        # check if all models fail
+        conditions = self.fallback(conditions)
 
-        return torch.mean(processed_input, dim=0)
+        processed_input = inputs[conditions].reshape(
+                            conditions.sum().item(),
+                            batch_size*n_atoms,
+                            property_dim)
+        mean = np.squeeze(np.mean(processed_input, axis=0))
+        return(mean)
 
 
 class EnsembleCalculator(SpkCalculator):
@@ -276,8 +289,8 @@ class EnsembleCalculator(SpkCalculator):
             if self.ensemble_average_strategy:
                 results[prop] = self.ensemble_average_strategy.uncertainty_estimation(
                     inputs=stacked_model_results,
-                    #device=self.device
-                ).detach().cpu().numpy()
+                    num_atoms = x["_n_atoms"]
+                ) * self.property_units[prop]
             else:
                 results.update(self._default_average_strategy(prop, stacked_model_results))
 
