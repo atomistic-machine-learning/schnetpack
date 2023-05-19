@@ -92,6 +92,7 @@ class EnsembleAverageStrategy:
 
         return conditions
 
+
 class SimpleEnsembleAverage(EnsembleAverageStrategy):
     """
 
@@ -161,7 +162,7 @@ class SimpleEnsembleAverage(EnsembleAverageStrategy):
                             batch_size*n_atoms,
                             property_dim)
         mean = np.squeeze(np.mean(processed_input, axis=0))
-        return(mean)
+        return mean
 
 
 class EnsembleCalculator(SpkCalculator):
@@ -234,7 +235,7 @@ class EnsembleCalculator(SpkCalculator):
         ensemble_model = nn.ModuleDict()
         for model_idx, m in enumerate(model):
             if type(m) is str:
-                m = torch.load(m)
+                m = torch.load(m, map_location="cpu")
             for auxiliary_output_module in self.auxiliary_output_modules:
                 m.output_modules.insert(1, auxiliary_output_module)
             ensemble_model.update({"model{}".format(model_idx): m})

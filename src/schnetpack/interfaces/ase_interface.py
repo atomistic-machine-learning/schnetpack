@@ -170,8 +170,6 @@ class SpkCalculator(Calculator):
     ASE calculator for schnetpack machine learning models.
 
     """
-    # TODO: test relaxation
-    #       fix model type casting issue
 
     energy = "energy"
     forces = "forces"
@@ -208,7 +206,7 @@ class SpkCalculator(Calculator):
             energy_unit (str, float): energy units used by model (default="kcal/mol")
             position_unit (str, float): position units used by model (default="Angstrom")
             device (torch.device): device used for calculations (default="cpu")
-            dtype (torch.dtype): select model precision (default=float32)
+            dtype (torch.dtype): select model input precision (default=float32)
             converter (callable): converter used to set up input batches
             transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
                 can be found in the AtomsConverter docstring.
@@ -241,7 +239,7 @@ class SpkCalculator(Calculator):
         self.auxiliary_output_modules = auxiliary_output_modules or []
 
         self.model = self._load_model(model)
-        self.model.to(device=device, dtype=dtype)
+        self.model.to(device=device)
 
         # set up basic conversion factors
         self.energy_conversion = convert_units(energy_unit, "eV")
@@ -271,9 +269,9 @@ class SpkCalculator(Calculator):
         log.info("Loading model from {:s}".format(model))
         if type(model) is str:
             # load model and keep it on CPU, device can be changed afterwards
-            model = torch.load(model, map_location="cpu").to(torch.float64)
+            model = torch.load(model, map_location="cpu")
 
-        # add auxiliary output modules before CastTo62
+        # add auxiliary output modules after CastTo62
         for auxiliary_output_module in self.auxiliary_output_modules:
             model.output_modules.insert(1, auxiliary_output_module)
 
@@ -393,7 +391,7 @@ class AseInterface:
             energy_unit (str, float): energy units used by model (default="kcal/mol")
             position_unit (str, float): position units used by model (default="Angstrom")
             device (torch.device): device used for calculations (default="cpu")
-            dtype (torch.dtype): select model precision (default=float32)
+            dtype (torch.dtype): select model input precision (default=float32)
             converter (schnetpack.interfaces.AtomsConverter): converter used to set up input batches
             optimizer_class (ase.optimize.optimizer): ASE optimizer used for structure relaxation.
             fixed_atoms (list(int)): list of indices corresponding to atoms with positions fixed in space.
