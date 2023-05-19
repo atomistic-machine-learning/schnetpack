@@ -32,7 +32,7 @@ class EnsembleAverageStrategy:
     def __init__(self):
         pass
 
-    def correct_dimension(self,num_atoms,inputs:torch.Tensor):
+    def correct_dimension(self, num_atoms, inputs:torch.Tensor):
 
         """
         Args:
@@ -47,7 +47,6 @@ class EnsembleAverageStrategy:
             this way no distinction between single point and batchwise optimization has to be done in Ensemble
         """
 
-
         n_models = inputs.shape[0]
         batch_size = num_atoms.size()[0]
         n_atoms = num_atoms.unique()[0].item()
@@ -56,18 +55,14 @@ class EnsembleAverageStrategy:
         if len(inputs.shape) == 2:
             n_atoms = 1
             property_dim = 1
-    
 
         return (n_models,batch_size,n_atoms,property_dim)
-
 
     def uncertainty_estimation(self, inputs: torch.Tensor, num_atoms):
         """
         Args:
             inputs:
                 stacked output tensors of predicted property (e.g Energy or Forces)
-            device:
-                device used for calculations (default="cpu")
             num_atoms:
                 number of atoms in mol. Needed for correct dimension reshaping
 
@@ -76,17 +71,15 @@ class EnsembleAverageStrategy:
         """
         raise NotImplementedError
     
-    def fallback(self,conditions):
-
+    def fallback(self, conditions):
         if conditions.sum() == 0:
-
-            logging.info(f"All models fail to predict properties with the given filter criteria: {self.filter_criteria.item()}\n"
-                     f"Please consider to change the filter criteria or" 
-                     f"to lower the applied model drop threshold of currently {self.model_drop_threshold * 100} % "
-                     f"Per default now only the first model is considered for the current step"
-                     )
+            logging.info(
+                f"All models fail to predict properties with the given filter criteria: {self.filter_criteria.item()}\n"
+                f"Please consider to change the filter criteria or" 
+                f"to lower the applied model drop threshold of currently {self.model_drop_threshold * 100} % "
+                f"Per default now only the first model is considered for the current step"
+            )
             conditions[0] = True
-
         else:
             pass
 
@@ -134,25 +127,24 @@ class SimpleEnsembleAverage(EnsembleAverageStrategy):
         n_models, batch_size, n_atoms, property_dim = self.correct_dimension(num_atoms,inputs)
 
         # consistent with _default_average_strategy, detach avoids num precision error in mean
-        inputs = torch.reshape(inputs,(n_models,batch_size,n_atoms,property_dim)).detach().cpu().numpy()
-        conditions = np.zeros(shape=(n_models,batch_size),dtype=bool)
+        inputs = torch.reshape(inputs, (n_models, batch_size, n_atoms, property_dim)).detach().cpu().numpy()
+        conditions = np.zeros(shape=(n_models, batch_size), dtype=bool)
 
         for batch in range(batch_size):
-            mean = np.mean(inputs[:,batch,:,:],axis=0)
-            std =  np.std(inputs[:,batch,:,:],axis=0) * self.filter_criteria
+            mean = np.mean(inputs[:, batch, :, :], axis=0)
+            std = np.std(inputs[:, batch, :, :], axis=0) * self.filter_criteria
 
             for model in range(n_models):
 
                 check = np.logical_and(
-                    inputs[model,batch,:,:]  >= (mean - std),
-                    inputs[model,batch,:,:]  <=  (mean + std)).sum() > round( n_atoms*property_dim * self.model_drop_threshold)
+                    inputs[model, batch, :, :] >= (mean - std),
+                    inputs[model, batch, :, :] <= (mean + std)).sum() > round(n_atoms * property_dim * self.model_drop_threshold)
                 
-                conditions[model,batch] = check
+                conditions[model, batch] = check
 
         # needed for batch optimization mode
         if batch_size > 1:
-            conditions = conditions.sum(axis=1) >= round(batch_size *self.model_drop_threshold)     
-
+            conditions = conditions.sum(axis=1) >= round(batch_size * self.model_drop_threshold)
 
         # check if all models fail
         conditions = self.fallback(conditions)
@@ -290,7 +282,7 @@ class EnsembleCalculator(SpkCalculator):
             if self.ensemble_average_strategy:
                 results[prop] = self.ensemble_average_strategy.uncertainty_estimation(
                     inputs=stacked_model_results,
-                    num_atoms = x["_n_atoms"]
+                    num_atoms=x["_n_atoms"]
                 ) * self.property_units[prop]
             else:
                 results.update(self._default_average_strategy(prop, stacked_model_results))
