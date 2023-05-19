@@ -550,7 +550,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
 
     def __init__(
         self,
-        calculator: BatchwiseCalculator,
+        calculator: BatchwiseCalculator or BatchwiseEnsembleCalculator,
         atoms: List[Atoms],
         restart: Optional[bool] = None,
         logfile: str = "-",

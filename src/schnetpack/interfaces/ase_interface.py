@@ -178,7 +178,7 @@ class SpkCalculator(Calculator):
 
     def __init__(
         self,
-        model: str or nn.ModuleList,
+        model: str or nn.Module,
         neighbor_list: schnetpack.transform.Transform,
         energy_key: str = "energy",
         force_key: str = "forces",
@@ -198,7 +198,7 @@ class SpkCalculator(Calculator):
 
         """
         Args:
-            model: path to trained model
+            model: path to trained model or trained model
             neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
             energy_key (str): name of energies in model (default="energy")
             force_key (str): name of forces in model (default="forces")
@@ -260,7 +260,7 @@ class SpkCalculator(Calculator):
         Load an individual model, activate stress computation
 
         Args:
-            model: path to model.
+            model: path to trained model or trained model.
 
         Returns:
            AtomisticTask: loaded schnetpack model
