@@ -31,8 +31,7 @@ class BatchwiseCalculator(SpkCalculator):
     """
     Calculator for neural network models for batchwise optimization.
     """
-    # TODO: docstring
-    #       maybe calculate function should calculate all properties always
+    # TODO: maybe calculate function should calculate all properties always
     def __init__(
             self,
             model: nn.Module or str,
@@ -53,35 +52,22 @@ class BatchwiseCalculator(SpkCalculator):
             **kwargs,
     ):
         """
-        model:
-            path to trained model or trained model
-
-        atoms_converter:
-            Class used to convert ase Atoms objects to schnetpack input
-
-        device:
-            device used for calculations (default="cpu")
-
-        auxiliary_output_modules:
-            auxiliary module to manipulate output properties (e.g., prior energy or forces)
-
-        energy_key:
-            name of energies in model (default="energy")
-
-        force_key:
-            name of forces in model (default="forces")
-
-        stress_key:
-            name of stress in model (default=None)
-
-        energy_unit:
-            energy units used by model (default="eV")
-
-        position_unit:
-            position units used by model (default="Angstrom")
-
-        dtype:
-            required data type for the model input (default: torch.float32)
+        Args:
+            model: path to trained model or trained model
+            neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
+            energy_key (str): name of energies in model (default="energy")
+            force_key (str): name of forces in model (default="forces")
+            stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
+            energy_unit (str, float): energy units used by model (default="kcal/mol")
+            position_unit (str, float): position units used by model (default="Angstrom")
+            device (torch.device): device used for calculations (default="cpu")
+            dtype (torch.dtype): select model input precision (default=float32)
+            converter (callable): converter used to set up input batches
+            transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
+                can be found in the AtomsConverter docstring.
+            additional_inputs (dict): additional inputs required for some transforms in the converter.
+            auxiliary_output_modules: auxiliary module to manipulate output properties (e.g., prior energy or forces)
+            **kwargs: Additional arguments for basic ase calculator class
         """
 
         SpkCalculator.__init__(
@@ -121,31 +107,6 @@ class BatchwiseCalculator(SpkCalculator):
             f[fixed_atoms_mask] *= 0.0
         return f
 
-    def _calculate(self, atoms: Union[ase.Atoms, List[ase.Atoms]], properties: List[str]) -> None:
-        # Convert to schnetpack input format
-        model_inputs = self.converter(atoms)
-        model_results = self.model(model_inputs)
-
-        results = {}
-        # TODO: use index information to slice everything properly
-        for prop in properties:
-            model_prop = self.property_map[prop]
-
-            if model_prop in model_results:
-                results[prop] = (
-                        model_results[model_prop].cpu().data.numpy()
-                        * self.property_units[prop]
-                )
-            else:
-                raise AtomsConverterError(
-                    "'{:s}' is not a property of your model. Please "
-                    "check the model "
-                    "properties!".format(prop)
-                )
-
-        self.results = results
-        self.model_results = model_results
-
     def calculate(
             self,
             atoms: List[ase.Atoms] = None,
@@ -154,17 +115,15 @@ class BatchwiseCalculator(SpkCalculator):
     ) -> None:
 
         if self.calculation_required(atoms=atoms, properties=properties):
-            self._calculate(atoms=atoms, properties=properties)
+            self._collect_results(atoms=atoms, properties=properties)
             self.atoms = atoms.copy()
 
 
 class BatchwiseEnsembleCalculator(EnsembleCalculator):
     """
-    Calculator for neural network models for ensemble calculations.
-    Requires multiple models
+    Calculator for neural network model ensembles for batchwise optimization.
     """
-    # TODO: Doc string
-    #       set calc when logging structure to visualize energy with ase gui
+    # TODO: set calc when logging structure to visualize energy with ase gui
 
     def __init__(
             self,
@@ -187,34 +146,24 @@ class BatchwiseEnsembleCalculator(EnsembleCalculator):
             ** kwargs,
     ):
         """
-        model_file: str
-            path to trained models
-            has to be a list of paths
-            OR
-            list of preloaded models
-
-        atoms_converter: schnetpack.interfaces.AtomsConverter
-            Class used to convert ase Atoms objects to schnetpack input
-
-        device: torch.device
-            device used for calculations (default="cpu")
-
-        energy_key: str
-            name of energies in model (default="energy")
-
-        force_key: str
-            name of forces in model (default="forces")
-
-        energy_unit: str, float
-            energy units used by model (default="eV")
-
-        position_unit: str, float
-            position units used by model (default="Angstrom")
-
-        ensemble_average_strategy : User defined class to
-            to calculate ensemble average
+        Args:
+            model: path to trained models or list of preloaded model.
+            neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
+            energy_key (str): name of energies in model (default="energy")
+            force_key (str): name of forces in model (default="forces")
+            stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
+            energy_unit (str, float): energy units used by model (default="kcal/mol")
+            position_unit (str, float): position units used by model (default="Angstrom")
+            device (torch.device): device used for calculations (default="cpu")
+            dtype (torch.dtype): select model input precision (default=float32)
+            converter (callable): converter used to set up input batches
+            transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
+                can be found in the AtomsConverter docstring.
+            additional_inputs (dict): additional inputs required for some transforms in the converter.
+            auxiliary_output_modules: auxiliary module to manipulate output properties (e.g., prior energy or forces)
+            ensemble_average_strategy : User defined class to calculate ensemble average.
+            **kwargs: Additional arguments for basic ase calculator class
         """
-
         super(BatchwiseEnsembleCalculator, self).__init__(
             model=model,
             neighbor_list=neighbor_list,
@@ -252,17 +201,6 @@ class BatchwiseEnsembleCalculator(EnsembleCalculator):
             f[fixed_atoms_mask] *= 0.0
         return f
 
-    def _default_average_strategy(self, prop, stacked_model_results):
-
-        mean = torch.mean(stacked_model_results, dim=0) * self.property_units[prop]
-        std = torch.std(stacked_model_results, dim=0) * self.property_units[prop]
-
-        results = {
-            prop: mean.detach().cpu().numpy(),
-            prop + "_std": std.detach().cpu().numpy()
-        }
-        return results
-
     def calculate(
             self,
             atoms: List[ase.Atoms] = None,
@@ -271,7 +209,7 @@ class BatchwiseEnsembleCalculator(EnsembleCalculator):
     ) -> None:
 
         if self.calculation_required(atoms=atoms, properties=properties):
-            self._calculate(atoms=atoms, properties=properties)
+            self._collect_results(atoms=atoms, properties=properties)
             self.atoms = atoms.copy()
 
 

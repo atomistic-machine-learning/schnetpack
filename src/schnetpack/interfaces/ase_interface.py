@@ -195,7 +195,6 @@ class SpkCalculator(Calculator):
         auxiliary_output_modules: Optional[List] = None,
         **kwargs,
     ):
-
         """
         Args:
             model: path to trained model or trained model
@@ -283,14 +282,19 @@ class SpkCalculator(Calculator):
 
         return model
 
-    def _calculate(self, atoms: Union[ase.Atoms, List[ase.Atoms]], properties: List[str]) -> None:
+    def _ase_specific_output_format(self, properties):
+        for prop in properties:
+            if prop == self.energy or prop == self.stress:
+                # ase calculator should return scalar energy
+                self.results[prop] = self.results[prop].item()
+
+    def _collect_results(self, atoms: Union[ase.Atoms, List[ase.Atoms]], properties: List[str]) -> None:
         """
-        Internal method to collect model outputs and apply unit convertions.
+        Internal method to collect model outputs and apply unit conversions.
 
         Args:
             atoms (ase.Atoms or list): ASE atoms object or list of ASE atoms objects.
             properties (list of str): Properties to compute.
-            system_changes (list of str): List of changes for ASE.
 
         Returns:
             None
@@ -301,22 +305,13 @@ class SpkCalculator(Calculator):
         model_results = self.model(model_inputs)
 
         results = {}
-        # TODO: use index information to slice everything properly
         for prop in properties:
             model_prop = self.property_map[prop]
-
             if model_prop in model_results:
-                if prop == self.energy or prop == self.stress:
-                    # ase calculator should return scalar energy
-                    results[prop] = (
-                            model_results[model_prop].cpu().data.numpy().item()
-                            * self.property_units[prop]
-                    )
-                else:
-                    results[prop] = (
-                            model_results[model_prop].cpu().data.numpy()
-                            * self.property_units[prop]
-                    )
+                results[prop] = (
+                        model_results[model_prop].cpu().data.numpy()
+                        * self.property_units[prop]
+                )
             else:
                 raise AtomsConverterError(
                     "'{:s}' is not a property of your model. Please "
@@ -350,7 +345,8 @@ class SpkCalculator(Calculator):
             # First call original calculator to set atoms attribute
             # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
             Calculator.calculate(self, atoms)
-            self._calculate(atoms=atoms, properties=properties)
+            self._collect_results(atoms=atoms, properties=properties)
+            self._ase_specific_output_format(properties=properties)
 
 
 class AseInterface:
