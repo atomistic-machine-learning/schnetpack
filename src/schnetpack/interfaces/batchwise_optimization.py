@@ -16,8 +16,8 @@ import torch
 from torch import nn
 
 import schnetpack
-from schnetpack.interfaces.ase_interface import AtomsConverter, SpkCalculator
-from schnetpack.interfaces.ensemble_calculator import EnsembleCalculator, EnsembleAverageStrategy
+from schnetpack.interfaces.ase_interface import AtomsConverter, SpkCalculator, SpkEnsembleCalculator
+from schnetpack.interfaces.ensemble_calculator import EnsembleAverageStrategy
 
 
 __all__ = ["ASEBatchwiseLBFGS", "BatchwiseCalculator", "BatchwiseEnsembleCalculator"]
@@ -119,7 +119,7 @@ class BatchwiseCalculator(SpkCalculator):
             self.atoms = atoms.copy()
 
 
-class BatchwiseEnsembleCalculator(EnsembleCalculator):
+class BatchwiseEnsembleCalculator(SpkEnsembleCalculator):
     """
     Calculator for neural network model ensembles for batchwise optimization.
     """

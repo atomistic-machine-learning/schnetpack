@@ -40,13 +40,14 @@ from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.transform import CastTo32, CastTo64
 from schnetpack.units import convert_units
 from schnetpack.md.utils import activate_model_stress
+from schnetpack.interfaces.ensemble_calculator import EnsembleAverageStrategy
 
 from typing import Optional, List, Union, Dict
 from ase import Atoms
 
 log = logging.getLogger(__name__)
 
-__all__ = ["SpkCalculator", "AseInterface", "AtomsConverter"]
+__all__ = ["SpkCalculator", "SpkEnsembleCalculator", "AseInterface", "AtomsConverter"]
 
 
 class AtomsConverterError(Exception):
@@ -347,6 +348,133 @@ class SpkCalculator(Calculator):
             Calculator.calculate(self, atoms)
             self._collect_results(atoms=atoms, properties=properties)
             self._ase_specific_output_format(properties=properties)
+
+
+class SpkEnsembleCalculator(SpkCalculator):
+    """
+    Calculator for neural network models for ensemble calculations.
+    Requires multiple models
+    """
+    # TODO: maybe calculate function should calculate all properties always
+
+    def __init__(
+            self,
+            model: Union[List[str], List[nn.Module]],
+            neighbor_list: schnetpack.transform.Transform,
+            energy_key: str = "energy",
+            force_key: str = "forces",
+            stress_key: Optional[str] = None,
+            energy_unit: Union[str, float] = "kcal/mol",
+            position_unit: Union[str, float] = "Angstrom",
+            device: Union[str, torch.device] = "cpu",
+            dtype: torch.dtype = torch.float32,
+            converter: callable = AtomsConverter,
+            transforms: Union[
+                schnetpack.transform.Transform, List[schnetpack.transform.Transform]
+            ] = None,
+            additional_inputs: Dict[str, torch.Tensor] = None,
+            auxiliary_output_modules: Optional[List] = None,
+            ensemble_average_strategy: Optional[EnsembleAverageStrategy] = None,
+            **kwargs,
+    ):
+        """
+        Args:
+            model: path to trained models or list of preloaded model
+            neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
+            energy_key (str): name of energies in model (default="energy")
+            force_key (str): name of forces in model (default="forces")
+            stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
+            energy_unit (str, float): energy units used by model (default="kcal/mol")
+            position_unit (str, float): position units used by model (default="Angstrom")
+            device (torch.device): device used for calculations (default="cpu")
+            dtype (torch.dtype): select model input precision (default=float32)
+            converter (callable): converter used to set up input batches
+            transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
+                can be found in the AtomsConverter docstring.
+            additional_inputs (dict): additional inputs required for some transforms in the converter.
+            auxiliary_output_modules: auxiliary module to manipulate output properties (e.g., prior energy or forces)
+            ensemble_average_strategy : User defined class to calculate ensemble average.
+            **kwargs: Additional arguments for basic ase calculator class
+        """
+        SpkCalculator.__init__(
+            self,
+            model=model,
+            neighbor_list=neighbor_list,
+            energy_key=energy_key,
+            force_key=force_key,
+            stress_key=stress_key,
+            energy_unit=energy_unit,
+            position_unit=position_unit,
+            device=device,
+            dtype=dtype,
+            converter=converter,
+            transforms=transforms,
+            additional_inputs=additional_inputs,
+            auxiliary_output_modules=auxiliary_output_modules,
+            **kwargs
+        )
+        self.ensemble_average_strategy = ensemble_average_strategy
+
+    def _load_model(self, model):
+        ensemble_model = nn.ModuleDict()
+        for model_idx, m in enumerate(model):
+            if type(m) is str:
+                m = torch.load(m, map_location="cpu")
+            for auxiliary_output_module in self.auxiliary_output_modules:
+                m.output_modules.insert(1, auxiliary_output_module)
+            ensemble_model.update({"model{}".format(model_idx): m})
+        ensemble_model = ensemble_model.eval()
+        return ensemble_model
+
+    def _ase_specific_output_format(self, properties):
+        for prop in properties:
+            if prop == self.energy or prop == self.stress:
+                # ase calculator should return scalar energy
+                self.results[prop] = self.results[prop].item()
+                self.results[prop + "_std"] = self.results[prop + "_std"].item()
+
+    def _collect_results(self, atoms: Union[ase.Atoms, List[ase.Atoms]], properties: List[str]) -> None:
+        inputs = self.converter(atoms)
+
+        # empty dict for model results
+        model_results = {}
+        for prop in properties:
+            model_prop = self.property_map[prop]
+            model_results[model_prop] = []
+
+        # get results of all models
+        for model_key in self.model.keys():
+            model = self.model[model_key]
+            x = deepcopy(inputs)
+            predictions = model(x)
+            for prop in properties:
+                model_prop = self.property_map[prop]
+                if model_prop in predictions:
+                    model_results[model_prop].append(predictions[model_prop])
+                else:
+                    raise AtomsConverterError(
+                        "'{:s}' is not a property of your model. Please "
+                        "check the model "
+                        "properties!".format(prop)
+                    )
+
+        results = {}
+        for prop in properties:
+            model_prop = self.property_map[prop]
+            stacked_model_results = torch.stack(model_results[model_prop])
+
+            if self.ensemble_average_strategy:
+                results[prop] = self.ensemble_average_strategy.uncertainty_estimation(
+                    inputs=stacked_model_results,
+                    num_atoms=inputs[0]["_n_atoms"].clone()
+                ) * self.property_units[prop]
+            else:
+                mean = torch.mean(stacked_model_results, dim=0) * self.property_units[prop]
+                std = torch.std(stacked_model_results, dim=0) * self.property_units[prop]
+                results[prop] = mean.detach().cpu().numpy()
+                results[prop + "_std"] = std.detach().cpu().numpy()
+
+        self.results = results
 
 
 class AseInterface:
