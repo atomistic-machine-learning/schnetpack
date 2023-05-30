@@ -37,9 +37,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("model_path")
     parser.add_argument("deployed_model_path")
+    parser.add_argument("--device", type=str, default="cpu")
     args = parser.parse_args()
 
-    model = torch.load(args.model_path, map_location="cpu")
+    model = torch.load(args.model_path, map_location=args.device)
     save_jit_model(model, args.deployed_model_path)
 
     print(f"stored deployed model at {args.deployed_model_path}.")
