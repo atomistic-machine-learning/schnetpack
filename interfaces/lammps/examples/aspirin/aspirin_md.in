@@ -7,9 +7,9 @@ boundary s s s
 read_data aspirin.data
 pair_style	schnetpack
 pair_coeff	* * deployed_model 6 1 8
-mass 1 1.0
+mass 1 12.0
 mass 2 1.0
-mass 3 1.0
+mass 3 16.0
 neighbor	1.0 bin
 neigh_modify    delay 0 every 1 check no
 fix		1 all nve
