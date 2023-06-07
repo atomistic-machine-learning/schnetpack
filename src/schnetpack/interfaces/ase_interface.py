@@ -285,7 +285,7 @@ class SpkCalculator(Calculator):
 
     def _ase_specific_output_format(self, properties):
         for prop in properties:
-            if prop == self.energy or prop == self.stress:
+            if prop == self.energy:
                 # ase calculator should return scalar energy
                 self.results[prop] = self.results[prop].item()
 
@@ -428,7 +428,7 @@ class SpkEnsembleCalculator(SpkCalculator):
 
     def _ase_specific_output_format(self, properties):
         for prop in properties:
-            if prop == self.energy or prop == self.stress:
+            if prop == self.energy:
                 # ase calculator should return scalar energy
                 self.results[prop] = self.results[prop].item()
                 self.results[prop + "_std"] = self.results[prop + "_std"].item()
