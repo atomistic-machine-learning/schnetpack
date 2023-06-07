@@ -17,7 +17,7 @@ from torch import nn
 
 import schnetpack
 from schnetpack.interfaces.ase_interface import AtomsConverter, SpkCalculator, SpkEnsembleCalculator
-from schnetpack.interfaces.ensemble_calculator import EnsembleAverageStrategy
+from schnetpack.interfaces.ensemble_strategies import EnsembleAverageStrategy
 
 
 __all__ = ["ASEBatchwiseLBFGS", "BatchwiseCalculator", "BatchwiseEnsembleCalculator"]

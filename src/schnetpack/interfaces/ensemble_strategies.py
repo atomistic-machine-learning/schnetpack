@@ -11,7 +11,7 @@ class EnsembleAverageStrategy:
     def __init__(self):
         pass
 
-    def correct_dimension(self, num_atoms, inputs:torch.Tensor):
+    def correct_dimension(self, num_atoms, inputs: torch.Tensor):
 
         """
         Args:

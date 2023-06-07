@@ -40,7 +40,7 @@ from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.transform import CastTo32, CastTo64
 from schnetpack.units import convert_units
 from schnetpack.md.utils import activate_model_stress
-from schnetpack.interfaces.ensemble_calculator import EnsembleAverageStrategy
+from schnetpack.interfaces.ensemble_strategies import EnsembleAverageStrategy
 
 from typing import Optional, List, Union, Dict
 from ase import Atoms
@@ -271,7 +271,7 @@ class SpkCalculator(Calculator):
             # load model and keep it on CPU, device can be changed afterwards
             model = torch.load(model, map_location="cpu")
 
-        # add auxiliary output modules after CastTo62
+        # add auxiliary output modules after CastTo64
         for auxiliary_output_module in self.auxiliary_output_modules:
             model.output_modules.insert(1, auxiliary_output_module)
 
