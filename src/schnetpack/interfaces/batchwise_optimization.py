@@ -152,8 +152,6 @@ class BatchwiseCalculator:
         # debugging: log forward pass time and nbh list calc. time
         self.total_fwd_time = 0.
         self.n_fwd_iterations = 0
-        self.total_nbh_time = 0.
-        self.n_nbh_iterations = 0
 
     def _load_model(self, model: str) -> nn.Module:
         return torch.load(model, map_location="cpu").to(torch.float64)
@@ -197,13 +195,7 @@ class BatchwiseCalculator:
 
     def calculate(self, atoms: List[ase.Atoms]) -> None:
         property_keys = list(self.property_units.keys())
-
-        # track nbh. list time and count iterations
-        self.n_nbh_iterations += 1
-        ts = time.time()
         inputs = self.atoms_converter(atoms)
-        te = time.time()
-        self.total_nbh_time += te - ts
 
         # track fwd. pass time and count iterations
         self.n_fwd_iterations += 1
