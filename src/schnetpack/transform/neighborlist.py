@@ -8,6 +8,8 @@ from .base import Transform
 from dirsync import sync
 import numpy as np
 from typing import Optional, Dict, List
+import time
+
 
 __all__ = [
     "ASENeighborList",
@@ -290,15 +292,32 @@ class SkinNeighborList(Transform):
         self.distance_calculator = spk.atomistic.PairwiseDistances()
         self.previous_inputs = {}
 
+        self.total_nbh_time = 0.
+        self.n_nbh_iterations = 0
+
+        self.total_postproc_time = 0.
+        self.n_postproc_iterations = 0
+
     # @timeit
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
 
+        ts = time.time()
+
         update_required, inputs = self._update(inputs)
         inputs = self.distance_calculator(inputs)
         inputs = self._remove_neighbors_in_skin(inputs)
+
+        te = time.time()
+
+        if update_required:
+            self.total_nbh_time += te - ts
+            self.n_nbh_iterations += 1
+        else:
+            self.total_postproc_time += te - ts
+            self.n_postproc_iterations += 1
 
         return inputs
 
