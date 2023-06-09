@@ -349,7 +349,7 @@ class SkinNeighborList(Transform):
         idx_j = inputs[properties.idx_j]
         offsets = inputs[properties.offsets]
 
-        rij = torch.norm(inputs[properties.Rij], dim=-1)
+        rij = torch.norm(Rij, dim=-1)
         cidx = torch.nonzero(rij <= self.cutoff).squeeze(-1)
 
         inputs[properties.Rij] = Rij[cidx]
@@ -360,41 +360,36 @@ class SkinNeighborList(Transform):
         return inputs
 
     def _update(self, inputs):
-        """Make sure the list is up-to-date."""
-
-        # get sample index
         sample_idx = inputs[properties.idx].item()
 
-        # check if previous neighbor list exists and make sure that this is not the
-        # first update step
-        if sample_idx in self.previous_inputs.keys():
+        # check if previous neighbor list exists
+        if sample_idx in self.previous_inputs:
+
             # load previous inputs
             previous_inputs = self.previous_inputs[sample_idx]
+
             # extract previous structure
-            previous_positions = np.array(previous_inputs[properties.R], copy=True)
-            previous_cell = np.array(
-                previous_inputs[properties.cell].view(3, 3), copy=True
-            )
-            previous_pbc = np.array(previous_inputs[properties.pbc], copy=True)
+            previous_positions = previous_inputs[properties.R]
+            previous_cell = previous_inputs[properties.cell].view(3, 3)
+            previous_pbc = previous_inputs[properties.pbc]
+
             # extract current structure
             positions = inputs[properties.R]
             cell = inputs[properties.cell].view(3, 3)
             pbc = inputs[properties.pbc]
-            # check if structure change is sufficiently small to reuse previous neighbor
-            # list
+
+            # check if structure change is sufficiently small to reuse previous neighbor list
             if (
-                (previous_pbc == pbc.numpy()).any()
-                and (previous_cell == cell.numpy()).any()
-                and ((previous_positions - positions.numpy()) ** 2).sum(1).max()
-                < 0.25 * self.cutoff_skin**2
+                torch.equal(previous_pbc, pbc)
+                and torch.equal(previous_cell, cell)
+                and torch.max(torch.sum(torch.square(previous_positions - positions), dim=-1)).item()
+                    < 0.25 * self.cutoff_skin**2
             ):
-                # reuse previous neighbor list
-                inputs[properties.idx_i] = previous_inputs[properties.idx_i].clone()
-                inputs[properties.idx_j] = previous_inputs[properties.idx_j].clone()
-                inputs[properties.offsets] = previous_inputs[properties.offsets].clone()
+                inputs[properties.idx_i] = previous_inputs[properties.idx_i]
+                inputs[properties.idx_j] = previous_inputs[properties.idx_j]
+                inputs[properties.offsets] = previous_inputs[properties.offsets]
                 return False, inputs
 
-        # build new neighbor list
         inputs = self._build(inputs)
         return True, inputs
 
@@ -408,12 +403,12 @@ class SkinNeighborList(Transform):
         # store new reference conformation and remove old one
         sample_idx = inputs[properties.idx].item()
         stored_inputs = {
-            properties.R: inputs[properties.R].detach().clone(),
-            properties.cell: inputs[properties.cell].detach().clone(),
-            properties.pbc: inputs[properties.pbc].detach().clone(),
-            properties.idx_i: inputs[properties.idx_i].detach().clone(),
-            properties.idx_j: inputs[properties.idx_j].detach().clone(),
-            properties.offsets: inputs[properties.offsets].detach().clone(),
+            properties.R: inputs[properties.R],
+            properties.cell: inputs[properties.cell],
+            properties.pbc: inputs[properties.pbc],
+            properties.idx_i: inputs[properties.idx_i],
+            properties.idx_j: inputs[properties.idx_j],
+            properties.offsets: inputs[properties.offsets],
         }
         self.previous_inputs.update({sample_idx: stored_inputs})
 
