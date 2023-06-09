@@ -179,6 +179,9 @@ class NeighborListTransform(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
+
+        ts = time.time()
+
         Z = inputs[properties.Z]
         R = inputs[properties.R]
         cell = inputs[properties.cell].view(3, 3)
@@ -188,6 +191,12 @@ class NeighborListTransform(Transform):
         inputs[properties.idx_i] = idx_i.detach()
         inputs[properties.idx_j] = idx_j.detach()
         inputs[properties.offsets] = offset
+
+        te = time.time()
+
+        self.total_nbh_time += te - ts
+        self.n_nbh_iterations += 1
+
         return inputs
 
     def _build_neighbor_list(
@@ -225,6 +234,12 @@ class MatScipyNeighborList(NeighborListTransform):
     References:
         https://github.com/libAtoms/matscipy
     """
+
+    total_nbh_time = 0.
+    n_nbh_iterations = 0
+
+    total_postproc_time = 0.
+    n_postproc_iterations = 0
 
     def _build_neighbor_list(
         self, Z, positions, cell, pbc, cutoff, eps=1e-6, buffer=1.0
