@@ -569,11 +569,11 @@ class FilterNeighbors(Transform):
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         ts = time.time()
 
-        slab_indices = set(inputs[self.selection_name])
-        mask = np.array([
-            i not in slab_indices or j not in slab_indices
-            for i, j in zip(inputs[properties.idx_i], inputs[properties.idx_j])
-        ])
+        slab_indices = inputs[self.selection_name]
+        mask = np.logical_or(
+            np.isin(inputs[properties.idx_i], slab_indices, invert=True),
+            np.isin(inputs[properties.idx_j], slab_indices, invert=True)
+        )
 
         inputs[properties.idx_i] = inputs[properties.idx_i][mask]
         inputs[properties.idx_j] = inputs[properties.idx_j][mask]
