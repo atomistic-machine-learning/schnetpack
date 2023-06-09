@@ -566,25 +566,18 @@ class FilterNeighbors(Transform):
         self.total_postproc_time = 0.
         self.n_postproc_iterations = 0
 
-    def forward(
-        self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
-
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         ts = time.time()
 
-        n_neighbors = inputs[properties.idx_i].shape[0]
-        slab_indices = inputs[self.selection_name].tolist()
-        kept_nbh_indices = []
-        for nbh_idx in range(n_neighbors):
-            i = inputs[properties.idx_i][nbh_idx].item()
-            j = inputs[properties.idx_j][nbh_idx].item()
-            if i not in slab_indices or j not in slab_indices:
-                kept_nbh_indices.append(nbh_idx)
+        slab_indices = set(inputs[self.selection_name])
+        mask = np.array([
+            i not in slab_indices or j not in slab_indices
+            for i, j in zip(inputs[properties.idx_i], inputs[properties.idx_j])
+        ])
 
-        inputs[properties.idx_i] = inputs[properties.idx_i][kept_nbh_indices]
-        inputs[properties.idx_j] = inputs[properties.idx_j][kept_nbh_indices]
-        inputs[properties.offsets] = inputs[properties.offsets][kept_nbh_indices]
+        inputs[properties.idx_i] = inputs[properties.idx_i][mask]
+        inputs[properties.idx_j] = inputs[properties.idx_j][mask]
+        inputs[properties.offsets] = inputs[properties.offsets][mask]
 
         te = time.time()
         self.total_postproc_time += te - ts
