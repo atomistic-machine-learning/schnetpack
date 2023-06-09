@@ -737,6 +737,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         if use_line_search:
             raise NotImplementedError("Lines search has not been implemented yet")
 
+        # debugging: log forward pass time and nbh list calc. time
+        self.total_opt_time = 0.
+
     def initialize(self) -> None:
         """Initialize everything so no checks have to be done in step"""
         self.iteration = 0
@@ -776,6 +779,8 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             f = self.calculator.get_forces(
                 self.atoms, fixed_atoms_mask=self.fixed_atoms_mask
             )
+
+        ts = time.time()
 
         # check if updates for respective structures are required
         q_euclidean = -f.reshape(self.n_configs, -1, 3)
@@ -868,6 +873,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
                 self.task,
             )
         )
+
+        te = time.time()
+        self.total_opt_time += te - ts
 
     def determine_step(self, dr: np.array) -> np.array:
         """Determine step to take according to maxstep

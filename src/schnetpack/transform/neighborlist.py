@@ -563,10 +563,15 @@ class FilterNeighbors(Transform):
         self.selection_name = selection_name
         super().__init__()
 
+        self.total_postproc_time = 0.
+        self.n_postproc_iterations = 0
+
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
+
+        ts = time.time()
 
         n_neighbors = inputs[properties.idx_i].shape[0]
         slab_indices = inputs[self.selection_name].tolist()
@@ -580,6 +585,10 @@ class FilterNeighbors(Transform):
         inputs[properties.idx_i] = inputs[properties.idx_i][kept_nbh_indices]
         inputs[properties.idx_j] = inputs[properties.idx_j][kept_nbh_indices]
         inputs[properties.offsets] = inputs[properties.offsets][kept_nbh_indices]
+
+        te = time.time()
+        self.total_postproc_time += te - ts
+        self.n_postproc_iterations += 1
 
         return inputs
 
