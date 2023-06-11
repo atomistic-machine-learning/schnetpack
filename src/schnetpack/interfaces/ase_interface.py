@@ -374,7 +374,7 @@ class SpkEnsembleCalculator(SpkCalculator):
             ] = None,
             additional_inputs: Dict[str, torch.Tensor] = None,
             auxiliary_output_modules: Optional[List] = None,
-            ensemble_average_strategy: Optional[EnsembleAverageStrategy] = None,
+            ensemble_average_strategy : callable = EnsembleAverageStrategy,
             **kwargs,
     ):
         """
@@ -393,7 +393,7 @@ class SpkEnsembleCalculator(SpkCalculator):
                 can be found in the AtomsConverter docstring.
             additional_inputs (dict): additional inputs required for some transforms in the converter.
             auxiliary_output_modules: auxiliary module to manipulate output properties (e.g., prior energy or forces)
-            ensemble_average_strategy : User defined class to calculate ensemble average.
+            ensemble_average_strategy : User defined class to calculate ensemble average (default= simple mean and standard deviation).
             **kwargs: Additional arguments for basic ase calculator class
         """
         SpkCalculator.__init__(
@@ -463,16 +463,13 @@ class SpkEnsembleCalculator(SpkCalculator):
             model_prop = self.property_map[prop]
             stacked_model_results = torch.stack(model_results[model_prop])
 
-            if self.ensemble_average_strategy:
-                results[prop] = self.ensemble_average_strategy.uncertainty_estimation(
+
+            mean, std = results[prop] = self.ensemble_average_strategy.uncertainty_estimation(
                     inputs=stacked_model_results,
-                    num_atoms=inputs[0]["_n_atoms"].clone()
-                ) * self.property_units[prop]
-            else:
-                mean = torch.mean(stacked_model_results, dim=0) * self.property_units[prop]
-                std = torch.std(stacked_model_results, dim=0) * self.property_units[prop]
-                results[prop] = mean.detach().cpu().numpy()
-                results[prop + "_std"] = std.detach().cpu().numpy()
+                    num_atoms=inputs["_n_atoms"].clone()
+                )
+            results[prop] = mean * self.property_units[prop]
+            results[prop + "_std"] = std * self.property_units[prop]
 
         self.results = results
 

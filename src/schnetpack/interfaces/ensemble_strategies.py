@@ -14,16 +14,13 @@ class EnsembleAverageStrategy:
     def correct_dimension(self, num_atoms, inputs: torch.Tensor):
 
         """
-        Args:
-            inputs:
-                stacked output tensors of predicted property (e.g Energy or Forces)
-            num_atoms:
-                number of atoms in mol. Needed for correct dimension reshaping
+        Reshaping of the inputs as (num_models, num_mols in batch, num_atoms in mol, property dimension)
+        this way no distinction between single molecule optimization and batchwise optimization 
+        has to be done in the Ensemble Average Strategy
 
-        Returns:
-            correct dimension for reshaping the inputs accordingly
-            [num_models, num_mols in batch, num_atoms in mol, property dimension]
-            this way no distinction between single point and batchwise optimization has to be done in Ensemble
+        Args:
+            inputs: stacked output tensors of predicted property (e.g Energy or Forces)
+            num_atoms: number of atoms in mol. Needed for correct dimension reshaping
         """
 
         n_models = inputs.shape[0]
@@ -40,15 +37,16 @@ class EnsembleAverageStrategy:
     def uncertainty_estimation(self, inputs: torch.Tensor, num_atoms):
         """
         Args:
-            inputs:
-                stacked output tensors of predicted property (e.g Energy or Forces)
-            num_atoms:
-                number of atoms in mol. Needed for correct dimension reshaping
-
-        Returns:
-            custom uncertainty estimation
+            inputs: stacked output tensors of predicted property (e.g Energy or Forces)
+            num_atoms: number of atoms in mol. Needed for correct dimension reshaping
         """
-        raise NotImplementedError
+        # consistent with _default_average_strategy, detach avoids num precision error in mean
+        processed_inputs = inputs.detach().cpu().numpy()
+
+        mean = np.squeeze(np.mean(processed_inputs, axis=0))
+        std = np.squeeze(np.std(processed_inputs, axis=0))
+
+        return (mean,std)
     
     def fallback(self, conditions):
         if conditions.sum() == 0:
@@ -80,10 +78,8 @@ class SimpleEnsembleAverage(EnsembleAverageStrategy):
             ):
         """
         Args:
-            filter_criteria:
-                numerical criteria applied to inputs
-            model_drop_threshold:
-                threshold when to drop specific model (default = 0.5)
+            filter_criteria: numerical criteria applied to inputs
+            model_drop_threshold: threshold when to drop specific model (default = 0.5)
         """
         self.filter_criteria = filter_criteria
         self.model_drop_threshold = model_drop_threshold
@@ -97,10 +93,7 @@ class SimpleEnsembleAverage(EnsembleAverageStrategy):
             ):
         """
         Args:
-            inputs:
-                stacked output tensors of predicted property (e.g Energy or Forces)
-        Returns:
-            ...
+            inputs: stacked output tensors of predicted property (e.g Energy or Forces)
         """
 
         n_models, batch_size, n_atoms, property_dim = self.correct_dimension(num_atoms,inputs)
@@ -133,4 +126,5 @@ class SimpleEnsembleAverage(EnsembleAverageStrategy):
                             batch_size*n_atoms,
                             property_dim)
         mean = np.squeeze(np.mean(processed_input, axis=0))
-        return mean
+        std = np.squeeze(np.std(processed_input, axis=0))
+        return (mean,std)
