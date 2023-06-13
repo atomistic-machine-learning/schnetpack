@@ -220,7 +220,7 @@ class BatchwiseCalculator:
         for prop in property_keys:
             if prop in model_results:
                 results[prop] = (
-                    model_results[prop].detach().cpu().numpy()
+                    model_results[prop].detach()
                     * self.property_units[prop]
                 )
             else:
@@ -642,6 +642,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         log_every_step: bool = False,
         fixed_atoms_mask: Optional[List[int]] = None,
         verbose: bool = False,
+        device: torch.device = torch.device("cuda"),
     ):
         """Parameters:
 
@@ -739,6 +740,8 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         # debugging: log forward pass time and nbh list calc. time
         self.total_opt_time = 0.
 
+        self.device = device
+
     def initialize(self) -> None:
         """Initialize everything so no checks have to be done in step"""
         self.iteration = 0
@@ -783,18 +786,15 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
 
         # check if updates for respective structures are required
         q_euclidean = -f.reshape(self.n_configs, -1, 3)
-        squared_max_forces = (q_euclidean**2).sum(axis=-1).max(axis=-1)
+        squared_max_forces = (q_euclidean**2).sum(axis=-1).max(axis=-1)[0]
         configs_mask = squared_max_forces < self.fmax**2
-        mask = (
-            configs_mask[:, None]
-            .repeat(q_euclidean.shape[1], 0)
-            .repeat(q_euclidean.shape[2], 1)
-        )
-        r = np.zeros((self.n_atoms * self.n_configs, 3), dtype=np.float64)
+        mask = configs_mask[:, None, None].repeat(1, q_euclidean.shape[1], q_euclidean.shape[2]).view(-1, 3)
+
+        r = torch.zeros((self.n_atoms * self.n_configs, 3), dtype=torch.float64).to(self.device)
         for config_idx, at in enumerate(self.atoms):
             first_idx = config_idx * self.n_atoms
             last_idx = config_idx * self.n_atoms + self.n_atoms
-            r[first_idx:last_idx] = at.get_positions()
+            r[first_idx:last_idx] = torch.from_numpy(at.get_positions()).to(self.device)
 
         self.update(r, f, self.r0, self.f0)
 
@@ -804,30 +804,30 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         H0 = self.H0
 
         loopmax = np.min([self.memory, self.iteration])
-        a = np.empty(
+        a = torch.empty(
             (
                 loopmax,
                 self.n_configs,
                 1,
                 1,
             ),
-            dtype=np.float64,
-        )
+            dtype=torch.float64,
+        ).to(self.device)
 
         # ## The algorithm itself:
         q = -f.reshape(self.n_configs, 1, -1)
         for i in range(loopmax - 1, -1, -1):
-            a[i] = rho[i] * np.matmul(s[i], np.transpose(q, axes=(0, 2, 1)))
+            a[i] = rho[i] * torch.matmul(s[i], torch.transpose(q, 2, 1))
             q -= a[i] * y[i]
 
         z = H0 * q
 
         for i in range(loopmax):
-            b = rho[i] * np.matmul(y[i], np.transpose(z, axes=(0, 2, 1)))
+            b = rho[i] * torch.matmul(y[i], torch.transpose(z, 2, 1))
             z += s[i] * (a[i] - b)
 
         p = -z.reshape((-1, 3))
-        self.p = np.where(mask, np.zeros_like(p), p)
+        self.p = torch.where(mask, torch.zeros_like(p), p)
         # ##
 
         g = -f
@@ -841,7 +841,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             dr = self.determine_step(self.p) * self.damping
 
         # update positions
-        pos_updated = r + dr
+        pos_updated = (r + dr).cpu().numpy()
 
         # create new list of ase Atoms objects with updated positions
         ats = []
@@ -884,12 +884,12 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         """
         steplengths = (dr**2).sum(-1) ** 0.5
         # check if any step in entire batch is greater than maxstep
-        if np.max(steplengths) >= self.maxstep:
+        if torch.max(steplengths) >= self.maxstep:
             # rescale steps for each config separately
             for config_idx in range(self.n_configs):
                 first_idx = config_idx * self.n_atoms
                 last_idx = config_idx * self.n_atoms + self.n_atoms
-                longest_step = np.max(steplengths[first_idx:last_idx])
+                longest_step = torch.max(steplengths[first_idx:last_idx])
                 if longest_step >= self.maxstep:
                     if self.verbose:
                         print("normalized integration step")
@@ -910,9 +910,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             y0 = f0.reshape(self.n_configs, 1, -1) - f.reshape(self.n_configs, 1, -1)
             self.y.append(y0)
 
-            rho0 = np.ones((self.n_configs, 1, 1), dtype=np.float64)
+            rho0 = torch.ones((self.n_configs, 1, 1), dtype=torch.float64).to(self.device)
             for config_idx in range(self.n_configs):
-                ys0 = np.dot(y0[config_idx, 0], s0[config_idx, 0])
+                ys0 = torch.dot(y0[config_idx, 0], s0[config_idx, 0])
                 if ys0 > 1e-8:
                     rho0[config_idx, 0, 0] = 1.0 / ys0
             self.rho.append(rho0)
