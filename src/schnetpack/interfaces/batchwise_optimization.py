@@ -837,6 +837,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         # update positions
         pos_updated = (r + dr).cpu().numpy()
 
+        te = time.time()
+        self.total_opt_time += te - ts
+
         # create new list of ase Atoms objects with updated positions
         ats = []
         for config_idx, at in enumerate(self.atoms):
@@ -866,9 +869,6 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
                 self.task,
             )
         )
-
-        te = time.time()
-        self.total_opt_time += te - ts
 
     def determine_step(self, dr: np.array) -> np.array:
         """Determine step to take according to maxstep
