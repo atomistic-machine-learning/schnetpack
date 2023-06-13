@@ -212,6 +212,8 @@ class BatchwiseCalculator:
         self.n_fwd_iterations += 1
         ts = time.time()
         model_results = self.model(inputs)
+        te = time.time()
+        self.total_fwd_time += te - ts
 
         results = {}
         # store model results in calculator
@@ -227,9 +229,6 @@ class BatchwiseCalculator:
                     "check the model "
                     "properties!".format(prop)
                 )
-
-        te = time.time()
-        self.total_fwd_time += te - ts
 
         self.results = results
         self.atoms = atoms.copy()
