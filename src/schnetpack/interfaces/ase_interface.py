@@ -374,7 +374,7 @@ class SpkEnsembleCalculator(SpkCalculator):
             ] = None,
             additional_inputs: Dict[str, torch.Tensor] = None,
             auxiliary_output_modules: Optional[List] = None,
-            ensemble_average_strategy : callable = EnsembleAverageStrategy,
+            ensemble_average_strategy: callable = EnsembleAverageStrategy(),
             **kwargs,
     ):
         """
@@ -462,7 +462,6 @@ class SpkEnsembleCalculator(SpkCalculator):
         for prop in properties:
             model_prop = self.property_map[prop]
             stacked_model_results = torch.stack(model_results[model_prop])
-
 
             mean, std = results[prop] = self.ensemble_average_strategy.uncertainty_estimation(
                     inputs=stacked_model_results,
