@@ -153,6 +153,8 @@ class BatchwiseCalculator:
         self.total_fwd_time = 0.
         self.n_fwd_iterations = 0
 
+        self.positions = None
+
     def _load_model(self, model: str) -> nn.Module:
         return torch.load(model, map_location="cpu").to(torch.float64)
 
@@ -185,7 +187,8 @@ class BatchwiseCalculator:
             self.calculate(atoms)
         f = self.results[self.force_key]
         if fixed_atoms_mask is not None:
-            f[fixed_atoms_mask] = 0.0
+            torch.tensor(fixed_atoms_mask)
+            f = f[~torch.tensor(fixed_atoms_mask)]
         return f
 
     def get_potential_energy(self, atoms: List[ase.Atoms]) -> float:
@@ -196,6 +199,7 @@ class BatchwiseCalculator:
     def calculate(self, atoms: List[ase.Atoms]) -> None:
         property_keys = list(self.property_units.keys())
         inputs = self.atoms_converter(atoms)
+        self.positions = inputs["_positions"].detach()
 
         # track fwd. pass time and count iterations
         self.n_fwd_iterations += 1
@@ -409,7 +413,7 @@ class BatchwiseDynamics(Dynamics):
         self.log_every_step = log_every_step
         self.fixed_atoms_mask = fixed_atoms_mask
         self.n_configs = len(self.atoms)
-        self.n_atoms = len(self.atoms[0])
+        #self.n_atoms = len(self.atoms[0])
 
     def irun(self):
         # compute initial structure and log the first step
@@ -784,11 +788,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         configs_mask = squared_max_forces < self.fmax**2
         mask = configs_mask[:, None, None].repeat(1, q_euclidean.shape[1], q_euclidean.shape[2]).view(-1, 3)
 
-        r = torch.zeros((self.n_atoms * self.n_configs, 3), dtype=torch.float64).to(self.device)
-        for config_idx, at in enumerate(self.atoms):
-            first_idx = config_idx * self.n_atoms
-            last_idx = config_idx * self.n_atoms + self.n_atoms
-            r[first_idx:last_idx] = torch.from_numpy(at.get_positions()).to(self.device)
+        r = self.calculator.positions[~torch.tensor(self.fixed_atoms_mask)].to(torch.float64)
 
         self.update(r, f, self.r0, self.f0)
 
@@ -835,7 +835,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             dr = self.determine_step(self.p) * self.damping
 
         # update positions
-        pos_updated = (r + dr).cpu().numpy()
+        pos_updated = self.calculator.positions
+        pos_updated[~torch.tensor(self.fixed_atoms_mask)] += dr
+        pos_updated = pos_updated.cpu().numpy()
 
         te = time.time()
         self.total_opt_time += te - ts
@@ -843,8 +845,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         # create new list of ase Atoms objects with updated positions
         ats = []
         for config_idx, at in enumerate(self.atoms):
-            first_idx = config_idx * self.n_atoms
-            last_idx = config_idx * self.n_atoms + self.n_atoms
+            # warning: only works when all structures have the same number of atoms
+            first_idx = config_idx * len(at)
+            last_idx = config_idx * len(at) + len(at)
             at = Atoms(
                 positions=pos_updated[first_idx:last_idx],
                 numbers=self.atoms[config_idx].get_atomic_numbers(),
@@ -881,8 +884,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         if torch.max(steplengths) >= self.maxstep:
             # rescale steps for each config separately
             for config_idx in range(self.n_configs):
-                first_idx = config_idx * self.n_atoms
-                last_idx = config_idx * self.n_atoms + self.n_atoms
+                # TODO: make this more general
+                first_idx = config_idx * 42
+                last_idx = config_idx * 42 + 42
                 longest_step = torch.max(steplengths[first_idx:last_idx])
                 if longest_step >= self.maxstep:
                     if self.verbose:
