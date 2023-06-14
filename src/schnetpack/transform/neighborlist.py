@@ -322,8 +322,8 @@ class SkinNeighborList(Transform):
         ts = time.time()
 
         update_required, inputs = self._update(inputs)
-        inputs = self.distance_calculator(inputs)
-        inputs = self._remove_neighbors_in_skin(inputs)
+        #inputs = self.distance_calculator(inputs)
+        #inputs = self._remove_neighbors_in_skin(inputs)
 
         te = time.time()
 
