@@ -198,8 +198,7 @@ class BatchwiseCalculator:
             self.calculate(atoms)
         f = self.results[self.force_key]
         if fixed_atoms_mask is not None:
-            torch.tensor(fixed_atoms_mask)
-            f = f[~torch.tensor(fixed_atoms_mask)]
+            f = f[fixed_atoms_mask]
         return f
 
     def get_potential_energy(self, atoms: List[ase.Atoms]) -> float:
@@ -418,7 +417,9 @@ class BatchwiseDynamics(Dynamics):
         self.calculator = calculator
         self.trajectory = trajectory
         self.log_every_step = log_every_step
-        self.fixed_atoms_mask = fixed_atoms_mask
+        #self.fixed_atoms_mask = fixed_atoms_mask
+        self.fixed_atoms_mask = ~torch.tensor(fixed_atoms_mask)
+
         self.n_configs = len(self.atoms)
         #self.n_atoms = len(self.atoms[0])
 
@@ -794,7 +795,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         configs_mask = squared_max_forces < self.fmax**2
         mask = configs_mask[:, None, None].repeat(1, q_euclidean.shape[1], q_euclidean.shape[2]).view(-1, 3)
 
-        r = self.calculator.positions[~torch.tensor(self.fixed_atoms_mask)].to(torch.float64)
+        r = self.calculator.positions[self.fixed_atoms_mask].to(torch.float64)
 
         self.update(r, f, self.r0, self.f0)
 
@@ -842,7 +843,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
 
         # update positions
         pos_updated = self.calculator.positions
-        pos_updated[~torch.tensor(self.fixed_atoms_mask)] += dr
+        pos_updated[self.fixed_atoms_mask] += dr
         pos_updated = pos_updated.cpu().numpy()
 
         te = time.time()
