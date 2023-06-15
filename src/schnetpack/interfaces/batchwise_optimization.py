@@ -908,18 +908,16 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         This function is mostly here to allow for replay_trajectory.
         """
         if self.iteration > 0:
-            s0 = r.reshape(self.n_configs, 1, -1) - r0.reshape(self.n_configs, 1, -1)
+
+            s0 = (r - r0).view(self.n_configs, 1, -1)
             self.s.append(s0)
 
             # We use the gradient which is minus the force!
-            y0 = f0.reshape(self.n_configs, 1, -1) - f.reshape(self.n_configs, 1, -1)
+            y0 = (f0 - f).view(self.n_configs, 1, -1)
             self.y.append(y0)
 
-            rho0 = torch.ones((self.n_configs, 1, 1), dtype=torch.float64).to(self.device)
-            for config_idx in range(self.n_configs):
-                ys0 = torch.dot(y0[config_idx, 0], s0[config_idx, 0])
-                if ys0 > 1e-8:
-                    rho0[config_idx, 0, 0] = 1.0 / ys0
+            ys0 = torch.matmul(y0, s0.transpose(1, 2))
+            rho0 = torch.where(ys0 > 1e-8, 1.0 / ys0, 0.0)
             self.rho.append(rho0)
 
         if self.iteration > self.memory:
