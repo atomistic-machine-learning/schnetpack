@@ -12,7 +12,7 @@ References
 """
 
 import os
-
+import time
 import ase
 from ase import units
 from ase.constraints import FixAtoms
@@ -110,6 +110,9 @@ class AtomsConverter:
         else:
             raise AtomsConverterError(f"Unrecognized precision {dtype}")
 
+        self.converter_time = 0.
+        self.converter_iterations = 0
+
     def __call__(self, atoms: List[Atoms] or Atoms):
         """
 
@@ -119,6 +122,8 @@ class AtomsConverter:
         Returns:
             dict[str, torch.Tensor]: input batch for model.
         """
+
+        ts = time.time()
 
         # check input type and prepare for conversion
         if type(atoms) == list:
@@ -157,6 +162,10 @@ class AtomsConverter:
 
         # Move input batch to device
         inputs = {p: inputs[p].to(self.device) for p in inputs}
+
+        te = time.time()
+        self.converter_time += te - ts
+        self.converter_iterations += 1
 
         return inputs
 
