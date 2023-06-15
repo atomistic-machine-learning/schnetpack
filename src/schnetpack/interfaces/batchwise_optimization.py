@@ -744,6 +744,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
 
         # debugging: log forward pass time and nbh list calc. time
         self.total_opt_time = 0.
+        self.ase_time = 0.
 
         self.device = device
 
@@ -850,6 +851,8 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         te = time.time()
         self.total_opt_time += te - ts
 
+        ts = time.time()
+
         # create new list of ase Atoms objects with updated positions
         ats = []
         for config_idx, at in enumerate(self.atoms):
@@ -880,6 +883,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
                 self.task,
             )
         )
+
+        te = time.time()
+        self.ase_time += te - ts
 
     def determine_step(self, dr: np.array) -> np.array:
         """Determine step to take according to maxstep
