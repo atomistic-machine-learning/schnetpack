@@ -785,7 +785,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         if f is None:
             f = self.calculator.get_forces(
                 self.atoms, fixed_atoms_mask=self.fixed_atoms_mask
-            )
+            ).to(self.device)
 
         ts = time.time()
 
@@ -795,7 +795,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         configs_mask = squared_max_forces < self.fmax**2
         mask = configs_mask[:, None, None].repeat(1, q_euclidean.shape[1], q_euclidean.shape[2]).view(-1, 3)
 
-        r = self.calculator.positions[self.fixed_atoms_mask].to(torch.float64)
+        r = self.calculator.positions[self.fixed_atoms_mask].to(torch.float64).to(self.device)
 
         self.update(r, f, self.r0, self.f0)
 
@@ -842,7 +842,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             dr = self.determine_step(self.p) * self.damping
 
         # update positions
-        pos_updated = self.calculator.positions
+        pos_updated = self.calculator.positions.to(self.device)
         pos_updated[self.fixed_atoms_mask] += dr
         pos_updated = pos_updated.cpu().numpy()
 
