@@ -154,6 +154,7 @@ class BatchwiseCalculator:
         self.n_fwd_iterations = 0
 
         self.positions = None
+        self.positions_updated = None
 
     def _load_model(self, model: str) -> nn.Module:
         return torch.load(model, map_location="cpu").to(torch.float64)
@@ -170,11 +171,16 @@ class BatchwiseCalculator:
         for name in property_keys:
             if name not in self.results:
                 return True
-        if len(self.atoms) != len(atoms):
-            return True
-        for atom, atom_ref in zip(atoms, self.atoms):
-            if atom != atom_ref:
+        #TODO:check pbc cell
+        if self.positions_updated is not None:
+            if not torch.equal(self.positions_updated, self.positions):
                 return True
+        else:
+            if len(self.atoms) != len(atoms):
+                return True
+            for atom, atom_ref in zip(atoms, self.atoms):
+                if atom != atom_ref:
+                    return True
 
     def get_forces(self, atoms: List[ase.Atoms], fixed_atoms_mask: Optional[List[int]] = None) -> np.array:
         """
@@ -836,8 +842,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             dr = self.determine_step(self.p) * self.damping
 
         # update positions
-        pos_updated = self.calculator.positions.to(self.device)
+        pos_updated = self.calculator.positions.clone().to(self.device)
         pos_updated[self.fixed_atoms_mask] += dr
+        self.calculator.positions_updated = pos_updated
         pos_updated = pos_updated.cpu().numpy()
 
         te = time.time()
