@@ -849,8 +849,8 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             dr = self.determine_step(self.p) * self.damping
 
         # update positions
-        pos_updated = self.calculator.positions.clone().to(self.device)
-        pos_updated[self.fixed_atoms_mask] += dr
+        pos_updated = self.calculator.positions.clone()
+        pos_updated[self.fixed_atoms_mask] += dr.to(self.calculator.device)
         self.calculator.positions_updated = pos_updated
         pos_updated = pos_updated.cpu().numpy()
 
