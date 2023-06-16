@@ -454,7 +454,7 @@ class BatchwiseDynamics(Dynamics):
         #self.n_atoms = len(self.atoms[0])
 
     def _build_ase_atoms(self):
-
+        ts = time.time()
         ats = []
         n_configs = self.inputs["_n_atoms"].shape[0]
         for config_idx in range(n_configs):
@@ -468,6 +468,8 @@ class BatchwiseDynamics(Dynamics):
             # TODO pbc
             ats.append(at)
         self.atoms = ats
+        te = time.time()
+        self.ase_time += te - ts
 
     def irun(self):
         # compute initial structure and log the first step
@@ -845,7 +847,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         configs_mask = squared_max_forces < self.fmax**2
         mask = configs_mask[:, None, None].repeat(1, q_euclidean.shape[1], q_euclidean.shape[2]).view(-1, 3)
 
-        r = self.calculator.positions[self.fixed_atoms_mask].to(torch.float64).to(self.device)
+        r = self.inputs["_positions"][self.fixed_atoms_mask].to(torch.float64).to(self.device)
 
         self.update(r, f, self.r0, self.f0)
 
@@ -892,31 +894,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             dr = self.determine_step(self.p) * self.damping
 
         # update positions
-        pos_updated = self.calculator.positions.clone()
-        pos_updated[self.fixed_atoms_mask] += dr.to(self.calculator.device)
-        #self.calculator.positions_updated = pos_updated
-        self.inputs["_positions"] = pos_updated
-        #pos_updated = pos_updated.cpu().numpy()
-
-        te = time.time()
-        self.total_opt_time += te - ts
-
-        ts = time.time()
-
-        ## create new list of ase Atoms objects with updated positions
-        #ats = []
-        #for config_idx, at in enumerate(self.atoms):
-        #    # warning: only works when all structures have the same number of atoms
-        #    first_idx = config_idx * len(at)
-        #    last_idx = config_idx * len(at) + len(at)
-        #    at = Atoms(
-        #        positions=pos_updated[first_idx:last_idx],
-        #        numbers=self.atoms[config_idx].get_atomic_numbers(),
-        #    )
-        #    at.pbc = self.atoms[config_idx].pbc
-        #    at.cell = self.atoms[config_idx].cell
-        #    ats.append(at)
-        #self.atoms = ats
+        self.inputs["_positions"][self.fixed_atoms_mask] += dr.to(self.calculator.device)
 
         self.iteration += 1
         self.r0 = r
@@ -935,7 +913,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         )
 
         te = time.time()
-        self.ase_time += te - ts
+        self.total_opt_time += te - ts
 
     def determine_step(self, dr: np.array) -> np.array:
         """Determine step to take according to maxstep
