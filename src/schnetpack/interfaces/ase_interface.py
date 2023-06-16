@@ -110,8 +110,10 @@ class AtomsConverter:
         else:
             raise AtomsConverterError(f"Unrecognized precision {dtype}")
 
-        self.converter_time = 0.
-        self.converter_iterations = 0
+        self.converter_time_loop = 0.
+        self.converter_iterations_loop = 0
+        self.converter_time_post = 0.
+        self.converter_iterations_post = 0
 
     def __call__(self, atoms: List[Atoms] or Atoms):
         """
@@ -158,14 +160,19 @@ class AtomsConverter:
                 inputs = transform(inputs)
             inputs_batch.append(inputs)
 
+        te = time.time()
+        self.converter_time_loop += te - ts
+        self.converter_iterations_loop += 1
+        ts = time.time()
+
         inputs = _atoms_collate_fn(inputs_batch)
 
         # Move input batch to device
         inputs = {p: inputs[p].to(self.device) for p in inputs}
 
         te = time.time()
-        self.converter_time += te - ts
-        self.converter_iterations += 1
+        self.converter_time_post += te - ts
+        self.converter_iterations_post += 1
 
         return inputs
 
