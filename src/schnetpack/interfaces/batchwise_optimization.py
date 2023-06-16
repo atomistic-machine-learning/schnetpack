@@ -19,6 +19,8 @@ import torch
 from torch import nn
 from schnetpack.units import convert_units
 from schnetpack.interfaces.ase_interface import AtomsConverter
+from schnetpack import properties
+from schnetpack.data.loader import _atoms_collate_fn
 
 
 __all__ = [
@@ -161,7 +163,6 @@ class BatchwiseCalculator:
         self.n_fwd_iterations = 0
 
         self.positions = None
-        self.positions_updated = None
 
     def _load_model(self, model: str) -> nn.Module:
         return torch.load(model, map_location="cpu").to(torch.float64)
@@ -172,50 +173,72 @@ class BatchwiseCalculator:
         self.model = model.eval()
         self.model.to(device=self.device, dtype=self.dtype)
 
-    def _requires_calculation(self, property_keys: List[str], atoms: List[ase.Atoms]):
+    def _requires_calculation(self, property_keys: List[str], inputs):
         if self.results is None:
             return True
         for name in property_keys:
             if name not in self.results:
                 return True
-        #TODO:check pbc cell
-        if self.positions_updated is not None:
-            if not torch.equal(self.positions_updated, self.positions):
-                return True
-        else:
-            if len(self.atoms) != len(atoms):
-                return True
-            for atom, atom_ref in zip(atoms, self.atoms):
-                if atom != atom_ref:
-                    return True
+        if self.positions is None:
+            return True
+        if not torch.equal(inputs["_positions"], self.positions):
+            return True
+        if not torch.equal(inputs["_cell"], self.cell):
+            return True
+        if not torch.equal(inputs["_pbc"], self.pbc):
+            return True
 
-    def get_forces(
-        self, atoms: List[ase.Atoms], fixed_atoms_mask: Optional[List[int]] = None
-    ) -> np.array:
+    def get_forces(self, inputs, fixed_atoms_mask: Optional[List[int]] = None) -> np.array:
         """
         atoms:
 
         fixed_atoms_mask:
             list of indices corresponding to atoms with positions fixed in space.
         """
-        if self._requires_calculation(
-            property_keys=[self.energy_key, self.force_key], atoms=atoms
-        ):
-            self.calculate(atoms)
+        if self._requires_calculation(property_keys=[self.energy_key, self.force_key], inputs=inputs):
+            self.calculate(inputs)
         f = self.results[self.force_key]
         if fixed_atoms_mask is not None:
             f = f[fixed_atoms_mask]
         return f
 
-    def get_potential_energy(self, atoms: List[ase.Atoms]) -> float:
-        if self._requires_calculation(property_keys=[self.energy_key], atoms=atoms):
-            self.calculate(atoms)
+    def get_potential_energy(self, inputs) -> float:
+        if self._requires_calculation(property_keys=[self.energy_key], inputs=inputs):
+            self.calculate(inputs)
         return self.results[self.energy_key]
 
-    def calculate(self, atoms: List[ase.Atoms]) -> None:
+    def calculate(self, inputs) -> None:
         property_keys = list(self.property_units.keys())
-        inputs = self.atoms_converter(atoms)
-        self.positions = inputs["_positions"].detach()
+
+        n_configs = inputs["_n_atoms"].shape[0]
+        inputs_tmp = []
+        for config_idx in range(n_configs):
+            spl_input = {}
+            spl_input.update({properties.n_atoms: inputs[properties.n_atoms][config_idx].unsqueeze(0)})
+            spl_input.update({properties.Z: inputs[properties.Z][inputs["_idx_m"] == config_idx].long()})
+            spl_input.update({properties.R: inputs[properties.R][inputs["_idx_m"] == config_idx].double()})
+            spl_input.update({properties.cell: inputs[properties.cell][config_idx].unsqueeze(0).double()})
+            spl_input.update({properties.pbc: inputs[properties.pbc][config_idx].unsqueeze(0)})
+            spl_input.update({properties.idx: inputs[properties.idx][config_idx].unsqueeze(0)})
+            #inputs.update(self.additional_inputs)
+            spl_input.update({"slab_indices": inputs["slab_indices"]})
+
+            # Move input batch to cpu
+            spl_input = {p: spl_input[p].to(torch.device("cpu")) for p in spl_input}
+
+            for transform in self.atoms_converter.transforms:
+                spl_input = transform(spl_input)
+            inputs_tmp.append(spl_input)
+
+        inputs = _atoms_collate_fn(inputs_tmp)
+
+        # Move input batch to device
+        inputs = {p: inputs[p].to(self.device) for p in inputs}
+
+        #inputs = self.atoms_converter(atoms)
+        self.positions = inputs["_positions"].detach().clone()
+        self.cell = inputs["_cell"].detach().detach().clone()
+        self.pbc = inputs["_pbc"].detach().detach().clone()
 
         # track fwd. pass time and count iterations
         self.n_fwd_iterations += 1
@@ -240,7 +263,7 @@ class BatchwiseCalculator:
                 )
 
         self.results = results
-        self.atoms = atoms.copy()
+        #self.atoms = atoms.copy()
 
 
 class BatchwiseEnsembleCalculator(BatchwiseCalculator):
@@ -368,7 +391,7 @@ class BatchwiseDynamics(Dynamics):
     def __init__(
         self,
         calculator: BatchwiseCalculator,
-        atoms: List[Atoms],
+        inputs: Dict[str, torch.Tensor],
         logfile: str,
         trajectory: Optional[str],
         append_trajectory: bool = False,
@@ -413,7 +436,7 @@ class BatchwiseDynamics(Dynamics):
             list of indices corresponding to atoms with positions fixed in space.
         """
         super().__init__(
-            atoms=atoms,
+            atoms=None,
             logfile=logfile,
             trajectory=trajectory,
             append_trajectory=append_trajectory,
@@ -426,17 +449,35 @@ class BatchwiseDynamics(Dynamics):
         #self.fixed_atoms_mask = fixed_atoms_mask
         self.fixed_atoms_mask = ~torch.tensor(fixed_atoms_mask)
 
-        self.n_configs = len(self.atoms)
+        self.inputs = inputs
+        self.n_configs = self.inputs["_n_atoms"].shape[0]
         #self.n_atoms = len(self.atoms[0])
+
+    def _build_ase_atoms(self):
+
+        ats = []
+        n_configs = self.inputs["_n_atoms"].shape[0]
+        for config_idx in range(n_configs):
+            pos = self.inputs["_positions"][self.inputs["_idx_m"] == config_idx].cpu().numpy()
+            at_nums = self.inputs["_atomic_numbers"][self.inputs["_idx_m"] == config_idx].cpu().numpy()
+            at = Atoms(
+                positions=pos,
+                numbers=at_nums,
+            )
+            # TODO cell
+            # TODO pbc
+            ats.append(at)
+        self.atoms = ats
 
     def irun(self):
         # compute initial structure and log the first step
-        self.calculator.get_forces(self.atoms, fixed_atoms_mask=self.fixed_atoms_mask)
+        self.calculator.get_forces(self.inputs, fixed_atoms_mask=self.fixed_atoms_mask)
 
         # yield the first time to inspect before logging
         yield False
 
         if self.nsteps == 0:
+            self._build_ase_atoms()
             self.log()
             pass
 
@@ -453,9 +494,11 @@ class BatchwiseDynamics(Dynamics):
 
             # log the step
             if self.log_every_step:
+                self._build_ase_atoms()
                 self.log()
 
         # log last step
+        self._build_ase_atoms()
         self.log()
 
         # finally check if algorithm was converged
@@ -482,7 +525,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
     def __init__(
         self,
         calculator: BatchwiseCalculator,
-        atoms: List[Atoms],
+        inputs: Dict[str, torch.Tensor],
         restart: Optional[bool] = None,
         logfile: Optional[str] = None,
         trajectory: Optional[str] = None,
@@ -530,7 +573,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
         BatchwiseDynamics.__init__(
             self,
             calculator=calculator,
-            atoms=atoms,
+            inputs=inputs,
             logfile=logfile,
             trajectory=trajectory,
             master=master,
@@ -578,7 +621,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
         """Did the optimization converge?"""
         if forces is None:
             forces = self.calculator.get_forces(
-                self.atoms, fixed_atoms_mask=self.fixed_atoms_mask
+                self.inputs, fixed_atoms_mask=self.fixed_atoms_mask
             )
         # todo: maybe np.linalg.norm?
         return (forces**2).sum(axis=1).max() < self.fmax**2
@@ -586,7 +629,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
     def log(self, forces: Optional[np.array] = None) -> None:
         if forces is None:
             forces = self.calculator.get_forces(
-                self.atoms, fixed_atoms_mask=self.fixed_atoms_mask
+                self.inputs, fixed_atoms_mask=self.fixed_atoms_mask
             )
         fmax = sqrt((forces**2).sum(axis=1).max())
         T = time.localtime()
@@ -614,7 +657,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
                 )
 
     def get_relaxation_results(self) -> Tuple[Atoms, Dict]:
-        self.calculator.get_forces(self.atoms)
+        self.calculator.get_forces(self.inputs)
         return self.atoms, self.calculator.results
 
     def dump(self, data):
@@ -640,7 +683,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
     def __init__(
         self,
         calculator: BatchwiseCalculator,
-        atoms: List[Atoms],
+        inputs: Dict[str, torch.Tensor],
         restart: Optional[bool] = None,
         logfile: str = "-",
         trajectory: Optional[str] = None,
@@ -712,7 +755,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         BatchwiseOptimizer.__init__(
             self,
             calculator=calculator,
-            atoms=atoms,
+            inputs=inputs,
             restart=restart,
             logfile=logfile,
             trajectory=trajectory,
@@ -791,7 +834,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
 
         if f is None:
             f = self.calculator.get_forces(
-                self.atoms, fixed_atoms_mask=self.fixed_atoms_mask
+                self.inputs, fixed_atoms_mask=self.fixed_atoms_mask
             ).to(self.device)
 
         ts = time.time()
@@ -851,28 +894,29 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         # update positions
         pos_updated = self.calculator.positions.clone()
         pos_updated[self.fixed_atoms_mask] += dr.to(self.calculator.device)
-        self.calculator.positions_updated = pos_updated
-        pos_updated = pos_updated.cpu().numpy()
+        #self.calculator.positions_updated = pos_updated
+        self.inputs["_positions"] = pos_updated
+        #pos_updated = pos_updated.cpu().numpy()
 
         te = time.time()
         self.total_opt_time += te - ts
 
         ts = time.time()
 
-        # create new list of ase Atoms objects with updated positions
-        ats = []
-        for config_idx, at in enumerate(self.atoms):
-            # warning: only works when all structures have the same number of atoms
-            first_idx = config_idx * len(at)
-            last_idx = config_idx * len(at) + len(at)
-            at = Atoms(
-                positions=pos_updated[first_idx:last_idx],
-                numbers=self.atoms[config_idx].get_atomic_numbers(),
-            )
-            at.pbc = self.atoms[config_idx].pbc
-            at.cell = self.atoms[config_idx].cell
-            ats.append(at)
-        self.atoms = ats
+        ## create new list of ase Atoms objects with updated positions
+        #ats = []
+        #for config_idx, at in enumerate(self.atoms):
+        #    # warning: only works when all structures have the same number of atoms
+        #    first_idx = config_idx * len(at)
+        #    last_idx = config_idx * len(at) + len(at)
+        #    at = Atoms(
+        #        positions=pos_updated[first_idx:last_idx],
+        #        numbers=self.atoms[config_idx].get_atomic_numbers(),
+        #    )
+        #    at.pbc = self.atoms[config_idx].pbc
+        #    at.cell = self.atoms[config_idx].cell
+        #    ats.append(at)
+        #self.atoms = ats
 
         self.iteration += 1
         self.r0 = r
