@@ -21,6 +21,7 @@ from schnetpack.units import convert_units
 from schnetpack.interfaces.ase_interface import AtomsConverter
 from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
+from schnetpack.transform import CastTo32
 
 
 __all__ = ["ASEBatchwiseLBFGS", "BatchwiseCalculator", "BatchwiseEnsembleCalculator", "NNEnsemble"]
@@ -155,7 +156,11 @@ class BatchwiseCalculator:
         self.total_fwd_time = 0.
         self.n_fwd_iterations = 0
 
-        self.positions = None
+        self.previous_positions = None
+        self.previous_cell = None
+        self.previous_pbc = None
+
+        self.cutoff_skin = 0.3
 
     def _load_model(self, model: str) -> nn.Module:
         return torch.load(model, map_location="cpu").to(torch.float64)
@@ -172,14 +177,56 @@ class BatchwiseCalculator:
         for name in property_keys:
             if name not in self.results:
                 return True
-        if self.positions is None:
+        if self.previous_positions is None or self.previous_cell is None or self.previous_pbc is None:
             return True
-        if not torch.equal(inputs["_positions"], self.positions):
+        if not torch.equal(inputs["_positions"], self.previous_positions):
             return True
-        if not torch.equal(inputs["_cell"], self.cell):
+        if not torch.equal(inputs["_cell"], self.previous_cell):
             return True
-        if not torch.equal(inputs["_pbc"], self.pbc):
+        if not torch.equal(inputs["_pbc"], self.previous_pbc):
             return True
+
+    def _requires_new_nbh_list(self, inputs):
+        # check if structure change is sufficiently small to reuse previous neighbor list
+        if self.previous_positions is None or self.previous_cell is None or self.previous_pbc is None:
+            return False
+        if (
+                torch.equal(self.previous_pbc, inputs[properties.pbc])
+                and torch.equal(self.previous_cell, inputs[properties.cell])
+                and torch.max(torch.sum(torch.square(
+                    self.previous_positions - inputs[properties.position]
+                ), dim=-1)).item() < 0.25 * self.cutoff_skin ** 2
+        ):
+            # inputs = CastTo32()(inputs)
+            return False
+        return True
+
+    def _build_nbh_list(self, inputs):
+        n_configs = inputs["_n_atoms"].shape[0]
+        inputs_tmp = []
+        for config_idx in range(n_configs):
+            spl_input = {}
+            spl_input.update({properties.n_atoms: inputs[properties.n_atoms][config_idx].unsqueeze(0)})
+            spl_input.update({properties.Z: inputs[properties.Z][inputs["_idx_m"] == config_idx].long()})
+            spl_input.update({properties.R: inputs[properties.R][inputs["_idx_m"] == config_idx].double()})
+            spl_input.update({properties.cell: inputs[properties.cell][config_idx].unsqueeze(0).double()})
+            spl_input.update({properties.pbc: inputs[properties.pbc][config_idx].unsqueeze(0)})
+            spl_input.update({properties.idx: inputs[properties.idx][config_idx].unsqueeze(0)})
+            # inputs.update(self.additional_inputs)
+            spl_input.update({"slab_indices": inputs["slab_indices"]})
+
+            # Move input batch to cpu
+            spl_input = {p: spl_input[p].to(torch.device("cpu")) for p in spl_input}
+
+            for transform in self.atoms_converter.transforms:
+                spl_input = transform(spl_input)
+            inputs_tmp.append(spl_input)
+
+        inputs = _atoms_collate_fn(inputs_tmp)
+
+        # Move input batch to device
+        inputs = {p: inputs[p].to(self.device) for p in inputs}
+        return inputs
 
     def get_forces(self, inputs, fixed_atoms_mask: Optional[List[int]] = None) -> np.array:
         """
@@ -201,37 +248,16 @@ class BatchwiseCalculator:
         return self.results[self.energy_key]
 
     def calculate(self, inputs) -> None:
+
+        inputs = deepcopy(inputs)
         property_keys = list(self.property_units.keys())
 
-        n_configs = inputs["_n_atoms"].shape[0]
-        inputs_tmp = []
-        for config_idx in range(n_configs):
-            spl_input = {}
-            spl_input.update({properties.n_atoms: inputs[properties.n_atoms][config_idx].unsqueeze(0)})
-            spl_input.update({properties.Z: inputs[properties.Z][inputs["_idx_m"] == config_idx].long()})
-            spl_input.update({properties.R: inputs[properties.R][inputs["_idx_m"] == config_idx].double()})
-            spl_input.update({properties.cell: inputs[properties.cell][config_idx].unsqueeze(0).double()})
-            spl_input.update({properties.pbc: inputs[properties.pbc][config_idx].unsqueeze(0)})
-            spl_input.update({properties.idx: inputs[properties.idx][config_idx].unsqueeze(0)})
-            #inputs.update(self.additional_inputs)
-            spl_input.update({"slab_indices": inputs["slab_indices"]})
+        if self._requires_new_nbh_list(inputs):
+            self._build_nbh_list(inputs)
 
-            # Move input batch to cpu
-            spl_input = {p: spl_input[p].to(torch.device("cpu")) for p in spl_input}
-
-            for transform in self.atoms_converter.transforms:
-                spl_input = transform(spl_input)
-            inputs_tmp.append(spl_input)
-
-        inputs = _atoms_collate_fn(inputs_tmp)
-
-        # Move input batch to device
-        inputs = {p: inputs[p].to(self.device) for p in inputs}
-
-        #inputs = self.atoms_converter(atoms)
-        self.positions = inputs["_positions"].detach().clone()
-        self.cell = inputs["_cell"].detach().detach().clone()
-        self.pbc = inputs["_pbc"].detach().detach().clone()
+        self.previous_positions = inputs[properties.R].clone()
+        self.previous_cell = inputs[properties.cell].clone()
+        self.previous_pbc = inputs[properties.pbc].clone()
 
         # track fwd. pass time and count iterations
         self.n_fwd_iterations += 1
@@ -256,7 +282,6 @@ class BatchwiseCalculator:
                 )
 
         self.results = results
-        #self.atoms = atoms.copy()
 
 
 class BatchwiseEnsembleCalculator(BatchwiseCalculator):
@@ -656,6 +681,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
                 )
 
     def get_relaxation_results(self) -> Tuple[Atoms, Dict]:
+        self._build_ase_atoms()
         self.calculator.get_forces(self.inputs)
         return self.atoms, self.calculator.results
 
@@ -892,7 +918,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             dr = self.determine_step(self.p) * self.damping
 
         # update positions
-        self.inputs["_positions"][self.fixed_atoms_mask] += dr.to(self.calculator.device)
+        self.inputs["_positions"][self.fixed_atoms_mask] += dr.to(self.calculator.device).to(torch.float32)
 
         self.iteration += 1
         self.r0 = r
