@@ -155,6 +155,10 @@ class BatchwiseCalculator:
         # debugging: log forward pass time and nbh list calc. time
         self.total_fwd_time = 0.
         self.n_fwd_iterations = 0
+        self.converter_time_loop = 0.
+        self.converter_iterations_loop = 0
+        self.converter_time_check = 0.
+        self.converter_iterations_check = 0
 
         self.previous_positions = None
         self.previous_cell = None
@@ -252,8 +256,17 @@ class BatchwiseCalculator:
         inputs = deepcopy(inputs)
         property_keys = list(self.property_units.keys())
 
-        if self._requires_new_nbh_list(inputs):
+        ts = time.time()
+        _update = self._requires_new_nbh_list(inputs)
+        te = time.time()
+        self.converter_time_check += te - ts
+        self.converter_iterations_check += 1
+        if _update:
+            ts = time.time()
             self._build_nbh_list(inputs)
+            te = time.time()
+            self.converter_time_loop += te - ts
+            self.converter_iterations_loop += 1
 
         self.previous_positions = inputs[properties.R].clone()
         self.previous_cell = inputs[properties.cell].clone()
