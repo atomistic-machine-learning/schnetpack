@@ -481,17 +481,16 @@ class BatchwiseDynamics(Dynamics):
         self.calculator = calculator
         self.trajectory = trajectory
         self.log_every_step = log_every_step
-        #self.fixed_atoms_mask = fixed_atoms_mask
         self.fixed_atoms_mask = ~torch.tensor(fixed_atoms_mask)
 
         self.inputs = inputs
-        self.n_configs = self.inputs["_n_atoms"].shape[0]
-        #self.n_atoms = len(self.atoms[0])
+        self.n_configs = inputs["_n_atoms"].shape[0]
 
     def _build_ase_atoms(self):
         ts = time.time()
         ats = []
         n_configs = self.inputs["_n_atoms"].shape[0]
+        cells = torch.diagonal(self.inputs["_cell"], offset=0, dim1=-2, dim2=-1)
         for config_idx in range(n_configs):
             pos = self.inputs["_positions"][self.inputs["_idx_m"] == config_idx].cpu().numpy()
             at_nums = self.inputs["_atomic_numbers"][self.inputs["_idx_m"] == config_idx].cpu().numpy()
@@ -499,8 +498,8 @@ class BatchwiseDynamics(Dynamics):
                 positions=pos,
                 numbers=at_nums,
             )
-            # TODO cell
-            # TODO pbc
+            at.pbc = self.inputs["_pbc"][config_idx].cpu().numpy()
+            at.set_cell(cells[config_idx].cpu().numpy())
             ats.append(at)
         self.atoms = ats
         te = time.time()
