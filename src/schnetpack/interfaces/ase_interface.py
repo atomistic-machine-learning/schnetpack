@@ -68,6 +68,7 @@ class AtomsConverter:
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
         additional_inputs: Dict[str, torch.Tensor] = None,
+        cutoff_skin: float = 0.3,
     ):
         """
         Args:
@@ -90,6 +91,7 @@ class AtomsConverter:
         self.device = device
         self.dtype = dtype
         self.additional_inputs = additional_inputs or {}
+        self.cutoff_skin = cutoff_skin
 
         # convert transforms and neighbor_list to list
         transforms = transforms or []
@@ -110,10 +112,12 @@ class AtomsConverter:
         else:
             raise AtomsConverterError(f"Unrecognized precision {dtype}")
 
-        self.converter_time_loop = 0.
-        self.converter_iterations_loop = 0
-        self.converter_time_post = 0.
-        self.converter_iterations_post = 0
+        self.converter_time = 0.
+        self.converter_iterations = 0
+
+        self.previous_positions = None
+        self.previous_cell = None
+        self.previous_pbc = None
 
     def __call__(self, atoms: List[Atoms] or Atoms):
         """
@@ -160,19 +164,79 @@ class AtomsConverter:
                 inputs = transform(inputs)
             inputs_batch.append(inputs)
 
-        te = time.time()
-        self.converter_time_loop += te - ts
-        self.converter_iterations_loop += 1
-        ts = time.time()
-
         inputs = _atoms_collate_fn(inputs_batch)
 
         # Move input batch to device
         inputs = {p: inputs[p].to(self.device) for p in inputs}
 
+        self.previous_positions = inputs[properties.R].clone()
+        self.previous_cell = inputs[properties.cell].clone()
+        self.previous_pbc = inputs[properties.pbc].clone()
+
         te = time.time()
-        self.converter_time_post += te - ts
-        self.converter_iterations_post += 1
+        self.converter_time += te - ts
+        self.converter_iterations += 1
+
+        return inputs
+
+    def _requires_new_nbh_list(self, inputs):
+        # check if structure change is sufficiently small to reuse previous neighbor list
+        if self.previous_positions is None or self.previous_cell is None or self.previous_pbc is None:
+            return True
+        if (
+                torch.equal(self.previous_pbc, inputs[properties.pbc])
+                and torch.equal(self.previous_cell, inputs[properties.cell])
+                and torch.max(torch.sum(torch.square(
+                    self.previous_positions - inputs[properties.position]
+                ), dim=-1)).item() < 0.25 * self.cutoff_skin ** 2
+        ):
+            return False
+        return True
+
+    def _transform_inputs(self, inputs):
+        n_configs = inputs["_n_atoms"].shape[0]
+        inputs_tmp = []
+        for config_idx in range(n_configs):
+            spl_input = {}
+            spl_input.update({properties.n_atoms: inputs[properties.n_atoms][config_idx].unsqueeze(0)})
+            spl_input.update({properties.Z: inputs[properties.Z][inputs["_idx_m"] == config_idx].long()})
+            spl_input.update({properties.R: inputs[properties.R][inputs["_idx_m"] == config_idx].double()})
+            spl_input.update({properties.cell: inputs[properties.cell][config_idx].unsqueeze(0).double()})
+            spl_input.update({properties.pbc: inputs[properties.pbc][config_idx].unsqueeze(0)})
+            spl_input.update({properties.idx: inputs[properties.idx][config_idx].unsqueeze(0)})
+            # inputs.update(self.additional_inputs)
+            spl_input.update({"slab_indices": inputs["slab_indices"]})
+
+            # Move input batch to cpu
+            spl_input = {p: spl_input[p].to(torch.device("cpu")) for p in spl_input}
+
+            for transform in self.transforms:
+                spl_input = transform(spl_input)
+            inputs_tmp.append(spl_input)
+
+        inputs = _atoms_collate_fn(inputs_tmp)
+
+        # Move input batch to device
+        inputs = {p: inputs[p].to(self.device) for p in inputs}
+
+        return inputs
+
+    def update_inputs(self, inputs):
+
+        ts = time.time()
+
+        _update = self._requires_new_nbh_list(inputs)
+        if _update:
+            print("update")
+            inputs = self._transform_inputs(inputs)
+
+        self.previous_positions = inputs[properties.R].clone()
+        self.previous_cell = inputs[properties.cell].clone()
+        self.previous_pbc = inputs[properties.pbc].clone()
+
+        te = time.time()
+        self.converter_time += te - ts
+        self.converter_iterations += 1
 
         return inputs
 

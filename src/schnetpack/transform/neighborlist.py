@@ -175,6 +175,9 @@ class NeighborListTransform(Transform):
         super().__init__()
         self._cutoff = cutoff
 
+        self.total_nbh_time = 0.
+        self.n_nbh_iterations = 0
+
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
@@ -234,12 +237,6 @@ class MatScipyNeighborList(NeighborListTransform):
     References:
         https://github.com/libAtoms/matscipy
     """
-
-    total_nbh_time = 0.
-    n_nbh_iterations = 0
-
-    total_postproc_time = 0.
-    n_postproc_iterations = 0
 
     def _build_neighbor_list(
         self, Z, positions, cell, pbc, cutoff, eps=1e-6, buffer=1.0
@@ -310,9 +307,6 @@ class SkinNeighborList(Transform):
         self.total_nbh_time = 0.
         self.n_nbh_iterations = 0
 
-        self.total_postproc_time = 0.
-        self.n_postproc_iterations = 0
-
     # @timeit
     def forward(
         self,
@@ -322,42 +316,16 @@ class SkinNeighborList(Transform):
         ts = time.time()
 
         update_required, inputs = self._update(inputs)
-        #inputs = self.distance_calculator(inputs)
-        #inputs = self._remove_neighbors_in_skin(inputs)
 
         te = time.time()
 
-        if update_required:
-            self.total_nbh_time += te - ts
-            self.n_nbh_iterations += 1
-        else:
-            self.total_postproc_time += te - ts
-            self.n_postproc_iterations += 1
+        self.total_nbh_time += te - ts
+        self.n_nbh_iterations += 1
 
         return inputs
 
     def reset(self):
         self.previous_inputs = {}
-
-    def _remove_neighbors_in_skin(
-        self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
-
-        Rij = inputs[properties.Rij]
-        idx_i = inputs[properties.idx_i]
-        idx_j = inputs[properties.idx_j]
-        offsets = inputs[properties.offsets]
-
-        rij = torch.norm(Rij, dim=-1)
-        cidx = torch.nonzero(rij <= self.cutoff).squeeze(-1)
-
-        inputs[properties.Rij] = Rij[cidx]
-        inputs[properties.idx_i] = idx_i[cidx]
-        inputs[properties.idx_j] = idx_j[cidx]
-        inputs[properties.offsets] = offsets[cidx]
-
-        return inputs
 
     def _update(self, inputs):
         sample_idx = inputs[properties.idx].item()
