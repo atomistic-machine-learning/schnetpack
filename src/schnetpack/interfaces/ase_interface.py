@@ -68,7 +68,6 @@ class AtomsConverter:
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
         additional_inputs: Dict[str, torch.Tensor] = None,
-        cutoff_skin: float = 0.3,
     ):
         """
         Args:
@@ -91,7 +90,14 @@ class AtomsConverter:
         self.device = device
         self.dtype = dtype
         self.additional_inputs = additional_inputs or {}
-        self.cutoff_skin = cutoff_skin
+
+        if hasattr(neighbor_list, 'cutoff_skin'):
+            self.cutoff_skin = neighbor_list.cutoff_skin
+            self.previous_positions = None
+            self.previous_cell = None
+            self.previous_pbc = None
+        else:
+            self.cutoff_skin = None
 
         # convert transforms and neighbor_list to list
         transforms = transforms or []
@@ -114,10 +120,6 @@ class AtomsConverter:
 
         self.converter_time = 0.
         self.converter_iterations = 0
-
-        self.previous_positions = None
-        self.previous_cell = None
-        self.previous_pbc = None
 
     def __call__(self, atoms: List[Atoms] or Atoms):
         """
@@ -169,9 +171,10 @@ class AtomsConverter:
         # Move input batch to device
         inputs = {p: inputs[p].to(self.device) for p in inputs}
 
-        self.previous_positions = inputs[properties.R].clone()
-        self.previous_cell = inputs[properties.cell].clone()
-        self.previous_pbc = inputs[properties.pbc].clone()
+        if self.cutoff_skin is not None:
+            self.previous_positions = inputs[properties.R].clone()
+            self.previous_cell = inputs[properties.cell].clone()
+            self.previous_pbc = inputs[properties.pbc].clone()
 
         te = time.time()
         self.converter_time += te - ts
@@ -194,20 +197,21 @@ class AtomsConverter:
         return True
 
     def _transform_inputs(self, inputs):
+        print("update")
         n_configs = inputs["_n_atoms"].shape[0]
         inputs_tmp = []
         for config_idx in range(n_configs):
             spl_input = {}
             spl_input.update({properties.n_atoms: inputs[properties.n_atoms][config_idx].unsqueeze(0)})
-            spl_input.update({properties.Z: inputs[properties.Z][inputs["_idx_m"] == config_idx].long()})
-            spl_input.update({properties.R: inputs[properties.R][inputs["_idx_m"] == config_idx].double()})
-            spl_input.update({properties.cell: inputs[properties.cell][config_idx].unsqueeze(0).double()})
+            spl_input.update({properties.Z: inputs[properties.Z][inputs["_idx_m"] == config_idx]})
+            spl_input.update({properties.R: inputs[properties.R][inputs["_idx_m"] == config_idx]})
+            spl_input.update({properties.cell: inputs[properties.cell][config_idx].unsqueeze(0)})
             spl_input.update({properties.pbc: inputs[properties.pbc][config_idx].unsqueeze(0)})
             spl_input.update({properties.idx: inputs[properties.idx][config_idx].unsqueeze(0)})
-            # inputs.update(self.additional_inputs)
-            spl_input.update({"slab_indices": inputs["slab_indices"]})
+            spl_input.update(self.additional_inputs)
 
-            # Move input batch to cpu
+            # Cast to double and move input batch to cpu
+            spl_input = CastTo64()(spl_input)
             spl_input = {p: spl_input[p].to(torch.device("cpu")) for p in spl_input}
 
             for transform in self.transforms:
@@ -225,9 +229,14 @@ class AtomsConverter:
 
         ts = time.time()
 
-        _update = self._requires_new_nbh_list(inputs)
-        if _update:
-            print("update")
+        if self.cutoff_skin is None:
+            inputs = self._transform_inputs(inputs)
+            te = time.time()
+            self.converter_time += te - ts
+            self.converter_iterations += 1
+            return inputs
+
+        if self._requires_new_nbh_list(inputs):
             inputs = self._transform_inputs(inputs)
 
         self.previous_positions = inputs[properties.R].clone()
