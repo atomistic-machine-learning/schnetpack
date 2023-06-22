@@ -32,7 +32,6 @@ Rij: Final[str] = "_Rij"  #: vectors pointing from center atoms to neighboring a
 Rij_lr: Final[
     str
 ] = "_Rij_lr"  #: vectors pointing from center atoms to neighboring atoms for long range
-rij: Final[str] = "_rij"  #: scalar distances between neighboring atoms
 n_atoms: Final[str] = "_n_atoms"  #: number of atoms
 offsets: Final[str] = "_offsets"  #: cell offset vectors
 offsets_lr: Final[str] = "_offsets_lr"  #: cell offset vectors for long range

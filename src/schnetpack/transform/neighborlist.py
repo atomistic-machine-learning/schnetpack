@@ -328,6 +328,9 @@ class SkinNeighborList(Transform):
         self.previous_inputs = {}
 
     def _update(self, inputs):
+        """Make sure the list is up-to-date."""
+
+        # get sample index
         sample_idx = inputs[properties.idx].item()
 
         # check if previous neighbor list exists
@@ -359,6 +362,7 @@ class SkinNeighborList(Transform):
                 inputs[properties.offsets] = previous_inputs[properties.offsets]
                 return False, inputs
 
+        # build new neighbor list
         inputs = self._build(inputs)
         return True, inputs
 
@@ -527,12 +531,7 @@ class FilterNeighbors(Transform):
         self.selection_name = selection_name
         super().__init__()
 
-        self.total_postproc_time = 0.
-        self.n_postproc_iterations = 0
-
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        ts = time.time()
-
         slab_indices = inputs[self.selection_name]
         mask = np.logical_or(
             np.isin(inputs[properties.idx_i], slab_indices, invert=True),
@@ -542,10 +541,6 @@ class FilterNeighbors(Transform):
         inputs[properties.idx_i] = inputs[properties.idx_i][mask]
         inputs[properties.idx_j] = inputs[properties.idx_j][mask]
         inputs[properties.offsets] = inputs[properties.offsets][mask]
-
-        te = time.time()
-        self.total_postproc_time += te - ts
-        self.n_postproc_iterations += 1
 
         return inputs
 
