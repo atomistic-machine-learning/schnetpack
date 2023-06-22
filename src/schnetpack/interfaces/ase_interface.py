@@ -39,6 +39,7 @@ from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.transform import CastTo32, CastTo64
 from schnetpack.units import convert_units
 from schnetpack.md.utils import activate_model_stress
+import schnetpack.properties as structure
 
 from typing import Optional, List, Union, Dict
 from ase import Atoms
@@ -85,7 +86,6 @@ class AtomsConverter:
                 stored to the input batch.
         """
 
-        self.neighbor_list = deepcopy(neighbor_list)
         self.device = device
         self.dtype = dtype
         self.additional_inputs = additional_inputs or {}
@@ -171,7 +171,9 @@ class AtomsConverter:
         inputs = {p: inputs[p].to(self.device) for p in inputs}
 
         if self.cutoff_skin is not None:
-            self.previous_positions = inputs[properties.R].clone()
+            previous_inputs = self.transforms[0].previous_inputs
+            self.previous_positions = torch.cat([d[properties.R] for d in previous_inputs.values()])
+            self.previous_positions = self.previous_positions.to(self.device).to(self.dtype)
             self.previous_cell = inputs[properties.cell].clone()
             self.previous_pbc = inputs[properties.pbc].clone()
 
@@ -230,17 +232,14 @@ class AtomsConverter:
 
         if self.cutoff_skin is None:
             inputs = self._transform_inputs(inputs)
-            te = time.time()
-            self.converter_time += te - ts
-            self.converter_iterations += 1
-            return inputs
 
         if self._requires_new_nbh_list(inputs):
             inputs = self._transform_inputs(inputs)
-
-        self.previous_positions = inputs[properties.R].clone()
-        self.previous_cell = inputs[properties.cell].clone()
-        self.previous_pbc = inputs[properties.pbc].clone()
+            previous_inputs = self.transforms[0].previous_inputs
+            self.previous_positions = torch.cat([d[properties.R] for d in previous_inputs.values()])
+            self.previous_positions = self.previous_positions.to(self.device).to(self.dtype)
+            self.previous_cell = inputs[properties.cell].clone()
+            self.previous_pbc = inputs[properties.pbc].clone()
 
         te = time.time()
         self.converter_time += te - ts
