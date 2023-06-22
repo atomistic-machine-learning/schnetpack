@@ -20,8 +20,6 @@ from torch import nn
 from schnetpack.units import convert_units
 from schnetpack.interfaces.ase_interface import AtomsConverter
 from schnetpack import properties
-from schnetpack.data.loader import _atoms_collate_fn
-from schnetpack.transform import CastTo32
 
 
 __all__ = [
@@ -167,8 +165,6 @@ class BatchwiseCalculator:
         self.previous_cell = None
         self.previous_pbc = None
 
-        self.cutoff_skin = 0.3
-
     def _load_model(self, model: str) -> nn.Module:
         return torch.load(model, map_location="cpu").to(torch.float64)
 
@@ -192,6 +188,7 @@ class BatchwiseCalculator:
             return True
         if not torch.equal(inputs["_pbc"], self.previous_pbc):
             return True
+        return False
 
     def get_forces(self, inputs, fixed_atoms_mask: Optional[List[int]] = None) -> np.array:
         """
