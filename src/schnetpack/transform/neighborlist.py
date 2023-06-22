@@ -10,7 +10,6 @@ import numpy as np
 from typing import Optional, Dict, List
 import time
 
-
 __all__ = [
     "ASENeighborList",
     "MatScipyNeighborList",
@@ -531,11 +530,12 @@ class FilterNeighbors(Transform):
         super().__init__()
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        slab_indices = inputs[self.selection_name]
-        mask = np.logical_or(
-            np.isin(inputs[properties.idx_i], slab_indices, invert=True),
-            np.isin(inputs[properties.idx_j], slab_indices, invert=True)
-        )
+        filtered_out_indices = inputs[self.selection_name]
+
+        # filter out pairs where both atoms are contained in filtered_out_indices
+        at_i_is_not_filtered_out = torch.isin(inputs[properties.idx_i], filtered_out_indices, invert=True)
+        at_j_is_not_filtered_out = torch.isin(inputs[properties.idx_j], filtered_out_indices, invert=True)
+        mask = at_i_is_not_filtered_out | at_j_is_not_filtered_out
 
         inputs[properties.idx_i] = inputs[properties.idx_i][mask]
         inputs[properties.idx_j] = inputs[properties.idx_j][mask]
