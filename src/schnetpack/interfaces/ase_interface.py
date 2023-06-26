@@ -233,7 +233,7 @@ class AtomsConverter:
         if self.cutoff_skin is None:
             inputs = self._transform_inputs(inputs)
 
-        if self._requires_new_nbh_list(inputs):
+        elif self._requires_new_nbh_list(inputs):
             inputs = self._transform_inputs(inputs)
             previous_inputs = self.transforms[0].previous_inputs
             self.previous_positions = torch.cat([d[properties.R] for d in previous_inputs.values()])
