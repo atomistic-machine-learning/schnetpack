@@ -433,9 +433,8 @@ class BatchwiseDynamics(Dynamics):
     def _build_ase_atoms(self):
         ts = time.time()
         ats = []
-        n_configs = self.inputs["_n_atoms"].shape[0]
         cells = torch.diagonal(self.inputs["_cell"], offset=0, dim1=-2, dim2=-1)
-        for config_idx in range(n_configs):
+        for config_idx in range(self.n_configs):
             pos = self.inputs["_positions"][self.inputs["_idx_m"] == config_idx].cpu().numpy()
             at_nums = self.inputs["_atomic_numbers"][self.inputs["_idx_m"] == config_idx].cpu().numpy()
             at = Atoms(
