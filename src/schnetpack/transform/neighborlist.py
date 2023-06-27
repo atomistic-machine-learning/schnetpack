@@ -351,7 +351,7 @@ class SkinNeighborList(Transform):
             # check if structure change is sufficiently small to reuse previous neighbor list
             if (
                 torch.equal(previous_pbc, pbc)
-                and torch.equal(previous_cell, cell)
+                and torch.allclose(previous_cell, cell)
                 and torch.max(torch.sum(torch.square(previous_positions - positions), dim=-1)).item()
                     < 0.25 * self.cutoff_skin**2
             ):
