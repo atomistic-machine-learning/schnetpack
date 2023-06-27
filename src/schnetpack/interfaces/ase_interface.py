@@ -177,11 +177,11 @@ class AtomsConverter:
             previous_inputs = self.transforms[0].previous_inputs
             self.previous_positions = torch.cat([d[properties.R] for d in previous_inputs.values()])
             self.previous_positions = self.previous_positions.to(self.device).to(self.dtype)
-            self.previous_cell = inputs[properties.cell].clone()
-            self.previous_pbc = inputs[properties.pbc].clone()
-            self.previous_idx_i = inputs[properties.idx_i].clone()
-            self.previous_idx_j = inputs[properties.idx_j].clone()
-            self.previous_offsets = inputs[properties.offsets].clone()
+            self.previous_cell = inputs[properties.cell]
+            self.previous_pbc = inputs[properties.pbc]
+            self.previous_idx_i = inputs[properties.idx_i]
+            self.previous_idx_j = inputs[properties.idx_j]
+            self.previous_offsets = inputs[properties.offsets]
 
         te = time.time()
         self.converter_time += te - ts
@@ -242,11 +242,11 @@ class AtomsConverter:
             previous_inputs = self.transforms[0].previous_inputs
             self.previous_positions = torch.cat([d[properties.R] for d in previous_inputs.values()])
             self.previous_positions = self.previous_positions.to(self.device).to(self.dtype)
-            self.previous_cell = inputs[properties.cell].clone()
-            self.previous_pbc = inputs[properties.pbc].clone()
-            self.previous_idx_i = inputs[properties.idx_i].clone()
-            self.previous_idx_j = inputs[properties.idx_j].clone()
-            self.previous_offsets = inputs[properties.offsets].clone()
+            self.previous_cell = inputs[properties.cell]
+            self.previous_pbc = inputs[properties.pbc]
+            self.previous_idx_i = inputs[properties.idx_i]
+            self.previous_idx_j = inputs[properties.idx_j]
+            self.previous_offsets = inputs[properties.offsets]
         else:
             inputs[properties.idx_i] = self.previous_idx_i
             inputs[properties.idx_j] = self.previous_idx_j
