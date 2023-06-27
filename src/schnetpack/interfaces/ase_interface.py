@@ -95,6 +95,9 @@ class AtomsConverter:
             self.previous_positions = None
             self.previous_cell = None
             self.previous_pbc = None
+            self.previous_idx_i = None
+            self.previous_idx_j = None
+            self.previous_offsets = None
         else:
             self.cutoff_skin = None
 
@@ -176,6 +179,9 @@ class AtomsConverter:
             self.previous_positions = self.previous_positions.to(self.device).to(self.dtype)
             self.previous_cell = inputs[properties.cell].clone()
             self.previous_pbc = inputs[properties.pbc].clone()
+            self.previous_idx_i = inputs[properties.idx_i].clone()
+            self.previous_idx_j = inputs[properties.idx_j].clone()
+            self.previous_offsets = inputs[properties.offsets].clone()
 
         te = time.time()
         self.converter_time += te - ts
@@ -189,7 +195,7 @@ class AtomsConverter:
             return True
         if (
                 torch.equal(self.previous_pbc, inputs[properties.pbc])
-                and torch.equal(self.previous_cell, inputs[properties.cell])
+                and torch.allclose(self.previous_cell, inputs[properties.cell])
                 and torch.max(torch.sum(torch.square(
                     self.previous_positions - inputs[properties.position]
                 ), dim=-1)).item() < 0.25 * self.cutoff_skin ** 2
@@ -198,7 +204,6 @@ class AtomsConverter:
         return True
 
     def _transform_inputs(self, inputs):
-        print("update")
         n_configs = inputs["_n_atoms"].shape[0]
         inputs_tmp = []
         for config_idx in range(n_configs):
@@ -232,7 +237,6 @@ class AtomsConverter:
 
         if self.cutoff_skin is None:
             inputs = self._transform_inputs(inputs)
-
         elif self._requires_new_nbh_list(inputs):
             inputs = self._transform_inputs(inputs)
             previous_inputs = self.transforms[0].previous_inputs
@@ -240,6 +244,13 @@ class AtomsConverter:
             self.previous_positions = self.previous_positions.to(self.device).to(self.dtype)
             self.previous_cell = inputs[properties.cell].clone()
             self.previous_pbc = inputs[properties.pbc].clone()
+            self.previous_idx_i = inputs[properties.idx_i].clone()
+            self.previous_idx_j = inputs[properties.idx_j].clone()
+            self.previous_offsets = inputs[properties.offsets].clone()
+        else:
+            inputs[properties.idx_i] = self.previous_idx_i
+            inputs[properties.idx_j] = self.previous_idx_j
+            inputs[properties.offsets] = self.previous_offsets
 
         te = time.time()
         self.converter_time += te - ts

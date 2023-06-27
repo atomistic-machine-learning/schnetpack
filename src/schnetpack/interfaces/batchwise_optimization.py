@@ -209,6 +209,7 @@ class BatchwiseCalculator:
 
         inputs = self.atoms_converter.update_inputs(inputs)
 
+        # TODO: we could remove the clone() here
         self.previous_positions = inputs[properties.R].clone()
         self.previous_cell = inputs[properties.cell].clone()
         self.previous_pbc = inputs[properties.pbc].clone()
