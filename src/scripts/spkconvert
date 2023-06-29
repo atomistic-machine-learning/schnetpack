@@ -28,8 +28,8 @@ if __name__ == "__main__":
         default=[],
         nargs='+',
         help="Expanding the first dimension of the given property "
-             "(required for example for old field schnet datasets). "
-             "Add property names here in the form 'property1, property2, property3'",
+             "(required for example for old FieldSchNet datasets). "
+             "Add property names here in the form 'property1 property2 property3'",
     )
     args = parser.parse_args()
     with connect(args.data_path) as db:
