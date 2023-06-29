@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-import schnetpack.data as dat
 import argparse
 
 from ase.db import connect
 import numpy as np
+from tqdm import tqdm
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -20,7 +21,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--propunit",
         help="Property units as string, corresponding "
-        "to ASE units (e.g. `kcal/mol/Ang`), in the form: `property1:unit1,property2,unit2`",
+        "to ASE units (e.g. `kcal/mol/Ang`), in the form: `property1:unit1,property2:unit2`",
+    )
+    parser.add_argument(
+        "--expand_property_dims",
+        default=[],
+        nargs='+',
+        help="Expanding the first dimension of the given property "
+             "(required for example for old field schnet datasets). "
+             "Add property names here in the form 'property1, property2, property3'",
     )
     args = parser.parse_args()
     with connect(args.data_path) as db:
@@ -59,3 +68,16 @@ if __name__ == "__main__":
 
     with connect(args.data_path) as db:
         db.metadata = meta
+
+    if args.expand_property_dims is not None and len(args.expand_property_dims) > 0:
+
+        with connect(args.data_path) as db:
+            for i in tqdm(range(len(db))):
+                atoms_row = db.get(i + 1)
+                data = {}
+                for p, v in atoms_row.data.items():
+                    if p in args.expand_property_dims:
+                        data[p] = np.expand_dims(v, 0)
+                    else:
+                        data[p] = v
+                db.update(i + 1, data=data)
