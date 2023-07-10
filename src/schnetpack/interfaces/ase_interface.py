@@ -187,7 +187,8 @@ class SpkCalculator(Calculator):
         energy_unit: Union[str, float] = "kcal/mol",
         position_unit: Union[str, float] = "Angstrom",
         device: Union[str, torch.device] = "cpu",
-        dtype: torch.dtype = torch.float32,
+        input_dtype: torch.dtype = torch.float32,
+        output_dtype: torch.dtype = torch.float64,
         converter: callable = AtomsConverter,
         transforms: Union[
             schnetpack.transform.Transform, List[schnetpack.transform.Transform]
@@ -206,7 +207,8 @@ class SpkCalculator(Calculator):
             energy_unit (str, float): energy units used by model (default="kcal/mol")
             position_unit (str, float): position units used by model (default="Angstrom")
             device (torch.device): device used for calculations (default="cpu")
-            dtype (torch.dtype): select model input precision (default=float32)
+            input_dtype (torch.dtype): select model input precision (default=float32)
+            output_dtype (torch.dtype): select model output precision (default=float64)
             converter (callable): converter used to set up input batches
             transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
                 can be found in the AtomsConverter docstring.
@@ -219,7 +221,7 @@ class SpkCalculator(Calculator):
         self.converter = converter(
             neighbor_list=neighbor_list,
             device=device,
-            dtype=dtype,
+            dtype=input_dtype,
             transforms=transforms,
             additional_inputs=additional_inputs,
         )
@@ -234,6 +236,14 @@ class SpkCalculator(Calculator):
             self.forces: force_key,
             self.stress: stress_key,
         }
+
+        # Set numerical precision if model output
+        if output_dtype == torch.float32:
+            self.postprocessor_casting = CastTo32()
+        elif output_dtype == torch.float64:
+            self.postprocessor_casting = CastTo64()
+        else:
+            raise AtomsConverterError(f"Unrecognized precision {output_dtype}")
 
         # auxiliary output modules could, e.g., be additional potential functions based on prior knowledge
         self.auxiliary_output_modules = auxiliary_output_modules or []
@@ -274,6 +284,11 @@ class SpkCalculator(Calculator):
         # add auxiliary output modules after CastTo64
         for auxiliary_output_module in self.auxiliary_output_modules:
             model.output_modules.insert(1, auxiliary_output_module)
+
+        # adapt postprocessing to output_dtype (assumed that postprocessors always contain some casting transform)
+        for proc_idx, post_proc in enumerate(model.postprocessors):
+            if post_proc.__class__ is (CastTo64 or CastTo32):
+                model.postprocessors[proc_idx] = self.postprocessor_casting
 
         model = model.eval()
 
@@ -367,7 +382,8 @@ class SpkEnsembleCalculator(SpkCalculator):
             energy_unit: Union[str, float] = "kcal/mol",
             position_unit: Union[str, float] = "Angstrom",
             device: Union[str, torch.device] = "cpu",
-            dtype: torch.dtype = torch.float32,
+            input_dtype: torch.dtype = torch.float32,
+            output_dtype: torch.dtype = torch.float64,
             converter: callable = AtomsConverter,
             transforms: Union[
                 schnetpack.transform.Transform, List[schnetpack.transform.Transform]
@@ -387,7 +403,8 @@ class SpkEnsembleCalculator(SpkCalculator):
             energy_unit (str, float): energy units used by model (default="kcal/mol")
             position_unit (str, float): position units used by model (default="Angstrom")
             device (torch.device): device used for calculations (default="cpu")
-            dtype (torch.dtype): select model input precision (default=float32)
+            input_dtype (torch.dtype): select model input precision (default=float32)
+            output_dtype (torch.dtype): select model output precision (default=float64)
             converter (callable): converter used to set up input batches
             transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
                 can be found in the AtomsConverter docstring.
@@ -406,7 +423,8 @@ class SpkEnsembleCalculator(SpkCalculator):
             energy_unit=energy_unit,
             position_unit=position_unit,
             device=device,
-            dtype=dtype,
+            input_dtype=input_dtype,
+            output_dtype=output_dtype,
             converter=converter,
             transforms=transforms,
             additional_inputs=additional_inputs,
@@ -422,6 +440,9 @@ class SpkEnsembleCalculator(SpkCalculator):
                 m = torch.load(m, map_location="cpu")
             for auxiliary_output_module in self.auxiliary_output_modules:
                 m.output_modules.insert(1, auxiliary_output_module)
+            for proc_idx, post_proc in enumerate(m.postprocessors):
+                if post_proc.__class__ is (CastTo64 or CastTo32):
+                    m.postprocessors[proc_idx] = self.postprocessor_casting
             ensemble_model.update({"model{}".format(model_idx): m})
         ensemble_model = ensemble_model.eval()
         return ensemble_model
@@ -490,7 +511,8 @@ class AseInterface:
         energy_unit: Union[str, float] = "kcal/mol",
         position_unit: Union[str, float] = "Angstrom",
         device: Union[str, torch.device] = "cpu",
-        dtype: torch.dtype = torch.float32,
+        input_dtype: torch.dtype = torch.float32,
+        output_dtype: torch.dtype = torch.float64,
         converter: AtomsConverter = AtomsConverter,
         optimizer_class: type = QuasiNewton,
         fixed_atoms: Optional[List[int]] = None,
@@ -511,7 +533,8 @@ class AseInterface:
             energy_unit (str, float): energy units used by model (default="kcal/mol")
             position_unit (str, float): position units used by model (default="Angstrom")
             device (torch.device): device used for calculations (default="cpu")
-            dtype (torch.dtype): select model input precision (default=float32)
+            input_dtype (torch.dtype): select model input precision (default=float32)
+            output_dtype (torch.dtype): select model output precision (default=float64)
             converter (schnetpack.interfaces.AtomsConverter): converter used to set up input batches
             optimizer_class (ase.optimize.optimizer): ASE optimizer used for structure relaxation.
             fixed_atoms (list(int)): list of indices corresponding to atoms with positions fixed in space.
@@ -545,7 +568,8 @@ class AseInterface:
             energy_unit=energy_unit,
             position_unit=position_unit,
             device=device,
-            dtype=dtype,
+            input_dtype=input_dtype,
+            output_dtype=output_dtype,
             converter=converter,
             transforms=transforms,
             additional_inputs=additional_inputs,
