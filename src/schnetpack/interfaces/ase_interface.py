@@ -306,10 +306,10 @@ class SpkCalculator(Calculator):
                             * self.property_units[prop]
                         )
                     elif prop == self.stress:
-                        # ase calculator should return scalar energy
+                        # squeeze stress dimension [1, 3, 3] of spk to [3, 3] of ase
                         results[prop] = (
-                                model_results[model_prop].cpu().data.numpy().squeeze()
-                                * self.property_units[prop]
+                            model_results[model_prop].cpu().data.numpy().squeeze()
+                            * self.property_units[prop]
                         )
                     else:
                         results[prop] = (
