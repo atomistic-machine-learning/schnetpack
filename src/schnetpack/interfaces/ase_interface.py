@@ -299,11 +299,17 @@ class SpkCalculator(Calculator):
                 model_prop = self.property_map[prop]
 
                 if model_prop in model_results:
-                    if prop == self.energy or prop == self.stress:
+                    if prop == self.energy:
                         # ase calculator should return scalar energy
                         results[prop] = (
                             model_results[model_prop].cpu().data.numpy().item()
                             * self.property_units[prop]
+                        )
+                    elif prop == self.stress:
+                        # ase calculator should return scalar energy
+                        results[prop] = (
+                                model_results[model_prop].cpu().data.numpy().squeeze()
+                                * self.property_units[prop]
                         )
                     else:
                         results[prop] = (
