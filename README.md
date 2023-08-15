@@ -88,7 +88,7 @@ By default, the model is stored in a directory with a unique run id hash as a su
 This can be changed as follows:
 
 ```
-spktrain experiment=qm9 run.data_dir=/my/data/dir run.path=~/all_my_runs run.id=this_run
+spktrain experiment=qm9_atomwise run.data_dir=/my/data/dir run.path=~/all_my_runs run.id=this_run
 ```
 
 If you call `spktrain experiment=qm9 --help`, you can see the full config with all the parameters
