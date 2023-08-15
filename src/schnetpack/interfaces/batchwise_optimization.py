@@ -902,8 +902,8 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             # rescale steps for each config separately
             for config_idx in range(self.n_configs):
                 # TODO: make this more general
-                first_idx = config_idx * 42
-                last_idx = config_idx * 42 + 42
+                first_idx = config_idx * 38
+                last_idx = config_idx * 38 + 38
                 longest_step = torch.max(steplengths[first_idx:last_idx])
                 if longest_step >= self.maxstep:
                     if self.verbose:
