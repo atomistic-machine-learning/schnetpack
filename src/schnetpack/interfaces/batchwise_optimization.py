@@ -822,6 +822,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         configs_mask = squared_max_forces < self.fmax**2
         mask = configs_mask[:, None, None].repeat(1, q_euclidean.shape[1], q_euclidean.shape[2]).view(-1, 3)
 
+        # currently all structures must exhibit the same number of atoms
+        num_atoms = q_euclidean.shape[1]
+
         r = self.inputs["_positions"][self.fixed_atoms_mask].to(torch.float64).to(self.device)
 
         self.update(r, f, self.r0, self.f0)
@@ -862,11 +865,11 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         if self.use_line_search is True:
             e = self.func(r)
             self.line_search(r, g, e)
-            dr = (self.alpha_k * self.p).reshape(self.n_atoms * self.n_configs, -1)
+            dr = (self.alpha_k * self.p).reshape(num_atoms * self.n_configs, -1)
         else:
             self.force_calls += 1
             self.function_calls += 1
-            dr = self.determine_step(self.p) * self.damping
+            dr = self.determine_step(self.p, num_atoms) * self.damping
 
         # update positions
         self.inputs["_positions"][self.fixed_atoms_mask] += dr.to(self.calculator.device).to(torch.float32)
@@ -890,7 +893,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         te = time.time()
         self.total_opt_time += te - ts
 
-    def determine_step(self, dr: np.array) -> np.array:
+    def determine_step(self, dr: np.array, num_atoms: int) -> np.array:
         """Determine step to take according to maxstep
 
         Normalize all steps as the largest step. This way
@@ -901,9 +904,8 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         if torch.max(steplengths) >= self.maxstep:
             # rescale steps for each config separately
             for config_idx in range(self.n_configs):
-                # TODO: make this more general
-                first_idx = config_idx * 38
-                last_idx = config_idx * 38 + 38
+                first_idx = config_idx * num_atoms
+                last_idx = config_idx * num_atoms + num_atoms
                 longest_step = torch.max(steplengths[first_idx:last_idx])
                 if longest_step >= self.maxstep:
                     if self.verbose:
