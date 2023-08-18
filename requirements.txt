@@ -18,6 +18,7 @@ torch_ema
 rich
 fasteners
 matscipy
+tensorboard
 
 pre-commit
 black
