@@ -33,7 +33,7 @@ setup(
         "hydra-core>=1.1.0",
         "torch>=1.9",
         "pytorch_lightning>=2.0.0",
-        "torchmetrics",
+        "torchmetrics==1.0.1",
         "hydra-colorlog>=1.1.0",
         "rich",
         "fasteners",

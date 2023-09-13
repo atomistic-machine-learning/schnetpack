@@ -8,7 +8,7 @@ hydra-core>=1.1.0
 hydra-colorlog>=1.1.0
 numpy
 ase>=3.21
-torchmetrics
+torchmetrics==1.0.1
 h5py
 tqdm
 pytest
