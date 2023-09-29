@@ -40,6 +40,7 @@ setup(
         "dirsync",
         "torch-ema",
         "matscipy",
+        "tensorboard",
     ],
     include_package_data=True,
     extras_require={"test": ["pytest", "pytest-datadir", "pytest-benchmark"]},
