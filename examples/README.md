@@ -14,7 +14,7 @@ Jupyter notebooks demonstrating general concepts and workflows
 
 [Molecular dynamics in SchNetPack](tutorials/tutorial_04_molecular_dynamics.ipynb)
 
-[Preparing and training on data with periodic boundary conditions](tutorials/tutorial_05_materials.ipynb)
+[Force fields for materials](tutorials/tutorial_05_materials.ipynb)
 
 
 ## How-To
