@@ -186,6 +186,10 @@ These can be selected as follows::
 
 **References**
 
+.. [#schnetpack2] K.T. Schütt, S.S.P. Hessmann, N.W. Gebauer, J. Lederer, & M. Gastegger
+   `SchNetPack: SchNetPack 2.0: A neural network toolbox for atomistic machine learning <https://doi.org/10.1063/5.0138367>`_.
+   The Journal of Chemical Physics **158** (14), pp. 144801. 2023.
+
 .. [#schnetpack] K.T. Schütt, P. Kessel, M. Gastegger, K.A. Nicoli, A. Tkatchenko, K.-R. Müller.
    `SchNetPack: A Deep Learning Toolbox For Atomistic Systems <https://doi.org/10.1021/acs.jctc.8b00908>`_.
    Journal of Chemical Theory and Computation **15** (1), pp. 448-455. 2018.
