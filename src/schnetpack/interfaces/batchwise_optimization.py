@@ -162,8 +162,9 @@ class BatchwiseCalculator:
         return torch.load(model, map_location="cpu").to(torch.float64)
 
     def _initialize_model(self, model: nn.Module) -> None:
+        n_output_modules = len(model.output_modules)
         for auxiliary_output_module in self.auxiliary_output_modules:
-            model.output_modules.insert(1, auxiliary_output_module)
+            model.output_modules.insert(n_output_modules-1, auxiliary_output_module)
         self.model = model.eval()
         self.model.to(device=self.device, dtype=self.dtype)
 
