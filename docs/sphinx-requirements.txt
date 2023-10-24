@@ -1,4 +1,4 @@
-https://download.pytorch.org/whl/cpu/torch-1.12.1%2Bcpu-cp38-cp38-linux_x86_64.whl; python_version=='3.8'
+https://download.pytorch.org/whl/cpu/torch-1.12.1%2Bcpu-cp38-cp38-linux_x86_64.whl; python_version=='3.10'
 
 numpy
 ase>=3.21
