@@ -10,8 +10,8 @@ nbsphinx
 sphinx-autoapi
 sphinx-rtd-theme
 
-pytorch_lightning>=1.8.1
+pytorch_lightning>=2.0.0
 hydra-core==1.1.0
-hydra-colorlog==1.1.0
-torchmetrics>=0.4.1
+hydra-colorlog>=1.1.0
+torchmetrics==1.0.1
 protobuf==3.20.2
