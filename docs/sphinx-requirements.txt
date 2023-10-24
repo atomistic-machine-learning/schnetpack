@@ -8,6 +8,7 @@ tqdm
 ipykernel
 nbsphinx
 sphinx-autoapi
+sphinx-rtd-theme
 
 pytorch_lightning>=1.8.1
 hydra-core==1.1.0
