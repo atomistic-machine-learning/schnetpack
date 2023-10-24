@@ -7,11 +7,11 @@ pyyaml
 tqdm
 ipykernel
 
-nbsphinx==0.9.3
-sphinx-autoapi==0.5.0
+nbsphinx
+sphinx-autoapi
 sphinx==7.1.2
-sphinx_rtd_theme==1.1.1
-readthedocs-sphinx-search==0.1.1
+sphinx_rtd_theme
+readthedocs-sphinx-search
 
 pytorch_lightning>=2.0.0
 hydra-core==1.1.0
