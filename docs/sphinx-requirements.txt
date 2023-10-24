@@ -8,7 +8,6 @@ tqdm
 ipykernel
 
 nbsphinx
-sphinx-autoapi
 sphinx==7.1.2
 sphinx_rtd_theme
 readthedocs-sphinx-search
