@@ -46,7 +46,7 @@ Contents
    :caption: How-To
    :maxdepth: 1
 
-   howtos/howto_batchwise_relaxations
+   .. howtos/howto_batchwise_relaxations
    howtos/lammps
 
 .. toctree::
