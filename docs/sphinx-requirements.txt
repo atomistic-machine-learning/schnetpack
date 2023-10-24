@@ -6,9 +6,12 @@ h5py
 pyyaml
 tqdm
 ipykernel
-nbsphinx
-sphinx-autoapi
-sphinx-rtd-theme
+
+nbsphinx=0.9.3
+sphinx-autoapi==0.5.0
+sphinx==5.3.0
+sphinx_rtd_theme==1.1.1
+readthedocs-sphinx-search==0.1.1
 
 pytorch_lightning>=2.0.0
 hydra-core==1.1.0
