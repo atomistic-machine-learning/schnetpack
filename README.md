@@ -53,7 +53,7 @@ pip install tensorboard
 ```
 
 ## Getting started
- 
+
 The best place to get started is training a SchNetPack model on a common benchmark dataset via the command line
 interface (CLI).
 When installing SchNetPack, the training script `spktrain` is added to your PATH.
@@ -91,12 +91,12 @@ This can be changed as follows:
 spktrain experiment=qm9_atomwise run.data_dir=/my/data/dir run.path=~/all_my_runs run.id=this_run
 ```
 
-If you call `spktrain experiment=qm9 --help`, you can see the full config with all the parameters
+If you call `spktrain experiment=qm9_atomwise --help`, you can see the full config with all the parameters
 that can be changed.
 Nested parameters can be changed as follows:
 
 ```
-spktrain experiment=qm9_atomwise data_dir=<path> data.batch_size=64
+spktrain experiment=qm9_atomwise run.data_dir=<path> data.batch_size=64
 ```
 
 Hydra organizes parameters in config groups which allows hierarchical configurations consisting of multiple
@@ -104,7 +104,7 @@ yaml files. This allows to easily change the whole dataset, model or representat
 For instance, changing from the default SchNet representation to PaiNN, use:
 
 ```
-spktrain experiment=qm9_atomwise data_dir=<path> model/representation=painn
+spktrain experiment=qm9_atomwise run.data_dir=<path> model/representation=painn
 ```
 
 It is a bit confusing at first when to use "." or "/". The slash is used, if you are loading a preconfigured config
@@ -131,7 +131,7 @@ corresponds to the following part of the config:
 If you would want to additionally change some value of this group, you could use:
 
 ```
-spktrain experiment=qm9_atomwise data_dir=<path> model/representation=painn model.representation.n_interactions=5
+spktrain experiment=qm9_atomwise run.data_dir=<path> model/representation=painn model.representation.n_interactions=5
 ```
 
 For more details on config groups, have a look at the
@@ -231,12 +231,12 @@ If you are using SchNetPack in your research, please cite:
 
 K.T. Schütt, S.S.P. Hessmann, N.W.A. Gebauer, J. Lederer, M. Gastegger.
 SchNetPack 2.0: A neural network toolbox for atomistic machine learning.
-J. Chem. Phys. 2023, 158 (14): 144801. 
+J. Chem. Phys. 2023, 158 (14): 144801.
 [10.1063/5.0138367](https://doi.org/10.1063/5.0138367).
 
 K.T. Schütt, P. Kessel, M. Gastegger, K. Nicoli, A. Tkatchenko, K.-R. Müller.
 SchNetPack: A Deep Learning Toolbox For Atomistic Systems.
-J. Chem. Theory Comput. 2019, 15 (1): 448-455. 
+J. Chem. Theory Comput. 2019, 15 (1): 448-455.
 [10.1021/acs.jctc.8b00908](http://dx.doi.org/10.1021/acs.jctc.8b00908).
 
     @article{schutt2023schnetpack,
@@ -275,22 +275,22 @@ CLI and hydra configs for PyTorch Lightning are adapted from this template: [![]
 
 ## References
 
-* [1] K.T. Schütt. F. Arbabzadah. S. Chmiela, K.-R. Müller, A. Tkatchenko.  
+* [1] K.T. Schütt. F. Arbabzadah. S. Chmiela, K.-R. Müller, A. Tkatchenko.
 *Quantum-chemical insights from deep tensor neural networks.*
 Nature Communications **8**. 13890 (2017) [10.1038/ncomms13890](http://dx.doi.org/10.1038/ncomms13890)
 
-* [2] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.  
+* [2] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.
 *SchNet: A continuous-filter convolutional neural network for modeling quantum interactions.*
 Advances in Neural Information Processing Systems 30, pp. 992-1002 (2017) [Paper](http://papers.nips.cc/paper/6700-schnet-a-continuous-filter-convolutional-neural-network-for-modeling-quantum-interactions)
 
-* [3] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.  
-*SchNet - a deep learning architecture for molecules and materials.* 
+* [3] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.
+*SchNet - a deep learning architecture for molecules and materials.*
 The Journal of Chemical Physics 148(24), 241722 (2018) [10.1063/1.5019779](https://doi.org/10.1063/1.5019779)
 
-* [4] K. T. Schütt, O. T. Unke, M. Gastegger  
-*Equivariant message passing for the prediction of tensorial properties and molecular spectra.* 
+* [4] K. T. Schütt, O. T. Unke, M. Gastegger
+*Equivariant message passing for the prediction of tensorial properties and molecular spectra.*
 International Conference on Machine Learning (pp. 9377-9388). PMLR, [Paper](https://proceedings.mlr.press/v139/schutt21a.html).
 
-* [5] N. W. A. Gebauer, M. Gastegger, S. S. P. Hessmann, K.-R. Müller, K. T. Schütt  
+* [5] N. W. A. Gebauer, M. Gastegger, S. S. P. Hessmann, K.-R. Müller, K. T. Schütt
 *Inverse design of 3d molecular structures with conditional generative neural networks.*
 Nature Communications **13**. 973 (2022) [10.1038/s41467-022-28526-y](https://doi.org/10.1038/s41467-022-28526-y)
