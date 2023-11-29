@@ -41,6 +41,10 @@ setup(
         "torch-ema",
         "matscipy",
         "tensorboard",
+        "tqdm",
+        "pre-commit",
+        "black",
+        "protobuf==3.20.2"
     ],
     include_package_data=True,
     extras_require={"test": ["pytest", "pytest-datadir", "pytest-benchmark"]},
