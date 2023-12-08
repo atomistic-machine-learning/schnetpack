@@ -366,7 +366,7 @@ class PropertyStream(DataStream):
 
     def update_buffer(self, buffer_position: int, simulator: Simulator):
         """
-        Routine for updating the propery buffer.
+        Routine for updating the property buffer.
 
         Args:
             buffer_position (int): Current position in the buffer.
