@@ -8,7 +8,7 @@ from torch.autograd import grad
 from schnetpack.nn.utils import derivative_from_molecular, derivative_from_atomic
 import schnetpack.properties as properties
 
-__all__ = ["Forces", "Strain", "Response"]
+__all__ = ["Forces", "Strain", "Response", "Hessian"]
 
 
 class ResponseException(Exception):
@@ -88,6 +88,63 @@ class Forces(nn.Module):
                 keepdim=True,
             )[:, :, None]
             inputs[self.stress_key] = stress / volume
+
+        return inputs
+
+class Hessian(nn.Module):
+    def __init__(
+        self,
+        calc_forces: bool = True,
+        energy_key: str = properties.energy,
+        force_key: str = properties.forces,
+        hessian_key: str = properties.hessian,
+    ):
+        """
+        Args:
+            calc_forces: If True, calculate atomic forces.
+            energy_key: Key of the energy in results.
+            force_key: Key of the forces in results.
+            hessian: Key of the hessian in results.
+        """
+        super(Hessian, self).__init__()
+        self.calc_forces = calc_forces
+        self.energy_key = energy_key
+        self.force_key = force_key
+        self.hessian_key = hessian_key
+        self.model_outputs = []
+        if calc_forces:
+            self.model_outputs.append(force_key)
+        self.model_outputs.append(hessian_key)
+
+        self.required_derivatives = []
+        self.required_derivatives.append(properties.R)
+
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        Epred = inputs[self.energy_key]
+
+        go: List[Optional[torch.Tensor]] = [torch.ones_like(Epred)]
+        grads = grad(
+            [Epred],
+            [inputs[prop] for prop in self.required_derivatives],
+            grad_outputs=go,
+            create_graph=True,
+        )
+
+        dEdR = grads[0]
+        # TorchScript needs Tensor instead of Optional[Tensor]
+        if dEdR is None:
+            dEdR = torch.zeros_like(inputs[properties.R])
+        if self.calc_forces:
+            inputs[self.force_key] = -dEdR
+
+        d2EdR2 = derivative_from_atomic(
+            dEdR,
+            inputs[properties.R],
+            inputs[properties.n_atoms],
+            create_graph=self.training,
+            retain_graph=True,
+        )
+        inputs[properties.hessian] = d2EdR2
 
         return inputs
 
