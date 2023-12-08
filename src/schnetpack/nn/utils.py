@@ -108,7 +108,7 @@ def derivative_from_atomic(
                 retain_graph=retain_graph,
             )[0]
 
-            dfdx_mol.append(dfdx_i[n_mol : n_mol + n_atoms[idx], ...])
+            dfdx_mol.append(dfdx_i[n_mol: n_mol + n_atoms[idx], ...])
 
         # Build molecular matrix and reshape
         dfdx_mol = torch.stack(dfdx_mol, dim=0)
