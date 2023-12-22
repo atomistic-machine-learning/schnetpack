@@ -318,8 +318,9 @@ class SkinNeighborList(Transform):
 
         te = time.time()
 
-        self.total_nbh_time += te - ts
-        self.n_nbh_iterations += 1
+        if update_required:
+            self.total_nbh_time += te - ts
+            self.n_nbh_iterations += 1
 
         return inputs
 
