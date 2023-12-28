@@ -290,6 +290,7 @@ class SpkCalculator(Calculator):
             schnetpack.transform.Transform, List[schnetpack.transform.Transform]
         ] = None,
         additional_inputs: Dict[str, torch.Tensor] = None,
+        auxiliary_output_modules: Optional[List] = None,
         **kwargs,
     ):
 
@@ -331,6 +332,8 @@ class SpkCalculator(Calculator):
             self.stress: stress_key,
         }
 
+        self.auxiliary_output_modules = auxiliary_output_modules or []
+
         self.model = self._load_model(model_file)
         self.model.to(device=device, dtype=dtype)
 
@@ -348,6 +351,9 @@ class SpkCalculator(Calculator):
         # Container for basic ml model ouputs
         self.model_results = None
 
+        self.total_fwd_time = 0.
+        self.n_fwd_iterations = 0
+
     def _load_model(self, model_file: str) -> schnetpack.model.AtomisticModel:
         """
         Load an individual model, activate stress computation
@@ -362,6 +368,11 @@ class SpkCalculator(Calculator):
         log.info("Loading model from {:s}".format(model_file))
         # load model and keep it on CPU, device can be changed afterwards
         model = torch.load(model_file, map_location="cpu").to(torch.float64)
+
+        n_output_modules = len(model.output_modules)
+        for auxiliary_output_module in self.auxiliary_output_modules:
+            model.output_modules.insert(n_output_modules-1, auxiliary_output_module)
+
         model = model.eval()
 
         if self.stress_key is not None:
@@ -385,12 +396,21 @@ class SpkCalculator(Calculator):
         # First call original calculator to set atoms attribute
         # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
 
+        # TODO remove this hack and make schnetpack PR
+        properties = ["energy", "forces"]
+
         if self.calculation_required(atoms, properties):
             Calculator.calculate(self, atoms)
 
             # Convert to schnetpack input format
             model_inputs = self.converter(atoms)
+
+            # track fwd. pass time and count iterations
+            self.n_fwd_iterations += 1
+            ts = time.time()
             model_results = self.model(model_inputs)
+            te = time.time()
+            self.total_fwd_time += te - ts
 
             results = {}
             # TODO: use index information to slice everything properly
