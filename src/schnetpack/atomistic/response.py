@@ -145,7 +145,7 @@ class Hessian(nn.Module):
             create_graph=self.training,
             retain_graph=True,
         )
-        inputs[properties.hessian] = d2EdR2
+        inputs[self.hessian_key] = d2EdR2
 
         return inputs
 
