@@ -2,7 +2,7 @@
 
 defaults:
   - override /model: nnp
-  - override /data: md17
+  - override /data: rmd17
 
 run:
   experiment: md17_${data.molecule}
