@@ -1,8 +1,6 @@
 # SchNetPack - Deep Neural Networks for Atomistic Systems
-[![Build Status](https://travis-ci.com/atomistic-machine-learning/schnetpack.svg?branch=master)](https://travis-ci.com/atomistic-machine-learning/schnetpack)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/python/black)
 [![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
-
 
 
 SchNetPack is a toolbox for the development and application of deep neural networks to the prediction of potential energy surfaces and other quantum-chemical properties of molecules and materials. It contains basic building blocks of atomistic neural networks, manages their training and provides simple access to common benchmark datasets. This allows for an easy implementation and evaluation of new models.
@@ -14,16 +12,6 @@ SchNetPack is a toolbox for the development and application of deep neural netwo
 - Output modules for dipole moments, polarizability, stress, and general response properties
 - Modules for electrostatics, Ewald summation, ZBL repulsion
 - GPU-accelerated molecular dynamics code incl. path-integral MD, thermostats, barostats
-
-##### Requirements:
-- python 3.8
-- Atomic Simulation Environment (ASE) 3.21
-- NumPy
-- PyTorch 1.9
-- PyTorch Lightning 1.9.0
-- Hydra 1.1
-
-_**Note: We recommend using a GPU for training the neural networks.**_
 
 ## Installation
 
@@ -44,20 +32,17 @@ cd schnetpack
 pip install .
 ```
 
-
 ### Visualization with Tensorboard
 
-SchNetPack supports multiple logging backends over PyTorch Lightning. The default logger is Tensorboard, which can be installed via:
-```
-pip install tensorboard
-```
+SchNetPack supports multiple logging backends via PyTorch Lightning. The default logger is Tensorboard. SchNetPack also supports TensorboardX.
+
 
 ## Getting started
 
 The best place to get started is training a SchNetPack model on a common benchmark dataset via the command line
 interface (CLI).
 When installing SchNetPack, the training script `spktrain` is added to your PATH.
-The CLI is based on [Hydra](https://hydra.cc/) and oriented on the PyTorch Lightning/Hydra template that can be found
+The CLI uses [Hydra](https://hydra.cc/) and is based on the PyTorch Lightning/Hydra template that can be found
 [here](https://github.com/ashleve/lightning-hydra-template).
 This enables a flexible configuration of the model, data and training process.
 To fully take advantage of these features, it might be helpful to have a look at the Hydra and PyTorch Lightning docs.
