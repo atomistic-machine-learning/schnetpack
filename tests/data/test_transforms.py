@@ -38,7 +38,7 @@ class TestNeighborLists:
         neighbors_ref = self._sort_neighbors(neighbors_ref)
 
         for nbl, nbl_ref in zip(neighbors, neighbors_ref):
-            torch.testing.assert_allclose(nbl, nbl_ref)
+            torch.testing.assert_close(nbl, nbl_ref)
 
     def _sort_neighbors(self, neighbors):
         """
@@ -135,7 +135,7 @@ def test_remove_com(four_atoms):
     ):
         com += r_i * m_i
 
-    torch.testing.assert_allclose(com, torch.tensor([0.0, 0.0, 0.0]))
+    torch.testing.assert_close(com, torch.tensor([0.0, 0.0, 0.0]))
 
 
 def test_remove_cog(four_atoms):
@@ -145,4 +145,4 @@ def test_remove_cog(four_atoms):
     for r_i in positions_trans[structure.position]:
         cog += r_i
 
-    torch.testing.assert_allclose(cog, torch.tensor([0.0, 0.0, 0.0]))
+    torch.testing.assert_close(cog, torch.tensor([0.0, 0.0, 0.0]))
