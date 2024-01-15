@@ -5,6 +5,8 @@
 
 SchNetPack is a toolbox for the development and application of deep neural networks to the prediction of potential energy surfaces and other quantum-chemical properties of molecules and materials. It contains basic building blocks of atomistic neural networks, manages their training and provides simple access to common benchmark datasets. This allows for an easy implementation and evaluation of new models.
 
+The documentation can be found [here](https://schnetpack.readthedocs.io).
+
 ##### Features
 
 - SchNet - an end-to-end continuous-filter CNN for molecules and materials [1-3]
@@ -206,9 +208,6 @@ SchNetPack can be used as a base for implementations of advanced atomistic neura
 For example, there exists an [extension package](https://github.com/atomistic-machine-learning/schnetpack-gschnet) called `schnetpack-gschnet` for the most recent version of cG-SchNet [5], a conditional generative model for molecules.
 It demonstrates how a complex training task can be implemented in a few custom classes while leveraging the hierarchical configuration and automated training procedure of the SchNetPack framework.
 
-## Documentation
-
-For the full API reference, visit our [documentation](https://schnetpack.readthedocs.io).
 
 ## Citation
 
