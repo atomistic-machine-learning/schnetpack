@@ -202,7 +202,7 @@ class AtomisticTask(pl.LightningModule):
 
         loss = self.loss_fn(pred, targets)
 
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch['_idx']))
         self.log_metrics(pred, targets, "val")
 
         return {"val_loss": loss}
@@ -225,7 +225,7 @@ class AtomisticTask(pl.LightningModule):
 
         loss = self.loss_fn(pred, targets)
 
-        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch['_idx']))
         self.log_metrics(pred, targets, "test")
         return {"test_loss": loss}
 
