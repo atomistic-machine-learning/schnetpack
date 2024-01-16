@@ -15,3 +15,6 @@ from schnetpack import model
 from schnetpack.units import *
 from schnetpack.task import *
 from schnetpack import md
+
+
+__version__ = '2.0.4'
