@@ -5,6 +5,11 @@ from schnetpack.transform import CastTo64, CastTo32, AddOffsets
 import argparse
 
 
+# This script is supposed to take a pytorch model and save a just in time compiled version of it.
+# This is needed to run the model with LAMMPS.
+# For further info see examples/howtos/lammps.rst
+
+
 def get_jit_model(model):
     # fix invalid operations in postprocessing
     jit_postprocessors = nn.ModuleList()
