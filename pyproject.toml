@@ -29,7 +29,7 @@ dependencies = [
     "hydra-core>=1.1.0",
     "torch>=1.9",
     "pytorch_lightning>=2.0.0",
-    "torchmetrics==1.0.1",
+    "torchmetrics",
     "hydra-colorlog>=1.1.0",
     "rich",
     "fasteners",
@@ -40,7 +40,7 @@ dependencies = [
     "tqdm",
     "pre-commit",
     "black",
-    "protobuf==3.20.2"
+    "protobuf"
 ]
 
 [project.optional-dependencies]
