@@ -14,8 +14,7 @@ pip install .[test]
 ```
 
 ## Run tests
-In order to run the tests, switch into the `tests` directory and run the `pytest` command:
+In order to run the tests, run the following command from the root of the repository:
 ```
-cd tests
-pytest
+pytest tests
 ```
