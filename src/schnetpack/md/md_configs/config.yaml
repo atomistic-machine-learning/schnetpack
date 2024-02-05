@@ -9,6 +9,7 @@ restart: null
 load_config: null
 
 defaults:
+  - _self_
   - calculator: spk
   - system: system
   - dynamics: base
