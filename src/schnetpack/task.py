@@ -283,8 +283,15 @@ class AtomisticTask(pl.LightningModule):
             pp_status = self.model.do_postprocessing
             if do_postprocessing is not None:
                 self.model.do_postprocessing = do_postprocessing
-
-            torch.save(self.model, path)
+            # this is a quick fix to avoid issues with wandb and saving model as pickle
+            # related to https://github.com/wandb/wandb/issues/5573
+            try:
+                import wandb
+                wandb.unwatch()
+                torch.save(self.model, path)
+                wandb.watch(self.model)
+            except:
+                torch.save(self.model, path)
 
             self.model.do_postprocessing = pp_status
 
