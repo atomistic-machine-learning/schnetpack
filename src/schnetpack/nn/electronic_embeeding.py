@@ -78,15 +78,19 @@ class ElectronicEmbedding(nn.Module):
         x (FloatTensor [N, num_features]):
             Atomic feature vectors.
         """
+        # segment ids are used to separate different molecules in a batch
         if batch_seg is None:  # assume a single batch
             batch_seg = torch.zeros(x.size(0), dtype=torch.int64, device=x.device)
+        # q shape (Batchsize x N_atoms, n_atom_basis)
         q = self.linear_q(x)  # queries
         if self.is_charge:
             e = F.relu(torch.stack([E, -E], dim=-1))
         else:
             e = torch.abs(E).unsqueeze(-1)  # +/- spin is the same => abs
         enorm = torch.maximum(e, torch.ones_like(e))
+        # k shape (Batchsize x N_atoms, n_atom_basis) and key per molecular graph
         k = self.linear_k(e / enorm)[batch_seg]  # keys
+        # v shape (Batchsize x N_atoms, n_atom_basis) and value per molecular graph
         v = self.linear_v(e)[batch_seg]  # values
         dot = torch.sum(k * q, dim=-1) / k.shape[-1] ** 0.5  # scaled dot product
         a = nn.functional.softplus(dot)  # unnormalized attention weights

@@ -59,7 +59,7 @@ def read_input_file(inputfile):
 # Loading input args
 # ===========================================
 #inputfile = sys.argv[1]
-inputfile = "/home/elron/phd/projects/schnetpack/tests/electronic_embedding/pain_carbene.json"
+inputfile = "/home/elron/phd/projects/google/experiments/carbene.json"
 inputs_args = read_input_file(inputfile)
 # for logger watch
 watch = False
