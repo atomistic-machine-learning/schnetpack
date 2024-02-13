@@ -126,3 +126,9 @@ interfaces/lammps/examples/*/deployed_model
 
 # batchwise optimizer examples
 examples/howtos/howto_batchwise_relaxations_outputs/*
+tests/electronic_embedding/pain_carbene.json
+.vscode/launch.json
+.vscode/settings.json
+tests/ase_carbene_2200.db
+tests/electronic_embedding/carbene.json
+tests/electronic_embedding/carbene.json

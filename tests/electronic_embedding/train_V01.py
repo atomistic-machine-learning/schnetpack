@@ -58,8 +58,11 @@ def read_input_file(inputfile):
 # ===========================================
 # Loading input args
 # ===========================================
-inputfile = sys.argv[1]
+#inputfile = sys.argv[1]
+inputfile = "/home/elron/phd/projects/schnetpack/tests/electronic_embedding/pain_carbene.json"
 inputs_args = read_input_file(inputfile)
+# for logger watch
+watch = False
 
 # dataset config specific
 db_path = inputs_args["db_path"]
@@ -132,7 +135,7 @@ repr_dict = {
     'painn':spk.representation.PaiNN(
     n_atom_basis=n_atom_basis, n_interactions=n_interaction,
     radial_basis=radial_basis,
-    cutoff_fn=cutoff_fn)
+    cutoff_fn=cutoff_fn,activate_charge_spin_embedding=activate_charge_spin_embedding)
 }
 
 repr = repr_dict[representation]
@@ -150,7 +153,8 @@ nnpot = spk.model.NeuralNetworkPotential(
     input_modules=[pairwise_distance],
     output_modules=[pred_energy,pred_forces],
     postprocessors=[
-        trn.CastTo64()
+        trn.CastTo64(),
+        trn.AddOffsets("energy",add_mean=True,add_atomrefs=False)
     ]
 )
 
@@ -198,7 +202,9 @@ wandb.login()
 logger = WandbLogger(project='google_dataset', config=inputs_args,
                        name=wandb_name, id=wandb_id, resume='allow')
 
-logger.watch(task, log="all",log_freq=False)
+if watch:
+    logger.watch(task, log="all",log_freq=False)
+
 callbacks = [
     spk.train.ModelCheckpoint(
         model_path=os.path.join(save_dir, 'checkpoints'),
@@ -214,4 +220,4 @@ trainer = pl.Trainer(
     accelerator="cuda" 
 )
 trainer.fit(task, datamodule=prepared_dataset)
-logger.unwatch(task)
+wandb.unwatch(task)

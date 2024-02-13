@@ -5,7 +5,7 @@
     "n_interaction": 6,
     "cutoff_fn": "spk.nn.CosineCutoff(cutoff)",
     "db_path": "tests/ase_carbene_2200.db",
-    "save_dir": "SPECIFY",
+    "save_dir": "/home/elron/phd/projects/google/experiments/painn_debug_test_q_s_embedding/carbene",
     "split_file": "SPECIFY",
     "batch_size": 1000,
     "num_val": 2000,
