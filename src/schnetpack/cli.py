@@ -102,21 +102,9 @@ def train(config: DictConfig):
 
     # Init Lightning datamodule
     log.info(f"Instantiating datamodule <{config.data._target_}>")
-    train_sampler_cls = (
-        str2class(config.data.train_sampler_cls) if config.data.train_sampler_cls else None
-    )
-    if config.data.train_sampler_args:
-        train_sampler_args = dict(config.data.train_sampler_args)
-        for k, v in config.data.train_sampler_args.items():
-            if type(v) == str:
-                train_sampler_args[k] = str2class(v)
-    else:
-        train_sampler_args = None
-
     datamodule: LightningDataModule = hydra.utils.instantiate(
         config.data,
-        train_sampler_cls=train_sampler_cls,
-        train_sampler_args=train_sampler_args,
+        train_sampler_cls=str2class(config.data.train_sampler_cls) if config.data.train_sampler_cls else None,
     )
 
     # Init model

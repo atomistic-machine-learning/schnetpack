@@ -47,4 +47,5 @@ Statistics
     :template: classtemplate.rst
 
     calculate_stats
-    number_of_atoms
+    NumberOfAtomsCriterion
+    PropertyCriterion
