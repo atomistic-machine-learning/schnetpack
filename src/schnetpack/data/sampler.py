@@ -7,40 +7,44 @@ from schnetpack.data import BaseAtomsData
 
 __all__ = [
     "StratifiedSampler",
-    "uniform_values",
-    "number_of_atoms",
+    "NumberOfAtomsCriterion",
+    "PropertyCriterion",
 ]
 
 
-def uniform_values(dataset) -> list:
+class NumberOfAtomsCriterion:
     """
-    Dummy partition_criterion for StratifiedSampler that returns a uniform weights distribution for all samples
-    (weight of each sample is close to 1).
+    A callable class that returns the number of atoms for each sample in the dataset.
     """
-    values = []
-    for spl_idx in range(len(dataset)):
-        values.append(spl_idx)
-    return values
+    def __call__(self, dataset):
+        n_atoms = []
+        for spl_idx in range(len(dataset)):
+            sample = dataset[spl_idx]
+            n_atoms.append(sample[properties.n_atoms].item())
+        return n_atoms
 
 
-def number_of_atoms(dataset):
+class PropertyCriterion:
     """
-    Calculates the number of atoms for each sample in the dataset.
+    A callable class that returns the specified property for each sample in the dataset.
+    Property must be a scalar value.
     """
-    n_atoms = []
-    for spl_idx in range(len(dataset)):
-        sample = dataset[spl_idx]
-        n_atoms.append(sample[properties.n_atoms].item())
-    return n_atoms
+    def __init__(self, property_key: str = properties.energy):
+        self.property_key = property_key
+
+    def __call__(self, dataset):
+        property_values = []
+        for spl_idx in range(len(dataset)):
+            sample = dataset[spl_idx]
+            property_values.append(sample[self.property_key].item())
+        return property_values
 
 
 class StratifiedSampler(WeightedRandomSampler):
     """
     A custom sampler that performs stratified sampling based on a partition criterion.
 
-    Note:
-        - make sure that num_bins is chosen sufficiently small to avoid too many empty bins.
-        - all str arguments must correspond to python classes
+    Note: Make sure that num_bins is chosen sufficiently small to avoid too many empty bins.
     """
     def __init__(
             self,

@@ -146,10 +146,6 @@ class AtomsDataModule(pl.LightningDataModule):
 
         self.train_sampler_cls = train_sampler_cls
         self.train_sampler_args = train_sampler_args
-        self.val_sampler_cls = None
-        self.val_sampler_args = None
-        self.test_sampler_cls = None
-        self.test_sampler_args = None
 
     @property
     def train_transforms(self):
