@@ -129,7 +129,7 @@ class AtomisticTask(pl.LightningModule):
         self.grad_enabled = len(self.model.required_derivatives) > 0
         self.lr = optimizer_args["lr"]
         self.warmup_steps = warmup_steps
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=['model'])
 
     def setup(self, stage=None):
         if stage == "fit":
@@ -202,7 +202,7 @@ class AtomisticTask(pl.LightningModule):
 
         loss = self.loss_fn(pred, targets)
 
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch['_idx']))
         self.log_metrics(pred, targets, "val")
 
         return {"val_loss": loss}
@@ -225,7 +225,7 @@ class AtomisticTask(pl.LightningModule):
 
         loss = self.loss_fn(pred, targets)
 
-        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch['_idx']))
         self.log_metrics(pred, targets, "test")
         return {"test_loss": loss}
 

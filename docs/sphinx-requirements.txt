@@ -1,16 +1,18 @@
-https://download.pytorch.org/whl/cpu/torch-1.12.1%2Bcpu-cp38-cp38-linux_x86_64.whl; python_version=='3.8'
-
+torch
 numpy
 ase>=3.21
 h5py
 pyyaml
 tqdm
 ipykernel
-nbsphinx
-sphinx-autoapi
 
-pytorch_lightning>=1.8.1
-hydra-core==1.1.0
-hydra-colorlog==1.1.0
-torchmetrics>=0.4.1
+nbsphinx
+sphinx==7.1.2
+sphinx_rtd_theme
+readthedocs-sphinx-search
+
+pytorch_lightning>=2.0.0
+hydra-core>=1.1.0
+hydra-colorlog>=1.1.0
+torchmetrics==1.0.1
 protobuf==3.20.2

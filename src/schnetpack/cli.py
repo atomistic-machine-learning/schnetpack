@@ -26,11 +26,11 @@ OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()))
 OmegaConf.register_new_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
 
 header = """
-   _____      __    _   __     __  ____             __  
+   _____      __    _   __     __  ____             __
   / ___/_____/ /_  / | / /__  / /_/ __ \____ ______/ /__
   \__ \/ ___/ __ \/  |/ / _ \/ __/ /_/ / __ `/ ___/ //_/
- ___/ / /__/ / / / /|  /  __/ /_/ ____/ /_/ / /__/ ,<   
-/____/\___/_/ /_/_/ |_/\___/\__/_/    \__,_/\___/_/|_|                                                          
+ ___/ / /__/ / / / /|  /  __/ /_/ ____/ /_/ / /__/ ,<
+/____/\___/_/ /_/_/ |_/\___/\__/_/    \__,_/\___/_/|_|
 """
 
 
@@ -52,7 +52,7 @@ def train(config: DictConfig):
     if not ("model" in config and "data" in config):
         log.error(
             f"""
-        Config incomplete! You have to specify at least `data` and `model`! 
+        Config incomplete! You have to specify at least `data` and `model`!
         For an example, try one of our pre-defined experiments:
         > spktrain data_dir=/data/will/be/here +experiment=qm9
         """

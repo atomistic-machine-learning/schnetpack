@@ -4,7 +4,8 @@ import shutil
 import tempfile
 from typing import List, Optional, Dict
 from urllib import request as request
-
+from tqdm import tqdm
+import numpy as np
 from ase.db import connect
 from urllib.error import HTTPError, URLError
 import tarfile
@@ -140,14 +141,25 @@ class ISO17(AtomsDataModule):
         tar.extractall(self.path)
         tar.close()
 
-        shutil.rmtree(tmpdir)
-
         # update metadata
         for fold in ISO17.existing_folds:
             dbpath = os.path.join(self.path, "iso17", fold + ".db")
+            tmp_dbpath = os.path.join(tmpdir, "tmp.db")
             with connect(dbpath) as conn:
-                conn.metadata = {
-                    "_property_unit_dict": {ISO17.energy: "eV", ISO17.forces: "eV/Ang"},
-                    "_distance_unit": "Ang",
-                    "atomrefs": {},
-                }
+                with connect(tmp_dbpath) as tmp_conn:
+                    tmp_conn.metadata = {
+                        "_property_unit_dict": {ISO17.energy: "eV", ISO17.forces: "eV/Ang"},
+                        "_distance_unit": "Ang",
+                        "atomrefs": {},
+                    }
+                    # add energy to data dict in db
+                    for idx in tqdm(range(len(conn)), f"parsing database file {dbpath}"):
+                        atmsrw = conn.get(idx + 1)
+                        data = atmsrw.data
+                        data[ISO17.forces] = np.array(data[ISO17.forces])
+                        data[ISO17.energy] = np.array([atmsrw.total_energy])
+                        tmp_conn.write(atmsrw.toatoms(), data=data)
+
+            os.remove(dbpath)
+            os.rename(tmp_dbpath, dbpath)
+        shutil.rmtree(tmpdir)

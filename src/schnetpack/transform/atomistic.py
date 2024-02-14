@@ -74,7 +74,7 @@ class RemoveOffsets(Transform):
         is_extensive: bool = True,
         zmax: int = 100,
         atomrefs: torch.Tensor = None,
-        propery_mean: torch.Tensor = None,
+        property_mean: torch.Tensor = None,
     ):
         """
         Args:
@@ -85,7 +85,7 @@ class RemoveOffsets(Transform):
             zmax: Set the maximum atomic number, to determine the size of the atomref
                 tensor.
             atomrefs: Provide single-atom references directly.
-            propery_mean: Provide mean property value / n_atoms.
+            property_mean: Provide mean property value / n_atoms.
         """
         super().__init__()
         self._property = property
@@ -102,7 +102,7 @@ class RemoveOffsets(Transform):
         else:
             self._atomrefs_initialized = False
 
-        if propery_mean is not None:
+        if property_mean is not None:
             self._mean_initialized = True
         else:
             self._mean_initialized = False
@@ -111,8 +111,8 @@ class RemoveOffsets(Transform):
             atomrefs = atomrefs or torch.zeros((zmax,))
             self.register_buffer("atomref", atomrefs)
         if self.remove_mean:
-            propery_mean = propery_mean or torch.zeros((1,))
-            self.register_buffer("mean", propery_mean)
+            property_mean = property_mean or torch.zeros((1,))
+            self.register_buffer("mean", property_mean)
 
     def datamodule(self, _datamodule):
         """
@@ -225,7 +225,7 @@ class AddOffsets(Transform):
         is_extensive: bool = True,
         zmax: int = 100,
         atomrefs: torch.Tensor = None,
-        propery_mean: torch.Tensor = None,
+        property_mean: torch.Tensor = None,
     ):
         """
         Args:
@@ -236,7 +236,7 @@ class AddOffsets(Transform):
             zmax: Set the maximum atomic number, to determine the size of the atomref
                 tensor.
             atomrefs: Provide single-atom references directly.
-            propery_mean: Provide mean property value / n_atoms.
+            property_mean: Provide mean property value / n_atoms.
         """
         super().__init__()
         self._property = property
@@ -254,15 +254,15 @@ class AddOffsets(Transform):
         else:
             self._atomrefs_initialized = False
 
-        if propery_mean is not None:
+        if property_mean is not None:
             self._mean_initialized = True
         else:
             self._mean_initialized = False
 
         atomrefs = atomrefs or torch.zeros((zmax,))
-        propery_mean = propery_mean or torch.zeros((1,))
+        property_mean = property_mean or torch.zeros((1,))
         self.register_buffer("atomref", atomrefs)
-        self.register_buffer("mean", propery_mean)
+        self.register_buffer("mean", property_mean)
 
     def datamodule(self, value):
         if self.add_atomrefs and not self._atomrefs_initialized:

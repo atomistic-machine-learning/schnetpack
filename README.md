@@ -1,11 +1,11 @@
 # SchNetPack - Deep Neural Networks for Atomistic Systems
-[![Build Status](https://travis-ci.com/atomistic-machine-learning/schnetpack.svg?branch=master)](https://travis-ci.com/atomistic-machine-learning/schnetpack)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/python/black)
 [![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
 
 
-
 SchNetPack is a toolbox for the development and application of deep neural networks to the prediction of potential energy surfaces and other quantum-chemical properties of molecules and materials. It contains basic building blocks of atomistic neural networks, manages their training and provides simple access to common benchmark datasets. This allows for an easy implementation and evaluation of new models.
+
+The documentation can be found [here](https://schnetpack.readthedocs.io).
 
 ##### Features
 
@@ -14,16 +14,6 @@ SchNetPack is a toolbox for the development and application of deep neural netwo
 - Output modules for dipole moments, polarizability, stress, and general response properties
 - Modules for electrostatics, Ewald summation, ZBL repulsion
 - GPU-accelerated molecular dynamics code incl. path-integral MD, thermostats, barostats
-
-##### Requirements:
-- python 3.8
-- Atomic Simulation Environment (ASE) 3.21
-- NumPy
-- PyTorch 1.9
-- PyTorch Lightning 1.9.0
-- Hydra 1.1
-
-_**Note: We recommend using a GPU for training the neural networks.**_
 
 ## Installation
 
@@ -44,20 +34,17 @@ cd schnetpack
 pip install .
 ```
 
-
 ### Visualization with Tensorboard
 
-SchNetPack supports multiple logging backends over PyTorch Lightning. The default logger is Tensorboard, which can be installed via:
-```
-pip install tensorboard
-```
+SchNetPack supports multiple logging backends via PyTorch Lightning. The default logger is Tensorboard. SchNetPack also supports TensorboardX.
+
 
 ## Getting started
- 
+
 The best place to get started is training a SchNetPack model on a common benchmark dataset via the command line
 interface (CLI).
 When installing SchNetPack, the training script `spktrain` is added to your PATH.
-The CLI is based on [Hydra](https://hydra.cc/) and oriented on the PyTorch Lightning/Hydra template that can be found
+The CLI uses [Hydra](https://hydra.cc/) and is based on the PyTorch Lightning/Hydra template that can be found
 [here](https://github.com/ashleve/lightning-hydra-template).
 This enables a flexible configuration of the model, data and training process.
 To fully take advantage of these features, it might be helpful to have a look at the Hydra and PyTorch Lightning docs.
@@ -88,15 +75,15 @@ By default, the model is stored in a directory with a unique run id hash as a su
 This can be changed as follows:
 
 ```
-spktrain experiment=qm9 run.data_dir=/my/data/dir run.path=~/all_my_runs run.id=this_run
+spktrain experiment=qm9_atomwise run.data_dir=/my/data/dir run.path=~/all_my_runs run.id=this_run
 ```
 
-If you call `spktrain experiment=qm9 --help`, you can see the full config with all the parameters
+If you call `spktrain experiment=qm9_atomwise --help`, you can see the full config with all the parameters
 that can be changed.
 Nested parameters can be changed as follows:
 
 ```
-spktrain experiment=qm9_atomwise data_dir=<path> data.batch_size=64
+spktrain experiment=qm9_atomwise run.data_dir=<path> data.batch_size=64
 ```
 
 Hydra organizes parameters in config groups which allows hierarchical configurations consisting of multiple
@@ -104,7 +91,7 @@ yaml files. This allows to easily change the whole dataset, model or representat
 For instance, changing from the default SchNet representation to PaiNN, use:
 
 ```
-spktrain experiment=qm9_atomwise data_dir=<path> model/representation=painn
+spktrain experiment=qm9_atomwise run.data_dir=<path> model/representation=painn
 ```
 
 It is a bit confusing at first when to use "." or "/". The slash is used, if you are loading a preconfigured config
@@ -131,7 +118,7 @@ corresponds to the following part of the config:
 If you would want to additionally change some value of this group, you could use:
 
 ```
-spktrain experiment=qm9_atomwise data_dir=<path> model/representation=painn model.representation.n_interactions=5
+spktrain experiment=qm9_atomwise run.data_dir=<path> model/representation=painn model.representation.n_interactions=5
 ```
 
 For more details on config groups, have a look at the
@@ -221,9 +208,6 @@ SchNetPack can be used as a base for implementations of advanced atomistic neura
 For example, there exists an [extension package](https://github.com/atomistic-machine-learning/schnetpack-gschnet) called `schnetpack-gschnet` for the most recent version of cG-SchNet [5], a conditional generative model for molecules.
 It demonstrates how a complex training task can be implemented in a few custom classes while leveraging the hierarchical configuration and automated training procedure of the SchNetPack framework.
 
-## Documentation
-
-For the full API reference, visit our [documentation](https://schnetpack.readthedocs.io).
 
 ## Citation
 
@@ -231,12 +215,12 @@ If you are using SchNetPack in your research, please cite:
 
 K.T. Schütt, S.S.P. Hessmann, N.W.A. Gebauer, J. Lederer, M. Gastegger.
 SchNetPack 2.0: A neural network toolbox for atomistic machine learning.
-J. Chem. Phys. 2023, 158 (14): 144801. 
+J. Chem. Phys. 2023, 158 (14): 144801.
 [10.1063/5.0138367](https://doi.org/10.1063/5.0138367).
 
 K.T. Schütt, P. Kessel, M. Gastegger, K. Nicoli, A. Tkatchenko, K.-R. Müller.
 SchNetPack: A Deep Learning Toolbox For Atomistic Systems.
-J. Chem. Theory Comput. 2019, 15 (1): 448-455. 
+J. Chem. Theory Comput. 2019, 15 (1): 448-455.
 [10.1021/acs.jctc.8b00908](http://dx.doi.org/10.1021/acs.jctc.8b00908).
 
     @article{schutt2023schnetpack,
@@ -275,22 +259,22 @@ CLI and hydra configs for PyTorch Lightning are adapted from this template: [![]
 
 ## References
 
-* [1] K.T. Schütt. F. Arbabzadah. S. Chmiela, K.-R. Müller, A. Tkatchenko.  
+* [1] K.T. Schütt. F. Arbabzadah. S. Chmiela, K.-R. Müller, A. Tkatchenko.
 *Quantum-chemical insights from deep tensor neural networks.*
 Nature Communications **8**. 13890 (2017) [10.1038/ncomms13890](http://dx.doi.org/10.1038/ncomms13890)
 
-* [2] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.  
+* [2] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.
 *SchNet: A continuous-filter convolutional neural network for modeling quantum interactions.*
 Advances in Neural Information Processing Systems 30, pp. 992-1002 (2017) [Paper](http://papers.nips.cc/paper/6700-schnet-a-continuous-filter-convolutional-neural-network-for-modeling-quantum-interactions)
 
-* [3] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.  
-*SchNet - a deep learning architecture for molecules and materials.* 
+* [3] K.T. Schütt. P.-J. Kindermans, H. E. Sauceda, S. Chmiela, A. Tkatchenko, K.-R. Müller.
+*SchNet - a deep learning architecture for molecules and materials.*
 The Journal of Chemical Physics 148(24), 241722 (2018) [10.1063/1.5019779](https://doi.org/10.1063/1.5019779)
 
-* [4] K. T. Schütt, O. T. Unke, M. Gastegger  
-*Equivariant message passing for the prediction of tensorial properties and molecular spectra.* 
+* [4] K. T. Schütt, O. T. Unke, M. Gastegger
+*Equivariant message passing for the prediction of tensorial properties and molecular spectra.*
 International Conference on Machine Learning (pp. 9377-9388). PMLR, [Paper](https://proceedings.mlr.press/v139/schutt21a.html).
 
-* [5] N. W. A. Gebauer, M. Gastegger, S. S. P. Hessmann, K.-R. Müller, K. T. Schütt  
+* [5] N. W. A. Gebauer, M. Gastegger, S. S. P. Hessmann, K.-R. Müller, K. T. Schütt
 *Inverse design of 3d molecular structures with conditional generative neural networks.*
 Nature Communications **13**. 973 (2022) [10.1038/s41467-022-28526-y](https://doi.org/10.1038/s41467-022-28526-y)

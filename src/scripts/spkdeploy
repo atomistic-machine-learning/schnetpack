@@ -5,6 +5,11 @@ from schnetpack.transform import CastTo64, CastTo32, AddOffsets
 import argparse
 
 
+# This script is supposed to take a pytorch model and save a just in time compiled version of it.
+# This is needed to run the model with LAMMPS.
+# For further info see examples/howtos/lammps.rst
+
+
 def get_jit_model(model):
     # fix invalid operations in postprocessing
     jit_postprocessors = nn.ModuleList()
@@ -37,9 +42,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("model_path")
     parser.add_argument("deployed_model_path")
+    parser.add_argument("--device", type=str, default="cpu")
     args = parser.parse_args()
 
-    model = torch.load(args.model_path, map_location="cpu")
+    model = torch.load(args.model_path, map_location=args.device)
     save_jit_model(model, args.deployed_model_path)
 
     print(f"stored deployed model at {args.deployed_model_path}.")
