@@ -11,6 +11,7 @@ from ase import Atoms
 
 import torch
 import schnetpack.properties as structure
+from schnetpack.data import RandomSplit
 
 from schnetpack.data import *
 
@@ -84,7 +85,7 @@ class rMD17(AtomsDataModule):
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
         data_workdir: Optional[str] = None,
-        split_id: int = 0,
+        split_id: Optional[int] = None,
         **kwargs,
     ):
         """
@@ -117,9 +118,11 @@ class rMD17(AtomsDataModule):
             split_id: The id of the predefined rMD17 train/test splits (0-4).
         """
 
-        splitting = SubsamplePartitions(
-            split_partition_sources=["known", "known", "test"], split_id=split_id
-        )
+        if split_id is not None:
+            splitting = SubsamplePartitions(split_partition_sources=["known", "known", "test"], split_id=split_id)
+        else:
+            splitting = RandomSplit()
+
         super().__init__(
             datapath=datapath,
             batch_size=batch_size,
