@@ -14,6 +14,7 @@ class NuclearEmbedding(nn.Module):
     from the electron configuration to a (num_features)-dimensional vector. The
     latter part encourages alchemically meaningful representations without
     restricting the expressivity of learned embeddings.
+    Using complexe nuclear embedding can have negative impact on the model performance, when spin charge embedding is activated
 
     Arguments:
         num_features (int):

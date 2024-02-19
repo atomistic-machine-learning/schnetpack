@@ -7,7 +7,7 @@ from schnetpack.nn.residual_blocks import ResidualMLP
 
 class ElectronicEmbedding(nn.Module):
     """
-    Block for updating atomic features through nonlocal interactions with the
+    Single Head self attention block for updating atomic features through nonlocal interactions with the
     electrons.
 
     Arguments:
@@ -68,35 +68,56 @@ class ElectronicEmbedding(nn.Module):
         E: torch.Tensor,
         num_batch: int,
         batch_seg: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,  # only for backwards compatibility
         eps: float = 1e-8,
     ) -> torch.Tensor:
         """
         Evaluate interaction block.
-        N: Number of atoms.
 
         x (FloatTensor [N, num_features]):
             Atomic feature vectors.
+        E (FloatTensor [N]): 
+            either charges or spin values per molecular graph
+        num_batch (int): 
+            number of molecular graphs in the batch
+        batch_seq (LongTensor [N]): 
+            segment ids (aka _idx_m) are used to separate different molecules in a batch
+        eps (float): 
+            small number to avoid division by zero
         """
-        # segment ids are used to separate different molecules in a batch
-        if batch_seg is None:  # assume a single batch
-            batch_seg = torch.zeros(x.size(0), dtype=torch.int64, device=x.device)
-        # q shape (Batchsize x N_atoms, n_atom_basis)
-        q = self.linear_q(x)  # queries
+        
+        # queries (Batchsize x N_atoms, n_atom_basis)
+        q = self.linear_q(x) 
+        
+        # to account for negative and positive charge
         if self.is_charge:
             e = F.relu(torch.stack([E, -E], dim=-1))
+        # +/- spin is the same => abs
         else:
-            e = torch.abs(E).unsqueeze(-1)  # +/- spin is the same => abs
+            e = torch.abs(E).unsqueeze(-1)  
         enorm = torch.maximum(e, torch.ones_like(e))
-        # k shape (Batchsize x N_atoms, n_atom_basis) and key per molecular graph
-        k = self.linear_k(e / enorm)[batch_seg]  # keys
-        # v shape (Batchsize x N_atoms, n_atom_basis) and value per molecular graph
-        v = self.linear_v(e)[batch_seg]  # values
-        dot = torch.sum(k * q, dim=-1) / k.shape[-1] ** 0.5  # scaled dot product
-        a = nn.functional.softplus(dot)  # unnormalized attention weights
+
+        # keys (Batchsize x N_atoms, n_atom_basis), the batch_seg ensures that the key is the same for all atoms belonging to the same graph
+        k = self.linear_k(e / enorm)[batch_seg] 
+
+        # values (Batchsize x N_atoms, n_atom_basis) the batch_seg ensures that the value is the same for all atoms belonging to the same graph
+        v = self.linear_v(e)[batch_seg]
+
+        # unnormalized, scaled attention weights, obtained by dot product of queries and keys (are logits)
+        # scaling by square root of attention dimension
+        weights = torch.sum(k * q, dim=-1) / k.shape[-1] ** 0.5
+
+        # probability distribution of scaled unnormalized attention weights, by applying softmax function
+        a = nn.functional.softplus(weights)
+
+        # normalization factor for every molecular graph, by adding up attention weights of every atom in the graph
         anorm = a.new_zeros(num_batch).index_add_(0, batch_seg, a)
-        if a.device.type == "cpu":  # indexing is faster on CPUs
+        
+        # make tensor filled with anorm value at the position of the corresponding molecular graph, 
+        # indexing faster on CPU, gather faster on GPU
+        if a.device.type == "cpu": 
             anorm = anorm[batch_seg]
-        else:  # gathering is faster on GPUs
+        else:
             anorm = torch.gather(anorm, 0, batch_seg)
+        
+        # return probability distribution of scaled normalized attention weights, eps is added for numerical stability (sum / batchsize equals 1)
         return self.resblock((a / (anorm + eps)).unsqueeze(-1) * v)

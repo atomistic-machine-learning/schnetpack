@@ -102,7 +102,8 @@ class SchNet(nn.Module):
         shared_interactions: bool = False,
         max_z: int = 87,
         activation: Callable = shifted_softplus,
-        activate_charge_spin_embedding: bool = False
+        activate_charge_spin_embedding: bool = False,
+        nuclear_embedding: str = "simple",
     ):
         """
         Args:
@@ -116,8 +117,8 @@ class SchNet(nn.Module):
                 interaction blocks and filter-generating networks.
             max_z: maximal nuclear charge
             activation: activation function
-            activate_charge_spin_embedding: if True, charge and spin embeddings are added to a modified version of 
-            the nuclear embeddings, taken from SpookyNet Implementation
+            activate_charge_spin_embedding: if True, charge and spin embeddings are added to nuclear embeddings taken from SpookyNet Implementation
+            nuclear_embedding: type of nuclear embedding to use (simple is simple embedding and complex is the one with electron configuration)
         """
         super().__init__()
         self.n_atom_basis = n_atom_basis
@@ -128,12 +129,14 @@ class SchNet(nn.Module):
         self.cutoff = cutoff_fn.cutoff
         self.activate_charge_spin_embedding = activate_charge_spin_embedding
 
-        # layers
-        self.embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
+        # nuclear embedding layer (often complex nuclear embedding has negative impact on the performance of the model, so we can use simple nuclear embedding to avoid this issue)
+        if nuclear_embedding != "simple":
+            self.nuclear_embedding = NuclearEmbedding(self.n_atom_basis,max_z, zero_init=True)
+        else:
+            self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
 
         if self.activate_charge_spin_embedding:
         # needed for spin and charge embeeding
-            self.nuclear_embedding = NuclearEmbedding(self.n_atom_basis,max_z, zero_init=True)
             # additional embeedings for the total charge
             self.charge_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
@@ -162,8 +165,6 @@ class SchNet(nn.Module):
 
         # get inputs
         atomic_numbers = inputs[structure.Z]
-        total_charge = inputs[structure.total_charge]#.long()
-        spin = inputs[structure.spin_multiplicity]#.reshape(-1,1)#.long()
         r_ij = inputs[structure.Rij]
         idx_i = inputs[structure.idx_i]
         idx_j = inputs[structure.idx_j]
@@ -182,9 +183,12 @@ class SchNet(nn.Module):
         rcut_ij = self.cutoff_fn(d_ij)
 
         # compute atom and pair features
-        #x = self.embedding(atomic_numbers)
 
         if self.activate_charge_spin_embedding:
+            # get inputs for spin and charge embedding 
+            # (to avoid error not having total charge /spin multiplicity in db if embedding not used)
+            total_charge = inputs[structure.total_charge]
+            spin = inputs[structure.spin_multiplicity]
             # specific nuclear embeeding with electron configuration
             z = self.nuclear_embedding(atomic_numbers)
 
@@ -194,7 +198,7 @@ class SchNet(nn.Module):
             # specific spin embeeding
             s = self.magmom_embedding(x = z, E = spin, num_batch = num_batch, batch_seg = batch_seg)
 
-            # combine nuclear, charge and spin embeeding
+            # additive combining nuclear, charge and spin embeeding
             x = z + q + s
         else:
             x = self.embedding(atomic_numbers)

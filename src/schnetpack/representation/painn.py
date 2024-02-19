@@ -141,7 +141,8 @@ class PaiNN(nn.Module):
         shared_interactions: bool = False,
         shared_filters: bool = False,
         epsilon: float = 1e-8,
-        activate_charge_spin_embedding: bool = False
+        activate_charge_spin_embedding: bool = False,
+        nuclear_embedding: str = "simple",
     ):
         """
         Args:
@@ -156,8 +157,8 @@ class PaiNN(nn.Module):
             shared_interactions: if True, share the weights across
                 filter-generating networks.
             epsilon: stability constant added in norm to prevent numerical instabilities
-            activate_charge_spin_embedding: if True, charge and spin embeddings are added to a modified version of 
-            the nuclear embeddings, taken from SpookyNet Implementation
+            activate_charge_spin_embedding: if True, charge and spin embeddings are added to nuclear embeddings taken from SpookyNet Implementation
+            nuclear_embedding: type of nuclear embedding to use (simple is simple embedding and complex is the one with electron configuration)
         """
         super(PaiNN, self).__init__()
 
@@ -168,11 +169,14 @@ class PaiNN(nn.Module):
         self.radial_basis = radial_basis
         self.activate_charge_spin_embedding = activate_charge_spin_embedding
 
-        self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
+        # nuclear embedding layer (often complex nuclear embedding has negative impact on the performance of the model, so we can use simple nuclear embedding to avoid this issue)
+        if nuclear_embedding != "simple":
+            self.nuclear_embedding = NuclearEmbedding(self.n_atom_basis,max_z, zero_init=True)
+        else:
+            self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
 
         if self.activate_charge_spin_embedding:
         # needed for spin and charge embeeding
-            self.nuclear_embedding = NuclearEmbedding(self.n_atom_basis,max_z, zero_init=True)
             # additional embeedings for the total charge
             self.charge_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
@@ -252,6 +256,10 @@ class PaiNN(nn.Module):
 
 
         if self.activate_charge_spin_embedding:
+            # get inputs for spin and charge embedding 
+            # (to avoid error not having total charge /spin multiplicity in db if embedding not used)
+            total_charge = inputs[properties.total_charge]
+            spin = inputs[properties.spin_multiplicity]
             # specific nuclear embeeding with electron configuration
             z = self.nuclear_embedding(atomic_numbers)
 
@@ -261,7 +269,7 @@ class PaiNN(nn.Module):
             # specific spin embeeding
             s = self.magmom_embedding(x = z, E = spin, num_batch = num_batch, batch_seg = batch_seg)
 
-            # combine nuclear, charge and spin embeeding
+            # additive combining nuclear, charge and spin embeeding
             q = (z + c + s)[:,None] 
 
         else:
