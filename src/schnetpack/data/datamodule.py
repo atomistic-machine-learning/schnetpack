@@ -319,16 +319,19 @@ class AtomsDataModule(pl.LightningDataModule):
             logging.debug(">> ", msg)
 
     def _setup_sampler(self, sampler_cls, sampler_args, dataset):
-        batch_sampler = BatchSampler(
-            sampler=sampler_cls(
-                data_source=dataset,
-                num_samples=len(dataset),
-                **sampler_args,
-            ),
-            batch_size=self.batch_size,
-            drop_last=True,
-        )
-        return batch_sampler
+        if sampler_cls is None:
+            return None
+        else:
+            batch_sampler = BatchSampler(
+                sampler=sampler_cls(
+                    data_source=dataset,
+                    num_samples=len(dataset),
+                    **sampler_args,
+                ),
+                batch_size=self.batch_size,
+                drop_last=True,
+            )
+            return batch_sampler
 
     def _setup_transforms(self):
         for t in self.train_transforms:
@@ -370,26 +373,21 @@ class AtomsDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> AtomsLoader:
         if self._train_dataloader is None:
-            if self.train_sampler_cls is None:
-                self._train_dataloader = AtomsLoader(
-                    self.train_dataset,
-                    batch_size=self.batch_size,
-                    num_workers=self.num_workers,
-                    shuffle=True,
-                    pin_memory=self._pin_memory,
-                )
-            else:
-                train_batch_sampler = self._setup_sampler(
-                    sampler_cls=self.train_sampler_cls,
-                    sampler_args=self.train_sampler_args,
-                    dataset=self.train_dataset
-                )
-                self._train_dataloader = AtomsLoader(
-                    self.train_dataset,
-                    batch_sampler=train_batch_sampler,
-                    num_workers=self.num_workers,
-                    pin_memory=self._pin_memory,
-                )
+
+            train_batch_sampler = self._setup_sampler(
+                sampler_cls=self.train_sampler_cls,
+                sampler_args=self.train_sampler_args,
+                dataset=self._train_dataset
+            )
+
+            self._train_dataloader = AtomsLoader(
+                self.train_dataset,
+                batch_size=self.batch_size if train_batch_sampler is None else 1,
+                shuffle=True if train_batch_sampler is None else False,
+                batch_sampler=train_batch_sampler,
+                num_workers=self.num_workers,
+                pin_memory=self._pin_memory,
+            )
         return self._train_dataloader
 
     def val_dataloader(self) -> AtomsLoader:
