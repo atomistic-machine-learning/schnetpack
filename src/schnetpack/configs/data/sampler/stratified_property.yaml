@@ -1,0 +1,8 @@
+# @package data
+train_sampler_cls: schnetpack.data.sampler.StratifiedSampler
+train_sampler_args:
+  partition_criterion:
+    _target_: schnetpack.data.sampler.PropertyCriterion
+    property_key: ${globals.property}
+  num_bins: 10
+  replacement: True

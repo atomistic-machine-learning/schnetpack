@@ -2,14 +2,12 @@ import logging
 import os
 import shutil
 from copy import copy
-from typing import Optional, List, Dict, Tuple, Union
-
-
+from typing import Optional, List, Dict, Tuple, Union, Any, Type
 import numpy as np
 import fasteners
-
 import pytorch_lightning as pl
 import torch
+from torch.utils.data import BatchSampler
 
 from schnetpack.data import (
     AtomsDataFormat,
@@ -52,6 +50,8 @@ class AtomsDataModule(pl.LightningDataModule):
         train_transforms: Optional[List[torch.nn.Module]] = None,
         val_transforms: Optional[List[torch.nn.Module]] = None,
         test_transforms: Optional[List[torch.nn.Module]] = None,
+        train_sampler_cls: Optional[Type] = None,
+        train_sampler_args: Optional[Dict[str, Any]] = None,
         num_workers: int = 8,
         num_val_workers: Optional[int] = None,
         num_test_workers: Optional[int] = None,
@@ -81,6 +81,9 @@ class AtomsDataModule(pl.LightningDataModule):
             train_transforms: Overrides transform_fn for training.
             val_transforms: Overrides transform_fn for validation.
             test_transforms: Overrides transform_fn for testing.
+            train_sampler_cls: type of torch training sampler.
+                This is by default wrapped into a torch.utils.data.BatchSampler.
+            train_sampler_args: dict of train_sampler keyword arguments.
             num_workers: Number of data loader workers.
             num_val_workers: Number of validation data loader workers
                 (overrides num_workers).
@@ -100,7 +103,6 @@ class AtomsDataModule(pl.LightningDataModule):
                 set to true, when GPUs are used.
         """
         super().__init__()
-
         self._train_transforms = train_transforms or copy(transforms) or []
         self._val_transforms = val_transforms or copy(transforms) or []
         self._test_transforms = test_transforms or copy(transforms) or []
@@ -141,6 +143,9 @@ class AtomsDataModule(pl.LightningDataModule):
         self._train_dataloader = None
         self._val_dataloader = None
         self._test_dataloader = None
+
+        self.train_sampler_cls = train_sampler_cls
+        self.train_sampler_args = train_sampler_args
 
     @property
     def train_transforms(self):
@@ -313,6 +318,21 @@ class AtomsDataModule(pl.LightningDataModule):
         else:
             logging.debug(">> ", msg)
 
+    def _setup_sampler(self, sampler_cls, sampler_args, dataset):
+        if sampler_cls is None:
+            return None
+        else:
+            batch_sampler = BatchSampler(
+                sampler=sampler_cls(
+                    data_source=dataset,
+                    num_samples=len(dataset),
+                    **sampler_args,
+                ),
+                batch_size=self.batch_size,
+                drop_last=True,
+            )
+            return batch_sampler
+
     def _setup_transforms(self):
         for t in self.train_transforms:
             t.datamodule(self)
@@ -353,11 +373,19 @@ class AtomsDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> AtomsLoader:
         if self._train_dataloader is None:
+
+            train_batch_sampler = self._setup_sampler(
+                sampler_cls=self.train_sampler_cls,
+                sampler_args=self.train_sampler_args,
+                dataset=self._train_dataset
+            )
+
             self._train_dataloader = AtomsLoader(
                 self.train_dataset,
-                batch_size=self.batch_size,
+                batch_size=self.batch_size if train_batch_sampler is None else 1,
+                shuffle=True if train_batch_sampler is None else False,
+                batch_sampler=train_batch_sampler,
                 num_workers=self.num_workers,
-                shuffle=True,
                 pin_memory=self._pin_memory,
             )
         return self._train_dataloader
