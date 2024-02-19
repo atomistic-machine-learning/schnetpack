@@ -79,19 +79,18 @@ class StratifiedSampler(WeightedRandomSampler):
         Calculates the weights for each sample based on the partition criterion.
         """
         feature_values = partition_criterion(self.data_source)
+
         min_value = min(feature_values)
         max_value = max(feature_values)
 
-        bins_array = np.linspace(min_value, max_value, num=self.num_bins + 1)[1:]
-        bins_array[-1] += 0.1
-        bin_indices = np.digitize(feature_values, bins_array)
+        bin_edges = np.linspace(min_value, max_value, num=self.num_bins + 1)[1:]
+        bin_edges[-1] += 0.1
+        bin_indices = np.digitize(feature_values, bin_edges)
         bin_counts = np.bincount(bin_indices, minlength=self.num_bins)
 
         min_counts = min(bin_counts[bin_counts != 0])
         bin_weights = np.where(bin_counts == 0, 0, min_counts / bin_counts)
 
-        weights = np.zeros(len(self.data_source))
-        for i, idx in enumerate(bin_indices):
-            weights[i] = bin_weights[idx]
+        weights = bin_weights[bin_indices]
 
         return weights
