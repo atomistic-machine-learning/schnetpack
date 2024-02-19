@@ -1,4 +1,5 @@
 from typing import Iterator, List, Callable
+
 import numpy as np
 from torch.utils.data import Sampler, WeightedRandomSampler
 from schnetpack import properties
