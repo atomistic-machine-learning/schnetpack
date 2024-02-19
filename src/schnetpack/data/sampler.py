@@ -80,17 +80,13 @@ class StratifiedSampler(WeightedRandomSampler):
         """
         feature_values = partition_criterion(self.data_source)
 
-        min_value = min(feature_values)
-        max_value = max(feature_values)
-
-        bin_edges = np.linspace(min_value, max_value, num=self.num_bins + 1)[1:]
+        bin_counts, bin_edges = np.histogram(feature_values, bins=self.num_bins)
+        bin_edges = bin_edges[1:]
         bin_edges[-1] += 0.1
         bin_indices = np.digitize(feature_values, bin_edges)
-        bin_counts = np.bincount(bin_indices, minlength=self.num_bins)
 
         min_counts = min(bin_counts[bin_counts != 0])
         bin_weights = np.where(bin_counts == 0, 0, min_counts / bin_counts)
-
         weights = bin_weights[bin_indices]
 
         return weights
