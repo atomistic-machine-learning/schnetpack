@@ -1,0 +1,63 @@
+seed_everything: 35
+
+datamodule:
+  datapath:  "/Users/mjwen.admin/Desktop/sharing_with_Dr_wen/processed/wannier_dataset.db"
+  split_file:  "/Users/mjwen.admin/Desktop/sharing_with_Dr_wen/processed/split.npz"
+  batch_size: 10
+  val_batch_size: 20
+  test_batch_size: 20
+  cutoff: 5.0
+
+model:
+  dipole_key: wan
+  n_atom_basis: 30  # number of features to describe atomic environments
+  n_interactions: 3  # number of interaction blocks (number of layers)
+  n_rbf: 20  # Total Number of Gaussian functions
+
+
+
+atomistic_task:
+  optimizer_cls: torch.optim.AdamW
+  optimizer_args:
+    lr: 0.01
+
+  scheduler_cls: torch.optim.lr_scheduler.ReduceLROnPlateau
+  scheduler_monitor: val_loss
+  scheduler_args:
+      mode: min
+      factor: 0.8
+      patience: 100
+      verbose: true
+
+trainer:
+  max_epochs: 3
+  accelerator: cpu
+  num_nodes: 1
+  check_val_every_n_epoch: 1
+  log_every_n_steps: 50
+  gradient_clip_val: 100.0
+
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      project: "wannier_proj"
+
+  callbacks:
+    - class_path: pytorch_lightning.callbacks.ModelSummary
+      init_args:
+        max_depth: -1
+    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: null
+    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+      init_args:
+        monitor: val_loss
+        mode: min
+        save_top_k: 3
+        verbose: false
+    - class_path: pytorch_lightning.callbacks.EarlyStopping
+      init_args:
+        monitor: val_loss
+        mode: min
+        patience: 200
+        verbose: true
