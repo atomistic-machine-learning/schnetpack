@@ -1,92 +1,117 @@
-import os
+from pathlib import Path
 
 import pytorch_lightning as pl
 import schnetpack as spk
 import schnetpack.transform as trn
 import torch
 import torchmetrics
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-from pytorch_lightning.loggers import WandbLogger
+import yaml
+from pytorch_lightning import Trainer
+from pytorch_lightning.cli import instantiate_class as lit_instantiate_class
 from schnetpack.atomistic.wannier import WannierCenter
-from schnetpack.wannier.utils import instantiate_class
-
-## Model training
-max_epoch_val = 3  # setting 3 for demo. Use at least 1500
-cutoff = 5.0
-batch_size = 10
-val_batch_size = 20
-num_workers = 1
-lr = 1e-4
-
-##Setting parameters in schnetpack
-n_atom_basis = 30  # number of features to describe atomic environments
-n_interactions = 3  # number of interaction blocks (number of layers)
-n_rbf = 20  # Total Number of Gaussian functions
-
-## Loss functions and checkpoints settings
-loss_fn = torch.nn.MSELoss()  # Using Mean Squared Error as loss function
-loss_weight = 1.0
-optimizer_cls = torch.optim.AdamW  # Using Adams optimizer
-monitor = "val_loss"  # Criteria for checkpoint of saving best model 'train_loss'
-
-hyperparameter_dict = {
-    "max_epoch_val": max_epoch_val,
-    "cutoff_radius": cutoff,
-    "batch_size": batch_size,
-    "val_batch_size": val_batch_size,
-    "num_workers": num_workers,
-    "lr": lr,
-    "n_atom_basis": n_atom_basis,
-    "n_layers": n_interactions,
-    "n_rad_basis": n_rbf,
-    "loss": str(loss_fn),
-    "loss_weight": loss_weight,
-    "optimizer": str(optimizer_cls),
-    "monitor": monitor,
-}
-
-qm9tut = "./qm9tut"
-if not os.path.exists(qm9tut):
-    os.makedirs(qm9tut)
-
-processed = "/Users/mjwen.admin/Desktop/sharing_with_Dr_wen/processed/"
-db_path = processed + "wannier_dataset.db"
-split_path = processed + "split.npz"
-
-custom_data = spk.data.AtomsDataModule(
-    db_path,
-    batch_size=batch_size,
-    val_batch_size=val_batch_size,
-    split_file=split_path,
-    distance_unit="Ang",
-    property_units={"wan": "Ang"},
-    transforms=[trn.ASENeighborList(cutoff=cutoff), trn.CastTo32()],
-    num_workers=num_workers,
-    pin_memory=False,  # set to false, when not using a GPU, set to True when using a GPU
-)
-# print(custom_data.val_idx)
-
-# print(custom_data.val_idx)
+from schnetpack.data import AtomsDataModule
 
 
-if __name__ == "__main__":
-    pairwise_distance = (
-        spk.atomistic.PairwiseDistances()
-    )  # calculates pairwise distances between atoms
-    radial_basis = spk.nn.GaussianRBF(n_rbf=n_rbf, cutoff=cutoff)
+def instantiate_class(d: dict | list[dict]):
+    """Instantiate one or a list of LightningModule classes from a dictionary."""
+    args = tuple()  # no positional args
+    if isinstance(d, dict):
+        return lit_instantiate_class(args, d)
+    elif isinstance(d, list):
+        return [lit_instantiate_class(args, x) for x in d]
+    else:
+        raise ValueError(f"Cannot instantiate class from {d}")
+
+
+def get_args(path: Path):
+    """Get the arguments from the config file."""
+    with open(path, "r") as f:
+        config = yaml.safe_load(f)
+    return config
+
+
+def get_module(module_path: str):
+    """Get the module from the module path."""
+    module_path = module_path.split(".")
+    module = __import__(".".join(module_path[:-1]), fromlist=[module_path[-1]])
+    return getattr(module, module_path[-1])
+
+
+def get_datamodule(
+    datapath: str,
+    split_file: str,
+    batch_size: int,
+    val_batch_size: int,
+    test_batch_size: int,
+    cutoff: float,
+    **kwargs,
+):
+    """
+    Create a datamodule for existing db and split files.
+
+    Args:
+        datapath:
+        split_file:
+        batch_size:
+        val_batch_size:
+        test_batch_size:
+        cutoff:
+        **kwargs: other parameters for AtomsDataModule
+    """
+    dm = AtomsDataModule(
+        datapath,
+        split_file=split_file,
+        batch_size=batch_size,
+        val_batch_size=val_batch_size,
+        test_batch_size=test_batch_size,
+        distance_unit="Ang",
+        property_units={"wan": "Ang"},
+        transforms=[trn.ASENeighborList(cutoff=cutoff), trn.CastTo32()],
+        **kwargs,
+    )
+
+    # TODO, check whether dm.setup() is needed
+
+    return dm
+
+
+def update_model_configs(config: dict) -> dict:
+    """
+    Copy model parameters from other sections of the config file.
+
+    Some parameters like cutoff are used in different places. To avoid redundancy, which
+    is error-prone, we just provide the parameter in one place in the config file and
+    copy it to other places where it is needed here.
+
+    Note the update is in place.
+    """
+    config["model"]["cutoff"] = config["datamodule"]["cutoff"]
+
+    return config
+
+
+def create_model(
+    model_hparams: dict = None,
+    # loss_hparams: dict = None,
+    task_hparams: dict = None,
+    other_hparams: dict = None,
+) -> pl.LightningModule:
+    # model
+    pairwise_distance = spk.atomistic.PairwiseDistances()
+    radial_basis = spk.nn.GaussianRBF(
+        n_rbf=model_hparams["n_rbf"],
+        cutoff=model_hparams["cutoff"],
+    )
     schnet = spk.representation.PaiNN(
-        n_atom_basis=n_atom_basis,
-        n_interactions=n_interactions,
+        n_atom_basis=model_hparams["n_atom_basis"],
+        n_interactions=model_hparams["n_interactions"],
         radial_basis=radial_basis,
-        cutoff_fn=spk.nn.CosineCutoff(cutoff),
+        cutoff_fn=spk.nn.CosineCutoff(model_hparams["cutoff"]),
     )
-    print("All okay")
     pred_wan = WannierCenter(
-        n_in=n_atom_basis,
-        dipole_key="wan",
+        n_in=model_hparams["n_atom_basis"],
+        dipole_key=model_hparams["dipole_key"],
     )
-
-    # print(pred_wan.return_charges)
     nnpot = spk.model.NeuralNetworkPotential(
         representation=schnet,
         input_modules=[pairwise_distance],
@@ -94,79 +119,65 @@ if __name__ == "__main__":
         postprocessors=[trn.CastTo64()],
     )
 
+    # loss
     output_wan = spk.task.ModelOutput(
         name="wan",
-        loss_fn=loss_fn,
-        loss_weight=loss_weight,
+        loss_fn=torch.nn.MSELoss(),
+        loss_weight=1.0,
         metrics={"MAE": torchmetrics.MeanAbsoluteError()},
     )
 
-    task = spk.task.AtomisticTask(
+    # optimizer and scheduler
+    model = spk.task.AtomisticTask(
         model=nnpot,
         outputs=[output_wan],
-        optimizer_cls=torch.optim.AdamW,
-        optimizer_args={"lr": 1e-4},
-        scheduler_cls=torch.optim.lr_scheduler.ReduceLROnPlateau,
-        scheduler_args={
-            "mode": "min",
-            "factor": 0.1,
-            "patience": 15,
-            "threshold": 1e-5,
-            "verbose": True,
-        },
-        scheduler_monitor="val_loss",
+        optimizer_cls=get_module(task_hparams["optimizer_cls"]),
+        optimizer_args=task_hparams["optimizer_args"],
+        scheduler_cls=get_module(task_hparams["scheduler_cls"]),
+        scheduler_args=task_hparams["scheduler_args"],
+        scheduler_monitor=task_hparams.get("scheduler_monitor", None),
+        # other_hparams passed to the model so that they are logged to wandb
+        other_hparams=other_hparams,
     )
 
-    early_stopping_callback = EarlyStopping(
-        monitor="val_loss",
-        patience=3,
-        verbose=True,
-        mode="min",
-        stopping_threshold=1e-06,
-        min_delta=0.0,
+    return model
+
+
+def main(config: dict):
+    pl.seed_everything(config["seed_everything"])
+
+    dm = get_datamodule(**config["datamodule"])
+
+    config = update_model_configs(config)
+    model = create_model(
+        model_hparams=config.pop("model"),
+        task_hparams=config.pop("atomistic_task"),
+        other_hparams=config,
     )
 
-    # pl.LightningModule.save_hyperparameters(pl, ignore=["model"])
+    # create all callbacks and logger
+    try:
+        callbacks = instantiate_class(config["trainer"].pop("callbacks"))
+    except KeyError:
+        callbacks = None
 
-    callbacks = [
-        spk.train.ModelCheckpoint(
-            mode="min",
-            model_path=os.path.join(qm9tut, "best_inference_model"),
-            save_top_k=1,
-            save_last=True,
-            monitor="val_loss",
-        ),
-        early_stopping_callback,
-    ]
-    # logger = pl.loggers.TensorBoardLogger(save_dir=qm9tut)
-    print(callbacks[0].model_path)
+    try:
+        logger = instantiate_class(config["trainer"].pop("logger"))
+    except KeyError:
+        logger = None
 
-    wandb_logger = WandbLogger(
-        project="demo",
-        save_dir=qm9tut,
-    )
+    trainer = Trainer(callbacks=callbacks, logger=logger, **config["trainer"])
 
-    trainer = pl.Trainer(
-        accelerator="cpu",
-        callbacks=callbacks,
-        logger=wandb_logger,
-        # log_every_n_steps=1,
-        default_root_dir=qm9tut,
-        max_epochs=max_epoch_val,  # for testing, we restrict the number of epochs
-    )
-    print(trainer.default_root_dir)
+    # fit
+    trainer.fit(model, datamodule=dm)
+    print("default_root_dir:", trainer.default_root_dir)
+    print(f"Best checkpoint path: {trainer.checkpoint_callback.best_model_path}")
 
-    trainer.fit(task, datamodule=custom_data)
-    print("After fitting ", trainer.default_root_dir)
+    # test
+    trainer.test(ckpt_path="best", datamodule=dm)
 
-    best_model_path = callbacks[0].best_model_path
-    print("best_model_path", best_model_path)
 
-    best_train_loss = (trainer.callback_metrics["train_loss"]).item()
-    best_val_loss = (trainer.callback_metrics["val_loss"]).item()
-
-    # mjwen
-    trainer.test(ckpt_path=best_model_path, datamodule=custom_data)
-
-    print(f"Best Training Loss: {best_train_loss}")
-    print(f"Best Validation Loss: {best_val_loss}")
+if __name__ == "__main__":
+    config_file = Path(__file__).parent / "configs" / "config_wannier.yaml"
+    config = get_args(config_file)
+    main(config)

@@ -1,5 +1,5 @@
 import warnings
-from typing import Optional, Dict, List, Type, Any
+from typing import Any, Dict, List, Optional, Type
 
 import pytorch_lightning as pl
 import torch
@@ -104,6 +104,7 @@ class AtomisticTask(pl.LightningModule):
         scheduler_args: Optional[Dict[str, Any]] = None,
         scheduler_monitor: Optional[str] = None,
         warmup_steps: int = 0,
+        other_hparams: dict = None,
     ):
         """
         Args:
@@ -116,6 +117,7 @@ class AtomisticTask(pl.LightningModule):
             scheduler_monitor: name of metric to be observed for ReduceLROnPlateau
             warmup_steps: number of steps used to increase the learning rate from zero
               linearly to the target learning rate at the beginning of training
+            other_hparams: additional hyperparameters to be logged to wandb
         """
         super().__init__()
         self.model = model
@@ -129,7 +131,7 @@ class AtomisticTask(pl.LightningModule):
         self.grad_enabled = len(self.model.required_derivatives) > 0
         self.lr = optimizer_args["lr"]
         self.warmup_steps = warmup_steps
-        self.save_hyperparameters(ignore=['model'])
+        self.save_hyperparameters(ignore=["model"])
 
     def setup(self, stage=None):
         if stage == "fit":
@@ -164,7 +166,6 @@ class AtomisticTask(pl.LightningModule):
         return pred, targets
 
     def training_step(self, batch, batch_idx):
-
         targets = {
             output.target_property: batch[output.target_property]
             for output in self.outputs
@@ -202,7 +203,14 @@ class AtomisticTask(pl.LightningModule):
 
         loss = self.loss_fn(pred, targets)
 
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch['_idx']))
+        self.log(
+            "val_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=len(batch["_idx"]),
+        )
         self.log_metrics(pred, targets, "val")
 
         return {"val_loss": loss}
@@ -225,7 +233,14 @@ class AtomisticTask(pl.LightningModule):
 
         loss = self.loss_fn(pred, targets)
 
-        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch['_idx']))
+        self.log(
+            "test_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=len(batch["_idx"]),
+        )
         self.log_metrics(pred, targets, "test")
         return {"test_loss": loss}
 
