@@ -373,11 +373,10 @@ class AtomsDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> AtomsLoader:
         if self._train_dataloader is None:
-
             train_batch_sampler = self._setup_sampler(
                 sampler_cls=self.train_sampler_cls,
                 sampler_args=self.train_sampler_args,
-                dataset=self._train_dataset
+                dataset=self._train_dataset,
             )
 
             self._train_dataloader = AtomsLoader(
