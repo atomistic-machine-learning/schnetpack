@@ -8,6 +8,7 @@ import torchmetrics
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 from schnetpack.atomistic.wannier import WannierCenter
+from schnetpack.wannier.utils import instantiate_class
 
 ## Model training
 max_epoch_val = 3  # setting 3 for demo. Use at least 1500
