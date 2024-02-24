@@ -1,11 +1,11 @@
-from ase.neighborlist import primitive_neighbor_list
-from typing import Union, Tuple
-from schnetpack.data import ASEAtomsData
+import os
+from typing import Tuple, Union
+
+import lightning as L
 import numpy as np
 from ase import Atoms
-from schnetpack.data import AtomsDataModule
-import os
-import lightning as L
+from ase.neighborlist import primitive_neighbor_list
+from schnetpack.data import ASEAtomsData, AtomsDataModule
 
 
 def data_preparation(z_list, pos_list, wc_list1, z_wannier: int = 8):

@@ -40,7 +40,7 @@ trainer:
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      project: "wannier_proj"
+      project: wannier_proj
 
   callbacks:
     - class_path: pytorch_lightning.callbacks.ModelSummary
