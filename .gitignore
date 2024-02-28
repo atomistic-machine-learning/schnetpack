@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 .idea
 *.DS_Store
-
+wandb
 docs/tutorials/*.db
 docs/tutorials/*.xyz
 docs/tutorials/qm9tut

@@ -1,8 +1,8 @@
 seed_everything: 35
 
 datamodule:
-  datapath:  "/Users/mjwen.admin/Desktop/sharing_with_Dr_wen/processed/wannier_dataset.db"
-  split_file:  "/Users/mjwen.admin/Desktop/sharing_with_Dr_wen/processed/split.npz"
+  datapath:  "/Users/sadhik22/Desktop/projects_wen_group/datasets/wannier_centers/schnet_processed/wannier_dataset.db"
+  split_file:  "/Users/sadhik22/Desktop/projects_wen_group/datasets/wannier_centers/schnet_processed/split.npz"
   batch_size: 10
   val_batch_size: 20
   test_batch_size: 20
@@ -30,7 +30,7 @@ atomistic_task:
       verbose: true
 
 trainer:
-  max_epochs: 3
+  max_epochs: 1
   accelerator: cpu
   num_nodes: 1
   check_val_every_n_epoch: 1
