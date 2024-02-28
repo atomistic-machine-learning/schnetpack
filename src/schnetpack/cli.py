@@ -89,6 +89,11 @@ def train(config: DictConfig):
     if config.get("print_config"):
         print_config(config, resolve=False)
 
+    # Set matmul precision if specified
+    if "matmul_precision" in config and config.matmul_precision is not None:
+        log.info(f"Setting float32 matmul precision to <{config.matmul_precision}>")
+        torch.set_float32_matmul_precision(config.matmul_precision)
+
     # Set seed for random number generators in pytorch, numpy and python.random
     if "seed" in config:
         log.info(f"Seed with <{config.seed}>")
