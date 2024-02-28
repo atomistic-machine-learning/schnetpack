@@ -28,6 +28,7 @@ dependencies = [
     "pyyaml",
     "hydra-core>=1.1.0",
     "torch>=1.9",
+    "lightning",
     "pytorch_lightning>=2.0.0",
     "torchmetrics",
     "hydra-colorlog>=1.1.0",
