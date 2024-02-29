@@ -197,17 +197,13 @@ class Process_xyz_remsing:
             shift_vec,
         ) = self.get_neigh(
             coords=coords1,
-            r_cut=0.75,
+            r_cut=0.74,
             cell=cell,
             pbc=True,
             self_interaction=False,
             periodic_self_interaction=True,
         )
-        # print(num_neigh[:len(oxy_positions)])
-        sum_neigh = np.sum(num_neigh[: len(oxy_positions)])
-        # print(abs_distance[:np.sum(num_neigh[:len(oxy_positions)])])
-        # print(np.max(abs_distance[:np.sum(num_neigh[:len(oxy_positions)])]))
-        # print(sum_neigh)
+        wc_neigh=num_neigh[: len(oxy_positions)]
         lst_wan = []
         sum1 = 0
         i: int
@@ -223,14 +219,14 @@ class Process_xyz_remsing:
 
         lst_wan = np.array(lst_wan)
 
-        return lst_wan, oxy_positions
-        # return lst_wan, oxy_positions, sum_neigh
+        return lst_wan, oxy_positions, wc_neigh
+
 
     def write_xyz(self, file_out="outfile_ret.xyz", format_out="xyz"):
         import ase.io as asi
         from ase import Atoms
 
-        lst_wan, oxy_positions = self.wannier_centers()
+        lst_wan, oxy_positions, wc_neigh = self.wannier_centers()
         # print(z_mol.shape)
         # print(len(pos_oxygen),len(lst_wan))
         new_str = Atoms(
@@ -255,6 +251,7 @@ def read_data(path):
     pos_list = []
     wc_list = []
     na_list = []
+    neigh_mismath_list=[]
 
     lst_dir = [x for x in os.listdir(path) if "." not in x]
     for dir in lst_dir:
@@ -264,16 +261,19 @@ def read_data(path):
             file_inp = file_path1 + "/water.inp"
             pxr = Process_xyz_remsing(file_str=file_str, file_inp=file_inp)
             # struct_obj, cell = pxr.get_structure()
-            lst_wan, oxy_positions = pxr.wannier_centers()
-            # lst_wan = (np.sum(lst_wan, axis=0) / len(lst_wan)).reshape(1, 3)
-            z_mol, pos_mol = pxr.atom_number_positions()
+            lst_wan, oxy_positions, wc_neigh = pxr.wannier_centers()
+            if list(np.unique(wc_neigh))==[4]:
+                z_mol, pos_mol = pxr.atom_number_positions()
 
-            z_list.append(z_mol)
-            pos_list.append(pos_mol)
-            wc_list.append(lst_wan)
+                z_list.append(z_mol)
+                pos_list.append(pos_mol)
+                wc_list.append(lst_wan)
+            else:
+                neigh_mismath_list.append(dir)
         else:
             na_list.append(dir)
     print("Number of na:", len(na_list))
+    print("Number of neighbor mismatch for given cutoff:", len(neigh_mismath_list))
 
     z_list = np.asarray(z_list)
     pos_list = np.asarray(pos_list)
@@ -287,7 +287,7 @@ def read_data(path):
 
 
 if __name__ == "__main__":
-    path = "/Users/sadhik22/Desktop/projects_wen_group/datasets/wannier_centers/RS_et_al_tr_tt_configs/D0/"
+    path = "/Users/sadhik22/Downloads/train_test_configs_orig/D0/"
     z_list, pos_list, wc_list = read_data(path)
 
     atoms_list, property_list = data_preparation(z_list, pos_list, wc_list)
