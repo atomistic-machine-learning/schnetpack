@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -6,8 +6,7 @@ import torch.nn.functional as F
 
 import schnetpack.properties as properties
 import schnetpack.nn as snn
-from schnetpack.nn.electronic_embeeding import ElectronicEmbedding
-from schnetpack.nn.nuclear_embedding import NuclearEmbedding
+from schnetpack.nn.embedding import NuclearEmbedding, ElectronicEmbedding
 
 __all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
 
@@ -142,9 +141,10 @@ class PaiNN(nn.Module):
         shared_filters: bool = False,
         epsilon: float = 1e-8,
         activate_charge_spin_embedding: bool = False,
-        nuclear_embedding: str = "simple",
+        nuclear_embedding: Union[Callable, nn.Module] = None,
     ):
         """
+                if self.activation is None
         Args:
             n_atom_basis: number of features to describe atomic environments.
                 This determines the size of each embedding vector; i.e. embeddings_dim.
@@ -168,12 +168,16 @@ class PaiNN(nn.Module):
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = radial_basis
         self.activate_charge_spin_embedding = activate_charge_spin_embedding
+        self.nuclear_embedding = nuclear_embedding
 
-        # nuclear embedding layer (often complex nuclear embedding has negative impact on the performance of the model, so we can use simple nuclear embedding to avoid this issue)
-        if nuclear_embedding != "simple":
-            self.nuclear_embedding = NuclearEmbedding(max_z,self.n_atom_basis, zero_init=True)
-        else:
+        if self.nuclear_embedding is None:
             self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
+
+        # # nuclear embedding layer (often complex nuclear embedding has negative impact on the performance of the model, so we can use simple nuclear embedding to avoid this issue)
+        # if nuclear_embedding != "simple":
+        #     self.nuclear_embedding = NuclearEmbedding(max_z,self.n_atom_basis, zero_init=True)
+        # else:
+        #     self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
 
         if self.activate_charge_spin_embedding:
         # needed for spin and charge embeeding
@@ -181,13 +185,13 @@ class PaiNN(nn.Module):
             self.charge_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
-                activation="ssp",
+                activation=activation,
                 is_charged=True)
             # additional embeedings for the spin multiplicity
             self.magmom_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
-                activation="ssp",
+                activation=activation,
                 is_charged=False)
 
         self.share_filters = shared_filters

@@ -1,11 +1,11 @@
-from typing import Callable, Dict
+from typing import Callable, Dict, Union
 
 import torch
 from torch import nn
 
 import schnetpack.properties as structure
 from schnetpack.nn import Dense, scatter_add
-from schnetpack.nn.nuclear_embedding import NuclearEmbedding
+from schnetpack.nn.embedding import NuclearEmbedding
 from schnetpack.nn import ElectronicEmbedding
 from schnetpack.nn.activations import shifted_softplus
 
@@ -103,7 +103,7 @@ class SchNet(nn.Module):
         max_z: int = 100,
         activation: Callable = shifted_softplus,
         activate_charge_spin_embedding: bool = False,
-        nuclear_embedding: str = "simple",
+        nuclear_embedding: Union[Callable, nn.Module] = None,
     ):
         """
         Args:
@@ -130,10 +130,8 @@ class SchNet(nn.Module):
         self.activate_charge_spin_embedding = activate_charge_spin_embedding
 
         # nuclear embedding layer (often complex nuclear embedding has negative impact on the performance of the model, so we can use simple nuclear embedding to avoid this issue)
-        if nuclear_embedding != "simple":
-            self.nuclear_embedding = NuclearEmbedding(self.n_atom_basis,max_z, zero_init=True)
-        else:
-            self.nuclear_embedding = nn.Embedding(self.n_atom_basis,max_z, padding_idx=0)
+        if self.nuclear_embedding is None:
+            self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
 
         if self.activate_charge_spin_embedding:
         # needed for spin and charge embeeding

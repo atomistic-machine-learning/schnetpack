@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from typing import Optional
-from schnetpack.nn.residual_blocks import ResidualMLP
+from schnetpack.nn.blocks import ResidualMLP
 
 class ElectronicEmbedding(nn.Module):
     """
@@ -90,7 +90,7 @@ class ElectronicEmbedding(nn.Module):
         q = self.linear_q(atomic_features) 
         
         # to account for negative and positive charge
-        if self.is_charge:
+        if self.is_charged:
             e = F.relu(torch.stack([electronic_feature, -electronic_feature], dim=-1))
         # +/- spin is the same => abs
         else:

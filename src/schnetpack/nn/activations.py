@@ -3,7 +3,7 @@ import torch
 
 from torch.nn import functional
 
-__all__ = ["shifted_softplus", "softplus_inverse"]
+__all__ = ["shifted_softplus", "softplus_inverse", "ShiftedSoftplus"]
 
 
 def shifted_softplus(x: torch.Tensor):
@@ -60,21 +60,20 @@ class ShiftedSoftplus(torch.nn.Module):
         self, 
         num_features: int, 
         initial_alpha: float = 1.0,
-        initial_beta: float = 1.0
-    ) -> None:
+        initial_beta: float = 1.0,
+        trainable: bool = False) -> None:
+
         """ Initializes the ShiftedSoftplus class. """
         super(ShiftedSoftplus, self).__init__()
-        self._log2 = math.log(2)
-        self.initial_alpha = initial_alpha
-        self.initial_beta = initial_beta
-        self.register_parameter("alpha", torch.nn.Parameter(torch.Tensor(num_features)))
-        self.register_parameter("beta", torch.nn.Parameter(torch.Tensor(num_features)))
-        self.reset_parameters()
+        initial_alpha = torch.tensor(initial_alpha)
+        initial_beta = torch.tensor(initial_beta)
 
-    def reset_parameters(self) -> None:
-        """ Initialize parameters alpha and beta. """
-        torch.nn.init.constant_(self.alpha, self.initial_alpha)
-        torch.nn.init.constant_(self.beta, self.initial_beta)
+        if trainable:
+            self.alpha = torch.nn.Parameter(torch.Tensor(num_features))
+            self.beta = torch.nn.Parameter(torch.Tensor(num_features))
+        else:
+            self.register_buffer("alpha", initial_alpha)
+            self.register_buffer("beta", initial_beta)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -91,6 +90,6 @@ class ShiftedSoftplus(torch.nn.Module):
         """
         return self.alpha * torch.where(
             self.beta != 0,
-            (torch.nn.functional.F.softplus(self.beta * x) - self._log2) / self.beta,
+            (torch.nn.functional.softplus(self.beta * x) - math.log(2)) / self.beta,
             0.5 * x,
         )
