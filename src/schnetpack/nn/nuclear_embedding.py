@@ -68,14 +68,14 @@ class NuclearEmbedding(nn.Module):
                     self.electron_config
                 )
 
-    def forward(self, Z: torch.Tensor) -> torch.Tensor:
+    def forward(self, atom_numbers: torch.Tensor) -> torch.Tensor:
         """
         Assign corresponding embeddings to nuclear charges.
         N: Number of atoms.
         num_features: Dimensions of feature space.
 
         Arguments:
-            Z (LongTensor [N]):
+            atom_numbers (LongTensor [N]):
                 Nuclear charges (atomic numbers) of atoms.
 
         Returns:
@@ -87,8 +87,8 @@ class NuclearEmbedding(nn.Module):
                 self.electron_config
             )
         if self.embedding.device.type == "cpu":  # indexing is faster on CPUs
-            return self.embedding[Z]
+            return self.embedding[atom_numbers]
         else:  # gathering is faster on GPUs
             return torch.gather(
-                self.embedding, 0, Z.view(-1, 1).expand(-1, self.num_features)
+                self.embedding, 0, atom_numbers.view(-1, 1).expand(-1, self.num_features)
             )
