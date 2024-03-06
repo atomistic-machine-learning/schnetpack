@@ -128,7 +128,7 @@ class SchNet(nn.Module):
         self.cutoff_fn = cutoff_fn
         self.cutoff = cutoff_fn.cutoff
         self.activate_charge_spin_embedding = activate_charge_spin_embedding
-
+        self.nuclear_embedding = nuclear_embedding
         # nuclear embedding layer (often complex nuclear embedding has negative impact on the performance of the model, so we can use simple nuclear embedding to avoid this issue)
         if self.nuclear_embedding is None:
             self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
