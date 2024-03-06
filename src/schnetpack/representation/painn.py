@@ -137,7 +137,7 @@ class PaiNN(nn.Module):
         radial_basis: nn.Module,
         cutoff_fn: Optional[Callable] = None,
         activation: Optional[Callable] = F.silu,
-        max_z: int = 87,
+        max_z: int = 100,
         shared_interactions: bool = False,
         shared_filters: bool = False,
         epsilon: float = 1e-8,
