@@ -31,8 +31,8 @@ class NuclearEmbedding(nn.Module):
 
     def __init__(
         self,
-        num_features: int,
-        Zmax: int = 100, 
+        max_z: int,
+        num_features: int, 
         zero_init: bool = True
         ) -> None:
         """ Initializes the NuclearEmbedding class. """
@@ -40,10 +40,10 @@ class NuclearEmbedding(nn.Module):
         self.num_features = num_features
         self.register_buffer("electron_config", torch.tensor(electron_config))
         self.register_parameter(
-            "element_embedding", nn.Parameter(torch.Tensor(Zmax, self.num_features))
+            "element_embedding", nn.Parameter(torch.Tensor(max_z, self.num_features))
         )
         self.register_buffer(
-            "embedding", torch.Tensor(Zmax, self.num_features), persistent=False
+            "embedding", torch.Tensor(max_z, self.num_features), persistent=False
         )
         self.config_linear = nn.Linear(
             self.electron_config.size(1), self.num_features, bias=False
