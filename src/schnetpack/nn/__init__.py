@@ -12,6 +12,4 @@ from schnetpack.nn.so3 import *
 from schnetpack.nn.scatter import *
 from schnetpack.nn.radial import *
 from schnetpack.nn.utils import *
-from schnetpack.nn.electronic_embeeding import *
-from schnetpack.nn.residual_blocks import *
-from schnetpack.nn.nuclear_embedding import *
+from schnetpack.nn.embedding import *
