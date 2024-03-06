@@ -15,19 +15,26 @@ class NuclearEmbedding(nn.Module):
     latter part encourages alchemically meaningful representations without
     restricting the expressivity of learned embeddings.
     Using complexe nuclear embedding can have negative impact on the model performance, when spin charge embedding is activated
+    Negative performance in regard of the duration until the model converges. The model will converge to a lower value, but the duration is longer.
 
     Arguments:
         num_features (int):
             Dimensions of feature space.
         Zmax (int):
-            Maximum nuclear charge +1 of atoms. The default is 87, so all
-            elements up to Rn (Z=86) are supported. Can be kept at the default
-            value (has minimal memory impact).
+            Maximum nuclear charge of atoms. The default is 100, so all
+            elements up to Fermium (Fe) (Z=100) are supported. 
+            Can be kept at the default value (has minimal memory impact).
+        zero_init (bool):
+            If True, initialize the embedding with zeros. Otherwise, use
+            uniform initialization.
     """
 
     def __init__(
-        self, num_features: int, Zmax: int = 87, zero_init: bool = True
-    ) -> None:
+        self,
+        num_features: int,
+        Zmax: int = 100, 
+        zero_init: bool = True
+        ) -> None:
         """ Initializes the NuclearEmbedding class. """
         super(NuclearEmbedding, self).__init__()
         self.num_features = num_features
