@@ -7,40 +7,38 @@ from schnetpack.nn.residual_blocks import ResidualMLP
 
 class ElectronicEmbedding(nn.Module):
     """
-    Single Head self attention block for updating atomic features through nonlocal interactions with the
+    Single Head self attention like block for updating atomic features through nonlocal interactions with the
     electrons.
 
     Arguments:
         num_features (int):
-            Dimensions of feature space.
-        num_basis_functions (int):
-            Number of radial basis functions.
-        num_residual_pre_i (int):
-            Number of residual blocks applied to atomic features in i branch
-            (central atoms) before computing the interaction.
-        num_residual_pre_j (int):
-            Number of residual blocks applied to atomic features in j branch
-            (neighbouring atoms) before computing the interaction.
-        num_residual_post (int):
-            Number of residual blocks applied to interaction features.
+            Dimensions of feature space aka the number of features to describe atomic environments.
+            This determines the size of each embedding vector
+        num_residual (int):
+            Number of residual blocks applied to atomic features
         activation (str):
-            Kind of activation function. Possible values:
-            'swish': Swish activation function.
+            Kind of activation function. Possible value:
             'ssp': Shifted softplus activation function.
+        is_charged (bool):
+            is_charged True corresponds to building embedding for molecular charge and
+            separate weights are used for positive and negative charges.
+            i_charged False corresponds to building embedding for spin values,
+            no seperate weights are used
+
     """
 
     def __init__(
         self,
         num_features: int,
         num_residual: int,
-        activation: str = "swish",
-        is_charge: bool = False,
+        activation: str = "ssp",
+        is_charged: bool = False,
     ) -> None:
         """ Initializes the ElectronicEmbedding class. """
         super(ElectronicEmbedding, self).__init__()
-        self.is_charge = is_charge
+        self.is_charged = is_charged
         self.linear_q = nn.Linear(num_features, num_features)
-        if is_charge:  # charges are duplicated to use separate weights for +/-
+        if is_charged:  # charges are duplicated to use separate weights for +/-
             self.linear_k = nn.Linear(2, num_features, bias=False)
             self.linear_v = nn.Linear(2, num_features, bias=False)
         else:
