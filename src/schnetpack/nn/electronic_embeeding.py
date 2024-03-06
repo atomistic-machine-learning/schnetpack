@@ -9,6 +9,10 @@ class ElectronicEmbedding(nn.Module):
     """
     Single Head self attention like block for updating atomic features through nonlocal interactions with the
     electrons.
+    The embeddings are used to map the total molecular charge or molecular spin to a feature vector.
+    Since those properties are not localized on a specific atom they have to be delocalized over the whole molecule.
+    The delocalization is achieved by using a self attention like mechanism.
+
 
     Arguments:
         num_features (int):
@@ -24,7 +28,6 @@ class ElectronicEmbedding(nn.Module):
             separate weights are used for positive and negative charges.
             i_charged False corresponds to building embedding for spin values,
             no seperate weights are used
-
     """
 
     def __init__(
@@ -62,8 +65,8 @@ class ElectronicEmbedding(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
-        E: torch.Tensor,
+        atomic_features: torch.Tensor,
+        electronic_feature: torch.Tensor,
         num_batch: int,
         batch_seg: torch.Tensor,
         eps: float = 1e-8,
@@ -71,9 +74,9 @@ class ElectronicEmbedding(nn.Module):
         """
         Evaluate interaction block.
 
-        x (FloatTensor [N, num_features]):
+        atomic_features (FloatTensor [N, num_features]):
             Atomic feature vectors.
-        E (FloatTensor [N]): 
+        electronic_feature (FloatTensor [N]): 
             either charges or spin values per molecular graph
         num_batch (int): 
             number of molecular graphs in the batch
@@ -84,14 +87,14 @@ class ElectronicEmbedding(nn.Module):
         """
         
         # queries (Batchsize x N_atoms, n_atom_basis)
-        q = self.linear_q(x) 
+        q = self.linear_q(atomic_features) 
         
         # to account for negative and positive charge
         if self.is_charge:
-            e = F.relu(torch.stack([E, -E], dim=-1))
+            e = F.relu(torch.stack([electronic_feature, -electronic_feature], dim=-1))
         # +/- spin is the same => abs
         else:
-            e = torch.abs(E).unsqueeze(-1)  
+            e = torch.abs(electronic_feature).unsqueeze(-1)  
         enorm = torch.maximum(e, torch.ones_like(e))
 
         # keys (Batchsize x N_atoms, n_atom_basis), the batch_seg ensures that the key is the same for all atoms belonging to the same graph
