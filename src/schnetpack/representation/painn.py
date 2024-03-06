@@ -171,7 +171,7 @@ class PaiNN(nn.Module):
 
         # nuclear embedding layer (often complex nuclear embedding has negative impact on the performance of the model, so we can use simple nuclear embedding to avoid this issue)
         if nuclear_embedding != "simple":
-            self.nuclear_embedding = NuclearEmbedding(self.n_atom_basis,max_z, zero_init=True)
+            self.nuclear_embedding = NuclearEmbedding(max_z,self.n_atom_basis, zero_init=True)
         else:
             self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
 
@@ -182,13 +182,13 @@ class PaiNN(nn.Module):
                 self.n_atom_basis,
                 num_residual=1,
                 activation="ssp",
-                is_charge=True)
+                is_charged=True)
             # additional embeedings for the spin multiplicity
             self.magmom_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
                 activation="ssp",
-                is_charge=False)
+                is_charged=False)
 
         self.share_filters = shared_filters
 
@@ -254,26 +254,24 @@ class PaiNN(nn.Module):
         else:
             filter_list = torch.split(filters, 3 * self.n_atom_basis, dim=-1)
 
-
+        # z_ = self.nuclear_embedding(atomic_numbers)[:,None] has shape of (300,1,128)  300 because of 3Atoms x max_z
+        # embedding of atom type
+        q = self.nuclear_embedding(atomic_numbers)[:, None]
         if self.activate_charge_spin_embedding:
             # get inputs for spin and charge embedding 
-            # (to avoid error not having total charge /spin multiplicity in db if embedding not used)
+            # to avoid error not having total charge /spin multiplicity in db if embedding not used
             total_charge = inputs[properties.total_charge]
             spin = inputs[properties.spin_multiplicity]
-            # specific nuclear embeeding with electron configuration
-            z = self.nuclear_embedding(atomic_numbers)
 
-            # specific total charge embeeding
-            c = self.charge_embedding(x = z, E = total_charge, num_batch = num_batch, batch_seg = batch_seg)
+            # specific total charge embeeding - squeezing necessary to remove the extra dimension, which is not anticipated in forward pass of electronic embedding
+            charge_embedding = self.charge_embedding(q.squeeze(),total_charge,num_batch,batch_seg)[:,None]
 
             # specific spin embeeding
-            s = self.magmom_embedding(x = z, E = spin, num_batch = num_batch, batch_seg = batch_seg)
+            spin_embedding = self.magmom_embedding(q.squeeze(),spin,num_batch,batch_seg)[:,None]
 
             # additive combining nuclear, charge and spin embeeding
-            q = (z + c + s)[:,None] 
+            q = (q + charge_embedding + spin_embedding)
 
-        else:
-            q = self.embedding(atomic_numbers)[:, None]
         
         qs = q.shape
         mu = torch.zeros((qs[0], 3, qs[2]), device=q.device)
