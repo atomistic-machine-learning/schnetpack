@@ -2,8 +2,13 @@
 import numpy as np
 
 '''
-The usage of the electron configuration is to provide a shorthand description 
-of the distribution of electrons in atomic/molecular orbitals for an atoms/molecules.
+The usage of the electron configuration is to provide a shorthand descriptor. This descriptor encode
+information about the groundstate information of an atom, the nuclear charge and the number of electrons in the 
+valence shell.
+The table is read as follows:
+The specific descriptor e.g for Oxygen would be: Z = 8, ground-state configuration [1s 2s 2p4] and valence shell vs = 2, vp = 4
+
+Background:
 Electrons are arranged around an atom's nucleus in energy levels (shells ranging from K,L,M ..., holding 2n^2 electrons)., 
 [K : 2, L : 8, M : 18, N : 32, O : 50, P: 72 ]
 and these shells contain subshells designated as 
@@ -12,12 +17,17 @@ p (principal, orbital angular momentum 1),
 d: (diffuse,orbital angular momentum 2), 
 f (fundamental, orbital angular momentum 3).
 
-The arrangement follows the Pauli Exclusion Principle and Hund's Rule ensuring the Aufbau Principle
+The arrangement follows the Pauli Exclusion Principle and Hund's Rule ensuring the Aufbau Principle.
 This provides the basis for the periodic table's structure and the periodicity of the elements' chemical behavior.
 
 When invoking the complex nuclear embedding method a linear mapping 
-from the electron configuration to a (num_features)-dimensional vector will be learned
-The latter part encourages alchemically meaningful representations without restricting the expressivity of learned embeddings
+from the electron configuration descriptor to a (num_features)-dimensional vector will be learned
+Applying the complex nuclear embedding encourages to capture similiarities between different elements based on the electron configuration
+This is justified by the fact that the chemistry of an element is mainly dominated by the valence shell.
+E.g Bromine and Chlorine tend both to form -1 ions (uptake of one electron for fullfilling the ocette rule)
+(Indicated by the same pattern in the electron configuration)
+
+
 '''
 
 # fmt: off
