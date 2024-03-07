@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from schnetpack.nn.blocks import ResidualMLP
-
+from typing import Callable, Union
 
 
 '''
@@ -266,7 +266,7 @@ class ElectronicEmbedding(nn.Module):
         self,
         num_features: int,
         num_residual: int,
-        activation: str = "ssp",
+        activation: Union[Callable, nn.Module],
         is_charged: bool = False,
     ) -> None:
         """ Initializes the ElectronicEmbedding class. """
