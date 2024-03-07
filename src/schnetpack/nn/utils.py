@@ -120,7 +120,7 @@ def derivative_from_atomic(
         mask = torch.triu(mask).flatten()
         dfdx_mol = dfdx_mol.flatten()
         dfdx_mol = dfdx_mol[mask]
-        dfdx_mol = dfdx_mol.reshape(n_atoms[idx], -1)
+        #dfdx_mol = dfdx_mol.reshape(n_atoms[idx], -1)
 
         dfdx.append(dfdx_mol)
 
