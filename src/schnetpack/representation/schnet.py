@@ -139,13 +139,13 @@ class SchNet(nn.Module):
             self.charge_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
-                activation="ssp",
+                activation=activation,
                 is_charged=True)
             # additional embeedings for the spin multiplicity
             self.magmom_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
-                activation="ssp",
+                activation=activation,
                 is_charged=False)
 
         self.interactions = snn.replicate_module(
