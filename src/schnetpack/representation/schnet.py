@@ -101,7 +101,7 @@ class SchNet(nn.Module):
         n_filters: int = None,
         shared_interactions: bool = False,
         max_z: int = 100,
-        activation: Callable = shifted_softplus,
+        activation: Union[Callable, nn.Module] = shifted_softplus,
         activate_charge_spin_embedding: bool = False,
         nuclear_embedding: Union[Callable, nn.Module] = None,
     ):

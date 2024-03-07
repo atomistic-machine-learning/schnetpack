@@ -46,31 +46,27 @@ class ShiftedSoftplus(torch.nn.Module):
     With learnable parameters alpha and beta, the shifted softplus function can
     become equivalent to ReLU (if alpha is equal 1 and beta approaches infinity) or to
     the identity function (if alpha is equal 2 and beta is equal 0).
-
-    Arguments:
-        num_features (int):
-            Dimensions of feature space.
-        initial_alpha (float):
-            Initial "scale" alpha of the softplus function.
-        initial_beta (float):
-            Initial "temperature" beta of the softplus function.
     """
 
     def __init__(
         self, 
-        num_features: int, 
         initial_alpha: float = 1.0,
         initial_beta: float = 1.0,
         trainable: bool = False) -> None:
 
-        """ Initializes the ShiftedSoftplus class. """
+        """    
+        Args:
+            initial_alpha: Initial "scale" alpha of the softplus function.
+            initial_beta: Initial "temperature" beta of the softplus function.
+            trainable: If True, alpha and beta are trained during optimization.
+        """
         super(ShiftedSoftplus, self).__init__()
         initial_alpha = torch.tensor(initial_alpha)
         initial_beta = torch.tensor(initial_beta)
 
         if trainable:
-            self.alpha = torch.nn.Parameter(torch.Tensor(num_features))
-            self.beta = torch.nn.Parameter(torch.Tensor(num_features))
+            self.alpha = torch.nn.Parameter(torch.FloatTensor([initial_alpha]))
+            self.beta = torch.nn.Parameter(torch.FloatTensor([initial_beta]))
         else:
             self.register_buffer("alpha", initial_alpha)
             self.register_buffer("beta", initial_beta)
@@ -80,13 +76,11 @@ class ShiftedSoftplus(torch.nn.Module):
         Evaluate activation function given the input features x.
         num_features: Dimensions of feature space.
 
-        Arguments:
-            x (FloatTensor [:, num_features]):
-                Input features.
+        Args:
+            x (FloatTensor [:, num_features]): Input features.
 
         Returns:
-            y (FloatTensor [:, num_features]):
-                Activated features.
+            y (FloatTensor [:, num_features]): Activated features.
         """
         return self.alpha * torch.where(
             self.beta != 0,

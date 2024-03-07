@@ -159,14 +159,7 @@ def build_gated_equivariant_mlp(
 class Residual(nn.Module):
     """
     Pre-activation residual block inspired by He, Kaiming, et al. "Identity
-    mappings in deep residual networks.".
-
-    Arguments:
-        num_features (int):
-            Dimensions of feature space.
-        activation (str):
-            Kind of activation function. Possible value:
-            'ssp': Shifted softplus activation function.
+    mappings in deep residual networks."
     """
 
     def __init__(
@@ -176,7 +169,11 @@ class Residual(nn.Module):
         bias: bool = True,
         zero_init: bool = True,
     ) -> None:
-        """ Initializes the Residual class. """
+        """    
+        Args:
+            num_features: Dimensions of feature space.
+            activation: activation function
+        """
         super(Residual, self).__init__()
         # initialize attributes
 
@@ -203,13 +200,11 @@ class Residual(nn.Module):
         N: Number of atoms.
         num_features: Dimensions of feature space.
 
-        Arguments:
-            x (FloatTensor [N, num_features]):
-                Input feature representations of atoms.
+        Args:
+            x (FloatTensor [N, num_features]):Input feature representations of atoms.
 
         Returns:
-            y (FloatTensor [N, num_features]):
-                Output feature representations of atoms.
+            y (FloatTensor [N, num_features]): Output feature representations of atoms.
         """
         y = self.activation1(x)
         y = self.linear1(y)
@@ -221,15 +216,6 @@ class Residual(nn.Module):
 class ResidualStack(nn.Module):
     """
     Stack of num_blocks pre-activation residual blocks evaluated in sequence.
-
-    Arguments:
-        num_blocks (int):
-            Number of residual blocks to be stacked in sequence.
-        num_features (int):
-            Dimensions of feature space.
-        activation (str):
-            Kind of activation function. Possible values:
-            'ssp': Shifted softplus activation function.
     """
 
     def __init__(
@@ -238,9 +224,13 @@ class ResidualStack(nn.Module):
         num_residual: int,
         activation: Union[Callable, nn.Module],
         bias: bool = True,
-        zero_init: bool = True,
-    ) -> None:
-        """ Initializes the ResidualStack class. """
+        zero_init: bool = True) -> None:
+        """    
+        Args:
+            num_blocks: Number of residual blocks to be stacked in sequence.
+            num_features: Dimensions of feature space.
+            activation: activation function
+        """
         super(ResidualStack, self).__init__()
         self.stack = nn.ModuleList(
             [
@@ -255,13 +245,11 @@ class ResidualStack(nn.Module):
         N: Number of inputs.
         num_features: Dimensions of feature space.
 
-        Arguments:
-            x (FloatTensor [N, num_features]):
-                Input feature representations.
+        Args:
+            x (FloatTensor [N, num_features]): Input feature representations.
 
         Returns:
-            y (FloatTensor [N, num_features]):
-                Output feature representations.
+            y (FloatTensor [N, num_features]):Output feature representations.
         """
         for residual in self.stack:
             x = residual(x)
@@ -269,17 +257,22 @@ class ResidualStack(nn.Module):
     
 
 class ResidualMLP(nn.Module):
-
-    # if used with learnable shifted softplus activation function, callable needs to be initiated with num features
-
+    """Residual MLP with num_residual residual blocks."""
     def __init__(
         self,
         num_features: int,
         num_residual: int,
         activation: Union[Callable, nn.Module],
         bias: bool = True,
-        zero_init: bool = False,
-    ) -> None:
+        zero_init: bool = False):
+
+        """
+        Args:
+            num_features: Dimensions of feature space.
+            num_residual: Number of residual blocks to be stacked in sequence.
+            activation: activation function
+        """
+
         super(ResidualMLP, self).__init__()
         self.residual = ResidualStack(
             num_features, num_residual, activation=activation, bias=bias, zero_init=True

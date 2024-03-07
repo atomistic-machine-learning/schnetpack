@@ -144,7 +144,6 @@ class PaiNN(nn.Module):
         nuclear_embedding: Union[Callable, nn.Module] = None,
     ):
         """
-                if self.activation is None
         Args:
             n_atom_basis: number of features to describe atomic environments.
                 This determines the size of each embedding vector; i.e. embeddings_dim.
@@ -173,14 +172,9 @@ class PaiNN(nn.Module):
         if self.nuclear_embedding is None:
             self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
 
-        # # nuclear embedding layer (often complex nuclear embedding has negative impact on the performance of the model, so we can use simple nuclear embedding to avoid this issue)
-        # if nuclear_embedding != "simple":
-        #     self.nuclear_embedding = NuclearEmbedding(max_z,self.n_atom_basis, zero_init=True)
-        # else:
-        #     self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
-
+        # needed if spin or charge embeeding requested
         if self.activate_charge_spin_embedding:
-        # needed for spin and charge embeeding
+
             # additional embeedings for the total charge
             self.charge_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
@@ -258,7 +252,6 @@ class PaiNN(nn.Module):
         else:
             filter_list = torch.split(filters, 3 * self.n_atom_basis, dim=-1)
 
-        # z_ = self.nuclear_embedding(atomic_numbers)[:,None] has shape of (300,1,128)  300 because of 3Atoms x max_z
         # embedding of atom type
         q = self.nuclear_embedding(atomic_numbers)[:, None]
         if self.activate_charge_spin_embedding:
