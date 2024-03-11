@@ -1,8 +1,8 @@
 seed_everything: 35
 
 datamodule:
-  datapath:  "/Users/sadhik22/Desktop/projects_wen_group/datasets/wannier_centers/schnet_processed/wannier_dataset.db"
-  split_file:  "/Users/sadhik22/Desktop/projects_wen_group/datasets/wannier_centers/schnet_processed/split.npz"
+  datapath:  "/project/wen/sadhik22/model_training/wannier_centers/schnet_processed/wannier_dataset.db"
+  split_file:  "/project/wen/sadhik22/model_training/wannier_centers/schnet_processed/split.npz"
   batch_size: 10
   val_batch_size: 20
   test_batch_size: 20
