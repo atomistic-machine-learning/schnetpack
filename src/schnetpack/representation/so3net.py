@@ -31,7 +31,7 @@ class SO3net(nn.Module):
         return_vector_representation: bool = False,
         activation: Optional[Callable] = F.silu,
         activate_charge_spin_embedding: bool = False,
-        nuclear_embedding: Union[Callable, nn.Module] = None,
+        embedding: Union[Callable, nn.Module] = None,
     ):
         """
         Args:
@@ -45,8 +45,9 @@ class SO3net(nn.Module):
             max_z: maximal nuclear charge
             return_vector_representation: return l=1 features in Cartesian XYZ order
                 (e.g. for DipoleMoment output module)
-            activate_charge_spin_embedding: if True, charge and spin embeddings are added to nuclear embeddings taken from SpookyNet Implementation
-            nuclear_embedding: type of nuclear embedding to use (simple is simple embedding and complex is the one with electron configuration)
+            activate_charge_spin_embedding: if True, charge and spin embeddings are added
+                to nuclear embeddings taken from SpookyNet Implementation
+            embedding: custom nuclear embedding
         """
         super(SO3net, self).__init__()
 
@@ -57,36 +58,40 @@ class SO3net(nn.Module):
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = radial_basis
         self.return_vector_representation = return_vector_representation
-        self.nuclear_embedding = nuclear_embedding
         self.activate_charge_spin_embedding = activate_charge_spin_embedding
         self.activation = activation
 
-        if self.nuclear_embedding is None:
-            self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
+        # initialize nuclear embedding
+        self.embedding = embedding
+        if self.embedding is None:
+            self.embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
 
-        # needed if spin or charge embeeding requested
+        # initialize spin and charge embeddings
         if self.activate_charge_spin_embedding:
-
-            # additional embeedings for the total charge
             self.charge_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
                 activation=activation,
-                is_charged=True)
-            # additional embeedings for the spin multiplicity
-            self.magmom_embedding = ElectronicEmbedding(
+                is_charged=True,
+            )
+            self.spin_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
                 activation=activation,
-                is_charged=False) 
+                is_charged=False,
+            )
 
+        # initialize shperical harmonics
         self.sphharm = so3.RealSphericalHarmonics(lmax=lmax)
 
+        # initialize filters
         self.so3convs = snn.replicate_module(
             lambda: so3.SO3Convolution(lmax, n_atom_basis, self.radial_basis.n_rbf),
             self.n_interactions,
             shared_interactions,
         )
+
+        # initialize interaction blocks
         self.mixings1 = snn.replicate_module(
             lambda: nn.Linear(n_atom_basis, n_atom_basis, bias=False),
             self.n_interactions,
@@ -126,9 +131,6 @@ class SO3net(nn.Module):
         r_ij = inputs[properties.Rij]
         idx_i = inputs[properties.idx_i]
         idx_j = inputs[properties.idx_j]
-        # inputs needed for charge and spin embedding
-        num_batch = len(inputs[properties.idx])
-        batch_seg = inputs[properties.idx_m]
 
         # compute atom and pair features
         d_ij = torch.norm(r_ij, dim=1, keepdim=True)
@@ -138,25 +140,29 @@ class SO3net(nn.Module):
         radial_ij = self.radial_basis(d_ij)
         cutoff_ij = self.cutoff_fn(d_ij)[..., None]
 
-        x0 = self.nuclear_embedding(atomic_numbers)[:, None]
-
-        if self.activate_charge_spin_embedding:
-            # get inputs for spin and charge embedding 
-            # to avoid error not having total charge /spin multiplicity in db if embedding not used
+        # compute initial embeddings
+        x0 = self.embedding(atomic_numbers)[:, None]
+        
+        # add spin and charge embeddings
+        if hasattr(self, "activate_charge_spin_embedding") and self.activate_charge_spin_embedding:
+            # get tensors from input dictionary
             total_charge = inputs[properties.total_charge]
             spin = inputs[properties.spin_multiplicity]
+            num_batch = len(inputs[properties.idx])
+            idx_m = inputs[properties.idx_m]
 
-            # specific total charge embeeding - squeezing necessary to remove the extra dimension, which is not anticipated in forward pass of electronic embedding
-            charge_embedding = self.charge_embedding(x0.squeeze(),total_charge,num_batch,batch_seg)[:,None]
+            charge_embedding = self.charge_embedding(
+                x0.squeeze(), total_charge, num_batch, idx_m
+            )[:, None]
+            spin_embedding = self.spin_embedding(
+                x0.squeeze(), spin, num_batch, idx_m
+            )[:, None]
 
-            # specific spin embeeding
-            spin_embedding = self.magmom_embedding(x0.squeeze(),spin,num_batch,batch_seg)[:,None]
-
-            # additive combining nuclear, charge and spin embeeding
+            # additive combining of nuclear, charge and spin embedding
             x0 = (x0 + charge_embedding + spin_embedding)
 
+        # compute interaction blocks and update atomic embeddings
         x = so3.scalar2rsh(x0, int(self.lmax))
-
         for so3conv, mixing1, mixing2, gating, mixing3 in zip(
                 self.so3convs, self.mixings1, self.mixings2, self.gatings, self.mixings3
         ):
@@ -168,9 +174,9 @@ class SO3net(nn.Module):
             dx = mixing3(dx)
             x = x + dx
 
+        # collect results
         inputs["scalar_representation"] = x[:, 0]
         inputs["multipole_representation"] = x
-
         # extract cartesian vector from multipoles: [y, z, x] -> [x, y, z]
         if self.return_vector_representation:
             inputs["vector_representation"] = torch.roll(x[:, 1:4], 1, 1)

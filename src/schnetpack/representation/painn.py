@@ -19,7 +19,6 @@ class PaiNNInteraction(nn.Module):
         Args:
             n_atom_basis: number of features to describe atomic environments.
             activation: if None, no activation function is used.
-            epsilon: stability constant added in norm to prevent numerical instabilities
         """
         super(PaiNNInteraction, self).__init__()
         self.n_atom_basis = n_atom_basis
@@ -141,7 +140,7 @@ class PaiNN(nn.Module):
         shared_filters: bool = False,
         epsilon: float = 1e-8,
         activate_charge_spin_embedding: bool = False,
-        nuclear_embedding: Union[Callable, nn.Module] = None,
+        embedding: Union[Callable, nn.Module] = None,
     ):
         """
         Args:
@@ -157,8 +156,9 @@ class PaiNN(nn.Module):
             shared_interactions: if True, share the weights across
                 filter-generating networks.
             epsilon: stability constant added in norm to prevent numerical instabilities
-            activate_charge_spin_embedding: if True, charge and spin embeddings are added to nuclear embeddings taken from SpookyNet Implementation
-            nuclear_embedding: type of nuclear embedding to use (simple is simple embedding and complex is the one with electron configuration)
+            activate_charge_spin_embedding: if True, charge and spin embeddings are added
+                to nuclear embeddings taken from SpookyNet Implementation
+            embedding: custom nuclear embedding
         """
         super(PaiNN, self).__init__()
 
@@ -168,29 +168,27 @@ class PaiNN(nn.Module):
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = radial_basis
         self.activate_charge_spin_embedding = activate_charge_spin_embedding
-        self.nuclear_embedding = nuclear_embedding
 
-        if self.nuclear_embedding is None:
-            self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
+        # initialize nuclear embedding
+        self.embedding = embedding
+        if self.embedding is None:
+            self.embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
 
-        # needed if spin or charge embeeding requested
+        # initialize spin and charge embeddings
         if self.activate_charge_spin_embedding:
-
-            # additional embeedings for the total charge
             self.charge_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
                 activation=activation,
                 is_charged=True)
-            # additional embeedings for the spin multiplicity
-            self.magmom_embedding = ElectronicEmbedding(
+            self.spin_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
                 activation=activation,
                 is_charged=False)
-
+        
+        # initialize filter layers
         self.share_filters = shared_filters
-
         if shared_filters:
             self.filter_net = snn.Dense(
                 self.radial_basis.n_rbf, 3 * n_atom_basis, activation=None
@@ -202,6 +200,7 @@ class PaiNN(nn.Module):
                 activation=None,
             )
 
+        # initialize interaction blocks
         self.interactions = snn.replicate_module(
             lambda: PaiNNInteraction(
                 n_atom_basis=self.n_atom_basis, activation=activation
@@ -222,7 +221,7 @@ class PaiNN(nn.Module):
         Compute atomic representations/embeddings.
 
         Args:
-            inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+            inputs: SchNetPack dictionary of input tensors.
 
         Returns:
             torch.Tensor: atom-wise representation.
@@ -236,9 +235,6 @@ class PaiNN(nn.Module):
         idx_j = inputs[properties.idx_j]
         n_atoms = atomic_numbers.shape[0]
 
-        #inputs needed for charge and spin embedding
-        num_batch = len(inputs[properties.idx])
-        batch_seg = inputs[properties.idx_m]
         # compute atom and pair features
         d_ij = torch.norm(r_ij, dim=1, keepdim=True)
         dir_ij = r_ij / d_ij
@@ -251,33 +247,40 @@ class PaiNN(nn.Module):
         else:
             filter_list = torch.split(filters, 3 * self.n_atom_basis, dim=-1)
 
-        # embedding of atom type
-        q = self.nuclear_embedding(atomic_numbers)[:, None]
-        if self.activate_charge_spin_embedding:
-            # get inputs for spin and charge embedding 
-            # to avoid error not having total charge /spin multiplicity in db if embedding not used
+        # compute initial embeddings
+        q = self.embedding(atomic_numbers)[:, None]
+        
+        # add spin and charge embeddings
+        if hasattr(self, "activate_charge_spin_embedding") and self.activate_charge_spin_embedding:
+            # get tensors from input dictionary
             total_charge = inputs[properties.total_charge]
             spin = inputs[properties.spin_multiplicity]
+            num_batch = len(inputs[properties.idx])
+            idx_m = inputs[properties.idx_m]
 
-            # specific total charge embeeding - squeezing necessary to remove the extra dimension, which is not anticipated in forward pass of electronic embedding
-            charge_embedding = self.charge_embedding(q.squeeze(),total_charge,num_batch,batch_seg)[:,None]
+            charge_embedding = self.charge_embedding(
+                q.squeeze(),
+                total_charge,
+                num_batch,
+                idx_m
+            )[:, None]
+            spin_embedding = self.spin_embedding(
+                q.squeeze(), spin, num_batch, idx_m
+            )[:, None]
 
-            # specific spin embeeding
-            spin_embedding = self.magmom_embedding(q.squeeze(),spin,num_batch,batch_seg)[:,None]
-
-            # additive combining nuclear, charge and spin embeeding
+            # additive combining of nuclear, charge and spin embedding
             q = (q + charge_embedding + spin_embedding)
 
-        
+        # compute interaction blocks and update atomic embeddings
         qs = q.shape
         mu = torch.zeros((qs[0], 3, qs[2]), device=q.device)
-
         for i, (interaction, mixing) in enumerate(zip(self.interactions, self.mixing)):
             q, mu = interaction(q, mu, filter_list[i], dir_ij, idx_i, idx_j, n_atoms)
             q, mu = mixing(q, mu)
-
         q = q.squeeze(1)
 
+        # collect results
         inputs["scalar_representation"] = q
         inputs["vector_representation"] = mu
+
         return inputs
