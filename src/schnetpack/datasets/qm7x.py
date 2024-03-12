@@ -282,7 +282,6 @@ class QM7X(AtomsDataModule):
 
         # download files
         for i, file_id in enumerate(file_ids):
-
             if ignore_extracted and os.path.exists(
                 os.path.join(tar_dir, f"{file_id}.hdf5")
             ):
@@ -299,7 +298,6 @@ class QM7X(AtomsDataModule):
         # extract the compressed files
         extracted = []
         for i, file_id in enumerate(file_ids):
-
             xz_path = os.path.join(tar_dir, f"{file_id}.xz")
             hd_path = os.path.join(tar_dir, f"{file_id}.hdf5")
 
@@ -317,7 +315,6 @@ class QM7X(AtomsDataModule):
         # parse the data files
 
         for file in files:
-
             logging.info(f"Parsing {file.split('/')[-1]} ...")
 
             atoms_list = []
@@ -332,7 +329,6 @@ class QM7X(AtomsDataModule):
             with h5py.File(file, "r") as mol_dict:
                 for mol_id, mol in tqdm(mol_dict.items()):
                     for conf_id, conf in mol.items():
-
                         # exclude equilibrium duplicates
                         trunc_id = conf_id[::-1].split("-", 1)[-1][::-1]
                         if self.remove_duplicates and trunc_id in self.duplicates_ids:
@@ -387,7 +383,6 @@ class QM7X(AtomsDataModule):
         prepare data for pytorch lightning data module
         """
         if not os.path.exists(self.datapath):
-
             tar_dir = self.raw_data_path or tempfile.mkdtemp("qm7x")
 
             atomrefs = {
@@ -430,15 +425,15 @@ class QM7X(AtomsDataModule):
             )
 
             # use subset of equilibrium structures
-            
+
             if self.only_equilibrium or self.only_non_equilibrium:
                 step_ids = self.dataset.metadata["groups_ids"]["step_id"]
-                    
+
                 if len(step_ids) != len(self.dataset):
                     raise ValueError(
                         "The dataset size does not match the size of step ids arrays in meta data."
-                    )                
-                
+                    )
+
                 if self.only_equilibrium:
                     eq_indices = [i for i, s in enumerate(step_ids) if s == 0]
                 else:
