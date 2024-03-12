@@ -148,6 +148,7 @@ electron_config = np.array([
 # normalization just for numerical reasons            
 electron_config = electron_config / np.max(electron_config, axis=0)
 
+
 class NuclearEmbedding(nn.Module):
     """
     Embedding which maps scalar nuclear charges Z to vectors in a
@@ -288,7 +289,7 @@ class ElectronicEmbedding(nn.Module):
         """
         Evaluate interaction block.
         Args:
-            atomic_features: Atomic feature vector of dimension [N, num_features])
+            atomic_features: Atomic feature vector of dimension [N, num_features]
             electronic_feature: either charges or spin values per N molecular graph 
                 either charges or spin values per molecular graph
             num_batch: number of molecular graphs in the batch

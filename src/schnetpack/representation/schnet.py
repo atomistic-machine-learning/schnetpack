@@ -103,7 +103,7 @@ class SchNet(nn.Module):
         max_z: int = 101,
         activation: Union[Callable, nn.Module] = shifted_softplus,
         activate_charge_spin_embedding: bool = False,
-        nuclear_embedding: Union[Callable, nn.Module] = None,
+        embedding: Union[Callable, nn.Module] = None,
     ):
         """
         Args:
@@ -118,36 +118,35 @@ class SchNet(nn.Module):
             max_z: maximal nuclear charge
             activation: activation function
             activate_charge_spin_embedding: if True, charge and spin embeddings are added to nuclear embeddings taken from SpookyNet Implementation
-            nuclear_embedding: type of nuclear embedding to use (simple is simple embedding and complex is the one with electron configuration)
+            embedding: type of nuclear embedding to use (simple is simple embedding and complex is the one with electron configuration)
         """
         super().__init__()
         self.n_atom_basis = n_atom_basis
-        self.size = (self.n_atom_basis,)
         self.n_filters = n_filters or self.n_atom_basis
         self.radial_basis = radial_basis
         self.cutoff_fn = cutoff_fn
         self.cutoff = cutoff_fn.cutoff
         self.activate_charge_spin_embedding = activate_charge_spin_embedding
-        self.nuclear_embedding = nuclear_embedding
-        # nuclear embedding layer (often complex nuclear embedding has negative impact on the performance of the model, so we can use simple nuclear embedding to avoid this issue)
-        if self.nuclear_embedding is None:
-            self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
 
+        # initialize nuclear embedding
+        self.embedding = embedding
+        if self.embedding is None:
+            self.embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
+
+        # initialize spin and charge embeddings
         if self.activate_charge_spin_embedding:
-        # needed for spin and charge embeeding
-            # additional embeedings for the total charge
             self.charge_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
                 activation=activation,
                 is_charged=True)
-            # additional embeedings for the spin multiplicity
-            self.magmom_embedding = ElectronicEmbedding(
+            self.spin_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
                 activation=activation,
                 is_charged=False)
 
+        # initialize interaction blocks
         self.interactions = snn.replicate_module(
             lambda: SchNetInteraction(
                 n_atom_basis=self.n_atom_basis,
@@ -161,47 +160,44 @@ class SchNet(nn.Module):
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
 
-        # get inputs
+        # get tensors from input dictionary
         atomic_numbers = inputs[structure.Z]
         r_ij = inputs[structure.Rij]
         idx_i = inputs[structure.idx_i]
         idx_j = inputs[structure.idx_j]
-        num_batch = len(inputs[structure.idx])
-        # batch seq
-        # Index for each atom that specifies to which molecule in the
-        # batch it belongs. For example, when predicting a H2O and a CH4
-        # molecule, batch_seg would be [0, 0, 0, 1, 1, 1, 1, 1] to
-        # indicate that the first three atoms belong to the first molecule
-        # and the last five atoms to the second molecule.
-        batch_seg = inputs[structure.idx_m]
 
         # compute pair features
         d_ij = torch.norm(r_ij, dim=1)
         f_ij = self.radial_basis(d_ij)
         rcut_ij = self.cutoff_fn(d_ij)
 
-        # compute atom and pair features
-        x = self.nuclear_embedding(atomic_numbers)
-        if self.activate_charge_spin_embedding:
-            # get inputs for spin and charge embedding 
-            # (to avoid error not having total charge /spin multiplicity in db if embedding not used)
+        # compute initial embeddings
+        x = self.embedding(atomic_numbers)
+
+        # add spin and charge embeddings
+        if hasattr(self, "activate_charge_spin_embedding") and self.activate_charge_spin_embedding:
+            # get tensors from input dictionary
             total_charge = inputs[structure.total_charge]
             spin = inputs[structure.spin_multiplicity]
+            idx_m = inputs[structure.idx_m]
+            num_batch = len(inputs[structure.idx])
 
-            # specific total charge embeeding
-            charge_embedding = self.charge_embedding(x,total_charge,num_batch,batch_seg)
+            charge_embedding = self.charge_embedding(
+                x, total_charge, num_batch, idx_m
+            )
+            spin_embedding = self.spin_embedding(
+                x, spin, num_batch, idx_m
+            )
 
-            # specific spin embeeding
-            spin_embedding = self.magmom_embedding(x,spin,num_batch,batch_seg)
-
-            # additive combining nuclear, charge and spin embeeding
+            # additive combining of nuclear, charge and spin embedding
             x = x + charge_embedding + spin_embedding
 
-
-        # compute interaction block to update atomic embeddings
+        # compute interaction blocks and update atomic embeddings
         for interaction in self.interactions:
             v = interaction(x, f_ij, idx_i, idx_j, rcut_ij)
             x = x + v
 
+        # collect results
         inputs["scalar_representation"] = x
+
         return inputs
