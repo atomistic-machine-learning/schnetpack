@@ -1,11 +1,13 @@
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Union
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 import schnetpack.nn as snn
 import schnetpack.nn.so3 as so3
 import schnetpack.properties as properties
+from schnetpack.nn import ElectronicEmbedding
 
 __all__ = ["SO3net"]
 
@@ -25,8 +27,11 @@ class SO3net(nn.Module):
         radial_basis: nn.Module,
         cutoff_fn: Optional[Callable] = None,
         shared_interactions: bool = False,
-        max_z: int = 100,
+        max_z: int = 101,
         return_vector_representation: bool = False,
+        activation: Optional[Callable] = F.silu,
+        activate_charge_spin_embedding: bool = False,
+        nuclear_embedding: Union[Callable, nn.Module] = None,
     ):
         """
         Args:
@@ -37,10 +42,11 @@ class SO3net(nn.Module):
             radial_basis: layer for expanding interatomic distances in a basis set
             cutoff_fn: cutoff function
             shared_interactions:
-            max_z:
-            conv_layer:
+            max_z: maximal nuclear charge
             return_vector_representation: return l=1 features in Cartesian XYZ order
                 (e.g. for DipoleMoment output module)
+            activate_charge_spin_embedding: if True, charge and spin embeddings are added to nuclear embeddings taken from SpookyNet Implementation
+            nuclear_embedding: type of nuclear embedding to use (simple is simple embedding and complex is the one with electron configuration)
         """
         super(SO3net, self).__init__()
 
@@ -51,8 +57,29 @@ class SO3net(nn.Module):
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = radial_basis
         self.return_vector_representation = return_vector_representation
+        self.nuclear_embedding = nuclear_embedding
+        self.activate_charge_spin_embedding = activate_charge_spin_embedding
+        self.activation = activation
 
-        self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
+        if self.nuclear_embedding is None:
+            self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
+
+        # needed if spin or charge embeeding requested
+        if self.activate_charge_spin_embedding:
+
+            # additional embeedings for the total charge
+            self.charge_embedding = ElectronicEmbedding(
+                self.n_atom_basis,
+                num_residual=1,
+                activation=activation,
+                is_charged=True)
+            # additional embeedings for the spin multiplicity
+            self.magmom_embedding = ElectronicEmbedding(
+                self.n_atom_basis,
+                num_residual=1,
+                activation=activation,
+                is_charged=False) 
+
         self.sphharm = so3.RealSphericalHarmonics(lmax=lmax)
 
         self.so3convs = snn.replicate_module(
@@ -99,6 +126,9 @@ class SO3net(nn.Module):
         r_ij = inputs[properties.Rij]
         idx_i = inputs[properties.idx_i]
         idx_j = inputs[properties.idx_j]
+        # inputs needed for charge and spin embedding
+        num_batch = len(inputs[properties.idx])
+        batch_seg = inputs[properties.idx_m]
 
         # compute atom and pair features
         d_ij = torch.norm(r_ij, dim=1, keepdim=True)
@@ -108,7 +138,23 @@ class SO3net(nn.Module):
         radial_ij = self.radial_basis(d_ij)
         cutoff_ij = self.cutoff_fn(d_ij)[..., None]
 
-        x0 = self.embedding(atomic_numbers)[:, None]
+        x0 = self.nuclear_embedding(atomic_numbers)[:, None]
+
+        if self.activate_charge_spin_embedding:
+            # get inputs for spin and charge embedding 
+            # to avoid error not having total charge /spin multiplicity in db if embedding not used
+            total_charge = inputs[properties.total_charge]
+            spin = inputs[properties.spin_multiplicity]
+
+            # specific total charge embeeding - squeezing necessary to remove the extra dimension, which is not anticipated in forward pass of electronic embedding
+            charge_embedding = self.charge_embedding(x0.squeeze(),total_charge,num_batch,batch_seg)[:,None]
+
+            # specific spin embeeding
+            spin_embedding = self.magmom_embedding(x0.squeeze(),spin,num_batch,batch_seg)[:,None]
+
+            # additive combining nuclear, charge and spin embeeding
+            x0 = (x0 + charge_embedding + spin_embedding)
+
         x = so3.scalar2rsh(x0, int(self.lmax))
 
         for so3conv, mixing1, mixing2, gating, mixing3 in zip(

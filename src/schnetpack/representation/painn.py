@@ -136,7 +136,7 @@ class PaiNN(nn.Module):
         radial_basis: nn.Module,
         cutoff_fn: Optional[Callable] = None,
         activation: Optional[Callable] = F.silu,
-        max_z: int = 100,
+        max_z: int = 101,
         shared_interactions: bool = False,
         shared_filters: bool = False,
         epsilon: float = 1e-8,
@@ -150,6 +150,7 @@ class PaiNN(nn.Module):
             n_interactions: number of interaction blocks.
             radial_basis: layer for expanding interatomic distances in a basis set
             cutoff_fn: cutoff function
+            max_z: maximal nuclear charge
             activation: activation function
             shared_interactions: if True, share the weights across
                 interaction blocks.
@@ -238,8 +239,6 @@ class PaiNN(nn.Module):
         #inputs needed for charge and spin embedding
         num_batch = len(inputs[properties.idx])
         batch_seg = inputs[properties.idx_m]
-        total_charge = inputs[properties.total_charge]
-        spin = inputs[properties.spin_multiplicity]
         # compute atom and pair features
         d_ij = torch.norm(r_ij, dim=1, keepdim=True)
         dir_ij = r_ij / d_ij
