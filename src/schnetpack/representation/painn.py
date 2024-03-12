@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 import schnetpack.properties as properties
 import schnetpack.nn as snn
+from schnetpack.nn.embedding import NuclearEmbedding, ElectronicEmbedding
 
 __all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
 
@@ -135,10 +136,12 @@ class PaiNN(nn.Module):
         radial_basis: nn.Module,
         cutoff_fn: Optional[Callable] = None,
         activation: Optional[Callable] = F.silu,
-        max_z: int = 100,
+        max_z: int = 101,
         shared_interactions: bool = False,
         shared_filters: bool = False,
         epsilon: float = 1e-8,
+        activate_charge_spin_embedding: bool = False,
+        nuclear_embedding: Union[Callable, nn.Module] = None,
     ):
         """
         Args:
@@ -147,12 +150,15 @@ class PaiNN(nn.Module):
             n_interactions: number of interaction blocks.
             radial_basis: layer for expanding interatomic distances in a basis set
             cutoff_fn: cutoff function
+            max_z: maximal nuclear charge
             activation: activation function
             shared_interactions: if True, share the weights across
                 interaction blocks.
             shared_interactions: if True, share the weights across
                 filter-generating networks.
             epsilon: stability constant added in norm to prevent numerical instabilities
+            activate_charge_spin_embedding: if True, charge and spin embeddings are added to nuclear embeddings taken from SpookyNet Implementation
+            nuclear_embedding: type of nuclear embedding to use (simple is simple embedding and complex is the one with electron configuration)
         """
         super(PaiNN, self).__init__()
 
@@ -161,8 +167,27 @@ class PaiNN(nn.Module):
         self.cutoff_fn = cutoff_fn
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = radial_basis
+        self.activate_charge_spin_embedding = activate_charge_spin_embedding
+        self.nuclear_embedding = nuclear_embedding
 
-        self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
+        if self.nuclear_embedding is None:
+            self.nuclear_embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
+
+        # needed if spin or charge embeeding requested
+        if self.activate_charge_spin_embedding:
+
+            # additional embeedings for the total charge
+            self.charge_embedding = ElectronicEmbedding(
+                self.n_atom_basis,
+                num_residual=1,
+                activation=activation,
+                is_charged=True)
+            # additional embeedings for the spin multiplicity
+            self.magmom_embedding = ElectronicEmbedding(
+                self.n_atom_basis,
+                num_residual=1,
+                activation=activation,
+                is_charged=False)
 
         self.share_filters = shared_filters
 
@@ -211,6 +236,9 @@ class PaiNN(nn.Module):
         idx_j = inputs[properties.idx_j]
         n_atoms = atomic_numbers.shape[0]
 
+        #inputs needed for charge and spin embedding
+        num_batch = len(inputs[properties.idx])
+        batch_seg = inputs[properties.idx_m]
         # compute atom and pair features
         d_ij = torch.norm(r_ij, dim=1, keepdim=True)
         dir_ij = r_ij / d_ij
@@ -223,7 +251,24 @@ class PaiNN(nn.Module):
         else:
             filter_list = torch.split(filters, 3 * self.n_atom_basis, dim=-1)
 
-        q = self.embedding(atomic_numbers)[:, None]
+        # embedding of atom type
+        q = self.nuclear_embedding(atomic_numbers)[:, None]
+        if self.activate_charge_spin_embedding:
+            # get inputs for spin and charge embedding 
+            # to avoid error not having total charge /spin multiplicity in db if embedding not used
+            total_charge = inputs[properties.total_charge]
+            spin = inputs[properties.spin_multiplicity]
+
+            # specific total charge embeeding - squeezing necessary to remove the extra dimension, which is not anticipated in forward pass of electronic embedding
+            charge_embedding = self.charge_embedding(q.squeeze(),total_charge,num_batch,batch_seg)[:,None]
+
+            # specific spin embeeding
+            spin_embedding = self.magmom_embedding(q.squeeze(),spin,num_batch,batch_seg)[:,None]
+
+            # additive combining nuclear, charge and spin embeeding
+            q = (q + charge_embedding + spin_embedding)
+
+        
         qs = q.shape
         mu = torch.zeros((qs[0], 3, qs[2]), device=q.device)
 
