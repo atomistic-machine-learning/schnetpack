@@ -425,3 +425,16 @@ config and code. As an example, you can check out the package
 which implements new classes and integrates them in a custom config to build generative 
 neural networks for molecules.
 
+Internal precision of float32 matrix multiplications
+====================================================
+
+When utilizing GPUs, it can be advantageous to manage the precision of floating-point 
+and matrix multiplication. PyTorch Lightning offers the option to set floating-point 
+precision by defining the alias ``trainer.precision`` in the Hydra config file.
+In addition to the explicit floating point precision, you can adjust the internal 
+precision for matrix multiplication operations with float32 by defining ``matmul_precision`` 
+in the config file or the argument ``+matmul_precision`` when using the CLI.
+It's important to note that this PyTorch variable applies only to NVIDIA GPUs with specific
+capabilities, like A100, that allow the adjustment of internal precision for matrix multiplications.
+Further details can be found in the PyTorch documentation for ``torch.set_float32_matmul_precision``.
+
