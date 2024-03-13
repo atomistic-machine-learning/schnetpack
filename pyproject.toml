@@ -37,6 +37,7 @@ dependencies = [
     "torch-ema",
     "matscipy",
     "tensorboard",
+    "tensorboardX",
     "tqdm",
     "pre-commit",
     "black",
