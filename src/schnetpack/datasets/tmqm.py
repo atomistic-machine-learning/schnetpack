@@ -1,24 +1,22 @@
-import io
 import logging
 import os
-import re
 import shutil
-import tarfile
 import tempfile
 from typing import List, Optional, Dict
 from urllib import request as request
 import gzip
 
 import numpy as np
-from ase import Atoms
-from ase.io.extxyz import read_xyz
 from ase.io import read
-from tqdm import tqdm
 
 import torch
-from schnetpack.data import *
-import schnetpack.properties as structure
-from schnetpack.data import AtomsDataModuleError, AtomsDataModule
+from schnetpack.data import (
+    AtomsDataModule,
+    AtomsDataFormat,
+    BaseAtomsData,
+    create_dataset,
+    load_dataset,
+)
 
 __all__ = ["TMQM"]
 
@@ -26,10 +24,7 @@ __all__ = ["TMQM"]
 class TMQM(AtomsDataModule):
     """tmQM database of Ballcells 2020 of inorganic CSD structures.
 
-    
-
     References:
-
         .. [#tmqm_1] https://pubs.acs.org/doi/10.1021/acs.jcim.0c01041
 
     """
@@ -86,7 +81,6 @@ class TMQM(AtomsDataModule):
             split_file: path to npz file with data partitions
             format: dataset format
             load_properties: subset of properties to load
-            remove_uncharacterized: do not include uncharacterized molecules.
             val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
             test_batch_size: test batch size. If None, use val_batch_size, then batch_size.
             transforms: Transform applied to each system separately before batching.
@@ -124,7 +118,6 @@ class TMQM(AtomsDataModule):
             **kwargs
         )
 
-
     def prepare_data(self):
         if not os.path.exists(self.datapath):
             property_unit_dict = {
@@ -155,17 +148,20 @@ class TMQM(AtomsDataModule):
     def _download_data(
         self, tmpdir, dataset: BaseAtomsData
     ):
-        tar_path = os.path.join(tmpdir, "tmQM_X1.xyz.gz")
+        # download urls
         url = ["https://github.com/bbskjelstad/tmqm/raw/master/data/tmQM_X1.xyz.gz",
             "https://github.com/bbskjelstad/tmqm/raw/master/data/tmQM_X2.xyz.gz"]
 
         url_y = "https://github.com/bbskjelstad/tmqm/raw/master/data/tmQM_y.csv"
 
+        # tmp files
+        tar_path = os.path.join(tmpdir, "tmQM_X1.xyz.gz")
         tmp_xyz_file = os.path.join(tmpdir, "tmQM_X.xyz")
         tmp_properties_file = os.path.join(tmpdir, "tmQM_y.csv")
 
+        # download atoms data
+        logging.info("Downloading TMQM structure data...")
         atomslist = []
-
         for u in url:
             request.urlretrieve(u, tar_path)
             with gzip.open(tar_path, 'rb') as f_in:
@@ -177,20 +173,16 @@ class TMQM(AtomsDataModule):
             
             atomslist.extend(read(tmp_xyz_file, index=":"))
 
-
-        # download proeprties in tmQM_y.csv
+        # download properties data
+        # CSV format:
+        # CSD_code;Electronic_E;Dispersion_E;Dipole_M;Metal_q;HL_Gap;HOMO_Energy;LUMO_Energy;Polarizability
+        # WIXKOE;-2045.524942;-0.239239;4.233300;2.109340;0.131080;-0.162040;-0.030960;598.457913
+        # DUCVIG;-2430.690317;-0.082134;11.754400;0.759940;0.124930;-0.243580;-0.118650;277.750698
+        # KINJOG;-3467.923206;-0.137954;8.301700;1.766500;0.140140;-0.236460;-0.096320;393.442545
+        logging.info("Downloading TMQM properties data...")
         request.urlretrieve(url_y, tmp_properties_file)
-
-        # CSV format
-        #CSD_code;Electronic_E;Dispersion_E;Dipole_M;Metal_q;HL_Gap;HOMO_Energy;LUMO_Energy;Polarizability
-        #WIXKOE;-2045.524942;-0.239239;4.233300;2.109340;0.131080;-0.162040;-0.030960;598.457913
-        #DUCVIG;-2430.690317;-0.082134;11.754400;0.759940;0.124930;-0.243580;-0.118650;277.750698
-        #KINJOG;-3467.923206;-0.137954;8.301700;1.766500;0.140140;-0.236460;-0.096320;393.442545
-
-        # read csv
         prop_list = []
         key_value_pairs_list = []
-
         with open(tmp_properties_file, "r") as file:
             lines = file.readlines()
             keys = lines[0].strip("\n").split(";")
@@ -202,5 +194,5 @@ class TMQM(AtomsDataModule):
                 prop_list.append(prop_dict)
                 key_value_pairs_list.append(key_value_pairs)
 
-
+        logging.info("Writing structures to db...")
         dataset.add_systems(property_list=prop_list, atoms_list=atomslist)
