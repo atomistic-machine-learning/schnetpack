@@ -1,15 +1,15 @@
-from typing import Callable, Dict, Union
+from typing import Callable, Dict, Union, Optional
 
 import torch
 from torch import nn
 
 import schnetpack.properties as structure
 from schnetpack.nn import Dense, scatter_add
-from schnetpack.nn.embedding import NuclearEmbedding
-from schnetpack.nn import ElectronicEmbedding
+import schnetpack.properties as properties
 from schnetpack.nn.activations import shifted_softplus
 
 import schnetpack.nn as snn
+
 
 __all__ = ["SchNet", "SchNetInteraction"]
 
@@ -100,10 +100,9 @@ class SchNet(nn.Module):
         cutoff_fn: Callable,
         n_filters: int = None,
         shared_interactions: bool = False,
-        max_z: int = 101,
         activation: Union[Callable, nn.Module] = shifted_softplus,
-        activate_charge_spin_embedding: bool = False,
-        embedding: Union[Callable, nn.Module] = None,
+        nuclear_embedding: Optional[nn.Module] = None,
+        electronic_embeddings: Optional[nn.ModuleList] = None,
     ):
         """
         Args:
@@ -115,9 +114,7 @@ class SchNet(nn.Module):
             n_filters: number of filters used in continuous-filter convolution
             shared_interactions: if True, share the weights across
                 interaction blocks and filter-generating networks.
-            max_z: maximal nuclear charge
             activation: activation function
-            activate_charge_spin_embedding: if True, charge and spin embeddings are added to nuclear embeddings taken from SpookyNet Implementation
             embedding: type of nuclear embedding to use (simple is simple embedding and complex is the one with electron configuration)
         """
         super().__init__()
@@ -126,25 +123,14 @@ class SchNet(nn.Module):
         self.radial_basis = radial_basis
         self.cutoff_fn = cutoff_fn
         self.cutoff = cutoff_fn.cutoff
-        self.activate_charge_spin_embedding = activate_charge_spin_embedding
 
-        # initialize nuclear embedding
-        self.embedding = embedding
-        if self.embedding is None:
-            self.embedding = nn.Embedding(max_z, self.n_atom_basis, padding_idx=0)
-
-        # initialize spin and charge embeddings
-        if self.activate_charge_spin_embedding:
-            self.charge_embedding = ElectronicEmbedding(
-                self.n_atom_basis,
-                num_residual=1,
-                activation=activation,
-                is_charged=True)
-            self.spin_embedding = ElectronicEmbedding(
-                self.n_atom_basis,
-                num_residual=1,
-                activation=activation,
-                is_charged=False)
+        # initialize embeddings
+        if nuclear_embedding is None:
+            nuclear_embedding = nn.Embedding(100, n_atom_basis)
+        self.embedding = nuclear_embedding
+        if electronic_embeddings is None:
+            electronic_embeddings = nn.ModuleList([])
+        self.electronic_embeddings = electronic_embeddings
 
         # initialize interaction blocks
         self.interactions = snn.replicate_module(
@@ -161,7 +147,7 @@ class SchNet(nn.Module):
     def forward(self, inputs: Dict[str, torch.Tensor]):
 
         # get tensors from input dictionary
-        atomic_numbers = inputs[structure.Z]
+        atomic_numbers = inputs[properties.Z]
         r_ij = inputs[structure.Rij]
         idx_i = inputs[structure.idx_i]
         idx_j = inputs[structure.idx_j]
@@ -173,24 +159,8 @@ class SchNet(nn.Module):
 
         # compute initial embeddings
         x = self.embedding(atomic_numbers)
-
-        # add spin and charge embeddings
-        if hasattr(self, "activate_charge_spin_embedding") and self.activate_charge_spin_embedding:
-            # get tensors from input dictionary
-            total_charge = inputs[structure.total_charge]
-            spin = inputs[structure.spin_multiplicity]
-            idx_m = inputs[structure.idx_m]
-            num_batch = len(inputs[structure.idx])
-
-            charge_embedding = self.charge_embedding(
-                x, total_charge, num_batch, idx_m
-            )
-            spin_embedding = self.spin_embedding(
-                x, spin, num_batch, idx_m
-            )
-
-            # additive combining of nuclear, charge and spin embedding
-            x = x + charge_embedding + spin_embedding
+        for embedding in self.interactions:
+            x += embedding(x, inputs)
 
         # compute interaction blocks and update atomic embeddings
         for interaction in self.interactions:
