@@ -234,8 +234,8 @@ class PaiNN(nn.Module):
 
         # compute initial embeddings
         q = self.embedding(atomic_numbers)
-        for embedding in self.interactions:
-            q += embedding(q, inputs)
+        for embedding in self.electronic_embeddings:
+            q = q + embedding(q, inputs)
         q = q.unsqueeze(1)
 
         # compute interaction blocks and update atomic embeddings

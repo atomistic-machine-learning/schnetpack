@@ -3,7 +3,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
 import schnetpack.properties as properties
 
 from schnetpack.nn.blocks import ResidualMLP
