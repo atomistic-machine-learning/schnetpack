@@ -159,8 +159,8 @@ class SchNet(nn.Module):
 
         # compute initial embeddings
         x = self.embedding(atomic_numbers)
-        for embedding in self.interactions:
-            x += embedding(x, inputs)
+        for embedding in self.electronic_embeddings:
+            x = x + embedding(x, inputs)
 
         # compute interaction blocks and update atomic embeddings
         for interaction in self.interactions:

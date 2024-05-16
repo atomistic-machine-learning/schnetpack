@@ -125,8 +125,8 @@ class SO3net(nn.Module):
 
         # compute initial embeddings
         x0 = self.embedding(atomic_numbers)
-        for embedding in self.interactions:
-            x0 += embedding(x0, inputs)
+        for embedding in self.electronic_embeddings:
+            x0 = x0 + embedding(x0, inputs)
         x0 = x0.unsueeze(1)
 
         # compute interaction blocks and update atomic embeddings
