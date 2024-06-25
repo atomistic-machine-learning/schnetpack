@@ -176,6 +176,19 @@ class AtomisticTask(pl.LightningModule):
             pass
 
         pred = self.predict_without_postprocessing(batch)
+        """
+        if "hessian" in batch:
+            rand_vecs = batch["random_vec"]
+            n_atoms = batch["_n_atoms"]
+            rand_vecs = list(rand_vecs.split(list(n_atoms)))
+            hvps = []
+            for spl_idx, rand_vec in enumerate(rand_vecs):
+                rand_vec = rand_vec.view(-1)
+                hvp = torch.linalg.matmul(targets["hessian"][spl_idx], rand_vec[None].T)
+                hvp = hvp.view(-1, 3)
+                hvps.append(hvp)
+            targets["hessian"] = torch.cat(hvps, dim=0)
+        """
         pred, targets = self.apply_constraints(pred, targets)
 
         loss = self.loss_fn(pred, targets)
@@ -198,6 +211,19 @@ class AtomisticTask(pl.LightningModule):
             pass
 
         pred = self.predict_without_postprocessing(batch)
+        """
+        if "hessian" in batch:
+            rand_vecs = batch["random_vec"]
+            n_atoms = batch["_n_atoms"]
+            rand_vecs = list(rand_vecs.split(list(n_atoms)))
+            hvps = []
+            for spl_idx, rand_vec in enumerate(rand_vecs):
+                rand_vec = rand_vec.view(-1)
+                hvp = torch.linalg.matmul(targets["hessian"][spl_idx], rand_vec[None].T)
+                hvp = hvp.view(-1, 3)
+                hvps.append(hvp)
+            targets["hessian"] = torch.cat(hvps, dim=0)
+        """
         pred, targets = self.apply_constraints(pred, targets)
 
         loss = self.loss_fn(pred, targets)
@@ -221,6 +247,19 @@ class AtomisticTask(pl.LightningModule):
             pass
 
         pred = self.predict_without_postprocessing(batch)
+        """
+        if "hessian" in batch:
+            rand_vecs = batch["random_vec"]
+            n_atoms = batch["_n_atoms"]
+            rand_vecs = list(rand_vecs.split(list(n_atoms)))
+            hvps = []
+            for spl_idx, rand_vec in enumerate(rand_vecs):
+                rand_vec = rand_vec.view(-1)
+                hvp = torch.linalg.matmul(targets["hessian"][spl_idx], rand_vec[None].T)
+                hvp = hvp.view(-1, 3)
+                hvps.append(hvp)
+            targets["hessian"] = torch.cat(hvps, dim=0)
+        """
         pred, targets = self.apply_constraints(pred, targets)
 
         loss = self.loss_fn(pred, targets)
