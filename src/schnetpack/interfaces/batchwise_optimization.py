@@ -413,7 +413,7 @@ class BatchwiseDynamics(Dynamics):
             list of indices corresponding to atoms with positions fixed in space.
         """
         super().__init__(
-            atoms=None,
+            atoms=Atoms(),
             logfile=logfile,
             trajectory=trajectory,
             append_trajectory=append_trajectory,
