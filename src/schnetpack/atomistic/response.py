@@ -148,7 +148,6 @@ class Hessian(nn.Module):
         #inputs[self.hessian_key] = d2EdR2
 
         random_vec = torch.randn_like(inputs[properties.R])
-        # normalize random vector
         random_vec = random_vec / torch.norm(random_vec, dim=-1, keepdim=True)
 
         d2EdR2 = grad(
