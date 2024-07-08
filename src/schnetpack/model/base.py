@@ -89,7 +89,8 @@ class AtomisticModel(nn.Module):
             ):
                 required_derivatives.update(m.required_derivatives)
         required_derivatives: List[str] = list(required_derivatives)
-        self.required_derivatives = required_derivatives
+        if len(required_derivatives) > 0:
+            self.required_derivatives = required_derivatives
 
     def collect_outputs(self) -> List[str]:
         self.model_outputs = None
@@ -103,9 +104,10 @@ class AtomisticModel(nn.Module):
     def initialize_derivatives(
         self, inputs: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
-        for p in self.required_derivatives:
-            if p in inputs.keys():
-                inputs[p].requires_grad_()
+        if self.required_derivatives is not None:
+            for p in self.required_derivatives:
+                if p in inputs.keys():
+                    inputs[p].requires_grad_()
         return inputs
 
     def initialize_transforms(self, datamodule):

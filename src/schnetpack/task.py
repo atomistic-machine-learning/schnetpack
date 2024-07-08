@@ -126,7 +126,7 @@ class AtomisticTask(pl.LightningModule):
         self.schedule_monitor = scheduler_monitor
         self.outputs = nn.ModuleList(outputs)
 
-        self.grad_enabled = len(self.model.required_derivatives) > 0
+        self.grad_enabled = self.model.required_derivatives is not None
         self.lr = optimizer_args["lr"]
         self.warmup_steps = warmup_steps
         self.save_hyperparameters()
