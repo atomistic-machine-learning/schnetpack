@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Union, Optional
+from typing import Callable, Dict, Union, Optional, List
 
 import torch
 from torch import nn
@@ -102,7 +102,7 @@ class SchNet(nn.Module):
         shared_interactions: bool = False,
         activation: Union[Callable, nn.Module] = shifted_softplus,
         nuclear_embedding: Optional[nn.Module] = None,
-        electronic_embeddings: Optional[nn.ModuleList] = None,
+        electronic_embeddings: Optional[List] = None,
     ):
         """
         Args:
@@ -115,7 +115,9 @@ class SchNet(nn.Module):
             shared_interactions: if True, share the weights across
                 interaction blocks and filter-generating networks.
             activation: activation function
-            embedding: type of nuclear embedding to use (simple is simple embedding and complex is the one with electron configuration)
+            nuclear_embedding: custom nuclear embedding (e.g. spk.nn.embeddings.NuclearEmbedding)
+            electronic_embeddings: list of electronic embeddings. E.g. for spin and
+                charge (see spk.nn.embeddings.ElectronicEmbedding)
         """
         super().__init__()
         self.n_atom_basis = n_atom_basis
@@ -129,7 +131,9 @@ class SchNet(nn.Module):
             nuclear_embedding = nn.Embedding(100, n_atom_basis)
         self.embedding = nuclear_embedding
         if electronic_embeddings is None:
-            electronic_embeddings = nn.ModuleList([])
+            electronic_embeddings = []
+        electronic_embeddings = nn.ModuleList(electronic_embeddings)
+
         self.electronic_embeddings = electronic_embeddings
 
         # initialize interaction blocks
