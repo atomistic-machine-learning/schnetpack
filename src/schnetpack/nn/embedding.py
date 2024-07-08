@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import schnetpack.properties as properties
-
+from schnetpack.nn.activations import shifted_softplus
 from schnetpack.nn.blocks import ResidualMLP
 from typing import Callable, Union
 
@@ -245,9 +245,9 @@ class ElectronicEmbedding(nn.Module):
         self,
         property_key: str,
         num_features: int,
-        num_residual: int,
-        activation: Union[Callable, nn.Module],
-        is_charged: bool = False,
+        is_charged: bool,
+        num_residual:  int = 1,
+        activation: Union[Callable, nn.Module] = shifted_softplus,
         epsilon: float = 1e-8,
     ):
         """
