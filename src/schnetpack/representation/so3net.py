@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Dict, Optional, Union, List
 
 import torch
 import torch.nn as nn
@@ -30,7 +30,7 @@ class SO3net(nn.Module):
         return_vector_representation: bool = False,
         activation: Optional[Callable] = F.silu,
         nuclear_embedding: Optional[nn.Module] = None,
-        electronic_embeddings: Optional[nn.ModuleList] = None,
+        electronic_embeddings: Optional[List] = None,
     ):
         """
         Args:
@@ -43,7 +43,9 @@ class SO3net(nn.Module):
             shared_interactions:
             return_vector_representation: return l=1 features in Cartesian XYZ order
                 (e.g. for DipoleMoment output module)
-            nuclear_embedding: custom nuclear embedding
+            nuclear_embedding: custom nuclear embedding (e.g. spk.nn.embeddings.NuclearEmbedding)
+            electronic_embeddings: list of electronic embeddings. E.g. for spin and
+                charge (see spk.nn.embeddings.ElectronicEmbedding)
         """
         super(SO3net, self).__init__()
 
@@ -61,7 +63,8 @@ class SO3net(nn.Module):
             nuclear_embedding = nn.Embedding(100, n_atom_basis)
         self.embedding = nuclear_embedding
         if electronic_embeddings is None:
-            electronic_embeddings = nn.ModuleList([])
+            electronic_embeddings = []
+        electronic_embeddings = nn.ModuleList(electronic_embeddings)
         self.electronic_embeddings = electronic_embeddings
 
         # initialize shperical harmonics
