@@ -1,11 +1,8 @@
 from typing import Callable, Dict, Union, Optional, List
-
 import torch
 from torch import nn
-
-import schnetpack.properties as structure
-from schnetpack.nn import Dense, scatter_add
 import schnetpack.properties as properties
+from schnetpack.nn import Dense, scatter_add
 from schnetpack.nn.activations import shifted_softplus
 
 import schnetpack.nn as snn
@@ -152,9 +149,9 @@ class SchNet(nn.Module):
 
         # get tensors from input dictionary
         atomic_numbers = inputs[properties.Z]
-        r_ij = inputs[structure.Rij]
-        idx_i = inputs[structure.idx_i]
-        idx_j = inputs[structure.idx_j]
+        r_ij = inputs[properties.Rij]
+        idx_i = inputs[properties.idx_i]
+        idx_j = inputs[properties.idx_j]
 
         # compute pair features
         d_ij = torch.norm(r_ij, dim=1)
