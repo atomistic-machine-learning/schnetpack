@@ -292,14 +292,14 @@ class ElectronicEmbedding(nn.Module):
 
     def forward(
         self,
-        embedding,
+        input_embedding,
         inputs,
     ) -> torch.Tensor:
         """
         Evaluate interaction block.
 
         Args:
-            embedding: embedding of nuclear charges (and other electronic embeddings)
+            input_embedding: embedding of nuclear charges (and other electronic embeddings)
             inputs: spk style input dictionary
 
         """
@@ -309,7 +309,7 @@ class ElectronicEmbedding(nn.Module):
         electronic_feature = inputs[self.property_key]
 
         # queries (Batchsize x N_atoms, n_atom_basis)
-        q = self.linear_q(embedding)
+        q = self.linear_q(input_embedding)
         
         # to account for negative and positive charge
         if self.is_charged:
