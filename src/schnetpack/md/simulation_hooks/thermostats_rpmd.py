@@ -2,6 +2,7 @@
 This module contains pecialized thermostats for controlling temperature of the system during
 ring polymer molecular dynamics simulations.
 """
+
 from __future__ import annotations
 import torch
 

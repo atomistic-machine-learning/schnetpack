@@ -62,7 +62,7 @@ class ISO17(AtomsDataModule):
         num_test_workers: Optional[int] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Args:
@@ -113,7 +113,7 @@ class ISO17(AtomsDataModule):
             num_test_workers=num_test_workers,
             property_units=property_units,
             distance_unit=distance_unit,
-            **kwargs
+            **kwargs,
         )
 
     def prepare_data(self):
@@ -148,12 +148,17 @@ class ISO17(AtomsDataModule):
             with connect(dbpath) as conn:
                 with connect(tmp_dbpath) as tmp_conn:
                     tmp_conn.metadata = {
-                        "_property_unit_dict": {ISO17.energy: "eV", ISO17.forces: "eV/Ang"},
+                        "_property_unit_dict": {
+                            ISO17.energy: "eV",
+                            ISO17.forces: "eV/Ang",
+                        },
                         "_distance_unit": "Ang",
                         "atomrefs": {},
                     }
                     # add energy to data dict in db
-                    for idx in tqdm(range(len(conn)), f"parsing database file {dbpath}"):
+                    for idx in tqdm(
+                        range(len(conn)), f"parsing database file {dbpath}"
+                    ):
                         atmsrw = conn.get(idx + 1)
                         data = atmsrw.data
                         data[ISO17.forces] = np.array(data[ISO17.forces])

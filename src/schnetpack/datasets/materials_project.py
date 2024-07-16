@@ -54,7 +54,7 @@ class MaterialsProject(AtomsDataModule):
         distance_unit: Optional[str] = None,
         apikey: Optional[str] = None,
         timestamp: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
         """
 
@@ -101,7 +101,7 @@ class MaterialsProject(AtomsDataModule):
             num_test_workers=num_test_workers,
             property_units=property_units,
             distance_unit=distance_unit,
-            **kwargs
+            **kwargs,
         )
         if len(apikey) != 16:
             raise AtomsDataModuleError(
@@ -197,13 +197,15 @@ class MaterialsProject(AtomsDataModule):
                             )
                             properties_list.append(
                                 {
-                                    MaterialsProject.EPerAtom: np.array([q["energy_per_atom"]]),
-                                    MaterialsProject.EformationPerAtom: np.array([q[
-                                        "formation_energy_per_atom"
-                                    ]]),
-                                    MaterialsProject.TotalMagnetization: np.array([q[
-                                        "total_magnetization"
-                                    ]]),
+                                    MaterialsProject.EPerAtom: np.array(
+                                        [q["energy_per_atom"]]
+                                    ),
+                                    MaterialsProject.EformationPerAtom: np.array(
+                                        [q["formation_energy_per_atom"]]
+                                    ),
+                                    MaterialsProject.TotalMagnetization: np.array(
+                                        [q["total_magnetization"]]
+                                    ),
                                     MaterialsProject.BandGap: np.array([q["band_gap"]]),
                                 }
                             )
