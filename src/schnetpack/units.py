@@ -3,9 +3,10 @@ from typing import Union, Dict
 
 from ase import units as aseunits
 from ase.units import Units
+import torch
 import numpy as np
 
-__all__ = ["convert_units"]
+__all__ = ["convert_units", "load_model"]
 
 # Internal units (MD internal -> ASE internal)
 __md_base_units__ = {
@@ -184,6 +185,31 @@ def unit2internal(src_unit: Union[str, float]):
 def convert_units(src_unit: Union[str, float], tgt_unit: Union[str, float]):
     """Return conversion factor for given units"""
     return _parse_unit(src_unit) / _parse_unit(tgt_unit)
+
+
+def load_model(model_path, device, **kwargs):
+    """
+    Load a SchNetPack model from a file.
+
+    Args:
+        model_path (str): Path to the model file.
+        device (torch.device): Device on which the model should be loaded.
+        **kwargs: Additional arguments for the model loading.
+
+    Returns:
+        torch.nn.Module: Loaded model.
+    """
+
+    def _convert_from_v2_0_4(model):
+        if not hasattr(model, "electronic_embeddings"):
+            model.representation.electronic_embeddings = []
+        return model
+
+    model = torch.load(model_path, map_location=device, **kwargs)
+    # TODO: get model version from metadata
+    model = _convert_from_v2_0_4(model)
+
+    return model
 
 
 globals().update(setup_md_units(__md_base_units__))
