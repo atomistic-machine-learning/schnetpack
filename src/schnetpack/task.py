@@ -3,13 +3,21 @@ from typing import Optional, Dict, List, Type, Any
 
 import pytorch_lightning as pl
 import torch
-from torch import nn as nn
+from torch import nn as nn, Tensor
 from torchmetrics import Metric
 
 from schnetpack.model.base import AtomisticModel
 import schnetpack.properties as properties
 
-__all__ = ["ModelOutput", "AtomisticTask"]
+__all__ = ["ModelOutput", "AtomisticTask", "RegularizerLoss"]
+
+
+class RegularizerLoss(nn.MSELoss):
+    def __init__(self, size_average=None, reduce=None, reduction: str = "mean") -> None:
+        super().__init__(size_average, reduce, reduction)
+
+    def forward(self, input: Tensor, target: Tensor) -> Tensor:
+        return torch.mean(input**2)
 
 
 class ModelOutput(nn.Module):
