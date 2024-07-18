@@ -9,6 +9,9 @@ import argparse
 # This is needed to run the model with LAMMPS.
 # For further info see examples/howtos/lammps.rst
 
+# Note that this script is designed for models that predict atomic forces via automatic differentiation (utilizing response modules). 
+# Hence this script will not work for models without response modules.
+
 
 def get_jit_model(model):
     # fix invalid operations in postprocessing

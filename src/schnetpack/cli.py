@@ -4,10 +4,11 @@ import uuid
 import tempfile
 import socket
 from typing import List
+import random
 
 import torch
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
 from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers.logger import Logger
@@ -86,9 +87,6 @@ def train(config: DictConfig):
         with open("config.yaml", "w") as f:
             OmegaConf.save(config, f, resolve=False)
 
-    if config.get("print_config"):
-        print_config(config, resolve=False)
-
     # Set matmul precision if specified
     if "matmul_precision" in config and config.matmul_precision is not None:
         log.info(f"Setting float32 matmul precision to <{config.matmul_precision}>")
@@ -97,10 +95,15 @@ def train(config: DictConfig):
     # Set seed for random number generators in pytorch, numpy and python.random
     if "seed" in config:
         log.info(f"Seed with <{config.seed}>")
-        seed_everything(config.seed, workers=True)
     else:
-        log.info(f"Seed randomly...")
-        seed_everything(workers=True)
+        # choose seed randomly
+        with open_dict(config):
+            config.seed = random.randint(0, 2 ** 32 - 1)
+        log.info(f"Seed randomly with <{config.seed}>")
+    seed_everything(seed=config.seed, workers=True)
+
+    if config.get("print_config"):
+        print_config(config, resolve=False)
 
     if not os.path.exists(config.run.data_dir):
         os.makedirs(config.run.data_dir)

@@ -42,6 +42,21 @@ class PropertyCriterion:
         return property_values
 
 
+class MaxForceCriterion(PropertyCriterion):
+    """
+    A callable class that returns the maximum force norm for each sample in the dataset.
+    """
+    def __init__(self, property_key: str = properties.forces):
+        super().__init__(property_key)
+
+    def __call__(self, dataset):
+        forces = []
+        for spl_idx in range(len(dataset)):
+            sample = dataset[spl_idx]
+            forces.append(sample[self.property_key].norm(dim=-1).max().item())
+        return forces
+
+
 class StratifiedSampler(WeightedRandomSampler):
     """
     A custom sampler that performs stratified sampling based on a partition criterion.
