@@ -112,11 +112,12 @@ def derivative_from_atomic(
 
         # Build molecular matrix and reshape
         dfdx_mol = torch.stack(dfdx_mol, dim=0)
-        dfdx_mol = dfdx_mol.view(n_atoms[idx], 3, n_atoms[idx], 3)
-        dfdx_mol = dfdx_mol.permute(0, 2, 1, 3)
-        dfdx_mol = dfdx_mol.reshape(n_atoms[idx] ** 2, 3, 3)
+        dfdx_mol = dfdx_mol.view(-1, n_atoms[idx] * 3)
+        # dfdx_mol = dfdx_mol.view(n_atoms[idx], 3, n_atoms[idx], 3)
+        # dfdx_mol = dfdx_mol.permute(0, 2, 1, 3)
+        # dfdx_mol = dfdx_mol.reshape(n_atoms[idx] ** 2, 3, 3)
 
-        dfdx.append(dfdx_mol)
+        dfdx.append(dfdx_mol[None])
 
         n_mol += n_atoms[idx]
 

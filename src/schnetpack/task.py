@@ -170,9 +170,9 @@ class AtomisticTask(pl.LightningModule):
             n_atoms = list(batch[properties.n_atoms])
             rand_vecs = rand_vecs.split(n_atoms)
             hvps = []
-            for spl_idx, rand_vec in enumerate(rand_vecs):
+            for target_hess, rand_vec in zip(targets["hessian"], rand_vecs):
                 rand_vec = rand_vec.view(-1)
-                hvp = torch.linalg.matmul(targets["hessian"][spl_idx], rand_vec[None].T)
+                hvp = torch.linalg.matmul(target_hess, rand_vec)
                 hvp = hvp.view(-1, 3)
                 hvps.append(hvp)
             targets["hessian"] = torch.cat(hvps, dim=0)
@@ -219,7 +219,14 @@ class AtomisticTask(pl.LightningModule):
 
         loss = self.loss_fn(pred, targets)
 
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch['_idx']))
+        self.log(
+            "val_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=len(batch["_idx"]),
+        )
         self.log_metrics(pred, targets, "val")
 
         return {"val_loss": loss}
@@ -243,7 +250,14 @@ class AtomisticTask(pl.LightningModule):
 
         loss = self.loss_fn(pred, targets)
 
-        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch['_idx']))
+        self.log(
+            "test_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=len(batch["_idx"]),
+        )
         self.log_metrics(pred, targets, "test")
         return {"test_loss": loss}
 

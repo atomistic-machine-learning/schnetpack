@@ -138,17 +138,22 @@ class Hessian(nn.Module):
         if self.calc_forces:
             inputs[self.force_key] = -dEdR
 
-        #d2EdR2 = derivative_from_atomic(
+        # d2EdR2_full = derivative_from_atomic(
         #    dEdR,
         #    inputs[properties.R],
         #    inputs[properties.n_atoms],
         #    create_graph=self.training,
         #    retain_graph=True,
-        #)
-        #inputs[self.hessian_key] = d2EdR2
+        # )
+        # inputs["full_hessian"] = d2EdR2_full
 
         random_vec = torch.randn_like(inputs[properties.R])
-        random_vec = random_vec / torch.norm(random_vec, dim=-1, keepdim=True)
+        # normalize random vectors separately
+        n_atoms = list(inputs[properties.n_atoms])
+        for idx, rand_vec in enumerate(random_vec.split(n_atoms)):
+            random_vec[
+                n_atoms[idx] * idx : n_atoms[idx] * (idx + 1)
+            ] = rand_vec / torch.norm(rand_vec)
 
         d2EdR2 = grad(
             dEdR,
