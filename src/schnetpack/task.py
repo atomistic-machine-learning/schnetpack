@@ -199,7 +199,7 @@ class AtomisticTask(pl.LightningModule):
             pass
 
         pred = self.predict_without_postprocessing(batch)
-        targets = self.calculate_target_hvp(batch, targets)
+        # targets = self.calculate_target_hvp(batch, targets)
         pred, targets = self.apply_constraints(pred, targets)
 
         loss = self.loss_fn(pred, targets)
@@ -222,7 +222,7 @@ class AtomisticTask(pl.LightningModule):
             pass
 
         pred = self.predict_without_postprocessing(batch)
-        targets = self.calculate_target_hvp(batch, targets)
+        # targets = self.calculate_target_hvp(batch, targets)
         pred, targets = self.apply_constraints(pred, targets)
 
         loss = self.loss_fn(pred, targets)
@@ -253,7 +253,7 @@ class AtomisticTask(pl.LightningModule):
             pass
 
         pred = self.predict_without_postprocessing(batch)
-        targets = self.calculate_target_hvp(batch, targets)
+        # targets = self.calculate_target_hvp(batch, targets)
         pred, targets = self.apply_constraints(pred, targets)
 
         loss = self.loss_fn(pred, targets)
