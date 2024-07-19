@@ -10,6 +10,7 @@ References
    The atomic simulation environment -- a Python library for working with atoms.
    Journal of Physics: Condensed Matter, 9, 27. 2017.
 """
+
 import logging
 import os
 from abc import ABC, abstractmethod

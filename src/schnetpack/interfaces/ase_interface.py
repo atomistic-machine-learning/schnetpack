@@ -193,7 +193,6 @@ class SpkCalculator(Calculator):
         additional_inputs: Dict[str, torch.Tensor] = None,
         **kwargs,
     ):
-
         """
         Args:
             model_file (str): path to trained model

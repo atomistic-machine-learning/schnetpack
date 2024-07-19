@@ -2,6 +2,7 @@
 This module contains various barostats for controlling the pressure of the system during
 molecular dynamics simulations.
 """
+
 from __future__ import annotations
 from typing import Optional, Tuple, TYPE_CHECKING
 
@@ -357,16 +358,12 @@ class NHCBarostatIsotropic(BarostatHook):
 
         # Get masses of innermost thermostat
         self.t_masses[..., 0] = (
-            self.degrees_of_freedom_particles
-            * self.kb_temperature
-            / self.frequency**2
+            self.degrees_of_freedom_particles * self.kb_temperature / self.frequency**2
         )
 
         # Get masses of cell
         self.t_masses_cell[..., 0] = (
-            self.degrees_of_freedom_cell
-            * self.kb_temperature
-            / self.cell_frequency**2
+            self.degrees_of_freedom_cell * self.kb_temperature / self.cell_frequency**2
         )
 
         # Set masses of remaining thermostats

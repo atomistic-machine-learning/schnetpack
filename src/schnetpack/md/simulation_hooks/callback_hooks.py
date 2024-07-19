@@ -1,6 +1,7 @@
 """
 This module contains different hooks for monitoring the simulation and checkpointing.
 """
+
 from __future__ import annotations
 from typing import Union, List, Dict, Tuple, Any
 from typing import TYPE_CHECKING
@@ -270,40 +271,40 @@ class MoleculeStream(DataStream):
         # Store energies
         start = 0
         stop = simulator.system.n_molecules
-        self.buffer[
-            buffer_position : buffer_position + 1, :, start:stop
-        ] = simulator.system.energy.view(simulator.system.n_replicas, -1).detach()
+        self.buffer[buffer_position : buffer_position + 1, :, start:stop] = (
+            simulator.system.energy.view(simulator.system.n_replicas, -1).detach()
+        )
 
         # Store positions
         start = stop
         stop += simulator.system.total_n_atoms * 3
-        self.buffer[
-            buffer_position : buffer_position + 1, :, start:stop
-        ] = simulator.system.positions.view(simulator.system.n_replicas, -1).detach()
+        self.buffer[buffer_position : buffer_position + 1, :, start:stop] = (
+            simulator.system.positions.view(simulator.system.n_replicas, -1).detach()
+        )
 
         if self.store_velocities:
             start = stop
             stop += simulator.system.total_n_atoms * 3
-            self.buffer[
-                buffer_position : buffer_position + 1, :, start:stop
-            ] = simulator.system.velocities.view(
-                simulator.system.n_replicas, -1
-            ).detach()
+            self.buffer[buffer_position : buffer_position + 1, :, start:stop] = (
+                simulator.system.velocities.view(
+                    simulator.system.n_replicas, -1
+                ).detach()
+            )
 
         if self.cells:
             # Get cells
             start = stop
             stop += 9 * simulator.system.n_molecules
-            self.buffer[
-                buffer_position : buffer_position + 1, :, start:stop
-            ] = simulator.system.cells.view(simulator.system.n_replicas, -1).detach()
+            self.buffer[buffer_position : buffer_position + 1, :, start:stop] = (
+                simulator.system.cells.view(simulator.system.n_replicas, -1).detach()
+            )
 
             # Get stress tensors
             start = stop
             stop += 9 * simulator.system.n_molecules
-            self.buffer[
-                buffer_position : buffer_position + 1, :, start:stop
-            ] = simulator.system.stress.view(simulator.system.n_replicas, -1).detach()
+            self.buffer[buffer_position : buffer_position + 1, :, start:stop] = (
+                simulator.system.stress.view(simulator.system.n_replicas, -1).detach()
+            )
 
 
 class PropertyStream(DataStream):

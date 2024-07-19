@@ -300,7 +300,9 @@ class SO3Convolution(nn.Module):
             * self.clebsch_gordan[None, :, None]
             * xj
         )
-        yij = snn.scatter_add(v, self.idx_out, dim_size=int((self.lmax + 1) ** 2), dim=1)
+        yij = snn.scatter_add(
+            v, self.idx_out, dim_size=int((self.lmax + 1) ** 2), dim=1
+        )
         y = snn.scatter_add(yij, idx_i, dim_size=x.shape[0])
         return y
 

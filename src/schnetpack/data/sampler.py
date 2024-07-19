@@ -18,6 +18,7 @@ class NumberOfAtomsCriterion:
     """
     A callable class that returns the number of atoms for each sample in the dataset.
     """
+
     def __call__(self, dataset):
         n_atoms = []
         for spl_idx in range(len(dataset)):
@@ -31,6 +32,7 @@ class PropertyCriterion:
     A callable class that returns the specified property for each sample in the dataset.
     Property must be a scalar value.
     """
+
     def __init__(self, property_key: str = properties.energy):
         self.property_key = property_key
 
@@ -48,14 +50,15 @@ class StratifiedSampler(WeightedRandomSampler):
 
     Note: Make sure that num_bins is chosen sufficiently small to avoid too many empty bins.
     """
+
     def __init__(
-            self,
-            data_source: BaseAtomsData,
-            partition_criterion: Callable[[BaseAtomsData], List],
-            num_samples: int,
-            num_bins: int = 10,
-            replacement: bool = True,
-            verbose: bool = True,
+        self,
+        data_source: BaseAtomsData,
+        partition_criterion: Callable[[BaseAtomsData], List],
+        num_samples: int,
+        num_bins: int = 10,
+        replacement: bool = True,
+        verbose: bool = True,
     ) -> None:
         """
         Args:
@@ -72,7 +75,9 @@ class StratifiedSampler(WeightedRandomSampler):
         self.verbose = verbose
 
         weights = self.calculate_weights(partition_criterion)
-        super().__init__(weights=weights, num_samples=num_samples, replacement=replacement)
+        super().__init__(
+            weights=weights, num_samples=num_samples, replacement=replacement
+        )
 
     def calculate_weights(self, partition_criterion):
         """

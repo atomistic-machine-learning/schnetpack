@@ -26,7 +26,7 @@ __all__ = ["TMQM"]
 class TMQM(AtomsDataModule):
     """tmQM database of Ballcells 2020 of inorganic CSD structures.
 
-    
+
 
     References:
 
@@ -41,7 +41,7 @@ class TMQM(AtomsDataModule):
     # dipole moment, and natural charge of the metal center; GFN2-xTB polarizabilities are also provided.
 
     # these strings match the names in the header of the csv file
-    csd_code = "CSD_code" #should go into key-value pair
+    csd_code = "CSD_code"  # should go into key-value pair
     energy = "Electronic_E"
     dispersion = "Dispersion_E"
     homo = "HOMO_Energy"
@@ -73,7 +73,7 @@ class TMQM(AtomsDataModule):
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
         data_workdir: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
         """
 
@@ -121,9 +121,8 @@ class TMQM(AtomsDataModule):
             property_units=property_units,
             distance_unit=distance_unit,
             data_workdir=data_workdir,
-            **kwargs
+            **kwargs,
         )
-
 
     def prepare_data(self):
         if not os.path.exists(self.datapath):
@@ -152,12 +151,12 @@ class TMQM(AtomsDataModule):
         else:
             dataset = load_dataset(self.datapath, self.format)
 
-    def _download_data(
-        self, tmpdir, dataset: BaseAtomsData
-    ):
+    def _download_data(self, tmpdir, dataset: BaseAtomsData):
         tar_path = os.path.join(tmpdir, "tmQM_X1.xyz.gz")
-        url = ["https://github.com/bbskjelstad/tmqm/raw/master/data/tmQM_X1.xyz.gz",
-            "https://github.com/bbskjelstad/tmqm/raw/master/data/tmQM_X2.xyz.gz"]
+        url = [
+            "https://github.com/bbskjelstad/tmqm/raw/master/data/tmQM_X1.xyz.gz",
+            "https://github.com/bbskjelstad/tmqm/raw/master/data/tmQM_X2.xyz.gz",
+        ]
 
         url_y = "https://github.com/bbskjelstad/tmqm/raw/master/data/tmQM_y.csv"
 
@@ -168,24 +167,23 @@ class TMQM(AtomsDataModule):
 
         for u in url:
             request.urlretrieve(u, tar_path)
-            with gzip.open(tar_path, 'rb') as f_in:
-                with open(tmp_xyz_file, 'wb') as f_out:
+            with gzip.open(tar_path, "rb") as f_in:
+                with open(tmp_xyz_file, "wb") as f_out:
                     lines = f_in.readlines()
                     # remove empty lines
                     lines = [line for line in lines if line.strip()]
                     f_out.writelines(lines)
-            
-            atomslist.extend(read(tmp_xyz_file, index=":"))
 
+            atomslist.extend(read(tmp_xyz_file, index=":"))
 
         # download proeprties in tmQM_y.csv
         request.urlretrieve(url_y, tmp_properties_file)
 
         # CSV format
-        #CSD_code;Electronic_E;Dispersion_E;Dipole_M;Metal_q;HL_Gap;HOMO_Energy;LUMO_Energy;Polarizability
-        #WIXKOE;-2045.524942;-0.239239;4.233300;2.109340;0.131080;-0.162040;-0.030960;598.457913
-        #DUCVIG;-2430.690317;-0.082134;11.754400;0.759940;0.124930;-0.243580;-0.118650;277.750698
-        #KINJOG;-3467.923206;-0.137954;8.301700;1.766500;0.140140;-0.236460;-0.096320;393.442545
+        # CSD_code;Electronic_E;Dispersion_E;Dipole_M;Metal_q;HL_Gap;HOMO_Energy;LUMO_Energy;Polarizability
+        # WIXKOE;-2045.524942;-0.239239;4.233300;2.109340;0.131080;-0.162040;-0.030960;598.457913
+        # DUCVIG;-2430.690317;-0.082134;11.754400;0.759940;0.124930;-0.243580;-0.118650;277.750698
+        # KINJOG;-3467.923206;-0.137954;8.301700;1.766500;0.140140;-0.236460;-0.096320;393.442545
 
         # read csv
         prop_list = []
@@ -194,13 +192,14 @@ class TMQM(AtomsDataModule):
         with open(tmp_properties_file, "r") as file:
             lines = file.readlines()
             keys = lines[0].strip("\n").split(";")
-            
+
             for l in lines[1:]:
                 properties = l.split(";")
-                prop_dict = {k:np.array([float(v)]) for k, v in zip(keys[1:], properties[1:])}
-                key_value_pairs = {k:v for k, v in zip(keys[0], properties[0])}
+                prop_dict = {
+                    k: np.array([float(v)]) for k, v in zip(keys[1:], properties[1:])
+                }
+                key_value_pairs = {k: v for k, v in zip(keys[0], properties[0])}
                 prop_list.append(prop_dict)
                 key_value_pairs_list.append(key_value_pairs)
-
 
         dataset.add_systems(property_list=prop_list, atoms_list=atomslist)
