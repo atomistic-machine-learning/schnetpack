@@ -60,9 +60,9 @@ def activate_model_stress(
                 module.derivative_instructions["dEds"] = True
                 module.basic_derivatives["dEds"] = schnetpack.properties.strain
 
-                module.map_properties[
+                module.map_properties[schnetpack.properties.stress] = (
                     schnetpack.properties.stress
-                ] = schnetpack.properties.stress
+                )
 
                 # append stress label to output list and update required derivatives in the module
                 module.model_outputs.append(stress_key)

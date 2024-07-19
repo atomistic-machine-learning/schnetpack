@@ -4,6 +4,7 @@ Keys to access structure properties.
 Note: Had to be moved out of Structure class for TorchScript compatibility
 
 """
+
 from typing import Final
 
 idx: Final[str] = "_idx"
@@ -25,13 +26,13 @@ idx_i_lr: Final[str] = "_idx_i_lr"  #: indices of center atoms for long-range
 idx_j_lr: Final[str] = "_idx_j_lr"  #: indices of neighboring atoms for long-range
 
 lidx_i: Final[str] = "_idx_i_local"  #: local indices of center atoms (within system)
-lidx_j: Final[
-    str
-] = "_idx_j_local"  #: local indices of neighboring atoms (within system)
+lidx_j: Final[str] = (
+    "_idx_j_local"  #: local indices of neighboring atoms (within system)
+)
 Rij: Final[str] = "_Rij"  #: vectors pointing from center atoms to neighboring atoms
-Rij_lr: Final[
-    str
-] = "_Rij_lr"  #: vectors pointing from center atoms to neighboring atoms for long range
+Rij_lr: Final[str] = (
+    "_Rij_lr"  #: vectors pointing from center atoms to neighboring atoms for long range
+)
 n_atoms: Final[str] = "_n_atoms"  #: number of atoms
 offsets: Final[str] = "_offsets"  #: cell offset vectors
 offsets_lr: Final[str] = "_offsets_lr"  #: cell offset vectors for long range

@@ -98,7 +98,7 @@ def train(config: DictConfig):
     else:
         # choose seed randomly
         with open_dict(config):
-            config.seed = random.randint(0, 2 ** 32 - 1)
+            config.seed = random.randint(0, 2**32 - 1)
         log.info(f"Seed randomly with <{config.seed}>")
     seed_everything(seed=config.seed, workers=True)
 
@@ -112,7 +112,11 @@ def train(config: DictConfig):
     log.info(f"Instantiating datamodule <{config.data._target_}>")
     datamodule: LightningDataModule = hydra.utils.instantiate(
         config.data,
-        train_sampler_cls=str2class(config.data.train_sampler_cls) if config.data.train_sampler_cls else None,
+        train_sampler_cls=(
+            str2class(config.data.train_sampler_cls)
+            if config.data.train_sampler_cls
+            else None
+        ),
     )
 
     # Init model
@@ -208,13 +212,14 @@ def predict(config: DictConfig):
             results = {k: v.detach().cpu() for k, v in results.items()}
             return results
 
-
     log.info(f"Instantiating trainer <{config.trainer._target_}>")
     trainer: Trainer = hydra.utils.instantiate(
         config.trainer,
         callbacks=[
             PredictionWriter(
-                output_dir=config.outputdir, write_interval=config.write_interval, write_idx=config.write_idx_m
+                output_dir=config.outputdir,
+                write_interval=config.write_interval,
+                write_idx=config.write_idx_m,
             )
         ],
         default_root_dir=".",

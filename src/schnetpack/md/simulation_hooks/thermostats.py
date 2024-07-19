@@ -2,6 +2,7 @@
 This module contains various thermostats for regulating the temperature of the system during
 molecular dynamics simulations.
 """
+
 from __future__ import annotations
 import torch
 import numpy as np

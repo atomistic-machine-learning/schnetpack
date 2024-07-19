@@ -9,6 +9,7 @@ References
                Computing vibrational spectra from ab initio molecular dynamics.
                Phys. Chem. Chem. Phys., 15 (18), 6608--6622. 2013.
 """
+
 import numpy as np
 from ase import units as ase_units
 from schnetpack.md.data import HDF5Loader

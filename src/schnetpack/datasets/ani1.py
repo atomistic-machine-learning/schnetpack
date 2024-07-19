@@ -61,7 +61,7 @@ class ANI1(AtomsDataModule):
         num_test_workers: Optional[int] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
         """
 
@@ -112,7 +112,7 @@ class ANI1(AtomsDataModule):
             num_test_workers=num_test_workers,
             property_units=property_units,
             distance_unit=distance_unit,
-            **kwargs
+            **kwargs,
         )
 
     def prepare_data(self):

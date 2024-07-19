@@ -49,12 +49,12 @@ class ShiftedSoftplus(torch.nn.Module):
     """
 
     def __init__(
-        self, 
+        self,
         initial_alpha: float = 1.0,
         initial_beta: float = 1.0,
-        trainable: bool = False) -> None:
-
-        """    
+        trainable: bool = False,
+    ) -> None:
+        """
         Args:
             initial_alpha: Initial "scale" alpha of the softplus function.
             initial_beta: Initial "temperature" beta of the softplus function.

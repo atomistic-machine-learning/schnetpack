@@ -21,7 +21,12 @@ from schnetpack.units import convert_units
 from schnetpack.interfaces.ase_interface import AtomsConverter
 
 
-__all__ = ["ASEBatchwiseLBFGS", "BatchwiseCalculator", "BatchwiseEnsembleCalculator", "NNEnsemble"]
+__all__ = [
+    "ASEBatchwiseLBFGS",
+    "BatchwiseCalculator",
+    "BatchwiseEnsembleCalculator",
+    "NNEnsemble",
+]
 
 
 class AtomsConverterError(Exception):
@@ -141,7 +146,9 @@ class BatchwiseCalculator:
             self.force_key: self.energy_conversion / self.position_conversion,
         }
         if self.stress_key is not None:
-            self.property_units[self.stress_key] = self.energy_conversion / self.position_conversion ** 3
+            self.property_units[self.stress_key] = (
+                self.energy_conversion / self.position_conversion**3
+            )
 
         # load model from path if needed
         if type(model) == str:
@@ -170,14 +177,18 @@ class BatchwiseCalculator:
             if atom != atom_ref:
                 return True
 
-    def get_forces(self, atoms: List[ase.Atoms], fixed_atoms_mask: Optional[List[int]] = None) -> np.array:
+    def get_forces(
+        self, atoms: List[ase.Atoms], fixed_atoms_mask: Optional[List[int]] = None
+    ) -> np.array:
         """
         atoms:
 
         fixed_atoms_mask:
             list of indices corresponding to atoms with positions fixed in space.
         """
-        if self._requires_calculation(property_keys=[self.energy_key, self.force_key], atoms=atoms):
+        if self._requires_calculation(
+            property_keys=[self.energy_key, self.force_key], atoms=atoms
+        ):
             self.calculate(atoms)
         f = self.results[self.force_key]
         if fixed_atoms_mask is not None:
@@ -217,6 +228,7 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
     """
     Calculator for ensemble of neural network models for batchwise optimization.
     """
+
     # TODO: inherit from SpkEnsembleCalculator
     def __init__(
         self,
@@ -278,16 +290,14 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
     def _load_model(self, model: str) -> nn.ModuleList:
         # get model paths
         model_names = os.listdir(model)
-        model_paths = [
-            os.path.join(model, model_name) for model_name in model_names
-        ]
+        model_paths = [os.path.join(model, model_name) for model_name in model_names]
 
         # create module list
         models = torch.nn.ModuleList()
         for m_path in model_paths:
-            m = torch.load(
-                os.path.join(m_path, "best_model"), map_location="cpu"
-            ).to(torch.float64)
+            m = torch.load(os.path.join(m_path, "best_model"), map_location="cpu").to(
+                torch.float64
+            )
             models.append(m)
 
         return models
@@ -299,9 +309,7 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
                 m.output_modules.insert(1, auxiliary_output_module)
 
         # initialize ensemble
-        ensemble = NNEnsemble(
-            models=model, properties=list(self.property_units.keys())
-        )
+        ensemble = NNEnsemble(models=model, properties=list(self.property_units.keys()))
         self.model = ensemble.eval().to(device=self.device, dtype=self.dtype)
 
     def calculate(self, atoms: List[ase.Atoms]) -> None:
@@ -314,8 +322,7 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
         for prop in property_keys:
             if prop in model_results:
                 results["{}_uncertainty".format(prop)] = (
-                    stds[prop].detach().cpu().numpy()
-                    * self.property_units[prop]
+                    stds[prop].detach().cpu().numpy() * self.property_units[prop]
                 )
 
         # store model results in calculator
@@ -348,7 +355,7 @@ class BatchwiseDynamics(Dynamics):
         append_trajectory: bool = False,
         master: Optional[bool] = None,
         log_every_step: bool = False,
-        fixed_atoms_mask: Optional[List[int]]=None,
+        fixed_atoms_mask: Optional[List[int]] = None,
     ):
         """Structure dynamics object.
 
@@ -626,7 +633,6 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         fixed_atoms_mask: Optional[List[int]] = None,
         verbose: bool = False,
     ):
-
         """Parameters:
 
         calculator:

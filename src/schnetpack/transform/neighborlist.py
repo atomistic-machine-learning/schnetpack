@@ -355,15 +355,9 @@ class SkinNeighborList(Transform):
                 < 0.25 * self.cutoff_skin**2
             ):
                 # reuse previous neighbor list
-                inputs[properties.idx_i] = (
-                    previous_inputs[properties.idx_i].clone()
-                )
-                inputs[properties.idx_j] = (
-                    previous_inputs[properties.idx_j].clone()
-                )
-                inputs[properties.offsets] = (
-                    previous_inputs[properties.offsets].clone()
-                )
+                inputs[properties.idx_i] = previous_inputs[properties.idx_i].clone()
+                inputs[properties.idx_j] = previous_inputs[properties.idx_j].clone()
+                inputs[properties.offsets] = previous_inputs[properties.offsets].clone()
                 return False, inputs
 
         # build new neighbor list

@@ -71,7 +71,7 @@ class AtomsLoader(DataLoader):
         num_workers: int = 0,
         collate_fn: _collate_fn_t = _atoms_collate_fn,
         pin_memory: bool = False,
-        **kwargs
+        **kwargs,
     ):
         super(AtomsLoader, self).__init__(
             dataset=dataset,
@@ -82,5 +82,5 @@ class AtomsLoader(DataLoader):
             num_workers=num_workers,
             collate_fn=collate_fn,
             pin_memory=pin_memory,
-            **kwargs
+            **kwargs,
         )

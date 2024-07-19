@@ -70,7 +70,6 @@ class SchNetInteraction(nn.Module):
         return x
 
 
-
 class SchNet(nn.Module):
     """SchNet architecture for learning representations of atomistic systems
 
