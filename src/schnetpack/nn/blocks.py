@@ -169,7 +169,7 @@ class Residual(nn.Module):
         bias: bool = True,
         zero_init: bool = True,
     ) -> None:
-        """    
+        """
         Args:
             num_features: Dimensions of feature space.
             activation: activation function
@@ -177,14 +177,14 @@ class Residual(nn.Module):
         super(Residual, self).__init__()
         # initialize attributes
 
-        self.activation1 = activation#(num_features)
+        self.activation1 = activation  # (num_features)
         self.linear1 = nn.Linear(num_features, num_features, bias=bias)
-        self.activation2 = activation#(num_features)
+        self.activation2 = activation  # (num_features)
         self.linear2 = nn.Linear(num_features, num_features, bias=bias)
         self.reset_parameters(bias, zero_init)
 
     def reset_parameters(self, bias: bool = True, zero_init: bool = True) -> None:
-        """ Initialize parameters to compute an identity mapping. """
+        """Initialize parameters to compute an identity mapping."""
         nn.init.orthogonal_(self.linear1.weight)
         if zero_init:
             nn.init.zeros_(self.linear2.weight)
@@ -224,8 +224,9 @@ class ResidualStack(nn.Module):
         num_residual: int,
         activation: Union[Callable, nn.Module],
         bias: bool = True,
-        zero_init: bool = True) -> None:
-        """    
+        zero_init: bool = True,
+    ) -> None:
+        """
         Args:
             num_blocks: Number of residual blocks to be stacked in sequence.
             num_features: Dimensions of feature space.
@@ -254,18 +255,19 @@ class ResidualStack(nn.Module):
         for residual in self.stack:
             x = residual(x)
         return x
-    
+
 
 class ResidualMLP(nn.Module):
     """Residual MLP with num_residual residual blocks."""
+
     def __init__(
         self,
         num_features: int,
         num_residual: int,
         activation: Union[Callable, nn.Module],
         bias: bool = True,
-        zero_init: bool = False):
-
+        zero_init: bool = False,
+    ):
         """
         Args:
             num_features: Dimensions of feature space.

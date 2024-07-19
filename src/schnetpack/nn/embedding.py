@@ -12,7 +12,7 @@ from typing import Callable, Union
 __all__ = ["NuclearEmbedding", "ElectronicEmbedding"]
 
 
-'''
+"""
 The usage of the electron configuration is to provide a shorthand descriptor. This descriptor encode
 information about the groundstate information of an atom, the nuclear charge and the number of electrons in the 
 valence shell.
@@ -39,7 +39,7 @@ E.g Bromine and Chlorine tend both to form -1 ions (uptake of one electron for f
 (Indicated by the same pattern in the electron configuration)
 
 
-'''
+"""
 
 # fmt: off
 # up until Z = 100; vs = valence s, vp = valence p, vd = valence d, vf = valence f. 
@@ -149,9 +149,9 @@ electron_config = np.array([
   [100, 2, 2, 6, 2, 6, 2, 10, 6, 2, 10, 6, 2, 14, 10, 6, 2, 12,0,  2, 0,  0, 12]  # Fm
             
 ], dtype=np.float32)            
-# fmt: on            
-# normalize entries (between 0.0 and 1.0)            
-# normalization just for numerical reasons            
+# fmt: on
+# normalize entries (between 0.0 and 1.0)
+# normalization just for numerical reasons
 electron_config = electron_config / np.max(electron_config, axis=0)
 
 
@@ -169,16 +169,12 @@ class NuclearEmbedding(nn.Module):
     The model will converge to a lower value, but the duration is longer.
     """
 
-    def __init__(
-        self,
-        max_z: int,
-        num_features: int, 
-        zero_init: bool = True):
-        """     
+    def __init__(self, max_z: int, num_features: int, zero_init: bool = True):
+        """
         Args:
         num_features: Dimensions of feature space.
         Zmax: Maximum nuclear charge of atoms. The default is 100, so all
-            elements up to Fermium (Fe) (Z=100) are supported. 
+            elements up to Fermium (Fe) (Z=100) are supported.
             Can be kept at the default value (has minimal memory impact).
         zero_init: If True, initialize the embedding with zeros. Otherwise, use
             uniform initialization.
@@ -186,13 +182,19 @@ class NuclearEmbedding(nn.Module):
         super(NuclearEmbedding, self).__init__()
         self.num_features = num_features
         self.register_buffer("electron_config", torch.tensor(electron_config))
-        self.register_parameter("element_embedding", nn.Parameter(torch.Tensor(max_z, self.num_features)))
-        self.register_buffer("embedding", torch.Tensor(max_z, self.num_features), persistent=False)
-        self.config_linear = nn.Linear(self.electron_config.size(1), self.num_features, bias=False)
+        self.register_parameter(
+            "element_embedding", nn.Parameter(torch.Tensor(max_z, self.num_features))
+        )
+        self.register_buffer(
+            "embedding", torch.Tensor(max_z, self.num_features), persistent=False
+        )
+        self.config_linear = nn.Linear(
+            self.electron_config.size(1), self.num_features, bias=False
+        )
         self.reset_parameters(zero_init)
 
     def reset_parameters(self, zero_init: bool = True) -> None:
-        """ Initialize parameters. """
+        """Initialize parameters."""
         if zero_init:
             nn.init.zeros_(self.element_embedding)
             nn.init.zeros_(self.config_linear.weight)
@@ -201,7 +203,7 @@ class NuclearEmbedding(nn.Module):
             nn.init.orthogonal_(self.config_linear.weight)
 
     def train(self, mode: bool = True) -> None:
-        """ Switch between training and evaluation mode. """
+        """Switch between training and evaluation mode."""
         super(NuclearEmbedding, self).train(mode=mode)
         if not self.training:
             with torch.no_grad():
@@ -228,7 +230,9 @@ class NuclearEmbedding(nn.Module):
             return self.embedding[atomic_numbers]
         else:  # gathering is faster on GPUs
             return torch.gather(
-                self.embedding, 0, atomic_numbers.view(-1, 1).expand(-1, self.num_features)
+                self.embedding,
+                0,
+                atomic_numbers.view(-1, 1).expand(-1, self.num_features),
             )
 
 
@@ -246,7 +250,7 @@ class ElectronicEmbedding(nn.Module):
         property_key: str,
         num_features: int,
         is_charged: bool,
-        num_residual:  int = 1,
+        num_residual: int = 1,
         activation: Union[Callable, nn.Module] = shifted_softplus,
         epsilon: float = 1e-8,
     ):
@@ -284,7 +288,7 @@ class ElectronicEmbedding(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        """ Initialize parameters. """
+        """Initialize parameters."""
         nn.init.orthogonal_(self.linear_k.weight)
         nn.init.orthogonal_(self.linear_v.weight)
         nn.init.orthogonal_(self.linear_q.weight)
@@ -310,13 +314,13 @@ class ElectronicEmbedding(nn.Module):
 
         # queries (Batchsize x N_atoms, n_atom_basis)
         q = self.linear_q(input_embedding)
-        
+
         # to account for negative and positive charge
         if self.is_charged:
             e = F.relu(torch.stack([electronic_feature, -electronic_feature], dim=-1))
         # +/- spin is the same => abs
         else:
-            e = torch.abs(electronic_feature).unsqueeze(-1)  
+            e = torch.abs(electronic_feature).unsqueeze(-1)
         enorm = torch.maximum(e, torch.ones_like(e))
 
         # keys (Batchsize x N_atoms, n_atom_basis), the idx_m ensures that the key is the same for all atoms belonging to the same graph
@@ -330,12 +334,14 @@ class ElectronicEmbedding(nn.Module):
         weights = torch.sum(k * q, dim=-1) / k.shape[-1] ** 0.5
 
         # probability distribution of scaled unnormalized attention weights, by applying softmax function
-        a = nn.functional.softmax(weights, dim=0) # nn.functional.softplus(weights) seems to function to but softmax might be more stable
+        a = nn.functional.softmax(
+            weights, dim=0
+        )  # nn.functional.softplus(weights) seems to function to but softmax might be more stable
         # normalization factor for every molecular graph, by adding up attention weights of every atom in the graph
         anorm = a.new_zeros(num_batch).index_add_(0, idx_m, a)
-        # make tensor filled with anorm value at the position of the corresponding molecular graph, 
+        # make tensor filled with anorm value at the position of the corresponding molecular graph,
         # indexing faster on CPU, gather faster on GPU
-        if a.device.type == "cpu": 
+        if a.device.type == "cpu":
             anorm = anorm[idx_m]
         else:
             anorm = torch.gather(anorm, 0, idx_m)

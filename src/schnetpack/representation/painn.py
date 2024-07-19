@@ -174,7 +174,7 @@ class PaiNN(nn.Module):
             electronic_embeddings = []
         electronic_embeddings = nn.ModuleList(electronic_embeddings)
         self.electronic_embeddings = electronic_embeddings
-        
+
         # initialize filter layers
         self.share_filters = shared_filters
         if shared_filters:

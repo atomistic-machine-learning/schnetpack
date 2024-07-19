@@ -2,6 +2,7 @@
 This module contains barostats for controlling the pressure of the system during
 ring polymer molecular dynamics simulations.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
