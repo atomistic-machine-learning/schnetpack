@@ -5,6 +5,7 @@ integrator for a purely classical simulations of the nuclei. The ring polymer mo
 integrator simulates multiple replicas of the system coupled by harmonic springs and recovers
 a certain extent of nuclear quantum effects (e.g. tunneling).
 """
+
 import torch
 import torch.nn as nn
 import numpy as np

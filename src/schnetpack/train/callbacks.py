@@ -26,10 +26,10 @@ class PredictionWriter(BasePredictionWriter):
     """
 
     def __init__(
-            self,
-            output_dir: str,
-            write_interval: str,
-            write_idx: bool = False,
+        self,
+        output_dir: str,
+        write_interval: str,
+        write_idx: bool = False,
     ):
         """
         Args:

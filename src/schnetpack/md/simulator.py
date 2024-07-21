@@ -4,6 +4,7 @@ This class collects the atomistic system (:obj:`schnetpack.md.System`), calculat
 integrators (:obj:`schnetpack.md.integrators`) and various simulation hooks (:obj:`schnetpack.md.simulation_hooks`)
 and performs the time integration.
 """
+
 import torch
 import torch.nn as nn
 from contextlib import nullcontext

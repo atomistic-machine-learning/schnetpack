@@ -118,7 +118,9 @@ class rMD17(AtomsDataModule):
         """
 
         if split_id is not None:
-            splitting = SubsamplePartitions(split_partition_sources=["known", "known", "test"], split_id=split_id)
+            splitting = SubsamplePartitions(
+                split_partition_sources=["known", "known", "test"], split_id=split_id
+            )
         else:
             splitting = RandomSplit()
 
