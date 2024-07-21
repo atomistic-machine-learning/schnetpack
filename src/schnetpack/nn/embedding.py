@@ -4,7 +4,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from schnetpack.nn.blocks import ResidualMLP
-from typing import Callable, Union
+from typing import Callable, Union, Sequence, Dict, Optional
+from schnetpack.nn.activations import shifted_softplus
+from schnetpack.nn.ops.spherical import init_sph_fn
+import schnetpack.nn as snn
+import schnetpack.properties as properties
 
 '''
 The usage of the electron configuration is to provide a shorthand descriptor. This descriptor encode
@@ -148,6 +152,88 @@ electron_config = np.array([
 # normalization just for numerical reasons            
 electron_config = electron_config / np.max(electron_config, axis=0)
 
+
+
+class SPHC_Embedding(nn.Module):
+
+    """
+    Embedding of the spherical harmonic coordinates used in So3krates (source!)
+    The degrees has to be in consective monotically increasing order [1,2,3] is ok but [1,3] is not
+    rij is number of pairs from pairwise distances (len(idx_j or idx_i))
+    This is the initial embedding, the sphc are contracted per order in further layers
+    """
+
+    def __init__(
+                self,
+                degrees: Sequence[int],
+                sphc_normalization: Optional[float] = None,
+                solid_harmonic: bool = False):
+
+        # init spherical harmonics distances for each degree
+        super().__init__()
+        #register_buffer("tmp_normalizat", torch.tensor(degrees))
+        self.degrees = degrees
+        self.sph_fns = [init_sph_fn(y) for y in self.degrees]
+        self.sphc_normalization = sphc_normalization
+        self.solid_harmonic = solid_harmonic
+        """
+        Args: 
+        degrees: List of degrees of the spherical harmonics to be used (e.g [1,2,3]).
+        unit_r_ij: Normalized distance vectors from the 
+            radial basis expansion functions of the distances of shape (rij,3)
+        phi_r_cut: cutoff function for the radial basis expansion of distances shape (rij)
+        sphc_normalization: to decide if neighborhood dependent embedding or not
+            this is the scatter_add sum of cutoff function
+        """
+    
+    def forward(self,unit_r_ij:torch.Tensor,phi_r_cut:torch.Tensor,r_ij:torch.Tensor,Z:torch.Tensor, idx_m:torch.Tensor):
+
+        # Spherical harmonics
+        sph_harms_ij = []
+        g_ij = None
+        for sph_fn in self.sph_fns:
+            sph_ij = sph_fn(unit_r_ij)  # shape: (n_pairs,2l+1)
+            sph_harms_ij += [sph_ij]  # len: |L| / shape: (n_pairs,2l+1)
+
+        # direct sum of degree dimension space (LD) shape: (n_pairs,m_tot)
+        sph_harms_ij = torch.concatenate(sph_harms_ij, axis=-1) if len(self.degrees) > 0 else None
+        
+        # Initialize SPHCs to zero and keep it that way if no normalization is used
+        # althought the normalization corresponds much more a to weighted average 
+        # of the spherical harmonics by the cutoff function (as equation 11 in appendix of so3krates)
+        chi = torch.zeros((Z.shape[-1],sph_harms_ij.shape[-1]),device=Z.device)
+        if not self.sphc_normalization == None:
+            chi += self._init_sphc(idx_m,sph_harms_ij,phi_r_cut,self.sphc_normalization)
+        
+        # if real spherical harmonics (with radial part) are requested
+        if self.solid_harmonic:
+            g_ij = self._init_solid_harmonic_sphc(sph_harms_ij,r_ij,phi_r_cut,self.sphc_normalization)
+
+        return chi, g_ij,sph_harms_ij
+
+    def _init_sphc(self,idx_m, sph_ij, phi_r_cut,sphc_normalization):
+        
+        # Initialize SPHCs with a neighborhood dependent embedding if mp normalization is used
+        _sph_harms_ij = torch.where(
+            phi_r_cut != 0,
+            sph_ij * phi_r_cut,0) # shape: (n_pairs,m_tot) phi_r_cut shape (n_pairs,1)
+            
+        maxm = int(idx_m[-1]) + 1
+        #sphc_normalization = snn.scatter_add(phi_r_cut,idx_m,dim_size=maxm)[:,None] # shape(n,)
+        chi = snn.scatter_add(_sph_harms_ij, idx_m, dim_size=maxm) # shape: (n,m_tot)
+        # TODO check nochmal warum diese art gewählt wurde
+        #chi = snn.scatter_add(_sph_harms_ij, idx_m, dim_size=maxm) / sphc_normalization # shape: (n,m_tot)
+
+        return chi / sphc_normalization
+
+    def _init_solid_harmonic_sphc(self,sph_harms_ij,r_ij,phi_r_cut):
+
+        rbf_ij = torch.where(
+            phi_r_cut[:,None] != 0,
+            r_ij * phi_r_cut[:,None],0) # shape: (n_pairs,n_rbfs)
+
+        g_ij = sph_harms_ij[:, :, None] * rbf_ij[:, None, :]  # shape: (n_pair,m_tot,K)
+        return g_ij
 
 class NuclearEmbedding(nn.Module):
     """

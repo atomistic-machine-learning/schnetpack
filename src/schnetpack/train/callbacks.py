@@ -1,6 +1,8 @@
 from copy import copy
 from typing import Dict
+import numpy as np
 
+from pytorch_lightning import LightningModule, Trainer
 from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.callbacks import ModelCheckpoint as BaseModelCheckpoint
 
@@ -13,9 +15,9 @@ from typing import List, Any
 from schnetpack.task import AtomisticTask
 from schnetpack import properties
 from collections import defaultdict
+import h5py
 
-
-__all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
+__all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage","So3kratesCallback"]
 
 
 class PredictionWriter(BasePredictionWriter):
@@ -153,3 +155,43 @@ class ExponentialMovingAverage(Callback):
 
     def state_dict(self):
         return {"ema": self.ema.state_dict()}
+
+
+class So3kratesCallback(Callback):
+    """this is just a simple callback to collect the sphc coordinates
+    right now the structure is not ideal, and might be changed later """
+
+    def __init__(self):
+        super().__init__()
+
+    def on_fit_end(self, trainer, pl_module: AtomisticTask) -> None:
+
+        d = {}
+        layers = pl_module.model.representation.n_interactions
+        for l in range(layers):
+
+            d[f"so3krates_layer_{l}"] = {}
+            chi_out = pl_module.model.representation.so3krates_layer[l].record["chi_out"].detach().cpu().numpy()
+            chi_in = pl_module.model.representation.so3krates_layer[l].record["chi_in"].detach().cpu().numpy()
+            
+            d[f"so3krates_layer_{l}"]["chi_in"] = chi_in
+            d[f"so3krates_layer_{l}"]["chi_out"] = chi_out
+
+            geo_heads = pl_module.model.representation.so3krates_layer[l].geometry_block.attention_fn.record.keys()
+            fea_heads = pl_module.model.representation.so3krates_layer[l].feature_block.attention_fn.record.keys()
+            geo_att = pl_module.model.representation.so3krates_layer[l].geometry_block.attention_fn.record
+            fea_att = pl_module.model.representation.so3krates_layer[0].feature_block.attention_fn.record
+
+            for g in geo_heads:
+                d[f"so3krates_layer_{l}"][f"geo_head_{g}"] = {}
+                for k in geo_att[g].keys():
+                    d[f"so3krates_layer_{l}"][f"geo_head_{g}"][k] = geo_att[g][k].detach().cpu().numpy()
+
+            for f in fea_heads:
+                d[f"so3krates_layer_{l}"][f"fea_head_{f}"] = {}
+                for k in fea_att[f].keys():
+                    d[f"so3krates_layer_{l}"][f"fea_head_{f}"][k] = fea_att[f][k].detach().cpu().numpy()
+
+            np.savez(os.path.join(trainer.log_dir,"so3krates_records.npz"), **d)
+
+        print("Saving sow equivalent for attention weights and chi")

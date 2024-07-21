@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple, Sequence
 
 import torch
 from torch import nn as nn
@@ -124,3 +124,28 @@ def derivative_from_atomic(
     dfdx = torch.cat(dfdx, dim=0)
 
     return dfdx
+
+
+# TODO check if this is still needed, since vmap version of attention layer implemented
+def equal_head_split(x: torch.Tensor, n_heads: int) -> Tuple[Callable, torch.Tensor]:
+    """
+    Splits the input tensor into multiple heads and returns an inverse function
+    to reshape it back to the original shape.
+
+    Args:
+        x (torch.Tensor): The input tensor, shape: (batch_size, features)
+        n_heads (int): The number of heads to split the tensor into.
+
+    Returns:
+        inv_split (Callable): Function to reshape the tensor back to its original shape.
+        split_tensor (torch.Tensor): The reshaped tensor, shape: (batch_size, n_heads, features // n_heads)
+    """
+
+    def inv_split(inputs: torch.Tensor) -> torch.Tensor:
+       return inputs.reshape(*x.shape[:-1], -1)
+
+    # Split the input tensor
+    split_tensor = x.reshape(*x.shape[:-1], n_heads, -1)
+    
+    return inv_split, split_tensor
+

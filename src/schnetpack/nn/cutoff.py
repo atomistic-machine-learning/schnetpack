@@ -8,6 +8,8 @@ __all__ = [
     "mollifier_cutoff",
     "cosine_cutoff",
     "SwitchFunction",
+    "zero_cutoff",
+    "ZeroCutoff"
 ]
 
 
@@ -156,3 +158,26 @@ class SwitchFunction(nn.Module):
 
         f_switch = torch.where(x <= 0, ones, torch.where(x >= 1, zeros, fm / (fp + fm)))
         return f_switch
+
+
+def zero_cutoff(input: torch.Tensor):
+    """ dummy zero cutoff function for sphc in so3krates layer
+    if none is requested to ensure consistent behavior."""
+
+    # Compute values of cutoff function
+    input_cut = torch.zeros(input.shape[0], device=input.device)
+    return input_cut
+
+class ZeroCutoff(nn.Module):
+    r""" Dummy cutoff function for sphc to only return zeros.
+    if none is requested to ensure consistent behavior"""
+
+    def __init__(self):
+        """
+        Args:
+            cutoff (float, optional): cutoff radius.
+        """
+        super().__init__()
+
+    def forward(self, input: torch.Tensor):
+        return zero_cutoff(input)
