@@ -165,13 +165,16 @@ class NeighborListTransform(Transform):
     def __init__(
         self,
         cutoff: float,
+        spec: str,
     ):
         """
         Args:
             cutoff: Cutoff radius for neighbor search.
+            spec: Specification of the neighbor list, e.g. 'S' for shifts, D for distance vector etc.
         """
         super().__init__()
         self._cutoff = cutoff
+        self._spec = spec
 
     def forward(
         self,
@@ -182,7 +185,7 @@ class NeighborListTransform(Transform):
         cell = inputs[properties.cell].view(3, 3)
         pbc = inputs[properties.pbc]
 
-        idx_i, idx_j, offset = self._build_neighbor_list(Z, R, cell, pbc, self._cutoff)
+        idx_i, idx_j, offset = self._build_neighbor_list(Z, R, cell, pbc, self._cutoff, self._spec)
         inputs[properties.idx_i] = idx_i.detach()
         inputs[properties.idx_j] = idx_j.detach()
         inputs[properties.offsets] = offset
@@ -195,6 +198,7 @@ class NeighborListTransform(Transform):
         cell: torch.Tensor,
         pbc: torch.Tensor,
         cutoff: float,
+        spec: str
     ):
         """Override with specific neighbor list implementation"""
         raise NotImplementedError
@@ -223,9 +227,9 @@ class MatScipyNeighborList(NeighborListTransform):
     References:
         https://github.com/libAtoms/matscipy
     """
-
+    
     def _build_neighbor_list(
-        self, Z, positions, cell, pbc, cutoff, eps=1e-6, buffer=1.0
+        self, Z, positions, cell, pbc, cutoff,spec, eps=1e-6, buffer=1.0
     ):
         at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
 
@@ -238,7 +242,7 @@ class MatScipyNeighborList(NeighborListTransform):
             at.center()
 
         # Compute neighborhood
-        idx_i, idx_j, S = msp_neighbor_list("ijS", at, cutoff)
+        idx_i, idx_j, S = msp_neighbor_list("ij"+spec, at, cutoff)
         idx_i = torch.from_numpy(idx_i).long()
         idx_j = torch.from_numpy(idx_j).long()
         S = torch.from_numpy(S).to(dtype=positions.dtype)
