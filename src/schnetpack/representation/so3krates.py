@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Union, Tuple, Sequence, Optional, Any
+from typing import Callable, Dict, Union, Tuple, Sequence, Optional, Any,List
 from functools import partial
 import math
 import numpy as np
@@ -37,7 +37,8 @@ class So3kratesInteractionBlock(nn.Module):
             self,
             num_features: int,
             degrees: Sequence[int],
-            parity: bool = True
+            parity: bool = True,
+            activation: Union[Callable, nn.Module] = None
             ):
         
         super().__init__()
@@ -50,7 +51,7 @@ class So3kratesInteractionBlock(nn.Module):
 
         self.mixing_layer = snn.Dense(
             in_features=num_features+num_segments,
-            out_features=num_features+num_segments,bias=False)
+            out_features=num_features+num_segments,activation=activation,bias=False)
 
 
     def forward(self, x:torch.Tensor, chi:torch.Tensor):
@@ -317,6 +318,7 @@ class So3kratesLayer(nn.Module):
         
         # create m_tot contracted chi_ij
         self.record["chi_in"] = chi
+        self.record["features_in"] = x
         m_chi_ij = order_contraction(chi,idx_j,idx_i,self.degrees) # shape: (n_pairs, |l|)
         # apply pre layer normalization (for conv layer it may destroys spatial dependency)
         x_pre_1 = self.layer_normalization(x)
@@ -371,6 +373,7 @@ class So3kratesLayer(nn.Module):
 
         # track chi results for later analysis
         self.record["chi_out"] = chi_skip_2
+        self.record["features_out"] = x_skip_2
 
         # return final atomic features
         return x_skip_2, chi_skip_2
@@ -484,6 +487,7 @@ class So3krates(nn.Module):
             self.n_interactions,
             False,
         )
+        #self.reset_parameters()
 
     def helper(self,data,level,device):
         """this is just a helper function for debugging purposes"""
@@ -501,17 +505,19 @@ class So3krates(nn.Module):
         """ this is used for debugging (comparing implementation with original implementation)"""
         # DEBUG ONLY init with weights and bias of original implementation
         import numpy as np
+        import os
+        BASE = '/home/elron/phd/projects/ba_betreuung/data/debug/so3krates'
         data = {}
-        data = np.load("params_1.npz",allow_pickle=True)
+        data = np.load(os.path.join(BASE,"params.npz"),allow_pickle=True)
         device = self.cutoff_fn.cutoff.device
 
         for M,layer in enumerate(list(data.keys())):
 
             # ['FeatureBlock_0', 'GeometricBlock_0', 'InteractionBlock_0']
 
-            feature_block = data[layer].item()['FeatureBlock_0'].item()
-            geometry_block = data[layer].item()['GeometricBlock_0'].item()
-            interaction_block = data[layer].item()['InteractionBlock_0'].item()
+            feature_block = data[layer].item()['FeatureBlock_0']#.item()
+            geometry_block = data[layer].item()['GeometricBlock_0']#.item()
+            interaction_block = data[layer].item()['InteractionBlock_0']#.item()
 
             # step by step starting with feature block
             levels = list(feature_block.keys())
@@ -544,6 +550,12 @@ class So3krates(nn.Module):
             self.so3krates_layer[M].feature_block.attention_fn.coeff_fn[1].q_i_layer.weight = torch.nn.Parameter(weights_A[:,:,1])
             self.so3krates_layer[M].feature_block.attention_fn.coeff_fn[1].k_j_layer.weight = torch.nn.Parameter(weights_B[:,:,1])
 
+            self.so3krates_layer[M].feature_block.attention_fn.coeff_fn[2].q_i_layer.weight = torch.nn.Parameter(weights_A[:,:,2])
+            self.so3krates_layer[M].feature_block.attention_fn.coeff_fn[2].k_j_layer.weight = torch.nn.Parameter(weights_B[:,:,2])
+            
+            self.so3krates_layer[M].feature_block.attention_fn.coeff_fn[3].q_i_layer.weight = torch.nn.Parameter(weights_A[:,:,3])
+            self.so3krates_layer[M].feature_block.attention_fn.coeff_fn[3].k_j_layer.weight = torch.nn.Parameter(weights_B[:,:,3])
+            
 
             # attention aggregation
             attention_agg_levels = levels[6:8]
@@ -552,7 +564,8 @@ class So3krates(nn.Module):
                 # Ansatz: first layer und second layer aggregation sieht aus wie ref wenn weights.T loaded
                 self.so3krates_layer[M].feature_block.attention_fn.aggregate_fn[0].v_j_linear.weight = torch.nn.Parameter(weights[:,:,0])
                 self.so3krates_layer[M].feature_block.attention_fn.aggregate_fn[1].v_j_linear.weight = torch.nn.Parameter(weights[:,:,1])
-
+                self.so3krates_layer[M].feature_block.attention_fn.aggregate_fn[2].v_j_linear.weight = torch.nn.Parameter(weights[:,:,2])
+                self.so3krates_layer[M].feature_block.attention_fn.aggregate_fn[3].v_j_linear.weight = torch.nn.Parameter(weights[:,:,3])
 
             levels = list(geometry_block.keys())
             # radial
