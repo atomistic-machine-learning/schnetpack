@@ -3,7 +3,8 @@ from typing import Callable, Sequence
 import torch
 from torch import nn
 from torch.nn import functional as F
-
+from functorch import combine_state_for_ensemble
+import functorch
 from schnetpack.nn import Dense
 
 __all__ = [
@@ -53,13 +54,32 @@ class RadialFilter(nn.Module):
         l1 = Dense(in_features=self.num_features[0],activation=activation,out_features=self.num_features[1])
         l2 = Dense(in_features=self.num_features[1],activation=None,out_features=self.num_features[1])
 
-        self.rad_filter_fn = nn.ModuleList([l1,l2])
+        self.rad_filter_fn = nn.Sequential(*[l1,l2])
+        #self.rad_filter_fn = nn.ModuleList([l1,l2])
+
+    def vec_calc(self, nn, x_heads, w_heads, idx_i, idx_j):
+        '''to vectorize the head calculations, resulting in speed up'''
+        fmodel, params = functorch.make_functional(nn)
+        fmodel, params, buffers = combine_state_for_ensemble(nn)
+        value =  functorch.vmap(
+            fmodel, (0,0,0,0,None, None),out_dims=1)(
+                params, 
+                buffers, 
+                x_heads,
+                w_heads,
+                idx_i,idx_j)
+        return value
 
 
     def forward(self,x:torch.Tensor) -> torch.Tensor:
+        
+        #alpha = self.vec_calc(self.coeff_fn, x_heads, w_heads, idx_i, idx_j)
+        fmodel, params = functorch.make_functional(self.rad_filter_fn)
+        x = fmodel(params, x)
 
-        for layer in self.rad_filter_fn:
-            x = layer(x)
+
+        #for layer in self.rad_filter_fn:
+        #    x = layer(x)
         return x
 
 
@@ -76,16 +96,19 @@ class SphericalFilter(nn.Module):
         self.num_features = [len(self.degrees)] + list(num_features)  
 
         # TODO should be adapted to work with arbitrary number of layers
-        l1 = Dense(in_features=self.degrees,activation=activation,out_features=self.num_features[0])
-        l2 = Dense(in_features=self.num_features[0],activation=None,out_features=self.num_features[1])
+        l1 = Dense(in_features=self.degrees,activation=activation,out_features=self.num_features[1])
+        l2 = Dense(in_features=self.num_features[1],activation=None,out_features=self.num_features[2])
         # TODO check ob equivalent to sequential (sollte sein, aber sicherheitshalber checken)
-        self.sph_filter_fn = nn.ModuleList([l1,l2])
-
+        #self.sph_filter_fn = nn.ModuleList([l1,l2])
+        self.sph_filter_fn  = nn.Sequential(*[l1,l2])
 
     def forward(self,x:torch.Tensor) -> torch.Tensor:
 
-        for layer in self.sph_filter_fn:
-            x = layer(x)
+        fmodel, params = functorch.make_functional(self.sph_filter_fn)
+        x = fmodel(params, x)
+
+        #for layer in self.sph_filter_fn:
+        #    x = layer(x)
         return x
 
 
