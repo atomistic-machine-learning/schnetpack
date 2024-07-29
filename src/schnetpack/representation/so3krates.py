@@ -646,6 +646,8 @@ class So3krates(nn.Module):
 
 
         # compute interaction blocks and update atomic embeddings
+        #BASE = '/home/elron/phd/projects/ba_betreuung/data/debug/so3krates/x.npy'
+        #x = torch.tensor(np.load(BASE).squeeze(),device=x.device)
         for so3krates_layer in self.so3krates_layer:
             
             v, chi_ = so3krates_layer(
