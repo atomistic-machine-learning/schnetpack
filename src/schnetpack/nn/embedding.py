@@ -202,6 +202,10 @@ class SPHC_Embedding(nn.Module):
             sph_harms_ij += [sph_ij]  # len: |L| / shape: (n_pairs,2l+1)
 
         # direct sum of degree dimension space (LD) shape: (n_pairs,m_tot)
+        # column idx is = (l+1)*l + m , meaning (if degrees [1,2]) at col 1 the sh of (l1,m-1) are sitting 
+        # for the specific pairwise distance
+        # complete idx is [r_ij, (l+1)*l + m]
+        # this is vector valued function Y(l)
         sph_harms_ij = torch.concatenate(sph_harms_ij, axis=-1) if len(self.degrees) > 0 else None
         
         # Initialize SPHCs to zero and keep it that way if no normalization is used

@@ -216,9 +216,14 @@ def polynomial_cutoff_fn(
         p: Maximal order of the polynomial
         eps: Offset added to distances for numerical stability.
 
+    in ref paper p=6 and k=1 for cumulene
+    cutoff = k/n_atoms with k controlling the extend of cutoff
+    TODO update to work with batch of differenz sized molecules
     Returns: Cutoff fn output with value=0 for r > r_cut, shape (...)
 
     """
+    # softmax for rescaled version since interaction length of SPHC is abstract and not known beforehand
+    input = 1 - torch.nn.functional.softmax(torch.norm(input,dim=-1),dim=-1)
     input_cut = (1 - (1/2) * (p+1)*(p+2) * (input/cutoff)**p
                  + p*(p+2)*(input/cutoff)**(p+1)
                  -(1/2)*p*(p+1)*(input/cutoff)**(p+2)

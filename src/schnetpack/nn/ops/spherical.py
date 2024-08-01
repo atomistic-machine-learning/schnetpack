@@ -14,7 +14,8 @@ x,y,z are normalized unit vector (aka x/r, y/r, z/r, with r = sqrt(x^2 + y^2 + z
 # TODO: probabily contains stuff already present 
 # in so3Net, check if both can be combined, but for now keep
 # needs the provided cgmatrix.npz file
-
+# first part is the normalization constant
+# N_l^m = sqrt((2l+1)/(4pi) * (l-m)!/(l+m)!)
 # l = 0
 _Y00 = lambda x, y, z: 1/2 * math.sqrt(1/math.pi)  # in shape: (...) / out shape: (...)
 
@@ -227,6 +228,7 @@ def init_clebsch_gordan_matrix(degrees, l_out_max=None):
 
     offset_corr = indx_fn(l_in_min - 1)
     _cg = load_cgmatrix(degrees)
+    # 0:1, 0:9, 0:9
     return _cg[offset_corr:indx_fn(_l_out_max), offset_corr:indx_fn(l_in_max), offset_corr:indx_fn(l_in_max)]
 
 
@@ -261,11 +263,35 @@ def make_l0_contraction_fn(degrees):
         
         # Using torch_scatter to perform segment sum
         result = snn.scatter_add(weighted_sphc, segment_ids, dim=1, dim_size=num_segments)
-        
+
         return result  # shape: (n, len(degrees))
 
     return contraction_fn
 
+
+def make_degree_norm(degrees):
+
+    segment_ids = torch.tensor(
+        [y for y in it.chain(*[[n] * int(2 * degrees[n] + 1) for n in range(len(degrees))])], dtype=torch.long, device=degrees.device)  # shape: (m_tot
+    num_segments = len(degrees)
+
+    def fn(sphc):
+
+        norm_result = snn.scatter_add(sphc**2, segment_ids, dim=1, dim_size=num_segments)
+        per_degree_norm = torch.where(
+                norm_result > 0,
+                torch.sqrt(norm_result),0)
+        return per_degree_norm
+    
+    return fn
+
+
+
+
+def wrapper_make_degree_norm(chi,idx_j,idx_i,degrees):
+    chi_ij = chi[idx_j] - chi[idx_i]
+    degree_norm_fn = make_degree_norm(degrees)
+    return degree_norm_fn(chi_ij)
 
 def order_contraction(chi,idx_j,idx_i,degrees):
 
