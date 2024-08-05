@@ -138,7 +138,7 @@ class BernsteinRBF(torch.nn.Module):
     """
 
     def __init__(
-            self, n_rbf: int, cutoff:float, init_alpha:0.95):  
+            self, n_rbf: int, cutoff:float, init_alpha:float = 0.95):  
         """
         Args:
             n_rbf: total number of Bernstein functions, :math:`N_g`.

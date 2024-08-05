@@ -130,7 +130,7 @@ class SO3net(nn.Module):
         x0 = self.embedding(atomic_numbers)
         for embedding in self.electronic_embeddings:
             x0 = x0 + embedding(x0, inputs)
-        x0 = x0.unsueeze(1)
+        x0 = x0.unsqueeze(1)
 
         # compute interaction blocks and update atomic embeddings
         x = so3.scalar2rsh(x0, int(self.lmax))
