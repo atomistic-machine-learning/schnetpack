@@ -37,7 +37,8 @@ import schnetpack.task
 from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.transform import CastTo32, CastTo64
-from schnetpack.units import convert_units, load_model
+from schnetpack.units import convert_units
+from schnetpack.utils import load_model
 from schnetpack.md.utils import activate_model_stress
 
 from typing import Optional, List, Union, Dict

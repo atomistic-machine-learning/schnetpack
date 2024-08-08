@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional, List
 
+import schnetpack as spk
 from schnetpack.transform import Transform
 import schnetpack.properties as properties
 from schnetpack.utils import as_dtype
@@ -78,6 +79,7 @@ class AtomisticModel(nn.Module):
         self.postprocessors = nn.ModuleList(postprocessors)
         self.required_derivatives: Optional[List[str]] = None
         self.model_outputs: Optional[List[str]] = None
+        self.spk_version = spk.__version__
 
     def collect_derivatives(self) -> List[str]:
         self.required_derivatives = None
