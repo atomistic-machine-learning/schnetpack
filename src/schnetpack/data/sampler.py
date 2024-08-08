@@ -1,7 +1,7 @@
 from typing import Iterator, List, Callable
 
 import numpy as np
-from torch.utils.data import Sampler, WeightedRandomSampler
+from torch.utils.data import Sampler, WeightedRandomSampler, RandomSampler
 
 from schnetpack import properties
 from schnetpack.data import BaseAtomsData
@@ -11,6 +11,7 @@ __all__ = [
     "StratifiedSampler",
     "NumberOfAtomsCriterion",
     "PropertyCriterion",
+    "MultipleTrainEpochsSampler",
 ]
 
 
@@ -95,3 +96,19 @@ class StratifiedSampler(WeightedRandomSampler):
         weights = bin_weights[bin_indices]
 
         return weights
+
+
+class MultipleTrainEpochsSampler(RandomSampler):
+    def __init__(
+        self,
+        data_source,
+        num_samples=None,
+        n_train_epochs=1,
+        generator=None,
+    ):
+        super().__init__(
+            data_source=data_source,
+            replacement=True,
+            num_samples=len(data_source) * n_train_epochs,
+            generator=generator,
+        )
