@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Union, List, Dict, TYPE_CHECKING
 
 import schnetpack.atomistic.response
+from schnetpack.utils import load_model
 
 if TYPE_CHECKING:
     from schnetpack.md import System
@@ -94,7 +95,7 @@ class SchNetPackCalculator(MDCalculator):
 
         log.info("Loading model from {:s}".format(model_file))
         # load model and keep it on CPU, device can be changed afterwards
-        model = torch.load(model_file, map_location="cpu").to(torch.float64)
+        model = load_model(model_file, device=torch.device("cpu")).to(torch.float64)
         model = model.eval()
 
         if self.stress_key is not None:
