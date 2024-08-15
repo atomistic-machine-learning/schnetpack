@@ -22,24 +22,27 @@ def load_model(model_path, device="cpu", **kwargs):
     """
 
     def _convert_from_older(model):
-        if not hasattr(model.representation, "electronic_embeddings"):
-            model.representation.electronic_embeddings = []
+        model.spk_version = "2.0.4"
         return model
 
     def _convert_from_v2_0_4(model):
         if not hasattr(model.representation, "electronic_embeddings"):
             model.representation.electronic_embeddings = []
+        model.spk_version = (
+            "latest"  # TODO: replace by latest pypi version once available
+        )
         return model
 
     model = torch.load(model_path, map_location=device, **kwargs)
-    if hasattr(model, "spk_version"):
-        if model.spk_version == "2.0.4":
-            model = _convert_from_v2_0_4(model)
-    else:
+
+    if not hasattr(model, "spk_version"):
         # make warning that model has no version information
         warnings.warn(
             "Model was saved without version information. Conversion to current version may fail."
         )
         model = _convert_from_older(model)
+
+    if model.spk_version == "2.0.4":
+        model = _convert_from_v2_0_4(model)
 
     return model
