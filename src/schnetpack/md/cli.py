@@ -102,14 +102,11 @@ def simulate(config: DictConfig):
     precision = int2precision(config.precision)
 
     # Set seed for random number generators in pytorch, numpy and python.random
-    if "seed" in config:
-        if config.seed is not None:
+    if config.seed is not None:
+        if isinstance(config.seed, int):
             log.info(f"Seed with <{config.seed}>")
         else:
-            # choose seed randomly
-            with open_dict(config):
-                config.seed = random.randint(0, 2**32 - 1)
-            log.info(f"Seed randomly with <{config.seed}>")
+            raise ValueError("Seed must be an integer.")
     else:
         # choose seed randomly
         with open_dict(config):
