@@ -3,12 +3,13 @@ import uuid
 import torch
 import os
 import shutil
+import random
 
 from datetime import datetime
 
 import hydra
 from hydra.core.hydra_config import HydraConfig
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 
 import tempfile
 
@@ -101,8 +102,17 @@ def simulate(config: DictConfig):
     precision = int2precision(config.precision)
 
     # Set seed for random number generators in pytorch, numpy and python.random
-    seed = seed_everything(config.seed)
-    log.info("Using random seed {:d}".format(seed))
+    if config.seed is not None:
+        if isinstance(config.seed, int):
+            log.info(f"Seed with <{config.seed}>")
+        else:
+            raise ValueError("Seed must be an integer.")
+    else:
+        # choose seed randomly
+        with open_dict(config):
+            config.seed = random.randint(0, 2**32 - 1)
+        log.info(f"Seed randomly with <{config.seed}>")
+    seed_everything(seed=config.seed)
 
     # ===========================================
     #   Initialize the system
