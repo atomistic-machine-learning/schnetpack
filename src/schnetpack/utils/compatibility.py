@@ -22,7 +22,6 @@ def load_model(model_path, device="cpu", **kwargs):
     """
 
     def _convert_from_older(model):
-        # TODO: add further conversions here
         if not hasattr(model.representation, "electronic_embeddings"):
             model.representation.electronic_embeddings = []
         return model
