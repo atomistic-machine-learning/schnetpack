@@ -3,10 +3,10 @@ from typing import Dict, Tuple
 import torch
 from tqdm import tqdm
 
-import schnetpack.properties as structure
+import schnetpack.properties as properties
 from schnetpack.data import AtomsLoader
 
-__all__ = ["calculate_stats"]
+__all__ = ["calculate_stats", "estimate_atomrefs"]
 
 
 def calculate_stats(
@@ -47,8 +47,8 @@ def calculate_stats(
             val = props[p][None, :]
             if atomref and p in atomref.keys():
                 ar = atomref[p]
-                ar = ar[props[structure.Z]]
-                idx_m = props[structure.idx_m]
+                ar = ar[props[properties.Z]]
+                idx_m = props[properties.idx_m]
                 tmp = torch.zeros((idx_m[-1] + 1,), dtype=ar.dtype, device=ar.device)
                 v0 = tmp.index_add(0, idx_m, ar)
                 val -= v0
@@ -59,7 +59,7 @@ def calculate_stats(
         batch_size = sample_values.shape[1]
         new_count = count + batch_size
 
-        norm = norm_mask[:, None] * props[structure.n_atoms][None, :] + (
+        norm = norm_mask[:, None] * props[properties.n_atoms][None, :] + (
             1 - norm_mask[:, None]
         )
         sample_values /= norm
@@ -76,3 +76,44 @@ def calculate_stats(
     stddev = torch.sqrt(M2 / count)
     stats = {pn: (mu, std) for pn, mu, std in zip(property_names, mean, stddev)}
     return stats
+
+
+def estimate_atomrefs(loader, divide_by_atoms, z_max=100):
+    property_names = list(divide_by_atoms.keys())
+    n_data = len(loader.dataset)
+    all_properties = {pname: torch.zeros(n_data) for pname in property_names}
+    all_atom_types = torch.zeros((n_data, z_max))
+    data_counter = 0
+
+
+    # loop over all batches
+    for batch in tqdm(loader):
+        # load data
+        idx_m = batch[properties.idx_m]
+        atomic_numbers = batch[properties.Z]
+
+        # get counts for atomic numbers
+        unique_ids = torch.unique(idx_m)
+        for i in unique_ids:
+            atomic_numbers_i = atomic_numbers[idx_m == i]
+            atom_types, atom_counts = torch.unique(atomic_numbers_i, return_counts=True)
+            # save atom counts and properties
+            for atom_type, atom_count in zip(atom_types, atom_counts):
+                all_atom_types[data_counter, atom_type] = atom_count
+            for pname in property_names:
+                all_properties[pname][data_counter] = batch[pname][i]
+            data_counter += 1
+
+    # perform linear regression to get the elementwise energy contributions
+    existing_atom_types = torch.where(all_atom_types.sum(axis=0) != 0)[0]
+    X = torch.squeeze(all_atom_types[:, existing_atom_types])
+    y = all_properties["energy_U0"]
+    w = torch.linalg.inv(X.T @ X) @ X.T @ y
+
+    # compute energy estimates
+    elementwise_contributions = torch.zeros((z_max))
+    for atom_type, weight in zip(existing_atom_types, w):
+        elementwise_contributions[atom_type] = weight
+    energy_estimates = torch.sum(all_atom_types * elementwise_contributions, axis=1)
+
+    return energy_estimates

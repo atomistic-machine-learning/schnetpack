@@ -120,6 +120,8 @@ class RemoveOffsets(Transform):
         """
         if self.remove_atomrefs and not self._atomrefs_initialized:
             atrefs = _datamodule.train_dataset.atomrefs
+            if atrefs[self._property] is None:
+                atrefs = _datamodule.get_atomrefs(self._property, self.is_extensive)
             self.atomref = atrefs[self._property].detach()
 
         if self.remove_mean and not self._mean_initialized:
@@ -264,13 +266,15 @@ class AddOffsets(Transform):
         self.register_buffer("atomref", atomrefs)
         self.register_buffer("mean", property_mean)
 
-    def datamodule(self, value):
+    def datamodule(self, _datamodule):
         if self.add_atomrefs and not self._atomrefs_initialized:
-            atrefs = value.train_dataset.atomrefs
+            atrefs = _datamodule.train_dataset.atomrefs
+            if atrefs[self._property] is None:
+                atrefs = _datamodule.get_atomrefs(self._property, self.is_extensive)
             self.atomref = atrefs[self._property].detach()
 
         if self.add_mean and not self._mean_initialized:
-            stats = value.get_stats(
+            stats = _datamodule.get_stats(
                 self._property, self.is_extensive, self.add_atomrefs
             )
             self.mean = stats[0].detach()
