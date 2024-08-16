@@ -38,6 +38,7 @@ from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.transform import CastTo32, CastTo64
 from schnetpack.units import convert_units
+from schnetpack.utils import load_model
 from schnetpack.md.utils import activate_model_stress
 
 from typing import Optional, List, Union, Dict
@@ -261,7 +262,7 @@ class SpkCalculator(Calculator):
 
         log.info("Loading model from {:s}".format(model_file))
         # load model and keep it on CPU, device can be changed afterwards
-        model = torch.load(model_file, map_location="cpu").to(torch.float64)
+        model = load_model(model_file, device=torch.device("cpu")).to(torch.float64)
         model = model.eval()
 
         if self.stress_key is not None:

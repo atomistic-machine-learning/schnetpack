@@ -1,3 +1,4 @@
+from .compatibility import *
 import importlib
 import torch
 from typing import Type, Union, List
