@@ -23,13 +23,13 @@ def calculate_stats(
     .. [h1] https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
 
     Args:
-        dataset: atoms data set
+        dataloader: data loader
         divide_by_atoms: dict from property name to bool:
             If True, divide property by number of atoms before calculating statistics.
         atomref: reference values for single atoms to be removed before calculating stats
 
-
     Returns:
+        Mean and standard deviation over all samples
 
     """
     property_names = list(divide_by_atoms.keys())
@@ -41,7 +41,7 @@ def calculate_stats(
     mean = torch.zeros_like(norm_mask)
     M2 = torch.zeros_like(norm_mask)
 
-    for props in tqdm(dataloader):
+    for props in tqdm(dataloader, "calculating statistics"):
         sample_values = []
         for p in property_names:
             val = props[p][None, :]
@@ -78,16 +78,27 @@ def calculate_stats(
     return stats
 
 
-def estimate_atomrefs(loader, divide_by_atoms, z_max=100):
+def estimate_atomrefs(dataloader, divide_by_atoms, z_max=100):
+    """
+    Uses linear regression to estimate the elementwise biases (atomrefs).
+
+    Args:
+        dataloader: data loader
+        divide_by_atoms: dict from property name to bool:
+            If True, divide property by number of atoms before calculating statistics.
+
+    Returns:
+        Elementwise bias estimates over all samples
+
+    """
     property_names = list(divide_by_atoms.keys())
-    n_data = len(loader.dataset)
+    n_data = len(dataloader.dataset)
     all_properties = {pname: torch.zeros(n_data) for pname in property_names}
     all_atom_types = torch.zeros((n_data, z_max))
     data_counter = 0
 
-
     # loop over all batches
-    for batch in tqdm(loader):
+    for batch in tqdm(dataloader, "estimating atomrefs"):
         # load data
         idx_m = batch[properties.idx_m]
         atomic_numbers = batch[properties.Z]

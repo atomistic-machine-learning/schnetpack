@@ -359,7 +359,9 @@ class ASEAtomsData(BaseAtomsData):
             properties[structure.cell] = (
                 torch.tensor(row["cell"][None].copy()) * self.distance_conversion
             )
-            properties[structure.pbc] = torch.tensor(row["pbc"].tolist()) # todo: check this RuntimeError: Could not infer dtype of numpy.bool
+            properties[structure.pbc] = torch.tensor(
+                row["pbc"].tolist()
+            )  # todo: check this RuntimeError: Could not infer dtype of numpy.bool
 
         return properties
 

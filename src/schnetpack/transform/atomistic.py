@@ -75,6 +75,7 @@ class RemoveOffsets(Transform):
         zmax: int = 100,
         atomrefs: torch.Tensor = None,
         property_mean: torch.Tensor = None,
+        estimate_atomref: bool = False,
     ):
         """
         Args:
@@ -92,10 +93,14 @@ class RemoveOffsets(Transform):
         self.remove_mean = remove_mean
         self.remove_atomrefs = remove_atomrefs
         self.is_extensive = is_extensive
+        self.estimate_atomref = estimate_atomref
 
         assert (
             remove_atomrefs or remove_mean
         ), "You should set at least one of `remove_mean` and `remove_atomrefs` to true!"
+        assert (
+            not (estimate_atomref and atomrefs is not None)
+        ), "You can not set `atomrefs` and use `estimate_atomrefs=True!`"
 
         if atomrefs is not None:
             self._atomrefs_initialized = True
@@ -119,9 +124,10 @@ class RemoveOffsets(Transform):
         Sets mean and atomref automatically when using PyTorchLightning integration.
         """
         if self.remove_atomrefs and not self._atomrefs_initialized:
-            atrefs = _datamodule.train_dataset.atomrefs
-            if atrefs[self._property] is None:
+            if self.estimate_atomref:
                 atrefs = _datamodule.get_atomrefs(self._property, self.is_extensive)
+            else:
+                atrefs = _datamodule.train_dataset.atomrefs
             self.atomref = atrefs[self._property].detach()
 
         if self.remove_mean and not self._mean_initialized:
@@ -228,6 +234,7 @@ class AddOffsets(Transform):
         zmax: int = 100,
         atomrefs: torch.Tensor = None,
         property_mean: torch.Tensor = None,
+        estimate_atomref: bool = False,
     ):
         """
         Args:
@@ -246,10 +253,14 @@ class AddOffsets(Transform):
         self.add_atomrefs = add_atomrefs
         self.is_extensive = is_extensive
         self._aggregation = "sum" if self.is_extensive else "mean"
+        self.estimate_atomref = estimate_atomref
 
         assert (
             add_mean or add_atomrefs
         ), "You should set at least one of `add_mean` and `add_atomrefs` to true!"
+        assert (
+            not (estimate_atomref and atomrefs is not None)
+        ), "You can not set `atomrefs` and use `estimate_atomrefs=True!`"
 
         if atomrefs is not None:
             self._atomrefs_initialized = True
@@ -268,9 +279,10 @@ class AddOffsets(Transform):
 
     def datamodule(self, _datamodule):
         if self.add_atomrefs and not self._atomrefs_initialized:
-            atrefs = _datamodule.train_dataset.atomrefs
-            if atrefs[self._property] is None:
+            if self.estimate_atomref:
                 atrefs = _datamodule.get_atomrefs(self._property, self.is_extensive)
+            else:
+                atrefs = _datamodule.train_dataset.atomrefs
             self.atomref = atrefs[self._property].detach()
 
         if self.add_mean and not self._mean_initialized:

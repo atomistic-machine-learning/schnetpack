@@ -363,7 +363,6 @@ class AtomsDataModule(pl.LightningDataModule):
 
     def get_atomrefs(
         self, property: str, divide_by_atoms: bool
-
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         key = (property, divide_by_atoms)
         if key in self._stats:
