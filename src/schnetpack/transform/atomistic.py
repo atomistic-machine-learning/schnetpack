@@ -98,8 +98,8 @@ class RemoveOffsets(Transform):
         assert (
             remove_atomrefs or remove_mean
         ), "You should set at least one of `remove_mean` and `remove_atomrefs` to true!"
-        assert (
-            not (estimate_atomref and atomrefs is not None)
+        assert not (
+            estimate_atomref and atomrefs is not None
         ), "You can not set `atomrefs` and use `estimate_atomrefs=True!`"
 
         if atomrefs is not None:
@@ -258,8 +258,8 @@ class AddOffsets(Transform):
         assert (
             add_mean or add_atomrefs
         ), "You should set at least one of `add_mean` and `add_atomrefs` to true!"
-        assert (
-            not (estimate_atomref and atomrefs is not None)
+        assert not (
+            estimate_atomref and atomrefs is not None
         ), "You can not set `atomrefs` and use `estimate_atomrefs=True!`"
 
         if atomrefs is not None:
