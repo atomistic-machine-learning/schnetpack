@@ -94,9 +94,9 @@ class SphericalFilter(nn.Module):
         super().__init__()
         self.register_buffer("degrees", torch.LongTensor(degrees))
         self.num_features = [len(self.degrees)] + list(num_features)  
-
+    
         # TODO should be adapted to work with arbitrary number of layers
-        l1 = Dense(in_features=self.degrees,activation=activation,out_features=self.num_features[1])
+        l1 = Dense(in_features=32,activation=activation,out_features=self.num_features[1]) #set back to 32
         l2 = Dense(in_features=self.num_features[1],activation=None,out_features=self.num_features[2])
         # TODO check ob equivalent to sequential (sollte sein, aber sicherheitshalber checken)
         #self.sph_filter_fn = nn.ModuleList([l1,l2])

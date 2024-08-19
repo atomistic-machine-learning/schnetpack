@@ -6,15 +6,16 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from schnetpack.nn.radial import GaussianRBF, gaussian_rbf
 import schnetpack.properties as structure
 from schnetpack.nn import ElectronicEmbedding
 from schnetpack.nn.activations import shifted_softplus
-from schnetpack.nn.ops.spherical import order_contraction, make_l0_contraction_fn, interaction_order_contraction
+from schnetpack.nn.ops.spherical import order_contraction, make_l0_contraction_fn, interaction_order_contraction, wrapper_make_degree_norm
 from schnetpack.nn.utils import equal_head_split#, inv_split
 
 
 import schnetpack.nn as snn
-from schnetpack.nn.cutoff import ZeroCutoff
+from schnetpack.nn.cutoff import CosineCutoff, PolynomialCutoff, ZeroCutoff
 
 __all__ = [
     'So3kratesInteractionBlock',
@@ -319,7 +320,16 @@ class So3kratesLayer(nn.Module):
         # create m_tot contracted chi_ij
         self.record["chi_in"] = chi
         self.record["features_in"] = x
-        m_chi_ij = order_contraction(chi,idx_j,idx_i,self.degrees) # shape: (n_pairs, |l|)
+        m_chi_ij = wrapper_make_degree_norm(chi, idx_j, idx_i, self.degrees) # shape: (n_pairs, |l|)
+        sphc_cutoff_fn = PolynomialCutoff(1/x.shape[0], 6)
+        mcut_ij = sphc_cutoff_fn(m_chi_ij)
+        sphc_num_rbf = 32
+        for col_idx in range(m_chi_ij.shape[1]):
+            # get the corresponding column of chi
+            chi_l = m_chi_ij[:, col_idx]
+            gauss = GaussianRBF(sphc_num_rbf, 1, 0, True)
+            exp_chi_l = gauss(chi_l)
+            exp_chi_l_with_cutoff = torch.where(mcut_ij[:,None] != 0, exp_chi_l * mcut_ij[:,None], 0) # shape: (n_pairs,n_rbfs)        
         # apply pre layer normalization (for conv layer it may destroys spatial dependency)
         x_pre_1 = self.layer_normalization(x)
         # calculate phi_chi_cut
@@ -328,7 +338,7 @@ class So3kratesLayer(nn.Module):
         # calculate local features
         x_local = self.feature_block(
                             rbf = rbf,
-                            d_gamma = m_chi_ij,
+                            d_gamma = exp_chi_l_with_cutoff,
                             x = x_pre_1,
                             idx_i = idx_i,
                             idx_j = idx_j,
@@ -340,7 +350,7 @@ class So3kratesLayer(nn.Module):
                             sph_ij = sph_ij,
                             x = x_pre_1,
                             rbf = rbf,
-                            d_gamma = m_chi_ij,
+                            d_gamma = exp_chi_l_with_cutoff,
                             phi_r_cut = phi_r_cut,
                             phi_chi_cut = phi_chi_cut,
                             idx_i = idx_i,
@@ -607,7 +617,6 @@ class So3krates(nn.Module):
 
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
-
         # get tensors from input dictionary
         atomic_numbers = inputs[structure.Z]
         r_ij = inputs[structure.Rij]
