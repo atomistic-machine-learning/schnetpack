@@ -1,6 +1,7 @@
 from typing import Callable, Dict, Union, Tuple, Sequence, Optional, Any,List
 from functools import partial
 import math
+from matplotlib import pyplot as plt
 import numpy as np
 import torch
 from torch import nn
@@ -315,22 +316,39 @@ class So3kratesLayer(nn.Module):
             idx_i: torch.Tensor, # shape: (n_pairs,) idx of centering atom i
             x: torch.Tensor,# shape: (n_atoms, F)  atomic features --> eco so aufbauen dass nonlocal features hierzu aufaddiert werden ?
             rbf: torch.Tensor, # shape: (n_pairs,K): rbf expanded distances
-            phi_r_cut: torch.Tensor) -> torch.Tensor:
+            phi_r_cut: torch.Tensor,
+            sphc_rbf_fn) -> torch.Tensor:
         
         # create m_tot contracted chi_ij
+        draw = False
         self.record["chi_in"] = chi
         self.record["features_in"] = x
         m_chi_ij = wrapper_make_degree_norm(chi, idx_j, idx_i, self.degrees) # shape: (n_pairs, |l|)
-        sphc_cutoff_fn = PolynomialCutoff(1/x.shape[0], 6)
+        sphc_cutoff_fn = CosineCutoff(0.2)
+        # sphc_cutoff_fn = PolynomialCutoff(1/x.shape[0], 6)
         mcut_ij = sphc_cutoff_fn(m_chi_ij)
         sphc_num_rbf = 32
         for col_idx in range(m_chi_ij.shape[1]):
             # get the corresponding column of chi
             chi_l = m_chi_ij[:, col_idx]
-            gauss = GaussianRBF(sphc_num_rbf, 1, 0, True)
-            exp_chi_l = gauss(chi_l)
-            exp_chi_l_with_cutoff = torch.where(mcut_ij[:,None] != 0, exp_chi_l * mcut_ij[:,None], 0) # shape: (n_pairs,n_rbfs)        
+            exp_chi_l = sphc_rbf_fn(chi_l)
+            exp_chi_l_with_cutoff = torch.where(mcut_ij != 0, exp_chi_l * mcut_ij, 0) # shape: (n_pairs,n_rbfs)        
         # apply pre layer normalization (for conv layer it may destroys spatial dependency)
+        if draw:
+            fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+            
+            # Sort the data by chi_l (x values)
+            sorted_indices = chi_l.clone().detach().argsort()
+            chi_l_sorted = chi_l.clone().detach()[sorted_indices]
+            exp_chi_l_sorted = exp_chi_l_with_cutoff[:, :].clone().detach()[sorted_indices]
+
+            # Plot the sorted data
+            ax.plot(chi_l_sorted, exp_chi_l_sorted)
+            ax.set_ylabel("f(r)")
+            ax.set_xlabel("chi values")
+            ax.annotate("Gaussian RBF", xy=(0.6, 0.88), xycoords="axes fraction", fontsize=11, fontweight="bold")
+            plt.legend()
+            plt.savefig("exponentiel_rbf_mit_gauss.png", dpi=400)
         x_pre_1 = self.layer_normalization(x)
         # calculate phi_chi_cut
         phi_chi_cut = self.chi_cut_fn_dynamic(m_chi_ij)#[:,None] # TODO make sure that shape is consistent (npairs,1)
@@ -456,6 +474,7 @@ class So3krates(nn.Module):
         self.cutoff = cutoff_fn.cutoff
         self.activate_charge_spin_embedding = activate_charge_spin_embedding
         self.degrees = list(degrees)
+        self.sphc_rbf_fn = GaussianRBF(16, 0.5, 0, False)
 
         # initialize nuclear embedding
         self.embedding = embedding
@@ -653,7 +672,6 @@ class So3krates(nn.Module):
             # additive combining of nuclear, charge and spin embedding
             x = x + charge_embedding + spin_embedding
 
-
         # compute interaction blocks and update atomic embeddings
         #BASE = '/home/elron/phd/projects/ba_betreuung/data/debug/so3krates/x.npy'
         #x = torch.tensor(np.load(BASE).squeeze(),device=x.device)
@@ -666,7 +684,8 @@ class So3krates(nn.Module):
                 idx_i=idx_i,
                 x=x,
                 rbf=f_ij,
-                phi_r_cut=rcut_ij
+                phi_r_cut=rcut_ij,
+                sphc_rbf_fn=self.sphc_rbf_fn
             )
             # the atomic embeddings are overwritten instead of adding the interaction
             # to the init embeddings, this is in contrast to schnet etc.
