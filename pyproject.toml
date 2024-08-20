@@ -19,9 +19,9 @@ authors = [
 description = "SchNetPack - Deep Neural Networks for Atomistic Systems"
 readme = "README.md"
 license = { file="LICENSE" }
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
-    "numpy==1.26.4",
+    "numpy>=2.0.0",
     "sympy",
     "ase>=3.21",
     "h5py",
@@ -35,7 +35,7 @@ dependencies = [
     "fasteners",
     "dirsync",
     "torch-ema",
-    "matscipy",
+    "matscipy>=1.1.0",
     "tensorboard",
     "tensorboardX",
     "tqdm",
