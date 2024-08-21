@@ -19,6 +19,8 @@ from schnetpack.utils.script import log_hyperparameters, print_config
 from schnetpack.data import BaseAtomsData, AtomsLoader
 from schnetpack.train import PredictionWriter
 from schnetpack import properties
+from schnetpack.utils import load_model
+
 
 log = logging.getLogger(__name__)
 
@@ -194,7 +196,7 @@ def predict(config: DictConfig):
     dataset: BaseAtomsData = hydra.utils.instantiate(config.data)
     loader = AtomsLoader(dataset, batch_size=config.batch_size, num_workers=8)
 
-    model = torch.load("best_model")
+    model = load_model("best_model")
 
     class WrapperLM(LightningModule):
         def __init__(self, model, enable_grad=config.enable_grad):
