@@ -133,8 +133,12 @@ class RemoveOffsets(Transform):
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
         if self.remove_mean:
-            inputs[self._property] -= self.mean * inputs[structure.n_atoms]
-
+            mean = (
+                self.mean * inputs[structure.n_atoms]
+                if self.is_extensive
+                else self.mean
+            )
+            inputs[self._property] -= mean
         if self.remove_atomrefs:
             inputs[self._property] -= torch.sum(self.atomref[inputs[structure.Z]])
 
@@ -243,7 +247,6 @@ class AddOffsets(Transform):
         self.add_mean = add_mean
         self.add_atomrefs = add_atomrefs
         self.is_extensive = is_extensive
-        self._aggregation = "sum" if self.is_extensive else "mean"
 
         assert (
             add_mean or add_atomrefs
