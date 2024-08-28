@@ -28,9 +28,7 @@ def load_model(model_path, device="cpu", **kwargs):
     def _convert_from_v2_0_4(model):
         if not hasattr(model.representation, "electronic_embeddings"):
             model.representation.electronic_embeddings = []
-        model.spk_version = (
-            "2.1.0"
-        )
+        model.spk_version = "2.1.0"
         return model
 
     model = torch.load(model_path, map_location=device, **kwargs)
