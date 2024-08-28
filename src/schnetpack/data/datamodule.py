@@ -362,18 +362,18 @@ class AtomsDataModule(pl.LightningDataModule):
         return stats
 
     def get_atomrefs(
-        self, property: str, divide_by_atoms: bool
+        self, property: str, is_extensive: bool
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        key = (property, divide_by_atoms)
-        if key in self._stats:
-            return self._stats[key]
+        key = (property, is_extensive)
+        if key in self._atomrefs:
+            return {property: self._atomrefs[key]}
 
         atomrefs = estimate_atomrefs(
             self.train_dataloader(),
-            divide_by_atoms={property: divide_by_atoms},
+            is_extensive={property: is_extensive},
         )[property]
         self._atomrefs[key] = atomrefs
-        return atomrefs
+        return {property: atomrefs}
 
     @property
     def train_dataset(self) -> BaseAtomsData:

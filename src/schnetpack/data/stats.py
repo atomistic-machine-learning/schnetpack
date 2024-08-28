@@ -56,6 +56,7 @@ def calculate_stats(
             sample_values.append(val)
         sample_values = torch.cat(sample_values, dim=0)
 
+
         batch_size = sample_values.shape[1]
         new_count = count + batch_size
 
@@ -78,20 +79,20 @@ def calculate_stats(
     return stats
 
 
-def estimate_atomrefs(dataloader, divide_by_atoms, z_max=100):
+def estimate_atomrefs(dataloader, is_extensive, z_max=100):
     """
     Uses linear regression to estimate the elementwise biases (atomrefs).
 
     Args:
         dataloader: data loader
-        divide_by_atoms: dict from property name to bool:
-            If True, divide property by number of atoms before calculating statistics.
+        is_extensive: If True, divide atom type counts by number of atoms before
+            calculating statistics.
 
     Returns:
         Elementwise bias estimates over all samples
 
     """
-    property_names = list(divide_by_atoms.keys())
+    property_names = list(is_extensive.keys())
     n_data = len(dataloader.dataset)
     all_properties = {pname: torch.zeros(n_data) for pname in property_names}
     all_atom_types = torch.zeros((n_data, z_max))
@@ -112,19 +113,26 @@ def estimate_atomrefs(dataloader, divide_by_atoms, z_max=100):
             for atom_type, atom_count in zip(atom_types, atom_counts):
                 all_atom_types[data_counter, atom_type] = atom_count
             for pname in property_names:
-                all_properties[pname][data_counter] = batch[pname][i]
+                property_value = batch[pname][i]
+                if not is_extensive[pname]:
+                    property_value *= batch[properties.n_atoms][i]
+                all_properties[pname][data_counter] = property_value
             data_counter += 1
 
     # perform linear regression to get the elementwise energy contributions
     existing_atom_types = torch.where(all_atom_types.sum(axis=0) != 0)[0]
     X = torch.squeeze(all_atom_types[:, existing_atom_types])
-    y = all_properties["energy_U0"]
-    w = torch.linalg.inv(X.T @ X) @ X.T @ y
+    w = dict()
+    for pname in property_names:
+        if is_extensive[pname]:
+            w[pname] = torch.linalg.inv(X.T @ X) @ X.T @ all_properties[pname]
+        else:
+            w[pname] = torch.linalg.inv(X.T @ X) @ X.T @ (all_properties[pname] / X.sum(axis=1))
 
     # compute energy estimates
-    elementwise_contributions = torch.zeros((z_max))
-    for atom_type, weight in zip(existing_atom_types, w):
-        elementwise_contributions[atom_type] = weight
-    energy_estimates = torch.sum(all_atom_types * elementwise_contributions, axis=1)
+    elementwise_contributions = {pname: torch.zeros((z_max)) for pname in property_names}
+    for pname in property_names:
+        for atom_type, weight in zip(existing_atom_types, w[pname]):
+            elementwise_contributions[pname][atom_type] = weight
 
-    return energy_estimates
+    return elementwise_contributions
