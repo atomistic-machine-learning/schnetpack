@@ -29,7 +29,7 @@ def load_model(model_path, device="cpu", **kwargs):
         if not hasattr(model.representation, "electronic_embeddings"):
             model.representation.electronic_embeddings = []
         model.spk_version = (
-            "latest"  # TODO: replace by latest pypi version once available
+            "2.1.0"
         )
         return model
 
