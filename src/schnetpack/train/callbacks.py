@@ -15,9 +15,10 @@ from typing import List, Any
 from schnetpack.task import AtomisticTask
 from schnetpack import properties
 from collections import defaultdict
+from matplotlib import animation, pyplot as plt
 import h5py
 
-__all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage","So3kratesCallback"]
+__all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage","So3kratesCallback","So3kratesSphcDistancesCallback","So3kratesDrawSphcDistancesCallback"]
 
 
 class PredictionWriter(BasePredictionWriter):
@@ -255,3 +256,116 @@ class So3kratesCallback(Callback):
             np.savez(os.path.join(trainer.log_dir,"so3krates_records.npz"), **d)
 
         print("Saving sow equivalent for attention weights and chi")
+        
+        
+class So3kratesSphcDistancesCallback(Callback):
+    """Callback to collect and save SPHC distances for each layer across epochs."""
+    
+    def __init__(self):
+        super().__init__()
+        self.epoch_counter = 0
+    
+    def on_validation_end(self, trainer, pl_module: AtomisticTask) -> None:
+        layers = pl_module.model.representation.n_interactions
+
+        for l in range(layers):
+            # Path for the HDF5 file for the current layer
+            hdf5_path = os.path.join(trainer.log_dir, f"so3krates_distances_record_layer_{l}.h5")
+            
+            # Fetching the distances for the current layer
+            sphc_dist_out = pl_module.model.representation.so3krates_layer[l].record["sphc_distances_out"].detach().cpu().numpy()
+            sphc_dist_in = pl_module.model.representation.so3krates_layer[l].record["sphc_distances_in"].detach().cpu().numpy()
+            
+            # Open or create the HDF5 file and add datasets for the current epoch
+            with h5py.File(hdf5_path, 'a') as hf:
+                grp = hf.require_group(f"so3krates_layer_{l}")
+                # Create a new dataset for the current epoch
+                epoch_grp = grp.create_group(f"epoch_{self.epoch_counter}")
+                epoch_grp.create_dataset("sphc_distances_in", data=sphc_dist_in)
+                epoch_grp.create_dataset("sphc_distances_out", data=sphc_dist_out)
+        
+        self.epoch_counter += 1
+        print(f"Saving SO(3) SPHC equivariant distances for epoch {self.epoch_counter} in HDF5 format")
+        
+        
+    def on_fit_end(self, trainer, pl_module):
+        layers = pl_module.model.representation.n_interactions
+
+        for l in range(layers):
+            hdf5_path = os.path.join(trainer.log_dir, f"so3krates_distances_record_layer_{l}.h5")            
+            if not os.path.exists(hdf5_path):
+                print(f"HDF5 file for layer {l} not found at {hdf5_path}. Skipping visualization.")
+                continue
+                
+            with h5py.File(hdf5_path, 'r') as hf:
+                layer_group = hf.get(f"so3krates_layer_{l}")
+                if layer_group is None:
+                    print(f"No data found for layer {l} in HDF5 file. Skipping visualization.")
+                    continue
+                    
+                # Retrieve and sort epoch keys
+                epoch_keys = sorted(layer_group.keys(), key=lambda x: int(x.split('_')[-1]))
+                    
+                # Prepare data for all epochs
+                sphc_dist_in_list = []
+                sphc_dist_out_list = []
+                for epoch_key in epoch_keys:
+                    epoch_group = layer_group[epoch_key]
+                    sphc_dist_in = epoch_group['sphc_distances_in'][:]
+                    sphc_dist_out = epoch_group['sphc_distances_out'][:]
+                    sphc_dist_in_list.append(sphc_dist_in)
+                    sphc_dist_out_list.append(sphc_dist_out)
+                    
+                # Create animation
+                fig, ax = plt.subplots(figsize=(10, 8))
+                    
+                def animate(i):
+                    ax.clear()
+                    sphc_dist_in = sphc_dist_in_list[i]
+                    sphc_dist_out = sphc_dist_out_list[i]
+                    sorted_indices = np.argsort(sphc_dist_in.squeeze())
+                    chi_l_sorted = sphc_dist_in.squeeze()[sorted_indices]
+                    exp_chi_l_sorted = sphc_dist_out.squeeze()[sorted_indices]
+                    ax.plot(chi_l_sorted, exp_chi_l_sorted)
+                    ax.set_xlabel("sphc_distances_in")
+                    ax.set_ylabel("sphc_distances_out")
+                    ax.set_title(f"Layer {l} - Epoch {i}")
+                    ax.grid(True)
+                    
+                ani = animation.FuncAnimation(fig, animate, frames=len(epoch_keys), interval=500, repeat=False)
+                
+                # Define video save path
+                video_path = os.path.join(trainer.log_dir, f"sphc_distances_layer_{l}_trajectory.mp4")
+                    
+                # Save animation
+                writervideo = animation.FFMpegWriter(fps=2)
+                ani.save(video_path, writer=writervideo)
+                plt.close(fig)
+                print(f"Saved SPHC distances trajectory video for layer {l} at {video_path}")
+        
+        
+class So3kratesDrawSphcDistancesCallback(Callback):
+    """this is just a simple callback to draw the expanded SPHC-Distances"""
+
+    def __init__(self):
+        super().__init__()
+        self.epoch_counter = 0
+
+    def on_validation_end(self, trainer, pl_module: AtomisticTask) -> None:
+        layers = pl_module.model.representation.n_interactions
+        for l in range(layers):
+            sphc_dist_out = pl_module.model.representation.so3krates_layer[l].record["sphc_distances_out"].detach().cpu()
+            sphc_dist_in = pl_module.model.representation.so3krates_layer[l].record["sphc_distances_in"].detach().cpu()
+            fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+            # Sort the data by chi_l (x values)
+            sorted_indices = sphc_dist_in.clone().squeeze().detach().argsort()
+            chi_l_sorted = sphc_dist_in.clone().squeeze().detach()[sorted_indices]
+            exp_chi_l_sorted = sphc_dist_out[:, :].clone().detach()[sorted_indices]
+            # Plot the sorted data
+            ax.plot(chi_l_sorted.numpy(), exp_chi_l_sorted.numpy())
+            ax.set_ylabel("f(r)")
+            ax.set_xlabel("chi values")
+            ax.annotate("Gaussian RBF", xy=(0.6, 0.88), xycoords="axes fraction", fontsize=11, fontweight="bold")
+            plt.legend()
+            plt.savefig(f"exponentiel_rbf_mit_gauss_{l}_epoch_{self.epoch_counter}.png", dpi=400)
+        self.epoch_counter += 1

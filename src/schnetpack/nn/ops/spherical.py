@@ -280,7 +280,7 @@ def make_degree_norm(degrees):
         norm_result = snn.scatter_add(sphc**2, segment_ids, dim=1, dim_size=num_segments)
         per_degree_norm = torch.where(
                 norm_result > 0,
-                torch.sqrt(norm_result + 1e-8),0)
+                torch.sqrt(norm_result + 1e-8), 0)
         return per_degree_norm
     
     return fn
