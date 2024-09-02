@@ -16,12 +16,10 @@ from schnetpack.data import (
     BaseAtomsData,
     AtomsLoader,
     calculate_stats,
+    estimate_atomrefs,
     SplittingStrategy,
     RandomSplit,
-    #WeightedSampler,
 )
-
-from schnetpack.data.sampler import WeightedSampler, StratifiedSampler, tip_heights
 
 
 __all__ = ["AtomsDataModule", "AtomsDataModuleError"]
@@ -130,6 +128,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self.property_units = property_units
         self.distance_unit = distance_unit
         self._stats = {}
+        self._atomrefs = {}
         self._is_setup = False
         self.data_workdir = data_workdir
         self.cleanup_workdir_stage = cleanup_workdir_stage
@@ -362,6 +361,20 @@ class AtomsDataModule(pl.LightningDataModule):
         self._stats[key] = stats
         return stats
 
+    def get_atomrefs(
+        self, property: str, is_extensive: bool
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        key = (property, is_extensive)
+        if key in self._atomrefs:
+            return {property: self._atomrefs[key]}
+
+        atomrefs = estimate_atomrefs(
+            self.train_dataloader(),
+            is_extensive={property: is_extensive},
+        )[property]
+        self._atomrefs[key] = atomrefs
+        return {property: atomrefs}
+
     @property
     def train_dataset(self) -> BaseAtomsData:
         return self._train_dataset
@@ -375,16 +388,6 @@ class AtomsDataModule(pl.LightningDataModule):
         return self._test_dataset
 
     def train_dataloader(self) -> AtomsLoader:
-
-        #shuffle = True
-        #self.train_sampler = None
-        self.train_sampler = StratifiedSampler(
-            data_source=self.train_dataset,
-            partition_criterion=tip_heights,
-            num_samples=100,
-        )
-        shuffle = False
-
         if self._train_dataloader is None:
 
             train_batch_sampler = self._setup_sampler(
