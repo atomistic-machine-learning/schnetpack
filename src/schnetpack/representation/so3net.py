@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Optional, Union, List
+from typing import Callable, Dict, Optional, Union, List, Union
 
 import torch
 import torch.nn as nn
@@ -28,9 +28,9 @@ class SO3net(nn.Module):
         cutoff_fn: Optional[Callable] = None,
         shared_interactions: bool = False,
         return_vector_representation: bool = False,
-        activation: Optional[Callable] = F.silu,
         nuclear_embedding: Optional[nn.Module] = None,
         electronic_embeddings: Optional[List] = None,
+        activation: Optional[Callable] = F.silu,
     ):
         """
         Args:
@@ -46,6 +46,8 @@ class SO3net(nn.Module):
             nuclear_embedding: custom nuclear embedding (e.g. spk.nn.embeddings.NuclearEmbedding)
             electronic_embeddings: list of electronic embeddings. E.g. for spin and
                 charge (see spk.nn.embeddings.ElectronicEmbedding)
+            activate_charge_spin_embedding: if True, charge and spin embeddings are added to nuclear embeddings taken from SpookyNet Implementation
+            nuclear_embedding: type of nuclear embedding to use (simple is simple embedding and complex is the one with electron configuration)
         """
         super(SO3net, self).__init__()
 
@@ -117,6 +119,9 @@ class SO3net(nn.Module):
         r_ij = inputs[properties.Rij]
         idx_i = inputs[properties.idx_i]
         idx_j = inputs[properties.idx_j]
+        # inputs needed for charge and spin embedding
+        num_batch = len(inputs[properties.idx])
+        batch_seg = inputs[properties.idx_m]
 
         # compute atom and pair features
         d_ij = torch.norm(r_ij, dim=1, keepdim=True)

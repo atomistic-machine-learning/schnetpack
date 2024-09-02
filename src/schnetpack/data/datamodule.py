@@ -18,7 +18,10 @@ from schnetpack.data import (
     calculate_stats,
     SplittingStrategy,
     RandomSplit,
+    #WeightedSampler,
 )
+
+from schnetpack.data.sampler import WeightedSampler, StratifiedSampler, tip_heights
 
 
 __all__ = ["AtomsDataModule", "AtomsDataModuleError"]
@@ -372,6 +375,16 @@ class AtomsDataModule(pl.LightningDataModule):
         return self._test_dataset
 
     def train_dataloader(self) -> AtomsLoader:
+
+        #shuffle = True
+        #self.train_sampler = None
+        self.train_sampler = StratifiedSampler(
+            data_source=self.train_dataset,
+            partition_criterion=tip_heights,
+            num_samples=100,
+        )
+        shuffle = False
+
         if self._train_dataloader is None:
 
             train_batch_sampler = self._setup_sampler(

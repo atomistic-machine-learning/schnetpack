@@ -1,8 +1,10 @@
-from typing import Callable, Dict, Union, Optional, List
+from typing import Callable, Dict, Union, Union, Optional, List
 import torch
 from torch import nn
 import schnetpack.properties as properties
 from schnetpack.nn import Dense, scatter_add
+from schnetpack.nn.embedding import NuclearEmbedding
+from schnetpack.nn import ElectronicEmbedding
 from schnetpack.nn.activations import shifted_softplus
 
 import schnetpack.nn as snn
@@ -68,6 +70,7 @@ class SchNetInteraction(nn.Module):
 
         x = self.f2out(x)
         return x
+
 
 
 class SchNet(nn.Module):
@@ -156,6 +159,7 @@ class SchNet(nn.Module):
         d_ij = torch.norm(r_ij, dim=1)
         f_ij = self.radial_basis(d_ij)
         rcut_ij = self.cutoff_fn(d_ij)
+
 
         # compute initial embeddings
         x = self.embedding(atomic_numbers)

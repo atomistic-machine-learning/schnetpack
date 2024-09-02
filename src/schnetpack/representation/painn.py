@@ -148,6 +148,7 @@ class PaiNN(nn.Module):
             n_interactions: number of interaction blocks.
             radial_basis: layer for expanding interatomic distances in a basis set
             cutoff_fn: cutoff function
+            max_z: maximal nuclear charge
             activation: activation function
             shared_interactions: if True, share the weights across
                 interaction blocks.
@@ -222,7 +223,7 @@ class PaiNN(nn.Module):
         idx_i = inputs[properties.idx_i]
         idx_j = inputs[properties.idx_j]
         n_atoms = atomic_numbers.shape[0]
-
+        
         # compute atom and pair features
         d_ij = torch.norm(r_ij, dim=1, keepdim=True)
         dir_ij = r_ij / d_ij
