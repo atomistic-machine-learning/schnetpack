@@ -60,13 +60,21 @@ class ModelOutput(nn.Module):
         if self.loss_weight == 0 or self.loss_fn is None:
             return 0.0
 
+        # since there is no value to compare
+        #if self.name == "electronegativity":
+        #    loss = self.loss_weight * self.loss_fn(pred)
+
+        #else:
         loss = self.loss_weight * self.loss_fn(
-            pred[self.name], target[self.target_property]
-        )
+                pred[self.name], target[self.target_property]
+            )
         return loss
 
     def update_metrics(self, pred, target, subset):
         for metric in self.metrics[subset].values():
+        #    if self.name == "electronegativity":
+        #        metric(pred)
+        #    else:
             metric(pred[self.name], target[self.target_property])
 
 
@@ -104,6 +112,7 @@ class AtomisticTask(pl.LightningModule):
         scheduler_args: Optional[Dict[str, Any]] = None,
         scheduler_monitor: Optional[str] = None,
         warmup_steps: int = 0,
+        freeze_weights: bool = False
     ):
         """
         Args:
@@ -129,6 +138,7 @@ class AtomisticTask(pl.LightningModule):
         self.grad_enabled = len(self.model.required_derivatives) > 0
         self.lr = optimizer_args["lr"]
         self.warmup_steps = warmup_steps
+        self.freeze_weights = freeze_weights # hack added to modify the optimizer and scheduler
         self.save_hyperparameters()
 
     def setup(self, stage=None):
@@ -177,7 +187,8 @@ class AtomisticTask(pl.LightningModule):
 
         pred = self.predict_without_postprocessing(batch)
         pred, targets = self.apply_constraints(pred, targets)
-
+        # needed for EN geometric loss
+        #pred["_idx_m"] = batch["_idx_m"]
         loss = self.loss_fn(pred, targets)
 
         self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
@@ -199,7 +210,8 @@ class AtomisticTask(pl.LightningModule):
 
         pred = self.predict_without_postprocessing(batch)
         pred, targets = self.apply_constraints(pred, targets)
-
+        # needed for EN geometric loss
+        #pred["_idx_m"] = batch["_idx_m"]
         loss = self.loss_fn(pred, targets)
 
         self.log(
@@ -229,7 +241,8 @@ class AtomisticTask(pl.LightningModule):
 
         pred = self.predict_without_postprocessing(batch)
         pred, targets = self.apply_constraints(pred, targets)
-
+        # needed for EN geometric loss
+        #pred["_idx_m"] = batch["_idx_m"]
         loss = self.loss_fn(pred, targets)
 
         self.log(
@@ -251,9 +264,15 @@ class AtomisticTask(pl.LightningModule):
         return pred
 
     def configure_optimizers(self):
-        optimizer = self.optimizer_cls(
-            params=self.parameters(), **self.optimizer_kwargs
-        )
+
+        if self.freeze_weights:
+            optimizer = self.optimizer_cls(
+                filter(lambda p: p.requires_grad,self.parameters()), **self.optimizer_kwargs)
+        
+        else:
+            optimizer = self.optimizer_cls(
+                params=self.parameters(), **self.optimizer_kwargs
+            )
 
         if self.scheduler_cls:
             schedulers = []
@@ -337,3 +356,21 @@ class ConsiderOnlySelectedAtoms(nn.Module):
         ]
 
         return pred, targets
+
+# for task and save model when using wandb saving gradients and params
+    # def save_model(self, path: str, do_postprocessing: Optional[bool] = None):
+    #     if self.global_rank == 0:
+    #         pp_status = self.model.do_postprocessing
+    #         if do_postprocessing is not None:
+    #             self.model.do_postprocessing = do_postprocessing
+
+    #         try:
+    #             import wandb
+    #             wandb.unwatch()
+    #             torch.save(self.model, path)
+    #             wandb.watch(self.model)
+    #         except:
+    #             torch.save(self.model, path)
+
+    #         #torch.save(self.model, path)
+    #         self.model.do_postprocessing = pp_status
