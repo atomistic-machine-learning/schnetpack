@@ -17,7 +17,7 @@ from schnetpack import properties
 from collections import defaultdict
 import h5py
 
-__all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage","So3kratesCallback"]
+__all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
 
 
 
