@@ -59,3 +59,9 @@ script-files = [
 
 [tool.setuptools.dynamic]
 version = {attr = "schnetpack.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+schnetpack = ["configs/**/*.yaml"]
