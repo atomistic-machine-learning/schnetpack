@@ -58,14 +58,15 @@ class EmbeddingWriter(Callback):
         
         self.file_name = file_name
         self.writer_interval = writer_interval
-
+        self.writing_keys = [
+                "scalar_representation", "initial_nuclear_embedding","_idx_i","_idx_j","_idx_m","_n_atoms","_atomic_numbers","charge"
+                ]
         # init the file 
         with h5py.File(self.file_name, 'w') as f:
-            for p in [
-                "scalar_representation", "vector_representation","idx_i","idx_j","idx_m","n_atoms","atomic_numbers","charge"]:
+            for p in self.writing_keys :
                 f.create_group(p)
 
-    def on_train_batch_end(self,
+    def on_predict_batch_end(self,
         trainer,
         pl_module: AtomisticTask,
         outputs,
@@ -75,19 +76,23 @@ class EmbeddingWriter(Callback):
         
 
         if batch_idx % self.writer_interval == 0:
-            q,mu = (batch["scalar_representation"],batch["vector_representation"])
-            idx_i,idx_j,idx_m,n_atoms = (batch["_idx_i"],batch["_idx_j"],batch["_idx_m"],batch["_n_atoms"])
-            atomic_numbers = batch[properties.Z]
+            #q,mu = (batch["scalar_representation"],batch["vector_representation"])
+            #idx_i,idx_j,idx_m,n_atoms = (batch["_idx_i"],batch["_idx_j"],batch["_idx_m"],batch["_n_atoms"])
+            #atomic_numbers = batch[properties.Z]
             tag = "global step "+str(trainer.global_step)+"batch idx "+str(batch_idx)
             with h5py.File(self.file_name, 'a') as f:
-                f["scalar_representation"].create_dataset(tag, data=q.detach().cpu().numpy(),compression="gzip") 
-                #f["vector_representation"].create_dataset(tag, data=mu.detach().cpu().numpy(),compression="gzip")
-                f["idx_i"].create_dataset(tag, data=idx_i.detach().cpu().numpy(),compression="gzip")
-                f["idx_j"].create_dataset(tag, data=idx_j.detach().cpu().numpy(),compression="gzip")
-                f["idx_m"].create_dataset(tag, data=idx_m.detach().cpu().numpy(),compression="gzip")
-                f["n_atoms"].create_dataset(tag, data=n_atoms.detach().cpu().numpy(),compression="gzip")
-                f["atomic_numbers"].create_dataset(tag, data=atomic_numbers.detach().cpu().numpy(),compression="gzip")
-                f["charge"].create_dataset(tag, data=batch["charge"].detach().cpu().numpy(),compression="gzip")                
+                
+                for key in self.writing_keys:
+                    f[key].create_dataset(tag, data=batch[key].detach().cpu().numpy(),compression="gzip")
+
+                #f["scalar_representation"].create_dataset(tag, data=q.detach().cpu().numpy(),compression="gzip") 
+                ##f["vector_representation"].create_dataset(tag, data=mu.detach().cpu().numpy(),compression="gzip")
+                #f["idx_i"].create_dataset(tag, data=idx_i.detach().cpu().numpy(),compression="gzip")
+                #f["idx_j"].create_dataset(tag, data=idx_j.detach().cpu().numpy(),compression="gzip")
+                #f["idx_m"].create_dataset(tag, data=idx_m.detach().cpu().numpy(),compression="gzip")
+                #f["n_atoms"].create_dataset(tag, data=n_atoms.detach().cpu().numpy(),compression="gzip")
+                #f["atomic_numbers"].create_dataset(tag, data=atomic_numbers.detach().cpu().numpy(),compression="gzip")
+                #f["charge"].create_dataset(tag, data=batch["charge"].detach().cpu().numpy(),compression="gzip")                
 
         
     

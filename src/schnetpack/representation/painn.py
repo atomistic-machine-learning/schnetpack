@@ -238,6 +238,8 @@ class PaiNN(nn.Module):
 
         # compute initial embeddings
         q = self.embedding(atomic_numbers)
+        # only tmp added for writing out initial embedding
+        inputs["initial_nuclear_embedding"] = q
         for embedding in self.electronic_embeddings:
             q = q + embedding(q, inputs)
         q = q.unsqueeze(1)
