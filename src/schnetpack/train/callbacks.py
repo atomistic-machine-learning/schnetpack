@@ -49,6 +49,34 @@ __all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
 #         # get the input of the model
 #         inputs = batch
 
+class CustomLRSchedulerCallback(Callback):
+    def __init__(self, threshold: float, target_lr: float):
+        """
+        Args:
+            threshold (float): The validation loss threshold below which the learning rate is set.
+            target_lr (float): The new learning rate to set if the validation loss falls below the threshold.
+        """
+        super().__init__()
+        self.threshold = threshold
+        self.target_lr = target_lr
+        # we only want to to do this once
+        self.counter = 0 
+
+    def on_validation_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"):
+        # Get the last validation loss from the logger (or from trainer if no logger is used)
+        val_loss = trainer.callback_metrics.get("val_loss")
+
+        # Check if validation loss is below the threshold
+        if val_loss is not None and val_loss < self.threshold and self.counter == 0:
+            # Update learning rate to the target value
+            for optimizer in trainer.optimizers:
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = self.target_lr
+
+            print(f"Validation loss fell below {self.threshold}. Learning rate set to {self.target_lr}.")
+            self.counter += 1
+
+
 class EmbeddingWriter(Callback):
 
     def __init__(

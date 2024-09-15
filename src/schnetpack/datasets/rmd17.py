@@ -159,6 +159,8 @@ class rMD17(AtomsDataModule):
             property_unit_dict = {
                 rMD17.energy: "kcal/mol",
                 rMD17.forces: "kcal/mol/Ang",
+                "total_charge": 1.0,
+                "spin_multiplicity": 1.0,
             }
 
             tmpdir = tempfile.mkdtemp("md17")
@@ -227,6 +229,9 @@ class rMD17(AtomsDataModule):
                 structure.R: ats.positions,
                 structure.cell: ats.cell,
                 structure.pbc: ats.pbc,
+                # ADDED BECAUSE OF QCML dataset
+                'total_charge': np.array([0]),
+                'spin_multiplicity': np.array([1])
             }
             property_list.append(properties)
 
