@@ -16,6 +16,8 @@ from schnetpack.task import AtomisticTask
 from schnetpack import properties
 from collections import defaultdict
 import h5py
+import pandas as pd
+from tqdm import tqdm
 
 __all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
 
@@ -76,6 +78,162 @@ class CustomLRSchedulerCallback(Callback):
             print(f"Validation loss fell below {self.threshold}. Learning rate set to {self.target_lr}.")
             self.counter += 1
 
+import numpy as np
+import pandas as pd
+from collections import defaultdict
+
+
+
+import h5py
+import numpy as np
+
+class EmbeddingWriterV3(Callback):
+
+    def __init__(self, file_name: str, writer_interval: int, max_examples_per_atom_type: int = 25000):
+        self.file_name = file_name
+        self.writer_interval = writer_interval
+        self.max_examples_per_atom_type = max_examples_per_atom_type
+        
+        # Initialize atom counts
+        self.atom_count = {int(k): 0 for k in range(1, 100)}
+        
+        # Create or load the HDF5 file and initialize groups if not present
+        with h5py.File(self.file_name, 'w') as f:
+            for atom_type in range(1, 100):
+                if str(atom_type) not in f:
+                    f.create_group(str(atom_type))
+        
+        self.batch_counter = 0
+        self.data_accumulator = []
+
+    def on_predict_batch_end(self, trainer, pl_module: AtomisticTask, outputs, batch: Any, batch_idx: int, dataloader_idx: int = 0):
+        # Extract necessary data from the batch
+        atomic_numbers = batch["_atomic_numbers"].detach().cpu().numpy().reshape(-1)
+        embeddings = {
+            "initial_nuclear_embedding": batch["initial_nuclear_embedding"].detach().cpu().numpy(),
+            "scalar representation MP_1": batch["scalar representation MP_1"].detach().cpu().numpy(),
+            "scalar representation MP_2": batch["scalar representation MP_2"].detach().cpu().numpy(),
+            "scalar representation MP_3": batch["scalar representation MP_3"].detach().cpu().numpy()
+        }
+
+        # Collect the data for each atom type
+        for atom_type in tqdm(np.unique(atomic_numbers)):
+            atom_indices = np.where(atomic_numbers == atom_type)[0]
+            atom_count = len(atom_indices)
+
+            # If we already have 25k examples for this atom type, skip further writing
+            if self.atom_count[atom_type] >= self.max_examples_per_atom_type:
+                continue
+
+            # Calculate how many more examples we can write for this atom type
+            remaining_slots = self.max_examples_per_atom_type - self.atom_count[atom_type]
+            selected_indices = atom_indices[:remaining_slots]  # Limit to remaining slots
+            
+            # Accumulate data for the selected indices
+            self.data_accumulator.append((atom_type, {key: embeddings[key][selected_indices] for key in embeddings}))
+            self.atom_count[atom_type] += len(selected_indices)
+
+        # Write to HDF5 after the specified interval
+        self.batch_counter += 1
+        if self.batch_counter % self.writer_interval == 0:
+            self._write_to_hdf5()
+
+    def _write_to_hdf5(self):
+        # Open the HDF5 file and write accumulated data
+        with h5py.File(self.file_name, 'a') as f:
+            for atom_type, data in self.data_accumulator:
+                atom_group = f[str(atom_type)]
+
+                # For each dataset (embedding/representation), append new data
+                for key, values in data.items():
+                    if key in atom_group:
+                        # Append to existing dataset
+                        dset = atom_group[key]
+                        dset.resize(dset.shape[0] + values.shape[0], axis=0)
+                        dset[-values.shape[0]:] = values
+                    else:
+                        # Create new dataset if it doesn't exist
+                        maxshape = (None, values.shape[1])  # Set maxshape to None to allow appending
+                        dset = atom_group.create_dataset(key, data=values, maxshape=maxshape, chunks=True)
+
+        # Clear the data accumulator after writing
+        self.data_accumulator = []
+
+
+
+class EmbeddingWriterV2(Callback):
+
+    def __init__(self, file_name: str, writer_interval: int):
+        # Initialize the atomic count dictionary
+        self.MP1_atom_count = defaultdict(int)
+        
+        # Prepare the column names
+        self.cols = ["atomic_numbers"]
+        for k in ["initial_nuclear_embedding", "scalar representation MP_1", "scalar representation MP_2", "scalar representation MP_3"]:
+            self.cols.extend([f"{k}_Feature {i}" for i in range(256)])
+        
+        # Initialize an empty dataframe in memory
+        self.data_accumulator = pd.DataFrame(columns=self.cols)
+        
+        # File details
+        self.file_name = file_name
+        self.writer_interval = writer_interval
+        self.batch_counter = 0
+
+    def on_predict_batch_end(self, trainer, pl_module: AtomisticTask, outputs, batch: Any, batch_idx: int, dataloader_idx: int = 0):
+        # Extract the necessary keys
+        keys = ["_atomic_numbers", "initial_nuclear_embedding", "scalar representation MP_1", "scalar representation MP_2", "scalar representation MP_3"]
+
+        # Prepare data for the current batch
+        batch_data = []
+        for k in keys:
+            if k == "_atomic_numbers":
+                batch_data.append(batch[k].detach().cpu().numpy().reshape(-1, 1))
+            else:
+                batch_data.append(batch[k].detach().cpu().numpy())
+
+        # Concatenate the data along the axis
+        batch_data = np.concatenate(batch_data, axis=1)
+        
+        # Create a DataFrame from the concatenated data
+        batch_df = pd.DataFrame(batch_data, columns=self.cols)
+        atomic_numbers = batch_df["atomic_numbers"].values
+
+        # Count atom types and filter data
+        for atom_num, count in zip(*np.unique(atomic_numbers, return_counts=True)):
+            if self.MP1_atom_count[atom_num] + count <= 2000:
+                self.MP1_atom_count[atom_num] += count
+            else:
+                allowed_count = 2000 - self.MP1_atom_count[atom_num]
+                if allowed_count > 0:
+                    self.MP1_atom_count[atom_num] = 2000
+                    batch_df = batch_df[batch_df["atomic_numbers"] == atom_num][:allowed_count]
+
+        # Accumulate the data in memory
+        self.data_accumulator = pd.concat([self.data_accumulator, batch_df], axis=0)
+
+        # Write to CSV after the specified interval
+        self.batch_counter += 1
+        if self.batch_counter % self.writer_interval == 0:
+            self._write_to_file()
+
+    def _write_to_file(self):
+        # Load the existing data, if any
+        try:
+            existing_data = pd.read_csv(self.file_name, index_col="atomic_numbers")
+        except FileNotFoundError:
+            existing_data = pd.DataFrame(columns=self.cols).set_index("atomic_numbers")
+
+        # Concatenate the existing data with the accumulated data
+        combined_data = pd.concat([existing_data, self.data_accumulator], axis=0)
+
+        # Write the combined data to the CSV file
+        combined_data.to_csv(self.file_name)
+
+        # Clear the accumulator to free up memory
+        self.data_accumulator = pd.DataFrame(columns=self.cols)
+
+
 
 class EmbeddingWriter(Callback):
 
@@ -84,15 +242,40 @@ class EmbeddingWriter(Callback):
             file_name:str,
             writer_interval: int):
         
+
+        self.MP1_atom_count = {int(k) : 0 for k in range(1,100)}
+
+        cols = ["atomic_numbers"]
+        for k in ["initial_nuclear_embedding","scalar representation MP_1","scalar representation MP_2","scalar representation MP_3"]:
+            c = [f"{k}_Feature {i}" for i in range(256)]
+            cols.extend(c)
+
+        for k in range(1,100):
+            df = pd.DataFrame(columns=cols)
+            df.set_index("atomic_numbers",inplace=True)
+            df.to_csv(f"/home/elron/phd/projects/google/qmml/experiments/embedding_dfs/{k}_embeds.csv")
+
         self.file_name = file_name
         self.writer_interval = writer_interval
         self.writing_keys = [
                 "scalar_representation", "initial_nuclear_embedding","_idx_i","_idx_j","_idx_m","_n_atoms","_atomic_numbers","charge"
                 ]
+        
+        #["MP_1","MP_2","MP_3"]
+        #f"scalar representation MP_{i+1}"
         # init the file 
-        with h5py.File(self.file_name, 'w') as f:
-            for p in self.writing_keys :
-                f.create_group(p)
+        #with h5py.File(self.file_name, 'w') as f:
+        #    for p in self.writing_keys :
+                #f.create_group(p)
+        #        g = f.create_group(p)
+                #g.attrs["MP_1_atom_count"] = d
+                #g.attrs["MP_1_atom_count"] = d
+                #g.attrs["MP_1_atom_count"] = d
+                # g.attrs["cutoff_shell"] = cutoff_shell
+                # g.attrs["cell"] = np.array(cell)
+                # g.attrs["n_replicas"] = n_replicas
+                # g.attrs["system_temperature"] = system_temperature
+                # g.attrs["model_id"] = model_id
 
     def on_predict_batch_end(self,
         trainer,
@@ -102,16 +285,58 @@ class EmbeddingWriter(Callback):
         batch_idx: int,
         dataloader_idx: int = 0):
         
+        # tmp create dataframe to store the data
+        keys = ["_atomic_numbers","initial_nuclear_embedding","scalar representation MP_1","scalar representation MP_2","scalar representation MP_3"]
+        cols = []
 
-        if batch_idx % self.writer_interval == 0:
+
+        data = []
+        for k in keys:
+            if k == "_atomic_numbers":
+                data.append(batch[k].detach().cpu().numpy().reshape(-1,1))
+                cols.append("atomic_numbers")
+            else:
+                data.append(batch[k].detach().cpu().numpy())
+                c = [f"{k}_Feature {i}" for i in range(data[-1].shape[1])]
+                cols.extend(c)
+
+
+        data = np.concatenate(data,axis=1)
+        data = pd.DataFrame(data,columns=cols)
+        data.set_index("atomic_numbers",inplace=True)
+
+
+
+        # count the atom types to later prevent exorbitant big file
+        counts = data.index.value_counts().to_dict()
+        for k in tqdm(counts.keys()):
+            
+            if self.MP1_atom_count[k] > 25000:
+                continue
+                #data.drop(data[data.index == k].index, inplace=True)
+
+            else:
+                df = pd.read_csv(f"/home/elron/phd/projects/google/qmml/experiments/embedding_dfs/{int(k)}_embeds.csv",index_col="atomic_numbers")
+                df = pd.concat([df,data[data.index == k]],axis=0)
+                df.to_csv(f"/home/elron/phd/projects/google/qmml/experiments/embedding_dfs/{int(k)}_embeds.csv")
+                self.MP1_atom_count[k] += counts[k]
+
+
+        #df = pd.read_csv(self.file_name,index_col="atomic_numbers")
+        #df = pd.concat([df,data],axis=0)
+        #df.to_csv(self.file_name)
+#        if batch_idx % self.writer_interval == 0:
             #q,mu = (batch["scalar_representation"],batch["vector_representation"])
             #idx_i,idx_j,idx_m,n_atoms = (batch["_idx_i"],batch["_idx_j"],batch["_idx_m"],batch["_n_atoms"])
             #atomic_numbers = batch[properties.Z]
-            tag = "global step "+str(trainer.global_step)+"batch idx "+str(batch_idx)
-            with h5py.File(self.file_name, 'a') as f:
+#            tag = "global step "+str(trainer.global_step)+"batch idx "+str(batch_idx)
+
+
+
+#            with h5py.File(self.file_name, 'a') as f:
                 
-                for key in self.writing_keys:
-                    f[key].create_dataset(tag, data=batch[key].detach().cpu().numpy(),compression="gzip")
+#                for key in self.writing_keys:
+#                    f[key].create_dataset(tag, data=batch[key].detach().cpu().numpy(),compression="gzip")
 
                 #f["scalar_representation"].create_dataset(tag, data=q.detach().cpu().numpy(),compression="gzip") 
                 ##f["vector_representation"].create_dataset(tag, data=mu.detach().cpu().numpy(),compression="gzip")
