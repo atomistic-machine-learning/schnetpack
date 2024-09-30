@@ -129,7 +129,7 @@ class AtomisticTask(pl.LightningModule):
         self.grad_enabled = len(self.model.required_derivatives) > 0
         self.lr = optimizer_args["lr"]
         self.warmup_steps = warmup_steps
-        self.save_hyperparameters(ignore=['model'])
+        self.save_hyperparameters()
 
     def setup(self, stage=None):
         if stage == "fit":
@@ -202,7 +202,14 @@ class AtomisticTask(pl.LightningModule):
 
         loss = self.loss_fn(pred, targets)
 
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch['_idx']))
+        self.log(
+            "val_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=len(batch["_idx"]),
+        )
         self.log_metrics(pred, targets, "val")
 
         return {"val_loss": loss}
@@ -225,7 +232,14 @@ class AtomisticTask(pl.LightningModule):
 
         loss = self.loss_fn(pred, targets)
 
-        self.log("test_loss", loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch['_idx']))
+        self.log(
+            "test_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=len(batch["_idx"]),
+        )
         self.log_metrics(pred, targets, "test")
         return {"test_loss": loss}
 
@@ -283,9 +297,7 @@ class AtomisticTask(pl.LightningModule):
             pp_status = self.model.do_postprocessing
             if do_postprocessing is not None:
                 self.model.do_postprocessing = do_postprocessing
-
             torch.save(self.model, path)
-
             self.model.do_postprocessing = pp_status
 
 

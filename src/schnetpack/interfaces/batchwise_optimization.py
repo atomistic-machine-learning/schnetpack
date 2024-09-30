@@ -22,7 +22,12 @@ from schnetpack.interfaces.ase_interface import AtomsConverter
 from schnetpack import properties
 
 
-__all__ = ["ASEBatchwiseLBFGS", "BatchwiseCalculator", "BatchwiseEnsembleCalculator", "NNEnsemble"]
+__all__ = [
+    "ASEBatchwiseLBFGS",
+    "BatchwiseCalculator",
+    "BatchwiseEnsembleCalculator",
+    "NNEnsemble",
+]
 
 
 class AtomsConverterError(Exception):
@@ -142,7 +147,9 @@ class BatchwiseCalculator:
             self.force_key: self.energy_conversion / self.position_conversion,
         }
         if self.stress_key is not None:
-            self.property_units[self.stress_key] = self.energy_conversion / self.position_conversion ** 3
+            self.property_units[self.stress_key] = (
+                self.energy_conversion / self.position_conversion**3
+            )
 
         # load model from path if needed
         if type(model) == str:
@@ -151,7 +158,7 @@ class BatchwiseCalculator:
         self._initialize_model(model)
 
         # debugging: log forward pass time and nbh list calc. time
-        self.total_fwd_time = 0.
+        self.total_fwd_time = 0.0
         self.n_fwd_iterations = 0
 
         self.previous_positions = None
@@ -164,7 +171,7 @@ class BatchwiseCalculator:
     def _initialize_model(self, model: nn.Module) -> None:
         n_output_modules = len(model.output_modules)
         for auxiliary_output_module in self.auxiliary_output_modules:
-            model.output_modules.insert(n_output_modules-1, auxiliary_output_module)
+            model.output_modules.insert(n_output_modules - 1, auxiliary_output_module)
         self.model = model.eval()
         self.model.to(device=self.device, dtype=self.dtype)
 
@@ -174,7 +181,11 @@ class BatchwiseCalculator:
         for name in property_keys:
             if name not in self.results:
                 return True
-        if self.previous_positions is None or self.previous_cell is None or self.previous_pbc is None:
+        if (
+            self.previous_positions is None
+            or self.previous_cell is None
+            or self.previous_pbc is None
+        ):
             return True
         if not torch.equal(inputs["_positions"], self.previous_positions):
             return True
@@ -184,14 +195,19 @@ class BatchwiseCalculator:
             return True
         return False
 
-    def get_forces(self, inputs, fixed_atoms_mask: Optional[List[int]] = None) -> np.array:
+    def get_forces(
+        self, inputs, fixed_atoms_mask: Optional[List[int]] = None
+    ) -> np.array:
         """
         atoms:
 
         fixed_atoms_mask:
             list of indices corresponding to atoms with positions fixed in space.
         """
-        if self._requires_calculation(property_keys=[self.energy_key, self.force_key], inputs=inputs):
+
+        if self._requires_calculation(
+            property_keys=[self.energy_key, self.force_key], inputs=inputs
+        ):
             self.calculate(inputs)
         f = self.results[self.force_key]
         if fixed_atoms_mask is not None:
@@ -225,10 +241,7 @@ class BatchwiseCalculator:
         # store model results in calculator
         for prop in property_keys:
             if prop in model_results:
-                results[prop] = (
-                    model_results[prop].detach()
-                    * self.property_units[prop]
-                )
+                results[prop] = model_results[prop].detach() * self.property_units[prop]
             else:
                 raise AtomsConverterError(
                     "'{:s}' is not a property of your model. Please "
@@ -243,6 +256,7 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
     """
     Calculator for ensemble of neural network models for batchwise optimization.
     """
+
     # TODO: inherit from SpkEnsembleCalculator
     def __init__(
         self,
@@ -304,16 +318,14 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
     def _load_model(self, model: str) -> nn.ModuleList:
         # get model paths
         model_names = os.listdir(model)
-        model_paths = [
-            os.path.join(model, model_name) for model_name in model_names
-        ]
+        model_paths = [os.path.join(model, model_name) for model_name in model_names]
 
         # create module list
         models = torch.nn.ModuleList()
         for m_path in model_paths:
-            m = torch.load(
-                os.path.join(m_path, "best_model"), map_location="cpu"
-            ).to(torch.float64)
+            m = torch.load(os.path.join(m_path, "best_model"), map_location="cpu").to(
+                torch.float64
+            )
             models.append(m)
 
         return models
@@ -325,9 +337,7 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
                 m.output_modules.insert(1, auxiliary_output_module)
 
         # initialize ensemble
-        ensemble = NNEnsemble(
-            models=model, properties=list(self.property_units.keys())
-        )
+        ensemble = NNEnsemble(models=model, properties=list(self.property_units.keys()))
         self.model = ensemble.eval().to(device=self.device, dtype=self.dtype)
 
     def calculate(self, atoms: List[ase.Atoms]) -> None:
@@ -340,8 +350,7 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
         for prop in property_keys:
             if prop in model_results:
                 results["{}_uncertainty".format(prop)] = (
-                    stds[prop].detach().cpu().numpy()
-                    * self.property_units[prop]
+                    stds[prop].detach().cpu().numpy() * self.property_units[prop]
                 )
 
         # store model results in calculator
@@ -433,8 +442,16 @@ class BatchwiseDynamics(Dynamics):
         ats = []
         cells = torch.diagonal(self.inputs["_cell"], offset=0, dim1=-2, dim2=-1)
         for config_idx in range(self.n_configs):
-            pos = self.inputs["_positions"][self.inputs["_idx_m"] == config_idx].cpu().numpy()
-            at_nums = self.inputs["_atomic_numbers"][self.inputs["_idx_m"] == config_idx].cpu().numpy()
+            pos = (
+                self.inputs["_positions"][self.inputs["_idx_m"] == config_idx]
+                .cpu()
+                .numpy()
+            )
+            at_nums = (
+                self.inputs["_atomic_numbers"][self.inputs["_idx_m"] == config_idx]
+                .cpu()
+                .numpy()
+            )
             at = Atoms(
                 positions=pos,
                 numbers=at_nums,
@@ -675,7 +692,6 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         verbose: bool = False,
         device: torch.device = torch.device("cuda"),
     ):
-
         """Parameters:
 
         calculator:
@@ -770,8 +786,8 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             raise NotImplementedError("Lines search has not been implemented yet")
 
         # debugging: log forward pass time and nbh list calc. time
-        self.total_opt_time = 0.
-        self.ase_time = 0.
+        self.total_opt_time = 0.0
+        self.ase_time = 0.0
 
         self.device = device
 
@@ -821,12 +837,20 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         q_euclidean = -f.reshape(self.n_configs, -1, 3)
         squared_max_forces = (q_euclidean**2).sum(axis=-1).max(axis=-1)[0]
         configs_mask = squared_max_forces < self.fmax**2
-        mask = configs_mask[:, None, None].repeat(1, q_euclidean.shape[1], q_euclidean.shape[2]).view(-1, 3)
+        mask = (
+            configs_mask[:, None, None]
+            .repeat(1, q_euclidean.shape[1], q_euclidean.shape[2])
+            .view(-1, 3)
+        )
 
         # currently all structures must exhibit the same number of atoms
         num_atoms = q_euclidean.shape[1]
 
-        r = self.inputs["_positions"][self.fixed_atoms_mask].to(torch.float64).to(self.device)
+        r = (
+            self.inputs["_positions"][self.fixed_atoms_mask]
+            .to(torch.float64)
+            .to(self.device)
+        )
 
         self.update(r, f, self.r0, self.f0)
 
@@ -873,7 +897,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             dr = self.determine_step(self.p, num_atoms) * self.damping
 
         # update positions
-        self.inputs["_positions"][self.fixed_atoms_mask] += dr.to(self.calculator.device).to(torch.float32)
+        self.inputs["_positions"][self.fixed_atoms_mask] += dr.to(
+            self.calculator.device
+        ).to(torch.float32)
 
         self.iteration += 1
         self.r0 = r

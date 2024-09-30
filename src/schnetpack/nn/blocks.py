@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import schnetpack.nn as snn
+from schnetpack.nn.activations import shifted_softplus
 
 __all__ = ["build_mlp", "build_gated_equivariant_mlp"]
 
@@ -153,3 +154,143 @@ def build_gated_equivariant_mlp(
     # put all layers together to make the network
     out_net = nn.Sequential(*layers)
     return out_net
+
+
+class Residual(nn.Module):
+    """
+    Pre-activation residual block inspired by He, Kaiming, et al. "Identity
+    mappings in deep residual networks."
+    """
+
+    def __init__(
+        self,
+        num_features: int,
+        activation: Union[Callable, nn.Module] = None,
+        bias: bool = True,
+        zero_init: bool = True,
+    ) -> None:
+        """
+        Args:
+            num_features: Dimensions of feature space.
+            activation: activation function
+        """
+        super(Residual, self).__init__()
+        # initialize attributes
+
+        self.activation1 = activation  # (num_features)
+        self.linear1 = nn.Linear(num_features, num_features, bias=bias)
+        self.activation2 = activation  # (num_features)
+        self.linear2 = nn.Linear(num_features, num_features, bias=bias)
+        self.reset_parameters(bias, zero_init)
+
+    def reset_parameters(self, bias: bool = True, zero_init: bool = True) -> None:
+        """Initialize parameters to compute an identity mapping."""
+        nn.init.orthogonal_(self.linear1.weight)
+        if zero_init:
+            nn.init.zeros_(self.linear2.weight)
+        else:
+            nn.init.orthogonal_(self.linear2.weight)
+        if bias:
+            nn.init.zeros_(self.linear1.bias)
+            nn.init.zeros_(self.linear2.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Apply residual block to input atomic features.
+        N: Number of atoms.
+        num_features: Dimensions of feature space.
+
+        Args:
+            x (FloatTensor [N, num_features]):Input feature representations of atoms.
+
+        Returns:
+            y (FloatTensor [N, num_features]): Output feature representations of atoms.
+        """
+        y = self.activation1(x)
+        y = self.linear1(y)
+        y = self.activation2(y)
+        y = self.linear2(y)
+        return x + y
+
+
+class ResidualStack(nn.Module):
+    """
+    Stack of num_blocks pre-activation residual blocks evaluated in sequence.
+    """
+
+    def __init__(
+        self,
+        num_features: int,
+        num_residual: int,
+        activation: Union[Callable, nn.Module],
+        bias: bool = True,
+        zero_init: bool = True,
+    ) -> None:
+        """
+        Args:
+            num_blocks: Number of residual blocks to be stacked in sequence.
+            num_features: Dimensions of feature space.
+            activation: activation function
+        """
+        super(ResidualStack, self).__init__()
+        self.stack = nn.ModuleList(
+            [
+                Residual(num_features, activation, bias, zero_init)
+                for i in range(num_residual)
+            ]
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Applies all residual blocks to input features in sequence.
+        N: Number of inputs.
+        num_features: Dimensions of feature space.
+
+        Args:
+            x (FloatTensor [N, num_features]): Input feature representations.
+
+        Returns:
+            y (FloatTensor [N, num_features]):Output feature representations.
+        """
+        for residual in self.stack:
+            x = residual(x)
+        return x
+
+
+class ResidualMLP(nn.Module):
+    """Residual MLP with num_residual residual blocks."""
+
+    def __init__(
+        self,
+        num_features: int,
+        num_residual: int,
+        activation: Union[Callable, nn.Module],
+        bias: bool = True,
+        zero_init: bool = False,
+    ):
+        """
+        Args:
+            num_features: Dimensions of feature space.
+            num_residual: Number of residual blocks to be stacked in sequence.
+            activation: activation function
+        """
+
+        super(ResidualMLP, self).__init__()
+        self.residual = ResidualStack(
+            num_features, num_residual, activation=activation, bias=bias, zero_init=True
+        )
+
+        self.linear = nn.Linear(num_features, num_features, bias=bias)
+        self.activation = activation
+        self.reset_parameters(bias, zero_init)
+
+    def reset_parameters(self, bias: bool = True, zero_init: bool = False) -> None:
+        if zero_init:
+            nn.init.zeros_(self.linear.weight)
+        else:
+            nn.init.orthogonal_(self.linear.weight)
+        if bias:
+            nn.init.zeros_(self.linear.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.linear(self.activation(self.residual(x)))

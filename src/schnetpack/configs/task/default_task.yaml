@@ -1,4 +1,5 @@
 defaults:
+  - _self_
   - optimizer: adam
   - scheduler: reduce_on_plateau
 

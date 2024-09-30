@@ -1,11 +1,13 @@
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Union, List
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 import schnetpack.nn as snn
 import schnetpack.nn.so3 as so3
 import schnetpack.properties as properties
+from schnetpack.nn import ElectronicEmbedding
 
 __all__ = ["SO3net"]
 
@@ -25,8 +27,10 @@ class SO3net(nn.Module):
         radial_basis: nn.Module,
         cutoff_fn: Optional[Callable] = None,
         shared_interactions: bool = False,
-        max_z: int = 100,
         return_vector_representation: bool = False,
+        activation: Optional[Callable] = F.silu,
+        nuclear_embedding: Optional[nn.Module] = None,
+        electronic_embeddings: Optional[List] = None,
     ):
         """
         Args:
@@ -37,10 +41,11 @@ class SO3net(nn.Module):
             radial_basis: layer for expanding interatomic distances in a basis set
             cutoff_fn: cutoff function
             shared_interactions:
-            max_z:
-            conv_layer:
             return_vector_representation: return l=1 features in Cartesian XYZ order
                 (e.g. for DipoleMoment output module)
+            nuclear_embedding: custom nuclear embedding (e.g. spk.nn.embeddings.NuclearEmbedding)
+            electronic_embeddings: list of electronic embeddings. E.g. for spin and
+                charge (see spk.nn.embeddings.ElectronicEmbedding)
         """
         super(SO3net, self).__init__()
 
@@ -51,15 +56,28 @@ class SO3net(nn.Module):
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = radial_basis
         self.return_vector_representation = return_vector_representation
+        self.activation = activation
 
-        self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
+        # initialize embeddings
+        if nuclear_embedding is None:
+            nuclear_embedding = nn.Embedding(100, n_atom_basis)
+        self.embedding = nuclear_embedding
+        if electronic_embeddings is None:
+            electronic_embeddings = []
+        electronic_embeddings = nn.ModuleList(electronic_embeddings)
+        self.electronic_embeddings = electronic_embeddings
+
+        # initialize shperical harmonics
         self.sphharm = so3.RealSphericalHarmonics(lmax=lmax)
 
+        # initialize filters
         self.so3convs = snn.replicate_module(
             lambda: so3.SO3Convolution(lmax, n_atom_basis, self.radial_basis.n_rbf),
             self.n_interactions,
             shared_interactions,
         )
+
+        # initialize interaction blocks
         self.mixings1 = snn.replicate_module(
             lambda: nn.Linear(n_atom_basis, n_atom_basis, bias=False),
             self.n_interactions,
@@ -108,11 +126,16 @@ class SO3net(nn.Module):
         radial_ij = self.radial_basis(d_ij)
         cutoff_ij = self.cutoff_fn(d_ij)[..., None]
 
-        x0 = self.embedding(atomic_numbers)[:, None]
-        x = so3.scalar2rsh(x0, int(self.lmax))
+        # compute initial embeddings
+        x0 = self.embedding(atomic_numbers)
+        for embedding in self.electronic_embeddings:
+            x0 = x0 + embedding(x0, inputs)
+        x0 = x0.unsqueeze(1)
 
+        # compute interaction blocks and update atomic embeddings
+        x = so3.scalar2rsh(x0, int(self.lmax))
         for so3conv, mixing1, mixing2, gating, mixing3 in zip(
-                self.so3convs, self.mixings1, self.mixings2, self.gatings, self.mixings3
+            self.so3convs, self.mixings1, self.mixings2, self.gatings, self.mixings3
         ):
             dx = so3conv(x, radial_ij, Yij, cutoff_ij, idx_i, idx_j)
             ddx = mixing1(dx)
@@ -122,9 +145,9 @@ class SO3net(nn.Module):
             dx = mixing3(dx)
             x = x + dx
 
+        # collect results
         inputs["scalar_representation"] = x[:, 0]
         inputs["multipole_representation"] = x
-
         # extract cartesian vector from multipoles: [y, z, x] -> [x, y, z]
         if self.return_vector_representation:
             inputs["vector_representation"] = torch.roll(x[:, 1:4], 1, 1)

@@ -174,7 +174,7 @@ class NeighborListTransform(Transform):
         super().__init__()
         self._cutoff = cutoff
 
-        self.total_nbh_time = 0.
+        self.total_nbh_time = 0.0
         self.n_nbh_iterations = 0
 
     def forward(
@@ -303,7 +303,7 @@ class SkinNeighborList(Transform):
         self.distance_calculator = spk.atomistic.PairwiseDistances()
         self.previous_inputs = {}
 
-        self.total_nbh_time = 0.
+        self.total_nbh_time = 0.0
         self.n_nbh_iterations = 0
 
     # @timeit
@@ -353,13 +353,16 @@ class SkinNeighborList(Transform):
             if (
                 torch.equal(previous_pbc, pbc)
                 and torch.allclose(previous_cell, cell)
-                and torch.max(torch.sum(torch.square(previous_positions - positions), dim=-1)).item()
-                    < 0.25 * self.cutoff_skin**2
+                and torch.max(
+                    torch.sum(torch.square(previous_positions - positions), dim=-1)
+                ).item()
+                < 0.25 * self.cutoff_skin**2
             ):
                 # use previous neighbor list
                 inputs[properties.idx_i] = previous_inputs[properties.idx_i]
                 inputs[properties.idx_j] = previous_inputs[properties.idx_j]
                 inputs[properties.offsets] = previous_inputs[properties.offsets]
+
                 return False, inputs
 
         # build new neighbor list
@@ -535,8 +538,12 @@ class FilterNeighbors(Transform):
         filtered_out_indices = inputs[self.selection_name]
 
         # filter out pairs where both atoms are contained in filtered_out_indices
-        at_i_is_not_filtered_out = torch.isin(inputs[properties.idx_i], filtered_out_indices, invert=True)
-        at_j_is_not_filtered_out = torch.isin(inputs[properties.idx_j], filtered_out_indices, invert=True)
+        at_i_is_not_filtered_out = torch.isin(
+            inputs[properties.idx_i], filtered_out_indices, invert=True
+        )
+        at_j_is_not_filtered_out = torch.isin(
+            inputs[properties.idx_j], filtered_out_indices, invert=True
+        )
         mask = at_i_is_not_filtered_out | at_j_is_not_filtered_out
 
         inputs[properties.idx_i] = inputs[properties.idx_i][mask]

@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Union, List
 
 import torch
 import torch.nn as nn
@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 import schnetpack.properties as properties
 import schnetpack.nn as snn
+
 
 __all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
 
@@ -18,7 +19,6 @@ class PaiNNInteraction(nn.Module):
         Args:
             n_atom_basis: number of features to describe atomic environments.
             activation: if None, no activation function is used.
-            epsilon: stability constant added in norm to prevent numerical instabilities
         """
         super(PaiNNInteraction, self).__init__()
         self.n_atom_basis = n_atom_basis
@@ -135,10 +135,11 @@ class PaiNN(nn.Module):
         radial_basis: nn.Module,
         cutoff_fn: Optional[Callable] = None,
         activation: Optional[Callable] = F.silu,
-        max_z: int = 100,
         shared_interactions: bool = False,
         shared_filters: bool = False,
         epsilon: float = 1e-8,
+        nuclear_embedding: Optional[nn.Module] = None,
+        electronic_embeddings: Optional[List] = None,
     ):
         """
         Args:
@@ -152,7 +153,10 @@ class PaiNN(nn.Module):
                 interaction blocks.
             shared_interactions: if True, share the weights across
                 filter-generating networks.
-            epsilon: stability constant added in norm to prevent numerical instabilities
+            epsilon: numerical stability parameter
+            nuclear_embedding: custom nuclear embedding (e.g. spk.nn.embeddings.NuclearEmbedding)
+            electronic_embeddings: list of electronic embeddings. E.g. for spin and
+                charge (see spk.nn.embeddings.ElectronicEmbedding)
         """
         super(PaiNN, self).__init__()
 
@@ -162,10 +166,17 @@ class PaiNN(nn.Module):
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = radial_basis
 
-        self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
+        # initialize embeddings
+        if nuclear_embedding is None:
+            nuclear_embedding = nn.Embedding(100, n_atom_basis)
+        self.embedding = nuclear_embedding
+        if electronic_embeddings is None:
+            electronic_embeddings = []
+        electronic_embeddings = nn.ModuleList(electronic_embeddings)
+        self.electronic_embeddings = electronic_embeddings
 
+        # initialize filter layers
         self.share_filters = shared_filters
-
         if shared_filters:
             self.filter_net = snn.Dense(
                 self.radial_basis.n_rbf, 3 * n_atom_basis, activation=None
@@ -177,6 +188,7 @@ class PaiNN(nn.Module):
                 activation=None,
             )
 
+        # initialize interaction blocks
         self.interactions = snn.replicate_module(
             lambda: PaiNNInteraction(
                 n_atom_basis=self.n_atom_basis, activation=activation
@@ -197,7 +209,7 @@ class PaiNN(nn.Module):
         Compute atomic representations/embeddings.
 
         Args:
-            inputs (dict of torch.Tensor): SchNetPack dictionary of input tensors.
+            inputs: SchNetPack dictionary of input tensors.
 
         Returns:
             torch.Tensor: atom-wise representation.
@@ -223,16 +235,22 @@ class PaiNN(nn.Module):
         else:
             filter_list = torch.split(filters, 3 * self.n_atom_basis, dim=-1)
 
-        q = self.embedding(atomic_numbers)[:, None]
+        # compute initial embeddings
+        q = self.embedding(atomic_numbers)
+        for embedding in self.electronic_embeddings:
+            q = q + embedding(q, inputs)
+        q = q.unsqueeze(1)
+
+        # compute interaction blocks and update atomic embeddings
         qs = q.shape
         mu = torch.zeros((qs[0], 3, qs[2]), device=q.device)
-
         for i, (interaction, mixing) in enumerate(zip(self.interactions, self.mixing)):
             q, mu = interaction(q, mu, filter_list[i], dir_ij, idx_i, idx_j, n_atoms)
             q, mu = mixing(q, mu)
-
         q = q.squeeze(1)
 
+        # collect results
         inputs["scalar_representation"] = q
         inputs["vector_representation"] = mu
+
         return inputs
