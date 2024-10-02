@@ -16,6 +16,7 @@ from schnetpack.data import (
     BaseAtomsData,
     AtomsLoader,
     calculate_stats,
+    estimate_atomrefs,
     SplittingStrategy,
     RandomSplit,
 )
@@ -127,6 +128,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self.property_units = property_units
         self.distance_unit = distance_unit
         self._stats = {}
+        self._atomrefs = {}
         self._is_setup = False
         self.data_workdir = data_workdir
         self.cleanup_workdir_stage = cleanup_workdir_stage
@@ -358,6 +360,20 @@ class AtomsDataModule(pl.LightningDataModule):
         )[property]
         self._stats[key] = stats
         return stats
+
+    def get_atomrefs(
+        self, property: str, is_extensive: bool
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        key = (property, is_extensive)
+        if key in self._atomrefs:
+            return {property: self._atomrefs[key]}
+
+        atomrefs = estimate_atomrefs(
+            self.train_dataloader(),
+            is_extensive={property: is_extensive},
+        )[property]
+        self._atomrefs[key] = atomrefs
+        return {property: atomrefs}
 
     @property
     def train_dataset(self) -> BaseAtomsData:
