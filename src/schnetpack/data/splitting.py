@@ -114,6 +114,9 @@ class AtomTypeSplit(SplittingStrategy):
         self.atomtypes = atomtypes
         self.percentage_to_keep = percentage_to_keep
     
+    def calc_percentage_to_keep(self, dataset):
+        pass
+
     def split(self, dataset, *split_sizes):
 
         atom_type_count = np.array(dataset.conn.metadata["atom_type_count"])
@@ -123,23 +126,33 @@ class AtomTypeSplit(SplittingStrategy):
         if self.percentage_to_keep > 0:
             # how many occurences of atom type in dataset, and how many to keep
             # keeping means how many absolute occurences to keep, not relative, e.g 5% of all carbon occurences of the complete dataset are kept
-            total_atom_type_count = np.round(atom_type_count[:,self.atomtypes].sum(axis=0) * self.percentage_to_keep)
+            if len(self.atomtypes) == 1:
+                total_atom_type_count = np.round(atom_type_count[:,self.atomtypes].sum() * self.percentage_to_keep)
 
-            # init variables to track the running sum and indices
-            current_sum = 0
-            # random indices to iterate through the array to find occurences to keep
-            random_iter_indices = np.random.permutation(len(atom_type_count)).tolist()
-            random_iter_indices = [n for n in random_iter_indices if n not in indices]
-            selected_indices = []
+                # init variables to track the running sum and indices
+                current_sum = 0
+                # random indices to iterate through the array to find occurences to keep
+                random_iter_indices = np.random.permutation(len(atom_type_count)).tolist()
+                random_iter_indices = [n for n in random_iter_indices if n not in indices]
+                selected_indices = []
 
-            # iter through, to find the subset that sums up to number of occurences to keep
-            for i in random_iter_indices:
-                value = atom_type_count[i,self.atomtypes]
-                if current_sum + value <= total_atom_type_count.item():
-                    current_sum += value
-                    selected_indices.append(i)
-                if current_sum >= total_atom_type_count.item():
-                    break
+                # iter through, to find the subset that sums up to number of occurences to keep
+                for i in random_iter_indices:
+                    value = atom_type_count[i,self.atomtypes]
+                    if current_sum + value <= total_atom_type_count.item():
+                        current_sum += value
+                        selected_indices.append(i)
+                    if current_sum >= total_atom_type_count.item():
+                        break
+            # logic should mainly apply only to TM metals because they are only sparsly represented in the dataset
+            else:
+                # select all indices that are not in the mask
+                selected_indices = np.where(~mask)[0]
+                # num of molecules to keep
+                num_to_keep = int(len(selected_indices) * self.percentage_to_keep)
+                # shuffle to circumvent to sample highly represented TM
+                permuted_indices = selected_indices[torch.randperm(len(selected_indices))]
+                selected_indices = permuted_indices[:num_to_keep].tolist()
 
             #mutually_exclusive = set(indices).isdisjoint(set(selected_indices))
             indices.extend(selected_indices)
