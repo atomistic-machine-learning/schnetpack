@@ -3,7 +3,7 @@ import math
 import torch
 import numpy as np
 
-__all__ = ["SplittingStrategy", "RandomSplit", "SubsamplePartitions"]
+__all__ = ["SplittingStrategy", "RandomSplit", "SubsamplePartitions","AtomTypeSplit"]
 
 
 def absolute_split_sizes(dsize: int, split_sizes: List[int]) -> List[int]:
@@ -93,6 +93,52 @@ class RandomSplit(SplittingStrategy):
     def split(self, dataset, *split_sizes) -> List[torch.tensor]:
         dsize = len(dataset)
         partition_sizes_idx = random_split(dsize, *split_sizes)
+        return partition_sizes_idx
+
+
+class AtomTypeSplit(SplittingStrategy):
+
+    """
+    Strategy that filters out a specific atom type or multiple atom types from the dataset.
+    And then performs the splitting on the filtered dataset.
+    Requires the metadata to contain the atom type information (list of lists converted to ndarray).
+    """
+
+    def __init__(self,atomtypes: List[int]):
+        """
+        Args:
+            dataset: the dataset to be split
+            split_sizes: sizes for each split
+            atomtypes: list of atom types to be filtered out
+        """
+        self.atomtypes = atomtypes
+    
+    def split(self, dataset, *split_sizes):
+
+        atom_type_count = np.array(dataset.conn.metadata["atom_type_count"])
+        mask = (atom_type_count[:, self.atomtypes] == 0).all(axis=1)
+        indices = np.where(mask)[0] #+ 1
+        partition_sizes_idx = self.random_split(indices, *split_sizes)
+        return partition_sizes_idx
+
+    def random_split(self,indices, *split_sizes: Union[int, float]) -> List[torch.tensor]:
+        """
+        Randomly split the dataset
+
+        Args:
+            dsize - Size of dataset.
+            split_sizes - Sizes for each split. One can be set to -1 to assign all
+                remaining data. Values in [0, 1] can be used to give relative partition
+                sizes.
+        """
+        dsize = len(indices)
+        split_sizes = absolute_split_sizes(dsize, split_sizes)
+        offsets = torch.cumsum(torch.tensor(split_sizes), dim=0)
+        indices = indices[torch.randperm(len(indices)).tolist()].tolist()
+        partition_sizes_idx = [
+            indices[offset - length : offset]
+            for offset, length in zip(offsets, split_sizes)
+        ]
         return partition_sizes_idx
 
 

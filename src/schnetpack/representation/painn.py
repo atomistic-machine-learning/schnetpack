@@ -251,7 +251,7 @@ class PaiNN(nn.Module):
             q, mu = interaction(q, mu, filter_list[i], dir_ij, idx_i, idx_j, n_atoms)
             q, mu = mixing(q, mu)
             # tmp added to save all message passing outputs
-            inputs[f"scalar representation MP_{i+1}"] = deepcopy(q.squeeze(1))
+            #inputs[f"scalar representation MP_{i+1}"] = deepcopy(q.squeeze(1))
         q = q.squeeze(1)
 
         # collect results

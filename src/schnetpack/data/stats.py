@@ -91,22 +91,27 @@ def estimate_atomrefs(dataloader, is_extensive, z_max=100):
         Elementwise bias estimates over all samples
 
     """
+    #from ase.visualize import view
+    #from ase import Atoms
     property_names = list(is_extensive.keys())
     n_data = len(dataloader.dataset)
     all_properties = {pname: torch.zeros(n_data) for pname in property_names}
     all_atom_types = torch.zeros((n_data, z_max))
     data_counter = 0
-
+    #atoms_list = []
     # loop over all batches
     for batch in tqdm(dataloader, "estimating atomrefs"):
         # load data
         idx_m = batch[properties.idx_m]
         atomic_numbers = batch[properties.Z]
-
+        positions = batch[properties.R]
         # get counts for atomic numbers
         unique_ids = torch.unique(idx_m)
         for i in unique_ids:
             atomic_numbers_i = atomic_numbers[idx_m == i]
+     #       pos_i = positions[idx_m == i]
+     #       atm = Atoms(numbers=atomic_numbers_i, positions=pos_i)
+     #       atoms_list.append(atm)
             atom_types, atom_counts = torch.unique(atomic_numbers_i, return_counts=True)
             # save atom counts and properties
             for atom_type, atom_count in zip(atom_types, atom_counts):
