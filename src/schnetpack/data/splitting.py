@@ -104,20 +104,47 @@ class AtomTypeSplit(SplittingStrategy):
     Requires the metadata to contain the atom type information (list of lists converted to ndarray).
     """
 
-    def __init__(self,atomtypes: List[int]):
+    def __init__(self,atomtypes: List[int], percentage_to_keep: float = 0.0):
         """
         Args:
-            dataset: the dataset to be split
-            split_sizes: sizes for each split
             atomtypes: list of atom types to be filtered out
+            percentage_to_keep: percentage of the to be filtered out atomtypes to keep.
+                For now the percentage is applied to all atomtypes.
         """
         self.atomtypes = atomtypes
+        self.percentage_to_keep = percentage_to_keep
     
     def split(self, dataset, *split_sizes):
 
         atom_type_count = np.array(dataset.conn.metadata["atom_type_count"])
         mask = (atom_type_count[:, self.atomtypes] == 0).all(axis=1)
-        indices = np.where(mask)[0] #+ 1
+        indices = np.where(mask)[0].tolist() #+ 1
+
+        if self.percentage_to_keep > 0:
+            # how many occurences of atom type in dataset, and how many to keep
+            # keeping means how many absolute occurences to keep, not relative, e.g 5% of all carbon occurences of the complete dataset are kept
+            total_atom_type_count = np.round(atom_type_count[:,self.atomtypes].sum(axis=0) * self.percentage_to_keep)
+
+            # init variables to track the running sum and indices
+            current_sum = 0
+            # random indices to iterate through the array to find occurences to keep
+            random_iter_indices = np.random.permutation(len(atom_type_count)).tolist()
+            random_iter_indices = [n for n in random_iter_indices if n not in indices]
+            selected_indices = []
+
+            # iter through, to find the subset that sums up to number of occurences to keep
+            for i in random_iter_indices:
+                value = atom_type_count[i,self.atomtypes]
+                if current_sum + value <= total_atom_type_count.item():
+                    current_sum += value
+                    selected_indices.append(i)
+                if current_sum >= total_atom_type_count.item():
+                    break
+
+        #mutually_exclusive = set(indices).isdisjoint(set(selected_indices))
+        indices.extend(selected_indices)
+        indices = np.array(indices)
+
         partition_sizes_idx = self.random_split(indices, *split_sizes)
         return partition_sizes_idx
 
