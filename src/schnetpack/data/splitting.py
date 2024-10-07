@@ -141,11 +141,11 @@ class AtomTypeSplit(SplittingStrategy):
                 if current_sum >= total_atom_type_count.item():
                     break
 
-        #mutually_exclusive = set(indices).isdisjoint(set(selected_indices))
-        indices.extend(selected_indices)
-        indices = np.array(indices)
+            #mutually_exclusive = set(indices).isdisjoint(set(selected_indices))
+            indices.extend(selected_indices)
+            #indices = np.array(indices)
 
-        partition_sizes_idx = self.random_split(indices, *split_sizes)
+        partition_sizes_idx = self.random_split(np.array(indices), *split_sizes)
         return partition_sizes_idx
 
     def random_split(self,indices, *split_sizes: Union[int, float]) -> List[torch.tensor]:
