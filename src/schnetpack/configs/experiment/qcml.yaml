@@ -1,0 +1,98 @@
+# @package _global_
+
+defaults:
+  - override /model: nnp
+  - override /model/representation: painn
+  - override /model/representation/radial_basis: bernstein ### NEW ADDED FEATURE
+  - override /task/scheduler: multistep ### NEW ADDED CONFIG
+
+run:
+  experiment: qcml_debug
+
+globals:
+  cutoff: 10.
+  lr: 1e-3
+  seed: 0
+  energy_key: formation_energy
+  forces_key: forces
+  total_charge_key: charge ### NEW ADDED FEATURE
+  spin_key: multiplicity ### NEW ADDED FEATURE
+
+data:
+  datapath: ???
+  load_properties: [formation_energy,forces,charge,multiplicity]
+  batch_size: 50
+  num_train: 0.90
+  num_val: 0.05
+  num_workers: 4
+  num_val_workers: 4
+  distance_unit: Bohr
+  property_units:
+    energy: Hartree
+    forces: Hartree/Bohr
+  splitting:
+    _target_: schnetpack.data.splitting.AtomTypeSplit
+    atomtypes: [9,17,35,53]
+    num_keep: 0.02
+  transforms:
+    - _target_: schnetpack.transform.SubtractCenterOfMass
+    - _target_: schnetpack.transform.RemoveOffsets ### NEW ADDED FEATURE
+      property: ${globals.energy_key}
+      remove_mean: True
+    - _target_: schnetpack.transform.MatScipyNeighborList
+      cutoff: ${globals.cutoff}
+    - _target_: schnetpack.transform.CastTo32
+
+model:
+  representation: 
+    electronic_embeddings: ### NEW ADDED FEATURE
+    - _target_: schnetpack.nn.embedding.ElectronicEmbedding
+      property_key: ${globals.total_charge_key}
+      num_features: ${model.representation.n_atom_basis}
+      is_charged: true
+      num_residual: 1
+    - _target_: schnetpack.nn.embedding.ElectronicEmbedding ### NEW ADDED FEATURE
+      property_key: ${globals.spin_key}
+      num_features: ${model.representation.n_atom_basis}
+      is_charged: false
+      num_residual: 1
+  output_modules:
+    - _target_: schnetpack.atomistic.Atomwise
+      output_key: ${globals.energy_key}
+      n_in: ${model.representation.n_atom_basis}
+      aggregation_mode: sum
+    - _target_: schnetpack.atomistic.Forces
+      energy_key: ${globals.energy_key}
+      force_key: ${globals.forces_key}
+  postprocessors:
+    - _target_: schnetpack.transform.CastTo64
+    - _target_: schnetpack.transform.AddOffsets
+      property: ${globals.energy_key}
+      add_mean: True
+
+task:
+  outputs:
+    - _target_: schnetpack.task.ModelOutput
+      name: ${globals.energy_key}
+      loss_fn:
+        _target_: schnetpack.train.AdaptiveLossFunction ### NEW ADDED FEATURE
+        num_dims: 1
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 0.05
+    - _target_: schnetpack.task.ModelOutput
+      name: ${globals.forces_key}
+      loss_fn:
+        _target_: schnetpack.train.AdaptiveLossFunction ### NEW ADDED FEATURE
+        num_dims: 3
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 0.95

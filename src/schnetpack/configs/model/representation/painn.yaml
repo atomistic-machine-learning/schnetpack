@@ -1,5 +1,6 @@
 defaults:
   - radial_basis: gaussian
+  - nuclear_embedding: complex
 
 _target_: schnetpack.representation.PaiNN
 n_atom_basis: 128
