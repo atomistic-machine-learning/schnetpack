@@ -4,6 +4,7 @@ import numbers
 
 import numpy as np
 import mpmath
+import os
 from pkg_resources import resource_stream
 
 def interpolate1d(x, values, tangents):
@@ -291,7 +292,7 @@ class Distribution():
     # Load the values, tangents, and x-coordinate scaling of a spline that
     # approximates the partition function. This was produced by running
     # the script in fit_partition_spline.py
-    spline_file = "/home/elron/phd/projects/google/qmml/data/partition_spline_for_robust_loss.npz"
+    spline_file = (os.path.join(os.path.dirname(__file__), 'ressources/partition_spline_for_robust_loss.npz'))
     with np.load(spline_file, allow_pickle=False) as f:
         self._spline_x_scale = torch.tensor(f['x_scale'])
         self._spline_values = torch.tensor(f['values'])
@@ -352,9 +353,12 @@ class Distribution():
       The NLLs for each element of x, in the same shape and precision as x.
     """
     # `scale` and `alpha` must have the same type as `x`.
-
+    #try:
     assert (alpha >= 0).all()
     assert (scale >= 0).all()
+    #except:
+      #print(alpha)
+      #print(scale)
     float_dtype = x.dtype
     assert alpha.dtype == float_dtype
     assert scale.dtype == float_dtype
