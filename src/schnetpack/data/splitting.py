@@ -2,6 +2,7 @@ from typing import Optional, List, Dict, Tuple, Union
 import math
 import torch
 import numpy as np
+import scipy.sparse as sp
 
 __all__ = ["SplittingStrategy", "RandomSplit", "SubsamplePartitions","AtomTypeSplit"]
 
@@ -99,65 +100,63 @@ class RandomSplit(SplittingStrategy):
 class AtomTypeSplit(SplittingStrategy):
 
     """
-    Strategy that filters out a specific atom type or multiple atom types from the dataset.
+    Strategy that filters out a specific atom type or multiple atom types from the database.
     And then performs the splitting on the filtered dataset.
-    Requires the metadata to contain the atom type information (list of lists converted to ndarray).
+    The remaining dataset are all molecules, except the ones that contain the atom type(s) to be filtered out.
+
+    The data are read from the metadata.
+    Data should be saved as sparse array, where the data,indices,pointer,shape are provided in metadata
+    The keys in the metadata are of structure "atom_type_count_{indices OR indptr OR shape OR data}"
+    Filter array is binary, where 1 means the atom type is present in the molecule and 0 means it is not.
     """
 
-    def __init__(self,atomtypes: List[int], percentage_to_keep: float = 0.0):
+    def __init__(
+            self,
+            atomtypes: List[int], 
+            num_keep: Union[int,float] = None):
         """
         Args:
-            atomtypes: list of atom types to be filtered out
-            percentage_to_keep: percentage of the to be filtered out atomtypes to keep.
-                For now the percentage is applied to all atomtypes.
+            atomtypes: list of atom types to be filtered out.
+            num_keep: percentage of the to be filtered out atomtypes to keep.
+                        For now the percentage is applied to all atomtypes.
+                        Values below 1 are interpreted as percentage, values above as absolute number.
+                        Conversion is done automatically.
         """
         self.atomtypes = atomtypes
-        self.percentage_to_keep = percentage_to_keep
+        self.num_keep = num_keep 
     
-    def calc_percentage_to_keep(self, dataset):
-        pass
-
     def split(self, dataset, *split_sizes):
 
-        atom_type_count = np.array(dataset.conn.metadata["atom_type_count"])
-        mask = (atom_type_count[:, self.atomtypes] == 0).all(axis=1)
-        indices = np.where(mask)[0].tolist() #+ 1
+        # binary array of NxZ, where N is the number of molecules and Z is the number of atom types
+        # 1 means the atom type is present in the molecule and 0 means it is not
+        # the atom array count can be calculated with estimate_atomrefs code
+        atom_type_count = sp.csr_matrix(
+                    (dataset.conn.metadata["atom_type_count_data"], 
+                     dataset.conn.metadata["atom_type_count_indices"], 
+                     dataset.conn.metadata["atom_type_count_indptr"]),
+                     shape=dataset.conn.metadata["atom_type_count_shape"]).toarray()
 
-        if self.percentage_to_keep > 0:
-            # how many occurences of atom type in dataset, and how many to keep
-            # keeping means how many absolute occurences to keep, not relative, e.g 5% of all carbon occurences of the complete dataset are kept
-            if len(self.atomtypes) == 1:
-                total_atom_type_count = np.round(atom_type_count[:,self.atomtypes].sum() * self.percentage_to_keep)
+        # mask to keep all molecules without requested atomtypes
+        keep = (atom_type_count[:,self.atomtypes] == 0).all(axis=1)
+        indices = np.where(keep)[0]
+        # mask to exclude all molecules with requested atomtypes
+        exclude = (~keep)
+        exclude_indices = np.where(exclude)[0]
+        # random indices of exclude to choose from
+        random_iter_indices = np.random.permutation(len(exclude_indices)).tolist()
 
-                # init variables to track the running sum and indices
-                current_sum = 0
-                # random indices to iterate through the array to find occurences to keep
-                random_iter_indices = np.random.permutation(len(atom_type_count)).tolist()
-                random_iter_indices = [n for n in random_iter_indices if n not in indices]
-                selected_indices = []
-
-                # iter through, to find the subset that sums up to number of occurences to keep
-                for i in random_iter_indices:
-                    value = atom_type_count[i,self.atomtypes]
-                    if current_sum + value <= total_atom_type_count.item():
-                        current_sum += value
-                        selected_indices.append(i)
-                    if current_sum >= total_atom_type_count.item():
-                        break
-            # logic should mainly apply only to TM metals because they are only sparsly represented in the dataset
+        # adding requested percentage or absolute value of exclude to keep
+        # if num keep for exclude requested, cumulative keeping is done
+        # e.g first run 3% num keep and second run 5% num keep
+        # the 3% of first run are included in the 5% of the second run
+        if self.num_keep:
+            if self.num_keep < 1:
+                num_keep = int(math.floor(self.num_keep * exclude_indices.shape[0]))
             else:
-                # select all indices that are not in the mask
-                selected_indices = np.where(~mask)[0]
-                # num of molecules to keep
-                num_to_keep = int(len(selected_indices) * self.percentage_to_keep)
-                # shuffle to circumvent to sample highly represented TM
-                permuted_indices = selected_indices[torch.randperm(len(selected_indices))]
-                selected_indices = permuted_indices[:num_to_keep].tolist()
+                num_keep = self.num_keep
+            indices = np.concatenate([indices,exclude_indices[random_iter_indices[:num_keep]]])
 
-            #mutually_exclusive = set(indices).isdisjoint(set(selected_indices))
-            indices.extend(selected_indices)
-            #indices = np.array(indices)
-
+        # split the dataset
         partition_sizes_idx = self.random_split(np.array(indices), *split_sizes)
         return partition_sizes_idx
 
