@@ -233,7 +233,7 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
   cell[2][2] = domain->boxhi[2] - domain->boxlo[2];
 
 
-  auto cell_inv = cell_tensor.inverse().transpose(0,1);
+  // auto cell_inv = cell_tensor.inverse().transpose(0,1);
 
   // Loop over atoms and neighbors,
   // store edges and _cell_shifts
@@ -265,12 +265,12 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
 
       double rsq = dx*dx + dy*dy + dz*dz;
       if (rsq < cutoff*cutoff){
-          torch::Tensor cell_shift_tensor = cell_inv.matmul(periodic_shift_tensor);
-          auto cell_shift = cell_shift_tensor.accessor<float, 1>();
-          float * e_vec = &edge_cell_shifts[edge_counter*3];
-          e_vec[0] = std::round(cell_shift[0]);
-          e_vec[1] = std::round(cell_shift[1]);
-          e_vec[2] = std::round(cell_shift[2]);
+          //torch::Tensor cell_shift_tensor = cell_inv.matmul(periodic_shift_tensor);
+          //auto cell_shift = cell_shift_tensor.accessor<float, 1>();
+          //float * e_vec = &edge_cell_shifts[edge_counter*3];
+          //e_vec[0] = std::round(cell_shift[0]);
+          //e_vec[1] = std::round(cell_shift[1]);
+          //e_vec[2] = std::round(cell_shift[2]);
           //std::cout << "cell shift: " << cell_shift_tensor << "\n";
 
           // TODO: double check order
