@@ -58,7 +58,7 @@ script-files = [
 ]
 
 # Ensure package data such as resources are included
-package-data = { "schnetpack.train" = ["resources/partition_spline_for_robust_loss.npz"] }
+package-data = { "schnetpack.train" = ["ressources/partition_spline_for_robust_loss.npz"] }
 
 [tool.setuptools.dynamic]
 version = {attr = "schnetpack.__version__"}
