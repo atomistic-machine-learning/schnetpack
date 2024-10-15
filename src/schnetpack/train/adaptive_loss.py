@@ -7,6 +7,8 @@ import mpmath
 import os
 from pkg_resources import resource_stream
 
+__all__ = ["AdaptiveLossFunction"]
+
 def interpolate1d(x, values, tangents):
   r"""Perform cubic hermite spline interpolation on a 1D spline.
 
