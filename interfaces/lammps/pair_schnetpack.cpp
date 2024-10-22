@@ -281,7 +281,7 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
           if (debug_mode){
               printf("%d %d %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g\n", itag-1, jtag-1,
                 pos[itag-1][0],pos[itag-1][1],pos[itag-1][2],pos[jtag-1][0],pos[jtag-1][1],pos[jtag-1][2],
-                e_vec[0],e_vec[1],e_vec[2],sqrt(rsq));
+                sqrt(rsq));
           }
 
       }
