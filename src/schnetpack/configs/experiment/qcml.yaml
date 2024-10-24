@@ -72,6 +72,8 @@ model:
       add_mean: True
 
 task:
+  scheduler_args:
+    milestones: [3,9,15,18,24,30,36]
   outputs:
     - _target_: schnetpack.task.ModelOutput
       name: ${globals.energy_key}

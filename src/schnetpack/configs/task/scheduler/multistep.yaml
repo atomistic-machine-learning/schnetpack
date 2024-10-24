@@ -2,6 +2,6 @@
 scheduler_cls: torch.optim.lr_scheduler.MultiStepLR
 scheduler_monitor: val_loss
 scheduler_args:
-  milestones: [3,9,15,18,24,30,36]
+  milestones: ???
   gamma: 0.5
   last_epoch: -1
