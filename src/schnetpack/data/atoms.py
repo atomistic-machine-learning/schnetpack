@@ -344,15 +344,11 @@ class ASEAtomsData(BaseAtomsData):
         properties = {}
         properties[structure.idx] = torch.tensor([idx])
         for pname in load_properties:
-            # just added for qcml dataset, because i wrote the dipole moment in with wrong shape :(
-            if pname == "dipole_moment":
-                properties[pname] = (
-                torch.tensor(row.data[pname].copy()) * self.conversions[pname]
-                ).reshape(1, 3)
-            else:
-                properties[pname] = (
+
+
+            properties[pname] = (
                     torch.tensor(row.data[pname].copy()) * self.conversions[pname]
-                )
+            )
 
         Z = row["numbers"].copy()
         properties[structure.n_atoms] = torch.tensor([Z.shape[0]])
