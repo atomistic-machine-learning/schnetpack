@@ -1,6 +1,5 @@
 defaults:
   - radial_basis: gaussian
-  - nuclear_embedding: complex
 
 _target_: schnetpack.representation.PaiNN
 n_atom_basis: 128
@@ -10,3 +9,4 @@ shared_filters: False
 cutoff_fn:
   _target_: schnetpack.nn.cutoff.CosineCutoff
   cutoff: ${globals.cutoff}
+nuclear_embedding: null

@@ -2,7 +2,6 @@
 
 defaults:
   - override /data: qcml
-  - override /model: nnp
   - override /model/representation: painn
   - override /model/representation/radial_basis: bernstein ### NEW ADDED FEATURE
   - override /task/scheduler: multistep ### NEW ADDED CONFIG
@@ -43,6 +42,10 @@ data:
 
 model:
   representation: 
+    nuclear_embedding:
+      _target_: schnetpack.nn.embedding.NuclearEmbedding
+      max_z: 101
+      num_features: ${globals.representation_features} # same as n_atom_basis 
     electronic_embeddings: ### NEW ADDED FEATURE
     - _target_: schnetpack.nn.embedding.ElectronicEmbedding
       property_key: ${globals.total_charge_key}

@@ -1,3 +1,0 @@
-_target_: schnetpack.nn.embedding.NuclearEmbedding
-max_z: 101
-num_features: ${model.representation.n_atom_basis} # same as n_atom_basis 
