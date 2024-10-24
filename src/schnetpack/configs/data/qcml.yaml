@@ -1,0 +1,12 @@
+defaults:
+  - custom
+
+_target_: schnetpack.datasets.QCML
+
+datapath: ${run.data_dir}/qcml.db  # data_dir is specified in train.yaml
+batch_size: 50
+num_train: 0.90
+num_val: 0.05
+load_properties: [formation_energy,forces,charge,multiplicity]
+version: 0.0.3
+

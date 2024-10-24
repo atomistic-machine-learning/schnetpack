@@ -1,18 +1,20 @@
 # @package _global_
 
 defaults:
+  - override /data: qcml
   - override /model: nnp
   - override /model/representation: painn
   - override /model/representation/radial_basis: bernstein ### NEW ADDED FEATURE
   - override /task/scheduler: multistep ### NEW ADDED CONFIG
 
 run:
-  experiment: qcml_debug
+  experiment: qcml
+
+seed: 0
 
 globals:
   cutoff: 10.
   lr: 1e-3
-  seed: 0
   energy_key: formation_energy
   forces_key: forces
   total_charge_key: charge ### NEW ADDED FEATURE
@@ -30,10 +32,6 @@ data:
   property_units:
     energy: Hartree
     forces: Hartree/Bohr
-  splitting:
-    _target_: schnetpack.data.splitting.AtomTypeSplit
-    atomtypes: [9,17,35,53]
-    num_keep: 0.02
   transforms:
     - _target_: schnetpack.transform.SubtractCenterOfMass
     - _target_: schnetpack.transform.RemoveOffsets ### NEW ADDED FEATURE
