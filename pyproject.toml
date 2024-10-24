@@ -61,10 +61,9 @@ script-files = [
 version = {attr = "schnetpack.__version__"}
 
 # Ensure package data such as resources are included
-package-data = { "schnetpack.train" = ["ressources/partition_spline_for_robust_loss.npz"] }
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-schnetpack = ["configs/**/*.yaml"]
+schnetpack = ["configs/**/*.yaml","train/resources/*.npz"]
