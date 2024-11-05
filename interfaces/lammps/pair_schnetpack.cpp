@@ -324,8 +324,8 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
   if(debug_mode){
     std::cout << "SchNetPack model input:\n";
     std::cout << "_positions:\n" << positions_tensor << "\n";
-    std::cout << "_idx_i:\n" << edges_tensor[0] << "\n";
-    std::cout << "_idx_j:\n" << edges_tensor[1] << "\n";
+    std::cout << "_idx_i:\n" << idx_i_tensor << "\n";
+    std::cout << "_idx_j:\n" << idx_j_tensor << "\n";
     std::cout << "_idx_m:\n" << idx_m_tensor << "\n";
     std::cout << "_offsets:\n" << offsets_tensor << "\n";
     std::cout << "_cell:\n" << cell_tensor << "\n";
