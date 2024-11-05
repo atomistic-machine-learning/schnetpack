@@ -200,7 +200,7 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
 
   auto pos = pos_tensor.accessor<float, 2>();
   long edges[2*nedges];
-  float edge_cell_shifts[3*nedges];
+  float edge_periodic_shifts[3*nedges];
   auto tag2type = tag2type_tensor.accessor<long, 1>();
   auto periodic_shift = periodic_shift_tensor.accessor<float, 1>();
   auto cell = cell_tensor.accessor<float,2>();
@@ -232,15 +232,12 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
   cell[2][1] = domain->yz;
   cell[2][2] = domain->boxhi[2] - domain->boxlo[2];
 
-
-  // auto cell_inv = cell_tensor.inverse().transpose(0,1);
-
   // Loop over atoms and neighbors,
-  // store edges and _cell_shifts
+  // store edges and _periodic_shifts
   // ii follows the order of the neighbor lists,
   // i follows the order of x, f, etc.
   int edge_counter = 0;
-  if (debug_mode) printf("SchNetPack edges: i j xi[:] xj[:] cell_shift[:] rij\n");
+  if (debug_mode) printf("SchNetPack edges: i j xi[:] xj[:] periodic_shift[:] rij\n");
   for(int ii = 0; ii < nlocal; ii++){
     int i = ilist[ii];
     int itag = tag[i];
@@ -265,19 +262,11 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
 
       double rsq = dx*dx + dy*dy + dz*dz;
       if (rsq < cutoff*cutoff){
-          //torch::Tensor cell_shift_tensor = cell_inv.matmul(periodic_shift_tensor);
-          //auto cell_shift = cell_shift_tensor.accessor<float, 1>();
-          //float * e_vec = &edge_cell_shifts[edge_counter*3];
-          //e_vec[0] = std::round(cell_shift[0]);
-          //e_vec[1] = std::round(cell_shift[1]);
-          //e_vec[2] = std::round(cell_shift[2]);
-          //std::cout << "cell shift: " << cell_shift_tensor << "\n";
-          torch::Tensor cell_shift_tensor = periodic_shift_tensor;
-          auto cell_shift = cell_shift_tensor.accessor<float, 1>();
-          float * e_vec = &edge_cell_shifts[edge_counter*3];
-          e_vec[0] = cell_shift[0];
-          e_vec[1] = cell_shift[1];
-          e_vec[2] = cell_shift[2];
+          auto periodic_shift = periodic_shift_tensor.accessor<float, 1>();
+          float * e_vec = &edge_periodic_shifts[edge_counter*3];
+          e_vec[0] = periodic_shift[0];
+          e_vec[1] = periodic_shift[1];
+          e_vec[2] = periodic_shift[2];
 
           // TODO: double check order
           edges[edge_counter*2] = itag - 1; // tag is probably 1-based
@@ -287,7 +276,7 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
           if (debug_mode){
               printf("%d %d %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g\n", itag-1, jtag-1,
                 pos[itag-1][0],pos[itag-1][1],pos[itag-1][2],pos[jtag-1][0],pos[jtag-1][1],pos[jtag-1][2],
-                sqrt(rsq));
+                e_vec[0],e_vec[1],e_vec[2],sqrt(rsq));
           }
 
       }
@@ -297,19 +286,19 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
 
   // shorten the list before sending to nequip
   torch::Tensor edges_tensor = torch::zeros({2,edge_counter}, torch::TensorOptions().dtype(torch::kInt64));
-  torch::Tensor edge_cell_shifts_tensor = torch::zeros({edge_counter,3});
+  torch::Tensor edge_periodic_shifts_tensor = torch::zeros({edge_counter,3});
   auto new_edges = edges_tensor.accessor<long, 2>();
-  auto new_edge_cell_shifts = edge_cell_shifts_tensor.accessor<float, 2>();
+  auto new_edge_periodic_shifts = edge_periodic_shifts_tensor.accessor<float, 2>();
   for (int i=0; i<edge_counter; i++){
 
       long *e=&edges[i*2];
       new_edges[0][i] = e[0];
       new_edges[1][i] = e[1];
 
-      float *ev = &edge_cell_shifts[i*3];
-      new_edge_cell_shifts[i][0] = ev[0];
-      new_edge_cell_shifts[i][1] = ev[1];
-      new_edge_cell_shifts[i][2] = ev[2];
+      float *ev = &edge_periodic_shifts[i*3];
+      new_edge_periodic_shifts[i][0] = ev[0];
+      new_edge_periodic_shifts[i][1] = ev[1];
+      new_edge_periodic_shifts[i][2] = ev[2];
   }
   
   // define SchNetPack specific inputs
@@ -325,7 +314,7 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
   input.insert("_idx_i", edges_tensor[0].to(device));
   input.insert("_idx_j", edges_tensor[1].to(device));
   input.insert("_idx_m", idx_m.to(device));
-  input.insert("_offsets", edge_cell_shifts_tensor.to(device));
+  input.insert("_offsets", edge_periodic_shifts_tensor.to(device));
   input.insert("_cell", cell_tensor.to(device));
   input.insert("_n_atoms", n_atoms_tensor.to(device));
   input.insert("_atomic_numbers", tag2type_tensor.to(device));
@@ -337,7 +326,7 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
     std::cout << "_idx_i:\n" << edges_tensor[0] << "\n";
     std::cout << "_idx_j:\n" << edges_tensor[1] << "\n";
     std::cout << "_idx_m:\n" << idx_m << "\n";
-    std::cout << "_offsets:\n" << edge_cell_shifts_tensor << "\n";
+    std::cout << "_offsets:\n" << edge_periodic_shifts_tensor << "\n";
     std::cout << "_cell:\n" << cell_tensor << "\n";
     std::cout << "_atomic_numbers:\n" << tag2type_tensor << "\n";
   }
