@@ -272,6 +272,12 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
           //e_vec[1] = std::round(cell_shift[1]);
           //e_vec[2] = std::round(cell_shift[2]);
           //std::cout << "cell shift: " << cell_shift_tensor << "\n";
+          torch::Tensor cell_shift_tensor = periodic_shift_tensor;
+          auto cell_shift = cell_shift_tensor.accessor<float, 1>();
+          float * e_vec = &edge_cell_shifts[edge_counter*3];
+          e_vec[0] = cell_shift[0];
+          e_vec[1] = cell_shift[1];
+          e_vec[2] = cell_shift[2];
 
           // TODO: double check order
           edges[edge_counter*2] = itag - 1; // tag is probably 1-based
