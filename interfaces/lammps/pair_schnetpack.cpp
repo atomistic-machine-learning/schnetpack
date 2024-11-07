@@ -1,7 +1,7 @@
 /* ----------------------------------------------------------------------
 References:
 
-   .. [#SchNetPack] https://github.com/atomistic-machine-learning/schnetpack
+   .. [#pair_nequip] https://github.com/mir-group/pair_nequip
    .. [#lammps] https://github.com/lammps/lammps
 
 ------------------------------------------------------------------------- */
