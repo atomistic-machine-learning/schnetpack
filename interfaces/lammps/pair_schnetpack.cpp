@@ -1,7 +1,7 @@
 /* ----------------------------------------------------------------------
 References:
 
-   .. [#pair_nequip] https://github.com/mir-group/pair_nequip
+   .. [#SchNetPack] https://github.com/atomistic-machine-learning/schnetpack
    .. [#lammps] https://github.com/lammps/lammps
 
 ------------------------------------------------------------------------- */
@@ -195,7 +195,6 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
 
   torch::Tensor positions_tensor = torch::zeros({nlocal, 3});
   torch::Tensor atomic_numbers_tensor = torch::zeros({nlocal}, torch::TensorOptions().dtype(torch::kInt64));
-  torch::Tensor periodic_shift_tensor = torch::zeros({3});
   torch::Tensor cell_tensor = torch::zeros({3,3});
 
   auto positions = positions_tensor.accessor<float, 2>();
@@ -203,7 +202,6 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
   long idx_j[nedges];
   float offsets[3*nedges];
   auto atomic_numbers = atomic_numbers_tensor.accessor<long, 1>();
-  auto periodic_shift = periodic_shift_tensor.accessor<float, 1>();
   auto cell = cell_tensor.accessor<float,2>();
 
   // Inverse mapping from tag to "real" atom index
@@ -252,11 +250,6 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
       int jtag = tag[j];
       int jtype = type[j];
 
-      // TODO: check sign
-      periodic_shift[0] = x[j][0] - positions[jtag-1][0];
-      periodic_shift[1] = x[j][1] - positions[jtag-1][1];
-      periodic_shift[2] = x[j][2] - positions[jtag-1][2];
-
       double dx = x[i][0] - x[j][0];
       double dy = x[i][1] - x[j][1];
       double dz = x[i][2] - x[j][2];
@@ -264,9 +257,9 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
       double rsq = dx*dx + dy*dy + dz*dz;
       if (rsq < cutoff*cutoff){
           float * e_vec = &offsets[edge_counter*3];
-          e_vec[0] = periodic_shift[0];
-          e_vec[1] = periodic_shift[1];
-          e_vec[2] = periodic_shift[2];
+          e_vec[0] = x[j][0] - positions[jtag-1][0];
+          e_vec[1] = x[j][1] - positions[jtag-1][1];
+          e_vec[2] = x[j][2] - positions[jtag-1][2];
 
           // TODO: double check order
           idx_i[edge_counter] = itag - 1; // tag is probably 1-based
