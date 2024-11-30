@@ -1,7 +1,5 @@
 # SchNetPack - Deep Neural Networks for Atomistic Systems
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/python/black)
-[![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
-
 
 SchNetPack is a toolbox for the development and application of deep neural networks to the prediction of potential energy surfaces and other quantum-chemical properties of molecules and materials. It contains basic building blocks of atomistic neural networks, manages their training and provides simple access to common benchmark datasets. This allows for an easy implementation and evaluation of new models.
 
@@ -122,7 +120,7 @@ spktrain experiment=qm9_atomwise run.data_dir=<path> model/representation=painn 
 ```
 
 For more details on config groups, have a look at the
-[Hydra docs](https://hydra.cc/docs/next/tutorials/basic/your_first_app/config_groups).
+[Hydra docs](https://hydra.cc/docs/tutorials/basic/your_first_app/config_groups/).
 
 
 ### Example 2: Potential energy surfaces
@@ -249,13 +247,6 @@ J. Chem. Theory Comput. 2019, 15 (1): 448-455.
         URL = {https://doi.org/10.1021/acs.jctc.8b00908},
         eprint = {https://doi.org/10.1021/acs.jctc.8b00908},
     }
-
-
-
-## Acknowledgements
-
-CLI and hydra configs for PyTorch Lightning are adapted from this template: [![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
-
 
 ## References
 
