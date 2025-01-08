@@ -1,22 +1,18 @@
 defaults:
   - custom
 
-_target_: schnetpack.datasets.QM9
+_target_: schnetpack.datasets.TMQM
 
-datapath: ${run.data_dir}/qm9.db  # data_dir is specified in train.yaml
+datapath: ${run.data_dir}/tmqm.db  # data_dir is specified in train.yaml
 batch_size: 100
-num_train: 110000
+num_train: 108000
 num_val: 10000
-remove_uncharacterized: True
 
 # convert to typically used units
 distance_unit: Ang
 property_units:
-  energy_U0: eV
-  energy_U: eV
-  enthalpy_H: eV
-  free_energy: eV
-  homo: eV
-  lumo: eV
-  gap: eV
-  zpve: eV
+  Electronic_E: eV
+  Dispersion_E: eV
+  HOMO_Energy: eV
+  LUMO_Energy: eV
+  HL_Gap: eV
