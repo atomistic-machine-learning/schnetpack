@@ -1,0 +1,22 @@
+defaults:
+  - custom
+
+_target_: schnetpack.datasets.QM9
+
+datapath: ${run.data_dir}/qm9.db  # data_dir is specified in train.yaml
+batch_size: 100
+num_train: 110000
+num_val: 10000
+remove_uncharacterized: True
+
+# convert to typically used units
+distance_unit: Ang
+property_units:
+  energy_U0: eV
+  energy_U: eV
+  enthalpy_H: eV
+  free_energy: eV
+  homo: eV
+  lumo: eV
+  gap: eV
+  zpve: eV
