@@ -73,6 +73,7 @@ class TMQM(AtomsDataModule):
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
         data_workdir: Optional[str] = None,
+        use_old_tmqm: Optional[bool] = False,
         **kwargs,
     ):
         """
@@ -86,7 +87,6 @@ class TMQM(AtomsDataModule):
             split_file: path to npz file with data partitions
             format: dataset format
             load_properties: subset of properties to load
-            remove_uncharacterized: do not include uncharacterized molecules.
             val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
             test_batch_size: test batch size. If None, use val_batch_size, then batch_size.
             transforms: Transform applied to each system separately before batching.
@@ -99,7 +99,9 @@ class TMQM(AtomsDataModule):
             property_units: Dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
             distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
             data_workdir: Copy data here as part of setup, e.g. cluster scratch for faster performance.
+            use_old_tmqm: Use old_tmQM (2020 release) instead of 2024 release.
         """
+        self.use_old_tmqm=use_old_tmqm
         super().__init__(
             datapath=datapath,
             batch_size=batch_size,
@@ -153,12 +155,19 @@ class TMQM(AtomsDataModule):
 
     def _download_data(self, tmpdir, dataset: BaseAtomsData):
         tar_path = os.path.join(tmpdir, "tmQM_X1.xyz.gz")
-        url = [
-            "https://github.com/bbskjelstad/tmqm/raw/master/data/tmQM_X1.xyz.gz",
-            "https://github.com/bbskjelstad/tmqm/raw/master/data/tmQM_X2.xyz.gz",
-        ]
-
-        url_y = "https://github.com/bbskjelstad/tmqm/raw/master/data/tmQM_y.csv"
+        if self.use_old_tmqm:
+            url = [
+                "https://github.com/uiocompcat/tmQM/raw/refs/heads/master/old_tmQM/old_tmQM_X1.xyz.gz",
+                "https://github.com/uiocompcat/tmQM/raw/refs/heads/master/old_tmQM/old_tmQM_X2.xyz.gz",
+            ]
+            url_y = "https://github.com/uiocompcat/tmQM/raw/refs/heads/master/old_tmQM/old_tmQM_y.csv"
+        else:
+            url = [
+                "https://github.com/uiocompcat/tmQM/raw/refs/heads/master/tmQM/tmQM_X1.xyz.gz",
+                "https://github.com/uiocompcat/tmQM/raw/refs/heads/master/tmQM/tmQM_X2.xyz.gz",
+                "https://github.com/uiocompcat/tmQM/raw/refs/heads/master/tmQM/tmQM_X3.xyz.gz",
+            ]
+            url_y = "https://github.com/uiocompcat/tmQM/raw/refs/heads/master/tmQM/tmQM_y.csv"  
 
         tmp_xyz_file = os.path.join(tmpdir, "tmQM_X.xyz")
         tmp_properties_file = os.path.join(tmpdir, "tmQM_y.csv")
@@ -179,22 +188,31 @@ class TMQM(AtomsDataModule):
         # download proeprties in tmQM_y.csv
         request.urlretrieve(url_y, tmp_properties_file)
 
-        # CSV format
+        # CSV format old (2020 release)
         # CSD_code;Electronic_E;Dispersion_E;Dipole_M;Metal_q;HL_Gap;HOMO_Energy;LUMO_Energy;Polarizability
         # WIXKOE;-2045.524942;-0.239239;4.233300;2.109340;0.131080;-0.162040;-0.030960;598.457913
         # DUCVIG;-2430.690317;-0.082134;11.754400;0.759940;0.124930;-0.243580;-0.118650;277.750698
-        # KINJOG;-3467.923206;-0.137954;8.301700;1.766500;0.140140;-0.236460;-0.096320;393.442545
-
+        # CSV format new (2024 release)
+        # CSD_code;Electronic_E;Dispersion_E;Dipole_M;Metal_q;HL_Gap;HOMO_Energy;LUMO_Energy;Polarizability;CSD_years
+        # WELROW;-17117.605212;-0.252202;2.530600;0.434870;0.124680;-0.178870;-0.054190;726.670020;2020-2024
+        # VUCVUN;-2733.400152;-0.178124;6.348000;1.317090;0.132280;-0.304190;-0.171910;496.262887;2020-2024
+        
         # read csv
         prop_list = []
         key_value_pairs_list = []
 
         with open(tmp_properties_file, "r") as file:
             lines = file.readlines()
-            keys = lines[0].strip("\n").split(";")
+            if self.use_old_tmqm:
+                keys = lines[0].strip("\n").split(";")
+            else:
+                keys = lines[0].strip("\n").split(";")[:-1]
 
             for l in lines[1:]:
-                properties = l.split(";")
+                if self.use_old_tmqm:
+                    properties = l.strip("\n").split(";")
+                else:
+                    properties = l.strip("\n").split(";")[:-1]
                 prop_dict = {
                     k: np.array([float(v)]) for k, v in zip(keys[1:], properties[1:])
                 }
