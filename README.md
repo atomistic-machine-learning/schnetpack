@@ -122,7 +122,7 @@ spktrain experiment=qm9_atomwise run.data_dir=<path> model/representation=painn 
 ```
 
 For more details on config groups, have a look at the
-[Hydra docs](https://hydra.cc/docs/next/tutorials/basic/your_first_app/config_groups).
+[Hydra docs](https://hydra.cc/docs/tutorials/basic/your_first_app/config_groups/).
 
 
 ### Example 2: Potential energy surfaces
