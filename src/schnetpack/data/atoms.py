@@ -260,8 +260,7 @@ class ASEAtomsData(BaseAtomsData):
         if self.subset_idx is not None:
             return len(self.subset_idx)
 
-        with connect(self.datapath, use_lock_file=False) as conn:
-            return conn.count()
+        return self.conn.count()
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         if self.subset_idx is not None:
@@ -325,14 +324,13 @@ class ASEAtomsData(BaseAtomsData):
                 indices = [indices]
 
         # read from ase db
-        with connect(self.datapath, use_lock_file=False) as conn:
-            for i in indices:
-                yield self._get_properties(
-                    conn,
-                    i,
-                    load_properties=load_properties,
-                    load_structure=load_structure,
-                )
+        for i in indices:
+            yield self._get_properties(
+                self.conn,
+                i,
+                load_properties=load_properties,
+                load_structure=load_structure,
+            )
 
     def _get_properties(
         self, conn, idx: int, load_properties: List[str], load_structure: bool
@@ -367,12 +365,10 @@ class ASEAtomsData(BaseAtomsData):
 
     @property
     def metadata(self):
-        with connect(self.datapath) as conn:
-            return conn.metadata
+        return self.conn.metadata
 
     def _set_metadata(self, val: Dict[str, Any]):
-        with connect(self.datapath) as conn:
-            conn.metadata = val
+        self.conn.metadata = val
 
     def update_metadata(self, **kwargs):
         assert all(
@@ -461,8 +457,7 @@ class ASEAtomsData(BaseAtomsData):
                 `available_properties` of the dataset.
 
         """
-        with connect(self.datapath) as conn:
-            self._add_system(conn, atoms, **properties)
+        self._add_system(self.conn, atoms, **properties)
 
     def add_systems(
         self,
@@ -484,9 +479,8 @@ class ASEAtomsData(BaseAtomsData):
         if atoms_list is None:
             atoms_list = [None] * len(property_list)
 
-        with connect(self.datapath) as conn:
-            for at, prop in zip(atoms_list, property_list):
-                self._add_system(conn, at, **prop)
+        for at, prop in zip(atoms_list, property_list):
+            self._add_system(self.conn, at, **prop)
 
     def _add_system(self, conn, atoms: Optional[Atoms] = None, **properties):
         """Add systems to DB"""
