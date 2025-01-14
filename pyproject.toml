@@ -22,7 +22,7 @@ license = { file="LICENSE" }
 requires-python = "==3.12"
 dependencies = [
     "numpy>=2.0.0",
-    "sympy>=1.12",
+    "sympy>=1.13",
     "ase>=3.21",
     "h5py",
     "pyyaml",
