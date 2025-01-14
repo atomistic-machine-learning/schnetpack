@@ -19,15 +19,15 @@ authors = [
 description = "SchNetPack - Deep Neural Networks for Atomistic Systems"
 readme = "README.md"
 license = { file="LICENSE" }
-requires-python = ">=3.10"
+requires-python = "==3.12"
 dependencies = [
     "numpy>=2.0.0",
-    "sympy<=1.12",
+    "sympy>=1.12",
     "ase>=3.21",
     "h5py",
     "pyyaml",
     "hydra-core>=1.1.0",
-    "torch>=1.9",
+    "torch>=2.5.0",
     "pytorch_lightning>=2.0.0",
     "torchmetrics",
     "hydra-colorlog>=1.1.0",

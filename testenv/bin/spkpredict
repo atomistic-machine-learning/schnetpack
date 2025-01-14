@@ -1,0 +1,5 @@
+#!/Users/sundusaijaz/Desktop/TUProject/Testing/testenv/bin/python3.12
+import schnetpack.cli as cli
+
+if __name__ == "__main__":
+    cli.predict()

@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 
 from typing import Optional, Sequence
 from torch.utils.data import Dataset, Sampler
-from torch.utils.data.dataloader import _collate_fn_t, T_co
+from torch.utils.data.dataloader import _collate_fn_t, _T_co
 
 import schnetpack.properties as structure
 
@@ -63,7 +63,7 @@ class AtomsLoader(DataLoader):
 
     def __init__(
         self,
-        dataset: Dataset[T_co],
+        dataset: Dataset[_T_co],
         batch_size: Optional[int] = 1,
         shuffle: bool = False,
         sampler: Optional[Sampler[int]] = None,
