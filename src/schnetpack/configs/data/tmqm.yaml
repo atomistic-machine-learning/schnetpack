@@ -5,7 +5,7 @@ _target_: schnetpack.datasets.TMQM
 
 datapath: ${run.data_dir}/tmqm.db  # data_dir is specified in train.yaml
 batch_size: 100
-num_train: 108000
+num_train: 88000
 num_val: 10000
 
 # convert to typically used units
