@@ -14,7 +14,7 @@ def absolute_split_sizes(dsize: int, split_sizes: List[int]) -> List[int]:
         dsize - Size of dataset.
         split_sizes - Sizes for each split. One can be set to -1 to assign all
             remaining data.
-    """ 
+    """
     none_idx = None
     split_sizes = list(split_sizes)
     psum = 0
