@@ -41,7 +41,8 @@ dependencies = [
     "tqdm",
     "pre-commit",
     "black",
-    "protobuf"
+    "protobuf",
+    "progressbar"
 ]
 
 [project.optional-dependencies]
