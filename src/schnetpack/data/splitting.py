@@ -3,7 +3,7 @@ import math
 import torch
 import numpy as np
 
-__all__ = ["SplittingStrategy", "RandomSplit", "SubsamplePartitions"]
+__all__ = ["SplittingStrategy", "RandomSplit", "SubsamplePartitions", "GroupSplit"]
 
 
 def absolute_split_sizes(dsize: int, split_sizes: List[int]) -> List[int]:
