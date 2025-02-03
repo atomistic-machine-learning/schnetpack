@@ -1,0 +1,9 @@
+defaults:
+  - custom
+
+_target_: schnetpack.datasets.QM7X
+
+datapath: ${run.data_dir}/qm7x.db  # data_dir is specified in train.yaml
+batch_size: 100
+num_train: 5550
+num_val: 700
