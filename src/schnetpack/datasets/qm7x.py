@@ -17,6 +17,7 @@ from tqdm import tqdm
 
 from schnetpack.data import *
 from schnetpack.data import AtomsDataModule
+from schnetpack.data.splitting import GroupSplit
 
 __all__ = ["QM7X"]
 
