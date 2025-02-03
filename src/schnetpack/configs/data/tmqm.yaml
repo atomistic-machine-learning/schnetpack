@@ -1,0 +1,18 @@
+defaults:
+  - custom
+
+_target_: schnetpack.datasets.TMQM
+
+datapath: ${run.data_dir}/tmqm.db  # data_dir is specified in train.yaml
+batch_size: 100
+num_train: 88000
+num_val: 10000
+
+# convert to typically used units
+distance_unit: Ang
+property_units:
+  Electronic_E: eV
+  Dispersion_E: eV
+  HOMO_Energy: eV
+  LUMO_Energy: eV
+  HL_Gap: eV
