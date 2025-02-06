@@ -39,8 +39,12 @@ class CovalentBond(nn.Module):
 
         self.output_key = output_key
 
-        self.bond_length = nn.Parameter(torch.tensor([bond_length]), requires_grad=trainable)
-        self.spring_konst = nn.Parameter(torch.tensor([spring_konst]), requires_grad=trainable)
+        self.bond_length = nn.Parameter(
+            torch.tensor([bond_length]), requires_grad=trainable
+        )
+        self.spring_konst = nn.Parameter(
+            torch.tensor([spring_konst]), requires_grad=trainable
+        )
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
 
@@ -50,7 +54,9 @@ class CovalentBond(nn.Module):
         # check if n_atoms is identical for all configs
         if not (inputs["_n_atoms"] - n_atoms).sum().item() == 0:
             raise Warning("n atoms is not identical for all configs")
-        index_offsets = torch.tensor([_ for _ in range(0, n_structures * n_atoms, n_atoms)])
+        index_offsets = torch.tensor(
+            [_ for _ in range(0, n_structures * n_atoms, n_atoms)]
+        )
 
         indices0 = self.idx0 + index_offsets
         indices1 = self.idx1 + index_offsets
@@ -58,7 +64,7 @@ class CovalentBond(nn.Module):
         # define harmonic oscillator
         pos = inputs[properties.R] * self.position_units
         deviation = self.bond_length - torch.norm(pos[indices0] - pos[indices1], dim=-1)
-        harm_pot = self.spring_konst * deviation ** 2
+        harm_pot = self.spring_konst * deviation**2
 
         inputs[self.output_key] = harm_pot / self.energy_units
 
