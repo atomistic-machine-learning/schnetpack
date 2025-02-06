@@ -22,7 +22,11 @@ license = { file="LICENSE" }
 requires-python = "==3.12"
 dependencies = [
     "numpy>=2.0.0",
+<<<<<<< HEAD
     "sympy>=1.13",
+=======
+    "sympy>=1.12",
+>>>>>>> 8cd3f74 (pytorch version conflict bug fixed)
     "ase>=3.21",
     "h5py",
     "pyyaml",
