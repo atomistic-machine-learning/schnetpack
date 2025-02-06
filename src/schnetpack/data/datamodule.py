@@ -24,7 +24,7 @@ from schnetpack.data import (
 
 __all__ = ["AtomsDataModule", "AtomsDataModuleError"]
 
-
+# This is a test line
 class AtomsDataModuleError(Exception):
     pass
 
