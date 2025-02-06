@@ -464,7 +464,7 @@ class ASEAtomsData(BaseAtomsData):
         self,
         property_list: List[Dict[str, Any]],
         atoms_list: Optional[List[Atoms]] = None,
-        key_value_list: Optional[List[Dict[str, Any]]] = None
+        key_value_list: Optional[List[Dict[str, Any]]] = None,
     ):
         """
         Add atoms data to the dataset.
@@ -487,10 +487,21 @@ class ASEAtomsData(BaseAtomsData):
 
         # for at, prop in zip(atoms_list, property_list):
         #     self._add_system(self.conn, at, **prop)
-        for at, prop, key_val  in zip(atoms_list, property_list, key_value_list):
-            self._add_system(self.conn, at, key_val, **prop,)
+        for at, prop, key_val in zip(atoms_list, property_list, key_value_list):
+            self._add_system(
+                self.conn,
+                at,
+                key_val,
+                **prop,
+            )
 
-    def _add_system(self, conn, atoms: Optional[Atoms] = None, key_val: Optional[Dict[str, Any]] = None, **properties):
+    def _add_system(
+        self,
+        conn,
+        atoms: Optional[Atoms] = None,
+        key_val: Optional[Dict[str, Any]] = None,
+        **properties,
+    ):
         """Add systems to DB"""
         if atoms is None:
             try:
@@ -507,12 +518,7 @@ class ASEAtomsData(BaseAtomsData):
         # add available properties to database
         valid_props = set().union(
             conn.metadata["_property_unit_dict"].keys(),
-            [
-                structure.Z,
-                structure.R,
-                structure.cell,
-                structure.pbc
-            ],
+            [structure.Z, structure.R, structure.cell, structure.pbc],
         )
         for prop in properties:
             if prop not in valid_props:

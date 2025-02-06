@@ -30,8 +30,8 @@ class MaterialsProject(AtomsDataModule):
     EPerAtom = "energy_per_atom"
     BandGap = "band_gap"
     TotalMagnetization = "total_magnetization"
-    MaterialId = "material_id",
-    CreatedAt = 'created_at'
+    MaterialId = ("material_id",)
+    CreatedAt = "created_at"
 
     def __init__(
         self,
@@ -105,13 +105,13 @@ class MaterialsProject(AtomsDataModule):
             distance_unit=distance_unit,
             **kwargs,
         )
-        '''if len(apikey) != 16:
+        """if len(apikey) != 16:
             raise AtomsDataModuleError(
                 "Invalid API-key. ScheNetPack uses the legacy API of MaterialsProject, "
                 f"which requires a 16 character long API-key. Your API-key contains {len(apikey)}"
                 f"characters. In order to generate a valid API-key please use "
                 f"https://legacy.materialsproject.org/open."
-            )'''
+            )"""
         if len(apikey) not in (16, 32):
             raise AtomsDataModuleError(
                 "Invalid API-key. ScheNetPack uses the legacy and nextegen API of MaterialsProject, "
@@ -122,7 +122,7 @@ class MaterialsProject(AtomsDataModule):
             )
         self.apikey = apikey
         self.timestamp = timestamp
-        
+
     def prepare_data(self):
         if not os.path.exists(self.datapath):
             property_unit_dict = {
@@ -237,10 +237,9 @@ class MaterialsProject(AtomsDataModule):
         dataset.add_systems(
             atoms_list=atms_list,
             property_list=properties_list,
-            key_value_list=key_value_pairs_list
+            key_value_list=key_value_pairs_list,
         )
         logging.info("Done.")
-
 
     def _download_data_nextgen(self, dataset: BaseAtomsData):
         """
@@ -253,7 +252,7 @@ class MaterialsProject(AtomsDataModule):
                 "Provide a valid API key in order to download the "
                 "Materials Project data!"
             )
-                # collect data
+            # collect data
         atms_list = []
         properties_list = []
         key_value_pairs_list = []
@@ -267,26 +266,25 @@ class MaterialsProject(AtomsDataModule):
                 "In order to download Materials Project data, you have to install "
                 "mp-api and pymatgen packages"
             )
-        
+
         with MPRester(self.apikey) as m:
-            #for N in range(1, 9):
-                #for nsites in range(0, 300, 30):
-                    #ns = {"$lt": nsites + 31, "$gt": nsites}
+            # for N in range(1, 9):
+            # for nsites in range(0, 300, 30):
+            # ns = {"$lt": nsites + 31, "$gt": nsites}
             query = m.materials.summary.search(
-                num_sites = (0, 300, 30),
-                num_elements = (1, 9),
+                num_sites=(0, 300, 30),
+                num_elements=(1, 9),
                 fields=[
-                    "structure",   
-                    "energy_per_atom",  
-                    "formation_energy_per_atom", 
-                    "total_magnetization", 
-                    "band_gap", 
-                    "material_id", 
-                    "warnings",  
-                    #"created_at", #not found #last_updated 
+                    "structure",
+                    "energy_per_atom",
+                    "formation_energy_per_atom",
+                    "total_magnetization",
+                    "band_gap",
+                    "material_id",
+                    "warnings",
+                    # "created_at", #not found #last_updated
                 ],
             )
-
 
             for q in query:
                 # if (
@@ -309,24 +307,22 @@ class MaterialsProject(AtomsDataModule):
                             MaterialsProject.EPerAtom: q.energy_per_atom,
                             MaterialsProject.EformationPerAtom: q.formation_energy_per_atom,
                             MaterialsProject.TotalMagnetization: q.total_magnetization,
-                            MaterialsProject.BandGap: q.band_gap
+                            MaterialsProject.BandGap: q.band_gap,
                         }
                     )
-                    #todo: use key-value-pairs or not?
+                    # todo: use key-value-pairs or not?
                     key_value_pairs_list.append(
                         {
                             "material_id": q.material_id,
-                            #"created_at": q["created_at"], #leave in next gen
+                            # "created_at": q["created_at"], #leave in next gen
                         }
                     )
-
 
         # write systems to database
         logging.info("Write atoms to db...")
         dataset.add_systems(
             atoms_list=atms_list,
             property_list=properties_list,
-            key_value_list=key_value_pairs_list
+            key_value_list=key_value_pairs_list,
         )
         logging.info("Done.")
-        
