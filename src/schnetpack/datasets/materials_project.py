@@ -30,6 +30,8 @@ class MaterialsProject(AtomsDataModule):
     EPerAtom = "energy_per_atom"
     BandGap = "band_gap"
     TotalMagnetization = "total_magnetization"
+    MaterialId = ("material_id",)
+    CreatedAt = "created_at"
 
     def __init__(
         self,
@@ -103,12 +105,13 @@ class MaterialsProject(AtomsDataModule):
             distance_unit=distance_unit,
             **kwargs,
         )
-        if len(apikey) != 16:
+        if len(apikey) not in (16, 32):
             raise AtomsDataModuleError(
-                "Invalid API-key. ScheNetPack uses the legacy API of MaterialsProject, "
-                f"which requires a 16 character long API-key. Your API-key contains {len(apikey)} "
-                f"characters. In order to generate a valid API-key please use "
-                f"https://legacy.materialsproject.org/open."
+                "Invalid API-key. ScheNetPack uses the legacy and nextegen API of MaterialsProject, "
+                "which requires an API-key of either 16 or 32 characters. "
+                f"Your API-key contains {len(apikey)} characters. Please use a valid API-key. "
+                "For 16-character keys, visit https://legacy.materialsproject.org/open. "
+                "For 32-character keys, visit https://next-gen.materialsproject.org/ "
             )
         self.apikey = apikey
         self.timestamp = timestamp
@@ -128,12 +131,15 @@ class MaterialsProject(AtomsDataModule):
                 distance_unit="Ang",
                 property_unit_dict=property_unit_dict,
             )
+            if len(self.apikey) == 16:
+                self._download_data_legacy(dataset)
 
-            self._download_data(dataset)
+            if len(self.apikey) == 32:
+                self._download_data_nextgen(dataset)
         else:
             dataset = load_dataset(self.datapath, self.format)
 
-    def _download_data(self, dataset: BaseAtomsData):
+    def _download_data_legacy(self, dataset: BaseAtomsData):
         """
         Downloads dataset provided it does not exist in self.path
         Returns:
@@ -222,5 +228,81 @@ class MaterialsProject(AtomsDataModule):
         dataset.add_systems(
             atoms_list=atms_list,
             property_list=properties_list,
+            key_value_list=key_value_pairs_list,
+        )
+        logging.info("Done.")
+
+    def _download_data_nextgen(self, dataset: BaseAtomsData):
+        """
+        Downloads dataset provided it does not exist in self.path
+        Returns:
+            works (bool): true if download succeeded or file already exists
+        """
+        if self.apikey is None:
+            raise AtomsDataModuleError(
+                "Provide a valid API key in order to download the "
+                "Materials Project data!"
+            )
+            # collect data
+        atms_list = []
+        properties_list = []
+        key_value_pairs_list = []
+        try:
+            from pymatgen.core import Structure
+            import pymatgen as pmg
+            from mp_api.client import MPRester
+
+        except:
+            raise ImportError(
+                "In order to download Materials Project data, you have to install "
+                "mp-api and pymatgen packages"
+            )
+
+        with MPRester(self.apikey) as m:
+            query = m.materials.summary.search(
+                num_sites=(0, 300, 30),
+                num_elements=(1, 9),
+                fields=[
+                    "structure",
+                    "energy_per_atom",
+                    "formation_energy_per_atom",
+                    "total_magnetization",
+                    "band_gap",
+                    "material_id",
+                    "warnings",
+                ],
+            )
+
+            for q in query:
+                s = q.structure
+                if type(s) is Structure:
+                    atms_list.append(
+                        Atoms(
+                            numbers=s.atomic_numbers,
+                            positions=s.cart_coords,
+                            cell=s.lattice.matrix,
+                            pbc=True,
+                        )
+                    )
+                    properties_list.append(
+                        {
+                            MaterialsProject.EPerAtom: q.energy_per_atom,
+                            MaterialsProject.EformationPerAtom: q.formation_energy_per_atom,
+                            MaterialsProject.TotalMagnetization: q.total_magnetization,
+                            MaterialsProject.BandGap: q.band_gap,
+                        }
+                    )
+                    key_value_pairs_list.append(
+                        {
+                            "material_id": q.material_id,
+                        }
+                    )
+
+        # write systems to database
+        logging.info("Write atoms to db...")
+        dataset.add_systems(
+            atoms_list=atms_list,
+            property_list=properties_list,
+            key_value_list=key_value_pairs_list,
         )
         logging.info("Done.")
