@@ -105,13 +105,6 @@ class MaterialsProject(AtomsDataModule):
             distance_unit=distance_unit,
             **kwargs,
         )
-        """if len(apikey) != 16:
-            raise AtomsDataModuleError(
-                "Invalid API-key. ScheNetPack uses the legacy API of MaterialsProject, "
-                f"which requires a 16 character long API-key. Your API-key contains {len(apikey)}"
-                f"characters. In order to generate a valid API-key please use "
-                f"https://legacy.materialsproject.org/open."
-            )"""
         if len(apikey) not in (16, 32):
             raise AtomsDataModuleError(
                 "Invalid API-key. ScheNetPack uses the legacy and nextegen API of MaterialsProject, "
@@ -130,8 +123,6 @@ class MaterialsProject(AtomsDataModule):
                 MaterialsProject.EPerAtom: "eV",
                 MaterialsProject.BandGap: "eV",
                 MaterialsProject.TotalMagnetization: "None",
-                MaterialsProject.MaterialId: "None",
-                MaterialsProject.CreatedAt: "None",
             }
 
             dataset = create_dataset(
@@ -268,9 +259,6 @@ class MaterialsProject(AtomsDataModule):
             )
 
         with MPRester(self.apikey) as m:
-            # for N in range(1, 9):
-            # for nsites in range(0, 300, 30):
-            # ns = {"$lt": nsites + 31, "$gt": nsites}
             query = m.materials.summary.search(
                 num_sites=(0, 300, 30),
                 num_elements=(1, 9),
@@ -282,16 +270,10 @@ class MaterialsProject(AtomsDataModule):
                     "band_gap",
                     "material_id",
                     "warnings",
-                    # "created_at", #not found #last_updated
                 ],
             )
 
             for q in query:
-                # if (
-                #     self.timestamp is not None
-                #     and q["created_at"] > self.timestamp
-                # ):
-                #     continue
                 s = q.structure
                 if type(s) is Structure:
                     atms_list.append(
@@ -310,12 +292,10 @@ class MaterialsProject(AtomsDataModule):
                             MaterialsProject.BandGap: q.band_gap,
                         }
                     )
-                    # todo: use key-value-pairs or not?
                     key_value_pairs_list.append(
                         {
                             "material_id": q.material_id,
-                            # "created_at": q["created_at"], #leave in next gen
-                        }
+                                                                            }
                     )
 
         # write systems to database
