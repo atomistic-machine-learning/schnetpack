@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 
 from typing import Optional, Sequence
 from torch.utils.data import Dataset, Sampler
-from torch.utils.data.dataloader import _collate_fn_t, _T_co
+from torch.utils.data.dataloader import _collate_fn_t, T_co
 
 import schnetpack.properties as structure
 
