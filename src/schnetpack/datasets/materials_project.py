@@ -295,7 +295,7 @@ class MaterialsProject(AtomsDataModule):
                     key_value_pairs_list.append(
                         {
                             "material_id": q.material_id,
-                                                                            }
+                        }
                     )
 
         # write systems to database
