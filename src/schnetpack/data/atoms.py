@@ -499,12 +499,7 @@ class ASEAtomsData(BaseAtomsData):
         # add available properties to database
         valid_props = set().union(
             conn.metadata["_property_unit_dict"].keys(),
-            [
-                structure.Z,
-                structure.R,
-                structure.cell,
-                structure.pbc,
-            ],
+            [structure.Z, structure.R, structure.cell, structure.pbc],
         )
         for prop in properties:
             if prop not in valid_props:
