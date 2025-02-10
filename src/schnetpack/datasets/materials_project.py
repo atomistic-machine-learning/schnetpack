@@ -123,6 +123,8 @@ class MaterialsProject(AtomsDataModule):
                 MaterialsProject.EPerAtom: "eV",
                 MaterialsProject.BandGap: "eV",
                 MaterialsProject.TotalMagnetization: "None",
+                MaterialsProject.MaterialId: "None",
+                MaterialsProject.CreatedAt: "None"
             }
 
             dataset = create_dataset(
@@ -306,6 +308,6 @@ class MaterialsProject(AtomsDataModule):
         dataset.add_systems(
             atoms_list=atms_list,
             property_list=properties_list,
-            key_value_list=key_value_pairs_list,
+            #key_value_list=key_value_pairs_list,
         )
         logging.info("Done.")
