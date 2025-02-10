@@ -12,7 +12,7 @@ __all__ = [
 
 
 def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
-    """ Behler-style cosine cutoff.
+    r""" Behler-style cosine cutoff.
 
         .. math::
            f(r) = \begin{cases}
