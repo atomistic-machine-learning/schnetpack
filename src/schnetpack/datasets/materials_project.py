@@ -213,22 +213,24 @@ class MaterialsProject(AtomsDataModule):
                                         [q["total_magnetization"]]
                                     ),
                                     MaterialsProject.BandGap: np.array([q["band_gap"]]),
+                                    MaterialsProject.MaterialId: q["material_id"],
+                                    MaterialsProject.CreatedAt: q["created_at"]
                                 }
                             )
                             # todo: use key-value-pairs or not?
-                            key_value_pairs_list.append(
-                                {
-                                    "material_id": q["material_id"],
-                                    "created_at": q["created_at"],
-                                }
-                            )
+                            # key_value_pairs_list.append(
+                            #     {
+                            #         "material_id": q["material_id"],
+                            #         "created_at": q["created_at"],
+                            #     }
+                            # )
 
         # write systems to database
         logging.info("Write atoms to db...")
         dataset.add_systems(
             atoms_list=atms_list,
             property_list=properties_list,
-            key_value_list=key_value_pairs_list,
+            #key_value_list=key_value_pairs_list,
         )
         logging.info("Done.")
 
@@ -290,13 +292,14 @@ class MaterialsProject(AtomsDataModule):
                             MaterialsProject.EformationPerAtom: q.formation_energy_per_atom,
                             MaterialsProject.TotalMagnetization: q.total_magnetization,
                             MaterialsProject.BandGap: q.band_gap,
+                            MaterialsProject.MaterialId: q.material_id
                         }
                     )
-                    key_value_pairs_list.append(
-                        {
-                            "material_id": q.material_id,
-                        }
-                    )
+                    # key_value_pairs_list.append(
+                    #     {
+                    #         "material_id": q.material_id,
+                    #     }
+                    # )
 
         # write systems to database
         logging.info("Write atoms to db...")
