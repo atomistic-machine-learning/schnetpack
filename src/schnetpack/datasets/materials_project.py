@@ -288,6 +288,11 @@ class MaterialsProject(AtomsDataModule):
                             MaterialsProject.MaterialId: q.material_id,
                         }
                     )
+                    # key_value_pairs_list.append(
+                    #     {
+                    #         "material_id": q.material_id,
+                    #     }
+                    # )
 
         # write systems to database
         logging.info("Write atoms to db...")
