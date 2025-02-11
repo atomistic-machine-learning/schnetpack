@@ -249,7 +249,9 @@ class SpkCalculator(Calculator):
         # Container for basic ml model ouputs
         self.model_results = None
 
-    def _load_model(self, model_file: Union[str, schnetpack.model.AtomisticModel]) -> schnetpack.model.AtomisticModel:
+    def _load_model(
+        self, model_file: Union[str, schnetpack.model.AtomisticModel]
+    ) -> schnetpack.model.AtomisticModel:
         """
         Load an individual model, activate stress computation
 
@@ -260,16 +262,15 @@ class SpkCalculator(Calculator):
            AtomisticTask: loaded schnetpack model
         """
 
-        
-        if isinstance(model_file, str):  
+        if isinstance(model_file, str):
             log.info("Loading model from {:s}".format(model_file))
             # load model and keep it on CPU, device can be changed afterwards
             model = load_model(model_file, device=torch.device("cpu")).to(torch.float64)
-        
+
         else:
             log.info("Loading model from Model object")
-            model = model_file  
-        
+            model = model_file
+
         model = model.eval()
 
         if self.stress_key is not None:
