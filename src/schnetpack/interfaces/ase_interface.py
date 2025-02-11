@@ -173,8 +173,8 @@ class SpkCalculator(Calculator):
 
     def __init__(
         self,
-        model: Union[str, nn.Module],
-        neighbor_list: Transform,
+        model_file: Union[str, schnetpack.model.AtomisticModel],
+        neighbor_list: schnetpack.transform.Transform,
         energy_key: str = "energy",
         force_key: str = "forces",
         stress_key: Optional[str] = None,
@@ -189,17 +189,17 @@ class SpkCalculator(Calculator):
     ):
         """
         Args:
-            model: either path to trained model or model object
-            neighbor_list: SchNetPack neighbor list
-            energy_key: name of energies in model (default="energy")
-            force_key: name of forces in model (default="forces")
-            stress_key: name of stress tensor in model. Will not be computed if set to None (default=None)
-            energy_unit: energy units used by model (default="kcal/mol")
-            position_unit: position units used by model (default="Angstrom")
-            device: device used for calculations (default="cpu")
-            dtype: select model precision (default=float32)
-            converter: converter used to set up input batches
-            transforms: transforms for the converter. More information
+            model_file (str): either path to trained model or model object
+            neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
+            energy_key (str): name of energies in model (default="energy")
+            force_key (str): name of forces in model (default="forces")
+            stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
+            energy_unit (str, float): energy units used by model (default="kcal/mol")
+            position_unit (str, float): position units used by model (default="Angstrom")
+            device (torch.device): device used for calculations (default="cpu")
+            dtype (torch.dtype): select model precision (default=float32)
+            converter (callable): converter used to set up input batches
+            transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
                 can be found in the AtomsConverter docstring.
             additional_inputs: additional inputs required for some transforms in the converter.
         """
@@ -241,28 +241,26 @@ class SpkCalculator(Calculator):
         self.model_results = None
 
     def _load_model(
-        self,
-        model: Union[str, nn.Module],
-        device: Union[str, torch.device],
-        dtype: torch.dtype,
-    ) -> nn.Module:
+        self, model_file: Union[str, schnetpack.model.AtomisticModel]
+    ) -> schnetpack.model.AtomisticModel:
         """
         Load an individual model, activate stress computation
 
         Args:
-            model: Either path to model or model object
+            model_file (None): Either path to model or model object
 
         Returns:
            AtomisticTask: loaded schnetpack model
         """
 
-        if isinstance(model, str):
-            log.info("Loading model from {:s}...".format(model))
-            model = load_model(model, device=torch.device(device)).to(dtype)
+        if isinstance(model_file, str):
+            log.info("Loading model from {:s}".format(model_file))
+            # load model and keep it on CPU, device can be changed afterwards
+            model = load_model(model_file, device=torch.device("cpu")).to(torch.float64)
 
         else:
-            log.info("Using instantiated model...")
-            model = model.to(device).to(dtype)
+            log.info("Loading model from Model object")
+            model = model_file
 
         model = model.eval()
 
