@@ -71,6 +71,7 @@ magnetic_field: Final[str] = "magnetic_field"
 nuclear_magnetic_moments: Final[str] = "nuclear_magnetic_moments"
 shielding: Final[str] = "shielding"
 nuclear_spin_coupling: Final[str] = "nuclear_spin_coupling"
+newton_step: Final[str] = "newton_step"
 
 ## external fields needed for different response properties
 required_external_fields = {

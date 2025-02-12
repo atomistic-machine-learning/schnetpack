@@ -8,7 +8,7 @@ import schnetpack as spk
 import schnetpack.nn as snn
 import schnetpack.properties as properties
 
-__all__ = ["Atomwise", "DipoleMoment", "Polarizability"]
+__all__ = ["Atomwise", "DipoleMoment", "Polarizability", "NewtonStep"]
 
 
 class Atomwise(nn.Module):
@@ -85,6 +85,43 @@ class Atomwise(nn.Module):
                 y = y / inputs[properties.n_atoms]
 
         inputs[self.output_key] = y
+        return inputs
+
+
+class NewtonStep(nn.Module):
+    def __init__(
+        self,
+        n_in: int,
+        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_layers: int = 2,
+        activation: Callable = F.silu,
+        newton_step_key: str = properties.newton_step,
+    ):
+        super(NewtonStep, self).__init__()
+        self.n_in = n_in
+        self.n_layers = n_layers
+        self.n_hidden = n_hidden
+        self.newton_step_key = newton_step_key
+        self.model_outputs = [newton_step_key]
+
+        self.outnet = spk.nn.build_gated_equivariant_mlp(
+            n_in=n_in,
+            n_out=1,
+            n_hidden=n_hidden,
+            n_layers=n_layers,
+            activation=activation,
+            sactivation=activation,
+        )
+
+    def forward(self, inputs):
+        l0 = inputs["scalar_representation"]  # 90 x 30
+        l1 = inputs["vector_representation"]  # 90 x 3 x 30
+
+        l0, l1 = self.outnet((l0, l1))  # 90 x 1, 90 x 3 x 1
+
+        l1 = l1.squeeze(-1)  # 90 x 3
+
+        inputs[self.newton_step_key] = l1
         return inputs
 
 
