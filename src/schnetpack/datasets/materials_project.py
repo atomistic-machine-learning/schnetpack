@@ -123,6 +123,8 @@ class MaterialsProject(AtomsDataModule):
                 MaterialsProject.EPerAtom: "eV",
                 MaterialsProject.BandGap: "eV",
                 MaterialsProject.TotalMagnetization: "None",
+                MaterialsProject.MaterialId: "None",
+                MaterialsProject.CreatedAt: "None",
             }
 
             dataset = create_dataset(
@@ -163,7 +165,6 @@ class MaterialsProject(AtomsDataModule):
         # collect data
         atms_list = []
         properties_list = []
-        key_value_pairs_list = []
         with MPRester(self.apikey) as m:
             for N in range(1, 9):
                 for nsites in range(0, 300, 30):
@@ -213,13 +214,8 @@ class MaterialsProject(AtomsDataModule):
                                         [q["total_magnetization"]]
                                     ),
                                     MaterialsProject.BandGap: np.array([q["band_gap"]]),
-                                }
-                            )
-                            # todo: use key-value-pairs or not?
-                            key_value_pairs_list.append(
-                                {
-                                    "material_id": q["material_id"],
-                                    "created_at": q["created_at"],
+                                    MaterialsProject.MaterialId: q["material_id"],
+                                    MaterialsProject.CreatedAt: q["created_at"],
                                 }
                             )
 
@@ -228,7 +224,6 @@ class MaterialsProject(AtomsDataModule):
         dataset.add_systems(
             atoms_list=atms_list,
             property_list=properties_list,
-            key_value_list=key_value_pairs_list,
         )
         logging.info("Done.")
 
@@ -246,7 +241,6 @@ class MaterialsProject(AtomsDataModule):
             # collect data
         atms_list = []
         properties_list = []
-        key_value_pairs_list = []
         try:
             from pymatgen.core import Structure
             import pymatgen as pmg
@@ -290,11 +284,7 @@ class MaterialsProject(AtomsDataModule):
                             MaterialsProject.EformationPerAtom: q.formation_energy_per_atom,
                             MaterialsProject.TotalMagnetization: q.total_magnetization,
                             MaterialsProject.BandGap: q.band_gap,
-                        }
-                    )
-                    key_value_pairs_list.append(
-                        {
-                            "material_id": q.material_id,
+                            MaterialsProject.MaterialId: q.material_id,
                         }
                     )
 
@@ -303,6 +293,5 @@ class MaterialsProject(AtomsDataModule):
         dataset.add_systems(
             atoms_list=atms_list,
             property_list=properties_list,
-            key_value_list=key_value_pairs_list,
         )
         logging.info("Done.")

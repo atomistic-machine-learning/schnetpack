@@ -269,17 +269,17 @@ class AtomsDataModule(pl.LightningDataModule):
                 self.val_idx = S["val_idx"].tolist()
                 self.test_idx = S["test_idx"].tolist()
                 if self.num_train and self.num_train != len(self.train_idx):
-                    logging.warning(
+                    raise ValueError(
                         f"Split file was given, but `num_train ({self.num_train})"
                         + f" != len(train_idx)` ({len(self.train_idx)})!"
                     )
                 if self.num_val and self.num_val != len(self.val_idx):
-                    logging.warning(
+                    raise ValueError(
                         f"Split file was given, but `num_val ({self.num_val})"
                         + f" != len(val_idx)` ({len(self.val_idx)})!"
                     )
                 if self.num_test and self.num_test != len(self.test_idx):
-                    logging.warning(
+                    raise ValueError(
                         f"Split file was given, but `num_test ({self.num_test})"
                         + f" != len(test_idx)` ({len(self.test_idx)})!"
                     )
