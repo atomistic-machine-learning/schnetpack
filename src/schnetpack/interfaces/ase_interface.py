@@ -249,7 +249,7 @@ class SpkCalculator(Calculator):
         # Container for basic ml model ouputs
         self.model_results = None
 
-    def _load_model(self, model_file: str) -> schnetpack.model.AtomisticModel:
+    def _load_model(self, model_file: str) -> torch.nn.Module:
         """
         Load an individual model, activate stress computation
 
