@@ -88,6 +88,7 @@ def derivative_from_atomic(
         torch.Tensor: derivative of `fx` with respect to `dx`.
     """
     # Split input tensor for easier bookkeeping
+
     fxm = fx.split(list(n_atoms))
 
     dfdx = []
@@ -112,9 +113,13 @@ def derivative_from_atomic(
 
         # Build molecular matrix and reshape
         dfdx_mol = torch.stack(dfdx_mol, dim=0)
-        dfdx_mol = dfdx_mol.view(n_atoms[idx], 3, n_atoms[idx], 3)
-        dfdx_mol = dfdx_mol.permute(0, 2, 1, 3)
-        dfdx_mol = dfdx_mol.reshape(n_atoms[idx] ** 2, 3, 3)
+        dfdx_mol = dfdx_mol.reshape(n_atoms[idx] * 3, n_atoms[idx] * 3)
+
+        # only consider upper triangular part
+        # mask = torch.ones(dfdx_mol.shape, dtype=bool)
+        # mask = torch.triu(mask).flatten()
+        # dfdx_mol = dfdx_mol.flatten()
+        # dfdx_mol = dfdx_mol[mask]
 
         dfdx.append(dfdx_mol)
 
