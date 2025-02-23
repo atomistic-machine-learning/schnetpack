@@ -119,7 +119,7 @@ class NewtonStep(nn.Module):
 
         l0, l1 = self.outnet((l0, l1))  # 90 x 1, 90 x 3 x 1
 
-        l1 = l1.squeeze(-1)  # 90 x 3
+        l1 = l1.squeeze(-1) * l0  # 90 x 3
 
         inputs[self.newton_step_key] = l1
         return inputs
