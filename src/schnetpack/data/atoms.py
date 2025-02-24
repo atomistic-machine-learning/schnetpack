@@ -485,6 +485,9 @@ class ASEAtomsData(BaseAtomsData):
         if atoms_list is None:
             atoms_list = [None] * len(property_list)
 
+        if key_value_list is None:
+            key_value_list = [{}] * len(property_list)
+
         # for at, prop in zip(atoms_list, property_list):
         #     self._add_system(self.conn, at, **prop)
         for at, prop, key_val in zip(atoms_list, property_list, key_value_list):
