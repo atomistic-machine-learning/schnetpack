@@ -289,20 +289,38 @@ class AtomsDataModule(pl.LightningDataModule):
 
                 # Validate if the split file matches the expected sizes
                 if expected_train_size and expected_train_size != len(self.train_idx):
-                    raise ValueError(
+                    if self.num_train <= 1:
+                        raise ValueError(
                         f"Split file was given, but `num_train` ({self.num_train}) "
                         f"converted to {expected_train_size} != len(train_idx) ({len(self.train_idx)})!"
-                    )
+                        )
+                    else:
+                        raise ValueError(
+                            f"Split file was given, but `num_train ({self.num_train})"
+                            + f" != len(train_idx)` ({len(self.train_idx)})!"
+                        )
                 if expected_val_size and expected_val_size != len(self.val_idx):
-                    raise ValueError(
-                        f"Split file was given, but `num_val` ({self.num_val}) "
-                        f"converted to {expected_val_size} != len(val_idx) ({len(self.val_idx)})!"
-                    )
+                    if self.num_val <= 1:
+                        raise ValueError(
+                            f"Split file was given, but `num_val` ({self.num_val}) "
+                            f"converted to {expected_val_size} != len(val_idx) ({len(self.val_idx)})!"
+                        )
+                    else:
+                        raise ValueError(
+                            f"Split file was given, but `num_val ({self.num_val})"
+                            + f" != len(val_idx)` ({len(self.val_idx)})!"
+                        )
                 if expected_test_size and expected_test_size != len(self.test_idx):
-                    raise ValueError(
+                    if self.num_test <= 1:
+                        raise ValueError(
                         f"Split file was given, but `num_test` ({self.num_test}) "
                         f"converted to {expected_test_size} != len(test_idx) ({len(self.test_idx)})!"
                     )
+                    else:
+                        raise ValueError(
+                            f"Split file was given, but `num_test ({self.num_test})"
+                            + f" != len(test_idx)` ({len(self.test_idx)})!"
+                        )
 
             else:
                 self._log_with_rank("Create split")
