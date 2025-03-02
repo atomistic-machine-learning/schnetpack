@@ -178,7 +178,7 @@ class SpkCalculator(Calculator):
 
     def __init__(
         self,
-        model_file: Union[str, schnetpack.model.AtomisticModel],
+        model_file: Union[str, torch.nn.Module],
         neighbor_list: schnetpack.transform.Transform,
         energy_key: str = "energy",
         force_key: str = "forces",
