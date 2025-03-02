@@ -291,8 +291,8 @@ class AtomsDataModule(pl.LightningDataModule):
                 if expected_train_size and expected_train_size != len(self.train_idx):
                     if self.num_train <= 1:
                         raise ValueError(
-                        f"Split file was given, but `num_train` ({self.num_train}) "
-                        f"converted to {expected_train_size} != len(train_idx) ({len(self.train_idx)})!"
+                            f"Split file was given, but `num_train` ({self.num_train}) "
+                            f"converted to {expected_train_size} != len(train_idx) ({len(self.train_idx)})!"
                         )
                     else:
                         raise ValueError(
@@ -313,9 +313,9 @@ class AtomsDataModule(pl.LightningDataModule):
                 if expected_test_size and expected_test_size != len(self.test_idx):
                     if self.num_test <= 1:
                         raise ValueError(
-                        f"Split file was given, but `num_test` ({self.num_test}) "
-                        f"converted to {expected_test_size} != len(test_idx) ({len(self.test_idx)})!"
-                    )
+                            f"Split file was given, but `num_test` ({self.num_test}) "
+                            f"converted to {expected_test_size} != len(test_idx) ({len(self.test_idx)})!"
+                        )
                     else:
                         raise ValueError(
                             f"Split file was given, but `num_test ({self.num_test})"
