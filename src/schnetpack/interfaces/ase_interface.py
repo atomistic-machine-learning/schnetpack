@@ -250,8 +250,8 @@ class SpkCalculator(Calculator):
         self.model_results = None
 
     def _load_model(
-            self, model_file: Union[str, schnetpack.model.AtomisticModel, torch.nn.Module]
-            ) -> Union[schnetpack.model.AtomisticModel, torch.nn.Module]:
+        self, model_file: Union[str, schnetpack.model.AtomisticModel, torch.nn.Module]
+    ) -> Union[schnetpack.model.AtomisticModel, torch.nn.Module]:
         """
         Load an individual model, activate stress computation
 
