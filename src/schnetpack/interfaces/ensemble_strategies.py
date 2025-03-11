@@ -8,6 +8,7 @@ class EnsembleAverageStrategy:
     """
     Base class for Ensemble Average Strategies
     """
+
     def __init__(self):
         pass
 
