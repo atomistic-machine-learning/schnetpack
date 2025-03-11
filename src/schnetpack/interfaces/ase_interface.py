@@ -12,7 +12,7 @@ References
 """
 
 import os
-
+import numpy as np
 import ase
 from ase import units
 from ase.constraints import FixAtoms
@@ -326,6 +326,120 @@ class SpkCalculator(Calculator):
             self.results = results
             self.model_results = model_results
 
+
+class SpkEnsembleCalculator(SpkCalculator):
+    """
+    Calculator for neural network models for ensemble calculations.
+    Requires multiple models
+    """
+
+    def __init__(
+            self,
+            model_files: Union[List[str], List[torch.nn.Module]],
+            neighbor_list: schnetpack.transform.Transform,
+            energy_key: str = "energy",
+            force_key: str = "forces",
+            stress_key: Optional[str] = None,
+            energy_unit: Union[str, float] = "kcal/mol",
+            position_unit: Union[str, float] = "Angstrom",
+            device: Union[str, torch.device] = "cpu",
+            input_dtype: torch.dtype = torch.float32,
+            output_dtype: torch.dtype = torch.float64,
+            converter: callable = AtomsConverter,
+            transforms: Union[
+                schnetpack.transform.Transform, List[schnetpack.transform.Transform]
+            ] = None,
+            additional_inputs: Dict[str, torch.Tensor] = None,
+            auxiliary_output_modules: Optional[List] = None,
+            #ensemble_average_strategy: callable = EnsembleAverageStrategy(),
+            **kwargs,
+    ):
+        """
+        Args:
+            model_files: path to trained models or list of preloaded model
+            neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
+            energy_key (str): name of energies in model (default="energy")
+            force_key (str): name of forces in model (default="forces")
+            stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
+            energy_unit (str, float): energy units used by model (default="kcal/mol")
+            position_unit (str, float): position units used by model (default="Angstrom")
+            device (torch.device): device used for calculations (default="cpu")
+            input_dtype (torch.dtype): select model input precision (default=float32)
+            output_dtype (torch.dtype): select model output precision (default=float64)
+            converter (callable): converter used to set up input batches
+            transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
+                can be found in the AtomsConverter docstring.
+            additional_inputs (dict): additional inputs required for some transforms in the converter.
+            auxiliary_output_modules: auxiliary module to manipulate output properties (e.g., prior energy or forces)
+            ensemble_average_strategy : User defined class to calculate ensemble average (default= simple mean and standard deviation).
+            **kwargs: Additional arguments for basic ase calculator class
+        """
+        first_model = model_files[0] if isinstance(model_files[0], str) else None
+        super().__init__(
+            model_file=first_model,
+            neighbor_list=neighbor_list,
+            energy_key=energy_key,
+            force_key=force_key,
+            stress_key=stress_key,
+            energy_unit=energy_unit,
+            position_unit=position_unit,
+            device=device,
+            input_dtype=input_dtype,
+            output_dtype=output_dtype,
+            converter=converter,
+            transforms=transforms,
+            additional_inputs=additional_inputs,
+            auxiliary_output_modules=auxiliary_output_modules,
+            **kwargs
+        )
+        #self.ensemble_average_strategy = ensemble_average_strategy
+        # Load multiple models
+        self.models = [self._load_model(model_file) for model_file in model_files]
+
+    def calculate(
+        self,
+        atoms: ase.Atoms = None,
+        properties: List[str] = ["energy"],
+        system_changes: List[str] = all_changes,
+    ):
+        """
+        Calculate properties by averaging results from multiple models.
+        """
+        if self.calculation_required(atoms, properties):
+            Calculator.calculate(self, atoms)
+            
+            model_inputs = self.converter(atoms)
+            accumulated_results = {prop: [] for prop in properties}
+            
+            for model in self.models:
+                model_results = model(model_inputs)
+                
+                for prop in properties:
+                    model_prop = self.property_map[prop]
+                    if model_prop in model_results:
+                        value = model_results[model_prop].cpu().data.numpy()
+                        if prop == self.energy:
+                            value = value.item()
+                        elif prop == self.stress:
+                            value = value.squeeze()
+                        accumulated_results[prop].append(value * self.property_units[prop])
+                    else:
+                        raise AtomsConverterError(
+                            f"'{prop}' is not a property of your models. Please check the model properties!"
+                        )
+            
+            # Compute average values
+            self.results = {prop: np.mean(accumulated_results[prop], axis=0) for prop in properties}
+            #self.results["std_" + self.energy] = np.std(accumulated_results[self.energy], axis=0)
+            #def uncertainity function() 
+            #TODO
+            #return mean and std -- simple case 
+            #return force uncertainity
+            #for calculator 
+            #check calc required
+            #call self.result
+            
+        
 
 class AseInterface:
     """
