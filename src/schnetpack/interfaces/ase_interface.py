@@ -434,14 +434,57 @@ class SpkEnsembleCalculator(SpkCalculator):
             self.results = {
                 prop: np.mean(accumulated_results[prop], axis=0) for prop in properties
             }
-            # self.results["std_" + self.energy] = np.std(accumulated_results[self.energy], axis=0)
+            # TODO: implement uncertainty estimation
             # def uncertainity function()
-            # TODO
             # return mean and std -- simple case
             # return force uncertainity
             # for calculator
             # check calc required
             # call self.result
+    
+    def get_uncertainty(self, atoms, uncertainty_type="absolute"):
+        """
+        Compute uncertainty for energy and forces.
+
+        Args:
+            atoms (ase.Atoms): The atomic structure for which uncertainty is computed.
+            uncertainty_type (str): Type of uncertainty to return, either "absolute" or "relative".
+
+        Returns:
+            dict: Contains mean and chosen uncertainty type for:
+                - "energy": (mean, uncertainty)
+                - "forces": (mean, uncertainty)
+        """
+        if self.calculation_required(atoms, [self.energy, self.forces]):
+            self.calculate(atoms, [self.energy, self.forces])
+
+        energy_predictions = np.array(self.results[self.energy])
+        force_predictions = np.array(self.results[self.forces])
+
+        # Compute mean and standard deviation
+        mean_energy = float(np.mean(energy_predictions))
+        std_energy = float(np.std(energy_predictions))
+
+        mean_forces = np.mean(force_predictions, axis=0)
+        std_forces = np.std(force_predictions, axis=0)
+
+
+        if uncertainty_type == "absolute":
+            return {
+                "energy": {"mean": mean_energy, "uncertainty": std_energy},
+                "forces": {"mean": mean_forces, "uncertainty": std_forces},
+            }
+        elif uncertainty_type == "relative":
+            rel_energy = std_energy / abs(mean_energy) if mean_energy != 0 else 0
+            rel_forces = np.divide(std_forces, np.abs(mean_forces), out=np.zeros_like(std_forces), where=mean_forces!=0)
+
+            return {
+                "energy": {"mean": mean_energy, "uncertainty": rel_energy},
+                "forces": {"mean": mean_forces, "uncertainty": rel_forces},
+            }
+        else:
+            raise ValueError("Invalid uncertainty_type. Choose either 'absolute' or 'relative'.")
+
 
 
 class AseInterface:
