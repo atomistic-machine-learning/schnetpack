@@ -441,7 +441,7 @@ class SpkEnsembleCalculator(SpkCalculator):
             # for calculator
             # check calc required
             # call self.result
-    
+
     def get_uncertainty(self, atoms, uncertainty_type="absolute"):
         """
         Compute uncertainty for energy and forces.
@@ -468,7 +468,6 @@ class SpkEnsembleCalculator(SpkCalculator):
         mean_forces = np.mean(force_predictions, axis=0)
         std_forces = np.std(force_predictions, axis=0)
 
-
         if uncertainty_type == "absolute":
             return {
                 "energy": {"mean": mean_energy, "uncertainty": std_energy},
@@ -476,15 +475,21 @@ class SpkEnsembleCalculator(SpkCalculator):
             }
         elif uncertainty_type == "relative":
             rel_energy = std_energy / abs(mean_energy) if mean_energy != 0 else 0
-            rel_forces = np.divide(std_forces, np.abs(mean_forces), out=np.zeros_like(std_forces), where=mean_forces!=0)
+            rel_forces = np.divide(
+                std_forces,
+                np.abs(mean_forces),
+                out=np.zeros_like(std_forces),
+                where=mean_forces != 0,
+            )
 
             return {
                 "energy": {"mean": mean_energy, "uncertainty": rel_energy},
                 "forces": {"mean": mean_forces, "uncertainty": rel_forces},
             }
         else:
-            raise ValueError("Invalid uncertainty_type. Choose either 'absolute' or 'relative'.")
-
+            raise ValueError(
+                "Invalid uncertainty_type. Choose either 'absolute' or 'relative'."
+            )
 
 
 class AseInterface:
