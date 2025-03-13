@@ -30,7 +30,7 @@ class Dense(nn.Linear):
         """
         Args:
             in_features: number of input feature :math:`x`.
-            out_features: umber of output features :math:`y`.
+            out_features: number of output features :math:`y`.
             bias: If False, the layer will not adapt bias :math:`b`.
             activation: if None, no activation function is used.
             weight_init: weight initializer from current weight.
