@@ -435,60 +435,74 @@ class SpkEnsembleCalculator(SpkCalculator):
                 prop: np.mean(accumulated_results[prop], axis=0) for prop in properties
             }
 
-    def get_uncertainty(self, atoms, uncertainty_type="absolute",
-                    energy_weight=0, force_weight=1.0, stress_weight=0):
+    def get_uncertainty(
+        self,
+        atoms,
+        uncertainty_type="absolute",
+        energy_weight=0,
+        force_weight=1.0,
+        stress_weight=0,
+    ):
         """
         Compute a single uncertainty value as a weighted sum of energy, forces, and stress uncertainties.
-        
+
         For "absolute" option, the uncertainty is the standard deviation.
         For "relative" option, the uncertainty is computed as std/mean.
-        
+
         Args:
             atoms (ase.Atoms): The atomic structure for which uncertainty is computed.
             uncertainty_type (str): "absolute" or "relative".
             energy_weight (float): Weight for the energy uncertainty.
             force_weight (float): Weight for the forces uncertainty.
             stress_weight (float): Weight for the stress uncertainty.
-            
+
         Returns:
             float: The weighted sum of the uncertainties.
         """
-        
+
         properties = [self.energy, self.forces]
         if self.stress in self.results:
             properties.append(self.stress)
 
         if self.calculation_required(atoms, properties):
             self.calculate(atoms, properties)
-        
+
         # Energy uncertainty
         energy_predictions = np.array(self.results[self.energy])
         std_energy = float(np.std(energy_predictions))
-        
+
         # Forces uncertainty
         force_predictions = np.array(self.results[self.forces])
         std_forces = np.std(force_predictions, axis=0)
-        
+
         # Stress uncertainty: use self.results if available, else assign 0.
         if self.stress in self.results:
             stress_predictions = np.array(self.results[self.stress])
             std_stress = np.std(stress_predictions, axis=0)
         else:
             std_stress = 0
-        
+
         # Compute uncertainties based on the chosen type.
         if uncertainty_type == "absolute":
             energy_unc = std_energy
             force_unc = np.mean(std_forces) if std_forces.size > 0 else 0
-            stress_unc = np.mean(std_stress) if (isinstance(std_stress, np.ndarray) and std_stress.size > 0) else std_stress
+            stress_unc = (
+                np.mean(std_stress)
+                if (isinstance(std_stress, np.ndarray) and std_stress.size > 0)
+                else std_stress
+            )
 
         elif uncertainty_type == "relative":
             mean_energy = float(np.mean(energy_predictions))
             mean_forces = np.mean(force_predictions, axis=0)
-            mean_stress = np.mean(stress_predictions, axis=0) if self.stress in self.results else 0
+            mean_stress = (
+                np.mean(stress_predictions, axis=0)
+                if self.stress in self.results
+                else 0
+            )
 
             energy_unc = std_energy / abs(mean_energy) if mean_energy != 0 else 0
-            
+
             rel_forces = np.divide(
                 std_forces,
                 np.abs(mean_forces),
@@ -496,10 +510,11 @@ class SpkEnsembleCalculator(SpkCalculator):
                 where=mean_forces != 0,
             )
             force_unc = np.mean(rel_forces) if rel_forces.size > 0 else 0
-            
+
             # For stress: if mean_stress is 0 or not computed, set uncertainty to 0.
-            if (isinstance(mean_stress, (int, float)) and mean_stress == 0) or \
-            (hasattr(mean_stress, "size") and mean_stress.size == 0):
+            if (isinstance(mean_stress, (int, float)) and mean_stress == 0) or (
+                hasattr(mean_stress, "size") and mean_stress.size == 0
+            ):
                 stress_unc = 0
             else:
                 rel_stress = np.divide(
@@ -508,12 +523,18 @@ class SpkEnsembleCalculator(SpkCalculator):
                     out=np.zeros_like(std_stress),
                     where=mean_stress != 0,
                 )
-                stress_unc = np.mean(rel_stress) if (isinstance(rel_stress, np.ndarray) and rel_stress.size > 0) else rel_stress
+                stress_unc = (
+                    np.mean(rel_stress)
+                    if (isinstance(rel_stress, np.ndarray) and rel_stress.size > 0)
+                    else rel_stress
+                )
 
         else:
-            raise ValueError("Invalid uncertainty_type. Choose either 'absolute' or 'relative'.")
-        
-         # Normalize weights so that they sum up to 1.
+            raise ValueError(
+                "Invalid uncertainty_type. Choose either 'absolute' or 'relative'."
+            )
+
+        # Normalize weights so that they sum up to 1.
         total_weight = energy_weight + force_weight + stress_weight
         if total_weight:
             energy_weight /= total_weight
@@ -521,8 +542,13 @@ class SpkEnsembleCalculator(SpkCalculator):
             stress_weight /= total_weight
 
         # Calculate the weighted sum of all uncertainties.
-        total_uncertainty = energy_weight * energy_unc + force_weight * force_unc + stress_weight * stress_unc
+        total_uncertainty = (
+            energy_weight * energy_unc
+            + force_weight * force_unc
+            + stress_weight * stress_unc
+        )
         return round(total_uncertainty, 4)
+
 
 class AseInterface:
     """
