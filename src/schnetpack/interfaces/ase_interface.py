@@ -178,7 +178,7 @@ class SpkCalculator(Calculator):
 
     def __init__(
         self,
-        model_file: str,
+        model_file: Union[str, torch.nn.Module],
         neighbor_list: schnetpack.transform.Transform,
         energy_key: str = "energy",
         force_key: str = "forces",
@@ -196,7 +196,7 @@ class SpkCalculator(Calculator):
     ):
         """
         Args:
-            model_file (str): path to trained model
+            model_file (str): either path to trained model or model object
             neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
             energy_key (str): name of energies in model (default="energy")
             force_key (str): name of forces in model (default="forces")
@@ -249,20 +249,27 @@ class SpkCalculator(Calculator):
         # Container for basic ml model ouputs
         self.model_results = None
 
-    def _load_model(self, model_file: str) -> schnetpack.model.AtomisticModel:
+    def _load_model(
+        self, model_file: Union[str, schnetpack.model.AtomisticModel, torch.nn.Module]
+    ) -> Union[schnetpack.model.AtomisticModel, torch.nn.Module]:
         """
         Load an individual model, activate stress computation
 
         Args:
-            model_file (str): path to model.
+            model_file (None): Either path to model or model object
 
         Returns:
            AtomisticTask: loaded schnetpack model
         """
 
-        log.info("Loading model from {:s}".format(model_file))
-        # load model and keep it on CPU, device can be changed afterwards
-        model = load_model(model_file, device=torch.device("cpu")).to(torch.float64)
+        if isinstance(model_file, str):
+            log.info("Loading model from {:s}".format(model_file))
+            model = load_model(model_file, device=torch.device(self.device)).to(torch.float64)
+
+        else:
+            log.info("Loading model from Model object")
+            model = model_file
+
         model = model.eval()
 
         if self.stress_key is not None:
