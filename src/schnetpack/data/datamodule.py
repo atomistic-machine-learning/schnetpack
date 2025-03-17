@@ -268,7 +268,6 @@ class AtomsDataModule(pl.LightningDataModule):
                 self.num_val = int(self.num_val * total_size)
             if isinstance(self.num_test, float) and self.num_test <= 1:
                 self.num_test = int(self.num_test * total_size)
-            
 
             if self.split_file is not None and os.path.exists(self.split_file):
                 self._log_with_rank("Load split")
@@ -278,37 +277,19 @@ class AtomsDataModule(pl.LightningDataModule):
                 self.val_idx = S["val_idx"].tolist()
                 self.test_idx = S["test_idx"].tolist()
 
-                # total_size = len(self.dataset)  # Get dataset size
-
-                # # If num_train/num_val/num_test are fractions, convert them to absolute values
-                # if isinstance(self.num_train, float) and self.num_train <= 1:
-                #     expected_train_size = int(self.num_train * total_size)
-                # else:
-                #     expected_train_size = self.num_train
-
-                # if isinstance(self.num_val, float) and self.num_val <= 1:
-                #     expected_val_size = int(self.num_val * total_size)
-                # else:
-                #     expected_val_size = self.num_val
-
-                # if isinstance(self.num_test, float) and self.num_test <= 1:
-                #     expected_test_size = int(self.num_test * total_size)
-                # else:
-                #     expected_test_size = self.num_test
-
                 # Validate if the split file matches the expected sizes
                 if self.num_train and self.num_train != len(self.train_idx):
-                    logging.warning(
+                    raise ValueError(
                         f"Split file was given, but `num_train ({self.num_train})"
                         + f" != len(train_idx)` ({len(self.train_idx)})!"
                     )
                 if self.num_val and self.num_val != len(self.val_idx):
-                    logging.warning(
+                    raise ValueError(
                         f"Split file was given, but `num_val ({self.num_val})"
                         + f" != len(val_idx)` ({len(self.val_idx)})!"
                     )
                 if self.num_test and self.num_test != len(self.test_idx):
-                    logging.warning(
+                    raise ValueError(
                         f"Split file was given, but `num_test ({self.num_test})"
                         + f" != len(test_idx)` ({len(self.test_idx)})!"
                     )
@@ -320,15 +301,6 @@ class AtomsDataModule(pl.LightningDataModule):
                         "If no `split_file` is given, the sizes of the training and"
                         + " validation partitions need to be set!"
                     )
-
-                # # Convert relative sizes to absolute values
-                # total_size = len(self.dataset)
-                # if isinstance(self.num_train, float) and self.num_train <= 1:
-                #     self.num_train = int(self.num_train * total_size)
-                # if isinstance(self.num_val, float) and self.num_val <= 1:
-                #     self.num_val = int(self.num_val * total_size)
-                # if isinstance(self.num_test, float) and self.num_test <= 1:
-                #     self.num_test = int(self.num_test * total_size)
 
                 self.train_idx, self.val_idx, self.test_idx = self.splitting.split(
                     self.dataset, self.num_train, self.num_val, self.num_test
