@@ -264,9 +264,9 @@ class SpkCalculator(Calculator):
 
         if isinstance(model_file, str):
             log.info("Loading model from {:s}".format(model_file))
-            model = load_model(model_file, device=torch.device(self.device),weights_only=False).to(
-                torch.float64
-            )
+            model = load_model(
+                model_file, device=torch.device(self.device), weights_only=False
+            ).to(torch.float64)
 
         else:
             log.info("Loading model from Model object")
@@ -382,7 +382,7 @@ class SpkEnsembleCalculator(SpkCalculator):
         """
         # Initialize the parent class without loading a model
         Calculator.__init__(self, **kwargs)
-        
+
         self.neighbor_list = deepcopy(neighbor_list)
         self.device = device
         self.dtype = dtype
@@ -418,7 +418,7 @@ class SpkEnsembleCalculator(SpkCalculator):
             self.stress: self.energy_conversion / self.position_conversion**3,
         }
 
-        #Load multiple models 
+        # Load multiple models
         self.models = [self._load_model(model_file) for model_file in model_files]
 
     def calculate(
