@@ -264,7 +264,7 @@ class SpkCalculator(Calculator):
 
         if isinstance(model_file, str):
             log.info("Loading model from {:s}".format(model_file))
-            model = load_model(model_file, device=torch.device(self.device)).to(
+            model = load_model(model_file, device=torch.device(self.device),weights_only=False).to(
                 torch.float64
             )
 
@@ -352,15 +352,12 @@ class SpkEnsembleCalculator(SpkCalculator):
         energy_unit: Union[str, float] = "kcal/mol",
         position_unit: Union[str, float] = "Angstrom",
         device: Union[str, torch.device] = "cpu",
-        input_dtype: torch.dtype = torch.float32,
-        output_dtype: torch.dtype = torch.float64,
+        dtype: torch.dtype = torch.float32,
         converter: callable = AtomsConverter,
         transforms: Union[
             schnetpack.transform.Transform, List[schnetpack.transform.Transform]
         ] = None,
         additional_inputs: Dict[str, torch.Tensor] = None,
-        auxiliary_output_modules: Optional[List] = None,
-        # ensemble_average_strategy: callable = EnsembleAverageStrategy(),
         **kwargs,
     ):
         """
@@ -383,26 +380,45 @@ class SpkEnsembleCalculator(SpkCalculator):
             ensemble_average_strategy : User defined class to calculate ensemble average (default= simple mean and standard deviation).
             **kwargs: Additional arguments for basic ase calculator class
         """
-        first_model = model_files[0] if isinstance(model_files[0], str) else None
-        super().__init__(
-            model_file=first_model,
+        # Initialize the parent class without loading a model
+        Calculator.__init__(self, **kwargs)
+        
+        self.neighbor_list = deepcopy(neighbor_list)
+        self.device = device
+        self.dtype = dtype
+        self.additional_inputs = additional_inputs or {}
+
+        self.converter = converter(
             neighbor_list=neighbor_list,
-            energy_key=energy_key,
-            force_key=force_key,
-            stress_key=stress_key,
-            energy_unit=energy_unit,
-            position_unit=position_unit,
             device=device,
-            input_dtype=input_dtype,
-            output_dtype=output_dtype,
-            converter=converter,
+            dtype=dtype,
             transforms=transforms,
             additional_inputs=additional_inputs,
-            auxiliary_output_modules=auxiliary_output_modules,
-            **kwargs,
         )
-        # self.ensemble_average_strategy = ensemble_average_strategy
-        # Load multiple models
+
+        self.energy_key = energy_key
+        self.force_key = force_key
+        self.stress_key = stress_key
+
+        # Mapping between ASE names and model outputs
+        self.property_map = {
+            self.energy: energy_key,
+            self.forces: force_key,
+            self.stress: stress_key,
+        }
+
+        # set up basic conversion factors
+        self.energy_conversion = convert_units(energy_unit, "eV")
+        self.position_conversion = convert_units(position_unit, "Angstrom")
+
+        # Unit conversion to default ASE units
+        self.property_units = {
+            self.energy: self.energy_conversion,
+            self.forces: self.energy_conversion / self.position_conversion,
+            self.stress: self.energy_conversion / self.position_conversion**3,
+        }
+
+        #Load multiple models 
         self.models = [self._load_model(model_file) for model_file in model_files]
 
     def calculate(
