@@ -41,6 +41,7 @@ dependencies = [
     "tqdm",
     "pre-commit",
     "black",
+    "black[jupyter]",
     "protobuf",
     "progressbar"
 ]
