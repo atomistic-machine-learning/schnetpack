@@ -255,11 +255,19 @@ class AtomsDataModule(pl.LightningDataModule):
             t.teardown()
 
     def _load_partitions(self):
-        # split dataset
+        # Split dataset
         lock = fasteners.InterProcessLock("splitting.lock")
 
         with lock:
             self._log_with_rank("Enter splitting lock")
+            # Convert relative sizes to absolute values
+            total_size = len(self.dataset)
+            if isinstance(self.num_train, float) and self.num_train <= 1:
+                self.num_train = int(self.num_train * total_size)
+            if isinstance(self.num_val, float) and self.num_val <= 1:
+                self.num_val = int(self.num_val * total_size)
+            if isinstance(self.num_test, float) and self.num_test <= 1:
+                self.num_test = int(self.num_test * total_size)
 
             if self.split_file is not None and os.path.exists(self.split_file):
                 self._log_with_rank("Load split")
@@ -268,6 +276,8 @@ class AtomsDataModule(pl.LightningDataModule):
                 self.train_idx = S["train_idx"].tolist()
                 self.val_idx = S["val_idx"].tolist()
                 self.test_idx = S["test_idx"].tolist()
+
+                # Validate if the split file matches the expected sizes
                 if self.num_train and self.num_train != len(self.train_idx):
                     raise ValueError(
                         f"Split file was given, but `num_train ({self.num_train})"

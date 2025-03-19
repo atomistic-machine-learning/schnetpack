@@ -37,7 +37,7 @@ class EnsembleCalculator(ABC, MDCalculator):
 
     @staticmethod
     def _accumulate_results(
-        results: List[Dict[str, torch.tensor]]
+        results: List[Dict[str, torch.tensor]],
     ) -> Dict[str, torch.tensor]:
         """
         Accumulate results and compute average predictions and uncertainties.

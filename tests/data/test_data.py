@@ -100,7 +100,7 @@ def test_stats():
         d = {
             structure.Z: Z,
             structure.n_atoms: torch.tensor([len(Z)]),
-            "property1": torch.tensor([(1.0 + len(Z) * off)]),
+            "property1": torch.tensor([1.0 + len(Z) * off]),
             "property2": torch.tensor([off]),
         }
         data.append(d)
