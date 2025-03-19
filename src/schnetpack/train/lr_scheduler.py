@@ -20,7 +20,6 @@ class ReduceLROnPlateau(torch.optim.lr_scheduler.ReduceLROnPlateau):
         cooldown=0,
         min_lr=0,
         eps=1e-8,
-        verbose=False,
         smoothing_factor=0.0,
     ):
         """
@@ -53,8 +52,6 @@ class ReduceLROnPlateau(torch.optim.lr_scheduler.ReduceLROnPlateau):
             eps (float): Minimal decay applied to lr. If the difference
                 between new and old lr is smaller than eps, the update is
                 ignored. Default: 1e-8.
-            verbose (bool): If ``True``, prints a message to stdout for
-                each update. Default: ``False``.
             smoothing_factor: smoothing_factor of exponential moving average
         """
         super().__init__(
@@ -67,7 +64,6 @@ class ReduceLROnPlateau(torch.optim.lr_scheduler.ReduceLROnPlateau):
             cooldown=cooldown,
             min_lr=min_lr,
             eps=eps,
-            verbose=verbose,
         )
         self.smoothing_factor = smoothing_factor
         self.ema_loss = None
