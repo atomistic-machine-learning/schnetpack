@@ -255,8 +255,9 @@ class SpkCalculator(Calculator):
 
         if isinstance(model_file, str):
             log.info("Loading model from {:s}".format(model_file))
-            # load model and keep it on CPU, device can be changed afterwards
-            model = load_model(model_file, device=torch.device("cpu")).to(torch.float64)
+            model = load_model(model_file, device=torch.device(self.device)).to(
+                torch.float64
+            )
 
         else:
             log.info("Loading model from Model object")
