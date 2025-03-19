@@ -214,6 +214,7 @@ class ASEAtomsData(BaseAtomsData):
                 of the dataset. Units are converted automatically during loading.
         """
         self.datapath = datapath
+        self.conn = connect(self.datapath, use_lock_file=False)
 
         BaseAtomsData.__init__(
             self,
@@ -224,7 +225,6 @@ class ASEAtomsData(BaseAtomsData):
         )
 
         self._check_db()
-        self.conn = connect(self.datapath, use_lock_file=False)
 
         # initialize units
         md = self.metadata
