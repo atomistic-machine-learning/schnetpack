@@ -265,7 +265,7 @@ class SpkCalculator(Calculator):
         if isinstance(model_file, str):
             log.info("Loading model from {:s}".format(model_file))
             model = load_model(
-                model_file, device=torch.device(self.device), weights_only=False
+                model_file, device=torch.device(self.device),
             ).to(torch.float64)
 
         else:
