@@ -297,7 +297,9 @@ class SpkCalculator(Calculator):
         # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
 
         # make a list of all properties available in the model
-        properties = [p for p in self.property_map.values() if p is not None]
+        properties = [
+            p_key for p_key, p_value in self.property_map.items() if p_value is not None
+        ]
 
         if self.calculation_required(atoms, properties):
             Calculator.calculate(self, atoms)
