@@ -176,7 +176,7 @@ def scalar2rsh(x: torch.Tensor, lmax: int) -> torch.Tensor:
 
 class SO3TensorProduct(nn.Module):
     r"""
-    SO3-equivariant Clebsch-Gordon tensor product..
+    SO3-equivariant Clebsch-Gordon tensor product.
 
     With combined indexing s=(l,m), this can be written as:
 
