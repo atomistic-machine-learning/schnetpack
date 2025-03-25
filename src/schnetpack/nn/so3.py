@@ -175,7 +175,7 @@ def scalar2rsh(x: torch.Tensor, lmax: int) -> torch.Tensor:
 
 
 class SO3TensorProduct(nn.Module):
-    """
+    r"""
     SO3-equivariant Clebsch-Gordon tensor product.
 
     With combined indexing s=(l,m), this can be written as:
@@ -219,7 +219,7 @@ class SO3TensorProduct(nn.Module):
 
 
 class SO3Convolution(nn.Module):
-    """
+    r"""
     SO3-equivariant convolution using Clebsch-Gordon tensor product.
 
     With combined indexing s=(l,m), this can be written as:
@@ -308,7 +308,7 @@ class SO3Convolution(nn.Module):
 
 
 class SO3ParametricGatedNonlinearity(nn.Module):
-    """
+    r"""
     SO3-equivariant parametric gated nonlinearity.
 
     With combined indexing s=(l,m), this can be written as:
@@ -335,7 +335,7 @@ class SO3ParametricGatedNonlinearity(nn.Module):
 
 
 class SO3GatedNonlinearity(nn.Module):
-    """
+    r"""
     SO3-equivariant gated nonlinearity.
 
     With combined indexing s=(l,m), this can be written as:

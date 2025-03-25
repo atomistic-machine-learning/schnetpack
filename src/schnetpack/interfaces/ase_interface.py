@@ -232,8 +232,7 @@ class SpkCalculator(Calculator):
             self.stress: stress_key,
         }
 
-        self.model = self._load_model(model_file)
-        self.model.to(device=device, dtype=dtype)
+        self.model = self._load_model(model_file, device, dtype)
 
         # set up basic conversion factors
         self.energy_conversion = convert_units(energy_unit, "eV")
@@ -250,7 +249,10 @@ class SpkCalculator(Calculator):
         self.model_results = None
 
     def _load_model(
-        self, model_file: Union[str, schnetpack.model.AtomisticModel, torch.nn.Module]
+        self,
+        model_file: Union[str, schnetpack.model.AtomisticModel, torch.nn.Module],
+        device: Union[str, torch.device],
+        dtype: torch.dtype,
     ) -> Union[schnetpack.model.AtomisticModel, torch.nn.Module]:
         """
         Load an individual model, activate stress computation
@@ -264,9 +266,7 @@ class SpkCalculator(Calculator):
 
         if isinstance(model_file, str):
             log.info("Loading model from {:s}".format(model_file))
-            model = load_model(model_file, device=torch.device(self.device)).to(
-                torch.float64
-            )
+            model = load_model(model_file, device=torch.device(device)).to(dtype)
 
         else:
             log.info("Loading model from Model object")
@@ -283,17 +283,20 @@ class SpkCalculator(Calculator):
     def calculate(
         self,
         atoms: ase.Atoms = None,
-        properties: List[str] = ["energy"],
+        properties_placeholder: List[str] = ["energy"],
         system_changes: List[str] = all_changes,
     ):
         """
         Args:
             atoms (ase.Atoms): ASE atoms object.
-            properties (list of str): select properties computed and stored to results.
+            properties_placeholder (list of str): is not used.
             system_changes (list of str): List of changes for ASE.
         """
         # First call original calculator to set atoms attribute
         # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
+
+        # make a list of all properties available in the model
+        properties = [p for p in self.property_map.values() if p is not None]
 
         if self.calculation_required(atoms, properties):
             Calculator.calculate(self, atoms)
@@ -333,7 +336,6 @@ class SpkCalculator(Calculator):
                     )
 
             self.results = results
-            self.model_results = model_results
 
 
 class AseInterface:
