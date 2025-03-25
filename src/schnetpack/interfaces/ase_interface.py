@@ -283,13 +283,13 @@ class SpkCalculator(Calculator):
     def calculate(
         self,
         atoms: ase.Atoms = None,
-        properties_placeholder: List[str] = ["energy"],
+        properties: List[str] = ["energy"],
         system_changes: List[str] = all_changes,
     ):
         """
         Args:
             atoms (ase.Atoms): ASE atoms object.
-            properties_placeholder (list of str): is not used.
+            properties (list of str): This parameter is ignored. Instead, all specified property keys (energy_key, force_key, ...) are calculated and stored.
             system_changes (list of str): List of changes for ASE.
         """
         # First call original calculator to set atoms attribute
