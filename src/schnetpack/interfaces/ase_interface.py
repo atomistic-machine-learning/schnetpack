@@ -289,7 +289,8 @@ class SpkCalculator(Calculator):
         """
         Args:
             atoms (ase.Atoms): ASE atoms object.
-            properties (list of str): This parameter is ignored. Instead, all specified property keys (energy_key, force_key, ...) are calculated and stored.
+            properties (list of str): Ignored. Instead, all specified property keys (energy_key, force_key, ...)
+                are calculated and stored.
             system_changes (list of str): List of changes for ASE.
         """
         # First call original calculator to set atoms attribute
