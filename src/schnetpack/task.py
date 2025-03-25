@@ -26,7 +26,7 @@ class ModelOutput(nn.Module):
         constraints: Optional[List[torch.nn.Module]] = None,
         target_property: Optional[str] = None,
     ):
-        """
+        r"""
         Args:
             name: name of output in results dict
             target_property: Name of target in training batch. Only required for supervised training.
