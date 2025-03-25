@@ -26,7 +26,7 @@ class ModelOutput(nn.Module):
         constraints: Optional[List[torch.nn.Module]] = None,
         target_property: Optional[str] = None,
     ):
-        """
+        r"""
         Args:
             name: name of output in results dict
             target_property: Name of target in training batch. Only required for supervised training.
@@ -264,9 +264,9 @@ class AtomisticTask(pl.LightningModule):
             # incase model is validated before epoch end (not recommended use of val_check_interval)
             if self.trainer.val_check_interval < 1.0:
                 warnings.warn(
-                    "Learning rate is scheduled after epoch end. To enable scheduling before epoch end, "
-                    "please specify val_check_interval by the number of training epochs after which the "
-                    "model is validated."
+                    "Learning rate scheduling is set to occur after the epoch ends. To enable scheduling before the "
+                    "epoch end, please set the `val_check_interval` parameter to a value greater than 1.0, which "
+                    "indicates the number of training steps after which the model should be validated."
                 )
             # incase model is validated before epoch end (recommended use of val_check_interval)
             if self.trainer.val_check_interval > 1.0:
