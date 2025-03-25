@@ -224,7 +224,7 @@ class SpkCalculator(Calculator):
             self.stress: stress_key,
         }
 
-        self.model = self._load_model(model, device, dtype)
+        self.model = self._load_model(model_file, device, dtype)
 
         # set up basic conversion factors
         self.energy_conversion = convert_units(energy_unit, "eV")
@@ -241,8 +241,11 @@ class SpkCalculator(Calculator):
         self.model_results = None
 
     def _load_model(
-        self, model_file: Union[str, schnetpack.model.AtomisticModel]
-    ) -> schnetpack.model.AtomisticModel:
+        self,
+        model_file: Union[str, schnetpack.model.AtomisticModel, torch.nn.Module],
+        device: Union[str, torch.device],
+        dtype: torch.dtype,
+    ) -> Union[schnetpack.model.AtomisticModel, torch.nn.Module]:
         """
         Load an individual model, activate stress computation
 
@@ -255,9 +258,7 @@ class SpkCalculator(Calculator):
 
         if isinstance(model_file, str):
             log.info("Loading model from {:s}".format(model_file))
-            model = load_model(model_file, device=torch.device(self.device)).to(
-                torch.float64
-            )
+            model = load_model(model_file, device=torch.device(device)).to(dtype)
 
         else:
             log.info("Loading model from Model object")
@@ -273,25 +274,24 @@ class SpkCalculator(Calculator):
 
     def calculate(
         self,
-        atoms: Atoms = None,
-        # properties is just a placeholder and will be ignored
-        properties: List[str] = ["energy"],
+        atoms: ase.Atoms = None,
+        properties_placeholder: List[str] = ["energy"],
         system_changes: List[str] = all_changes,
     ):
         """
         Args:
-            atoms: ASE atoms object.
-            properties: Ignored. Instead, all specified property keys (energy_key, force_key, ...)
-                are calculated and stored.
-            system_changes: List of changes for ASE.
+            atoms (ase.Atoms): ASE atoms object.
+            properties_placeholder (list of str): is not used.
+            system_changes (list of str): List of changes for ASE.
         """
         # First call original calculator to set atoms attribute
         # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
 
         # make a list of all properties available in the model
-        properties = [
-            p_key for p_key, p_value in self.property_map.items() if p_value is not None
-        ]
+        properties = [p for p in self.property_map.values() if p is not None]
+
+        if self.calculation_required(atoms, properties):
+            Calculator.calculate(self, atoms)
 
         # check if calculation is needed
         if not self.calculation_required(atoms, properties):
@@ -566,30 +566,7 @@ class SpkEnsembleCalculator(SpkCalculator):
                         f"'{prop}' is not a property of your models. Please check the model properties!"
                     )
 
-        # Compute average values
-        accumulated_results = {
-            prop: np.stack(value) for prop, value in accumulated_results.items()
-        }
-        self.results = {
-            prop: np.mean(accumulated_results[prop], axis=0) for prop in properties
-        }
-
-        # Compute uncertainty using assigned uncertainty function
-        # self.results["uncertainty"] = self.uncertainty_fn(accumulated_results)
-        if len(self.uncertainty_fn) == 1:
-            self.results["uncertainty"] = self.uncertainty_fn[0](accumulated_results)
-        else:
-            self.results["uncertainty"] = {
-                type(fn).__name__: float(fn(accumulated_results))
-                for fn in self.uncertainty_fn
-            }
-
-    def get_uncertainty(self, atoms):
-        """
-        Ensure calculation is up to date and return the uncertainty.
-        """
-        self.calculate(atoms)
-        return self.results["uncertainty"]
+            self.results = results
 
 
 class AseInterface:
