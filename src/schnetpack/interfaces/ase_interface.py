@@ -40,6 +40,7 @@ from schnetpack.transform import CastTo32, CastTo64
 from schnetpack.units import convert_units
 from schnetpack.utils import load_model
 from schnetpack.md.utils import activate_model_stress
+import torch.nn as nn
 
 from typing import Optional, List, Union, Dict
 from ase import Atoms
@@ -419,7 +420,7 @@ class SpkEnsembleCalculator(SpkCalculator):
         }
 
         # Load multiple models
-        self.models = [self._load_model(model_file) for model_file in models]
+        self.models = nn.ModuleList([self._load_model(model_file) for model_file in models])
 
         if uncertainty_fn is None:
             self.uncertainty_fn = self.AbsoluteUncertainty
@@ -430,10 +431,7 @@ class SpkEnsembleCalculator(SpkCalculator):
         self,
         atoms: ase.Atoms = None,
         properties: List[str] = ["energy"],
-        system_changes: List[str] = all_changes,
-        # energy_weight: float = 0,
-        # force_weight: float = 1.0,
-        # stress_weight: float = 0,
+        system_changes: List[str] = all_changes
     ):
         """
         Calculate properties by averaging results from multiple models.
@@ -465,28 +463,12 @@ class SpkEnsembleCalculator(SpkCalculator):
             prop: np.mean(accumulated_results[prop], axis=0) for prop in properties
         }
         # Compute uncertainty using assigned uncertainty function
-        self.results["uncertainty"] = self.uncertainty_fn(
-            predictions = accumulated_results,
-            energy_weight = self.energy_weight,
-            force_weight = self.force_weight,
-            stress_weight = self.stress_weight,
-        )
+        self.results["uncertainty"] = self.uncertainty_fn(accumulated_results)
 
-    def get_uncertainty(
-        self,
-        atoms,
-        # properties: List[str] = None,
-        # energy_weight: float = 0,
-        # force_weight: float = 1.0,
-        # stress_weight: float = 0,
-    ):
+    def get_uncertainty(self,atoms):
         """
         Ensure calculation is up to date and return the uncertainty.
         """
-        # if properties is None:
-        #     properties = [self.energy, self.forces] + (
-        #         [self.stress] if self.stress_key is not None else []
-        #     )
         if self.calculation_required(atoms, properties):
             self.calculate(
                 atoms,
@@ -499,10 +481,6 @@ class SpkEnsembleCalculator(SpkCalculator):
 
     def AbsoluteUncertainty(
         self,
-        # predictions: dict,
-        # energy_weight: float = 0,
-        # force_weight: float = 1.0,
-        # stress_weight: float = 0,
     ) -> float:
         """
         Compute the absolute uncertainty as a weighted sum of standard deviations.
@@ -549,11 +527,7 @@ class SpkEnsembleCalculator(SpkCalculator):
         return total_uncertainty
 
     def RelativeUncertainty(
-        self,
-        # predictions: dict,
-        # energy_weight: float = 0,
-        # force_weight: float = 1.0,
-        # stress_weight: float = 0,
+        self
     ) -> float:
         """
         Compute the relative uncertainty (std/mean) as a weighted sum.
