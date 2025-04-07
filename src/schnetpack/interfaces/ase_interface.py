@@ -341,9 +341,17 @@ class SpkCalculator(Calculator):
 
             self.results = results
 
+
 class AbsoluteUncertainty:
-    def __init__(self, energy_key="energy", force_key="forces", stress_key="stress",
-                 energy_weight=0.5, force_weight=0.5, stress_weight=0.0):
+    def __init__(
+        self,
+        energy_key="energy",
+        force_key="forces",
+        stress_key="stress",
+        energy_weight=0.5,
+        force_weight=0.5,
+        stress_weight=0.0,
+    ):
         self.energy_key = energy_key
         self.force_key = force_key
         self.stress_key = stress_key
@@ -355,10 +363,14 @@ class AbsoluteUncertainty:
         energy_unc = np.std(predictions.get(self.energy_key, [0]))
 
         force_preds = predictions.get(self.force_key)
-        force_unc = np.mean(np.std(force_preds, axis=0)) if force_preds is not None else 0
+        force_unc = (
+            np.mean(np.std(force_preds, axis=0)) if force_preds is not None else 0
+        )
 
         stress_preds = predictions.get(self.stress_key)
-        stress_unc = np.mean(np.std(stress_preds, axis=0)) if stress_preds is not None else 0
+        stress_unc = (
+            np.mean(np.std(stress_preds, axis=0)) if stress_preds is not None else 0
+        )
 
         total_weight = self.energy_weight + self.force_weight + self.stress_weight
         ew = self.energy_weight / total_weight if total_weight else 0
@@ -366,10 +378,18 @@ class AbsoluteUncertainty:
         sw = self.stress_weight / total_weight if total_weight else 0
 
         return ew * energy_unc + fw * force_unc + sw * stress_unc
-    
+
+
 class RelativeUncertainty:
-    def __init__(self, energy_key="energy", force_key="forces", stress_key="stress",
-                 energy_weight=0.5, force_weight=0.5, stress_weight=0.0):
+    def __init__(
+        self,
+        energy_key="energy",
+        force_key="forces",
+        stress_key="stress",
+        energy_weight=0.5,
+        force_weight=0.5,
+        stress_weight=0.0,
+    ):
         self.energy_key = energy_key
         self.force_key = force_key
         self.stress_key = stress_key
@@ -390,8 +410,14 @@ class RelativeUncertainty:
         if force_preds:
             mean_forces = np.mean(force_preds, axis=0)
             std_forces = np.std(force_preds, axis=0)
-            force_unc = np.mean(np.divide(std_forces, np.abs(mean_forces),
-                                          out=np.zeros_like(std_forces), where=mean_forces != 0))
+            force_unc = np.mean(
+                np.divide(
+                    std_forces,
+                    np.abs(mean_forces),
+                    out=np.zeros_like(std_forces),
+                    where=mean_forces != 0,
+                )
+            )
         else:
             force_unc = 0
 
@@ -399,8 +425,14 @@ class RelativeUncertainty:
         if stress_preds:
             mean_stress = np.mean(stress_preds, axis=0)
             std_stress = np.std(stress_preds, axis=0)
-            stress_unc = np.mean(np.divide(std_stress, np.abs(mean_stress),
-                                           out=np.zeros_like(std_stress), where=mean_stress != 0))
+            stress_unc = np.mean(
+                np.divide(
+                    std_stress,
+                    np.abs(mean_stress),
+                    out=np.zeros_like(std_stress),
+                    where=mean_stress != 0,
+                )
+            )
         else:
             stress_unc = 0
 
@@ -410,6 +442,7 @@ class RelativeUncertainty:
         sw = self.stress_weight / total_weight if total_weight else 0
 
         return ew * energy_unc + fw * force_unc + sw * stress_unc
+
 
 class SpkEnsembleCalculator(SpkCalculator):
     """
@@ -489,10 +522,16 @@ class SpkEnsembleCalculator(SpkCalculator):
         }
 
         # Load multiple models
-        self.models = nn.ModuleList([
-                                        model if isinstance(model, torch.nn.Module) else self._load_model(model, self.device, self.dtype)
-                                        for model in models
-                                    ])
+        self.models = nn.ModuleList(
+            [
+                (
+                    model
+                    if isinstance(model, torch.nn.Module)
+                    else self._load_model(model, self.device, self.dtype)
+                )
+                for model in models
+            ]
+        )
         # if uncertainty_fn is None:
         #     self.uncertainty_fn = AbsoluteUncertainty(
         #         energy_key=self.energy_key,
@@ -514,12 +553,11 @@ class SpkEnsembleCalculator(SpkCalculator):
         else:
             self.uncertainty_fn = uncertainty_fn
 
-
     def calculate(
         self,
         atoms: ase.Atoms = None,
         properties: List[str] = ["energy"],
-        system_changes: List[str] = all_changes
+        system_changes: List[str] = all_changes,
     ):
         properties = [
             p_key for p_key, p_value in self.property_map.items() if p_value is not None
@@ -541,7 +579,9 @@ class SpkEnsembleCalculator(SpkCalculator):
                             value = value.item()
                         elif prop == self.stress:
                             value = value.squeeze()
-                        accumulated_results[prop].append(value * self.property_units[prop])
+                        accumulated_results[prop].append(
+                            value * self.property_units[prop]
+                        )
                     else:
                         raise AtomsConverterError(
                             f"'{prop}' is not a property of your models. Please check the model properties!"
@@ -552,24 +592,24 @@ class SpkEnsembleCalculator(SpkCalculator):
                 prop: np.mean(accumulated_results[prop], axis=0) for prop in properties
             }
             # Compute uncertainty using assigned uncertainty function
-            #self.results["uncertainty"] = self.uncertainty_fn(accumulated_results)
+            # self.results["uncertainty"] = self.uncertainty_fn(accumulated_results)
             if len(self.uncertainty_fn) == 1:
-                self.results["uncertainty"] = self.uncertainty_fn[0](accumulated_results)
+                self.results["uncertainty"] = self.uncertainty_fn[0](
+                    accumulated_results
+                )
             else:
                 self.results["uncertainty"] = {
-                                                type(fn).__name__: float(fn(accumulated_results))
-                                                for fn in self.uncertainty_fn
-                                            }
+                    type(fn).__name__: float(fn(accumulated_results))
+                    for fn in self.uncertainty_fn
+                }
 
-    def get_uncertainty(self,atoms):
+    def get_uncertainty(self, atoms):
         """
         Ensure calculation is up to date and return the uncertainty.
         """
-        self.calculate(
-            atoms,
-            properties
-        )
-        return self.results["uncertainty"]     
+        self.calculate(atoms, properties)
+        return self.results["uncertainty"]
+
 
 class AseInterface:
     """
