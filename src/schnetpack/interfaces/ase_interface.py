@@ -341,6 +341,75 @@ class SpkCalculator(Calculator):
 
             self.results = results
 
+class AbsoluteUncertainty:
+    def __init__(self, energy_key="energy", force_key="forces", stress_key="stress",
+                 energy_weight=0.5, force_weight=0.5, stress_weight=0.0):
+        self.energy_key = energy_key
+        self.force_key = force_key
+        self.stress_key = stress_key
+        self.energy_weight = energy_weight
+        self.force_weight = force_weight
+        self.stress_weight = stress_weight
+
+    def __call__(self, predictions: Dict[str, List[np.ndarray]]) -> float:
+        energy_unc = np.std(predictions.get(self.energy_key, [0]))
+
+        force_preds = predictions.get(self.force_key)
+        force_unc = np.mean(np.std(force_preds, axis=0)) if force_preds is not None else 0
+
+        stress_preds = predictions.get(self.stress_key)
+        stress_unc = np.mean(np.std(stress_preds, axis=0)) if stress_preds is not None else 0
+
+        total_weight = self.energy_weight + self.force_weight + self.stress_weight
+        ew = self.energy_weight / total_weight if total_weight else 0
+        fw = self.force_weight / total_weight if total_weight else 0
+        sw = self.stress_weight / total_weight if total_weight else 0
+
+        return ew * energy_unc + fw * force_unc + sw * stress_unc
+    
+class RelativeUncertainty:
+    def __init__(self, energy_key="energy", force_key="forces", stress_key="stress",
+                 energy_weight=0.5, force_weight=0.5, stress_weight=0.0):
+        self.energy_key = energy_key
+        self.force_key = force_key
+        self.stress_key = stress_key
+        self.energy_weight = energy_weight
+        self.force_weight = force_weight
+        self.stress_weight = stress_weight
+
+    def __call__(self, predictions: Dict[str, List[np.ndarray]]) -> float:
+        energy_preds = predictions.get(self.energy_key, None)
+        if energy_preds:
+            mean_energy = np.mean(energy_preds)
+            std_energy = np.std(energy_preds)
+            energy_unc = std_energy / abs(mean_energy) if mean_energy != 0 else 0
+        else:
+            energy_unc = 0
+
+        force_preds = predictions.get(self.force_key)
+        if force_preds:
+            mean_forces = np.mean(force_preds, axis=0)
+            std_forces = np.std(force_preds, axis=0)
+            force_unc = np.mean(np.divide(std_forces, np.abs(mean_forces),
+                                          out=np.zeros_like(std_forces), where=mean_forces != 0))
+        else:
+            force_unc = 0
+
+        stress_preds = predictions.get(self.stress_key)
+        if stress_preds:
+            mean_stress = np.mean(stress_preds, axis=0)
+            std_stress = np.std(stress_preds, axis=0)
+            stress_unc = np.mean(np.divide(std_stress, np.abs(mean_stress),
+                                           out=np.zeros_like(std_stress), where=mean_stress != 0))
+        else:
+            stress_unc = 0
+
+        total_weight = self.energy_weight + self.force_weight + self.stress_weight
+        ew = self.energy_weight / total_weight if total_weight else 0
+        fw = self.force_weight / total_weight if total_weight else 0
+        sw = self.stress_weight / total_weight if total_weight else 0
+
+        return ew * energy_unc + fw * force_unc + sw * stress_unc
 
 class SpkEnsembleCalculator(SpkCalculator):
     """
@@ -420,12 +489,31 @@ class SpkEnsembleCalculator(SpkCalculator):
         }
 
         # Load multiple models
-        self.models = nn.ModuleList([self._load_model(model_file) for model_file in models])
-
+        self.models = nn.ModuleList([
+                                        model if isinstance(model, torch.nn.Module) else self._load_model(model, self.device, self.dtype)
+                                        for model in models
+                                    ])
+        # if uncertainty_fn is None:
+        #     self.uncertainty_fn = AbsoluteUncertainty(
+        #         energy_key=self.energy_key,
+        #         force_key=self.force_key,
+        #         stress_key=self.stress_key,
+        #     )
+        # else:
+        #     self.uncertainty_fn = uncertainty_fn
         if uncertainty_fn is None:
-            self.uncertainty_fn = self.AbsoluteUncertainty
+            self.uncertainty_fn = [
+                AbsoluteUncertainty(
+                    energy_key=self.energy_key,
+                    force_key=self.force_key,
+                    stress_key=self.stress_key,
+                )
+            ]
+        elif not isinstance(uncertainty_fn, list):
+            self.uncertainty_fn = [uncertainty_fn]
         else:
-            self.uncertainty_fn = uncertainty_fn.__get__(self, type(self))
+            self.uncertainty_fn = uncertainty_fn
+
 
     def calculate(
         self,
@@ -433,170 +521,55 @@ class SpkEnsembleCalculator(SpkCalculator):
         properties: List[str] = ["energy"],
         system_changes: List[str] = all_changes
     ):
-        """
-        Calculate properties by averaging results from multiple models.
-        """
-        Calculator.calculate(self, atoms)
+        properties = [
+            p_key for p_key, p_value in self.property_map.items() if p_value is not None
+        ]
+        if self.calculation_required(atoms, properties):
+            Calculator.calculate(self, atoms)
 
-        model_inputs = self.converter(atoms)
-        accumulated_results = {prop: [] for prop in properties}
+            model_inputs = self.converter(atoms)
+            accumulated_results = {prop: [] for prop in properties}
 
-        for model in self.models:
-            model_results = model(model_inputs)
+            for model in self.models:
+                model_results = model(model_inputs)
 
-            for prop in properties:
-                model_prop = self.property_map[prop]
-                if model_prop in model_results:
-                    value = model_results[model_prop].cpu().data.numpy()
-                    if prop == self.energy:
-                        value = value.item()
-                    elif prop == self.stress:
-                        value = value.squeeze()
-                    accumulated_results[prop].append(value * self.property_units[prop])
-                else:
-                    raise AtomsConverterError(
-                        f"'{prop}' is not a property of your models. Please check the model properties!"
-                    )
+                for prop in properties:
+                    model_prop = self.property_map[prop]
+                    if model_prop in model_results:
+                        value = model_results[model_prop].cpu().data.numpy()
+                        if prop == self.energy:
+                            value = value.item()
+                        elif prop == self.stress:
+                            value = value.squeeze()
+                        accumulated_results[prop].append(value * self.property_units[prop])
+                    else:
+                        raise AtomsConverterError(
+                            f"'{prop}' is not a property of your models. Please check the model properties!"
+                        )
 
-        # Compute average values
-        self.results = {
-            prop: np.mean(accumulated_results[prop], axis=0) for prop in properties
-        }
-        # Compute uncertainty using assigned uncertainty function
-        self.results["uncertainty"] = self.uncertainty_fn(accumulated_results)
+            # Compute average values
+            self.results = {
+                prop: np.mean(accumulated_results[prop], axis=0) for prop in properties
+            }
+            # Compute uncertainty using assigned uncertainty function
+            #self.results["uncertainty"] = self.uncertainty_fn(accumulated_results)
+            if len(self.uncertainty_fn) == 1:
+                self.results["uncertainty"] = self.uncertainty_fn[0](accumulated_results)
+            else:
+                self.results["uncertainty"] = {
+                                                type(fn).__name__: float(fn(accumulated_results))
+                                                for fn in self.uncertainty_fn
+                                            }
 
     def get_uncertainty(self,atoms):
         """
         Ensure calculation is up to date and return the uncertainty.
         """
-        if self.calculation_required(atoms, properties):
-            self.calculate(
-                atoms,
-                properties,
-                energy_weight = self.energy_weight,
-                force_weight = self.force_weight,
-                stress_weight = self.stress_weight,
-            )
-        return self.results["uncertainty"]
-
-    def AbsoluteUncertainty(
-        self,
-    ) -> float:
-        """
-        Compute the absolute uncertainty as a weighted sum of standard deviations.
-        """
-        # Energy uncertainty
-        energy_preds = self.predictions.get(self.energy, None)
-        energy_unc = np.std(energy_preds) if energy_preds is not None else 0
-
-        # Forces uncertainty
-        forces_preds = self.predictions.get(self.forces, None)
-        if forces_preds is not None:
-            std_forces = np.std(forces_preds, axis=0)
-            force_unc = np.mean(std_forces) if std_forces.size > 0 else 0
-        else:
-            force_unc = 0
-
-        # Stress uncertainty
-        stress_preds = (
-            self.predictions.get(self.stress, None) if self.stress in self.predictions else None
+        self.calculate(
+            atoms,
+            properties
         )
-        if stress_preds is not None:
-            std_stress = np.std(stress_preds, axis=0)
-            stress_unc = (
-                np.mean(std_stress)
-                if (isinstance(std_stress, np.ndarray) and std_stress.size > 0)
-                else 0
-            )
-        else:
-            stress_unc = 0
-
-        # Normalize weights so that they sum up to 1.
-        total_weight = energy_weight + force_weight + stress_weight
-        if total_weight:
-            energy_weight /= total_weight
-            force_weight /= total_weight
-            stress_weight /= total_weight
-
-        # Calculate the weighted sum of all uncertainties.
-        total_uncertainty = (
-            energy_weight * energy_unc
-            + force_weight * force_unc
-            + stress_weight * stress_unc
-        )
-        return total_uncertainty
-
-    def RelativeUncertainty(
-        self
-    ) -> float:
-        """
-        Compute the relative uncertainty (std/mean) as a weighted sum.
-        """
-        # Energy relative uncertainty
-        energy_preds = self.predictions.get(self.energy, None)
-        if energy_preds is not None:
-            mean_energy = np.mean(energy_preds)
-            std_energy = np.std(energy_preds)
-            energy_unc = std_energy / abs(mean_energy) if mean_energy != 0 else 0
-        else:
-            energy_unc = 0
-
-        # Forces relative uncertainty
-        forces_preds = self.predictions.get(self.forces, None)
-        if forces_preds is not None:
-            mean_forces = np.mean(forces_preds, axis=0)
-            std_forces = np.std(forces_preds, axis=0)
-            rel_forces = np.divide(
-                std_forces,
-                np.abs(mean_forces),
-                out=np.zeros_like(std_forces),
-                where=mean_forces != 0,
-            )
-            force_unc = np.mean(rel_forces) if rel_forces.size > 0 else 0
-        else:
-            force_unc = 0
-
-        # Stress relative uncertainty
-        stress_preds = (
-            self.predictions.get(self.stress, None) if self.stress in self.predictions else None
-        )
-        if stress_preds is not None:
-            mean_stress = np.mean(stress_preds, axis=0)
-            std_stress = np.std(stress_preds, axis=0)
-            if (isinstance(mean_stress, (int, float)) and mean_stress == 0) or (
-                hasattr(mean_stress, "size") and mean_stress.size == 0
-            ):
-                stress_unc = 0
-            else:
-                rel_stress = np.divide(
-                    std_stress,
-                    np.abs(mean_stress),
-                    out=np.zeros_like(std_stress),
-                    where=mean_stress != 0,
-                )
-                stress_unc = (
-                    np.mean(rel_stress)
-                    if (isinstance(rel_stress, np.ndarray) and rel_stress.size > 0)
-                    else 0
-                )
-        else:
-            stress_unc = 0
-
-        # Normalize weights so that they sum up to 1.
-        total_weight = energy_weight + force_weight + stress_weight
-        if total_weight:
-            energy_weight /= total_weight
-            force_weight /= total_weight
-            stress_weight /= total_weight
-
-        # Calculate the weighted sum of all relative uncertainties.
-        total_uncertainty = (
-            energy_weight * energy_unc
-            + force_weight * force_unc
-            + stress_weight * stress_unc
-        )
-        return total_uncertainty
-
+        return self.results["uncertainty"]     
 
 class AseInterface:
     """
