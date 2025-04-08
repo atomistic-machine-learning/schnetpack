@@ -12,7 +12,7 @@ References
 """
 
 import os
-
+import numpy as np
 import ase
 from ase import units
 from ase.constraints import FixAtoms
@@ -40,13 +40,14 @@ from schnetpack.transform import CastTo32, CastTo64
 from schnetpack.units import convert_units
 from schnetpack.utils import load_model
 from schnetpack.md.utils import activate_model_stress
+import torch.nn as nn
 
 from typing import Optional, List, Union, Dict
 from ase import Atoms
 
 log = logging.getLogger(__name__)
 
-__all__ = ["SpkCalculator", "AseInterface", "AtomsConverter"]
+__all__ = ["SpkCalculator", "AseInterface", "AtomsConverter", "SpkEnsembleCalculator"]
 
 
 class AtomsConverterError(Exception):
@@ -339,6 +340,261 @@ class SpkCalculator(Calculator):
                     )
 
             self.results = results
+
+
+class AbsoluteUncertainty:
+    def __init__(
+        self,
+        energy_key="energy",
+        force_key="forces",
+        stress_key="stress",
+        energy_weight=0.5,
+        force_weight=0.5,
+        stress_weight=0.0,
+    ):
+        self.energy_key = energy_key
+        self.force_key = force_key
+        self.stress_key = stress_key
+        self.energy_weight = energy_weight
+        self.force_weight = force_weight
+        self.stress_weight = stress_weight
+
+    def __call__(self, predictions: Dict[str, List[np.ndarray]]) -> float:
+        energy_unc = np.std(predictions.get(self.energy_key, [0]))
+
+        force_preds = predictions.get(self.force_key)
+        force_unc = (
+            np.mean(np.std(force_preds, axis=0)) if force_preds is not None else 0
+        )
+
+        stress_preds = predictions.get(self.stress_key)
+        stress_unc = (
+            np.mean(np.std(stress_preds, axis=0)) if stress_preds is not None else 0
+        )
+
+        total_weight = self.energy_weight + self.force_weight + self.stress_weight
+        ew = self.energy_weight / total_weight if total_weight else 0
+        fw = self.force_weight / total_weight if total_weight else 0
+        sw = self.stress_weight / total_weight if total_weight else 0
+
+        return ew * energy_unc + fw * force_unc + sw * stress_unc
+
+
+class RelativeUncertainty:
+    def __init__(
+        self,
+        energy_key="energy",
+        force_key="forces",
+        stress_key="stress",
+        energy_weight=0.5,
+        force_weight=0.5,
+        stress_weight=0.0,
+    ):
+        self.energy_key = energy_key
+        self.force_key = force_key
+        self.stress_key = stress_key
+        self.energy_weight = energy_weight
+        self.force_weight = force_weight
+        self.stress_weight = stress_weight
+
+    def __call__(self, predictions: Dict[str, List[np.ndarray]]) -> float:
+        energy_preds = predictions.get(self.energy_key, None)
+        if energy_preds:
+            mean_energy = np.mean(energy_preds)
+            std_energy = np.std(energy_preds)
+            energy_unc = std_energy / abs(mean_energy) if mean_energy != 0 else 0
+        else:
+            energy_unc = 0
+
+        force_preds = predictions.get(self.force_key)
+        if force_preds:
+            mean_forces = np.mean(force_preds, axis=0)
+            std_forces = np.std(force_preds, axis=0)
+            force_unc = np.mean(
+                np.divide(
+                    std_forces,
+                    np.abs(mean_forces),
+                    out=np.zeros_like(std_forces),
+                    where=mean_forces != 0,
+                )
+            )
+        else:
+            force_unc = 0
+
+        stress_preds = predictions.get(self.stress_key)
+        if stress_preds:
+            mean_stress = np.mean(stress_preds, axis=0)
+            std_stress = np.std(stress_preds, axis=0)
+            stress_unc = np.mean(
+                np.divide(
+                    std_stress,
+                    np.abs(mean_stress),
+                    out=np.zeros_like(std_stress),
+                    where=mean_stress != 0,
+                )
+            )
+        else:
+            stress_unc = 0
+
+        total_weight = self.energy_weight + self.force_weight + self.stress_weight
+        ew = self.energy_weight / total_weight if total_weight else 0
+        fw = self.force_weight / total_weight if total_weight else 0
+        sw = self.stress_weight / total_weight if total_weight else 0
+
+        return ew * energy_unc + fw * force_unc + sw * stress_unc
+
+
+class SpkEnsembleCalculator(SpkCalculator):
+    """
+    Calculator for neural network models for ensemble calculations.
+    Requires multiple models
+    """
+
+    def __init__(
+        self,
+        models: Union[List[str], List[torch.nn.Module]],
+        neighbor_list: schnetpack.transform.Transform,
+        energy_key: str = "energy",
+        force_key: str = "forces",
+        stress_key: Optional[str] = None,
+        energy_unit: Union[str, float] = "kcal/mol",
+        position_unit: Union[str, float] = "Angstrom",
+        device: Union[str, torch.device] = "cpu",
+        dtype: torch.dtype = torch.float32,
+        converter: callable = AtomsConverter,
+        transforms: Optional[
+            Union[schnetpack.transform.Transform, List[schnetpack.transform.Transform]]
+        ] = None,
+        uncertainty_fn: callable = None,
+        **kwargs,
+    ):
+        """
+        Args:
+            models: path to trained models or list of preloaded model
+            neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
+            energy_key (str): name of energies in model (default="energy")
+            force_key (str): name of forces in model (default="forces")
+            stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
+            energy_unit (str, float): energy units used by model (default="kcal/mol")
+            position_unit (str, float): position units used by model (default="Angstrom")
+            device (torch.device): device used for calculations (default="cpu")
+            input_dtype (torch.dtype): select model input precision (default=float32)
+            output_dtype (torch.dtype): select model output precision (default=float64)
+            converter (callable): converter used to set up input batches
+            transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
+                can be found in the AtomsConverter docstring.
+            uncertainty_fn (callable): Function to compute uncertainty. If not provided, defaults to AbsoluteUncertainty.
+            **kwargs: Additional arguments for basic ase calculator class
+        """
+        # Initialize the parent class without loading a model
+        Calculator.__init__(self, **kwargs)
+
+        self.neighbor_list = deepcopy(neighbor_list)
+        self.device = device
+        self.dtype = dtype
+        self.converter = converter(
+            neighbor_list=neighbor_list,
+            device=device,
+            dtype=dtype,
+            transforms=transforms,
+        )
+
+        self.energy_key = energy_key
+        self.force_key = force_key
+        self.stress_key = stress_key
+
+        # Mapping between ASE names and model outputs
+        self.property_map = {
+            self.energy: energy_key,
+            self.forces: force_key,
+            self.stress: stress_key,
+        }
+
+        # set up basic conversion factors
+        self.energy_conversion = convert_units(energy_unit, "eV")
+        self.position_conversion = convert_units(position_unit, "Angstrom")
+
+        # Unit conversion to default ASE units
+        self.property_units = {
+            self.energy: self.energy_conversion,
+            self.forces: self.energy_conversion / self.position_conversion,
+            self.stress: self.energy_conversion / self.position_conversion**3,
+        }
+
+        # Load multiple models
+        self.models = nn.ModuleList(
+            [
+                (
+                    model
+                    if isinstance(model, torch.nn.Module)
+                    else self._load_model(model, self.device, self.dtype)
+                )
+                for model in models
+            ]
+        )
+        if uncertainty_fn is None:
+            self.uncertainty_fn = [AbsoluteUncertainty()]
+        elif not isinstance(uncertainty_fn, list):
+            self.uncertainty_fn = [uncertainty_fn]
+        else:
+            self.uncertainty_fn = uncertainty_fn
+
+    def calculate(
+        self,
+        atoms: ase.Atoms = None,
+        properties: List[str] = ["energy"],
+        system_changes: List[str] = all_changes,
+    ):
+        properties = [
+            p_key for p_key, p_value in self.property_map.items() if p_value is not None
+        ]
+        if self.calculation_required(atoms, properties):
+            Calculator.calculate(self, atoms)
+
+            model_inputs = self.converter(atoms)
+            accumulated_results = {prop: [] for prop in properties}
+
+            for model in self.models:
+                model_results = model(model_inputs)
+
+                for prop in properties:
+                    model_prop = self.property_map[prop]
+                    if model_prop in model_results:
+                        value = model_results[model_prop].cpu().data.numpy()
+                        if prop == self.energy:
+                            value = value.item()
+                        elif prop == self.stress:
+                            value = value.squeeze()
+                        accumulated_results[prop].append(
+                            value * self.property_units[prop]
+                        )
+                    else:
+                        raise AtomsConverterError(
+                            f"'{prop}' is not a property of your models. Please check the model properties!"
+                        )
+
+            # Compute average values
+            self.results = {
+                prop: np.mean(accumulated_results[prop], axis=0) for prop in properties
+            }
+            # Compute uncertainty using assigned uncertainty function
+            # self.results["uncertainty"] = self.uncertainty_fn(accumulated_results)
+            if len(self.uncertainty_fn) == 1:
+                self.results["uncertainty"] = self.uncertainty_fn[0](
+                    accumulated_results
+                )
+            else:
+                self.results["uncertainty"] = {
+                    type(fn).__name__: float(fn(accumulated_results))
+                    for fn in self.uncertainty_fn
+                }
+
+    def get_uncertainty(self, atoms):
+        """
+        Ensure calculation is up to date and return the uncertainty.
+        """
+        self.calculate(atoms)
+        return self.results["uncertainty"]
 
 
 class AseInterface:
