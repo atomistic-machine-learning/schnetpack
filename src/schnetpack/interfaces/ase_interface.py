@@ -532,22 +532,8 @@ class SpkEnsembleCalculator(SpkCalculator):
                 for model in models
             ]
         )
-        # if uncertainty_fn is None:
-        #     self.uncertainty_fn = AbsoluteUncertainty(
-        #         energy_key=self.energy_key,
-        #         force_key=self.force_key,
-        #         stress_key=self.stress_key,
-        #     )
-        # else:
-        #     self.uncertainty_fn = uncertainty_fn
         if uncertainty_fn is None:
-            self.uncertainty_fn = [
-                AbsoluteUncertainty(
-                    energy_key=self.energy_key,
-                    force_key=self.force_key,
-                    stress_key=self.stress_key,
-                )
-            ]
+            self.uncertainty_fn = [AbsoluteUncertainty()]
         elif not isinstance(uncertainty_fn, list):
             self.uncertainty_fn = [uncertainty_fn]
         else:
@@ -607,7 +593,7 @@ class SpkEnsembleCalculator(SpkCalculator):
         """
         Ensure calculation is up to date and return the uncertainty.
         """
-        self.calculate(atoms, properties)
+        self.calculate(atoms)
         return self.results["uncertainty"]
 
 
