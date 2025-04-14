@@ -61,9 +61,7 @@ class AtomsConverter:
     def __init__(
         self,
         neighbor_list: Union[Transform, None],
-        transforms: Union[
-            Transform, List[Transform]
-        ] = None,
+        transforms: Union[Transform, List[Transform]] = None,
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
         additional_inputs: Dict[str, torch.Tensor] = None,
@@ -97,9 +95,7 @@ class AtomsConverter:
         neighbor_list = [] if neighbor_list is None else [neighbor_list]
 
         # get transforms and initialize neighbor list
-        self.transforms: List[Transform] = (
-            neighbor_list + transforms
-        )
+        self.transforms: List[Transform] = neighbor_list + transforms
 
         # Set numerical precision
         if dtype == torch.float32:
@@ -187,9 +183,7 @@ class SpkCalculator(Calculator):
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
         converter: callable = AtomsConverter,
-        transforms: Union[
-            Transform, List[Transform]
-        ] = None,
+        transforms: Union[Transform, List[Transform]] = None,
         additional_inputs: Dict[str, torch.Tensor] = None,
         **kwargs,
     ):
@@ -349,9 +343,9 @@ class Uncertainty(ABC):
         energy_key="energy",
         force_key="forces",
         stress_key="stress",
-        energy_weight=0.,
-        force_weight=1.,
-        stress_weight=0.,
+        energy_weight=0.0,
+        force_weight=1.0,
+        stress_weight=0.0,
     ):
         self.energy_key = energy_key
         self.force_key = force_key
@@ -369,6 +363,7 @@ class Uncertainty(ABC):
     @abstractmethod
     def __call__(self, predictions: Dict[str, List[np.ndarray]]) -> float:
         pass
+
 
 class AbsoluteUncertainty(Uncertainty):
 
@@ -455,9 +450,7 @@ class SpkEnsembleCalculator(SpkCalculator):
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
         converter: callable = AtomsConverter,
-        transforms: Optional[
-            Union[Transform, List[Transform]]
-        ] = None,
+        transforms: Optional[Union[Transform, List[Transform]]] = None,
         uncertainty_fn: callable = None,
         **kwargs,
     ):
@@ -566,16 +559,16 @@ class SpkEnsembleCalculator(SpkCalculator):
                     elif prop == self.stress:
                         value = value.squeeze()
                     # accumulate results
-                    accumulated_results[prop].append(
-                        value * self.property_units[prop]
-                    )
+                    accumulated_results[prop].append(value * self.property_units[prop])
                 else:
                     raise AtomsConverterError(
                         f"'{prop}' is not a property of your models. Please check the model properties!"
                     )
 
         # Compute average values
-        accumulated_results = {prop: np.stack(value) for prop, value in accumulated_results.items()}
+        accumulated_results = {
+            prop: np.stack(value) for prop, value in accumulated_results.items()
+        }
         self.results = {
             prop: np.mean(accumulated_results[prop], axis=0) for prop in properties
         }
@@ -583,9 +576,7 @@ class SpkEnsembleCalculator(SpkCalculator):
         # Compute uncertainty using assigned uncertainty function
         # self.results["uncertainty"] = self.uncertainty_fn(accumulated_results)
         if len(self.uncertainty_fn) == 1:
-            self.results["uncertainty"] = self.uncertainty_fn[0](
-                accumulated_results
-            )
+            self.results["uncertainty"] = self.uncertainty_fn[0](accumulated_results)
         else:
             self.results["uncertainty"] = {
                 type(fn).__name__: float(fn(accumulated_results))
@@ -621,9 +612,7 @@ class AseInterface:
         converter: AtomsConverter = AtomsConverter,
         optimizer_class: type = QuasiNewton,
         fixed_atoms: Optional[List[int]] = None,
-        transforms: Union[
-            Transform, List[Transform]
-        ] = None,
+        transforms: Union[Transform, List[Transform]] = None,
         additional_inputs: Dict[str, torch.Tensor] = None,
     ):
         """

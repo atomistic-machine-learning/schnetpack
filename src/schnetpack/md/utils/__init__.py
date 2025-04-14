@@ -11,13 +11,12 @@ from schnetpack import properties
 from schnetpack.model import AtomisticModel
 from schnetpack.atomistic import Response, Forces, Strain
 
+
 class CalculatorError(Exception):
     pass
 
 
-def activate_model_stress(
-    model: AtomisticModel, stress_key: str
-) -> AtomisticModel:
+def activate_model_stress(model: AtomisticModel, stress_key: str) -> AtomisticModel:
     """
     Utility function for activating computation of stress in models not explicitly trained on the stress tensor.
     Used for e.g. simulations under constant pressure and in cells.
@@ -33,9 +32,7 @@ def activate_model_stress(
 
     # Check if a module suitable for stress computation is present
     for module in model.output_modules:
-        if isinstance(module, Forces) or isinstance(
-            module, Response
-        ):
+        if isinstance(module, Forces) or isinstance(module, Response):
             # for `Forces` module
             if hasattr(module, "calc_stress"):
                 # activate internal stress computation flag
@@ -62,9 +59,7 @@ def activate_model_stress(
                 module.derivative_instructions["dEds"] = True
                 module.basic_derivatives["dEds"] = properties.strain
 
-                module.map_properties[properties.stress] = (
-                    properties.stress
-                )
+                module.map_properties[properties.stress] = properties.stress
 
                 # append stress label to output list and update required derivatives in the module
                 module.model_outputs.append(stress_key)
