@@ -91,7 +91,7 @@ class AtomsConverter:
         self.dtype = dtype
         self.additional_inputs = additional_inputs or {}
 
-        if hasattr(neighbor_list, 'cutoff_skin'):
+        if hasattr(neighbor_list, "cutoff_skin"):
             self.cutoff_skin = neighbor_list.cutoff_skin
             self.previous_positions = None
             self.previous_cell = None
@@ -121,7 +121,7 @@ class AtomsConverter:
         else:
             raise AtomsConverterError(f"Unrecognized precision {dtype}")
 
-        self.converter_time = 0.
+        self.converter_time = 0.0
         self.converter_iterations = 0
 
     def __call__(self, atoms: List[Atoms] or Atoms):
@@ -176,8 +176,12 @@ class AtomsConverter:
 
         if self.cutoff_skin is not None:
             previous_inputs = self.transforms[0].previous_inputs
-            self.previous_positions = torch.cat([d[properties.R] for d in previous_inputs.values()])
-            self.previous_positions = self.previous_positions.to(self.device).to(self.dtype)
+            self.previous_positions = torch.cat(
+                [d[properties.R] for d in previous_inputs.values()]
+            )
+            self.previous_positions = self.previous_positions.to(self.device).to(
+                self.dtype
+            )
             self.previous_cell = inputs[properties.cell]
             self.previous_pbc = inputs[properties.pbc]
             self.previous_idx_i = inputs[properties.idx_i]
@@ -192,14 +196,22 @@ class AtomsConverter:
 
     def _requires_new_nbh_list(self, inputs):
         # check if structure change is sufficiently small to reuse previous neighbor list
-        if self.previous_positions is None or self.previous_cell is None or self.previous_pbc is None:
+        if (
+            self.previous_positions is None
+            or self.previous_cell is None
+            or self.previous_pbc is None
+        ):
             return True
         if (
-                torch.equal(self.previous_pbc, inputs[properties.pbc])
-                and torch.allclose(self.previous_cell, inputs[properties.cell])
-                and torch.max(torch.sum(torch.square(
-                    self.previous_positions - inputs[properties.position]
-                ), dim=-1)).item() < 0.25 * self.cutoff_skin ** 2
+            torch.equal(self.previous_pbc, inputs[properties.pbc])
+            and torch.allclose(self.previous_cell, inputs[properties.cell])
+            and torch.max(
+                torch.sum(
+                    torch.square(self.previous_positions - inputs[properties.position]),
+                    dim=-1,
+                )
+            ).item()
+            < 0.25 * self.cutoff_skin**2
         ):
             return False
         return True
@@ -209,12 +221,28 @@ class AtomsConverter:
         inputs_tmp = []
         for config_idx in range(n_configs):
             spl_input = {}
-            spl_input.update({properties.n_atoms: inputs[properties.n_atoms][config_idx].unsqueeze(0)})
-            spl_input.update({properties.Z: inputs[properties.Z][inputs["_idx_m"] == config_idx]})
-            spl_input.update({properties.R: inputs[properties.R][inputs["_idx_m"] == config_idx]})
-            spl_input.update({properties.cell: inputs[properties.cell][config_idx].unsqueeze(0)})
-            spl_input.update({properties.pbc: inputs[properties.pbc][config_idx].unsqueeze(0)})
-            spl_input.update({properties.idx: inputs[properties.idx][config_idx].unsqueeze(0)})
+            spl_input.update(
+                {
+                    properties.n_atoms: inputs[properties.n_atoms][
+                        config_idx
+                    ].unsqueeze(0)
+                }
+            )
+            spl_input.update(
+                {properties.Z: inputs[properties.Z][inputs["_idx_m"] == config_idx]}
+            )
+            spl_input.update(
+                {properties.R: inputs[properties.R][inputs["_idx_m"] == config_idx]}
+            )
+            spl_input.update(
+                {properties.cell: inputs[properties.cell][config_idx].unsqueeze(0)}
+            )
+            spl_input.update(
+                {properties.pbc: inputs[properties.pbc][config_idx].unsqueeze(0)}
+            )
+            spl_input.update(
+                {properties.idx: inputs[properties.idx][config_idx].unsqueeze(0)}
+            )
             spl_input.update(self.additional_inputs)
 
             # Cast to double and move input batch to cpu
@@ -241,8 +269,12 @@ class AtomsConverter:
         elif self._requires_new_nbh_list(inputs):
             inputs = self._transform_inputs(inputs)
             previous_inputs = self.transforms[0].previous_inputs
-            self.previous_positions = torch.cat([d[properties.R] for d in previous_inputs.values()])
-            self.previous_positions = self.previous_positions.to(self.device).to(self.dtype)
+            self.previous_positions = torch.cat(
+                [d[properties.R] for d in previous_inputs.values()]
+            )
+            self.previous_positions = self.previous_positions.to(self.device).to(
+                self.dtype
+            )
             self.previous_cell = inputs[properties.cell]
             self.previous_pbc = inputs[properties.pbc]
             self.previous_idx_i = inputs[properties.idx_i]
@@ -277,7 +309,7 @@ class SpkCalculator(Calculator):
 
     def __init__(
         self,
-        model_file: str,
+        model_file: Union[str, torch.nn.Module],
         neighbor_list: schnetpack.transform.Transform,
         energy_key: str = "energy",
         force_key: str = "forces",
@@ -296,7 +328,7 @@ class SpkCalculator(Calculator):
     ):
         """
         Args:
-            model_file (str): path to trained model
+            model_file (str): either path to trained model or model object
             neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
             energy_key (str): name of energies in model (default="energy")
             force_key (str): name of forces in model (default="forces")
@@ -333,9 +365,7 @@ class SpkCalculator(Calculator):
         }
 
         self.auxiliary_output_modules = auxiliary_output_modules or []
-
-        self.model = self._load_model(model_file)
-        self.model.to(device=device, dtype=dtype)
+        self.model = self._load_model(model_file, device, dtype)
 
         # set up basic conversion factors
         self.energy_conversion = convert_units(energy_unit, "eV")
@@ -351,27 +381,34 @@ class SpkCalculator(Calculator):
         # Container for basic ml model ouputs
         self.model_results = None
 
-        self.total_fwd_time = 0.
+        self.total_fwd_time = 0.0
         self.n_fwd_iterations = 0
 
-    def _load_model(self, model_file: str) -> schnetpack.model.AtomisticModel:
+    def _load_model(
+        self,
+        model_file: Union[str, schnetpack.model.AtomisticModel, torch.nn.Module],
+        device: Union[str, torch.device],
+        dtype: torch.dtype,
+    ) -> Union[schnetpack.model.AtomisticModel, torch.nn.Module]:
         """
         Load an individual model, activate stress computation
 
         Args:
-            model_file (str): path to model.
+            model_file (None): Either path to model or model object
 
         Returns:
            AtomisticTask: loaded schnetpack model
         """
 
-        log.info("Loading model from {:s}".format(model_file))
-        # load model and keep it on CPU, device can be changed afterwards
-        model = load_model(model_file, device=torch.device("cpu")).to(torch.float64)
-
+        if isinstance(model_file, str):
+            log.info("Loading model from {:s}".format(model_file))
+            model = load_model(model_file, device=torch.device(device)).to(dtype)
+        else:
+            log.info("Loading model from Model object")
+            model = model_file
         n_output_modules = len(model.output_modules)
         for auxiliary_output_module in self.auxiliary_output_modules:
-            model.output_modules.insert(n_output_modules-1, auxiliary_output_module)
+            model.output_modules.insert(n_output_modules - 1, auxiliary_output_module)
 
         model = model.eval()
 
@@ -390,14 +427,17 @@ class SpkCalculator(Calculator):
         """
         Args:
             atoms (ase.Atoms): ASE atoms object.
-            properties (list of str): select properties computed and stored to results.
+            properties (list of str): Ignored. Instead, all specified property keys (energy_key, force_key, ...)
+                are calculated and stored.
             system_changes (list of str): List of changes for ASE.
         """
         # First call original calculator to set atoms attribute
         # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
 
-        # TODO remove this hack and make schnetpack PR
-        properties = ["energy", "forces"]
+        # make a list of all properties available in the model
+        properties = [
+            p_key for p_key, p_value in self.property_map.items() if p_value is not None
+        ]
 
         if self.calculation_required(atoms, properties):
             Calculator.calculate(self, atoms)
@@ -443,7 +483,6 @@ class SpkCalculator(Calculator):
                     )
 
             self.results = results
-            self.model_results = model_results
 
 
 class AseInterface:
