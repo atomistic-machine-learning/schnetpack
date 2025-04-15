@@ -205,6 +205,7 @@ class BatchwiseCalculator:
         fixed_atoms_mask:
             list of indices corresponding to atoms with positions fixed in space.
         """
+
         if self._requires_calculation(
             property_keys=[self.energy_key, self.force_key], inputs=inputs
         ):
