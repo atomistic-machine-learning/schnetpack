@@ -276,6 +276,7 @@ class SpkCalculator(Calculator):
     def calculate(
         self,
         atoms: Atoms = None,
+        # properties is just a placeholder and will be ignored
         properties: List[str] = ["energy"],
         system_changes: List[str] = all_changes,
     ):
@@ -452,6 +453,7 @@ class SpkEnsembleCalculator(SpkCalculator):
         converter: callable = AtomsConverter,
         transforms: Optional[Union[Transform, List[Transform]]] = None,
         uncertainty_fn: callable = None,
+        additional_inputs: Dict[str, torch.Tensor] = None,
         **kwargs,
     ):
         """
@@ -470,7 +472,7 @@ class SpkEnsembleCalculator(SpkCalculator):
             transforms (Transform, list): transforms for the converter. More information
                 can be found in the AtomsConverter docstring.
             uncertainty_fn (callable): Function to compute uncertainty. If not provided, defaults to AbsoluteUncertainty.
-            **kwargs: Additional arguments for basic ase calculator class
+            additional_inputs (dict): Additional arguments for basic ase calculator class
         """
         # Initialize the parent class without loading a model
         Calculator.__init__(self, **kwargs)
@@ -483,6 +485,7 @@ class SpkEnsembleCalculator(SpkCalculator):
             device=device,
             dtype=dtype,
             transforms=transforms,
+            additional_inputs=additional_inputs,
         )
 
         self.energy_key = energy_key
