@@ -1,4 +1,3 @@
-import schnetpack
 import torch
 import torch.nn as nn
 
@@ -8,14 +7,16 @@ from .thermostat_utils import *
 
 from typing import Optional
 
+from schnetpack import properties
+from schnetpack.model import AtomisticModel
+from schnetpack.atomistic import Response, Forces, Strain
+
 
 class CalculatorError(Exception):
     pass
 
 
-def activate_model_stress(
-    model: schnetpack.model.AtomisticModel, stress_key: str
-) -> schnetpack.model.AtomisticModel:
+def activate_model_stress(model: AtomisticModel, stress_key: str) -> AtomisticModel:
     """
     Utility function for activating computation of stress in models not explicitly trained on the stress tensor.
     Used for e.g. simulations under constant pressure and in cells.
@@ -31,9 +32,7 @@ def activate_model_stress(
 
     # Check if a module suitable for stress computation is present
     for module in model.output_modules:
-        if isinstance(module, schnetpack.atomistic.response.Forces) or isinstance(
-            module, schnetpack.atomistic.Response
-        ):
+        if isinstance(module, Forces) or isinstance(module, Response):
             # for `Forces` module
             if hasattr(module, "calc_stress"):
                 # activate internal stress computation flag
@@ -41,14 +40,14 @@ def activate_model_stress(
 
                 # append stress label to output list and update required derivatives in the module
                 module.model_outputs.append(stress_key)
-                module.required_derivatives.append(schnetpack.properties.strain)
+                module.required_derivatives.append(properties.strain)
 
                 # if not set in the model, also update output list and required derivatives so that:
                 #   a) required derivatives are computed and
                 #   b) property is added to the model outputs
                 if stress_key not in model.model_outputs:
                     model.model_outputs.append(stress_key)
-                    model.required_derivatives.append(schnetpack.properties.strain)
+                    model.required_derivatives.append(properties.strain)
 
                 stress = True
 
@@ -56,30 +55,28 @@ def activate_model_stress(
             if hasattr(module, "basic_derivatives"):
                 # activate internal stress computation flag
                 module.calc_stress = True
-                module.basic_derivatives["dEds"] = schnetpack.properties.strain
+                module.basic_derivatives["dEds"] = properties.strain
                 module.derivative_instructions["dEds"] = True
-                module.basic_derivatives["dEds"] = schnetpack.properties.strain
+                module.basic_derivatives["dEds"] = properties.strain
 
-                module.map_properties[schnetpack.properties.stress] = (
-                    schnetpack.properties.stress
-                )
+                module.map_properties[properties.stress] = properties.stress
 
                 # append stress label to output list and update required derivatives in the module
                 module.model_outputs.append(stress_key)
-                module.required_derivatives.append(schnetpack.properties.strain)
+                module.required_derivatives.append(properties.strain)
 
                 # if not set in the model, also update output list and required derivatives so that:
                 #   a) required derivatives are computed and
                 #   b) property is added to the model outputs
                 if stress_key not in model.model_outputs:
                     model.model_outputs.append(stress_key)
-                    model.required_derivatives.append(schnetpack.properties.strain)
+                    model.required_derivatives.append(properties.strain)
 
                 stress = True
 
     # If stress computation has been enables, insert preprocessing for strain computation
     if stress:
-        model.input_modules.insert(0, schnetpack.atomistic.Strain())
+        model.input_modules.insert(0, Strain())
 
     if not stress:
         raise CalculatorError("Failed to activate stress computation")
