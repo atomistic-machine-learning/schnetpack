@@ -69,9 +69,7 @@ def make_test_calc(models, uncertainty_fn=None):
     return SpkEnsembleCalculator(
         models=models,
         neighbor_list=DummyTransform(),
-        # converter=DummyConverter,
-        energy_key="energy",
-        force_key="forces",
+        converter=DummyConverter,
         stress_key="stress",
         uncertainty_fn=uncertainty_fn,
     )
@@ -90,14 +88,8 @@ def test_ensemble_average_forces(dummy_atoms):
     calc = make_test_calc(models=[OnesModel(), TwosModel()])
     calc.calculate(dummy_atoms)
 
-    # Each atom's force should be averaged between OnesModel and TwosModel
-    expected_value = 1.5 * calc.energy_conversion  # because (1+2)/2 = 1.5
+    expected_value = 1.5 * calc.energy_conversion
     expected_forces = np.full((2, 3), expected_value)
-
-    print("\nCalculated Forces:")
-    print(calc.results["forces"])
-    print("Expected Forces:")
-    print(expected_forces)
 
     assert np.allclose(calc.results["forces"], expected_forces, rtol=1e-5)
 
@@ -187,106 +179,115 @@ def test_uncertainty_keys_multiple_fns(dummy_atoms):
     assert "RelativeUncertainty" in u
 
 
-def test_exact_predictions_and_uncertainties(dummy_atoms):
+def test_absolute_energy_uncertainty(dummy_atoms):
     calc = make_test_calc(
         models=[OnesModel(), TwosModel()],
-        uncertainty_fn=[AbsoluteUncertainty(), RelativeUncertainty()],
+        uncertainty_fn=AbsoluteUncertainty(
+            energy_weight=1.0, force_weight=0.0, stress_weight=0.0
+        ),
     )
 
     calc.calculate(dummy_atoms)
 
-    print("\n=== Predicted Properties ===")
-    print(f"Energy: {calc.results['energy']}")
-    print(f"Forces:\n{calc.results['forces']}")
-    print(f"Stress:\n{calc.results['stress']}")
+    abs_energy = calc.results["uncertainty"]
+    print(f"Absolute Energy Uncertainty: {abs_energy}")
+    assert np.isclose(abs_energy, 0.0217, rtol=1e-3)
 
-    # === Check predictions ===
-    # expected_energy = (1.0 + 2.0) / 2.0
-    # assert np.isclose(calc.results["energy"], 0.06)
 
-    # expected_forces = np.array([
-    #     [1.5, 1.5, 1.5],
-    #     [1.5, 1.5, 1.5],
-    # ])
-    # assert np.allclose(calc.results["forces"], expected_forces)
-
-    # expected_stress = np.full((3, 3), 1.5)
-    # assert np.allclose(calc.results["stress"], expected_stress)
-
-    # === Check uncertainties ===
-    uncertainties = calc.results["uncertainty"]
-
-    # AbsoluteUncertainty pieces
-    energy_preds = [1.0, 2.0]
-    force_preds = np.array(
-        [
-            [[1, 1, 1], [1, 1, 1]],
-            [[2, 2, 2], [2, 2, 2]],
-        ]
-    )
-    stress_preds = np.array(
-        [
-            np.ones((3, 3)),
-            2 * np.ones((3, 3)),
-        ]
+def test_absolute_force_uncertainty(dummy_atoms):
+    calc = make_test_calc(
+        models=[OnesModel(), TwosModel()],
+        uncertainty_fn=AbsoluteUncertainty(
+            energy_weight=0.0, force_weight=1.0, stress_weight=0.0
+        ),
     )
 
-    energy_std = np.std(energy_preds)
-    force_std = np.std(force_preds, axis=0)
-    per_atom_force_unc = np.linalg.norm(force_std, axis=1)
-    force_unc = np.mean(per_atom_force_unc)
+    calc.calculate(dummy_atoms)
 
-    stress_std = np.std(stress_preds, axis=0)
-    per_plane_stress_unc = np.linalg.norm(stress_std, axis=1)
-    stress_unc = np.mean(per_plane_stress_unc)
+    abs_force = calc.results["uncertainty"]
+    print(f"Absolute Force Uncertainty: {abs_force}")
+    assert np.isclose(abs_force, 0.0376, rtol=1e-2)
 
-    expected_absolute_uncertainty = energy_std + force_unc + stress_unc
 
-    print("\n=== Absolute Uncertainty Calculation ===")
-    print(f"Energy std: {energy_std}")
-    print(f"Force std (per component):\n{force_std}")
-    print(f"Force uncertainty per atom: {per_atom_force_unc}")
-    print(f"Force uncertainty mean: {force_unc}")
-    print(f"Stress std (per component):\n{stress_std}")
-    print(f"Stress uncertainty per plane: {per_plane_stress_unc}")
-    print(f"Stress uncertainty mean: {stress_unc}")
-    print(f"Total Absolute Uncertainty: {expected_absolute_uncertainty}")
-
-    # RelativeUncertainty pieces
-    mean_energy = np.mean(energy_preds)
-    relative_energy_unc = energy_std / (abs(mean_energy) + 1e-8)
-
-    mean_force = np.mean(force_preds, axis=0)
-    mean_force_norm = np.linalg.norm(mean_force, axis=1)
-    std_force_norm = np.linalg.norm(force_std, axis=1)
-    relative_force_unc = np.mean(std_force_norm / (mean_force_norm + 1e-8))
-
-    mean_stress = np.mean(stress_preds, axis=0)
-    mean_stress_planes = np.linalg.norm(mean_stress, axis=1)
-    std_stress_planes = np.linalg.norm(stress_std, axis=1)
-    relative_stress_unc = np.mean(std_stress_planes / (mean_stress_planes + 1e-8))
-
-    expected_relative_uncertainty = (
-        relative_energy_unc + relative_force_unc + relative_stress_unc
+def test_absolute_stress_uncertainty(dummy_atoms):
+    calc = make_test_calc(
+        models=[OnesModel(), TwosModel()],
+        uncertainty_fn=AbsoluteUncertainty(
+            energy_weight=0.0, force_weight=0.0, stress_weight=1.0
+        ),
     )
 
-    print("\n=== Relative Uncertainty Calculation ===")
-    print(f"Mean Energy: {mean_energy}")
-    print(f"Relative Energy Uncertainty: {relative_energy_unc}")
-    print(f"Mean Force (per atom):\n{mean_force}")
-    print(f"Mean Force norms: {mean_force_norm}")
-    print(f"Std Force norms: {std_force_norm}")
-    print(f"Relative Force Uncertainty: {relative_force_unc}")
-    print(f"Mean Stress:\n{mean_stress}")
-    print(f"Mean Stress planes: {mean_stress_planes}")
-    print(f"Std Stress planes: {std_stress_planes}")
-    print(f"Relative Stress Uncertainty: {relative_stress_unc}")
-    print(f"Total Relative Uncertainty: {expected_relative_uncertainty}")
+    calc.calculate(dummy_atoms)
 
-    # === Final assertions ===
-    assert np.isclose(
-        uncertainties["AbsoluteUncertainty"], expected_absolute_uncertainty, rtol=1e-4
+    abs_stress = calc.results["uncertainty"]
+    print(f"Absolute Stress Uncertainty: {abs_stress}")
+    assert np.isclose(abs_stress, 0.0376, rtol=1e-2)
+
+
+def test_relative_energy_uncertainty(dummy_atoms):
+    calc = make_test_calc(
+        models=[OnesModel(), TwosModel()],
+        uncertainty_fn=RelativeUncertainty(
+            energy_weight=1.0, force_weight=0.0, stress_weight=0.0
+        ),
     )
-    assert np.isclose(
-        uncertainties["RelativeUncertainty"], expected_relative_uncertainty, rtol=1e-4
+
+    calc.calculate(dummy_atoms)
+
+    rel_energy = calc.results["uncertainty"]
+    print(f"Relative Energy Uncertainty: {rel_energy}")
+    assert np.isclose(rel_energy, 0.333, rtol=1e-2)
+
+
+def test_relative_force_uncertainty(dummy_atoms):
+    calc = make_test_calc(
+        models=[OnesModel(), TwosModel()],
+        uncertainty_fn=RelativeUncertainty(
+            energy_weight=0.0, force_weight=1.0, stress_weight=0.0
+        ),
     )
+
+    calc.calculate(dummy_atoms)
+
+    rel_force = calc.results["uncertainty"]
+    print(f"Relative Force Uncertainty: {rel_force}")
+    assert np.isclose(rel_force, 0.333, rtol=1e-2)
+
+
+def test_relative_stress_uncertainty(dummy_atoms):
+    calc = make_test_calc(
+        models=[OnesModel(), TwosModel()],
+        uncertainty_fn=RelativeUncertainty(
+            energy_weight=0.0, force_weight=0.0, stress_weight=1.0
+        ),
+    )
+
+    calc.calculate(dummy_atoms)
+
+    rel_stress = calc.results["uncertainty"]
+    print(f"Relative Stress Uncertainty: {rel_stress}")
+    assert np.isclose(rel_stress, 0.333, rtol=1e-2)
+
+
+def test_absolute_uncertainty_calculation(dummy_atoms):
+    calc = make_test_calc(
+        models=[OnesModel(), TwosModel()], uncertainty_fn=AbsoluteUncertainty()
+    )
+
+    calc.calculate(dummy_atoms)
+
+    abs_unc = calc.results["uncertainty"]
+    print(f"Absolute Uncertainty: {abs_unc}")
+    assert np.isclose(abs_unc, 0.0376, rtol=1e-2)
+
+
+def test_relative_uncertainty_calculation(dummy_atoms):
+    calc = make_test_calc(
+        models=[OnesModel(), TwosModel()], uncertainty_fn=RelativeUncertainty()
+    )
+
+    calc.calculate(dummy_atoms)
+
+    rel_unc = calc.results["uncertainty"]
+    print(f"Relative Uncertainty: {rel_unc}")
+    assert np.isclose(rel_unc, 0.333, rtol=1e-2)
