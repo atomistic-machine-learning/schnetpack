@@ -179,6 +179,7 @@ def test_uncertainty_keys_multiple_fns(dummy_atoms):
     assert "RelativeUncertainty" in u
 
 
+# === Calculation Tests ===
 def test_absolute_energy_uncertainty(dummy_atoms):
     calc = make_test_calc(
         models=[OnesModel(), TwosModel()],
