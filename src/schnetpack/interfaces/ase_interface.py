@@ -513,7 +513,11 @@ class SpkEnsembleCalculator(SpkCalculator):
         # Load multiple models
         self.models = nn.ModuleList(
             [
-                (model if isinstance(model, nn.Module) else self._load_model(model))
+                (
+                    model
+                    if isinstance(model, nn.Module)
+                    else self._load_model(model, device, dtype)
+                )
                 for model in models
             ]
         ).to(dtype=self.dtype, device=self.device)
