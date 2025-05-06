@@ -513,14 +513,10 @@ class SpkEnsembleCalculator(SpkCalculator):
         # Load multiple models
         self.models = nn.ModuleList(
             [
-                (
-                    model
-                    if isinstance(model, nn.Module)
-                    else self._load_model(model, self.device, self.dtype)
-                )
+                (model if isinstance(model, nn.Module) else self._load_model(model))
                 for model in models
             ]
-        )
+        ).to(dtype=self.dtype, device=self.device)
 
         # define uncertainty function as list
         if uncertainty_fn is None:
@@ -551,7 +547,7 @@ class SpkEnsembleCalculator(SpkCalculator):
         # calculate properties
         accumulated_results = {prop: [] for prop in properties}
         for model in self.models:
-            model_results = model(model_inputs)
+            model_results = model({p: model_inputs[p].clone() for p in model_inputs})
             for prop in properties:
                 model_prop = self.property_map[prop]
                 if model_prop in model_results:
