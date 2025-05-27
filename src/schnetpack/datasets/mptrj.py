@@ -82,7 +82,9 @@ class MPTrajDataModule(AtomsDataModule):
         self.tmpdir = tmpdir
 
         if molecule not in self.datasets_dict:
-            raise AtomsDataModuleError(f"Molecule '{molecule}' not found in datasets_dict.")
+            raise AtomsDataModuleError(
+                f"Molecule '{molecule}' not found in datasets_dict."
+            )
         self.molecule = molecule
 
     def prepare_data(self):
@@ -110,7 +112,7 @@ class MPTrajDataModule(AtomsDataModule):
 
     def _download_data(self, tmpdir, dataset: BaseAtomsData):
         filename = self.datasets_dict[self.molecule]
-        url = self.download_url 
+        url = self.download_url
         local_path = os.path.join(tmpdir, os.path.basename(filename))
 
         logging.info(f"Downloading {filename} from {url}...")
@@ -120,14 +122,14 @@ class MPTrajDataModule(AtomsDataModule):
         atoms_list = ase_atoms_from_zip(
             zip_filename=local_path,
             filename_to_info=True,
-            limit=20000  #remove this limit to read all the structures
+            limit=20000,  # remove this limit to read all the structures
         )
 
         property_list = []
         key_value_pairs_list = []
         for atoms in atoms_list:
             # Extract metadata from info dictionary
-            #info = atoms.info
+            # info = atoms.info
             # metadata = {
             #     "material_id": info.get("material_id"),
             #     "formula": info.get("formula"),
@@ -156,8 +158,11 @@ class MPTrajDataModule(AtomsDataModule):
             key_value_pairs_list.append({"material_id": atoms.info.get("material_id")})
 
         logging.info("Write atoms to db...")
-        dataset.add_systems(property_list=property_list) #key_value_list=key_value_pairs_list)  
+        dataset.add_systems(
+            property_list=property_list
+        )  # key_value_list=key_value_pairs_list)
         logging.info("Done.")
+
 
 class MPTraj(MPTrajDataModule):
     """
@@ -193,7 +198,8 @@ class MPTraj(MPTrajDataModule):
         }
 
         atomrefs = {
-            self.energy: [0.0] * 10  # Replace with real atom reference values if available
+            self.energy: [0.0]
+            * 10  # Replace with real atom reference values if available
         }
 
         super(MPTraj, self).__init__(
