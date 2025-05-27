@@ -263,7 +263,7 @@ class SpkCalculator(Calculator):
 
         else:
             log.info("Loading model from Model object")
-            model = model_file
+            model = model_file.to(device).to(dtype)
 
         model = model.eval()
 
