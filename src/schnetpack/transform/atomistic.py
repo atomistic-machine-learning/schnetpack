@@ -173,7 +173,7 @@ class ScaleProperty(Transform):
         target_key: str = None,
         output_key: str = None,
         scale_by_mean: bool = False,
-        scale: torch.Tensor = None,
+        scale: float = None,
     ):
         """
         Args:
@@ -197,7 +197,7 @@ class ScaleProperty(Transform):
         else:
             self._initialized = False
 
-        scale = scale or torch.ones((1,))
+        scale = torch.tensor([scale]) or torch.ones((1,))
         self.register_buffer("scale", scale)
 
     def datamodule(self, _datamodule):
