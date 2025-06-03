@@ -12,8 +12,9 @@ run:
 globals:
   cutoff: 6.0
   lr: 5e-4
-  property: energy
-  aggregation: sum
+  energy_key: energy
+  forces_key: forces
+  stress_key: stress
 
 data:
   transforms:
@@ -22,7 +23,7 @@ data:
       property: ${globals.property}
       remove_atomrefs: True
       remove_mean: True
-    - _target_: schnetpack.transform.MatScipyNeighborList
+    - _target_: schnetpack.transform.CachedNeighborList
       cutoff: ${globals.cutoff}
     - _target_: schnetpack.transform.CastTo32
 
@@ -32,12 +33,18 @@ model:
       output_key: ${globals.property}
       n_in: ${model.representation.n_atom_basis}
       aggregation_mode: sum
+    - _target_: schnetpack.atomistic.Forces
+      energy_key: ${globals.energy_key}
+      force_key: ${globals.forces_key}
+    - _target_: schnetpack.atomistic.Stress
+      stress_key: ${globals.stress_key}
   postprocessors:
     - _target_: schnetpack.transform.CastTo64
     - _target_: schnetpack.transform.AddOffsets
       property: ${globals.property}
-      add_mean: True
+      add_mean: False
       add_atomrefs: True
+      estimate_atomrefs: True
 
 task:
   outputs:
