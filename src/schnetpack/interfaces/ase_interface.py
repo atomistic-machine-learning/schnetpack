@@ -173,7 +173,7 @@ class SpkCalculator(Calculator):
 
     def __init__(
         self,
-        model_file: Union[str, nn.Module],
+        model: Union[str, nn.Module],
         neighbor_list: Transform,
         energy_key: str = "energy",
         force_key: str = "forces",
@@ -189,20 +189,19 @@ class SpkCalculator(Calculator):
     ):
         """
         Args:
-            model_file (str): either path to trained model or model object
-            neighbor_list (Transform): SchNetPack neighbor list
-            energy_key (str): name of energies in model (default="energy")
-            force_key (str): name of forces in model (default="forces")
-            stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
-            energy_unit (str, float): energy units used by model (default="kcal/mol")
-            position_unit (str, float): position units used by model (default="Angstrom")
-            device (torch.device): device used for calculations (default="cpu")
-            dtype (torch.dtype): select model precision (default=float32)
-            converter (callable): converter used to set up input batches
-            transforms (Transform, list): transforms for the converter. More information
+            model: either path to trained model or model object
+            neighbor_list: SchNetPack neighbor list
+            energy_key: name of energies in model (default="energy")
+            force_key: name of forces in model (default="forces")
+            stress_key: name of stress tensor in model. Will not be computed if set to None (default=None)
+            energy_unit: energy units used by model (default="kcal/mol")
+            position_unit: position units used by model (default="Angstrom")
+            device: device used for calculations (default="cpu")
+            dtype: select model precision (default=float32)
+            converter: converter used to set up input batches
+            transforms: transforms for the converter. More information
                 can be found in the AtomsConverter docstring.
-            additional_inputs (dict): additional inputs required for some transforms in the converter.
-            **kwargs: Additional arguments for basic ase calculator class
+            additional_inputs: additional inputs required for some transforms in the converter.
         """
         Calculator.__init__(self, **kwargs)
 
@@ -225,7 +224,7 @@ class SpkCalculator(Calculator):
             self.stress: stress_key,
         }
 
-        self.model = self._load_model(model_file, device, dtype)
+        self.model = self._load_model(model, device, dtype)
 
         # set up basic conversion factors
         self.energy_conversion = convert_units(energy_unit, "eV")
@@ -243,7 +242,7 @@ class SpkCalculator(Calculator):
 
     def _load_model(
         self,
-        model_file: Union[str, nn.Module],
+        model: Union[str, nn.Module],
         device: Union[str, torch.device],
         dtype: torch.dtype,
     ) -> nn.Module:
@@ -251,19 +250,19 @@ class SpkCalculator(Calculator):
         Load an individual model, activate stress computation
 
         Args:
-            model_file (None): Either path to model or model object
+            model: Either path to model or model object
 
         Returns:
            AtomisticTask: loaded schnetpack model
         """
 
-        if isinstance(model_file, str):
-            log.info("Loading model from {:s}".format(model_file))
-            model = load_model(model_file, device=torch.device(device)).to(dtype)
+        if isinstance(model, str):
+            log.info("Loading model from {:s}...".format(model))
+            model = load_model(model, device=torch.device(device)).to(dtype)
 
         else:
-            log.info("Loading model from Model object")
-            model = model_file.to(device).to(dtype)
+            log.info("Using instantiated model...")
+            model = model.to(device).to(dtype)
 
         model = model.eval()
 
@@ -282,10 +281,10 @@ class SpkCalculator(Calculator):
     ):
         """
         Args:
-            atoms (ase.Atoms): ASE atoms object.
-            properties (list of str): Ignored. Instead, all specified property keys (energy_key, force_key, ...)
+            atoms: ASE atoms object.
+            properties: Ignored. Instead, all specified property keys (energy_key, force_key, ...)
                 are calculated and stored.
-            system_changes (list of str): List of changes for ASE.
+            system_changes: List of changes for ASE.
         """
         # First call original calculator to set atoms attribute
         # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
@@ -459,20 +458,20 @@ class SpkEnsembleCalculator(SpkCalculator):
         """
         Args:
             models: path to trained models or list of preloaded model
-            neighbor_list (Transform): SchNetPack neighbor list
-            energy_key (str): name of energies in model (default="energy")
-            force_key (str): name of forces in model (default="forces")
-            stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
-            energy_unit (str, float): energy units used by model (default="kcal/mol")
-            position_unit (str, float): position units used by model (default="Angstrom")
-            device (torch.device): device used for calculations (default="cpu")
-            input_dtype (torch.dtype): select model input precision (default=float32)
-            output_dtype (torch.dtype): select model output precision (default=float64)
-            converter (callable): converter used to set up input batches
-            transforms (Transform, list): transforms for the converter. More information
+            neighbor_list: SchNetPack neighbor list
+            energy_key: name of energies in model (default="energy")
+            force_key: name of forces in model (default="forces")
+            stress_key: name of stress tensor in model. Will not be computed if set to None (default=None)
+            energy_unit: energy units used by model (default="kcal/mol")
+            position_unit: position units used by model (default="Angstrom")
+            device: device used for calculations (default="cpu")
+            input_dtype: select model input precision (default=float32)
+            output_dtype: select model output precision (default=float64)
+            converter: converter used to set up input batches
+            transforms: transforms for the converter. More information
                 can be found in the AtomsConverter docstring.
-            uncertainty_fn (callable): Function to compute uncertainty. If not provided, defaults to AbsoluteUncertainty.
-            additional_inputs (dict): Additional arguments for basic ase calculator class
+            uncertainty_fn: Function to compute uncertainty. If not provided, defaults to AbsoluteUncertainty.
+            additional_inputs: Additional arguments for basic ase calculator class
         """
         # Initialize the parent class without loading a model
         Calculator.__init__(self, **kwargs)
@@ -622,21 +621,21 @@ class AseInterface:
         Args:
             molecule_path: Path to initial geometry
             working_dir: Path to directory where files should be stored
-            model_file (str): path to trained model
-            neighbor_list (Transform): SchNetPack neighbor list
-            energy_key (str): name of energies in model (default="energy")
-            force_key (str): name of forces in model (default="forces")
-            stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
-            energy_unit (str, float): energy units used by model (default="kcal/mol")
-            position_unit (str, float): position units used by model (default="Angstrom")
-            device (torch.device): device used for calculations (default="cpu")
-            dtype (torch.dtype): select model precision (default=float32)
-            converter (schnetpack.interfaces.AtomsConverter): converter used to set up input batches
-            optimizer_class (ase.optimize.optimizer): ASE optimizer used for structure relaxation.
-            fixed_atoms (list(int)): list of indices corresponding to atoms with positions fixed in space.
-            transforms (Transform, list): transforms for the converter. More information
+            model_file: path to trained model
+            neighbor_list: SchNetPack neighbor list
+            energy_key: name of energies in model (default="energy")
+            force_key: name of forces in model (default="forces")
+            stress_key: name of stress tensor in model. Will not be computed if set to None (default=None)
+            energy_unit: energy units used by model (default="kcal/mol")
+            position_unit: position units used by model (default="Angstrom")
+            device: device used for calculations (default="cpu")
+            dtype: select model precision (default=float32)
+            converter: converter used to set up input batches
+            optimizer_class: ASE optimizer used for structure relaxation.
+            fixed_atoms: list of indices corresponding to atoms with positions fixed in space.
+            transforms: transforms for the converter. More information
                 can be found in the AtomsConverter docstring.
-            additional_inputs (dict): additional inputs required for some transforms in the converter.
+            additional_inputs: additional inputs required for some transforms in the converter.
         """
         # Setup directory
         self.working_dir = working_dir
@@ -656,7 +655,7 @@ class AseInterface:
 
         # Set up calculator
         calculator = SpkCalculator(
-            model_file=model_file,
+            model=model_file,
             neighbor_list=neighbor_list,
             energy_key=energy_key,
             force_key=force_key,
