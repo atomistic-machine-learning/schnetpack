@@ -23,9 +23,11 @@ class MPTraj(AtomsDataModule):
     """
     MPTRJ Dataset loader (custom .extxyz inside .zip) using SchNetPack.
     """
+
     energy = "energy"
     forces = "forces"
     stress = "stress"
+    MaterialId = "material_id"
 
     def __init__(
         self,
@@ -83,7 +85,8 @@ class MPTraj(AtomsDataModule):
         self.molecule = "mptrj"
         self.tmpdir = "mptrj_tmp"
         self.atomrefs = {
-            self.energy: [0.0] * 10  # Replace with real atom reference values if available
+            self.energy: [0.0]
+            * 119  # Replace with real atom reference values if available
         }
 
     def prepare_data(self):
@@ -91,6 +94,8 @@ class MPTraj(AtomsDataModule):
             property_unit_dict = {
                 self.energy: "kcal/mol",
                 self.forces: "kcal/mol/Ang",
+                self.stress: "kcal/mol/Ang^3",
+                self.MaterialId: None,
             }
 
             tmpdir = tempfile.mkdtemp(self.tmpdir)
@@ -113,6 +118,7 @@ class MPTraj(AtomsDataModule):
         filename = self.datasets_dict[self.molecule]
         url = self.download_url
         local_path = os.path.join(tmpdir, os.path.basename(filename))
+        print(local_path)
 
         logging.info(f"Downloading {filename} from {url}...")
         request.urlretrieve(url, local_path)
@@ -121,7 +127,7 @@ class MPTraj(AtomsDataModule):
         atoms_list = ase_atoms_from_zip(
             zip_filename=local_path,
             filename_to_info=True,
-            limit=200,  # remove this limit to read all the structures
+            # limit=200,  # remove this limit to read all the structures
         )
 
         property_list = []
@@ -130,6 +136,7 @@ class MPTraj(AtomsDataModule):
             properties = {
                 self.energy: np.array([atoms.get_total_energy()]),
                 self.forces: atoms.get_forces(),
+                self.stress: atoms.get_stress(),
                 structure.Z: atoms.get_atomic_numbers(),
                 structure.R: atoms.get_positions(),
                 structure.cell: atoms.get_cell(),
@@ -143,5 +150,5 @@ class MPTraj(AtomsDataModule):
         dataset.add_systems(
             property_list=property_list,
             key_value_list=key_value_pairs_list,
-            )
+        )
         logging.info("Done.")
