@@ -48,24 +48,20 @@ def get_offset_transforms(property, use_mean, use_atomrefs, mean=None, atomrefs=
         mean (torch.Tensor): Mean value for the property
         atomrefs (torch.Tensor): Atom reference values
     """
-    atomrefs_tensor = None
-    if atomrefs is not None:
-        atomrefs_tensor = torch.tensor(atomrefs, dtype=torch.float32)
-
     remove_offsets = RemoveOffsets(
         property=property,
         remove_mean=use_mean,
         remove_atomrefs=use_atomrefs,
-        atomrefs=atomrefs_tensor,
-        property_mean=mean if use_mean else None,
+        atomrefs=atomrefs,
+        property_mean=mean,
     )
 
     add_offsets = AddOffsets(
         property=property,
         add_mean=use_mean,
         add_atomrefs=use_atomrefs,
-        atomrefs=atomrefs_tensor,
-        property_mean=mean if use_mean else None,
+        atomrefs=atomrefs,
+        property_mean=mean,
     )
 
     return remove_offsets, add_offsets
@@ -76,11 +72,6 @@ def run_transform_test(property, use_mean, use_atomrefs, mean=None, atomrefs=Non
     Run a test case with specified transform parameters.
     """
     inputs = get_dummy_inputs()
-    if atomrefs is not None:
-        atomrefs = torch.tensor(atomrefs, dtype=torch.float32)
-        print(f"Atomrefs tensor: {atomrefs}")
-        print(f"Atomrefs tensor shape: {atomrefs.shape}")
-
     remove_offsets, add_offsets = get_offset_transforms(
         property=property,
         use_mean=use_mean,
@@ -116,63 +107,74 @@ def test_all_combinations():
     Test all meaningful combinations of transform parameters.
     """
     property = "energy"
-    mean_values = [torch.tensor([-20.0])]
-    atomrefs_values = [[0.0, -0.5, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, -1.5]]
+    mean = torch.tensor([-20.0])
 
-    # Test all combinations
-    for mean in mean_values:
-        for atomrefs in atomrefs_values:
-            print(f"\nTesting uses_mean only without mean")
-            run_transform_test(
-                property=property,
-                use_mean=True,
-                use_atomrefs=False,
-                mean=None,
-                atomrefs=None,
-            )
-            print(f"\nTesting mean only with mean")
-            run_transform_test(
-                property=property,
-                use_mean=True,
-                use_atomrefs=False,
-                mean=mean,
-                atomrefs=None,
-            )
+    # Create atomrefs tensor
+    atomrefs_values = [0.0] * 9
+    atomrefs_values[1] = -0.5  # H
+    atomrefs_values[6] = -1.0  # C
+    atomrefs_values[8] = -1.5  # O
+    atomrefs_tensor = torch.tensor(atomrefs_values, dtype=torch.float32)
 
-            print(f"\nTesting use_atomrefs only with None")
-            run_transform_test(
-                property=property,
-                use_mean=False,
-                use_atomrefs=True,
-                mean=None,
-                atomrefs=None,
-            )
+    print("--------------------------------")
+    print(f"\nTesting uses_mean only without mean\n")
+    run_transform_test(
+        property=property,
+        use_mean=True,
+        use_atomrefs=False,
+        mean=None,
+        atomrefs=None,
+    )
 
-            print(f"\nTesting use_atomrefs only with atomrefs tensor")
-            run_transform_test(
-                property=property,
-                use_mean=False,
-                use_atomrefs=True,
-                mean=None,
-                atomrefs=atomrefs,
-            )
+    print("--------------------------------")
+    print(f"\nTesting mean only with mean\n")
+    run_transform_test(
+        property=property,
+        use_mean=True,
+        use_atomrefs=False,
+        mean=mean,
+        atomrefs=None,
+    )
 
-            print(f"\nTesting both mean and atomrefs with None")
-            run_transform_test(
-                property=property,
-                use_mean=True,
-                use_atomrefs=True,
-                mean=None,
-                atomrefs=None,
-            )
-            print(f"\nTesting both use_mean and use_atomrefs with mean and atomrefs")
-            run_transform_test(
-                property=property,
-                use_mean=True,
-                use_atomrefs=True,
-                mean=mean,
-                atomrefs=atomrefs,
-            )
+    print("--------------------------------")
+    print(f"\nTesting use_atomrefs only with None\n")
+    run_transform_test(
+        property=property,
+        use_mean=False,
+        use_atomrefs=True,
+        mean=None,
+        atomrefs=None,
+    )
+
+    print("--------------------------------")
+    print(f"\nTesting use_atomrefs only with atomrefs tensor\n")
+    run_transform_test(
+        property=property,
+        use_mean=False,
+        use_atomrefs=True,
+        mean=None,
+        atomrefs=atomrefs_tensor,
+    )
+
+    print("--------------------------------")
+    print(f"\nTesting both mean and atomrefs with None\n")
+    run_transform_test(
+        property=property,
+        use_mean=True,
+        use_atomrefs=True,
+        mean=None,
+        atomrefs=None,
+    )
+
+    print("--------------------------------")
+    print(f"\nTesting both use_mean and use_atomrefs with mean and atomrefs\n")
+    run_transform_test(
+        property=property,
+        use_mean=True,
+        use_atomrefs=True,
+        mean=mean,
+        atomrefs=atomrefs_tensor,
+    )
 
 
 if __name__ == "__main__":
