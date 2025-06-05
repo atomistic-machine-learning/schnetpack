@@ -122,7 +122,7 @@ def test_all_combinations():
     # Test all combinations
     for mean in mean_values:
         for atomrefs in atomrefs_values:
-            print(f"Testing uses_mean only without mean")
+            print(f"\nTesting uses_mean only without mean")
             run_transform_test(
                 property=property,
                 use_mean=True,
@@ -130,7 +130,7 @@ def test_all_combinations():
                 mean=None,
                 atomrefs=None,
             )
-            print(f"Testing mean only with mean")
+            print(f"\nTesting mean only with mean")
             run_transform_test(
                 property=property,
                 use_mean=True,
@@ -139,7 +139,7 @@ def test_all_combinations():
                 atomrefs=None,
             )
 
-            print(f"Testing use_atomrefs only with None")
+            print(f"\nTesting use_atomrefs only with None")
             run_transform_test(
                 property=property,
                 use_mean=False,
@@ -148,7 +148,7 @@ def test_all_combinations():
                 atomrefs=None,
             )
 
-            print(f"Testing use_atomrefs only with atomrefs tensor")
+            print(f"\nTesting use_atomrefs only with atomrefs tensor")
             run_transform_test(
                 property=property,
                 use_mean=False,
@@ -157,7 +157,7 @@ def test_all_combinations():
                 atomrefs=atomrefs,
             )
 
-            print(f"Testing both mean and atomrefs with None")
+            print(f"\nTesting both mean and atomrefs with None")
             run_transform_test(
                 property=property,
                 use_mean=True,
@@ -165,7 +165,7 @@ def test_all_combinations():
                 mean=None,
                 atomrefs=None,
             )
-            print(f"Testing both use_mean and use_atomrefs with mean and atomrefs")
+            print(f"\nTesting both use_mean and use_atomrefs with mean and atomrefs")
             run_transform_test(
                 property=property,
                 use_mean=True,
