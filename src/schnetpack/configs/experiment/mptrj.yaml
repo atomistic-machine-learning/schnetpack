@@ -15,28 +15,33 @@ globals:
   energy_key: energy
   forces_key: forces
   stress_key: stress
+  property: energy
 
 data:
   transforms:
-    - _target_: schnetpack.transform.SubtractCenterOfMass
+    - _target_: schnetpack.transform.SubtractCenterOfMass #ask about this
     - _target_: schnetpack.transform.RemoveOffsets
       property: ${globals.property}
       remove_atomrefs: True
       remove_mean: True
     - _target_: schnetpack.transform.CachedNeighborList
-      cutoff: ${globals.cutoff}
+      cache_path: /tmp/mptraj_cache
+      neighbor_list:
+        _target_: schnetpack.transform.MatScipyNeighborList
+        cutoff: ${globals.cutoff}
     - _target_: schnetpack.transform.CastTo32
 
 model:
   output_modules:
     - _target_: schnetpack.atomistic.Atomwise
-      output_key: ${globals.property}
-      n_in: ${model.representation.n_atom_basis}
+      output_key: ${globals.energy_key} #just for storing results
+      n_in: ${model.representation.n_atom_basis} #ask about this
       aggregation_mode: sum
     - _target_: schnetpack.atomistic.Forces
+      calc_forces: True
+      calc_stress: True
       energy_key: ${globals.energy_key}
       force_key: ${globals.forces_key}
-    - _target_: schnetpack.atomistic.Stress
       stress_key: ${globals.stress_key}
   postprocessors:
     - _target_: schnetpack.transform.CastTo64
