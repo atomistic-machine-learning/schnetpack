@@ -51,7 +51,6 @@ def dummy_inputs_intensive():
 
     all_Z = ethanol_Z + methanol_Z + water_Z
 
-    # Create molecule indices
     ethanol_idx = [0] * len(ethanol_Z)
     methanol_idx = [1] * len(methanol_Z)
     water_idx = [2] * len(water_Z)
@@ -338,7 +337,7 @@ def test_remove_add_offsets_both_mean_and_atomrefs_none(dummy_inputs_extensive):
 
 
 def test_remove_add_offsets_both_mean_and_atomrefs_intensive(
-    dummy_inputs_intensive, mean_tensor_intensive, atomrefs_tensor
+    dummy_inputs_intensive, mean_tensor, atomrefs_tensor
 ):
     """Test both mean and atomrefs with tensors and extensive False"""
     property = "energy"
@@ -346,13 +345,15 @@ def test_remove_add_offsets_both_mean_and_atomrefs_intensive(
         property=property,
         use_mean=True,
         use_atomrefs=True,
-        mean=mean_tensor_intensive,
+        mean=mean_tensor,
         atomrefs=atomrefs_tensor,
         is_extensive=False,
     )
 
     intermediate = remove_offsets(dummy_inputs_intensive.copy())
+    print("Intermediate:", intermediate[property])
     final = add_offsets(intermediate.copy())
+    print("Final:", final[property])
 
     # Check that transforms are inverse operations
     assert torch.allclose(final[property], dummy_inputs_intensive[property])
@@ -408,7 +409,7 @@ def test_remove_offsets_preserves_other_properties(dummy_inputs_extensive):
         is_extensive=True,
     )
 
-    intermediate = remove_offsets(dummy_inputs_extensive)
+    intermediate = remove_offsets(dummy_inputs_extensive.copy())
 
     # Check that all original properties are preserved
     for key in dummy_inputs_extensive.keys():
