@@ -214,6 +214,10 @@ class ASEAtomsData(BaseAtomsData):
                 of the dataset. Units are converted automatically during loading.
         """
         self.datapath = datapath
+        if not os.path.exists(self.datapath):
+            raise AtomsDataError(f"ASE DB does not exists at {self.datapath}")
+
+        self.conn = connect(self.datapath, use_lock_file=False)
 
         BaseAtomsData.__init__(
             self,
@@ -224,7 +228,6 @@ class ASEAtomsData(BaseAtomsData):
         )
 
         self._check_db()
-        self.conn = connect(self.datapath, use_lock_file=False)
 
         # initialize units
         md = self.metadata
