@@ -57,7 +57,7 @@ class Integrator(nn.Module):
         self._main_step(system)
 
     def half_step(self, system: System):
-        """
+        r"""
         Half steps propagating the system momenta according to:
 
         ..math::
@@ -95,7 +95,7 @@ class VelocityVerlet(Integrator):
         super(VelocityVerlet, self).__init__(time_step)
 
     def _main_step(self, system: System):
-        """
+        r"""
         Propagate the positions of the system according to:
 
         ..math::

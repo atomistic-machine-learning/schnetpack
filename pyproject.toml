@@ -41,8 +41,10 @@ dependencies = [
     "tqdm",
     "pre-commit",
     "black",
+    "black[jupyter]",
     "protobuf",
-    "progressbar"
+    "progressbar",
+    "pytest"
 ]
 
 [project.optional-dependencies]
