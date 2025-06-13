@@ -1,0 +1,10 @@
+defaults:
+  - custom
+  
+_target_: schnetpack.datasets.MPTraj
+
+datapath: ${run.data_dir}/mptraj.db 
+batch_size: 64
+num_train: 10000         
+num_val: 5000
+num_test: 2000
