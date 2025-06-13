@@ -22,3 +22,6 @@ Short notebooks showing a particular use-case or functionality
 
 [Batch-wise Structure Relaxation
 ](howtos/howto_batchwise_relaxations.ipynb)
+
+[Uncertainty Estimation with Model Ensembles
+](howtos/howto_ensemble_calculation.ipynb)
