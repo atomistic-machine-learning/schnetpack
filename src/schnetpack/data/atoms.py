@@ -281,7 +281,7 @@ class ASEAtomsData(BaseAtomsData):
 
     def _check_db(self):
         if not os.path.exists(self.datapath):
-            raise AtomsDataError(f"ASE DB does not exists at {self.datapath}")
+            raise AtomsDataError(f"ASE DB does not exist at {self.datapath}")
 
         if self.subset_idx:
             with connect(self.datapath, use_lock_file=False) as conn:
