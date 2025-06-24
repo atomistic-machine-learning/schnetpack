@@ -136,6 +136,7 @@ class PaiNN(nn.Module):
         cutoff_fn: Optional[Callable] = None,
         activation: Optional[Callable] = F.silu,
         shared_interactions: bool = False,
+        return_vector_representation: bool = False,
         shared_filters: bool = False,
         epsilon: float = 1e-8,
         nuclear_embedding: Optional[nn.Module] = None,
@@ -165,6 +166,7 @@ class PaiNN(nn.Module):
         self.cutoff_fn = cutoff_fn
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = radial_basis
+        self.return_vector_representation = return_vector_representation
 
         # initialize embeddings
         if nuclear_embedding is None:
@@ -251,6 +253,7 @@ class PaiNN(nn.Module):
 
         # collect results
         inputs["scalar_representation"] = q
-        inputs["vector_representation"] = mu
+        if self.return_vector_representation:
+            inputs["vector_representation"] = mu
 
         return inputs
