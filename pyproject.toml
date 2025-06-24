@@ -44,7 +44,8 @@ dependencies = [
     "black[jupyter]",
     "protobuf",
     "progressbar",
-    "pytest"
+    "pytest",
+    "petname",
 ]
 
 [project.optional-dependencies]

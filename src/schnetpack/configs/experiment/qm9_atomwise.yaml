@@ -6,6 +6,7 @@ defaults:
 
 run:
   experiment: qm9_${globals.property}
+  id: ${petname:1}
 
 globals:
   cutoff: 5.
