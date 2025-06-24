@@ -167,6 +167,7 @@ class PaiNN(nn.Module):
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = radial_basis
         self.return_vector_representation = return_vector_representation
+        self.epsilon = epsilon
 
         # initialize embeddings
         if nuclear_embedding is None:
@@ -200,7 +201,7 @@ class PaiNN(nn.Module):
         )
         self.mixing = snn.replicate_module(
             lambda: PaiNNMixing(
-                n_atom_basis=self.n_atom_basis, activation=activation, epsilon=epsilon
+                n_atom_basis=self.n_atom_basis, activation=activation, epsilon=self.epsilon
             ),
             self.n_interactions,
             shared_interactions,
