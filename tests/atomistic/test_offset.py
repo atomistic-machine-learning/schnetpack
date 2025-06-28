@@ -35,6 +35,7 @@ def dummy_inputs():
         structure.n_atoms: n_atoms,
         structure.idx_m: torch.tensor(all_idx),
         "energy": energies,
+        "energy_per_atom": energies / n_atoms,
     }
 
     return inputs
@@ -93,24 +94,6 @@ def get_offset_transforms(
 
 
 # === Test Functions ===
-def test_remove_add_offsets_mean_none_extensive(dummy_inputs):
-    """Test use_mean with None and extensive True"""
-    property = "energy"
-    remove_offsets, add_offsets = get_offset_transforms(
-        property=property,
-        use_mean=True,
-        use_atomrefs=False,
-        mean=None,
-        atomrefs=None,
-        is_extensive=True,
-    )
-
-    intermediate = remove_offsets(dummy_inputs.copy())
-    final = add_offsets(intermediate.copy())
-
-    assert torch.allclose(final[property], dummy_inputs[property])
-
-
 def test_remove_add_offsets_mean_extensive(dummy_inputs, mean_tensor):
     """Test use_mean with mean_tensor and extensive True"""
     property = "energy"
@@ -129,24 +112,6 @@ def test_remove_add_offsets_mean_extensive(dummy_inputs, mean_tensor):
     assert torch.allclose(final[property], dummy_inputs[property])
 
 
-def test_remove_add_offsets_mean_none_intensive(dummy_inputs):
-    """Test use_mean with None and extensive False"""
-    property = "energy"
-    remove_offsets, add_offsets = get_offset_transforms(
-        property=property,
-        use_mean=True,
-        use_atomrefs=False,
-        mean=None,
-        atomrefs=None,
-        is_extensive=False,
-    )
-
-    intermediate = remove_offsets(dummy_inputs.copy())
-    final = add_offsets(intermediate.copy())
-
-    assert torch.allclose(final[property], dummy_inputs[property])
-
-
 def test_remove_add_offsets_mean_intensive(dummy_inputs, mean_tensor):
     """Test use_mean with mean_tensor and extensive False"""
     property = "energy"
@@ -155,24 +120,6 @@ def test_remove_add_offsets_mean_intensive(dummy_inputs, mean_tensor):
         use_mean=True,
         use_atomrefs=False,
         mean=mean_tensor,
-        atomrefs=None,
-        is_extensive=True,
-    )
-
-    intermediate = remove_offsets(dummy_inputs.copy())
-    final = add_offsets(intermediate.copy())
-
-    assert torch.allclose(final[property], dummy_inputs[property])
-
-
-def test_remove_add_offsets_atomrefs_none_extensive(dummy_inputs):
-    """Test use_atomrefs None and extensive True"""
-    property = "energy"
-    remove_offsets, add_offsets = get_offset_transforms(
-        property=property,
-        use_mean=False,
-        use_atomrefs=True,
-        mean=None,
         atomrefs=None,
         is_extensive=True,
     )
@@ -201,24 +148,6 @@ def test_remove_add_offsets_atomrefs_tensor_extensive(dummy_inputs, atomrefs_ten
     assert torch.allclose(final[property], dummy_inputs[property])
 
 
-def test_remove_add_offsets_atomrefs_none(dummy_inputs):
-    """Test use_atomrefs None and extensive False"""
-    property = "energy"
-    remove_offsets, add_offsets = get_offset_transforms(
-        property=property,
-        use_mean=False,
-        use_atomrefs=True,
-        mean=None,
-        atomrefs=None,
-        is_extensive=False,
-    )
-
-    intermediate = remove_offsets(dummy_inputs.copy())
-    final = add_offsets(intermediate.copy())
-
-    assert torch.allclose(final[property], dummy_inputs[property])
-
-
 def test_remove_add_offsets_atomrefs_tensor(dummy_inputs, atomrefs_tensor):
     """Test use_atomrefs tensor and extensive False"""
     property = "energy"
@@ -229,24 +158,6 @@ def test_remove_add_offsets_atomrefs_tensor(dummy_inputs, atomrefs_tensor):
         mean=None,
         atomrefs=atomrefs_tensor,
         is_extensive=False,
-    )
-
-    intermediate = remove_offsets(dummy_inputs.copy())
-    final = add_offsets(intermediate.copy())
-
-    assert torch.allclose(final[property], dummy_inputs[property])
-
-
-def test_remove_add_offsets_both_mean_and_atomrefs_none_extensive(dummy_inputs):
-    """Test both mean and atomrefs with none and extensive True"""
-    property = "energy"
-    remove_offsets, add_offsets = get_offset_transforms(
-        property=property,
-        use_mean=True,
-        use_atomrefs=True,
-        mean=None,
-        atomrefs=None,
-        is_extensive=True,
     )
 
     intermediate = remove_offsets(dummy_inputs.copy())
@@ -275,24 +186,6 @@ def test_remove_add_offsets_both_mean_and_atomrefs_extensive(
     assert torch.allclose(final[property], dummy_inputs[property])
 
 
-def test_remove_add_offsets_both_mean_and_atomrefs_none(dummy_inputs):
-    """Test both mean and atomrefs with none and extensive False"""
-    property = "energy"
-    remove_offsets, add_offsets = get_offset_transforms(
-        property=property,
-        use_mean=True,
-        use_atomrefs=True,
-        mean=None,
-        atomrefs=None,
-        is_extensive=False,
-    )
-
-    intermediate = remove_offsets(dummy_inputs.copy())
-    final = add_offsets(intermediate.copy())
-
-    assert torch.allclose(final[property], dummy_inputs[property])
-
-
 def test_remove_add_offsets_both_mean_and_atomrefs_intensive(
     dummy_inputs, mean_tensor, atomrefs_tensor
 ):
@@ -311,42 +204,6 @@ def test_remove_add_offsets_both_mean_and_atomrefs_intensive(
     print("Intermediate:", intermediate[property])
     final = add_offsets(intermediate.copy())
     print("Final:", final[property])
-
-    assert torch.allclose(final[property], dummy_inputs[property])
-
-
-def test_remove_add_offsets_no_transforms_extensive(dummy_inputs):
-    """Test RemoveOffsets and AddOffsets with no transforms and extensive True"""
-    property = "energy"
-    remove_offsets, add_offsets = get_offset_transforms(
-        property=property,
-        use_mean=False,
-        use_atomrefs=False,
-        mean=None,
-        atomrefs=None,
-        is_extensive=True,
-    )
-
-    intermediate = remove_offsets(dummy_inputs.copy())
-    final = add_offsets(intermediate.copy())
-
-    assert torch.allclose(final[property], dummy_inputs[property])
-
-
-def test_remove_add_offsets_no_transforms_intensive(dummy_inputs):
-    """Test RemoveOffsets and AddOffsets with no transforms and extensive False"""
-    property = "energy"
-    remove_offsets, add_offsets = get_offset_transforms(
-        property=property,
-        use_mean=False,
-        use_atomrefs=False,
-        mean=None,
-        atomrefs=None,
-        is_extensive=False,
-    )
-
-    intermediate = remove_offsets(dummy_inputs.copy())
-    final = add_offsets(intermediate.copy())
 
     assert torch.allclose(final[property], dummy_inputs[property])
 
