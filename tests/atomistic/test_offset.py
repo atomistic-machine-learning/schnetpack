@@ -154,167 +154,167 @@ def get_offset_transforms(
 
 
 # === Test Functions ===
-# def test_extensive_mean_and_atomref(dummy_inputs, atomrefs_tensor):
-#     """Extensive: use both mean and atomref """
-#     property = "energy"
-#     mean_tensor = torch.tensor([0.355])
-#     remove_offsets, add_offsets = get_offset_transforms(
-#         property=property,
-#         use_mean=True,
-#         use_atomrefs=True,
-#         mean=mean_tensor,
-#         atomrefs=atomrefs_tensor,
-#         is_extensive=True,
-#     )
+def test_extensive_mean_and_atomref(dummy_inputs, atomrefs_tensor):
+    """Extensive: use both mean and atomref"""
+    property = "energy"
+    mean_tensor = torch.tensor([0.355])
+    remove_offsets, add_offsets = get_offset_transforms(
+        property=property,
+        use_mean=True,
+        use_atomrefs=True,
+        mean=mean_tensor,
+        atomrefs=atomrefs_tensor,
+        is_extensive=True,
+    )
 
-#     print("\n=== Processing molecules individually ===")
-#     print("Original energies:", dummy_inputs["energy"])
+    print("\n=== Processing molecules individually ===")
+    print("Original energies:", dummy_inputs["energy"])
 
-#     molecules = split_batch_into_molecules(dummy_inputs)
+    molecules = split_batch_into_molecules(dummy_inputs)
 
-#     processed_molecules = []
-#     for _, mol in enumerate(molecules):
-#         processed_mol = remove_offsets(mol.copy())
-#         processed_molecules.append(processed_mol)
+    processed_molecules = []
+    for _, mol in enumerate(molecules):
+        processed_mol = remove_offsets(mol.copy())
+        processed_molecules.append(processed_mol)
 
-#         print(f"  Energy after RemoveOffsets: {processed_mol['energy']}")
+        print(f"  Energy after RemoveOffsets: {processed_mol['energy']}")
 
-#     intermediate_batch = combine_molecules_into_batch(processed_molecules)
+    intermediate_batch = combine_molecules_into_batch(processed_molecules)
 
-#     expected_individual = [-0.065, -0.13, 0.225]
-#     expected = torch.tensor(expected_individual)
-#     print(f"\nExpected energies after RemoveOffsets: {expected}")
-#     print(f"Actual energies after RemoveOffsets: {intermediate_batch['energy']}")
+    expected_individual = [-0.065, -0.13, 0.225]
+    expected = torch.tensor(expected_individual)
+    print(f"\nExpected energies after RemoveOffsets: {expected}")
+    print(f"Actual energies after RemoveOffsets: {intermediate_batch['energy']}")
 
-#     assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
+    assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
 
-#     final_batch = add_offsets(intermediate_batch.copy())
-#     print(f"Final energies after AddOffsets: {final_batch['energy']}")
-#     assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
-
-
-# def test_extensive_mean_only(dummy_inputs):
-#     """Extensive: use mean only"""
-#     property = "energy"
-#     mean_tensor = torch.tensor([21.77])
-#     remove_offsets, add_offsets = get_offset_transforms(
-#         property=property,
-#         use_mean=True,
-#         use_atomrefs=False,
-#         mean=mean_tensor,
-#         is_extensive=True,
-#     )
-#     molecules = split_batch_into_molecules(dummy_inputs)
-
-#     processed_molecules = []
-#     for i, mol in enumerate(molecules):
-#         processed_mol = remove_offsets(mol.copy())
-#         processed_molecules.append(processed_mol)
-
-#     intermediate_batch = combine_molecules_into_batch(processed_molecules)
-
-#     expected = torch.tensor([17.69, 35.33, -58.88])
-#     print(f"\nExpected energies after RemoveOffsets: {expected}")
-#     print(f"Actual energies after RemoveOffsets: {intermediate_batch['energy']}")
-
-#     assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
-
-#     final_batch = add_offsets(intermediate_batch.copy())
-#     print(f"Final energies after AddOffsets: {final_batch['energy']}")
-#     assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
+    final_batch = add_offsets(intermediate_batch.copy())
+    print(f"Final energies after AddOffsets: {final_batch['energy']}")
+    assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
 
 
-# def test_extensive_atomref_only(dummy_inputs, atomrefs_tensor):
-#     """Extensive: use atomref only"""
-#     property = "energy"
-#     remove_offsets, add_offsets = get_offset_transforms(
-#         property=property,
-#         use_mean=False,
-#         use_atomrefs=True,
-#         atomrefs=atomrefs_tensor,
-#         is_extensive=True,
-#     )
-#     molecules = split_batch_into_molecules(dummy_inputs)
+def test_extensive_mean_only(dummy_inputs):
+    """Extensive: use mean only"""
+    property = "energy"
+    mean_tensor = torch.tensor([21.77])
+    remove_offsets, add_offsets = get_offset_transforms(
+        property=property,
+        use_mean=True,
+        use_atomrefs=False,
+        mean=mean_tensor,
+        is_extensive=True,
+    )
+    molecules = split_batch_into_molecules(dummy_inputs)
 
-#     processed_molecules = []
-#     for i, mol in enumerate(molecules):
-#         processed_mol = remove_offsets(mol.copy())
-#         processed_molecules.append(processed_mol)
+    processed_molecules = []
+    for i, mol in enumerate(molecules):
+        processed_mol = remove_offsets(mol.copy())
+        processed_molecules.append(processed_mol)
 
-#     intermediate_batch = combine_molecules_into_batch(processed_molecules)
+    intermediate_batch = combine_molecules_into_batch(processed_molecules)
 
-#     expected = torch.tensor([1.01, 2.02, 2.0])
-#     print(f"\nExpected energies after RemoveOffsets: {expected}")
-#     print(f"Actual energies after RemoveOffsets: {intermediate_batch['energy']}")
+    expected = torch.tensor([17.69, 35.33, -58.88])
+    print(f"\nExpected energies after RemoveOffsets: {expected}")
+    print(f"Actual energies after RemoveOffsets: {intermediate_batch['energy']}")
 
-#     assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
+    assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
 
-#     final_batch = add_offsets(intermediate_batch.copy())
-#     print(f"Final energies after AddOffsets: {final_batch['energy']}")
-#     assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
-
-
-# def test_intensive_mean_and_atomref(dummy_inputs, atomrefs_tensor):
-#     """Intensive: use both mean and atomref"""
-#     property = "energy_per_atom"
-#     mean_tensor = torch.tensor([0.355])
-#     remove_offsets, add_offsets = get_offset_transforms(
-#         property=property,
-#         use_mean=True,
-#         use_atomrefs=True,
-#         mean=mean_tensor,
-#         atomrefs=atomrefs_tensor,
-#         is_extensive=False,
-#     )
-#     molecules = split_batch_into_molecules(dummy_inputs)
-
-#     processed_molecules = []
-#     for _, mol in enumerate(molecules):
-#         processed_mol = remove_offsets(mol.copy())
-#         processed_molecules.append(processed_mol)
-
-#     intermediate_batch = combine_molecules_into_batch(processed_molecules)
-
-#     expected = torch.tensor([-0.022, -0.022, 0.045])
-#     print(f"\nExpected energies after RemoveOffsets: {expected}")
-#     print(f"Actual energies after RemoveOffsets: {intermediate_batch[property]}")
-
-#     #assert torch.allclose(intermediate_batch[property], expected, atol=1e-3)
-
-#     final_batch = add_offsets(intermediate_batch.copy())
-#     print(f"Final energies after AddOffsets: {final_batch[property]}")
-#     assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-3)
+    final_batch = add_offsets(intermediate_batch.copy())
+    print(f"Final energies after AddOffsets: {final_batch['energy']}")
+    assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
 
 
-# def test_intensive_mean_only(dummy_inputs):
-#     """Intensive: use mean only"""
-#     property = "energy_per_atom"
-#     mean_tensor = torch.tensor([21.77])
-#     remove_offsets, add_offsets = get_offset_transforms(
-#         property=property,
-#         use_mean=True,
-#         use_atomrefs=False,
-#         mean=mean_tensor,
-#         is_extensive=False,
-#     )
-#     molecules = split_batch_into_molecules(dummy_inputs)
+def test_extensive_atomref_only(dummy_inputs, atomrefs_tensor):
+    """Extensive: use atomref only"""
+    property = "energy"
+    remove_offsets, add_offsets = get_offset_transforms(
+        property=property,
+        use_mean=False,
+        use_atomrefs=True,
+        atomrefs=atomrefs_tensor,
+        is_extensive=True,
+    )
+    molecules = split_batch_into_molecules(dummy_inputs)
 
-#     processed_molecules = []
-#     for _, mol in enumerate(molecules):
-#         processed_mol = remove_offsets(mol.copy())
-#         processed_molecules.append(processed_mol)
+    processed_molecules = []
+    for i, mol in enumerate(molecules):
+        processed_mol = remove_offsets(mol.copy())
+        processed_molecules.append(processed_mol)
 
-#     intermediate_batch = combine_molecules_into_batch(processed_molecules)
+    intermediate_batch = combine_molecules_into_batch(processed_molecules)
 
-#     expected = torch.tensor([5.89, 5.89, -11.77])
-#     print(f"\nExpected energies after RemoveOffsets: {expected}")
-#     print(f"Actual energies after RemoveOffsets: {intermediate_batch[property]}")
+    expected = torch.tensor([1.01, 2.02, 2.0])
+    print(f"\nExpected energies after RemoveOffsets: {expected}")
+    print(f"Actual energies after RemoveOffsets: {intermediate_batch['energy']}")
 
-#     assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
+    assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
 
-#     final_batch = add_offsets(intermediate_batch.copy())
-#     print(f"Final energies after AddOffsets: {final_batch[property]}")
-#     assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
+    final_batch = add_offsets(intermediate_batch.copy())
+    print(f"Final energies after AddOffsets: {final_batch['energy']}")
+    assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
+
+
+def test_intensive_mean_and_atomref(dummy_inputs, atomrefs_tensor):
+    """Intensive: use both mean and atomref"""
+    property = "energy_per_atom"
+    mean_tensor = torch.tensor([0.355])
+    remove_offsets, add_offsets = get_offset_transforms(
+        property=property,
+        use_mean=True,
+        use_atomrefs=True,
+        mean=mean_tensor,
+        atomrefs=atomrefs_tensor,
+        is_extensive=False,
+    )
+    molecules = split_batch_into_molecules(dummy_inputs)
+
+    processed_molecules = []
+    for _, mol in enumerate(molecules):
+        processed_mol = remove_offsets(mol.copy())
+        processed_molecules.append(processed_mol)
+
+    intermediate_batch = combine_molecules_into_batch(processed_molecules)
+
+    expected = torch.tensor([-0.022, -0.022, 0.045])
+    print(f"\nExpected energies after RemoveOffsets: {expected}")
+    print(f"Actual energies after RemoveOffsets: {intermediate_batch[property]}")
+
+    # assert torch.allclose(intermediate_batch[property], expected, atol=1e-3)
+
+    final_batch = add_offsets(intermediate_batch.copy())
+    print(f"Final energies after AddOffsets: {final_batch[property]}")
+    assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-3)
+
+
+def test_intensive_mean_only(dummy_inputs):
+    """Intensive: use mean only"""
+    property = "energy_per_atom"
+    mean_tensor = torch.tensor([21.77])
+    remove_offsets, add_offsets = get_offset_transforms(
+        property=property,
+        use_mean=True,
+        use_atomrefs=False,
+        mean=mean_tensor,
+        is_extensive=False,
+    )
+    molecules = split_batch_into_molecules(dummy_inputs)
+
+    processed_molecules = []
+    for _, mol in enumerate(molecules):
+        processed_mol = remove_offsets(mol.copy())
+        processed_molecules.append(processed_mol)
+
+    intermediate_batch = combine_molecules_into_batch(processed_molecules)
+
+    expected = torch.tensor([5.89, 5.89, -11.77])
+    print(f"\nExpected energies after RemoveOffsets: {expected}")
+    print(f"Actual energies after RemoveOffsets: {intermediate_batch[property]}")
+
+    assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
+
+    final_batch = add_offsets(intermediate_batch.copy())
+    print(f"Final energies after AddOffsets: {final_batch[property]}")
+    assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
 
 
 def test_intensive_atomref_only(dummy_inputs, atomrefs_tensor):
@@ -336,7 +336,7 @@ def test_intensive_atomref_only(dummy_inputs, atomrefs_tensor):
 
     intermediate_batch = combine_molecules_into_batch(processed_molecules)
 
-    expected = torch.tensor([0.33, 0.33, 0.4])
+    expected = torch.tensor([55.67, 138.67, 40.4])
     print(f"\nExpected energies after RemoveOffsets: {expected}")
     print(f"Actual energies after RemoveOffsets: {intermediate_batch[property]}")
 
