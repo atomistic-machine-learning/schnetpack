@@ -221,7 +221,7 @@ def test_extensive_mean_only(dummy_inputs):
     molecules = split_batch_into_molecules(dummy_inputs)
 
     processed_molecules = []
-    for i, mol in enumerate(molecules):
+    for _, mol in enumerate(molecules):
         processed_mol = remove_offsets(mol.copy())
         processed_molecules.append(processed_mol)
 
@@ -284,7 +284,7 @@ def test_extensive_atomref_only(dummy_inputs, atomrefs_tensor):
 
     ## Add offsets: single molecule
     restored_molecules = []
-    for i, mol in enumerate(processed_molecules):
+    for _, mol in enumerate(processed_molecules):
         restored = add_offsets(mol.copy())
         restored_molecules.append(restored)
 
