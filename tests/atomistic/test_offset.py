@@ -177,20 +177,34 @@ def test_extensive_mean_and_atomref(dummy_inputs, atomrefs_tensor):
         processed_mol = remove_offsets(mol.copy())
         processed_molecules.append(processed_mol)
 
-        print(f"  Energy after RemoveOffsets: {processed_mol['energy']}")
+        print(f"  Energy after RemoveOffsets: {processed_mol[property]}")
 
     intermediate_batch = combine_molecules_into_batch(processed_molecules)
 
     expected_individual = [-0.065, -0.13, 0.225]
     expected = torch.tensor(expected_individual)
     print(f"\nExpected energies after RemoveOffsets: {expected}")
-    print(f"Actual energies after RemoveOffsets: {intermediate_batch['energy']}")
+    print(f"Actual energies after RemoveOffsets: {intermediate_batch[property]}")
 
     assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
 
+    ## Add offsets: batch
     final_batch = add_offsets(intermediate_batch.copy())
-    print(f"Final energies after AddOffsets: {final_batch['energy']}")
+    print(f"Final energies after AddOffsets (batch): {final_batch[property]}")
     assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
+
+    ## Add offsets: single molecule
+    restored_molecules = []
+    for i, mol in enumerate(processed_molecules):
+        restored = add_offsets(mol.copy())
+        restored_molecules.append(restored)
+
+    restored_batch = combine_molecules_into_batch(restored_molecules)
+    print(
+        f"\nFinal energies after AddOffsets (single molecule): {restored_batch[property]}"
+    )
+    print(f"Original energies: {dummy_inputs[property]}")
+    assert torch.allclose(restored_batch[property], dummy_inputs[property], atol=1e-2)
 
 
 def test_extensive_mean_only(dummy_inputs):
@@ -215,13 +229,27 @@ def test_extensive_mean_only(dummy_inputs):
 
     expected = torch.tensor([17.69, 35.33, -58.88])
     print(f"\nExpected energies after RemoveOffsets: {expected}")
-    print(f"Actual energies after RemoveOffsets: {intermediate_batch['energy']}")
+    print(f"Actual energies after RemoveOffsets: {intermediate_batch[property]}")
 
     assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
 
+    ## Add offsets: batch
     final_batch = add_offsets(intermediate_batch.copy())
-    print(f"Final energies after AddOffsets: {final_batch['energy']}")
+    print(f"Final energies after AddOffsets (batch): {final_batch[property]}")
     assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
+
+    ## Add offsets: single molecule
+    restored_molecules = []
+    for i, mol in enumerate(processed_molecules):
+        restored = add_offsets(mol.copy())
+        restored_molecules.append(restored)
+
+    restored_batch = combine_molecules_into_batch(restored_molecules)
+    print(
+        f"\nFinal energies after AddOffsets (single molecule): {restored_batch[property]}"
+    )
+    print(f"Original energies: {dummy_inputs[property]}")
+    assert torch.allclose(restored_batch[property], dummy_inputs[property], atol=1e-2)
 
 
 def test_extensive_atomref_only(dummy_inputs, atomrefs_tensor):
@@ -249,9 +277,23 @@ def test_extensive_atomref_only(dummy_inputs, atomrefs_tensor):
 
     assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
 
+    ## Add offsets: batch
     final_batch = add_offsets(intermediate_batch.copy())
-    print(f"Final energies after AddOffsets: {final_batch['energy']}")
+    print(f"Final energies after AddOffsets (batch): {final_batch[property]}")
     assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
+
+    ## Add offsets: single molecule
+    restored_molecules = []
+    for i, mol in enumerate(processed_molecules):
+        restored = add_offsets(mol.copy())
+        restored_molecules.append(restored)
+
+    restored_batch = combine_molecules_into_batch(restored_molecules)
+    print(
+        f"\nFinal energies after AddOffsets (single molecule): {restored_batch[property]}"
+    )
+    print(f"Original energies: {dummy_inputs[property]}")
+    assert torch.allclose(restored_batch[property], dummy_inputs[property], atol=1e-2)
 
 
 def test_intensive_mean_and_atomref(dummy_inputs, atomrefs_tensor):
@@ -271,6 +313,7 @@ def test_intensive_mean_and_atomref(dummy_inputs, atomrefs_tensor):
     processed_molecules = []
     for _, mol in enumerate(molecules):
         processed_mol = remove_offsets(mol.copy())
+        print("\nprocessed molecule", processed_mol)
         processed_molecules.append(processed_mol)
 
     intermediate_batch = combine_molecules_into_batch(processed_molecules)
@@ -279,11 +322,25 @@ def test_intensive_mean_and_atomref(dummy_inputs, atomrefs_tensor):
     print(f"\nExpected energies after RemoveOffsets: {expected}")
     print(f"Actual energies after RemoveOffsets: {intermediate_batch[property]}")
 
-    # assert torch.allclose(intermediate_batch[property], expected, atol=1e-3)
+    assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
 
+    ## Add offsets: batch
     final_batch = add_offsets(intermediate_batch.copy())
-    print(f"Final energies after AddOffsets: {final_batch[property]}")
+    print(f"Final energies after AddOffsets (batch): {final_batch[property]}")
     assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-3)
+
+    ## Add offsets: single molecule
+    restored_molecules = []
+    for i, mol in enumerate(processed_molecules):
+        restored = add_offsets(mol.copy())
+        restored_molecules.append(restored)
+
+    restored_batch = combine_molecules_into_batch(restored_molecules)
+    print(
+        f"\nFinal energies after AddOffsets (single molecule): {restored_batch[property]}"
+    )
+    print(f"Original energies: {dummy_inputs[property]}")
+    assert torch.allclose(restored_batch[property], dummy_inputs[property], atol=1e-2)
 
 
 def test_intensive_mean_only(dummy_inputs):
@@ -312,9 +369,23 @@ def test_intensive_mean_only(dummy_inputs):
 
     assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
 
+    ## Add offsets: batch
     final_batch = add_offsets(intermediate_batch.copy())
-    print(f"Final energies after AddOffsets: {final_batch[property]}")
+    print(f"Final energies after AddOffsets (batch): {final_batch[property]}")
     assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
+
+    ## Add offsets: single molecule
+    restored_molecules = []
+    for i, mol in enumerate(processed_molecules):
+        restored = add_offsets(mol.copy())
+        restored_molecules.append(restored)
+
+    restored_batch = combine_molecules_into_batch(restored_molecules)
+    print(
+        f"\nFinal energies after AddOffsets (single molecule): {restored_batch[property]}"
+    )
+    print(f"Original energies: {dummy_inputs[property]}")
+    assert torch.allclose(restored_batch[property], dummy_inputs[property], atol=1e-2)
 
 
 def test_intensive_atomref_only(dummy_inputs, atomrefs_tensor):
@@ -327,7 +398,7 @@ def test_intensive_atomref_only(dummy_inputs, atomrefs_tensor):
         atomrefs=atomrefs_tensor,
         is_extensive=False,
     )
-    molecules = split_batch_into_molecules(dummy_inputs)
+    molecules = split_batch_into_molecules(dummy_inputs.copy())
 
     processed_molecules = []
     for _, mol in enumerate(molecules):
@@ -336,12 +407,26 @@ def test_intensive_atomref_only(dummy_inputs, atomrefs_tensor):
 
     intermediate_batch = combine_molecules_into_batch(processed_molecules)
 
-    expected = torch.tensor([55.67, 138.67, 40.4])
+    expected = torch.tensor([0.33, 0.33, 0.4])
     print(f"\nExpected energies after RemoveOffsets: {expected}")
     print(f"Actual energies after RemoveOffsets: {intermediate_batch[property]}")
 
-    # assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
+    assert torch.allclose(intermediate_batch[property], expected, atol=1e-1)
 
+    ## Add offsets: batch
     final_batch = add_offsets(intermediate_batch.copy())
-    print(f"Final energies after AddOffsets: {final_batch[property]}")
-    # assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
+    print(f"Final energies after AddOffsets (batch): {final_batch[property]}")
+    assert torch.allclose(final_batch[property], dummy_inputs[property], atol=1e-1)
+
+    ## Add offsets: single molecule
+    restored_molecules = []
+    for i, mol in enumerate(processed_molecules):
+        restored = add_offsets(mol.copy())
+        restored_molecules.append(restored)
+
+    restored_batch = combine_molecules_into_batch(restored_molecules)
+    print(
+        f"\nFinal energies after AddOffsets (single molecule): {restored_batch[property]}"
+    )
+    print(f"Original energies: {dummy_inputs[property]}")
+    assert torch.allclose(restored_batch[property], dummy_inputs[property], atol=1e-2)
