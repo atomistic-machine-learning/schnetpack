@@ -148,12 +148,16 @@ class RemoveOffsets(Transform):
             )
             inputs[self._property] -= mean
         if self.remove_atomrefs:
-            atomref_bias = torch.sum(self.atomref[inputs[structure.Z]])
-            if not self.is_extensive:
-                # atomref_bias /= inputs[structure.n_atoms].item() #NOTE: this was the original code
-                atomref_bias /= len(inputs[structure.n_atoms])
-            inputs[self._property] -= atomref_bias
+            idx_m = inputs[structure.idx_m]
+            y0i = self.atomref[inputs[structure.Z]]
+            maxm = int(idx_m[-1]) + 1
 
+            y0 = scatter_add(y0i, idx_m, dim_size=maxm)
+
+            if not self.is_extensive:
+                y0 = y0 / inputs[structure.n_atoms]
+
+            inputs[self._property] -= y0
         return inputs
 
 
