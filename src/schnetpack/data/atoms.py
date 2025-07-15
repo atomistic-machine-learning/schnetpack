@@ -337,7 +337,12 @@ class ASEAtomsData(BaseAtomsData):
             )
 
     def _get_properties(
-        self, conn, idx: int, load_properties: List[str], load_structure: bool, load_metadata: bool = False,
+        self,
+        conn,
+        idx: int,
+        load_properties: List[str],
+        load_structure: bool,
+        load_metadata: bool = False,
     ):
         row = conn.get(idx + 1)
 
@@ -452,7 +457,12 @@ class ASEAtomsData(BaseAtomsData):
         return ASEAtomsData(datapath, **kwargs)
 
     # add systems
-    def add_system(self, atoms: Optional[Atoms] = None, atoms_metadata: Optional[Dict[str, Any]] = None, **properties):
+    def add_system(
+        self,
+        atoms: Optional[Atoms] = None,
+        atoms_metadata: Optional[Dict[str, Any]] = None,
+        **properties,
+    ):
         """
         Add atoms data to the dataset.
 
@@ -460,8 +470,8 @@ class ASEAtomsData(BaseAtomsData):
             atoms: System composition and geometry. If Atoms are None,
                 the structure needs to be given as part of the property dict
                 (using structure.Z, structure.R, structure.cell, structure.pbc)
-            atoms_metadata: Metadata of the atoms object as key-value pairs. 
-                Metadata can not be used as a training property, but can be used for splitting 
+            atoms_metadata: Metadata of the atoms object as key-value pairs.
+                Metadata can not be used as a training property, but can be used for splitting
                 strategies (e.g. material_id, timestamp, ...).
             **properties: properties as key-value pairs. Keys have to match the
                 `available_properties` of the dataset.
@@ -488,7 +498,7 @@ class ASEAtomsData(BaseAtomsData):
                 plus additional structure properties, if atoms is None.
             atoms_metadata_list: Metadata of the atoms objects as list of key-value pairs in the same
                 order as corresponding list of `atoms`.
-                Metadata can not be used as a training property, but can be used for splitting 
+                Metadata can not be used as a training property, but can be used for splitting
                 strategies (e.g. material_id, timestamp, ...).
         """
         if atoms_list is None:
@@ -497,7 +507,9 @@ class ASEAtomsData(BaseAtomsData):
         if atoms_metadata_list is None:
             atoms_metadata_list = [{}] * len(property_list)
 
-        for atoms, prop, atoms_metadata in zip(atoms_list, property_list, atoms_metadata_list):
+        for atoms, prop, atoms_metadata in zip(
+            atoms_list, property_list, atoms_metadata_list
+        ):
             self._add_system(
                 self.conn,
                 atoms,

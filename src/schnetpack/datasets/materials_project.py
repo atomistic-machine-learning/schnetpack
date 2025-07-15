@@ -141,7 +141,6 @@ class MaterialsProject(AtomsDataModule):
                 property_unit_dict=property_unit_dict,
             )
 
-
             self._download_data_nextgen(dataset)
         else:
             dataset = load_dataset(self.datapath, self.format)
@@ -196,8 +195,12 @@ class MaterialsProject(AtomsDataModule):
                     properties_list.append(
                         {
                             MaterialsProject.EPerAtom: np.array([q.energy_per_atom]),
-                            MaterialsProject.EformationPerAtom: np.array([q.formation_energy_per_atom]),
-                            MaterialsProject.TotalMagnetization: np.array([q.total_magnetization]),
+                            MaterialsProject.EformationPerAtom: np.array(
+                                [q.formation_energy_per_atom]
+                            ),
+                            MaterialsProject.TotalMagnetization: np.array(
+                                [q.total_magnetization]
+                            ),
                             MaterialsProject.BandGap: np.array([q.band_gap]),
                         }
                     )
