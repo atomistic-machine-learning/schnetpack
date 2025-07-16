@@ -1,6 +1,7 @@
 import logging
 import os
 from typing import List, Optional, Dict
+import warnings
 
 from ase import Atoms
 
@@ -55,7 +56,6 @@ class MaterialsProject(AtomsDataModule):
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
         apikey: Optional[str] = None,
-        timestamp: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -81,8 +81,20 @@ class MaterialsProject(AtomsDataModule):
             property_units: Dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
             distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
             apikey: Materials project key needed to download the data.
-            timestamp: Ignore structures that are newer than the timestamp.
         """
+        if apikey is not None and len(apikey) == 16:
+            raise DeprecationWarning(
+                "You are using a legacy API key. This API is deprecated and no longer supported by MaterialsProject. "
+                "Please use the nextgen API instead. "
+                "Visit https://next-gen.materialsproject.org/ to get a valid API-key. "
+            )
+        if apikey is not None and len(apikey) != 32:
+            raise AtomsDataModuleError(
+                "Invalid API-key. MaterialsProject requires an API-key of 32 characters. "
+                f"Your API-key contains {len(apikey)} characters. "
+                "Visit https://next-gen.materialsproject.org/ to get a valid API-key. "
+            )
+
         super().__init__(
             datapath=datapath,
             batch_size=batch_size,
@@ -105,19 +117,17 @@ class MaterialsProject(AtomsDataModule):
             distance_unit=distance_unit,
             **kwargs,
         )
-        if len(apikey) not in (16, 32):
-            raise AtomsDataModuleError(
-                "Invalid API-key. ScheNetPack uses the legacy and nextegen API of MaterialsProject, "
-                "which requires an API-key of either 16 or 32 characters. "
-                f"Your API-key contains {len(apikey)} characters. Please use a valid API-key. "
-                "For 16-character keys, visit https://legacy.materialsproject.org/open. "
-                "For 32-character keys, visit https://next-gen.materialsproject.org/ "
-            )
         self.apikey = apikey
-        self.timestamp = timestamp
 
     def prepare_data(self):
         if not os.path.exists(self.datapath):
+            # check if apikey is provided
+            if self.apikey is None:
+                raise AtomsDataModuleError(
+                    "No API-key provided, visit https://next-gen.materialsproject.org/ to get an API-key."
+                )
+
+            # initialize dataset
             property_unit_dict = {
                 MaterialsProject.EformationPerAtom: "eV",
                 MaterialsProject.EPerAtom: "eV",
@@ -126,18 +136,14 @@ class MaterialsProject(AtomsDataModule):
                 MaterialsProject.MaterialId: "None",
                 MaterialsProject.CreatedAt: "None",
             }
-
             dataset = create_dataset(
                 datapath=self.datapath,
                 format=self.format,
                 distance_unit="Ang",
                 property_unit_dict=property_unit_dict,
             )
-            if len(self.apikey) == 16:
-                self._download_data_legacy(dataset)
 
-            if len(self.apikey) == 32:
-                self._download_data_nextgen(dataset)
+            self._download_data_nextgen(dataset)
         else:
             dataset = load_dataset(self.datapath, self.format)
 
@@ -233,12 +239,7 @@ class MaterialsProject(AtomsDataModule):
         Returns:
             works (bool): true if download succeeded or file already exists
         """
-        if self.apikey is None:
-            raise AtomsDataModuleError(
-                "Provide a valid API key in order to download the "
-                "Materials Project data!"
-            )
-            # collect data
+        # collect data
         atms_list = []
         properties_list = []
         try:
