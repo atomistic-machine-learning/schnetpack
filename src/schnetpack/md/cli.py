@@ -24,7 +24,7 @@ from ase.io import read
 
 log = logging.getLogger(__name__)
 
-OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()))
+OmegaConf.register_new_resolver("uuid", lambda: str(uuid.uuid1()))
 OmegaConf.register_new_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
 
 
