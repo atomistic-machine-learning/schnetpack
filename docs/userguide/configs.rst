@@ -22,7 +22,7 @@ the command::
     │   └── work_dir: ${hydra:runtime.cwd}
     │       data_dir: ${run.work_dir}/data
     │       path: runs
-    │       id: ${uuid:1}
+    │       id: ${uuid:}
     │
     ├── globals
     │   └── model_path: best_model
