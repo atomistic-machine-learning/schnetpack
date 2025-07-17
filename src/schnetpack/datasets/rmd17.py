@@ -58,7 +58,6 @@ class rMD17(AtomsDataModule):
         toluene="rmd17_toluene.npz",
         uracil="rmd17_uracil.npz",
     )
-    existing_datasets = datasets_dict.keys()
 
     # properties
     def __init__(

@@ -110,8 +110,6 @@ class GDMLDataModule(AtomsDataModule):
         self.atomrefs = atomrefs
         self.tmpdir = tmpdir
 
-        self.existing_datasets = self.datasets_dict.keys()
-
         if molecule not in self.datasets_dict.keys():
             raise AtomsDataModuleError("Molecule {} is not supported!".format(molecule))
 
