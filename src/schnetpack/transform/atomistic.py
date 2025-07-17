@@ -110,7 +110,8 @@ class RemoveOffsets(Transform):
             self._mean_initialized = False
 
         if self.remove_atomrefs:
-            atomrefs = atomrefs or torch.zeros((zmax,))
+            # atomrefs = atomrefs or torch.zeros((zmax,)) #NOTE: this was the original code
+            atomrefs = atomrefs if atomrefs is not None else torch.zeros((zmax,))
             self.register_buffer("atomref", atomrefs)
         if self.remove_mean:
             property_mean = property_mean or torch.zeros((1,))
@@ -149,9 +150,8 @@ class RemoveOffsets(Transform):
         if self.remove_atomrefs:
             atomref_bias = torch.sum(self.atomref[inputs[structure.Z]])
             if not self.is_extensive:
-                atomref_bias /= inputs[structure.n_atoms].item()
+                atomref_bias = atomref_bias / inputs[structure.n_atoms]
             inputs[self._property] -= atomref_bias
-
         return inputs
 
 
@@ -275,7 +275,8 @@ class AddOffsets(Transform):
         else:
             self._mean_initialized = False
 
-        atomrefs = atomrefs or torch.zeros((zmax,))
+        # atomrefs = atomrefs or torch.zeros((zmax,)) #NOTE: this was the original code
+        atomrefs = atomrefs if atomrefs is not None else torch.zeros((zmax,))
         property_mean = property_mean or torch.zeros((1,))
         self.register_buffer("atomref", atomrefs)
         self.register_buffer("mean", property_mean)
