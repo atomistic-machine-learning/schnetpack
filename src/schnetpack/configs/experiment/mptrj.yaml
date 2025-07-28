@@ -5,9 +5,8 @@ defaults:
   - override /data: mptraj
 
 run:
-  id: mptraj_run
-  data_dir: /tmp
-  experiment: mptraj
+  id: mptrj_run
+  experiment: mptrj_${globals.property}
 
 globals:
   cutoff: 6.0

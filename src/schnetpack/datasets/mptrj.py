@@ -79,9 +79,9 @@ class MPTraj(AtomsDataModule):
 
         # Dataset specific configuration
         self.datasets_dict = {
-            "mptrj": "mp/2024-09-03-mp-trj.extxyz.zip",
+            "mptrj": "mptrj",
         }
-        self.download_url = "https://figshare.com/files/49034296"
+        self.download_url = "https://figshare.com/files/43302033" # "https://figshare.com/files/49034296"
         self.molecule = "mptrj"
         self.tmpdir = "mptrj_tmp"
         self.atomrefs = {
@@ -92,9 +92,9 @@ class MPTraj(AtomsDataModule):
     def prepare_data(self):
         if not os.path.exists(self.datapath):
             property_unit_dict = {
-                self.energy: "kcal/mol",
-                self.forces: "kcal/mol/Ang",
-                self.stress: "kcal/mol/Ang^3",
+                self.energy: "eV/atom",
+                self.forces: "eV/Ang",
+                self.stress: "eV/Ang^3",
                 self.MaterialId: None,
             }
 
@@ -124,17 +124,18 @@ class MPTraj(AtomsDataModule):
         request.urlretrieve(url, local_path)
 
         logging.info("Loading structures from zip file...")
-        atoms_list = ase_atoms_from_zip(
-            zip_filename=local_path,
-            filename_to_info=True,
-            # limit=200,  # remove this limit to read all the structures
-        )
+        atoms_list = self._load_atoms_from_zip(local_path)
 
         property_list = []
         key_value_pairs_list = []
         for atoms in atoms_list:
+            # Convert energy to eV/atom by dividing by number of atoms
+            total_energy = atoms.get_total_energy()
+            num_atoms = len(atoms)
+            energy_per_atom = total_energy / num_atoms
+            
             properties = {
-                self.energy: np.array([atoms.get_total_energy()]),
+                self.energy: np.array([energy_per_atom]),
                 self.forces: atoms.get_forces(),
                 self.stress: atoms.get_stress(),
                 structure.Z: atoms.get_atomic_numbers(),
@@ -152,3 +153,60 @@ class MPTraj(AtomsDataModule):
             key_value_list=key_value_pairs_list,
         )
         logging.info("Done.")
+
+    def _load_atoms_from_zip(self, zip_path):
+        """
+        Load atoms from a zip file containing .extxyz files.
+        Handles different encoding issues that might occur with the zip file.
+        """
+        atoms_list = []
+        
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_file:
+                # List all files in the zip
+                file_list = zip_file.namelist()
+                logging.info(f"Found {len(file_list)} files in zip")
+                
+                for filename in file_list:
+                    if filename.endswith('.extxyz') or filename.endswith('.xyz'):
+                        try:
+                            # Try to read the file content
+                            with zip_file.open(filename) as file:
+                                # Read as bytes first
+                                content = file.read()
+                                
+                                # Try different encodings
+                                encodings = ['utf-8', 'latin-1', 'cp1252']
+                                content_str = None
+                                
+                                for encoding in encodings:
+                                    try:
+                                        content_str = content.decode(encoding)
+                                        break
+                                    except UnicodeDecodeError:
+                                        continue
+                                
+                                if content_str is None:
+                                    logging.warning(f"Could not decode {filename} with any encoding, skipping")
+                                    continue
+                                
+                                # Parse the content using ASE
+                                try:
+                                    # Use StringIO to create a file-like object
+                                    from io import StringIO
+                                    atoms = read(StringIO(content_str), format='extxyz')
+                                    atoms_list.append(atoms)
+                                except Exception as e:
+                                    logging.warning(f"Could not parse {filename}: {e}")
+                                    continue
+                                    
+                        except Exception as e:
+                            logging.warning(f"Error reading {filename}: {e}")
+                            continue
+                            
+        except Exception as e:
+            logging.error(f"Error opening zip file {zip_path}: {e}")
+            raise
+            
+        logging.info(f"Successfully loaded {len(atoms_list)} structures")
+        return atoms_list
