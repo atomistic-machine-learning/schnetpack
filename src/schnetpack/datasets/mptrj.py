@@ -73,13 +73,10 @@ class MPTraj(AtomsDataModule):
         self.datasets_dict = {
             "mptrj": "mp/2023-11-22-mp-trj.extxyz.zip",
         }
-        self.download_url = "https://figshare.com/files/43302033"  
+        self.download_url = "https://figshare.com/files/43302033"
         self.molecule = "mptrj"
         self.tmpdir = "mptrj_tmp"
-        self.atomrefs = {
-            self.energy: [0.0]
-            * 119  
-        }
+        self.atomrefs = {self.energy: [0.0] * 119}
 
     def prepare_data(self):
         if not os.path.exists(self.datapath):
@@ -115,12 +112,13 @@ class MPTraj(AtomsDataModule):
         request.urlretrieve(url, local_path)
 
         logging.info("Loading structures from zip file...")
-        #atoms_list = ase_atoms_from_zip(local_path, filename_to_info=True)
+        # atoms_list = ase_atoms_from_zip(local_path, filename_to_info=True)
         atoms_list = ase_atoms_from_zip(
-                            zip_filename=local_path,
-                            file_filter=lambda f: f.startswith("mptrj-gga-ggapu/") and f.endswith(".extxyz"),
-                            filename_to_info=True,
-                        )
+            zip_filename=local_path,
+            file_filter=lambda f: f.startswith("mptrj-gga-ggapu/")
+            and f.endswith(".extxyz"),
+            filename_to_info=True,
+        )
 
         property_list = []
         key_value_pairs_list = []
@@ -144,5 +142,3 @@ class MPTraj(AtomsDataModule):
             key_value_list=key_value_pairs_list,
         )
         logging.info("Done.")
-
-
