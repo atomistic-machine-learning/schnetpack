@@ -45,7 +45,7 @@ dependencies = [
     "protobuf",
     "progressbar",
     "pytest",
-    "matbench-discovery"
+    "petname",
 ]
 
 [project.optional-dependencies]

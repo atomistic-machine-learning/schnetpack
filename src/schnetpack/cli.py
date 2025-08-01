@@ -5,6 +5,7 @@ import tempfile
 import socket
 from typing import List
 import random
+import petname
 
 import torch
 import hydra
@@ -25,7 +26,8 @@ from schnetpack.utils import load_model
 log = logging.getLogger(__name__)
 
 
-OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()))
+OmegaConf.register_new_resolver("uuid", lambda: str(uuid.uuid1()))
+OmegaConf.register_new_resolver("petname", lambda: petname.generate())
 OmegaConf.register_new_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
 
 header = """

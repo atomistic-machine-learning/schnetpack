@@ -2,5 +2,5 @@ work_dir: ${hydra:runtime.cwd}
 data_dir: ${run.work_dir}/data
 path: ${run.work_dir}/runs
 experiment: default
-id: ${uuid:1}
+id: ${uuid:}
 ckpt_path: null
