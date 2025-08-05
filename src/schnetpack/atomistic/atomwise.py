@@ -86,7 +86,78 @@ class Atomwise(nn.Module):
 
         inputs[self.output_key] = y
         return inputs
+        
+class Charges(nn.Module):
+    """
+    Predicts Charges
 
+    References:
+
+    .. [#painn1] Schütt, Unke, Gastegger.
+       Equivariant message passing for the prediction of tensorial properties and molecular spectra.
+       ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
+    .. [#irspec] Gastegger, Behler, Marquetand.
+       Machine learning molecular dynamics for the simulation of infrared spectra.
+       Chemical science 8.10 (2017): 6924-6935.
+    .. [#dipole] Veit et al.
+       Predicting molecular dipole moments by combining atomic partial charges and atomic dipoles.
+       The Journal of Chemical Physics 153.2 (2020): 024113.
+    """
+
+    def __init__(
+        self,
+        n_in: int,
+        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_layers: int = 2,
+        activation: Callable = F.silu,
+        charges_key: str = properties.partial_charges,
+        correct_charges: bool = True,
+    ):
+        """
+        Args:
+            n_in: input dimension of representation
+            n_hidden: size of hidden layers.
+                If an integer, same number of node is used for all hidden layers
+                resulting in a rectangular network.
+                If None, the number of neurons is divided by two after each layer
+                starting n_in resulting in a pyramidal network.
+            n_layers: number of layers.
+            activation: activation function
+            charges_key: the key under which partial charges will be stored
+            correct_charges: If true, forces the sum of partial charges to be the total
+                charge, if provided, and zero otherwise.
+        """
+        super().__init__()
+        self.charges_key = charges_key
+        self.model_outputs = [charges_key]
+        self.correct_charges = correct_charges
+        self.outnet = spk.nn.build_mlp(
+            n_in=n_in,
+            n_out=1,
+            n_hidden=n_hidden,
+            n_layers=n_layers,
+            activation=activation,
+        )
+
+    def forward(self, inputs):
+        positions = inputs[properties.R]
+        l0 = inputs["scalar_representation"]
+        natoms = inputs[properties.n_atoms]
+        idx_m = inputs[properties.idx_m]
+        maxm = int(idx_m[-1]) + 1
+
+        charges = self.outnet(l0).squeeze(-1)  # [n_atoms]
+
+        if self.correct_charges:
+            sum_charge = snn.scatter_add(charges, idx_m, dim_size=maxm)
+            total_charge = snn.scatter_add(inputs[properties.charges],idx_m,dim_size=maxm)
+            charge_correction = (total_charge - sum_charge) / natoms
+            charge_correction = charge_correction[idx_m]
+            charges = charges + charge_correction
+        
+        inputs[self.charges_key] = charges
+
+        return inputs
 
 class DipoleMoment(nn.Module):
     """
