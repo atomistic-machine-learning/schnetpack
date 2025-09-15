@@ -8,7 +8,7 @@ import schnetpack as spk
 import schnetpack.nn as snn
 import schnetpack.properties as properties
 
-__all__ = ["Atomwise", "DipoleMoment", "Polarizability"]
+__all__ = ["Atomwise", "DipoleMoment", "Polarizability","Charges"]
 
 
 class Atomwise(nn.Module):

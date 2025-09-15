@@ -169,7 +169,8 @@ class SpkCalculator(Calculator):
     energy = "energy"
     forces = "forces"
     stress = "stress"
-    implemented_properties = [energy, forces, stress]
+    charges = "charges"
+    implemented_properties = [energy, forces, stress, charges]
 
     def __init__(
         self,
@@ -178,6 +179,7 @@ class SpkCalculator(Calculator):
         energy_key: str = "energy",
         force_key: str = "forces",
         stress_key: Optional[str] = None,
+        charges_key: Optional[str] = None,
         energy_unit: Union[str, float] = "kcal/mol",
         position_unit: Union[str, float] = "Angstrom",
         device: Union[str, torch.device] = "cpu",
@@ -216,12 +218,14 @@ class SpkCalculator(Calculator):
         self.energy_key = energy_key
         self.force_key = force_key
         self.stress_key = stress_key
+        self.charges_key = charges_key
 
         # Mapping between ASE names and model outputs
         self.property_map = {
             self.energy: energy_key,
             self.forces: force_key,
             self.stress: stress_key,
+            self.charges: charges_key,        
         }
 
         self.model = self._load_model(model, device, dtype)
