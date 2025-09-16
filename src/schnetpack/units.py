@@ -146,7 +146,7 @@ def _conversion_factor_internal(unit: str):
 def _parse_unit(unit, conversion_factor=_conversion_factor_ase):
     if type(unit) == str:
         # If a string is given, split into parts.
-        parts = re.split("(\W)", unit)
+        parts = re.split(r"(\W)", unit)
 
         conversion = 1.0
         divide = False
