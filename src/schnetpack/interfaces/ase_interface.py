@@ -327,6 +327,9 @@ class SpkCalculator(Calculator):
                         model_results[model_prop].cpu().data.numpy().squeeze()
                         * self.property_units[prop]
                     )
+                elif prop == self.charges:
+                    # ase calculator should return list of shape [len(atoms)]
+                    results[prop] = (model_results[model_prop].cpu().data.numpy().reshape(len(atoms)))
                 else:
                     results[prop] = (
                         model_results[model_prop].cpu().data.numpy()
