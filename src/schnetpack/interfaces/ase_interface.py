@@ -173,7 +173,7 @@ class SpkCalculator(Calculator):
 
     def __init__(
         self,
-        model_file: Union[str, nn.Module],
+        model: Union[str, nn.Module],
         neighbor_list: Transform,
         energy_key: str = "energy",
         force_key: str = "forces",
@@ -189,17 +189,17 @@ class SpkCalculator(Calculator):
     ):
         """
         Args:
-            model_file (str): either path to trained model or model object
-            neighbor_list (schnetpack.transform.Transform): SchNetPack neighbor list
-            energy_key (str): name of energies in model (default="energy")
-            force_key (str): name of forces in model (default="forces")
-            stress_key (str): name of stress tensor in model. Will not be computed if set to None (default=None)
-            energy_unit (str, float): energy units used by model (default="kcal/mol")
-            position_unit (str, float): position units used by model (default="Angstrom")
-            device (torch.device): device used for calculations (default="cpu")
-            dtype (torch.dtype): select model precision (default=float32)
-            converter (callable): converter used to set up input batches
-            transforms (schnetpack.transform.Transform, list): transforms for the converter. More information
+            model: either path to trained model or model object
+            neighbor_list: SchNetPack neighbor list
+            energy_key: name of energies in model (default="energy")
+            force_key: name of forces in model (default="forces")
+            stress_key: name of stress tensor in model. Will not be computed if set to None (default=None)
+            energy_unit: energy units used by model (default="kcal/mol")
+            position_unit: position units used by model (default="Angstrom")
+            device: device used for calculations (default="cpu")
+            dtype: select model precision (default=float32)
+            converter: converter used to set up input batches
+            transforms: transforms for the converter. More information
                 can be found in the AtomsConverter docstring.
             additional_inputs: additional inputs required for some transforms in the converter.
         """
@@ -224,7 +224,7 @@ class SpkCalculator(Calculator):
             self.stress: stress_key,
         }
 
-        self.model = self._load_model(model_file, device, dtype)
+        self.model = self._load_model(model, device, dtype)
 
         # set up basic conversion factors
         self.energy_conversion = convert_units(energy_unit, "eV")
@@ -242,7 +242,7 @@ class SpkCalculator(Calculator):
 
     def _load_model(
         self,
-        model_file: Union[str, nn.Module, torch.nn.Module],
+        model: Union[str, nn.Module],
         device: Union[str, torch.device],
         dtype: torch.dtype,
     ) -> nn.Module:
@@ -250,19 +250,19 @@ class SpkCalculator(Calculator):
         Load an individual model, activate stress computation
 
         Args:
-            model_file (None): Either path to model or model object
+            model: Either path to model or model object
 
         Returns:
            AtomisticTask: loaded schnetpack model
         """
 
-        if isinstance(model_file, str):
-            log.info("Loading model from {:s}".format(model_file))
-            model = load_model(model_file, device=torch.device(device)).to(dtype)
+        if isinstance(model, str):
+            log.info("Loading model from {:s}...".format(model))
+            model = load_model(model, device=torch.device(device)).to(dtype)
 
         else:
-            log.info("Loading model from Model object")
-            model = model_file
+            log.info("Using instantiated model...")
+            model = model.to(device).to(dtype)
 
         model = model.eval()
 
@@ -274,15 +274,17 @@ class SpkCalculator(Calculator):
 
     def calculate(
         self,
-        atoms: ase.Atoms = None,
-        properties_placeholder: List[str] = ["energy"],
+        atoms: Atoms = None,
+        # properties is just a placeholder and will be ignored
+        properties: List[str] = ["energy"],
         system_changes: List[str] = all_changes,
     ):
         """
         Args:
-            atoms (ase.Atoms): ASE atoms object.
-            properties_placeholder (list of str): is not used.
-            system_changes (list of str): List of changes for ASE.
+            atoms: ASE atoms object.
+            properties: Ignored. Instead, all specified property keys (energy_key, force_key, ...)
+                are calculated and stored.
+            system_changes: List of changes for ASE.
         """
         # First call original calculator to set atoms attribute
         # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
@@ -566,7 +568,30 @@ class SpkEnsembleCalculator(SpkCalculator):
                         f"'{prop}' is not a property of your models. Please check the model properties!"
                     )
 
-            self.results = results
+        # Compute average values
+        accumulated_results = {
+            prop: np.stack(value) for prop, value in accumulated_results.items()
+        }
+        self.results = {
+            prop: np.mean(accumulated_results[prop], axis=0) for prop in properties
+        }
+
+        # Compute uncertainty using assigned uncertainty function
+        # self.results["uncertainty"] = self.uncertainty_fn(accumulated_results)
+        if len(self.uncertainty_fn) == 1:
+            self.results["uncertainty"] = self.uncertainty_fn[0](accumulated_results)
+        else:
+            self.results["uncertainty"] = {
+                type(fn).__name__: float(fn(accumulated_results))
+                for fn in self.uncertainty_fn
+            }
+
+    def get_uncertainty(self, atoms):
+        """
+        Ensure calculation is up to date and return the uncertainty.
+        """
+        self.calculate(atoms)
+        return self.results["uncertainty"]
 
 
 class AseInterface:
