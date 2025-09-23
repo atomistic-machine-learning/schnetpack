@@ -133,8 +133,6 @@ class MaterialsProject(AtomsDataModule):
                 MaterialsProject.EPerAtom: "eV",
                 MaterialsProject.BandGap: "eV",
                 MaterialsProject.TotalMagnetization: "None",
-                MaterialsProject.MaterialId: "None",
-                MaterialsProject.CreatedAt: "None",
             }
             dataset = create_dataset(
                 datapath=self.datapath,
@@ -147,92 +145,6 @@ class MaterialsProject(AtomsDataModule):
         else:
             dataset = load_dataset(self.datapath, self.format)
 
-    def _download_data_legacy(self, dataset: BaseAtomsData):
-        """
-        Downloads dataset provided it does not exist in self.path
-        Returns:
-            works (bool): true if download succeeded or file already exists
-        """
-        if self.apikey is None:
-            raise AtomsDataModuleError(
-                "Provide a valid API key in order to download the "
-                "Materials Project data!"
-            )
-        try:
-            from pymatgen.ext.matproj import MPRester
-            from pymatgen.core import Structure
-            import pymatgen as pmg
-        except:
-            raise ImportError(
-                "In order to download Materials Project data, you have to install "
-                "pymatgen"
-            )
-
-        # collect data
-        atms_list = []
-        properties_list = []
-        with MPRester(self.apikey) as m:
-            for N in range(1, 9):
-                for nsites in range(0, 300, 30):
-                    ns = {"$lt": nsites + 31, "$gt": nsites}
-                    query = m.query(
-                        criteria={
-                            "nelements": N,
-                            "is_compatible": True,
-                            "nsites": ns,
-                        },
-                        properties=[
-                            "structure",
-                            "energy_per_atom",
-                            "formation_energy_per_atom",
-                            "total_magnetization",
-                            "band_gap",
-                            "material_id",
-                            "warnings",
-                            "created_at",
-                        ],
-                    )
-                    for k, q in enumerate(query):
-                        if (
-                            self.timestamp is not None
-                            and q["created_at"] > self.timestamp
-                        ):
-                            continue
-                        s = q["structure"]
-                        if type(s) is Structure:
-                            atms_list.append(
-                                Atoms(
-                                    numbers=s.atomic_numbers,
-                                    positions=s.cart_coords,
-                                    cell=s.lattice.matrix,
-                                    pbc=True,
-                                )
-                            )
-                            properties_list.append(
-                                {
-                                    MaterialsProject.EPerAtom: np.array(
-                                        [q["energy_per_atom"]]
-                                    ),
-                                    MaterialsProject.EformationPerAtom: np.array(
-                                        [q["formation_energy_per_atom"]]
-                                    ),
-                                    MaterialsProject.TotalMagnetization: np.array(
-                                        [q["total_magnetization"]]
-                                    ),
-                                    MaterialsProject.BandGap: np.array([q["band_gap"]]),
-                                    MaterialsProject.MaterialId: q["material_id"],
-                                    MaterialsProject.CreatedAt: q["created_at"],
-                                }
-                            )
-
-        # write systems to database
-        logging.info("Write atoms to db...")
-        dataset.add_systems(
-            atoms_list=atms_list,
-            property_list=properties_list,
-        )
-        logging.info("Done.")
-
     def _download_data_nextgen(self, dataset: BaseAtomsData):
         """
         Downloads dataset provided it does not exist in self.path
@@ -242,6 +154,7 @@ class MaterialsProject(AtomsDataModule):
         # collect data
         atms_list = []
         properties_list = []
+        atoms_metadata_list = []
         try:
             from pymatgen.core import Structure
             import pymatgen as pmg
@@ -281,11 +194,19 @@ class MaterialsProject(AtomsDataModule):
                     )
                     properties_list.append(
                         {
-                            MaterialsProject.EPerAtom: q.energy_per_atom,
-                            MaterialsProject.EformationPerAtom: q.formation_energy_per_atom,
-                            MaterialsProject.TotalMagnetization: q.total_magnetization,
-                            MaterialsProject.BandGap: q.band_gap,
-                            MaterialsProject.MaterialId: q.material_id,
+                            MaterialsProject.EPerAtom: np.array([q.energy_per_atom]),
+                            MaterialsProject.EformationPerAtom: np.array(
+                                [q.formation_energy_per_atom]
+                            ),
+                            MaterialsProject.TotalMagnetization: np.array(
+                                [q.total_magnetization]
+                            ),
+                            MaterialsProject.BandGap: np.array([q.band_gap]),
+                        }
+                    )
+                    atoms_metadata_list.append(
+                        {
+                            "material_id": q.material_id,
                         }
                     )
 
@@ -294,5 +215,6 @@ class MaterialsProject(AtomsDataModule):
         dataset.add_systems(
             atoms_list=atms_list,
             property_list=properties_list,
+            atoms_metadata_list=atoms_metadata_list,
         )
         logging.info("Done.")
