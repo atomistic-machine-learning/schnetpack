@@ -483,7 +483,7 @@ class ASEAtomsData(BaseAtomsData):
         self,
         property_list: List[Dict[str, Any]],
         atoms_list: Optional[List[Atoms]] = None,
-        key_value_list: Optional[List[Dict[str, Any]]] = None,
+        atoms_metadata_list: Optional[List[Dict[str, Any]]] = None,
     ):
         """
         Add atoms data to the dataset.
@@ -496,25 +496,38 @@ class ASEAtomsData(BaseAtomsData):
                 order as corresponding list of `atoms`.
                 Keys have to match the `available_properties` of the dataset
                 plus additional structure properties, if atoms is None.
-            key_value_list: Properties as list of key-value pairs in the same
+            atoms_metadata_list: Metadata of the atoms objects as list of key-value pairs in the same
                 order as corresponding list of `atoms`.
-                Keys have to match the `available_properties` of the dataset
-                plus additional structure properties, if atoms is None.
+                Metadata can not be used as a training property, but can be used for splitting
+                strategies (e.g. material_id, timestamp, ...).
         """
         if atoms_list is None:
             atoms_list = [None] * len(property_list)
 
-        for at, prop in zip(atoms_list, property_list):
-            self._add_system(self.conn, at, **prop)
+        if atoms_metadata_list is None:
+            atoms_metadata_list = [{}] * len(property_list)
+
+        for atoms, prop, atoms_metadata in zip(
+            atoms_list, property_list, atoms_metadata_list
+        ):
+            self._add_system(
+                self.conn,
+                atoms,
+                atoms_metadata,
+                **prop,
+            )
 
     def _add_system(
         self,
         conn,
         atoms: Optional[Atoms] = None,
-        key_val: Optional[Dict[str, Any]] = None,
+        atoms_metadata: Optional[Dict[str, Any]] = None,
         **properties,
     ):
-        """Add systems to DB"""
+        """
+        Add systems to DB.
+        """
+        # create atoms object if not provided
         if atoms is None:
             try:
                 Z = properties[structure.Z]
@@ -535,15 +548,7 @@ class ASEAtomsData(BaseAtomsData):
         for pname in properties:
             if pname not in valid_props:
                 logger.warning(
-                    f"Property `{prop}` is not a defined property for this dataset and "
-                    + f"will be ignored. If it should be included, it has to be "
-                    + f"provided together with its unit when calling "
-                    + f"AseAtomsData.create()."
-                )
-        for key in key_val:
-            if key not in valid_props:
-                logger.warning(
-                    f"Property `{key}` is not a defined property for this dataset and "
+                    f"Property `{pname}` is not a defined property for this dataset and "
                     + f"will be ignored. If it should be included, it has to be "
                     + f"provided together with its unit when calling "
                     + f"AseAtomsData.create()."
@@ -551,12 +556,9 @@ class ASEAtomsData(BaseAtomsData):
 
         data = {}
         for pname in conn.metadata["_property_unit_dict"].keys():
-            try:
-                if pname in properties:
-                    data[pname] = properties[pname]
-                if pname in key_val:
-                    data[pname] = key_val[pname]
-            except:
+            if pname in properties:
+                data[pname] = properties[pname]
+            else:
                 raise AtomsDataError("Required property missing:" + pname)
 
         conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
