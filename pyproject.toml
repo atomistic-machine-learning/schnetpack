@@ -64,8 +64,10 @@ script-files = [
 [tool.setuptools.dynamic]
 version = {attr = "schnetpack.__version__"}
 
+# Ensure package data such as resources are included
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-schnetpack = ["configs/**/*.yaml"]
+schnetpack = ["configs/**/*.yaml","train/resources/*.npz"]
