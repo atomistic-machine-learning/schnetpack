@@ -1,4 +1,4 @@
-from typing import Sequence, Union, Callable, Dict, Optional
+from typing import Sequence, Union, Callable, Dict, Optional, List
 
 import torch
 import torch.nn as nn
@@ -8,7 +8,107 @@ import schnetpack as spk
 import schnetpack.nn as snn
 import schnetpack.properties as properties
 
-__all__ = ["Atomwise", "DipoleMoment", "Polarizability", "NewtonStep"]
+__all__ = [
+    "Atomwise",
+    "DipoleMoment",
+    "Polarizability",
+    "NewtonStep",
+    "HessianDUUT",
+    "ScalarPreconditioner",
+]
+
+
+# D + UU^T
+class HessianDUUT(nn.Module):
+    def __init__(self, n_in: int, hessian_key: str = properties.hessian, F_1: int = 6):
+        super(HessianDUUT, self).__init__()
+        activation = F.silu
+        self.F_1 = F_1
+        self.outnet_l1 = spk.nn.build_gated_equivariant_mlp(
+            n_in=n_in,
+            n_out=self.F_1,
+            n_hidden=None,
+            n_layers=2,
+            activation=activation,
+            sactivation=activation,
+        )
+
+        self.outnet_l0 = spk.nn.build_gated_equivariant_mlp(
+            n_in=n_in,
+            n_out=3,
+            n_hidden=None,
+            n_layers=2,
+            activation=activation,
+            sactivation=activation,
+        )
+
+        self.hessian_key = hessian_key
+        self.model_outputs = [hessian_key]
+
+    def forward(self, inputs):
+        atomic_numbers = inputs[properties.Z]
+        positions = inputs[properties.R]  # 90 x 3
+        l0 = inputs["scalar_representation"]  # 90 x F
+        l1 = inputs["vector_representation"]  # 90 x 3 x F
+
+        l0_outnet, _ = self.outnet_l0((l0, l1))  # 90 x 1, 90 x 3 x 1
+        _, l1_outnet = self.outnet_l1((l0, l1))  # 90 x F, 90 x 3 x F
+
+        n_atoms = inputs[properties.n_atoms]
+        hessians: List[torch.Tensor] = []
+
+        indices = torch.cumsum(n_atoms, dim=0) - n_atoms
+        for start_idx, n_atom in zip(indices, n_atoms):
+            end_idx = start_idx + n_atom
+
+            l0_atom = l0_outnet[start_idx:end_idx].reshape(n_atom * 3)  # n_atom * 3
+            l1_atom = l1_outnet[start_idx:end_idx].reshape(
+                n_atom * 3, self.F_1
+            )  # (n_atom * 3) x U_features
+
+            # represent hessian as D + UU^T
+            D = torch.diag_embed(l0_atom.flatten())  # (n_atom * 3) x (n_atom * 3)
+            UUT = l1_atom @ l1_atom.T  # (n_atom * 3) x (n_atom * 3)
+
+            hessian = D + UUT
+
+            hessians.append(hessian)
+
+        # hessians = torch.cat(hessians, dim=0)#.view(-1, n_atom * 3)
+
+        inputs[self.hessian_key] = hessians
+        return inputs
+
+
+class ScalarPreconditioner(nn.Module):
+    def __init__(
+        self,
+        n_in: int,
+        preconditioner_key: str,
+    ):
+        super(ScalarPreconditioner, self).__init__()
+        self.activation = F.silu
+        self.outnet = spk.nn.build_mlp(
+            n_in=n_in,
+            n_out=3,
+            n_hidden=None,
+            n_layers=2,
+            activation=self.activation,
+        )
+
+        self.preconditioner_key = preconditioner_key
+        self.model_outputs = [preconditioner_key]
+
+    def forward(self, inputs):
+        l0 = inputs["scalar_representation"]  # 90 x F
+
+        preconditioner = self.outnet(l0)
+        preconditioner = self.activation(preconditioner)
+        # repeat last dimension of preconditioner 3 times
+        # preconditioner = preconditioner.repeat(1, 3) + 1.0
+
+        inputs[self.preconditioner_key] = preconditioner
+        return inputs
 
 
 class Atomwise(nn.Module):
