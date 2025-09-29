@@ -8,7 +8,7 @@ from torch.autograd import grad
 from schnetpack.nn.utils import derivative_from_molecular, derivative_from_atomic
 import schnetpack.properties as properties
 
-__all__ = ["Forces", "ForcesLM", "Strain", "Response", "Hessian"]
+__all__ = ["Forces", "Strain", "Response", "Hessian"]
 
 
 class ResponseException(Exception):
