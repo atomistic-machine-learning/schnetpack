@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from typing import Dict, List
 
-__all__ = ["Aggregation", "NSAggregation", "NSwPrecondAggregation"]
+__all__ = ["Aggregation", "NSAggregation", "NSwPrecondAggregation", "ForceAggregation"]
 
 
 class Aggregation(nn.Module):
@@ -54,6 +54,34 @@ class NSAggregation(nn.Module):
             ns = ns.reshape(-1, 3)
             newton_step_pd.append(ns)
         inputs[self.output_key] = torch.cat(newton_step_pd, dim=0)
+        return inputs
+
+
+class ForceAggregation(nn.Module):
+    """
+    Calculate newton step from forces and inverse hessian.
+
+    Args:
+        output_key (str): Name of new property in output.
+    """
+
+    def __init__(self, ns_key: str, hess_key: str, output_key: str = "forces"):
+        super(ForceAggregation, self).__init__()
+
+        self.ns_key = ns_key
+        self.hess_key = hess_key
+        self.output_key = output_key
+        self.model_outputs = [output_key]
+
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        forces = []
+        _idx_m_hess = inputs["_idx_m"].repeat_interleave(3)
+        for idx_m in range(inputs["_n_atoms"].shape[0]):
+            ns = inputs[self.ns_key][inputs["_idx_m"] == idx_m].flatten()
+            hess = inputs[self.hess_key][_idx_m_hess == idx_m]
+            f = hess @ ns
+            forces.append(f.reshape(-1, 3))
+        inputs[self.output_key] = torch.cat(forces, dim=0)
         return inputs
 
 
