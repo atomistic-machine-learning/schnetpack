@@ -90,7 +90,7 @@ class ScalarPreconditioner(nn.Module):
         self.activation = F.silu
         self.outnet = spk.nn.build_mlp(
             n_in=n_in,
-            n_out=3,
+            n_out=1,
             n_hidden=None,
             n_layers=2,
             activation=self.activation,
@@ -105,7 +105,7 @@ class ScalarPreconditioner(nn.Module):
         preconditioner = self.outnet(l0)
         preconditioner = self.activation(preconditioner)
         # repeat last dimension of preconditioner 3 times
-        # preconditioner = preconditioner.repeat(1, 3) + 1.0
+        preconditioner = preconditioner.repeat(1, 3)  # + 1.0
 
         inputs[self.preconditioner_key] = preconditioner
         return inputs
