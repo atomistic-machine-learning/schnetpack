@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from schnetpack.units import convert_units
 
 from typing import Dict, List
 
@@ -65,21 +66,48 @@ class ForceAggregation(nn.Module):
         output_key (str): Name of new property in output.
     """
 
-    def __init__(self, ns_key: str, hess_key: str, output_key: str = "forces"):
+    def __init__(
+        self,
+        ns_key: str,
+        hess_key: str,
+        output_key: str = "forces",
+        energy_unit: str = "kcal/mol",
+        position_unit: str = "Ang",
+        damping: float = 0.1,
+    ):
         super(ForceAggregation, self).__init__()
+
+        self.energy_conversion = convert_units("Hartree", energy_unit)
+        self.position_conversion = convert_units("Bohr", position_unit)
 
         self.ns_key = ns_key
         self.hess_key = hess_key
         self.output_key = output_key
         self.model_outputs = [output_key]
 
+        self.damping = damping
+
+    def _levenberg_marquardt_regularization(
+        self, hessian: torch.tensor, inputs: Dict
+    ) -> torch.tensor:
+        eigvals = torch.linalg.eigvalsh(hessian)
+        min_eigval = torch.min(eigvals)
+        if min_eigval > 1e-8 * self.energy_conversion / self.position_conversion**2:
+            return hessian
+        factor = (
+            -min_eigval
+            + self.damping * self.energy_conversion / self.position_conversion**2
+        )
+        return hessian + factor * torch.eye(hessian.shape[0], device=hessian.device)
+
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         forces = []
         _idx_m_hess = inputs["_idx_m"].repeat_interleave(3)
-        for idx_m in range(inputs["_n_atoms"].shape[0]):
+        for idx_m, n_atoms in enumerate(inputs["_n_atoms"]):
             ns = inputs[self.ns_key][inputs["_idx_m"] == idx_m].flatten()
             hess = inputs[self.hess_key][_idx_m_hess == idx_m]
-            f = hess @ ns
+            hess = self._levenberg_marquardt_regularization(hess, inputs)
+            f = hess @ ns  # + torch.eye(n_atoms.item() * 3) * 0.1
             forces.append(f.reshape(-1, 3))
         inputs[self.output_key] = torch.cat(forces, dim=0)
         return inputs
