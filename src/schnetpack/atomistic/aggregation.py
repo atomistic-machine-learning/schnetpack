@@ -74,6 +74,7 @@ class ForceAggregation(nn.Module):
         energy_unit: str = "kcal/mol",
         position_unit: str = "Ang",
         damping: float = 0.1,
+        damping_strategy: str = "simple",
     ):
         super(ForceAggregation, self).__init__()
 
@@ -86,19 +87,67 @@ class ForceAggregation(nn.Module):
         self.model_outputs = [output_key]
 
         self.damping = damping
+        if damping_strategy == "simple":
+            self._damping_strategy = self._simple_damping
+        elif damping_strategy == "lm":
+            self._damping_strategy = self._levenberg_marquardt_regularization
+        else:
+            raise ValueError(f"Unknown damping strategy: {damping_strategy}")
 
     def _levenberg_marquardt_regularization(
-        self, hessian: torch.tensor, inputs: Dict
+        self, hessian: torch.tensor
     ) -> torch.tensor:
+        n_atoms = torch.tensor(hessian.shape[0] // 3, device=hessian.device)
         eigvals = torch.linalg.eigvalsh(hessian)
         min_eigval = torch.min(eigvals)
         if min_eigval > 1e-8 * self.energy_conversion / self.position_conversion**2:
-            return hessian
+            return torch.zeros_like(hessian, device=hessian.device)
         factor = (
             -min_eigval
             + self.damping * self.energy_conversion / self.position_conversion**2
         )
-        return hessian + factor * torch.eye(hessian.shape[0], device=hessian.device)
+        return torch.eye(n_atoms.item() * 3, device=hessian.device) * factor
+
+    def _simple_damping(self, hessian: torch.tensor) -> torch.tensor:
+        n_atoms = torch.tensor(hessian.shape[0] // 3, device=hessian.device)
+        factor = self.damping * self.energy_conversion / self.position_conversion**2
+        return torch.eye(n_atoms.item() * 3, device=hessian.device) * factor
+
+    def _modified_cholesky(self, hessian, beta=1e-8):
+        """
+        Perform a modified Cholesky decomposition on matrix H to ensure positive definiteness.
+        H: Input Hessian matrix (must be symmetric)
+        beta: Small positive constant to ensure positive definiteness
+        Returns: L such that H ≈ L @ L.T and L is lower triangular
+        """
+        n = hessian.shape[0]
+        L = torch.zeros_like(hessian, device=hessian.device)
+        D = torch.zeros(n, device=hessian.device)
+
+        for j in range(n):
+            dj = hessian[j, j] - torch.sum(L[j, :j] ** 2 * D[:j])
+            D[j] = max(abs(dj), beta)
+            L[j, j] = 1.0
+
+            for i in range(j + 1, n):
+                L[i, j] = (hessian[i, j] - torch.sum(L[i, :j] * L[j, :j] * D[:j])) / D[
+                    j
+                ]
+
+        H_new = L @ torch.diag(D) @ L.T
+        return H_new
+
+    def eigenvalue_modification(self, hessian):
+        eigvals, eigvectors = torch.linalg.eigh(hessian)
+
+        min_eigval = torch.min(eigvals)
+
+        cutoff = 1e-3
+        # modified_eigvals = torch.nn.functional.softplus(eigvals - cutoff) + cutoff
+        modified_eigvals = torch.abs(eigvals)
+        # modified_eigvals = torch.maximum(eigvals, torch.tensor([1.0], device=hessian.device))
+
+        return eigvectors.T @ torch.diag(modified_eigvals) @ eigvectors
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         forces = []
@@ -106,8 +155,13 @@ class ForceAggregation(nn.Module):
         for idx_m, n_atoms in enumerate(inputs["_n_atoms"]):
             ns = inputs[self.ns_key][inputs["_idx_m"] == idx_m].flatten()
             hess = inputs[self.hess_key][_idx_m_hess == idx_m]
-            hess = self._levenberg_marquardt_regularization(hess, inputs)
-            f = hess @ ns  # + torch.eye(n_atoms.item() * 3) * 0.1
+
+            damping_matrix = self._damping_strategy(hess)
+            f = hess @ ns + damping_matrix @ ns
+
+            # hess_pd = self.eigenvalue_modification(hess)
+            # f = hess_pd @ ns
+
             forces.append(f.reshape(-1, 3))
         inputs[self.output_key] = torch.cat(forces, dim=0)
         return inputs
