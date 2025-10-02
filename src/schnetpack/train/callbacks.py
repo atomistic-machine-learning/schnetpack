@@ -15,7 +15,7 @@ from schnetpack import properties
 from collections import defaultdict
 
 
-__all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
+__all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage", "LearningRateReset"]
 
 
 class PredictionWriter(BasePredictionWriter):
@@ -153,3 +153,22 @@ class ExponentialMovingAverage(Callback):
 
     def state_dict(self):
         return {"ema": self.ema.state_dict()}
+
+class LearningRateReset(Callback):
+    """
+    Callback to reset the learning rate at the beginning of training.
+    """
+    def __init__(self, new_lr: float, reset: bool = False)->None:
+        self.new_lr = new_lr
+        self.reset = reset
+        return
+
+    def on_train_start(self, trainer, pl_module)->None:
+        # Update learning rate for all optimizer parameter groups
+        if self.reset:
+            for opt in trainer.optimizers:
+                for param_group in opt.param_groups:
+                    param_group["lr"] = self.new_lr
+            print(f"Learning rate reset to {self.new_lr}")
+            return
+        else: return
