@@ -8,7 +8,7 @@ from torchmetrics import Metric
 
 from schnetpack.model.base import AtomisticModel
 
-__all__ = ["ModelOutput", "AtomisticTask"]
+__all__ = ["ModelOutput", "AtomisticTask", "ModelOutputWeighted"]
 
 
 class ModelOutput(nn.Module):
@@ -68,6 +68,40 @@ class ModelOutput(nn.Module):
     def update_metrics(self, pred, target, subset):
         for metric in self.metrics[subset].values():
             metric(pred[self.name], target[self.target_property])
+
+
+class ModelOutputWeighted(ModelOutput):
+    def __init__(
+        self,
+        name: str,
+        loss_fn: Optional[nn.Module] = None,
+        loss_weight: float = 1.0,
+        metrics: Optional[Dict[str, Metric]] = None,
+        constraints: Optional[List[torch.nn.Module]] = None,
+        target_property: Optional[str] = None,
+        weight_property: Optional[str] = None,
+    ):
+        super().__init__(
+            name,
+            loss_fn,
+            loss_weight,
+            metrics,
+            constraints,
+            target_property,
+        )
+        self.weight_property = weight_property
+
+    def calculate_loss(self, pred, target):
+        if self.loss_weight == 0 or self.loss_fn is None:
+            return 0.0
+
+        loss = self.loss_weight * self.loss_fn(
+            pred[self.name],
+            target[self.target_property],
+            target[self.weight_property],
+            target["_idx_m"],
+        )
+        return loss
 
 
 class UnsupervisedModelOutput(ModelOutput):
@@ -174,6 +208,14 @@ class AtomisticTask(pl.LightningModule):
             targets["considered_atoms"] = batch["considered_atoms"]
         except:
             pass
+        try:
+            targets["inv_hessian"] = batch["inv_hessian"]
+        except:
+            pass
+        try:
+            targets["_idx_m"] = batch["_idx_m"]
+        except:
+            pass
 
         pred = self.predict_without_postprocessing(batch)
         pred, targets = self.apply_constraints(pred, targets)
@@ -194,6 +236,14 @@ class AtomisticTask(pl.LightningModule):
         }
         try:
             targets["considered_atoms"] = batch["considered_atoms"]
+        except:
+            pass
+        try:
+            targets["inv_hessian"] = batch["inv_hessian"]
+        except:
+            pass
+        try:
+            targets["_idx_m"] = batch["_idx_m"]
         except:
             pass
 
@@ -224,6 +274,14 @@ class AtomisticTask(pl.LightningModule):
         }
         try:
             targets["considered_atoms"] = batch["considered_atoms"]
+        except:
+            pass
+        try:
+            targets["inv_hessian"] = batch["inv_hessian"]
+        except:
+            pass
+        try:
+            targets["_idx_m"] = batch["_idx_m"]
         except:
             pass
 
