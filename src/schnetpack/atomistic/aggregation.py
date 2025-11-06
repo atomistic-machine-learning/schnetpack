@@ -151,10 +151,23 @@ class ForceAggregation(nn.Module):
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         forces = []
-        _idx_m_hess = inputs["_idx_m"].repeat_interleave(3)
-        for idx_m, n_atoms in enumerate(inputs["_n_atoms"]):
+        repeats = inputs["_n_atoms"] ** 2 * 9
+        raw_indices = torch.arange(len(inputs["_n_atoms"]), device=repeats.device)
+        _idx_m_hess = torch.repeat_interleave(raw_indices, repeats)
+
+        # TODO: comment out for datasets that contain flat hessian tensor
+        inputs[self.hess_key] = inputs[self.hess_key].flatten()
+
+        for idx_m, _ in enumerate(inputs["_n_atoms"]):
             ns = inputs[self.ns_key][inputs["_idx_m"] == idx_m].flatten()
             hess = inputs[self.hess_key][_idx_m_hess == idx_m]
+
+            # build hessian matrix from flat tensor
+            hess = hess.reshape(-1, int(hess.shape[0] ** 0.5))
+            # herror = hessian.T - hessian
+            # hessian += 0.5 * herror
+            # assert check_symmetric(hessian)
+            # hessian = hessian[None]
 
             damping_matrix = self._damping_strategy(hess)
             f = hess @ ns + damping_matrix @ ns

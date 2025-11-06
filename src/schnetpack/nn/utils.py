@@ -113,16 +113,19 @@ def derivative_from_atomic(
 
         # Build molecular matrix and reshape
         dfdx_mol = torch.stack(dfdx_mol, dim=0)
+        dfdx_mol = dfdx_mol.flatten()
 
-        # convert shape NxNx3x3
-        dfdx_mol = (
-            dfdx_mol.reshape(n_atoms[idx].item(), 3, n_atoms[idx].item(), 3)
-            .permute(0, 2, 1, 3)
-            .reshape(-1, 3, 3)
-        )
-        # convert shape 3Nx3N
+        # option1: convert shape NxNx3x3
+        # dfdx_mol = (
+        #    dfdx_mol.reshape(n_atoms[idx].item(), 3, n_atoms[idx].item(), 3)
+        #    .permute(0, 2, 1, 3)
+        #    .reshape(-1, 3, 3)
+        # )
+
+        # option 2: convert shape 3Nx3N
         # dfdx_mol = dfdx_mol.reshape(n_atoms[idx] * 3, n_atoms[idx] * 3)
 
+        # option that can be added on top:
         # only consider upper triangular part
         # mask = torch.ones(dfdx_mol.shape, dtype=bool)
         # mask = torch.triu(mask).flatten()
