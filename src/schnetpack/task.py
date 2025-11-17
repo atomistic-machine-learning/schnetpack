@@ -7,8 +7,15 @@ from torch import nn as nn
 from torchmetrics import Metric
 
 from schnetpack.model.base import AtomisticModel
+from schnetpack.utils.compatibility import load_model
 
-__all__ = ["ModelOutput", "AtomisticTask", "ModelOutputWeighted"]
+
+__all__ = [
+    "ModelOutput",
+    "AtomisticTask",
+    "ModelOutputWeighted",
+    "AtomisticTaskSurrogate",
+]
 
 
 class ModelOutput(nn.Module):
@@ -357,6 +364,109 @@ class AtomisticTask(pl.LightningModule):
                 self.model.do_postprocessing = do_postprocessing
             torch.save(self.model, path)
             self.model.do_postprocessing = pp_status
+
+
+class AtomisticTaskSurrogate(AtomisticTask):
+    """ """
+
+    def __init__(
+        self,
+        model: AtomisticModel,
+        outputs: List[ModelOutput],
+        optimizer_cls: Type[torch.optim.Optimizer] = torch.optim.Adam,
+        optimizer_args: Optional[Dict[str, Any]] = None,
+        scheduler_cls: Optional[Type] = None,
+        scheduler_args: Optional[Dict[str, Any]] = None,
+        scheduler_monitor: Optional[str] = None,
+        warmup_steps: int = 0,
+        ref_model_path: str = None,
+    ):
+        """
+        Args:
+            model: the neural network model
+            outputs: list of outputs an optional loss functions
+            optimizer_cls: type of torch optimizer,e.g. torch.optim.Adam
+            optimizer_args: dict of optimizer keyword arguments
+            scheduler_cls: type of torch learning rate scheduler
+            scheduler_args: dict of scheduler keyword arguments
+            scheduler_monitor: name of metric to be observed for ReduceLROnPlateau
+            warmup_steps: number of steps used to increase the learning rate from zero
+              linearly to the target learning rate at the beginning of training
+        """
+        super().__init__(
+            model=model,
+            outputs=outputs,
+            optimizer_cls=optimizer_cls,
+            optimizer_args=optimizer_args,
+            scheduler_cls=scheduler_cls,
+            scheduler_args=scheduler_args,
+            scheduler_monitor=scheduler_monitor,
+            warmup_steps=warmup_steps,
+        )
+        self.ref_model = load_model(ref_model_path, device=self.device)
+        self.ref_model.output_modules[1].force_key = "target_forces"
+        self.ref_model.model_outputs = ["target_forces"]
+        self.ref_model.do_postprocessing = False
+        self.ref_model.eval()
+
+    def training_step(self, batch, batch_idx):
+        ref_targets = {"target_forces": batch["forces"]}
+
+        pred = self.predict_without_postprocessing(batch)
+        _ = self.ref_model(batch)
+        targets = {"target_forces": batch["target_forces"].detach()}
+
+        # for k in ref_targets.keys():
+        #    print(torch.max(torch.abs(targets[k] - ref_targets[k])))
+
+        loss = self.loss_fn(pred, targets)
+
+        self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
+        self.log_metrics(pred, targets, "train")
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        torch.set_grad_enabled(self.grad_enabled)
+
+        pred = self.predict_without_postprocessing(batch)
+        with torch.enable_grad():
+            _ = self.ref_model(batch)
+        targets = {"target_forces": batch["target_forces"].detach()}
+
+        loss = self.loss_fn(pred, targets)
+
+        self.log(
+            "val_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=len(batch["_idx"]),
+        )
+        self.log_metrics(pred, targets, "val")
+
+        return {"val_loss": loss}
+
+    def test_step(self, batch, batch_idx):
+        torch.set_grad_enabled(self.grad_enabled)
+
+        pred = self.predict_without_postprocessing(batch)
+        with torch.enable_grad():
+            _ = self.ref_model(batch)
+        targets = {"target_forces": batch["target_forces"].detach()}
+
+        loss = self.loss_fn(pred, targets)
+
+        self.log(
+            "test_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=len(batch["_idx"]),
+        )
+        self.log_metrics(pred, targets, "test")
+        return {"test_loss": loss}
 
 
 class ConsiderOnlySelectedAtoms(nn.Module):
