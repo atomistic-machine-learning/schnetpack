@@ -214,7 +214,6 @@ class HVP(nn.Module):
         damping_factor = inputs[
             "damping_factor"
         ]  # * energy_conversion / position_conversion**2
-        print(damping_factor)
         # damping_factor = torch.ones_like(damping_factor) * 0.1 * energy_conversion / position_conversion**2
 
         repeats = inputs["_n_atoms"] * 3
