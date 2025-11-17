@@ -7,8 +7,10 @@ from torch.autograd import grad
 
 from schnetpack.nn.utils import derivative_from_molecular, derivative_from_atomic
 import schnetpack.properties as properties
+from schnetpack.units import convert_units
 
-__all__ = ["Forces", "Strain", "Response", "Hessian"]
+
+__all__ = ["Forces", "Strain", "Response", "Hessian", "HVP"]
 
 
 class ResponseException(Exception):
@@ -146,6 +148,82 @@ class Hessian(nn.Module):
             retain_graph=True,
         )
         inputs[self.hessian_key] = d2EdR2
+
+        return inputs
+
+
+class HVP(nn.Module):
+    def __init__(
+        self,
+        calc_forces: bool = True,
+        energy_key: str = properties.energy,
+        force_key: str = "target_forces",
+        hvp_key: str = "forces",
+        prop_vec_key: str = "newton_step_pd",
+    ):
+        """
+        Args:
+            calc_forces: If True, calculate atomic forces.
+            energy_key: Key of the energy in results.
+            force_key: Key of the forces in results.
+            hessian_key: Key of the hessian in results.
+        """
+        super(HVP, self).__init__()
+        self.calc_forces = calc_forces
+        self.energy_key = energy_key
+        self.force_key = force_key
+        self.hvp_key = hvp_key
+        self.prop_vec_key = prop_vec_key
+        self.model_outputs = []
+        if calc_forces:
+            self.model_outputs.append(force_key)
+        self.model_outputs.append(hvp_key)
+
+        self.required_derivatives = []
+        self.required_derivatives.append(properties.R)
+
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        Epred = inputs[self.energy_key]
+
+        go: List[Optional[torch.Tensor]] = [torch.ones_like(Epred)]
+        grads = grad(
+            [Epred],
+            [inputs[prop] for prop in self.required_derivatives],
+            grad_outputs=go,
+            create_graph=True,
+        )
+
+        dEdR = grads[0]
+        # TorchScript needs Tensor instead of Optional[Tensor]
+        if dEdR is None:
+            dEdR = torch.zeros_like(inputs[properties.R])
+        if self.calc_forces:
+            inputs[self.force_key] = -dEdR
+
+        d2EdR2 = grad(
+            dEdR,
+            inputs[properties.R],
+            inputs[self.prop_vec_key],
+            create_graph=self.training,
+            retain_graph=True,
+        )[0]
+
+        energy_conversion = convert_units("Hartree", "kcal/mol")
+        position_conversion = convert_units("Bohr", "Ang")
+
+        damping_factor = inputs[
+            "damping_factor"
+        ]  # * energy_conversion / position_conversion**2
+        print(damping_factor)
+        # damping_factor = torch.ones_like(damping_factor) * 0.1 * energy_conversion / position_conversion**2
+
+        repeats = inputs["_n_atoms"] * 3
+        damping_factor = torch.repeat_interleave(damping_factor, repeats)
+        damping_factor = damping_factor.reshape(-1, 3)
+
+        damped_part = inputs[self.prop_vec_key] * damping_factor
+
+        inputs[self.hvp_key] = d2EdR2 + damped_part
 
         return inputs
 

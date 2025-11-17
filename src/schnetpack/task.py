@@ -8,6 +8,7 @@ from torchmetrics import Metric
 
 from schnetpack.model.base import AtomisticModel
 from schnetpack.utils.compatibility import load_model
+import schnetpack as spk
 
 
 __all__ = [
@@ -404,36 +405,45 @@ class AtomisticTaskSurrogate(AtomisticTask):
             warmup_steps=warmup_steps,
         )
         self.ref_model = load_model(ref_model_path, device=self.device)
-        self.ref_model.output_modules[1].force_key = "target_forces"
-        self.ref_model.model_outputs = ["target_forces"]
+        self.ref_model.output_modules[1] = spk.atomistic.HVP()
+        self.ref_model.model_outputs = ["forces", "target_forces"]
         self.ref_model.do_postprocessing = False
-        self.ref_model.eval()
+        # self.ref_model.eval()
+        # print(self.ref_model)
+        for p in self.ref_model.parameters():
+            p.requires_grad = False
+        self.ref_model.train()
 
     def training_step(self, batch, batch_idx):
-        ref_targets = {"target_forces": batch["forces"]}
+        # ref_targets = {"target_forces": batch["forces"]}
 
-        pred = self.predict_without_postprocessing(batch)
+        _ = self.predict_without_postprocessing(batch)
         _ = self.ref_model(batch)
         targets = {"target_forces": batch["target_forces"].detach()}
 
         # for k in ref_targets.keys():
         #    print(torch.max(torch.abs(targets[k] - ref_targets[k])))
 
-        loss = self.loss_fn(pred, targets)
+        targets["target_damping_factor"] = torch.zeros_like(batch["damping_factor"])
+
+        loss = self.loss_fn(batch, targets)
 
         self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
-        self.log_metrics(pred, targets, "train")
+        self.log_metrics(batch, targets, "train")
         return loss
 
     def validation_step(self, batch, batch_idx):
         torch.set_grad_enabled(self.grad_enabled)
 
-        pred = self.predict_without_postprocessing(batch)
+        _ = self.predict_without_postprocessing(batch)
         with torch.enable_grad():
             _ = self.ref_model(batch)
-        targets = {"target_forces": batch["target_forces"].detach()}
+        targets = {
+            "target_forces": batch["target_forces"].detach(),
+            "target_damping_factor": torch.zeros_like(batch["damping_factor"]),
+        }
 
-        loss = self.loss_fn(pred, targets)
+        loss = self.loss_fn(batch, targets)
 
         self.log(
             "val_loss",
@@ -443,19 +453,21 @@ class AtomisticTaskSurrogate(AtomisticTask):
             prog_bar=True,
             batch_size=len(batch["_idx"]),
         )
-        self.log_metrics(pred, targets, "val")
+        self.log_metrics(batch, targets, "val")
 
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_idx):
         torch.set_grad_enabled(self.grad_enabled)
 
-        pred = self.predict_without_postprocessing(batch)
+        _ = self.predict_without_postprocessing(batch)
         with torch.enable_grad():
             _ = self.ref_model(batch)
-        targets = {"target_forces": batch["target_forces"].detach()}
-
-        loss = self.loss_fn(pred, targets)
+        targets = {
+            "target_forces": batch["target_forces"].detach(),
+            "target_damping_factor": torch.zeros_like(batch["damping_factor"]),
+        }
+        loss = self.loss_fn(batch, targets)
 
         self.log(
             "test_loss",
@@ -465,7 +477,7 @@ class AtomisticTaskSurrogate(AtomisticTask):
             prog_bar=True,
             batch_size=len(batch["_idx"]),
         )
-        self.log_metrics(pred, targets, "test")
+        self.log_metrics(batch, targets, "test")
         return {"test_loss": loss}
 
 

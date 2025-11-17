@@ -184,6 +184,9 @@ class Atomwise(nn.Module):
             if self.aggregation_mode == "avg":
                 y = y / inputs[properties.n_atoms]
 
+            if self.aggregation_mode == "positive":
+                y = abs(y)
+
         inputs[self.output_key] = y
         return inputs
 
