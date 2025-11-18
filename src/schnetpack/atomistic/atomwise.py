@@ -15,6 +15,7 @@ __all__ = [
     "NewtonStep",
     "HessianDUUT",
     "ScalarPreconditioner",
+    "DampingFactor",
 ]
 
 
@@ -184,10 +185,79 @@ class Atomwise(nn.Module):
             if self.aggregation_mode == "avg":
                 y = y / inputs[properties.n_atoms]
 
-            if self.aggregation_mode == "positive":
-                y = abs(y)
-
         inputs[self.output_key] = y
+        return inputs
+
+
+class DampingFactor(Atomwise):
+    def __init__(
+        self,
+        n_in: int,
+        n_out: int = 1,
+        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_layers: int = 2,
+        activation: Callable = F.silu,
+        aggregation_mode: str = "sum",
+        output_key: str = "y",
+        per_atom_output_key: Optional[str] = None,
+        fixed_damping_factor: Optional[float] = None,
+        init_learnable_damping_factor: Optional[float] = None,
+    ):
+        super(DampingFactor, self).__init__(
+            n_in=n_in,
+            n_out=n_out,
+            n_hidden=n_hidden,
+            n_layers=n_layers,
+            activation=activation,
+            aggregation_mode=aggregation_mode,
+            output_key=output_key,
+            per_atom_output_key=per_atom_output_key,
+        )
+        self.fixed_damping_factor = fixed_damping_factor
+        if fixed_damping_factor:
+            self.fixed_damping_factor = torch.tensor([fixed_damping_factor])
+
+        self.init_learnable_damping_factor = init_learnable_damping_factor
+        self.learnable_damping_factor = None
+        if init_learnable_damping_factor is not None:
+            self.learnable_damping_factor = nn.Parameter(
+                torch.log(torch.tensor([init_learnable_damping_factor]))
+            )
+
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        n_mols = inputs["_n_atoms"].shape[0]
+        if self.fixed_damping_factor:
+            self.fixed_damping_factor = self.fixed_damping_factor.to(
+                inputs["_n_atoms"].device
+            )
+            inputs[self.output_key] = self.fixed_damping_factor.repeat(n_mols)
+        elif self.learnable_damping_factor:
+            self.learnable_damping_factor = self.learnable_damping_factor.to(
+                inputs["_n_atoms"].device
+            )
+            inputs[self.output_key] = self.learnable_damping_factor.repeat(n_mols)
+        else:
+            # predict atomwise contributions
+            y = self.outnet(inputs["scalar_representation"])
+
+            # accumulate the per-atom output if necessary
+            if self.per_atom_output_key is not None:
+                inputs[self.per_atom_output_key] = y
+
+            # aggregate
+            if self.aggregation_mode is not None:
+                idx_m = inputs[properties.idx_m]
+                maxm = int(idx_m[-1]) + 1
+                y = snn.scatter_add(y, idx_m, dim_size=maxm)
+                y = torch.squeeze(y, -1)
+
+                if self.aggregation_mode == "avg":
+                    y = y / inputs[properties.n_atoms]
+
+                if self.aggregation_mode == "positive":
+                    y = abs(y)
+
+            inputs[self.output_key] = y
         return inputs
 
 
