@@ -1,5 +1,6 @@
 import torch
 from torchmetrics import Metric
+import torch.nn.functional as F
 from torchmetrics.functional.regression.mae import (
     _mean_absolute_error_compute,
     _mean_absolute_error_update,
@@ -7,7 +8,7 @@ from torchmetrics.functional.regression.mae import (
 
 from typing import Optional, Tuple
 
-__all__ = ["TensorDiagonalMeanAbsoluteError"]
+__all__ = ["TensorDiagonalMeanAbsoluteError", "IsDescendingMetric"]
 
 
 class TensorDiagonalMeanAbsoluteError(Metric):
@@ -117,3 +118,59 @@ class TensorDiagonalMeanAbsoluteError(Metric):
             return diag_mask == 1
         else:
             return diag_mask != 1
+
+
+class IsDescendingMetric(Metric):
+    """ """
+
+    is_differentiable = True
+    higher_is_better = False
+    sum_abs_error: torch.Tensor
+    total: torch.Tensor
+
+    def __init__(self, margin=0.0, eps=1e-8, mode="hinge", clamp_at_zero=False) -> None:
+        super().__init__(dist_sync_on_step=False)
+
+        self.margin = margin
+        self.eps = eps
+        self.mode = mode
+        self.clamp_at_zero = clamp_at_zero
+
+        self.add_state("sum_abs_error", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
+        """
+        Update the metric.
+
+        Args:
+            preds (torch.Tensor): network predictions.
+            target (torch.Tensor): reference values.
+        """
+        n_obs = target.shape[0]
+
+        dot = torch.sum(preds * target, dim=1)
+        preds_norm = torch.norm(preds, dim=1)
+        target_norm = torch.norm(target, dim=1)
+
+        if self.mode == "hinge":
+            cos = dot / (preds_norm * target_norm + self.eps)
+            if self.clamp_at_zero:
+                loss = F.relu(-cos + self.margin).sum()
+            else:
+                loss = (-cos + self.margin).sum()
+        else:
+            raise NotImplementedError("mode not implemented")
+
+        self.sum_abs_error += loss
+        self.total += n_obs
+
+    def compute(self) -> torch.Tensor:
+        """
+        Compute the final metric.
+
+        Returns:
+            torch.Tensor: mean absolute error of diagonal or offdiagonal elements.
+        """
+        # compute final result
+        return _mean_absolute_error_compute(self.sum_abs_error, self.total)

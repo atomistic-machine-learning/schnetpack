@@ -1,3 +1,4 @@
+import torch
 from torch import Tensor
 from torch import nn
 import torch.nn.functional as F
@@ -15,6 +16,30 @@ class ScaledMSELoss(nn.MSELoss):
         input = input / target_norm
 
         return F.mse_loss(input, target, reduction=self.reduction)
+
+
+class DescendingLoss(nn.Module):
+    reduction: str
+
+    def __init__(self, margin=0.0, eps=1e-8, mode="hinge") -> None:
+        super().__init__()
+        self.reduction = "mean"
+        self.margin = margin
+        self.eps = eps
+        self.mode = mode
+
+    def forward(self, input: Tensor, target: Tensor) -> Tensor:
+
+        dot = torch.sum(input * target, dim=1)
+        input_norm = torch.norm(input, dim=1)
+        target_norm = torch.norm(target, dim=1)
+
+        if self.mode == "hinge":
+            cos = dot / (input_norm * target_norm + self.eps)
+            loss = F.relu(-cos + self.margin)
+            return loss.mean()
+        else:
+            raise NotImplementedError("mode not implemented")
 
 
 class WeightedMSELoss(nn.MSELoss):
