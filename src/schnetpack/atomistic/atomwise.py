@@ -231,11 +231,10 @@ class DampingFactor(Atomwise):
                 inputs["_n_atoms"].device
             )
             inputs[self.output_key] = self.fixed_damping_factor.repeat(n_mols)
+
         elif self.learnable_damping_factor:
-            self.learnable_damping_factor = self.learnable_damping_factor.to(
-                inputs["_n_atoms"].device
-            )
-            inputs[self.output_key] = self.learnable_damping_factor.repeat(n_mols)
+            damping_factor_processed = torch.exp(self.learnable_damping_factor)
+            inputs[self.output_key] = damping_factor_processed.repeat(n_mols)
         else:
             # predict atomwise contributions
             y = self.outnet(inputs["scalar_representation"])
