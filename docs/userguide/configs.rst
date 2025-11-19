@@ -22,7 +22,7 @@ the command::
     │   └── work_dir: ${hydra:runtime.cwd}
     │       data_dir: ${run.work_dir}/data
     │       path: runs
-    │       id: ${uuid:}
+    │       id: ${uuid:1}
     │
     ├── globals
     │   └── model_path: best_model
@@ -229,6 +229,18 @@ The config groups ``data``, ``model``, ``task``, ``trainer``, ``callback`` and
 ``logger`` directly define objects using the special key ``_target_``, which specifies
 a class, while the remaining key-value pairs define the arguments passed to the
 ``__init__``.
+
+A short note on the interpolation syntax ``${group.variable}``: Besides allowing to 
+reference variables of any group in the config, it can also be used with so-called
+``resolvers``, which are functions that evaluate some provided arguments when the config
+is built. The syntax is ``${resolver:arguments}``. For example, we utilize the built-in
+``hydra`` resolver in ``${hydra:runtime.cwd}`` to set the root directory of our run to the
+current working directory. Another example is the custom resolver ``uuid:1``. We have
+designed it to provide a unique identifier that is cached using the provided argument,
+i.e. calling ``${uuid:1}`` twice in your config will result in the same identifier.
+Calling it with another argument such as ``${uuid:2}`` will provide a second identifier.
+More information on available resolvers can be found in the 
+`Hydra documentation <https://hydra.cc/docs/configure_hydra/intro/#resolvers-provided-by-hydra>`_.
 
 Defining experiments
 ====================
