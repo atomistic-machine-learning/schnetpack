@@ -234,8 +234,8 @@ A short note on the interpolation syntax ``${group.variable}``: Besides allowing
 reference variables of any group in the config, it can also be used with so-called
 ``resolvers``, which are functions that evaluate some provided arguments when the config
 is built. The syntax is ``${resolver:arguments}``. For example, we utilize the built-in
-``hydra`` resolver ``${hydra:runtime.cwd}`` to set the root directory of our run to the
-current working directory. Another example is the custom resolver ``${uuid:1}``. We have
+``hydra`` resolver in ``${hydra:runtime.cwd}`` to set the root directory of our run to the
+current working directory. Another example is the custom resolver ``uuid:1``. We have
 designed it to provide a unique identifier that is cached using the provided argument,
 i.e. calling ``${uuid:1}`` twice in your config will result in the same identifier.
 Calling it with another argument such as ``${uuid:2}`` will provide a second identifier.
