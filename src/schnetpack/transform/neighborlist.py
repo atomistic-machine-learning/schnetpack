@@ -1,6 +1,7 @@
 import os
 import torch
 import shutil
+import fasteners
 from ase import Atoms
 from ase.neighborlist import neighbor_list as ase_neighbor_list
 from matscipy.neighbours import neighbour_list as msp_neighbor_list
@@ -8,10 +9,14 @@ from .base import Transform
 from dirsync import sync
 import numpy as np
 from typing import Optional, Dict, List
+from pymatgen.optimization.neighbors import find_points_in_spheres
+from vesin import NeighborList as vesin_nl
 
 __all__ = [
     "ASENeighborList",
     "MatScipyNeighborList",
+    "PymatgenNeighborList",
+    "VesinNeighborList",
     "TorchNeighborList",
     "CountNeighbors",
     "CollectAtomTriples",
@@ -24,7 +29,6 @@ __all__ = [
 
 import schnetpack as spk
 from schnetpack import properties
-import fasteners
 
 
 class CacheException(Exception):
@@ -199,6 +203,14 @@ class NeighborListTransform(Transform):
         """Override with specific neighbor list implementation"""
         raise NotImplementedError
 
+    def _convert_inputs_to_numpy(self, Z, positions, cell, pbc):
+        pos_np = positions.detach().cpu().numpy()
+        cell_np = cell.detach().cpu().numpy()
+        pbc_np_bool = pbc.detach().cpu().numpy()
+        pbc_np_int = pbc_np_bool.astype(int)
+
+        return pos_np, cell_np, pbc_np_bool, pbc_np_int
+
 
 class ASENeighborList(NeighborListTransform):
     """
@@ -214,6 +226,65 @@ class ASENeighborList(NeighborListTransform):
         S = torch.from_numpy(S).to(dtype=positions.dtype)
         offset = torch.mm(S, cell)
         return idx_i, idx_j, offset
+
+
+class PymatgenNeighborList(NeighborListTransform):
+    """
+    Calculate neighbor list using pymatgen.
+    """
+
+    def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
+        pos_np, cell_np, _, pbc_np_int = self._convert_inputs_to_numpy(
+            Z, positions, cell, pbc
+        )
+
+        device = positions.device
+        dtype = positions.dtype
+
+        idx_i, idx_j, offsets, distances = find_points_in_spheres(
+            pos_np,
+            pos_np,
+            r=float(cutoff),
+            pbc=pbc_np_int,
+            lattice=cell_np,
+            tol=1e-8,
+        )
+        # remove self-interactions
+        mask = idx_i != idx_j
+        idx_i = torch.from_numpy(idx_i[mask]).to(device)
+        idx_j = torch.from_numpy(idx_j[mask]).to(device)
+        offsets_frac = torch.from_numpy(offsets[mask]).to(dtype=dtype, device=device)
+        offsets_cart = offsets_frac @ cell.to(device)  # [E,3]
+        return idx_i, idx_j, offsets_cart
+
+
+class VesinNeighborList(NeighborListTransform):
+    """
+    Calculate neighbor list using Vesin.
+    """
+
+    def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
+        pos_np, cell_np, pbc_np_bool, pbc_np_int = self._convert_inputs_to_numpy(
+            Z, positions, cell, pbc
+        )
+
+        device = positions.device
+        dtype = positions.dtype
+
+        if pbc_np_bool.all():
+            periodic = True
+        elif (~pbc_np_bool).all():
+            periodic = False
+        else:
+            raise ValueError("vesin neighbor list does not support mixed PBC settings.")
+        results = vesin_nl(cutoff=float(cutoff), full_list=True).compute(
+            points=pos_np, box=cell_np, periodic=periodic, quantities="ijS"
+        )
+        idx_i = torch.from_numpy(results[0]).to(device).to(torch.long)
+        idx_j = torch.from_numpy(results[1]).to(device).to(torch.long)
+        S = torch.from_numpy(results[2]).to(dtype=dtype, device=device)
+        offsets_cart = S @ cell.to(device)
+        return idx_i, idx_j, offsets_cart
 
 
 class MatScipyNeighborList(NeighborListTransform):
