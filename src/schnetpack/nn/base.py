@@ -115,8 +115,9 @@ class Dense(nn.Linear):
         """
         self.weight_init = weight_init
         self.bias_init = bias_init
-        self.use_glu_variant= use_glu_variant
-        if self.use_glu_variant and activation is not None:
+        self.use_glu_variant = use_glu_variant and (activation is not None)
+
+        if self.use_glu_variant:
             out_features = out_features * 2
 
         super(Dense, self).__init__(in_features, out_features, bias)
@@ -131,7 +132,7 @@ class Dense(nn.Linear):
             self.bias_init(self.bias)
 
     def forward(self, input: torch.Tensor):
-        if self.use_glu_variant and self.activation is not None:
+        if self.use_glu_variant:
             gate, y = F.linear(input, self.weight, self.bias).chunk(2, dim=-1)
             y = self.activation(gate) * y
         else:

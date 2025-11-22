@@ -30,7 +30,7 @@ class PaiNNInteraction(nn.Module):
 
         self.interatomic_context_net = nn.Sequential(
             snn.Dense(n_atom_basis, n_atom_basis, activation=activation),
-            snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None, use_glu_variant=False),
+            snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None),
         )
 
     def forward(
@@ -99,10 +99,10 @@ class PaiNNMixing(nn.Module):
 
         self.intraatomic_context_net = nn.Sequential(
             snn.Dense(2 * n_atom_basis, n_atom_basis, activation=activation),
-            snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None, use_glu_variant=False, weight_init=nn.init.zeros_),
+            snn.Dense(n_atom_basis, 3 * n_atom_basis, activation=None, weight_init=nn.init.zeros_),
         )
         self.mu_channel_mix = snn.Dense(
-            n_atom_basis, 2 * n_atom_basis, activation=None, use_glu_variant=False, bias=False
+            n_atom_basis, 2 * n_atom_basis, activation=None, bias=False
         )
         self.epsilon = epsilon
 
@@ -130,11 +130,11 @@ class PaiNNMixing(nn.Module):
 
         # Use Squared Norm directly. 
         # Avoids sqrt() singularity near 0 and saves compute.
-        mu_V_sq = torch.sum(mu_V**2, dim=-2)
-        # mu_Vn = torch.sqrt(torch.sum(mu_V**2, dim=-2, keepdim=True) + self.epsilon)
+        # mu_V_sq = torch.sum(mu_V**2, dim=-2)
+        mu_Vn = torch.sqrt(torch.sum(mu_V**2, dim=-2, keepdim=True) + self.epsilon)
 
-        # ctx = torch.cat([q, mu_Vn], dim=-1)
-        ctx = torch.cat([q_in, mu_V_sq], dim=-1)
+        ctx = torch.cat([q, mu_Vn], dim=-1)
+        # ctx = torch.cat([q_in, mu_V_sq], dim=-1)
         x = self.intraatomic_context_net(ctx)
 
         dq_intra, dmu_intra, dqmu_intra = torch.split(x, self.n_atom_basis, dim=-1)
@@ -210,14 +210,13 @@ class PaiNN(nn.Module):
         self.share_filters = shared_filters
         if shared_filters:
             self.filter_net = snn.Dense(
-                self.radial_basis.n_rbf, 3 * n_atom_basis, activation=None, use_glu_variant=False
+                self.radial_basis.n_rbf, 3 * n_atom_basis, activation=None, 
             )
         else:
             self.filter_net = snn.Dense(
                 self.radial_basis.n_rbf,
                 self.n_interactions * n_atom_basis * 3,
                 activation=None,
-                use_glu_variant=False,
             )
 
         # initialize interaction blocks
@@ -271,16 +270,16 @@ class PaiNN(nn.Module):
         q = self.embedding(atomic_numbers)
         for embedding in self.electronic_embeddings:
             q = q + embedding(q, inputs)
-        # q = q.unsqueeze(1)
+        q = q.unsqueeze(1)
 
         # compute interaction blocks and update atomic embeddings
         qs = q.shape
-        # mu = torch.zeros((qs[0], 3, qs[2]), device=q.device)
-        mu = torch.zeros((qs[0], 3, qs[1]), device=q.device)
+        mu = torch.zeros((qs[0], 3, qs[2]), device=q.device)
+        # mu = torch.zeros((qs[0], 3, qs[1]), device=q.device)
         for i, (interaction, mixing) in enumerate(zip(self.interactions, self.mixing)):
             q, mu = interaction(q, mu, filter_list[i], dir_ij, idx_i, idx_j, n_atoms)
             q, mu = mixing(q, mu)
-        # q = q.squeeze(1)
+        q = q.squeeze(1)
 
         # collect results
         inputs["scalar_representation"] = q

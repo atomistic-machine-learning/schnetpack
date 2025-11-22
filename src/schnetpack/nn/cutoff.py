@@ -13,7 +13,6 @@ __all__ = [
 ]
 
 
-@torch.jit.script
 def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
     r""" Behler-style cosine cutoff.
 
@@ -60,7 +59,6 @@ class CosineCutoff(nn.Module):
         return cosine_cutoff(input, self.cutoff)
 
 
-@torch.jit.script
 def mollifier_cutoff(input: torch.Tensor, cutoff: torch.Tensor, eps: torch.Tensor):
     r""" Mollifier cutoff scaled to have a value of 1 at :math:`r=0`.
 
@@ -108,7 +106,6 @@ class MollifierCutoff(nn.Module):
         return mollifier_cutoff(input, self.cutoff, self.eps)
 
 
-@torch.jit.script
 def _switch_component(
     x: torch.Tensor, ones: torch.Tensor, zeros: torch.Tensor
 ) -> torch.Tensor:
@@ -162,7 +159,6 @@ class SwitchFunction(nn.Module):
         f_switch = torch.where(x <= 0, ones, torch.where(x >= 1, zeros, fm / (fp + fm)))
         return f_switch
 
-@torch.jit.script
 def polynomial_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
     r""" Polynomial cutoff with C2 continuity (used in MACE/NequIP).
 
