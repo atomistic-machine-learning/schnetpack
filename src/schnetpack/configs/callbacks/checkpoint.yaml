@@ -8,3 +8,4 @@ model_checkpoint:
     dirpath: 'checkpoints/'
     filename: '{epoch:02d}'
     model_path: ${globals.model_path}
+    save_weights_only: True

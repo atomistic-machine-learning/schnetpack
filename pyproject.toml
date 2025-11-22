@@ -28,7 +28,7 @@ dependencies = [
     "pyyaml",
     "hydra-core>=1.1.0",
     "torch>=2.5.0",
-    "pytorch_lightning>=2.0.0",
+    "pytorch-lightning>=2.0.0",
     "torchmetrics",
     "hydra-colorlog>=1.1.0",
     "rich",
@@ -46,7 +46,6 @@ dependencies = [
     "progressbar",
     "pytest",
     "petname",
-    "deepspeed>=0.18.2",
 ]
 
 [project.optional-dependencies]

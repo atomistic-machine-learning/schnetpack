@@ -28,4 +28,4 @@ num_nodes: 1
 deterministic: False
 inference_mode: False
 
-strategy: ddp
+strategy: ddp_find_unused_parameters_true
