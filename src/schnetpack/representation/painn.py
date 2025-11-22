@@ -130,11 +130,11 @@ class PaiNNMixing(nn.Module):
 
         # Use Squared Norm directly. 
         # Avoids sqrt() singularity near 0 and saves compute.
-        # mu_V_sq = torch.sum(mu_V**2, dim=-2)
-        mu_Vn = torch.sqrt(torch.sum(mu_V**2, dim=-2, keepdim=True) + self.epsilon)
+        mu_V_sq = torch.sum(mu_V**2, dim=-2)
+        # mu_Vn = torch.sqrt(torch.sum(mu_V**2, dim=-2, keepdim=True) + self.epsilon)
 
-        ctx = torch.cat([q, mu_Vn], dim=-1)
-        # ctx = torch.cat([q_in, mu_V_sq], dim=-1)
+        # ctx = torch.cat([q, mu_Vn], dim=-1)
+        ctx = torch.cat([q_in, mu_V_sq], dim=-1)
         x = self.intraatomic_context_net(ctx)
 
         dq_intra, dmu_intra, dqmu_intra = torch.split(x, self.n_atom_basis, dim=-1)
