@@ -46,6 +46,7 @@ dependencies = [
     "progressbar",
     "pytest",
     "petname",
+    "deepspeed>=0.18.2",
 ]
 
 [project.optional-dependencies]

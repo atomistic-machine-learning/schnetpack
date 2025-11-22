@@ -5,12 +5,15 @@ from torch import nn
 __all__ = [
     "CosineCutoff",
     "MollifierCutoff",
+    "PolynomialCutoff",
     "mollifier_cutoff",
     "cosine_cutoff",
+    "polynomial_cutoff",
     "SwitchFunction",
 ]
 
 
+@torch.jit.script
 def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
     r""" Behler-style cosine cutoff.
 
@@ -57,6 +60,7 @@ class CosineCutoff(nn.Module):
         return cosine_cutoff(input, self.cutoff)
 
 
+@torch.jit.script
 def mollifier_cutoff(input: torch.Tensor, cutoff: torch.Tensor, eps: torch.Tensor):
     r""" Mollifier cutoff scaled to have a value of 1 at :math:`r=0`.
 
@@ -104,6 +108,7 @@ class MollifierCutoff(nn.Module):
         return mollifier_cutoff(input, self.cutoff, self.eps)
 
 
+@torch.jit.script
 def _switch_component(
     x: torch.Tensor, ones: torch.Tensor, zeros: torch.Tensor
 ) -> torch.Tensor:
@@ -156,3 +161,61 @@ class SwitchFunction(nn.Module):
 
         f_switch = torch.where(x <= 0, ones, torch.where(x >= 1, zeros, fm / (fp + fm)))
         return f_switch
+
+@torch.jit.script
+def polynomial_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
+    r""" Polynomial cutoff with C2 continuity (used in MACE/NequIP).
+
+    .. math::
+       f(r) = \begin{cases}
+       1 - 10\left(\frac{r}{r_c}\right)^3 + 15\left(\frac{r}{r_c}\right)^4 - 6\left(\frac{r}{r_c}\right)^5 
+         & r < r_c \\
+       0 & r \geqslant r_c \\
+       \end{cases}
+
+    f(x) = 1 - 10x^3 + 15x^4 - 6x^5, where x = r / r_c
+
+    Args:
+        input: Input distances.
+        cutoff: Cutoff radius.
+    """
+    # x = r / r_c
+    x = input / cutoff
+    
+    mask = (x < 1.0).float()
+    
+    # Calculate polynomial 
+    # Optimized form: 1 + x^3 * (-10 + x * (15 - 6x))
+    # This reduces the number of multiplications compared to the expanded form.
+    polynomial = 1.0 + torch.pow(x, 3) * (-10.0 + x * (15.0 - 6.0 * x))
+    
+    # Apply mask
+    return polynomial * mask
+
+class PolynomialCutoff(nn.Module):
+    r""" Polynomial cutoff module with C2 continuity.
+    
+    Recommended for modern graph neural networks (MACE, NequIP, Allegro) as it 
+    ensures smooth first and second derivatives at the boundary, preventing 
+    force discontinuities in MD.
+
+    .. math::
+       f(r) = \begin{cases}
+       1 - 10\left(\frac{r}{r_c}\right)^3 + 15\left(\frac{r}{r_c}\right)^4 - 6\left(\frac{r}{r_c}\right)^5 
+         & r < r_c \\
+       0 & r \geqslant r_c \\
+       \end{cases}
+    """
+
+    def __init__(self, cutoff: float):
+        """
+        Args:
+            cutoff (float): cutoff radius.
+        """
+        super(PolynomialCutoff, self).__init__()
+        self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
+
+    def forward(self, input: torch.Tensor):
+        return polynomial_cutoff(input, self.cutoff)
+
+# vi:ts=4 sw=4 et

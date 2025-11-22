@@ -1,5 +1,6 @@
 defaults:
-  - radial_basis: gaussian
+  # - radial_basis: gaussian
+  - radial_basis: bessel
 
 _target_: schnetpack.representation.PaiNN
 n_atom_basis: 128
@@ -7,5 +8,6 @@ n_interactions: 3
 shared_interactions: False
 shared_filters: False
 cutoff_fn:
-  _target_: schnetpack.nn.cutoff.CosineCutoff
+  # _target_: schnetpack.nn.cutoff.CosineCutoff
+  _target_: schnetpack.nn.cutoff.PolynomialCutoff
   cutoff: ${globals.cutoff}
