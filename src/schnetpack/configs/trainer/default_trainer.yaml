@@ -28,4 +28,4 @@ num_nodes: 1
 deterministic: False
 inference_mode: False
 
-strategy: deepspeed
+strategy: ddp
