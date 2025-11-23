@@ -130,7 +130,7 @@ class PaiNNMixing(nn.Module):
 
         # Use Squared Norm directly. 
         # Avoids sqrt() singularity near 0 and saves compute.
-        mu_V_sq = torch.sum(mu_V**2, dim=-2)
+        mu_V_sq = torch.sum(mu_V**2, dim=-2, keepdim=True)
         # mu_Vn = torch.sqrt(torch.sum(mu_V**2, dim=-2, keepdim=True) + self.epsilon)
 
         # ctx = torch.cat([q, mu_Vn], dim=-1)
