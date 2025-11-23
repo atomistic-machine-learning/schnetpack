@@ -155,6 +155,7 @@ class AtomisticTask(pl.LightningModule):
                     on_step=(subset == "train"),
                     on_epoch=(subset != "train"),
                     prog_bar=False,
+                    sync_dist=True,
                 )
 
     def apply_constraints(self, pred, targets):
@@ -180,7 +181,7 @@ class AtomisticTask(pl.LightningModule):
 
         loss = self.loss_fn(pred, targets)
 
-        self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
+        self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False, sync_dist=True)
         self.log_metrics(pred, targets, "train")
         return loss
 
@@ -209,6 +210,7 @@ class AtomisticTask(pl.LightningModule):
             on_epoch=True,
             prog_bar=True,
             batch_size=len(batch["_idx"]),
+            sync_dist=True,
         )
         self.log_metrics(pred, targets, "val")
 
@@ -239,6 +241,7 @@ class AtomisticTask(pl.LightningModule):
             on_epoch=True,
             prog_bar=True,
             batch_size=len(batch["_idx"]),
+            sync_dist=True,
         )
         self.log_metrics(pred, targets, "test")
         return {"test_loss": loss}
