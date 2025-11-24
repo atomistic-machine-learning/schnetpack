@@ -502,6 +502,21 @@ wheels = [
 ]
 
 [[package]]
+name = "lmdb"
+version = "1.7.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c7/a3/3756f2c6adba4a1413dba55e6c81a20b38a868656517308533e33cb59e1c/lmdb-1.7.5.tar.gz", hash = "sha256:f0604751762cb097059d5412444c4057b95f386c7ed958363cf63f453e5108da", size = 883490, upload-time = "2025-10-15T03:39:44.038Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/34/b4/8b862c4d7fd6f68cb33e2a919169fda8924121dc5ff61e3cc105304a6dd4/lmdb-1.7.5-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:b48c2359eea876d7b634b49f84019ecc8c1626da97c795fc7b39a793676815df", size = 100910, upload-time = "2025-10-15T03:39:00.727Z" },
+    { url = "https://files.pythonhosted.org/packages/27/64/8ab5da48180d5f13a293ea00a9f8758b1bee080e76ea0ab0d6be0d51b55f/lmdb-1.7.5-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:2f84793baeb430ba984eb6c1b4e08c0a508b1c03e79ce79fcda0f29ecc06a95a", size = 99376, upload-time = "2025-10-15T03:39:01.791Z" },
+    { url = "https://files.pythonhosted.org/packages/43/e0/51bc942fe5ed3fce69c631b54f52d97785de3d94487376139be6de1e199a/lmdb-1.7.5-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:68cc21314a33faac1b749645a976b7655e7fa7cc104a72365d2429d2db7f6342", size = 298556, upload-time = "2025-10-15T03:39:02.787Z" },
+    { url = "https://files.pythonhosted.org/packages/66/c5/19ea75c88b91d12da5c6f4bbe2aca633047b6b270fd613d557583d32cc5c/lmdb-1.7.5-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:f2d9b7e102fcfe5e0cfb3acdebd403eb55ccbe5f7202d8f49d60bdafb1546d1e", size = 299449, upload-time = "2025-10-15T03:39:03.903Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/74/365194203dbff47d3a1621366d6a1133cdcce261f4ac0e1d0496f01e6ace/lmdb-1.7.5-cp312-cp312-win_amd64.whl", hash = "sha256:69de89cc79e03e191fc6f95797f1bef91b45c415d1ea9d38872b00b2d989a50f", size = 99328, upload-time = "2025-10-15T03:39:04.949Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/3a/a441afebff5bd761f7f58d194fed7ac265279964957479a5c8a51c42f9ad/lmdb-1.7.5-cp312-cp312-win_arm64.whl", hash = "sha256:0c880ee4b309e900f2d58a710701f5e6316a351878588c6a95a9c0bcb640680b", size = 94191, upload-time = "2025-10-15T03:39:05.975Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/2c/982cb5afed533d0cb8038232b40c19b5b85a2d887dec74dfd39e8351ef4b/lmdb-1.7.5-py3-none-any.whl", hash = "sha256:fc344bb8bc0786c87c4ccb19b31f09a38c08bd159ada6f037d669426fea06f03", size = 148539, upload-time = "2025-10-15T03:39:42.982Z" },
+]
+
+[[package]]
 name = "markdown"
 version = "3.10"
 source = { registry = "https://pypi.org/simple" }
@@ -1160,6 +1175,7 @@ dependencies = [
     { name = "h5py" },
     { name = "hydra-colorlog" },
     { name = "hydra-core" },
+    { name = "lmdb" },
     { name = "matscipy" },
     { name = "numpy" },
     { name = "petname" },
@@ -1196,6 +1212,7 @@ requires-dist = [
     { name = "h5py" },
     { name = "hydra-colorlog", specifier = ">=1.1.0" },
     { name = "hydra-core", specifier = ">=1.1.0" },
+    { name = "lmdb", specifier = ">=1.7.5" },
     { name = "matscipy", specifier = ">=1.1.0" },
     { name = "numpy", specifier = ">=2.0.0" },
     { name = "petname" },

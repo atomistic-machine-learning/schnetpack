@@ -3,7 +3,7 @@ defaults:
 
 _target_: schnetpack.datasets.QM9
 
-datapath: ${run.data_dir}/qm9.db  # data_dir is specified in train.yaml
+datapath: ${run.data_dir}/qm9.lmdb # data_dir is specified in train.yaml
 batch_size: 100
 num_train: 110000
 num_val: 10000

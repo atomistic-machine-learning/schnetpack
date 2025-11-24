@@ -46,6 +46,7 @@ dependencies = [
     "progressbar",
     "pytest",
     "petname",
+    "lmdb>=1.7.5",
 ]
 
 [project.optional-dependencies]
