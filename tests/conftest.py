@@ -106,7 +106,7 @@ def single_atom():
         spk.properties.Z: torch.tensor([6]),
         spk.properties.R: torch.tensor([[0.0, 0.0, 0.0]], dtype=torch.float64),
         spk.properties.cell: torch.tensor(
-            [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], dtype=torch.float64
+            [[0.0, 0.0, 0.1], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]], dtype=torch.float64
         ),
         spk.properties.pbc: torch.tensor([False, False, False]),
         spk.properties.n_atoms: torch.tensor([1]),
