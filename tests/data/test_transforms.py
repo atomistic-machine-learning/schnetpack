@@ -58,7 +58,7 @@ class TestNeighborLists:
 
         for nbl, nbl_ref in zip(neighbors, neighbors_ref):
 
-            if nbl_ref.dtype is torch.float64:
+            if nbl_ref.dtype == torch.float64:
                 nbl_ref = nbl_ref.to(dtype=precision)
 
             torch.testing.assert_close(nbl, nbl_ref)
