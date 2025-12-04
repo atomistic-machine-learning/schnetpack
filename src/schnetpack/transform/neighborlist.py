@@ -241,6 +241,10 @@ class PymatgenNeighborList(NeighborListTransform):
         device = positions.device
         dtype = positions.dtype
 
+        if cell_np.dtype == np.float32:
+            cell_np = cell_np.astype(np.float64)
+            pos_np = pos_np.astype(np.float64)
+
         idx_i, idx_j, offsets, distances = find_points_in_spheres(
             pos_np,
             pos_np,
