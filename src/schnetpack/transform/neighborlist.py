@@ -646,18 +646,20 @@ class CollectAtomTriples(Transform):
         """
         idx_i = inputs[properties.idx_i]
 
-        _, n_neighbors = torch.unique_consecutive(idx_i, return_counts=True)
+        atom_idxes, n_neighbors = torch.unique_consecutive(idx_i, return_counts=True)
 
         offset = 0
         idx_i_triples = ()
         idx_jk_triples = ()
-        for idx in range(n_neighbors.shape[0]):
+        for atom_idx, cur_n_neighbors in zip(atom_idxes, n_neighbors):
             triples = torch.combinations(
-                torch.arange(offset, offset + n_neighbors[idx]), r=2
+                torch.arange(offset, offset + cur_n_neighbors), r=2
             )
-            idx_i_triples += (torch.ones(triples.shape[0], dtype=torch.long) * idx,)
+            idx_i_triples += (
+                torch.ones(triples.shape[0], dtype=torch.long) * atom_idx,
+            )
             idx_jk_triples += (triples,)
-            offset += n_neighbors[idx]
+            offset += cur_n_neighbors
 
         idx_i_triples = torch.cat(idx_i_triples)
 
