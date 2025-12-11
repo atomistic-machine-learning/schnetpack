@@ -176,7 +176,7 @@ class BaseAtomsData(ABC):
         self,
         property_list: List[Dict[str, Any]],
         atoms_list: Optional[List[Atoms]] = None,
-        key_value_list: Optional[List[Dict[str, Any]]] = None,
+        atoms_metadata_list: Optional[List[Dict[str, Any]]] = None,
     ):
         pass
 
@@ -540,6 +540,9 @@ class ASEAtomsData(BaseAtomsData):
                     "Property dict does not contain all necessary structure keys"
                 ) from e
 
+        if atoms_metadata is None:
+            atoms_metadata = {}
+            
         # add available properties to database
         valid_props = set().union(
             conn.metadata["_property_unit_dict"].keys(),
