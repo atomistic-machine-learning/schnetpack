@@ -542,7 +542,7 @@ class ASEAtomsData(BaseAtomsData):
 
         if atoms_metadata is None:
             atoms_metadata = {}
-            
+
         # add available properties to database
         valid_props = set().union(
             conn.metadata["_property_unit_dict"].keys(),
