@@ -48,6 +48,7 @@ dependencies = [
     "petname",
     "vesin",
     "pymatgen",
+    "pytest-benchmark",
 ]
 
 [project.optional-dependencies]
