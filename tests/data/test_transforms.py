@@ -22,6 +22,15 @@ def neighbor_list(request):
     return neighbor_lists[request.param]
 
 
+@pytest.fixture(params=[0, 1])
+def precision(request):
+    precisions = [
+        torch.float64,
+        torch.float32,
+    ]
+    return precisions[request.param]
+
+
 class TestNeighborLists:
     """
     Test for different neighbor lists defined in neighbor_list using the Argon environment fixtures (periodic and
@@ -29,8 +38,12 @@ class TestNeighborLists:
 
     """
 
-    def test_neighbor_list(self, neighbor_list, environment):
+    def test_neighbor_list(self, neighbor_list, environment, precision):
         cutoff, props, neighbors_ref = environment
+
+        if precision == torch.float32:
+            _ = CastTo32()(props)
+
         neighbor_list = neighbor_list(cutoff)
         neighbors = neighbor_list(props)
         R = props[structure.R]
@@ -44,6 +57,10 @@ class TestNeighborLists:
         neighbors_ref = self._sort_neighbors(neighbors_ref)
 
         for nbl, nbl_ref in zip(neighbors, neighbors_ref):
+
+            if nbl_ref.dtype == torch.float64:
+                nbl_ref = nbl_ref.to(dtype=precision)
+
             torch.testing.assert_close(nbl, nbl_ref)
 
     def _sort_neighbors(self, neighbors):

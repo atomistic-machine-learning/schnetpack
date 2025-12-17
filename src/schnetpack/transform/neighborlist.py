@@ -230,7 +230,7 @@ class ASENeighborList(NeighborListTransform):
 
 class PymatgenNeighborList(NeighborListTransform):
     """
-    Calculate neighbor list using pymatgen.
+    Calculate neighbor list using pymatgen. Automatically casts Z and positions to np.float64.
     """
 
     def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
@@ -240,6 +240,9 @@ class PymatgenNeighborList(NeighborListTransform):
 
         device = positions.device
         dtype = positions.dtype
+
+        cell_np = cell_np.astype(np.float64, copy=False)
+        pos_np = pos_np.astype(np.float64, copy=False)
 
         idx_i, idx_j, offsets, distances = find_points_in_spheres(
             pos_np,
