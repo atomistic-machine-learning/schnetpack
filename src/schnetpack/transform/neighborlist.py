@@ -639,6 +639,7 @@ class CollectAtomTriples(Transform):
         these arrays generate the indices involved in the atom triples.
 
         Example:
+            idx_i_triples -> i atom in triple
             idx_j[idx_j_triples] -> j atom in triple
             idx_j[idx_k_triples] -> k atom in triple
             Rij[idx_j_triples] -> Rij vector in triple
