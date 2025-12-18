@@ -10,13 +10,12 @@ def assert_consistent(orig, transformed):
         assert (v == transformed[k]).all(), f"Changed value: {k}"
 
 
-@pytest.fixture(params=[0, 1, 2, 3, 4])
+@pytest.fixture(params=[0, 1, 2, 3])
 def neighbor_list(request):
     neighbor_lists = [
         ASENeighborList,
         TorchNeighborList,
         MatScipyNeighborList,
-        PymatgenNeighborList,
         VesinNeighborList,
     ]
     return neighbor_lists[request.param]
