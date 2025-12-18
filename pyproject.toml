@@ -47,7 +47,6 @@ dependencies = [
     "pytest",
     "petname",
     "vesin",
-    "pymatgen",
 ]
 
 [project.optional-dependencies]
