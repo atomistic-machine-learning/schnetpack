@@ -9,13 +9,11 @@ from .base import Transform
 from dirsync import sync
 import numpy as np
 from typing import Optional, Dict, List
-from pymatgen.optimization.neighbors import find_points_in_spheres
 from vesin import NeighborList as vesin_nl
 
 __all__ = [
     "ASENeighborList",
     "MatScipyNeighborList",
-    "PymatgenNeighborList",
     "VesinNeighborList",
     "TorchNeighborList",
     "CountNeighbors",
@@ -226,36 +224,6 @@ class ASENeighborList(NeighborListTransform):
         S = torch.from_numpy(S).to(dtype=positions.dtype)
         offset = torch.mm(S, cell)
         return idx_i, idx_j, offset
-
-
-class PymatgenNeighborList(NeighborListTransform):
-    """
-    Calculate neighbor list using pymatgen.
-    """
-
-    def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
-        pos_np, cell_np, _, pbc_np_int = self._convert_inputs_to_numpy(
-            Z, positions, cell, pbc
-        )
-
-        device = positions.device
-        dtype = positions.dtype
-
-        idx_i, idx_j, offsets, distances = find_points_in_spheres(
-            pos_np,
-            pos_np,
-            r=float(cutoff),
-            pbc=pbc_np_int,
-            lattice=cell_np,
-            tol=1e-8,
-        )
-        # remove self-interactions
-        mask = idx_i != idx_j
-        idx_i = torch.from_numpy(idx_i[mask]).to(device)
-        idx_j = torch.from_numpy(idx_j[mask]).to(device)
-        offsets_frac = torch.from_numpy(offsets[mask]).to(dtype=dtype, device=device)
-        offsets_cart = offsets_frac @ cell.to(device)  # [E,3]
-        return idx_i, idx_j, offsets_cart
 
 
 class VesinNeighborList(NeighborListTransform):
