@@ -227,7 +227,7 @@ class QM9(AtomsDataModule):
 
         logging.info("Parse xyz files...")
         ordered_files = sorted(
-            os.listdir(raw_path), key=lambda x: (int(re.sub("\D", "", x)), x)
+            os.listdir(raw_path), key=lambda x: (int(re.sub(r"\D", "", x)), x)
         )
 
         property_list = []

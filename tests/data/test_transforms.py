@@ -10,10 +10,20 @@ def assert_consistent(orig, transformed):
         assert (v == transformed[k]).all(), f"Changed value: {k}"
 
 
-@pytest.fixture(params=[0, 1])
+@pytest.fixture(params=[0, 1, 2, 3])
 def neighbor_list(request):
-    neighbor_lists = [ASENeighborList, TorchNeighborList]
+    neighbor_lists = [
+        ASENeighborList,
+        TorchNeighborList,
+        MatScipyNeighborList,
+        VesinNeighborList,
+    ]
     return neighbor_lists[request.param]
+
+
+@pytest.fixture
+def triplet_transform():
+    return CollectAtomTriples()
 
 
 class TestNeighborLists:
@@ -92,6 +102,37 @@ class TestNeighborLists:
         )
 
         return torch.argsort(unique_idx)
+
+
+def test_collect_atom_triples_non_consecutive_atom_ids(triplet_transform):
+    """
+    Ensure correct triple construction when idx_i contains non-consecutive atom IDs,
+    e.g. [0, 1, 1, 3, 3, 3] (note the missing "2").
+    """
+
+    # idx_i encodes which central atom each neighbor belongs to
+    idx_i = torch.tensor([0, 1, 1, 3, 3, 3], dtype=torch.long)
+
+    inputs = {structure.idx_i: idx_i.clone()}
+
+    out = triplet_transform.forward(inputs)
+
+    # ----- Expected groups -----
+    # Atom 0: only one neighbor → no triples
+    # Atom 1: two neighbors → 1 triple
+    # Atom 3: three neighbors → 3 triples
+
+    # Expected idx_i_triples:
+    expected_idx_i_triples = torch.tensor([1, 3, 3, 3], dtype=torch.long)
+
+    # Expected neighbor pair indices
+    expected_j = torch.tensor([1, 3, 3, 4], dtype=torch.long)
+    expected_k = torch.tensor([2, 4, 5, 5], dtype=torch.long)
+
+    # ----- Assertions -----
+    assert torch.equal(out[structure.idx_i_triples], expected_idx_i_triples)
+    assert torch.equal(out[structure.idx_j_triples], expected_j)
+    assert torch.equal(out[structure.idx_k_triples], expected_k)
 
 
 def test_single_atom(single_atom, neighbor_list, cutoff):

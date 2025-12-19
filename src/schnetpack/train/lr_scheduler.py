@@ -77,4 +77,4 @@ class ReduceLROnPlateau(torch.optim.lr_scheduler.ReduceLROnPlateau):
                 self.smoothing_factor * self.ema_loss
                 + (1.0 - self.smoothing_factor) * current
             )
-        super().step(current, epoch)
+        super().step(self.ema_loss, epoch)
