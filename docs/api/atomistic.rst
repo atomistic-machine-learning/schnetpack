@@ -22,4 +22,19 @@ Output modules
     :nosignatures:
     :template: classtemplate.rst
 
+    Response
     Forces
+    Strain
+
+.. rubric:: Physical prior layers
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+    :template: classtemplate.rst
+
+    ZBLRepulsionEnergy
+    CoulombPotential
+    DampedCoulombPotential
+    EnergyCoulomb
+    EnergyEwald
