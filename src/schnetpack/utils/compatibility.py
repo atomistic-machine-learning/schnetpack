@@ -23,27 +23,30 @@ def load_model(
     Returns:
         torch.nn.Module: Loaded model.
     """
-
-    def _convert_from_older(model: torch.nn.Module) -> torch.nn.Module:
-        model.spk_version = "2.0.4"
-        return model
-
-    def _convert_from_v2_0_4(model: torch.nn.Module) -> torch.nn.Module:
-        if not hasattr(model.representation, "electronic_embeddings"):
-            model.representation.electronic_embeddings = []
-        model.spk_version = "2.1.0"
-        return model
-
     model = torch.load(model_path, map_location=device, weights_only=False, **kwargs)
 
+    # convert old models to 2.0.4 format
     if not hasattr(model, "spk_version"):
         # make warning that model has no version information
         warnings.warn(
             "Model was saved without version information. Conversion to current version may fail."
         )
-        model = _convert_from_older(model)
+        model.spk_version = "2.0.4"
 
+    # convert 2.0.4 models to 2.1.0 format
     if model.spk_version == "2.0.4":
-        model = _convert_from_v2_0_4(model)
+        if not hasattr(model.representation, "electronic_embeddings"):
+            model.representation.electronic_embeddings = []
+        model.spk_version = "2.1.0"
+
+    # convert 2.1.0 models to 2.1.1 format
+    if model.spk_version == "2.1.0":
+        # no conversion needed
+        model.spk_version = "2.1.1"
+
+    # convert 2.1.1 models to 2.2.0 format
+    if model.spk_version == "2.1.1":
+        # no conversion needed
+        model.spk_version = "2.2.0"
 
     return model
