@@ -116,7 +116,7 @@ class MPTraj(AtomsDataModule):
             zip_filename=local_path,
             file_filter=lambda f: f.startswith("mptrj-gga-ggapu/")
             and f.endswith(".extxyz"),
-            filename_to_info=True
+            filename_to_info=True,
         )
 
         property_list = []
