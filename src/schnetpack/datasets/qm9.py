@@ -226,7 +226,7 @@ class QM9(AtomsDataModule):
             logging.info(f"Response status: {response.status}")
             with open(tar_path, "wb") as out_file:
                 shutil.copyfileobj(response, out_file)
-                
+
         logging.info("Done.")
 
         logging.info("Extracting files...")
