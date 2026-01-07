@@ -215,7 +215,18 @@ class QM9(AtomsDataModule):
         raw_path = os.path.join(tmpdir, "gdb9_xyz")
         url = "https://springernature.figshare.com/ndownloader/files/3195389"
 
-        request.urlretrieve(url, tar_path)
+        req = request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            },
+        )
+
+        with request.urlopen(req, timeout=600) as response:
+            logging.info(f"Response status: {response.status}")
+            with open(tar_path, "wb") as out_file:
+                shutil.copyfileobj(response, out_file)
+                
         logging.info("Done.")
 
         logging.info("Extracting files...")
