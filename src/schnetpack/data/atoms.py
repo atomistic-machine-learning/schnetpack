@@ -569,7 +569,7 @@ class ASEAtomsData(BaseAtomsData):
 
     def _add_system(
         self,
-        conn, #TODO: Remove this later. It’s no longer used, but kept to preserve the API structure.
+        conn,  # TODO: Remove this later. It’s no longer used, but kept to preserve the API structure.
         atoms: Optional[Atoms] = None,
         atoms_metadata: Optional[Dict[str, Any]] = None,
         **properties,
