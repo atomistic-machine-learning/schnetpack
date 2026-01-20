@@ -196,9 +196,9 @@ class rMD17(AtomsDataModule):
         raw_path = os.path.join(tmpdir, "rmd17")
         tar_path = os.path.join(tmpdir, "rmd17.tar")
         urls = [
-                "https://figshare.com/ndownloader/files/23950376",
-                "https://archive.materialscloud.org/records/pfffs-fff86/files/rmd17.tar.bz2?download=1", # Fallback mirror
-            ]
+            "https://figshare.com/ndownloader/files/23950376",
+            "https://archive.materialscloud.org/records/pfffs-fff86/files/rmd17.tar.bz2?download=1",  # Fallback mirror
+        ]
 
         downloaded = False
         last_error = None
@@ -215,8 +215,8 @@ class rMD17(AtomsDataModule):
 
                 if size == 0 or "text/html" in ctype:
                     raise RuntimeError(
-                            f"Blocked or invalid download (size={size}, Content-Type={ctype})"
-                        )
+                        f"Blocked or invalid download (size={size}, Content-Type={ctype})"
+                    )
                 logging.info(f"Download successful rMD17.")
                 downloaded = True
                 break
@@ -227,8 +227,7 @@ class rMD17(AtomsDataModule):
 
         if not downloaded:
             raise RuntimeError(
-                "rMD17 download failed from both sources. "
-                f"Error: {last_error}"
+                "rMD17 download failed from both sources. " f"Error: {last_error}"
             )
         logging.info("Done.")
 
