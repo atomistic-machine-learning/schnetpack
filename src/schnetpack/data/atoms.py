@@ -517,57 +517,6 @@ class ASEAtomsData(BaseAtomsData):
                 **prop,
             )
 
-    '''
-    def _add_system(
-        self,
-        conn,
-        atoms: Optional[Atoms] = None,
-        atoms_metadata: Optional[Dict[str, Any]] = None,
-        **properties,
-    ):
-        """
-        Add systems to DB.
-        """
-        # create atoms object if not provided
-        if atoms is None:
-            try:
-                Z = properties[structure.Z]
-                R = properties[structure.R]
-                cell = properties[structure.cell]
-                pbc = properties[structure.pbc]
-                atoms = Atoms(numbers=Z, positions=R, cell=cell, pbc=pbc)
-            except KeyError as e:
-                raise AtomsDataError(
-                    "Property dict does not contain all necessary structure keys"
-                ) from e
-
-        if atoms_metadata is None:
-            atoms_metadata = {}
-
-        # add available properties to database
-        valid_props = set().union(
-            conn.metadata["_property_unit_dict"].keys(),
-            [structure.Z, structure.R, structure.cell, structure.pbc],
-        )
-        for pname in properties:
-            if pname not in valid_props:
-                logger.warning(
-                    f"Property `{pname}` is not a defined property for this dataset and "
-                    + f"will be ignored. If it should be included, it has to be "
-                    + f"provided together with its unit when calling "
-                    + f"AseAtomsData.create()."
-                )
-
-        data = {}
-        for pname in conn.metadata["_property_unit_dict"].keys():
-            if pname in properties:
-                data[pname] = properties[pname]
-            else:
-                raise AtomsDataError("Required property missing:" + pname)
-
-        conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
-    '''
-
     def _add_system(
         self,
         atoms: Optional[Atoms] = None,
