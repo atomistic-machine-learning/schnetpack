@@ -50,8 +50,8 @@ class MergedAtomsDataModule(AtomsDataModule):
             num_train=num_train,
             num_val=num_val,
             num_test=num_test,
-            split_file=None,    
-            format=None,        
+            split_file=None,
+            format=None,
             load_properties=load_properties,
             transforms=transforms,
             train_transforms=train_transforms,
@@ -180,7 +180,11 @@ class MergedAtomsDataModule(AtomsDataModule):
             return self._stats[key]
 
         atomref = None
-        if remove_atomref and self.merged_atomrefs is not None and property in self.merged_atomrefs:
+        if (
+            remove_atomref
+            and self.merged_atomrefs is not None
+            and property in self.merged_atomrefs
+        ):
             atomref = self.merged_atomrefs
 
         stats = calculate_stats(
@@ -192,7 +196,9 @@ class MergedAtomsDataModule(AtomsDataModule):
         self._stats[key] = stats
         return stats
 
-    def get_atomrefs(self, property: str, is_extensive: bool) -> Dict[str, torch.Tensor]:
+    def get_atomrefs(
+        self, property: str, is_extensive: bool
+    ) -> Dict[str, torch.Tensor]:
         """
         Estimate atomrefs from merged training data (optional utility).
         """

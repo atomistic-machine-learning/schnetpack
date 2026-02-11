@@ -8,11 +8,18 @@ from schnetpack.data import AtomsDataFormat, load_dataset
 from schnetpack.datasets.md17 import MD17
 from schnetpack.datasets.rmd17 import rMD17
 
-__all__ = ["DATASET_REGISTRY", "DatasetSpec", "get_dataset_id", "build_dataset_by_name", "component_db_path"]
+__all__ = [
+    "DATASET_REGISTRY",
+    "DatasetSpec",
+    "get_dataset_id",
+    "build_dataset_by_name",
+    "component_db_path",
+]
 
 # ---------------------------
-# Registry 
+# Registry
 # ---------------------------
+
 
 @dataclass(frozen=True)
 class DatasetSpec:
@@ -40,6 +47,7 @@ def get_dataset_id(dataset_name: str) -> int:
 # ---------------------------
 # Factory (build/load datasets)
 # ---------------------------
+
 
 def component_db_path(dataset_root: str, dataset_name: str, molecule: str) -> str:
     """

@@ -25,6 +25,7 @@ def _resolve_split_sizes(
     - If a split is a float <= 1, interpret as fraction of total_size.
     - If num_test is None, fill as remainder.
     """
+
     def to_abs(x):
         if isinstance(x, float) and x <= 1.0:
             return int(round(x * total_size))
@@ -66,7 +67,9 @@ def _normalize_proportions(
     return {k: float(v) / s for k, v in proportions.items()}
 
 
-def _counts_from_proportions(split_size: int, proportions: Dict[str, float]) -> Dict[str, int]:
+def _counts_from_proportions(
+    split_size: int, proportions: Dict[str, float]
+) -> Dict[str, int]:
     """
     Turn proportions into integer counts that sum exactly to split_size.
     Uses floor then distributes remainder by largest fractional part.
@@ -171,7 +174,9 @@ class MergedDataset(Dataset):
         dataset_names = list(datasets.keys())
         proportions = _normalize_proportions(proportions, dataset_names)
 
-        n_train, n_val, n_test = _resolve_split_sizes(total_size, num_train, num_val, num_test)
+        n_train, n_val, n_test = _resolve_split_sizes(
+            total_size, num_train, num_val, num_test
+        )
 
         train_counts = _counts_from_proportions(n_train, proportions)
         val_counts = _counts_from_proportions(n_val, proportions)
@@ -197,12 +202,14 @@ class MergedDataset(Dataset):
         test_plan: List[PlanItem] = []
 
         for name in dataset_names:
-            chosen = rng.choice(len(datasets[name]), size=needed_total[name], replace=False).tolist()
+            chosen = rng.choice(
+                len(datasets[name]), size=needed_total[name], replace=False
+            ).tolist()
             ntr, nva, nts = train_counts[name], val_counts[name], test_counts[name]
 
             train_idx = chosen[:ntr]
-            val_idx = chosen[ntr:ntr + nva]
-            test_idx = chosen[ntr + nva:ntr + nva + nts]
+            val_idx = chosen[ntr : ntr + nva]
+            test_idx = chosen[ntr + nva : ntr + nva + nts]
 
             train_plan.extend([PlanItem(name, int(i)) for i in train_idx])
             val_plan.extend([PlanItem(name, int(i)) for i in val_idx])
@@ -214,7 +221,19 @@ class MergedDataset(Dataset):
             rng.shuffle(test_plan)
 
         return (
-            MergedDataset(datasets, train_plan, add_source_index=add_source_index, atomrefs=atomrefs),
-            MergedDataset(datasets, val_plan, add_source_index=add_source_index, atomrefs=atomrefs),
-            MergedDataset(datasets, test_plan, add_source_index=add_source_index, atomrefs=atomrefs),
+            MergedDataset(
+                datasets,
+                train_plan,
+                add_source_index=add_source_index,
+                atomrefs=atomrefs,
+            ),
+            MergedDataset(
+                datasets, val_plan, add_source_index=add_source_index, atomrefs=atomrefs
+            ),
+            MergedDataset(
+                datasets,
+                test_plan,
+                add_source_index=add_source_index,
+                atomrefs=atomrefs,
+            ),
         )

@@ -17,7 +17,7 @@ FORCES_KEY = "forces"
 
 
 # -------------------------
-# 1) dataset_id conditioning 
+# 1) dataset_id conditioning
 # -------------------------
 class ConditionOnDatasetID(nn.Module):
     """
@@ -27,7 +27,13 @@ class ConditionOnDatasetID(nn.Module):
     idx_m:      (N_atoms,) map atom -> structure index
     """
 
-    def __init__(self, base_representation: nn.Module, num_datasets: int, emb_dim: int, n_atom_basis: int):
+    def __init__(
+        self,
+        base_representation: nn.Module,
+        num_datasets: int,
+        emb_dim: int,
+        n_atom_basis: int,
+    ):
         super().__init__()
         self.base_representation = base_representation
         self.dataset_emb = nn.Embedding(num_datasets, emb_dim)
@@ -42,10 +48,10 @@ class ConditionOnDatasetID(nn.Module):
         dataset_id = dataset_id.long()  # (B,)
 
         idx_m = out[props.idx_m].long()  # (N_atoms,)
-        e_struct = self.dataset_emb(dataset_id)   # (B, emb_dim)
-        e_atoms = e_struct[idx_m]                 # (N_atoms, emb_dim)
+        e_struct = self.dataset_emb(dataset_id)  # (B, emb_dim)
+        e_atoms = e_struct[idx_m]  # (N_atoms, emb_dim)
 
-        h = out["scalar_representation"]          # (N_atoms, n_atom_basis)
+        h = out["scalar_representation"]  # (N_atoms, n_atom_basis)
         out["scalar_representation"] = h + self.proj(e_atoms)
         return out
 
@@ -89,8 +95,12 @@ class EnergyForcesLit(pl.LightningModule):
         loss = self.w_energy * loss_e + self.w_forces * loss_f
 
         self.log(f"{stage}/loss", loss, prog_bar=True, on_step=False, on_epoch=True)
-        self.log(f"{stage}/mae_energy", loss_e, prog_bar=True, on_step=False, on_epoch=True)
-        self.log(f"{stage}/mae_forces", loss_f, prog_bar=True, on_step=False, on_epoch=True)
+        self.log(
+            f"{stage}/mae_energy", loss_e, prog_bar=True, on_step=False, on_epoch=True
+        )
+        self.log(
+            f"{stage}/mae_forces", loss_f, prog_bar=True, on_step=False, on_epoch=True
+        )
         return loss
 
     def training_step(self, batch, batch_idx):
@@ -171,11 +181,11 @@ def build_conditioned_schnet(
 # -------------------------
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--use_atomrefs", type=int, default=0)   # 1/0
-    parser.add_argument("--remove_mean", type=int, default=0)    # 1/0
+    parser.add_argument("--use_atomrefs", type=int, default=0)  # 1/0
+    parser.add_argument("--remove_mean", type=int, default=0)  # 1/0
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--accelerator", type=str, default="cpu")  
+    parser.add_argument("--accelerator", type=str, default="cpu")
     args = parser.parse_args()
 
     use_atomrefs = bool(args.use_atomrefs)
@@ -204,7 +214,9 @@ def main():
         seed=42,
         transforms=[
             trn.ASENeighborList(cutoff=5.0),
-            trn.RemoveOffsets(ENERGY_KEY, remove_mean=remove_mean, remove_atomrefs=use_atomrefs),
+            trn.RemoveOffsets(
+                ENERGY_KEY, remove_mean=remove_mean, remove_atomrefs=use_atomrefs
+            ),
             trn.CastTo32(),
         ],
         load_properties=[ENERGY_KEY, FORCES_KEY],
@@ -235,7 +247,7 @@ def main():
         max_epochs=args.epochs,
         default_root_dir="./runs_conditioned_model",
         log_every_n_steps=10,
-        inference_mode=False,  
+        inference_mode=False,
     )
 
     trainer.fit(lit, datamodule=dm)
