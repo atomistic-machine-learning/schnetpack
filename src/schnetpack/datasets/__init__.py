@@ -8,3 +8,6 @@ from .materials_project import *
 from .omdb import *
 from .tmqm import *
 from .qm7x import *
+from .merged_dataset import *
+from .merged_datamodule import *
+from .factories import *
