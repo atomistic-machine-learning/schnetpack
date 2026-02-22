@@ -27,10 +27,10 @@ __all__ = ["QM9"]
 
 
 class QM9:
-    """QM9 benchmark database for organic molecules (dataset-only).
+    """QM9 benchmark database for organic molecules.
 
     This class:
-      - is a dataset wrapper (no Lightning DataModule inheritance)
+      - is a dataset wrapper
       - can download + build the dataset via prepare()
       - forwards the BaseAtomsData API to an underlying dataset instance
     """
@@ -126,17 +126,16 @@ class QM9:
     def subset(self, indices):
         """
         Forward subset() to underlying dataset.
-        Returns a BaseAtomsData-like object (whatever the backend returns).
+        Returns a BaseAtomsData-like object.
         """
         self._ensure_loaded()
         sub = self._dataset.subset(indices)
         # Ensure transforms are carried over if caller expects it
-        # (DataModuleV2 will set per-split transforms anyway)
+        # (DataModuleV2 will set per-split transforms)
         if getattr(sub, "transforms", None) is None:
             sub.transforms = []
         return sub
 
-    # Common attributes used elsewhere in SchNetPack
     @property
     def available_properties(self):
         self._ensure_loaded()
@@ -258,10 +257,6 @@ class QM9:
             distance_unit=self.distance_unit,
         )
         self._dataset.transforms = self.transforms
-
-    # # keep Lightning naming for convenience if any code still calls it
-    # def prepare_data(self) -> None:
-    #     self.prepare()
 
     def _download_uncharacterized(self, tmpdir: str) -> List[int]:
         logging.info("Downloading list of uncharacterized molecules...")

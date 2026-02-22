@@ -13,9 +13,6 @@ from schnetpack.data.stats import calculate_stats, estimate_atomrefs
 class StatsAtomrefProvider:
     """
     Compute and cache statistics and atom references from the *training split*.
-
-    This replaces the logic that used to live in AtomsDataModule.get_stats/get_atomrefs,
-    without requiring a DataModule instance in transforms or datasets.
     """
 
     train_dataloader_factory: Callable[[], AtomsLoader]
