@@ -24,7 +24,7 @@ from ase.db import connect
 
 import schnetpack as spk
 import schnetpack.properties as structure
-from schnetpack.transform import Transform
+from schnetpack.transform.base import Transform
 
 logger = logging.getLogger(__name__)
 

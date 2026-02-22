@@ -3,7 +3,7 @@ from typing import Optional, Dict
 import torch
 import torch.nn as nn
 
-import schnetpack as spk
+#import schnetpack as spk
 
 __all__ = [
     "Transform",
@@ -48,3 +48,10 @@ class Transform(nn.Module):
 
     def teardown(self):
         pass
+
+    def initialize(self, provider, atomrefs=None) -> None:
+        """
+        Preferred initialization hook (DataModule-free).
+        Transforms that require training stats/atomrefs override this.
+        """
+        return
