@@ -5,7 +5,7 @@ import re
 import shutil
 import tarfile
 import tempfile
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 from urllib import request as request
 
 import numpy as np
@@ -14,23 +14,25 @@ from ase.io.extxyz import read_xyz
 from tqdm import tqdm
 
 import torch
-from schnetpack.data import *
 import schnetpack.properties as structure
-from schnetpack.data import AtomsDataModuleError, AtomsDataModule
+from schnetpack.data import (
+    AtomsDataFormat,
+    AtomsDataModuleError,
+    BaseAtomsData,
+    create_dataset,
+    load_dataset,
+)
 
 __all__ = ["QM9"]
 
 
-class QM9(AtomsDataModule):
-    """QM9 benchmark database for organic molecules.
+class QM9:
+    """QM9 benchmark database for organic molecules (dataset-only).
 
-    The QM9 database contains small organic molecules with up to nine non-hydrogen atoms
-    from including C, O, N, F. This class adds convenient functions to download QM9 from
-    figshare and load the data into pytorch.
-
-    References:
-
-        .. [#qm9_1] https://ndownloader.figshare.com/files/3195404
+    This class:
+      - is a dataset wrapper (no Lightning DataModule inheritance)
+      - can download + build the dataset via prepare()
+      - forwards the BaseAtomsData API to an underlying dataset instance
     """
 
     base_urls = [
@@ -63,80 +65,107 @@ class QM9(AtomsDataModule):
     def __init__(
         self,
         datapath: str,
-        batch_size: int,
-        num_train: Optional[int] = None,
-        num_val: Optional[int] = None,
-        num_test: Optional[int] = None,
-        split_file: Optional[str] = "split.npz",
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
+        format: AtomsDataFormat = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
         remove_uncharacterized: bool = False,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
-        train_transforms: Optional[List[torch.nn.Module]] = None,
-        val_transforms: Optional[List[torch.nn.Module]] = None,
-        test_transforms: Optional[List[torch.nn.Module]] = None,
-        num_workers: int = 2,
-        num_val_workers: Optional[int] = None,
-        num_test_workers: Optional[int] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
-        data_workdir: Optional[str] = None,
+        transforms: Optional[List[torch.nn.Module]] = None,
         **kwargs,
     ):
         """
-
         Args:
-            datapath: path to dataset
-            batch_size: (train) batch size
-            num_train: number of training examples
-            num_val: number of validation examples
-            num_test: number of test examples
-            split_file: path to npz file with data partitions
-            format: dataset format
+            datapath: path to dataset DB (e.g. qm9.db)
+            format: dataset format (ASE by default)
             load_properties: subset of properties to load
-            remove_uncharacterized: do not include uncharacterized molecules.
-            val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
-            test_batch_size: test batch size. If None, use val_batch_size, then batch_size.
-            transforms: Transform applied to each system separately before batching.
-            train_transforms: Overrides transform_fn for training.
-            val_transforms: Overrides transform_fn for validation.
-            test_transforms: Overrides transform_fn for testing.
-            num_workers: Number of data loader workers.
-            num_val_workers: Number of validation data loader workers (overrides num_workers).
-            num_test_workers: Number of test data loader workers (overrides num_workers).
-            property_units: Dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
-            distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
-            data_workdir: Copy data here as part of setup, e.g. cluster scratch for faster performance.
+            remove_uncharacterized: if True, exclude uncharacterized molecules
+            property_units: optional unit overrides on load (passed to load_dataset/create_dataset)
+            distance_unit: optional distance unit override on load (passed to load_dataset/create_dataset)
+            transforms: optional default transforms (typically set by your DataModule per split)
+            **kwargs: reserved for forward compatibility
         """
-        super().__init__(
-            datapath=datapath,
-            batch_size=batch_size,
-            num_train=num_train,
-            num_val=num_val,
-            num_test=num_test,
-            split_file=split_file,
-            format=format,
-            load_properties=load_properties,
-            val_batch_size=val_batch_size,
-            test_batch_size=test_batch_size,
-            transforms=transforms,
-            train_transforms=train_transforms,
-            val_transforms=val_transforms,
-            test_transforms=test_transforms,
-            num_workers=num_workers,
-            num_val_workers=num_val_workers,
-            num_test_workers=num_test_workers,
-            property_units=property_units,
-            distance_unit=distance_unit,
-            data_workdir=data_workdir,
-            **kwargs,
-        )
-
+        self.datapath = datapath
+        self.format = format
+        self.load_properties = load_properties
         self.remove_uncharacterized = remove_uncharacterized
+        self.property_units = property_units
+        self.distance_unit = distance_unit
+        self._kwargs = kwargs
 
-    def _download_file(self, file_id: str, destination: str):
+        self._dataset: Optional[BaseAtomsData] = None
+        self.transforms = transforms or []
+
+    # -------------------------
+    # Dataset forwarding helpers
+    # -------------------------
+    def _ensure_loaded(self) -> None:
+        if self._dataset is None:
+            # Lazy-load if it already exists; otherwise require user to call prepare()
+            if not os.path.exists(self.datapath):
+                raise AtomsDataModuleError(
+                    f"QM9 dataset not found at {self.datapath}. Call dataset.prepare() first."
+                )
+            self._dataset = load_dataset(
+                self.datapath,
+                self.format,
+                load_properties=self.load_properties,
+                property_units=self.property_units,
+                distance_unit=self.distance_unit,
+            )
+            # attach any transforms set before first load
+            self._dataset.transforms = self.transforms
+
+    def __len__(self) -> int:
+        self._ensure_loaded()
+        return len(self._dataset)
+
+    def __getitem__(self, idx: int):
+        self._ensure_loaded()
+        return self._dataset[idx]
+
+    def subset(self, indices):
+        """
+        Forward subset() to underlying dataset.
+        Returns a BaseAtomsData-like object (whatever the backend returns).
+        """
+        self._ensure_loaded()
+        sub = self._dataset.subset(indices)
+        # Ensure transforms are carried over if caller expects it
+        # (DataModuleV2 will set per-split transforms anyway)
+        if getattr(sub, "transforms", None) is None:
+            sub.transforms = []
+        return sub
+
+    # Common attributes used elsewhere in SchNetPack
+    @property
+    def available_properties(self):
+        self._ensure_loaded()
+        return self._dataset.available_properties
+
+    @property
+    def atomrefs(self):
+        self._ensure_loaded()
+        return getattr(self._dataset, "atomrefs", None)
+
+    @property
+    def metadata(self):
+        self._ensure_loaded()
+        return getattr(self._dataset, "metadata", None)
+
+    @property
+    def distance_unit_internal(self):
+        self._ensure_loaded()
+        return getattr(self._dataset, "distance_unit", None)
+
+    @property
+    def property_unit_dict(self):
+        self._ensure_loaded()
+        return getattr(self._dataset, "property_unit_dict", None)
+
+    # -------------------------
+    # Download / build pipeline
+    # -------------------------
+    def _download_file(self, file_id: str, destination: str) -> None:
         for base_url in self.base_urls:
             url = f"{base_url}{file_id}"
             try:
@@ -148,7 +177,13 @@ class QM9(AtomsDataModule):
             f"Could not download file with id {file_id} from any source."
         )
 
-    def prepare_data(self):
+    def prepare_data(self) -> None:
+        """
+        Download + build the dataset if missing. If it already exists, verify
+        the uncharacterized setting is consistent.
+
+        After prepare(), the dataset is loaded and ready to use.
+        """
         if not os.path.exists(self.datapath):
             property_unit_dict = {
                 QM9.A: "GHz",
@@ -169,36 +204,62 @@ class QM9(AtomsDataModule):
             }
 
             tmpdir = tempfile.mkdtemp("qm9")
-            atomrefs = self._download_atomrefs(tmpdir)
+            try:
+                atomrefs = self._download_atomrefs(tmpdir)
 
-            dataset = create_dataset(
-                datapath=self.datapath,
-                format=self.format,
-                distance_unit="Ang",
-                property_unit_dict=property_unit_dict,
-                atomrefs=atomrefs,
-            )
+                dataset = create_dataset(
+                    datapath=self.datapath,
+                    format=self.format,
+                    distance_unit=self.distance_unit or "Ang",
+                    property_unit_dict=property_unit_dict if self.property_units is None else self.property_units,
+                    atomrefs=atomrefs,
+                )
 
-            if self.remove_uncharacterized:
-                uncharacterized = self._download_uncharacterized(tmpdir)
-            else:
-                uncharacterized = None
-            self._download_data(tmpdir, dataset, uncharacterized=uncharacterized)
-            shutil.rmtree(tmpdir)
+                if self.remove_uncharacterized:
+                    uncharacterized = self._download_uncharacterized(tmpdir)
+                else:
+                    uncharacterized = None
+
+                self._download_data(tmpdir, dataset, uncharacterized=uncharacterized)
+
+            finally:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+
         else:
-            dataset = load_dataset(self.datapath, self.format)
+            # validate uncharacterized constraint against dataset size
+            dataset = load_dataset(
+                self.datapath,
+                self.format,
+                load_properties=self.load_properties,
+                property_units=self.property_units,
+                distance_unit=self.distance_unit,
+            )
             if self.remove_uncharacterized and len(dataset) == 133885:
                 raise AtomsDataModuleError(
                     "The dataset at the chosen location contains the uncharacterized 3054 molecules. "
-                    + "Choose a different location to reload the data or set `remove_uncharacterized=False`!"
+                    "Choose a different location to reload the data or set `remove_uncharacterized=False`."
                 )
-            elif not self.remove_uncharacterized and len(dataset) < 133885:
+            if (not self.remove_uncharacterized) and len(dataset) < 133885:
                 raise AtomsDataModuleError(
                     "The dataset at the chosen location does NOT contain the uncharacterized 3054 molecules. "
-                    + "Choose a different location to reload the data or set `remove_uncharacterized=True`!"
+                    "Choose a different location to reload the data or set `remove_uncharacterized=True`."
                 )
 
-    def _download_uncharacterized(self, tmpdir):
+        # Load after prepare so wrapper is ready
+        self._dataset = load_dataset(
+            self.datapath,
+            self.format,
+            load_properties=self.load_properties,
+            property_units=self.property_units,
+            distance_unit=self.distance_unit,
+        )
+        self._dataset.transforms = self.transforms
+
+    # # keep Lightning naming for convenience if any code still calls it
+    # def prepare_data(self) -> None:
+    #     self.prepare()
+
+    def _download_uncharacterized(self, tmpdir: str) -> List[int]:
         logging.info("Downloading list of uncharacterized molecules...")
         tmp_path = os.path.join(tmpdir, "uncharacterized.txt")
         self._download_file(self.file_ids["uncharacterized"], tmp_path)
@@ -211,7 +272,7 @@ class QM9(AtomsDataModule):
                 uncharacterized.append(int(line.split()[0]))
         return uncharacterized
 
-    def _download_atomrefs(self, tmpdir):
+    def _download_atomrefs(self, tmpdir: str) -> Dict[str, List[float]]:
         logging.info("Downloading GDB-9 atom references...")
         tmp_path = os.path.join(tmpdir, "atomrefs.txt")
         self._download_file(self.file_ids["atomrefs"], tmp_path)
@@ -224,12 +285,14 @@ class QM9(AtomsDataModule):
             for z, l in zip([1, 6, 7, 8, 9], lines[5:10]):
                 for i, p in enumerate(props):
                     atref[p][z] = float(l.split()[i + 1])
-        atref = {k: v.tolist() for k, v in atref.items()}
-        return atref
+        return {k: v.tolist() for k, v in atref.items()}
 
     def _download_data(
-        self, tmpdir, dataset: BaseAtomsData, uncharacterized: List[int]
-    ):
+        self,
+        tmpdir: str,
+        dataset: BaseAtomsData,
+        uncharacterized: Optional[List[int]],
+    ) -> None:
         logging.info("Downloading GDB-9 data...")
         tar_path = os.path.join(tmpdir, "gdb9.tar.gz")
         raw_path = os.path.join(tmpdir, "gdb9_xyz")
@@ -248,7 +311,6 @@ class QM9(AtomsDataModule):
         )
 
         property_list = []
-
         irange = np.arange(len(ordered_files), dtype=int)
         if uncharacterized is not None:
             irange = np.setdiff1d(irange, np.array(uncharacterized, dtype=int) - 1)
