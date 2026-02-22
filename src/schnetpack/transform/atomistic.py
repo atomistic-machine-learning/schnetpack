@@ -140,7 +140,7 @@ class RemoveOffsets(Transform):
             )
             self.mean = mean.detach()
 
-    #legacy hook for old AtomsDataModule
+    # legacy hook for old AtomsDataModule
     def datamodule(self, _datamodule):
         """
         Legacy hook for old AtomsDataModule. Safe to remove once legacy DM is removed.
@@ -244,7 +244,6 @@ class ScaleProperty(Transform):
             mean, std = provider.get_stats(self._target_key, True, False)
             scale = mean if self._scale_by_mean else std
             self.scale = torch.abs(scale).detach()
-
 
     def datamodule(self, _datamodule):
         """
@@ -357,7 +356,6 @@ class AddOffsets(Transform):
                 self._property, self.is_extensive, self.add_atomrefs
             )
             self.mean = mean.detach()
-
 
     def datamodule(self, _datamodule):
         """

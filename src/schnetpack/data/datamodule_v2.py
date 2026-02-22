@@ -71,8 +71,12 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         self.train_sampler_args = train_sampler_args or {}
 
         self.num_workers = num_workers
-        self.num_val_workers = num_val_workers if num_val_workers is not None else num_workers
-        self.num_test_workers = num_test_workers if num_test_workers is not None else num_workers
+        self.num_val_workers = (
+            num_val_workers if num_val_workers is not None else num_workers
+        )
+        self.num_test_workers = (
+            num_test_workers if num_test_workers is not None else num_workers
+        )
         self.pin_memory = pin_memory
 
         self.train_idx: Optional[List[int]] = None
@@ -136,9 +140,15 @@ class AtomsDataModuleV2(pl.LightningDataModule):
 
         # Initialize transforms (V2 path: datamodule-free)
         train_atomrefs = getattr(self._train_dataset, "atomrefs", None)
-        self._initialize_transform_list(self.train_transforms, train_atomrefs=train_atomrefs)
-        self._initialize_transform_list(self.val_transforms, train_atomrefs=train_atomrefs)
-        self._initialize_transform_list(self.test_transforms, train_atomrefs=train_atomrefs)
+        self._initialize_transform_list(
+            self.train_transforms, train_atomrefs=train_atomrefs
+        )
+        self._initialize_transform_list(
+            self.val_transforms, train_atomrefs=train_atomrefs
+        )
+        self._initialize_transform_list(
+            self.test_transforms, train_atomrefs=train_atomrefs
+        )
 
         # Attach transforms after init (matches legacy behavior)
         self._train_dataset.transforms = self.train_transforms
