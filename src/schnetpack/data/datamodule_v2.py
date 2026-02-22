@@ -15,7 +15,7 @@ from schnetpack.data.splitting import RandomSplit, SplittingStrategy
 class AtomsDataModuleV2(pl.LightningDataModule):
     """
     V2 DataModule:
-      - accepts a dataset instance (datasets are independent)
+      - accepts a dataset instance
       - handles splitting + loaders/batching
       - builds StatsAtomrefProvider from train split
       - initializes transforms via t.initialize(provider, atomrefs=...)
@@ -150,7 +150,7 @@ class AtomsDataModuleV2(pl.LightningDataModule):
                 continue
             if self.strict_transform_init:
                 raise RuntimeError(
-                    f"Transform {type(t).__name__} does not implement initialize(provider, atomrefs=...)."
+                    f"Transform {type(t).__name__} does not implement initialize."
                 )
 
     def _load_partitions(self) -> None:
