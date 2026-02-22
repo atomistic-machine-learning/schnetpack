@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from copy import copy
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pytorch_lightning as pl
-from torch.utils.data import BatchSampler
 
 from schnetpack.data.atoms import BaseAtomsData
 from schnetpack.data.loader import AtomsLoader
@@ -20,7 +19,6 @@ class AtomsDataModuleV2(pl.LightningDataModule):
       - handles splitting + loaders/batching
       - builds StatsAtomrefProvider from train split
       - initializes transforms via t.initialize(provider, atomrefs=...)
-        (no t.datamodule() dependency in the V2 path)
     """
 
     def __init__(
@@ -36,24 +34,21 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         train_transforms: Optional[List] = None,
         val_transforms: Optional[List] = None,
         test_transforms: Optional[List] = None,
-        train_sampler_cls: Optional[Type] = None,
-        train_sampler_args: Optional[Dict[str, Any]] = None,
-        num_workers: int = 8,
-        num_val_workers: Optional[int] = None,
-        num_test_workers: Optional[int] = None,
-        pin_memory: bool = False,
+        num_workers: int = 0,
         strict_transform_init: bool = True,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
+        loader_kwargs: Optional[Dict[str, Any]] = None,
+        val_loader_kwargs: Optional[Dict[str, Any]] = None,
+        test_loader_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs,  # swallow legacy knobs without breaking configs
     ):
         super().__init__()
+
+        if kwargs:
+            pass
 
         self.dataset = dataset
 
         self.batch_size = batch_size
-        self.val_batch_size = val_batch_size or batch_size
-        self.test_batch_size = test_batch_size or batch_size
-
         self.num_train = num_train
         self.num_val = num_val
         self.num_test = num_test
@@ -61,35 +56,28 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         self.split_file = split_file
         self.splitting = splitting or RandomSplit()
 
-        # If transforms passed, replicate (copy) for each split unless split-specific provided
         self._train_transforms = train_transforms or copy(transforms) or []
         self._val_transforms = val_transforms or copy(transforms) or []
         self._test_transforms = test_transforms or copy(transforms) or []
         self.strict_transform_init = strict_transform_init
 
-        self.train_sampler_cls = train_sampler_cls
-        self.train_sampler_args = train_sampler_args or {}
-
         self.num_workers = num_workers
-        self.num_val_workers = (
-            num_val_workers if num_val_workers is not None else num_workers
-        )
-        self.num_test_workers = (
-            num_test_workers if num_test_workers is not None else num_workers
-        )
-        self.pin_memory = pin_memory
 
-        self.train_idx: Optional[List[int]] = None
-        self.val_idx: Optional[List[int]] = None
-        self.test_idx: Optional[List[int]] = None
+        self.loader_kwargs = loader_kwargs or {}
+        self.val_loader_kwargs = val_loader_kwargs or {}
+        self.test_loader_kwargs = test_loader_kwargs or {}
 
-        self._train_dataset: Optional[BaseAtomsData] = None
-        self._val_dataset: Optional[BaseAtomsData] = None
-        self._test_dataset: Optional[BaseAtomsData] = None
+        self.train_idx = None
+        self.val_idx = None
+        self.test_idx = None
 
-        self._train_loader: Optional[AtomsLoader] = None
-        self._val_loader: Optional[AtomsLoader] = None
-        self._test_loader: Optional[AtomsLoader] = None
+        self._train_dataset = None
+        self._val_dataset = None
+        self._test_dataset = None
+
+        self._train_loader = None
+        self._val_loader = None
+        self._test_loader = None
 
         self.provider: Optional[StatsAtomrefProvider] = None
 
@@ -127,19 +115,17 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         if self.train_idx is None:
             self._load_partitions()
 
-        # Create split datasets (no transforms attached yet)
         self._train_dataset = self.dataset.subset(self.train_idx)
         self._val_dataset = self.dataset.subset(self.val_idx)
         self._test_dataset = self.dataset.subset(self.test_idx)
 
-        # Build provider bound to train loader factory (loader created on demand)
+        train_atomrefs = getattr(self._train_dataset, "atomrefs", None)
+
         self.provider = StatsAtomrefProvider(
             train_dataloader_factory=self.train_dataloader,
-            train_atomrefs=getattr(self._train_dataset, "atomrefs", None),
+            train_atomrefs=train_atomrefs,
         )
 
-        # Initialize transforms (V2 path: datamodule-free)
-        train_atomrefs = getattr(self._train_dataset, "atomrefs", None)
         self._initialize_transform_list(
             self.train_transforms, train_atomrefs=train_atomrefs
         )
@@ -150,7 +136,6 @@ class AtomsDataModuleV2(pl.LightningDataModule):
             self.test_transforms, train_atomrefs=train_atomrefs
         )
 
-        # Attach transforms after init (matches legacy behavior)
         self._train_dataset.transforms = self.train_transforms
         self._val_dataset.transforms = self.val_transforms
         self._test_dataset.transforms = self.test_transforms
@@ -158,13 +143,11 @@ class AtomsDataModuleV2(pl.LightningDataModule):
     def _initialize_transform_list(self, transforms: List, train_atomrefs):
         if not transforms:
             return
-
         for t in transforms:
             init_fn = getattr(t, "initialize", None)
             if callable(init_fn):
                 init_fn(self.provider, atomrefs=train_atomrefs)
                 continue
-
             if self.strict_transform_init:
                 raise RuntimeError(
                     f"Transform {type(t).__name__} does not implement initialize(provider, atomrefs=...)."
@@ -202,33 +185,17 @@ class AtomsDataModuleV2(pl.LightningDataModule):
 
         if self.split_file is not None:
             np.savez(
-                self.split_file,
-                train_idx=self.train_idx,
-                val_idx=self.val_idx,
-                test_idx=self.test_idx,
+                self.split_file, train_idx=train_idx, val_idx=val_idx, test_idx=test_idx
             )
-
-    def _setup_train_batch_sampler(self):
-        if self.train_sampler_cls is None:
-            return None
-
-        sampler = self.train_sampler_cls(
-            data_source=self.train_dataset,
-            num_samples=len(self.train_dataset),
-            **self.train_sampler_args,
-        )
-        return BatchSampler(sampler=sampler, batch_size=self.batch_size, drop_last=True)
 
     def train_dataloader(self) -> AtomsLoader:
         if self._train_loader is None:
-            batch_sampler = self._setup_train_batch_sampler()
             self._train_loader = AtomsLoader(
                 self.train_dataset,
-                batch_size=self.batch_size if batch_sampler is None else 1,
-                shuffle=batch_sampler is None,
-                batch_sampler=batch_sampler,
+                batch_size=self.batch_size,
+                shuffle=True,
                 num_workers=self.num_workers,
-                pin_memory=self.pin_memory,
+                **self.loader_kwargs,
             )
         return self._train_loader
 
@@ -236,9 +203,9 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         if self._val_loader is None:
             self._val_loader = AtomsLoader(
                 self.val_dataset,
-                batch_size=self.val_batch_size,
-                num_workers=self.num_val_workers,
-                pin_memory=self.pin_memory,
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                **{**self.loader_kwargs, **self.val_loader_kwargs},
             )
         return self._val_loader
 
@@ -246,8 +213,8 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         if self._test_loader is None:
             self._test_loader = AtomsLoader(
                 self.test_dataset,
-                batch_size=self.test_batch_size,
-                num_workers=self.num_test_workers,
-                pin_memory=self.pin_memory,
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                **{**self.loader_kwargs, **self.test_loader_kwargs},
             )
         return self._test_loader
