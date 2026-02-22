@@ -211,7 +211,11 @@ class QM9:
                     datapath=self.datapath,
                     format=self.format,
                     distance_unit=self.distance_unit or "Ang",
-                    property_unit_dict=property_unit_dict if self.property_units is None else self.property_units,
+                    property_unit_dict=(
+                        property_unit_dict
+                        if self.property_units is None
+                        else self.property_units
+                    ),
                     atomrefs=atomrefs,
                 )
 

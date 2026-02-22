@@ -21,7 +21,9 @@ class StatsAtomrefProvider:
     train_dataloader_factory: Callable[[], AtomsLoader]
     train_atomrefs: Optional[Dict[str, torch.Tensor]] = None
 
-    _stats_cache: Optional[Dict[Tuple[str, bool, bool], Tuple[torch.Tensor, torch.Tensor]]] = None
+    _stats_cache: Optional[
+        Dict[Tuple[str, bool, bool], Tuple[torch.Tensor, torch.Tensor]]
+    ] = None
     _atomref_cache: Optional[Dict[Tuple[str, bool], torch.Tensor]] = None
 
     def __post_init__(self) -> None:
@@ -57,7 +59,9 @@ class StatsAtomrefProvider:
         self._stats_cache[key] = stats
         return stats
 
-    def get_atomrefs(self, property: str, is_extensive: bool) -> Dict[str, torch.Tensor]:
+    def get_atomrefs(
+        self, property: str, is_extensive: bool
+    ) -> Dict[str, torch.Tensor]:
         """
         Args:
             property: property key
@@ -70,7 +74,9 @@ class StatsAtomrefProvider:
             return {property: self._atomref_cache[key]}
 
         loader = self.train_dataloader_factory()
-        atomref = estimate_atomrefs(loader, is_extensive={property: is_extensive})[property]
+        atomref = estimate_atomrefs(loader, is_extensive={property: is_extensive})[
+            property
+        ]
 
         self._atomref_cache[key] = atomref
         return {property: atomref}
