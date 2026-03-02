@@ -1,4 +1,4 @@
-from typing import Optional, Dict
+from typing import  Dict
 
 import torch
 import torch.nn as nn
@@ -32,6 +32,7 @@ class Transform(nn.Module):
 
     def datamodule(self, value):
         """
+        Legacy hook for transforms initialized from an old AtomsDataModule.
         Extract all required information from data module automatically when using
         PyTorch Lightning integration. The transform should also implement a way to
         set these things manually, to make it usable independent of PL.
@@ -49,9 +50,8 @@ class Transform(nn.Module):
     def teardown(self):
         pass
 
-    def initialize(self, provider, atomrefs=None) -> None:
+    def initialize(self, **kwargs) -> None:
         """
-        Preferred initialization hook (DataModule-free).
-        Transforms that require training stats/atomrefs override this.
+        Initialization hook for transforms that require training
         """
         return
