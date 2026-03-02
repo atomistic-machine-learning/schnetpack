@@ -119,7 +119,7 @@ class RemoveOffsets(Transform):
             property_mean = property_mean or torch.zeros((1,))
             self.register_buffer("mean", property_mean)
 
-    def initialize(self, provider, atomrefs=None) -> None:
+    def initialize(self, provider, atomrefs=None, **kwargs) -> None:
         """
         Initialize mean and/or atomref using a StatsAtomrefProvider.
         """
@@ -145,32 +145,8 @@ class RemoveOffsets(Transform):
         """
         Legacy hook for old AtomsDataModule. Safe to remove once legacy DM is removed.
         """
-
-        provider = StatsAtomrefProvider(
-            train_dataloader_factory=_datamodule.train_dataloader,
-            train_atomrefs=getattr(_datamodule.train_dataset, "atomrefs", None),
-        )
-        atomrefs = getattr(_datamodule.train_dataset, "atomrefs", None)
-        return self.initialize(provider, atomrefs=atomrefs)
-
-    # def datamodule(self, _datamodule):
-    #     """
-    #     Sets mean and atomref automatically when using PyTorchLightning integration.
-    #     """
-    #     if self.remove_atomrefs and not self._atomrefs_initialized:
-    #         if self.estimate_atomref:
-    #             atrefs = _datamodule.get_atomrefs(
-    #                 property=self._property, is_extensive=self.is_extensive
-    #             )
-    #         else:
-    #             atrefs = _datamodule.train_dataset.atomrefs
-    #         self.atomref = atrefs[self._property].detach()
-
-    #     if self.remove_mean and not self._mean_initialized:
-    #         stats = _datamodule.get_stats(
-    #             self._property, self.is_extensive, self.remove_atomrefs
-    #         )
-    #         self.mean = stats[0].detach()
+        provider = StatsAtomrefProvider(_datamodule.train_dataset)
+        return self.initialize(provider, atomrefs=provider.train_atomrefs)
 
     def forward(
         self,
@@ -183,6 +159,7 @@ class RemoveOffsets(Transform):
                 else self.mean
             )
             inputs[self._property] -= mean
+
         if self.remove_atomrefs:
             atomref_bias = torch.sum(self.atomref[inputs[structure.Z]])
             if not self.is_extensive:
@@ -249,17 +226,8 @@ class ScaleProperty(Transform):
         """
         Legacy hook for old AtomsDataModule. Safe to remove once legacy DM is removed.
         """
-        provider = StatsAtomrefProvider(
-            train_dataloader_factory=_datamodule.train_dataloader,
-            train_atomrefs=getattr(_datamodule.train_dataset, "atomrefs", None),
-        )
+        provider = StatsAtomrefProvider(_datamodule.train_dataset)
         return self.initialize(provider, atomrefs=None)
-
-    # def datamodule(self, _datamodule):
-    #     if not self._initialized:
-    #         stats = _datamodule.get_stats(self._target_key, True, False)
-    #         scale = stats[0] if self._scale_by_mean else stats[1]
-    #         self.scale = torch.abs(scale).detach()
 
     def forward(
         self,
@@ -361,93 +329,33 @@ class AddOffsets(Transform):
         """
         Legacy hook for old AtomsDataModule. Safe to remove once legacy DM is removed.
         """
+        provider = StatsAtomrefProvider(_datamodule.train_dataset)
+        return self.initialize(provider, atomrefs=provider.train_atomrefs)
 
-        provider = StatsAtomrefProvider(
-            train_dataloader_factory=_datamodule.train_dataloader,
-            train_atomrefs=getattr(_datamodule.train_dataset, "atomrefs", None),
-        )
-        atomrefs = getattr(_datamodule.train_dataset, "atomrefs", None)
-        return self.initialize(provider, atomrefs=atomrefs)
 
-    # def datamodule(self, _datamodule):
-    #     if self.add_atomrefs and not self._atomrefs_initialized:
-    #         if self.estimate_atomref:
-    #             atrefs = _datamodule.get_atomrefs(
-    #                 property=self._property, is_extensive=self.is_extensive
-    #             )
-    #         else:
-    #             atrefs = _datamodule.train_dataset.atomrefs
-    #         self.atomref = atrefs[self._property].detach()
-
-    #     if self.add_mean and not self._mean_initialized:
-    #         stats = _datamodule.get_stats(
-    #             self._property, self.is_extensive, self.add_atomrefs
-    #         )
-    #         self.mean = stats[0].detach()
-
-    # def forward(
-    #     self,
-    #     inputs: Dict[str, torch.Tensor],
-    # ) -> Dict[str, torch.Tensor]:
-    #     if self.add_mean:
-    #         mean = (
-    #             self.mean * inputs[structure.n_atoms]
-    #             if self.is_extensive
-    #             else self.mean
-    #         )
-    #         inputs[self._property] += mean
-
-    #     if self.add_atomrefs:
-    #         idx_m = inputs[structure.idx_m]
-    #         y0i = self.atomref[inputs[structure.Z]]
-    #         maxm = int(idx_m[-1]) + 1
-
-    #         y0 = scatter_add(y0i, idx_m, dim_size=maxm)
-
-    #         if not self.is_extensive:
-    #             y0 /= inputs[structure.n_atoms]
-
-    #         inputs[self._property] += y0
-
-    #     return inputs
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(
+        self,
+        inputs: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
         if self.add_mean:
-            mean = self.mean
-            if self.is_extensive:
-                # n_atoms: (B,) in batch, (1,) in single
-                mean = mean * inputs[structure.n_atoms].to(mean.dtype)
-                # If mean is (1,) and n_atoms is (B,), broadcasting yields (B,)
-            inputs[self._property] = inputs[self._property] + mean
+            mean = (
+                self.mean * inputs[structure.n_atoms]
+                if self.is_extensive
+                else self.mean
+            )
+            inputs[self._property] += mean
 
         if self.add_atomrefs:
-            z = inputs[structure.Z]
-            y0i = self.atomref[z]  # (N_atoms, ...) ; usually (N_atoms,)
+            idx_m = inputs[structure.idx_m]
+            y0i = self.atomref[inputs[structure.Z]]
+            maxm = int(idx_m[-1]) + 1
 
-            if structure.idx_m in inputs:
-                # Batched path
-                idx_m = inputs[structure.idx_m]
-                maxm = int(idx_m[-1]) + 1 if idx_m.numel() > 0 else 0
-                y0 = scatter_add(y0i, idx_m, dim_size=maxm)  # (B, ...) or (B,)
+            y0 = scatter_add(y0i, idx_m, dim_size=maxm)
 
-                if not self.is_extensive:
-                    n_atoms = inputs[structure.n_atoms].to(y0.dtype)  # (B,)
-                    # Make n_atoms broadcast with y0 if y0 is (B, k)
-                    while n_atoms.dim() < y0.dim():
-                        n_atoms = n_atoms.unsqueeze(-1)
-                    y0 = y0 / n_atoms
+            if not self.is_extensive:
+                y0 /= inputs[structure.n_atoms]
 
-                inputs[self._property] = inputs[self._property] + y0
-
-            else:
-                # Single-system path (no idx_m)
-                y0 = y0i.sum(dim=0)  # scalar () or vector (k,)
-
-                if not self.is_extensive:
-                    n_atoms = inputs[structure.n_atoms].to(y0.dtype)  # usually (1,)
-                    # reduce n_atoms to scalar to avoid odd broadcasting
-                    n_atoms_scalar = n_atoms.view(-1)[0]
-                    y0 = y0 / n_atoms_scalar
-
-                inputs[self._property] = inputs[self._property] + y0
+            inputs[self._property] += y0
 
         return inputs
+    
