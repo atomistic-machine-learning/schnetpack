@@ -11,26 +11,19 @@ from urllib import request as request
 import numpy as np
 from ase import Atoms
 from ase.io.extxyz import read_xyz
+
 from tqdm import tqdm
 
 import schnetpack.properties as structure
-from schnetpack.data import (
-    AtomsDataFormat,
-    AtomsDataModuleError,
-    BaseAtomsData,
-    create_dataset,
-    load_dataset,
-)
+from schnetpack.data import AtomsDataFormat
+from schnetpack.data.atoms import ASEAtomsData, AtomsDataError, load_dataset
 
 __all__ = ["QM9"]
 
 
-class QM9:
+class QM9(ASEAtomsData):
     """
-    QM9 benchmark database downloader/builder.
-
-    This class only prepares the QM9 dataset on disk.
-    `prepare()` returns the loaded dataset.
+    QM9 benchmark database for organic molecules.
     """
 
     base_urls = [
@@ -62,93 +55,98 @@ class QM9:
     def __init__(
         self,
         datapath: str,
-        format: AtomsDataFormat = AtomsDataFormat.ASE,
-        load_properties: Optional[List[str]] = None,
+        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         remove_uncharacterized: bool = False,
+        load_properties: Optional[List[str]] = None,
+        # transforms=None,
+        subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
+        **kwargs,
     ):
-        self.datapath = datapath
-        self.format = format
-        self.load_properties = load_properties
         self.remove_uncharacterized = remove_uncharacterized
-        self.property_units = property_units
-        self.distance_unit = distance_unit
+        self.format = format
 
-    def prepare(self) -> BaseAtomsData:
+        self.prepare(
+            datapath=datapath,
+            distance_unit=distance_unit or "Ang",
+        )
+
+        super().__init__(
+            datapath=datapath,
+            load_properties=load_properties,
+            # transforms=transforms,
+            subset_idx=subset_idx,
+            property_units=property_units,
+            distance_unit=distance_unit,
+            **kwargs,
+        )
+
+    @staticmethod
+    def _native_property_units() -> Dict[str, str]:
+        # IMPORTANT: full native QM9 schema, stored in DB metadata
+        return {
+            QM9.A: "GHz",
+            QM9.B: "GHz",
+            QM9.C: "GHz",
+            QM9.mu: "Debye",
+            QM9.alpha: "a0 a0 a0",
+            QM9.homo: "Ha",
+            QM9.lumo: "Ha",
+            QM9.gap: "Ha",
+            QM9.r2: "a0 a0",
+            QM9.zpve: "Ha",
+            QM9.U0: "Ha",
+            QM9.U: "Ha",
+            QM9.H: "Ha",
+            QM9.G: "Ha",
+            QM9.Cv: "cal/mol/K",
+        }
+
+    def prepare(self, datapath: str, distance_unit: str = "Ang") -> None:
         """
-        Download + build the dataset if missing.
-        If it already exists, verify consistency.
-        Returns the loaded dataset.
+        Make sure the QM9 database exists.
+
+        If the DB already exists, validate consistency with the
+        remove_uncharacterized setting.
         """
-        if not os.path.exists(self.datapath):
-            property_unit_dict = {
-                QM9.A: "GHz",
-                QM9.B: "GHz",
-                QM9.C: "GHz",
-                QM9.mu: "Debye",
-                QM9.alpha: "a0 a0 a0",
-                QM9.homo: "Ha",
-                QM9.lumo: "Ha",
-                QM9.gap: "Ha",
-                QM9.r2: "a0 a0",
-                QM9.zpve: "Ha",
-                QM9.U0: "Ha",
-                QM9.U: "Ha",
-                QM9.H: "Ha",
-                QM9.G: "Ha",
-                QM9.Cv: "cal/mol/K",
-            }
-
-            tmpdir = tempfile.mkdtemp("qm9")
-            try:
-                atomrefs = self._download_atomrefs(tmpdir)
-
-                dataset = create_dataset(
-                    datapath=self.datapath,
-                    format=self.format,
-                    distance_unit=self.distance_unit or "Ang",
-                    property_unit_dict=property_unit_dict,
-                    atomrefs=atomrefs,
-                )
-
-                if self.remove_uncharacterized:
-                    uncharacterized = self._download_uncharacterized(tmpdir)
-                else:
-                    uncharacterized = None
-
-                self._download_data(tmpdir, dataset, uncharacterized)
-            finally:
-                shutil.rmtree(tmpdir, ignore_errors=True)
-
-        else:
-            dataset = load_dataset(
-                self.datapath,
-                self.format,
-                load_properties=self.load_properties,
-                property_units=self.property_units,
-                distance_unit=self.distance_unit,
-            )
+        if os.path.exists(datapath):
+            dataset = load_dataset(datapath, self.format, load_structure=False)
 
             if self.remove_uncharacterized and len(dataset) == 133885:
-                raise AtomsDataModuleError(
+                raise AtomsDataError(
                     "The dataset at the chosen location contains the uncharacterized 3054 molecules. "
-                    "Choose a different location to reload the data or set `remove_uncharacterized=False`."
+                    "Choose a different location to reload the data or set "
+                    "`remove_uncharacterized=False`."
                 )
 
             if (not self.remove_uncharacterized) and len(dataset) < 133885:
-                raise AtomsDataModuleError(
+                raise AtomsDataError(
                     "The dataset at the chosen location does NOT contain the uncharacterized 3054 molecules. "
-                    "Choose a different location to reload the data or set `remove_uncharacterized=True`."
+                    "Choose a different location to reload the data or set "
+                    "`remove_uncharacterized=True`."
                 )
+            return
 
-        return load_dataset(
-            self.datapath,
-            self.format,
-            load_properties=self.load_properties,
-            property_units=self.property_units,
-            distance_unit=self.distance_unit,
-        )
+        tmpdir = tempfile.mkdtemp("qm9")
+        try:
+            atomrefs = self._download_atomrefs(tmpdir)
+
+            dataset = ASEAtomsData.create(
+                datapath=datapath,
+                distance_unit=distance_unit,
+                property_unit_dict=self._native_property_units(),
+                atomrefs=atomrefs,
+            )
+
+            if self.remove_uncharacterized:
+                uncharacterized = self._download_uncharacterized(tmpdir)
+            else:
+                uncharacterized = None
+
+            self._download_data(tmpdir, dataset, uncharacterized)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
     def _download_file(self, file_id: str, destination: str) -> None:
         for base_url in self.base_urls:
@@ -158,11 +156,13 @@ class QM9:
                 return
             except Exception:
                 logging.warning(f"Could not download from {url}, trying next source...")
-        raise AtomsDataModuleError(
+
+        raise AtomsDataError(
             f"Could not download file with id {file_id} from any source."
         )
 
     def _download_uncharacterized(self, tmpdir: str) -> List[int]:
+
         logging.info("Downloading list of uncharacterized molecules...")
         tmp_path = os.path.join(tmpdir, "uncharacterized.txt")
         self._download_file(self.file_ids["uncharacterized"], tmp_path)
@@ -186,18 +186,19 @@ class QM9:
 
         with open(tmp_path) as f:
             lines = f.readlines()
-            for z, line in zip([1, 6, 7, 8, 9], lines[5:10]):
+            for z, l in zip([1, 6, 7, 8, 9], lines[5:10]):
                 for i, p in enumerate(props):
-                    atref[p][z] = float(line.split()[i + 1])
+                    atref[p][z] = float(l.split()[i + 1])
 
         return {k: v.tolist() for k, v in atref.items()}
 
     def _download_data(
         self,
         tmpdir: str,
-        dataset: BaseAtomsData,
+        dataset: ASEAtomsData,
         uncharacterized: Optional[List[int]],
     ) -> None:
+
         logging.info("Downloading GDB-9 data...")
         tar_path = os.path.join(tmpdir, "gdb9.tar.gz")
         raw_path = os.path.join(tmpdir, "gdb9_xyz")

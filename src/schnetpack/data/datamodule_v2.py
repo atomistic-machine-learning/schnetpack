@@ -9,6 +9,7 @@ import pytorch_lightning as pl
 from schnetpack.data.atoms import BaseAtomsData
 from schnetpack.data.provider import StatsAtomrefProvider
 from schnetpack.data.splitting import RandomSplit, SplittingStrategy
+from schnetpack.data.loader import AtomsLoader
 
 
 class AtomsDataModuleV2(pl.LightningDataModule):
@@ -17,7 +18,7 @@ class AtomsDataModuleV2(pl.LightningDataModule):
       - accepts a dataset instance
       - handles splitting
       - builds StatsAtomrefProvider from train split
-      - initializes transforms 
+      - initializes transforms
     """
 
     def __init__(
@@ -34,7 +35,7 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         val_transforms: Optional[List] = None,
         test_transforms: Optional[List] = None,
         num_workers: int = 0,
-        strict_transform_init: bool = True,
+        **kwargs,
     ):
         super().__init__()
 
@@ -46,7 +47,6 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         self.split_file = split_file
         self.splitting = splitting or RandomSplit()
         self.num_workers = num_workers
-        self.strict_transform_init = strict_transform_init
 
         self.train_transforms = train_transforms or copy(transforms) or []
         self.val_transforms = val_transforms or copy(transforms) or []
@@ -88,11 +88,7 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         self._val_dataset = self.dataset.subset(self.val_idx)
         self._test_dataset = self.dataset.subset(self.test_idx)
 
-        self.provider = StatsAtomrefProvider(
-            train_dataset=self._train_dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-        )
+        self.provider = StatsAtomrefProvider(self._train_dataset)
 
         self._initialize_transform_list(self.train_transforms)
         self._initialize_transform_list(self.val_transforms)
@@ -107,13 +103,7 @@ class AtomsDataModuleV2(pl.LightningDataModule):
             return
 
         for t in transforms:
-            init_fn = getattr(t, "initialize", None)
-            if callable(init_fn):
-                init_fn(self.provider, atomrefs=self.provider.train_atomrefs)
-            elif self.strict_transform_init:
-                raise RuntimeError(
-                    f"Transform {type(t).__name__} does not implement initialize."
-                )
+            t.initialize(provider=self.provider, atomrefs=self.provider.train_atomrefs)
 
     def _load_partitions(self) -> None:
         import os
@@ -157,3 +147,27 @@ class AtomsDataModuleV2(pl.LightningDataModule):
                 val_idx=val_idx,
                 test_idx=test_idx,
             )
+
+    def train_dataloader(self):
+        return AtomsLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+        )
+
+    def val_dataloader(self):
+        return AtomsLoader(
+            self.val_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+        )
+
+    def test_dataloader(self):
+        return AtomsLoader(
+            self.test_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+        )

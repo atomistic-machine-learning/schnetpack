@@ -332,7 +332,6 @@ class AddOffsets(Transform):
         provider = StatsAtomrefProvider(_datamodule.train_dataset)
         return self.initialize(provider, atomrefs=provider.train_atomrefs)
 
-
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
@@ -358,4 +357,3 @@ class AddOffsets(Transform):
             inputs[self._property] += y0
 
         return inputs
-    
