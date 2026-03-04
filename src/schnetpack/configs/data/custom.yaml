@@ -1,12 +1,24 @@
-_target_: schnetpack.data.AtomsDataModule
+# @package data
+_target_: schnetpack.data.datamodule_v2.AtomsDataModuleV2
 
+# legacy field if some old structured config still expects it
 datapath: ???
-data_workdir: null
+
+# dataset must be provided by concrete config
+dataset: ???
+
 batch_size: 10
 num_train: ???
 num_val: ???
 num_test: null
+
+split_file: ${run.data_dir}/split.npz
+splitting: null
+
+transforms: ${data.transforms}
+train_transforms: null
+val_transforms: null
+test_transforms: null
+
 num_workers: 8
-num_val_workers: null
-num_test_workers: null
-train_sampler_cls: null
+
