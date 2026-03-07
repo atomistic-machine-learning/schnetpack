@@ -4,14 +4,14 @@ import torch
 from tqdm import tqdm
 
 import schnetpack.properties as properties
-from schnetpack.data.atoms import BaseAtomsData
+from schnetpack.data.atoms import ASEAtomsData
 from schnetpack.data.loader import AtomsLoader
 
 __all__ = ["calculate_stats", "estimate_atomrefs"]
 
 
 def calculate_stats(
-    dataset: BaseAtomsData,
+    dataset: ASEAtomsData,
     divide_by_atoms: Dict[str, bool],
     atomref: Dict[str, torch.Tensor] = None,
     batch_size: int = 10000,
@@ -76,7 +76,7 @@ def calculate_stats(
 
 
 def estimate_atomrefs(
-    dataset: BaseAtomsData,
+    dataset: ASEAtomsData,
     is_extensive: Dict[str, bool],
     z_max: int = 100,
     batch_size: int = 10000,

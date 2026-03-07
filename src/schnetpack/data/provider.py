@@ -4,7 +4,7 @@ from typing import Dict, Optional, Tuple
 
 import torch
 
-from schnetpack.data.atoms import BaseAtomsData
+from schnetpack.data.atoms import ASEAtomsData
 from schnetpack.data.stats import calculate_stats, estimate_atomrefs
 
 
@@ -13,7 +13,7 @@ class StatsAtomrefProvider:
     Compute and cache statistics and atom references from the training dataset.
     """
 
-    def __init__(self, train_dataset: BaseAtomsData) -> None:
+    def __init__(self, train_dataset: ASEAtomsData) -> None:
         self.train_dataset = train_dataset
         self.train_atomrefs = getattr(train_dataset, "atomrefs", None)
 
