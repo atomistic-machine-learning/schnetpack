@@ -58,7 +58,7 @@ class QM9(ASEAtomsData):
         format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         remove_uncharacterized: bool = False,
         load_properties: Optional[List[str]] = None,
-        # transforms=None,
+        transforms=None,
         subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
@@ -67,7 +67,7 @@ class QM9(ASEAtomsData):
         self.remove_uncharacterized = remove_uncharacterized
         self.format = format
 
-        self.prepare(
+        self.download(
             datapath=datapath,
             distance_unit=distance_unit or "Ang",
         )
@@ -75,7 +75,7 @@ class QM9(ASEAtomsData):
         super().__init__(
             datapath=datapath,
             load_properties=load_properties,
-            # transforms=transforms,
+            transforms=transforms,
             subset_idx=subset_idx,
             property_units=property_units,
             distance_unit=distance_unit,
@@ -103,7 +103,7 @@ class QM9(ASEAtomsData):
             QM9.Cv: "cal/mol/K",
         }
 
-    def prepare(self, datapath: str, distance_unit: str = "Ang") -> None:
+    def download(self, datapath: str, distance_unit: str = "Ang") -> None:
         """
         Make sure the QM9 database exists.
 

@@ -136,7 +136,7 @@ class ANI1(AtomsDataModule):
         else:
             dataset = load_dataset(self.datapath, self.format)
 
-    def _download_data(self, tmpdir, dataset: BaseAtomsData):
+    def _download_data(self, tmpdir, dataset: ASEAtomsData):
         logging.info("downloading ANI-1 data...")
         tar_path = os.path.join(tmpdir, "ANI1_release.tar.gz")
         raw_path = os.path.join(tmpdir, "data")

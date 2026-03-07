@@ -151,7 +151,7 @@ class TMQM(AtomsDataModule):
         else:
             dataset = load_dataset(self.datapath, self.format)
 
-    def _download_data(self, tmpdir, dataset: BaseAtomsData):
+    def _download_data(self, tmpdir, dataset: ASEAtomsData):
         tar_path = os.path.join(tmpdir, "tmQM_X1.xyz.gz")
         url = [
             "https://github.com/bbskjelstad/tmqm/raw/master/data/tmQM_X1.xyz.gz",

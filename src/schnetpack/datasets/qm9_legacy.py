@@ -227,9 +227,7 @@ class QM9(AtomsDataModule):
         atref = {k: v.tolist() for k, v in atref.items()}
         return atref
 
-    def _download_data(
-        self, tmpdir, dataset: BaseAtomsData, uncharacterized: List[int]
-    ):
+    def _download_data(self, tmpdir, dataset: ASEAtomsData, uncharacterized: List[int]):
         logging.info("Downloading GDB-9 data...")
         tar_path = os.path.join(tmpdir, "gdb9.tar.gz")
         raw_path = os.path.join(tmpdir, "gdb9_xyz")

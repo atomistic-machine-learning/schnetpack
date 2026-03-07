@@ -151,7 +151,7 @@ class GDMLDataModule(AtomsDataModule):
     def _download_data(
         self,
         tmpdir,
-        dataset: BaseAtomsData,
+        dataset: ASEAtomsData,
     ):
         logging.info("Downloading {} data".format(self.molecule))
         rawpath = os.path.join(tmpdir, self.datasets_dict[self.molecule])

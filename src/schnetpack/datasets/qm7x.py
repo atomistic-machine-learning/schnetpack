@@ -308,7 +308,7 @@ class QM7X(AtomsDataModule):
 
         return extracted
 
-    def _parse_data(self, files: List[str], dataset: BaseAtomsData):
+    def _parse_data(self, files: List[str], dataset: ASEAtomsData):
         """
         Parse the downloaded data files and add them to the dataset.
         """

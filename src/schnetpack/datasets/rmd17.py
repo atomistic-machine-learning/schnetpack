@@ -190,7 +190,7 @@ class rMD17(AtomsDataModule):
     def _download_data(
         self,
         tmpdir,
-        dataset: BaseAtomsData,
+        dataset: ASEAtomsData,
     ):
         logging.info("Downloading {} data".format(self.molecule))
         raw_path = os.path.join(tmpdir, "rmd17")

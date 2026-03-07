@@ -145,7 +145,7 @@ class MaterialsProject(AtomsDataModule):
         else:
             dataset = load_dataset(self.datapath, self.format)
 
-    def _download_data_nextgen(self, dataset: BaseAtomsData):
+    def _download_data_nextgen(self, dataset: ASEAtomsData):
         """
         Downloads dataset provided it does not exist in self.path
         Returns:
