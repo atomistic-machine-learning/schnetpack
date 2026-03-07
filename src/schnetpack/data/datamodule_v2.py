@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from copy import copy
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict, Any, Type
 
 import numpy as np
 import pytorch_lightning as pl
+from torch.utils.data import BatchSampler
 
-from schnetpack.data.atoms import BaseAtomsData
+from schnetpack.data.atoms import ASEAtomsData
 from schnetpack.data.provider import StatsAtomrefProvider
 from schnetpack.data.splitting import RandomSplit, SplittingStrategy
 from schnetpack.data.loader import AtomsLoader
@@ -23,7 +24,7 @@ class AtomsDataModuleV2(pl.LightningDataModule):
 
     def __init__(
         self,
-        dataset: BaseAtomsData,
+        dataset: ASEAtomsData,
         batch_size: int,
         num_train: Union[int, float],
         num_val: Union[int, float],
@@ -35,18 +36,27 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         val_transforms: Optional[List] = None,
         test_transforms: Optional[List] = None,
         num_workers: int = 0,
+        val_batch_size: Optional[int] = None,
+        test_batch_size: Optional[int] = None,
+        train_sampler_cls: Optional[Type] = None,
+        train_sampler_args: Optional[Dict[str, Any]] = None,
+        pin_memory: bool = False,
         **kwargs,
     ):
         super().__init__()
 
         self.dataset = dataset
         self.batch_size = batch_size
+        self.val_batch_size = val_batch_size or test_batch_size or batch_size
+        self.test_batch_size = test_batch_size or val_batch_size or batch_size
+
         self.num_train = num_train
         self.num_val = num_val
         self.num_test = num_test
         self.split_file = split_file
         self.splitting = splitting or RandomSplit()
         self.num_workers = num_workers
+        self._pin_memory = pin_memory
 
         self.train_transforms = train_transforms or copy(transforms) or []
         self.val_transforms = val_transforms or copy(transforms) or []
@@ -60,22 +70,29 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         self._val_dataset = None
         self._test_dataset = None
 
+        self._train_dataloader = None
+        self._val_dataloader = None
+        self._test_dataloader = None
+
         self.provider: Optional[StatsAtomrefProvider] = None
 
+        self.train_sampler_cls = train_sampler_cls
+        self.train_sampler_args = train_sampler_args or {}
+
     @property
-    def train_dataset(self) -> BaseAtomsData:
+    def train_dataset(self) -> ASEAtomsData:
         if self._train_dataset is None:
             raise RuntimeError("Call setup() before accessing train_dataset.")
         return self._train_dataset
 
     @property
-    def val_dataset(self) -> BaseAtomsData:
+    def val_dataset(self) -> ASEAtomsData:
         if self._val_dataset is None:
             raise RuntimeError("Call setup() before accessing val_dataset.")
         return self._val_dataset
 
     @property
-    def test_dataset(self) -> BaseAtomsData:
+    def test_dataset(self) -> ASEAtomsData:
         if self._test_dataset is None:
             raise RuntimeError("Call setup() before accessing test_dataset.")
         return self._test_dataset
@@ -132,6 +149,11 @@ class AtomsDataModuleV2(pl.LightningDataModule):
             self.test_idx = split_data["test_idx"].tolist()
             return
 
+        if num_train is None or num_val is None:
+            raise ValueError(
+                "If no split file is given, num_train and num_val must be set."
+            )
+
         train_idx, val_idx, test_idx = self.splitting.split(
             self.dataset, num_train, num_val, num_test
         )
@@ -148,26 +170,57 @@ class AtomsDataModuleV2(pl.LightningDataModule):
                 test_idx=test_idx,
             )
 
-    def train_dataloader(self):
-        return AtomsLoader(
-            self.train_dataset,
+    def _setup_sampler(self, sampler_cls, sampler_args, dataset):
+        if sampler_cls is None:
+            return None
+
+        return BatchSampler(
+            sampler=sampler_cls(
+                data_source=dataset,
+                num_samples=len(dataset),
+                **sampler_args,
+            ),
             batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=self.num_workers,
+            drop_last=True,
         )
+
+    def train_dataloader(self):
+        if self._train_dataloader is None:
+            train_batch_sampler = self._setup_sampler(
+                sampler_cls=self.train_sampler_cls,
+                sampler_args=self.train_sampler_args,
+                dataset=self.train_dataset,
+            )
+
+            self._train_dataloader = AtomsLoader(
+                self.train_dataset,
+                batch_size=self.batch_size if train_batch_sampler is None else 1,
+                shuffle=True if train_batch_sampler is None else False,
+                batch_sampler=train_batch_sampler,
+                num_workers=self.num_workers,
+                pin_memory=self._pin_memory,
+            )
+
+        return self._train_dataloader
 
     def val_dataloader(self):
-        return AtomsLoader(
-            self.val_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-        )
+        if self._val_dataloader is None:
+            self._val_dataloader = AtomsLoader(
+                self.val_dataset,
+                batch_size=self.val_batch_size,
+                num_workers=self.num_workers,
+                pin_memory=self._pin_memory,
+            )
+
+        return self._val_dataloader
 
     def test_dataloader(self):
-        return AtomsLoader(
-            self.test_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-        )
+        if self._test_dataloader is None:
+            self._test_dataloader = AtomsLoader(
+                self.test_dataset,
+                batch_size=self.test_batch_size,
+                num_workers=self.num_workers,
+                pin_memory=self._pin_memory,
+            )
+
+        return self._test_dataloader

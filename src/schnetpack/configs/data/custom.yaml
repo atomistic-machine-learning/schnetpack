@@ -1,11 +1,13 @@
 # @package data
 _target_: schnetpack.data.datamodule_v2.AtomsDataModuleV2
 
-# legacy field if some old structured config still expects it
-datapath: ???
-
 # dataset must be provided by concrete config
-dataset: ???
+dataset:
+  _target_: schnetpack.data.ASEAtomsData
+  datapath: ???
+  load_properties: null
+  distance_unit: Ang
+  property_units: {}
 
 batch_size: 10
 num_train: ???
