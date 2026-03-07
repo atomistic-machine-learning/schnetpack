@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 import schnetpack.properties as structure
 from schnetpack.data import AtomsDataFormat
-from schnetpack.data.atoms import ASEAtomsData, AtomsDataError, load_dataset
+from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
 
 __all__ = ["QM9"]
 
@@ -111,7 +111,7 @@ class QM9(ASEAtomsData):
         remove_uncharacterized setting.
         """
         if os.path.exists(datapath):
-            dataset = load_dataset(datapath, self.format, load_structure=False)
+            dataset = ASEAtomsData(datapath=datapath, load_structure=False)
 
             if self.remove_uncharacterized and len(dataset) == 133885:
                 raise AtomsDataError(
