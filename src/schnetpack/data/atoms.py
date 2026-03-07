@@ -17,9 +17,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "ASEAtomsData",
     "AtomsDataFormat",
-    "resolve_format",
-    "create_dataset",
-    "load_dataset",
+    "load_dataset"
 ]
 
 
@@ -50,16 +48,14 @@ class ASEAtomsData(torch.utils.data.Dataset):
         distance_unit: Optional[str] = None,
     ):
         self.datapath = datapath
+        self.subset_idx = subset_idx
+        self._check_db()
         self.conn = connect(self.datapath, use_lock_file=False)
 
         # merged ASEAtomsData state
-        self._transform_module = None
-        self._transforms: List[Transform] = []
+        self.transforms: List[Transform] = list(transforms) if transforms is not None else []
         self._load_properties: Optional[List[str]] = None
         self.load_structure = load_structure
-        self.subset_idx = subset_idx
-
-        self._check_db()
 
         # units from metadata
         md = self.metadata
@@ -95,23 +91,8 @@ class ASEAtomsData(torch.utils.data.Dataset):
         # now validate load_properties against available_properties
         self.load_properties = load_properties
 
-        # set transforms last
-        self.transforms = transforms
 
     # ---------- merged ASEAtomsData bits ----------
-
-    @property
-    def transforms(self) -> List[Transform]:
-        return self._transforms
-
-    @transforms.setter
-    def transforms(self, value: Optional[List[Transform]]):
-        self._transforms = []
-        self._transform_module = None
-        if value:
-            self._transforms.extend(value)
-            self._transform_module = torch.nn.Sequential(*self._transforms)
-
     def subset(self, subset_idx: List[int]):
         if subset_idx is None:
             raise ValueError("subset_idx must be provided.")
@@ -152,11 +133,9 @@ class ASEAtomsData(torch.utils.data.Dataset):
         )
         return self._apply_transforms(props)
 
-    def _apply_transforms(
-        self, props: Dict[str, torch.Tensor]
-    ) -> Dict[str, torch.Tensor]:
-        if self._transform_module is not None:
-            props = self._transform_module(props)
+    def _apply_transforms(self, props: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        for tf in self.transforms:
+            props = tf(props)
         return props
 
     def _check_db(self):
@@ -378,41 +357,6 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
             conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
 
-
-def create_dataset(
-    datapath: str,
-    format: AtomsDataFormat,
-    distance_unit: str,
-    property_unit_dict: Dict[str, str],
-    **kwargs,
-) -> ASEAtomsData:
-    """
-    Create a new atoms dataset.
-
-    Args:
-        datapath: file path
-        format: atoms data format
-        distance_unit: unit of atom positiona etc. as string
-        property_unit_dict: dictionary that maps properties to units,
-            e.g. {"energy": "kcal/mol"}
-        **kwargs: arguments for passed to AtomsData init
-
-    Returns:
-
-    """
-    if format is AtomsDataFormat.ASE:
-        dataset = ASEAtomsData.create(
-            datapath=datapath,
-            distance_unit=distance_unit,
-            property_unit_dict=property_unit_dict,
-            **kwargs,
-        )
-    else:
-        raise AtomsDataError(f"Unknown format: {format}")
-
-    return dataset
-
-
 def load_dataset(datapath: str, format: AtomsDataFormat, **kwargs) -> ASEAtomsData:
     """
     Load dataset.
@@ -427,34 +371,3 @@ def load_dataset(datapath: str, format: AtomsDataFormat, **kwargs) -> ASEAtomsDa
         dataset = ASEAtomsData(datapath=datapath, **kwargs)
     else:
         raise AtomsDataError(f"Unknown format: {format}")
-    return dataset
-
-
-def resolve_format(
-    datapath: str, format: Optional[AtomsDataFormat] = None
-) -> Tuple[str, AtomsDataFormat]:
-    """
-    Extract data format from file suffix, check for consistency with (optional) given
-    format, or append suffix to file path.
-
-    Args:
-        datapath: path to atoms data
-        format: atoms data format
-
-    """
-    file, suffix = os.path.splitext(datapath)
-    if suffix == ".db":
-        if format is None:
-            format = AtomsDataFormat.ASE
-        assert (
-            format is AtomsDataFormat.ASE
-        ), f"File extension {suffix} is not compatible with chosen format {format}"
-    elif len(suffix) == 0 and format:
-        datapath = datapath + extension_map[format]
-    elif len(suffix) == 0 and format is None:
-        raise AtomsDataError(
-            "If format is not given, `datapath` needs a supported file extension!"
-        )
-    else:
-        raise AtomsDataError(f"Unsupported file extension: {suffix}")
-    return datapath, format
