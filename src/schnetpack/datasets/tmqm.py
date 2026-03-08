@@ -139,9 +139,9 @@ class TMQM(AtomsDataModule):
 
             tmpdir = tempfile.mkdtemp("tmQM")
 
-            dataset = create_dataset(
+            dataset = ASEAtomsData(
                 datapath=self.datapath,
-                format=self.format,
+                # format=self.format,
                 distance_unit="Ang",
                 property_unit_dict=property_unit_dict,
             )

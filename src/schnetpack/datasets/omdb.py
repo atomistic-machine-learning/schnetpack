@@ -104,9 +104,9 @@ class OrganicMaterialsDatabase(AtomsDataModule):
         if not os.path.exists(self.datapath):
             property_unit_dict = {OrganicMaterialsDatabase.BandGap: "eV"}
 
-            dataset = create_dataset(
+            dataset = ASEAtomsData(
                 datapath=self.datapath,
-                format=self.format,
+                # format=self.format,
                 distance_unit="Ang",
                 property_unit_dict=property_unit_dict,
             )

@@ -9,14 +9,14 @@ from typing import Dict, List, Optional
 from urllib import request as request
 
 import h5py
+import torch
 import numpy as np
 import progressbar
 from ase import Atoms
 
 import schnetpack.properties as structure
 from schnetpack.data import AtomsDataFormat
-from schnetpack.data.atoms import ASEAtomsData, AtomsDataError, load_dataset
-from schnetpack.transform.base import Transform
+from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
 
 __all__ = ["QM7X"]
 
@@ -136,12 +136,28 @@ class QM7X(ASEAtomsData):
         only_non_equilibrium: bool = False,
         format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[Transform]] = None,
+        transforms: Optional[List[torch.nn.Module]] = None,
         subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
         **kwargs,
     ):
+        """
+        Args:
+            datapath: path to dataset
+            raw_data_path: path to raw data
+            remove_duplicates: do not include duplicate molecules
+            only_equilibrium: only include equilibrium molecules
+            only_non_equilibrium: only include non-equilibrium molecules
+            format: dataset format
+            load_properties: subset of properties to load
+            transforms: Transform applied to each system separately before batching
+            subset_idx: indices of the subset to load
+            property_units: Dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
+            distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
+            **kwargs: additional keyword arguments.
+        """
+
         if only_equilibrium and only_non_equilibrium:
             raise AtomsDataError(
                 "only_equilibrium and only_non_equilibrium cannot both be True."
@@ -197,8 +213,11 @@ class QM7X(ASEAtomsData):
         self.subset_idx = effective_subset
 
     def download(self, datapath: str, distance_unit: str = "Ang") -> None:
+        """
+        Download the QM7-X dataset and create the ASEAtomsData object.
+        """
         if os.path.exists(datapath):
-            _ = load_dataset(datapath, self.format, load_structure=False)
+            _ = ASEAtomsData(datapath, self.format, load_structure=False)
             return
 
         tar_dir = self.raw_data_path or tempfile.mkdtemp("qm7x")

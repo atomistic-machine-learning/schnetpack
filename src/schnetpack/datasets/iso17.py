@@ -1,31 +1,31 @@
 import logging
 import os
 import shutil
-import tempfile
-from typing import List, Optional, Dict
-from urllib import request as request
-from tqdm import tqdm
-import numpy as np
-from ase.db import connect
-from urllib.error import HTTPError, URLError
 import tarfile
+import tempfile
+from typing import Dict, List, Optional
+from urllib import request as request
+from urllib.error import HTTPError, URLError
 
 import torch
+import numpy as np
+from ase.db import connect
+from tqdm import tqdm
 
-from schnetpack.data import *
+from schnetpack.data import AtomsDataFormat
+from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
 
 __all__ = ["ISO17"]
 
 
-class ISO17(AtomsDataModule):
+class ISO17(ASEAtomsData):
     """
-    ISO17 benchmark data set for molecular dynamics of C7O2H10 isomers
+    ISO17 benchmark dataset for molecular dynamics of C7O2H10 isomers
     containing molecular forces.
 
     References:
 
     .. [#iso17] http://quantum-machine.org/datasets/
-
     """
 
     energy = "total_energy"
@@ -39,27 +39,14 @@ class ISO17(AtomsDataModule):
         "test_eq",
     ]
 
-    # properties
     def __init__(
         self,
         datapath: str,
         fold: str,
-        batch_size: int,
-        num_train: Optional[int] = None,
-        num_val: Optional[int] = None,
-        num_test: Optional[int] = None,
-        split_file: Optional[str] = "split.npz",
         format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
         transforms: Optional[List[torch.nn.Module]] = None,
-        train_transforms: Optional[List[torch.nn.Module]] = None,
-        val_transforms: Optional[List[torch.nn.Module]] = None,
-        test_transforms: Optional[List[torch.nn.Module]] = None,
-        num_workers: int = 2,
-        num_val_workers: Optional[int] = None,
-        num_test_workers: Optional[int] = None,
+        subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
         **kwargs,
@@ -68,103 +55,99 @@ class ISO17(AtomsDataModule):
         Args:
             datapath: path to dataset
             fold: select a specific dataset of iso17
-            batch_size: (train) batch size
-            num_train: number of training examples
-            num_val: number of validation examples
-            num_test: number of test examples
-            split_file: path to npz file with data partitions
             format: dataset format
             load_properties: subset of properties to load
-            val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
-            test_batch_size: test batch size. If None, use val_batch_size, then batch_size.
-            transforms: Transform applied to each system separately before batching.
-            train_transforms: Overrides transform_fn for training.
-            val_transforms: Overrides transform_fn for validation.
-            test_transforms: Overrides transform_fn for testing.
-            num_workers: Number of data loader workers.
-            num_val_workers: Number of validation data loader workers (overrides num_workers).
-            num_test_workers: Number of test data loader workers (overrides num_workers).
+            transforms: Transform applied to each system separately before batching
+            subset_idx: indices of the subset to load
+            property_units: Dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
             distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
+            **kwargs: additional keyword arguments.
         """
         if fold not in self.existing_folds:
-            raise ValueError("Fold {:s} does not exist".format(fold))
+            raise AtomsDataError(f"Fold {fold} does not exist.")
 
-        self.path = datapath
+        self.root_path = datapath
         self.fold = fold
+        self.format = format
+
         dbpath = os.path.join(datapath, "iso17", fold + ".db")
+
+        self.download(datapath=dbpath, distance_unit=distance_unit or "Ang")
 
         super().__init__(
             datapath=dbpath,
-            batch_size=batch_size,
-            num_train=num_train,
-            num_val=num_val,
-            num_test=num_test,
-            split_file=split_file,
-            format=format,
             load_properties=load_properties,
-            val_batch_size=val_batch_size,
-            test_batch_size=test_batch_size,
             transforms=transforms,
-            train_transforms=train_transforms,
-            val_transforms=val_transforms,
-            test_transforms=test_transforms,
-            num_workers=num_workers,
-            num_val_workers=num_val_workers,
-            num_test_workers=num_test_workers,
+            subset_idx=subset_idx,
             property_units=property_units,
             distance_unit=distance_unit,
             **kwargs,
         )
 
-    def prepare_data(self):
-        if not os.path.exists(self.datapath):
-            self._download_data()
-        else:
-            dataset = load_dataset(self.datapath, self.format)
+    @staticmethod
+    def _native_property_units() -> Dict[str, str]:
+        return {
+            ISO17.energy: "eV",
+            ISO17.forces: "eV/Ang",
+        }
 
-    def _download_data(self):
+    def download(self, datapath: str, distance_unit: str = "Ang") -> None:
+        """
+        Ensure the ISO17 DB for the selected fold exists and has proper metadata.
+        """
+        if os.path.exists(datapath):
+            _ = ASEAtomsData(datapath, load_structure=False)
+            return
+
+        self._download_data()
+
+    def _download_data(self) -> None:
         logging.info("Downloading ISO17 database...")
         tmpdir = tempfile.mkdtemp("iso17")
-        tarpath = os.path.join(tmpdir, "iso17.tar.gz")
-        url = "http://www.quantum-machine.org/datasets/iso17.tar.gz"
 
         try:
-            request.urlretrieve(url, tarpath)
-        except HTTPError as e:
-            logging.error("HTTP Error:", e.code, url)
-            return False
-        except URLError as e:
-            logging.error("URL Error:", e.reason, url)
-            return False
+            tarpath = os.path.join(tmpdir, "iso17.tar.gz")
+            url = "http://www.quantum-machine.org/datasets/iso17.tar.gz"
 
-        tar = tarfile.open(tarpath)
-        tar.extractall(self.path)
-        tar.close()
+            try:
+                request.urlretrieve(url, tarpath)
+            except HTTPError as e:
+                raise AtomsDataError(
+                    f"HTTP Error {e.code} while downloading {url}"
+                ) from e
+            except URLError as e:
+                raise AtomsDataError(
+                    f"URL Error {e.reason} while downloading {url}"
+                ) from e
 
-        # update metadata
-        for fold in ISO17.existing_folds:
-            dbpath = os.path.join(self.path, "iso17", fold + ".db")
-            tmp_dbpath = os.path.join(tmpdir, "tmp.db")
-            with connect(dbpath) as conn:
-                with connect(tmp_dbpath) as tmp_conn:
-                    tmp_conn.metadata = {
-                        "_property_unit_dict": {
-                            ISO17.energy: "eV",
-                            ISO17.forces: "eV/Ang",
-                        },
-                        "_distance_unit": "Ang",
-                        "atomrefs": {},
-                    }
-                    # add energy to data dict in db
-                    for idx in tqdm(
-                        range(len(conn)), f"parsing database file {dbpath}"
-                    ):
-                        atmsrw = conn.get(idx + 1)
-                        data = atmsrw.data
-                        data[ISO17.forces] = np.array(data[ISO17.forces])
-                        data[ISO17.energy] = np.array([atmsrw.total_energy])
-                        tmp_conn.write(atmsrw.toatoms(), data=data)
+            with tarfile.open(tarpath) as tar:
+                tar.extractall(self.root_path)
 
-            os.remove(dbpath)
-            os.rename(tmp_dbpath, dbpath)
-        shutil.rmtree(tmpdir)
+            # update metadata + convert energy into row.data for every fold
+            for fold in self.existing_folds:
+                dbpath = os.path.join(self.root_path, "iso17", fold + ".db")
+                tmp_dbpath = os.path.join(tmpdir, f"{fold}_tmp.db")
+
+                with connect(dbpath) as conn:
+                    with connect(tmp_dbpath) as tmp_conn:
+                        tmp_conn.metadata = {
+                            "_property_unit_dict": self._native_property_units(),
+                            "_distance_unit": "Ang",
+                            "atomrefs": {},
+                        }
+
+                        for idx in tqdm(
+                            range(len(conn)),
+                            desc=f"parsing database file {dbpath}",
+                        ):
+                            atmsrw = conn.get(idx + 1)
+                            data = atmsrw.data
+                            data[self.forces] = np.array(data[self.forces])
+                            data[self.energy] = np.array([atmsrw.total_energy])
+                            tmp_conn.write(atmsrw.toatoms(), data=data)
+
+                os.remove(dbpath)
+                os.rename(tmp_dbpath, dbpath)
+
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)

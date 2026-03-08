@@ -1,5 +1,5 @@
 from typing import Optional, Dict, List
-
+import torch
 from schnetpack.data import AtomsDataFormat
 from schnetpack.datasets.md17 import GDMLDataset
 
@@ -20,7 +20,7 @@ class MD22(GDMLDataset):
         molecule: str,
         format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
-        transforms=None,
+        transforms: Optional[List[torch.nn.Module]] = None,
         subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
