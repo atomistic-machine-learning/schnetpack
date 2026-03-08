@@ -217,7 +217,7 @@ class QM7X(ASEAtomsData):
         Download the QM7-X dataset and create the ASEAtomsData object.
         """
         if os.path.exists(datapath):
-            _ = ASEAtomsData(datapath, self.format, load_structure=False)
+            _ = ASEAtomsData(datapath, load_structure=False)
             return
 
         tar_dir = self.raw_data_path or tempfile.mkdtemp("qm7x")
