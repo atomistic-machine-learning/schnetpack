@@ -178,18 +178,21 @@ def train(config: DictConfig):
 
     # Evaluate model on test set after training
     log.info("Starting testing.")
-    trainer.test(model=task, datamodule=datamodule, ckpt_path="best",weights_only=False)
+    trainer.test(
+        model=task, datamodule=datamodule, ckpt_path="best", weights_only=False
+    )
 
     # Store best model
     best_path = trainer.checkpoint_callback.best_model_path
     log.info(f"Best checkpoint path:\n{best_path}")
 
     log.info(f"Store best model")
-    best_task = type(task).load_from_checkpoint(best_path,weights_only=False)
+    best_task = type(task).load_from_checkpoint(best_path, weights_only=False)
     torch.save(best_task, config.globals.model_path + ".task")
 
     best_task.save_model(config.globals.model_path, do_postprocessing=True)
     log.info(f"Best model stored at {os.path.abspath(config.globals.model_path)}")
+
 
 @hydra.main(config_path="configs", config_name="predict", version_base="1.2")
 def predict(config: DictConfig):

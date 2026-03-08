@@ -14,11 +14,7 @@ from schnetpack.transform.base import Transform
 
 logger = logging.getLogger(__name__)
 
-__all__ = [
-    "ASEAtomsData",
-    "AtomsDataFormat",
-    "load_dataset"
-]
+__all__ = ["ASEAtomsData", "AtomsDataFormat", "load_dataset"]
 
 
 class AtomsDataFormat(Enum):
@@ -53,7 +49,9 @@ class ASEAtomsData(torch.utils.data.Dataset):
         self.conn = connect(self.datapath, use_lock_file=False)
 
         # merged ASEAtomsData state
-        self.transforms: List[Transform] = list(transforms) if transforms is not None else []
+        self.transforms: List[Transform] = (
+            list(transforms) if transforms is not None else []
+        )
         self._load_properties: Optional[List[str]] = None
         self.load_structure = load_structure
 
@@ -90,7 +88,6 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
         # now validate load_properties against available_properties
         self.load_properties = load_properties
-
 
     # ---------- merged ASEAtomsData bits ----------
     def subset(self, subset_idx: List[int]):
@@ -133,7 +130,9 @@ class ASEAtomsData(torch.utils.data.Dataset):
         )
         return self._apply_transforms(props)
 
-    def _apply_transforms(self, props: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def _apply_transforms(
+        self, props: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
         for tf in self.transforms:
             props = tf(props)
         return props
@@ -356,6 +355,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
                 data[pname] = properties[pname]
 
             conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
+
 
 def load_dataset(datapath: str, format: AtomsDataFormat, **kwargs) -> ASEAtomsData:
     """

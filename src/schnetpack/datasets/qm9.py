@@ -7,6 +7,7 @@ import tarfile
 import tempfile
 from typing import Dict, List, Optional
 from urllib import request as request
+import torch
 
 import numpy as np
 from ase import Atoms
@@ -58,7 +59,7 @@ class QM9(ASEAtomsData):
         format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         remove_uncharacterized: bool = False,
         load_properties: Optional[List[str]] = None,
-        transforms=None,
+        transforms: Optional[List[torch.nn.Module]] = None,
         subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,

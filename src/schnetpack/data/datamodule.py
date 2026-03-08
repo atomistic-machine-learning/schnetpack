@@ -11,7 +11,7 @@ from torch.utils.data import BatchSampler
 
 from schnetpack.data import (
     AtomsDataFormat,
-    #resolve_format,
+    # resolve_format,
     load_dataset,
     ASEAtomsData,
     AtomsLoader,
@@ -116,7 +116,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self.num_test = num_test
         self.splitting = splitting or RandomSplit()
         self.split_file = split_file
-        #self.datapath, self.format = resolve_format(datapath, format)
+        # self.datapath, self.format = resolve_format(datapath, format)
         self.load_properties = load_properties
         self.num_workers = num_workers
         self.num_val_workers = self.num_workers
