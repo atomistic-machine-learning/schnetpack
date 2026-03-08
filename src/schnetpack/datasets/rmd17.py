@@ -6,6 +6,7 @@ import tempfile
 from typing import Dict, List, Optional
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+import torch
 
 import numpy as np
 from ase import Atoms
@@ -70,12 +71,25 @@ class rMD17(ASEAtomsData):
         molecule: str,
         format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[Transform]] = None,
+        transforms: Optional[List[torch.nn.Module]] = None,
         subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
         **kwargs,
     ):
+        """
+        Args:
+            datapath: path to dataset
+            molecule: name of the molecule
+            format: dataset format
+            load_properties: subset of properties to load
+            transforms: Transform applied to each system separately before batching.
+            subset_idx: indices of the subset to load.
+            property_units: Dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
+            distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
+            **kwargs: additional keyword arguments.
+        """
+
         if molecule not in self.datasets_dict:
             raise AtomsDataError(f"Molecule {molecule} is not supported!")
 
