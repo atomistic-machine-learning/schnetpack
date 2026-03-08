@@ -88,7 +88,7 @@ class MaterialsProject(ASEAtomsData):
         Ensure the Materials Project ASE DB exists.
         """
         if os.path.exists(datapath):
-            _ = ASEAtomsData(datapath, self.format, load_structure=False)
+            _ = ASEAtomsData(datapath, load_structure=False)
             return
 
         if self.apikey is None:
