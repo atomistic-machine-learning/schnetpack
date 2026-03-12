@@ -113,15 +113,11 @@ class GDMLDataset(ASEAtomsData):
                 atomrefs=self._native_atomrefs,
             )
             dataset.update_metadata(molecule=self.molecule)
-            self._download_data(tmpdir, dataset)
+            self._download_data(tmpdir)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
-    def _download_data(
-        self,
-        tmpdir,
-        dataset: ASEAtomsData,
-    ):
+    def _download_data(self, tmpdir):
         logging.info("Downloading {} data".format(self.molecule))
         rawpath = os.path.join(tmpdir, self.datasets_dict[self.molecule])
         url = self.download_url + self.datasets_dict[self.molecule]

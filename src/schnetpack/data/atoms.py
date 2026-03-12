@@ -80,7 +80,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
             self.distance_conversion = 1.0
             self.distance_unit = md["_distance_unit"]
 
-        self._units = dict(md["_property_unit_dict"])
+        self._units = md["_property_unit_dict"]
         self.conversions = {prop: 1.0 for prop in self._units}
 
         # apply unit overrides on load only
