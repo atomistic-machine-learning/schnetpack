@@ -1,3 +1,16 @@
+"""
+This module contains all functionalities required to load atomistic data,
+generate batches and compute statistics. It makes use of the ASE database
+for atoms [#ase2]_.
+
+References
+----------
+.. [#ase2] Larsen, Mortensen, Blomqvist, Castelli, Christensen, Dułak, Friis,
+   Groves, Hammer, Hargus:
+   The atomic simulation environment -- a Python library for working with atoms.
+   Journal of Physics: Condensed Matter, 9, 27. 2017.
+"""
+
 import copy
 import logging
 import os
@@ -40,6 +53,20 @@ class ASEAtomsData(torch.utils.data.Dataset):
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
     ):
+        """
+        Args:
+            datapath: Path to ASE DB.
+            load_properties: Set of properties to be loaded and returned.
+                If None, all properties in the ASE dB will be returned.
+            load_structure: If True, load structure properties.
+            transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
+            train_transforms: overrides transform_fn for training
+            val_transforms: overrides transform_fn for validation
+            test_transforms: overrides transform_fn for testing
+            subset_idx: List of data indices.
+            property_units: dictionary from property to corresponding unit as a string (eV, kcal/mol, ...)
+            distance_unit: unit of the atom positions and cell as a string (Ang, Bohr, ...)
+        """
         self.datapath = datapath
         self.subset_idx = subset_idx
         self._check_db()
@@ -195,6 +222,19 @@ class ASEAtomsData(torch.utils.data.Dataset):
         load_structure: Optional[bool] = None,
         load_metadata: bool = False,
     ):
+        """
+        Return property dictionary at given indices.
+
+        Args:
+            indices: data indices
+            load_properties (sequence or None): subset of available properties to load
+            load_structure: load and return structure
+            load_metadata: load and return metadata
+
+        Returns:
+            properties (dict): dictionary with molecular properties
+
+        """
         if load_properties is None:
             load_properties = self.load_properties
         if load_structure is None:
@@ -230,6 +270,19 @@ class ASEAtomsData(torch.utils.data.Dataset):
         load_structure: bool,
         load_metadata: bool = False,
     ):
+        """
+        Load properties of a single system from the ASE database.
+
+        Args:
+            conn: ASE database connection.
+            idx: Zero-based system index.
+            load_properties: Properties to load.
+            load_structure: Whether to load structural information.
+            load_metadata: Whether to load metadata.
+
+        Returns:
+            Dict[str, torch.Tensor]: Dictionary containing the requested properties.
+        """
         row = conn.get(idx + 1)
         # TODO: can the copies be avoided?
         properties: Dict[str, torch.Tensor] = {}
@@ -268,6 +321,23 @@ class ASEAtomsData(torch.utils.data.Dataset):
         atomrefs: Optional[Dict[str, List[float]]] = None,
         **kwargs,
     ) -> "ASEAtomsData":
+        """
+
+        Args:
+            datapath: Path to ASE DB.
+            distance_unit: unit of atom positions and cell
+            property_unit_dict: Defines the available properties of the datasetseta and
+                provides units for ALL properties of the dataset. If a property is
+                unit-less, you can pass "arb. unit" or `None`.
+            atomrefs: dictionary mapping properies (the keys) to lists of single-atom
+                reference values of the property. This is especially useful for
+                extensive properties such as the energy, where the single atom energies
+                contribute a major part to the overall value.
+
+        Returns:
+            newly created ASEAtomsData
+
+        """
         if not datapath.endswith(".db"):
             raise AtomsDataError("Invalid datapath! Add '.db' extension.")
         if os.path.exists(datapath):
@@ -313,6 +383,22 @@ class ASEAtomsData(torch.utils.data.Dataset):
         atoms_list: Optional[List[Atoms]] = None,
         atoms_metadata_list: Optional[List[Dict[str, Any]]] = None,
     ):
+        """
+        Add atoms data to the dataset.
+
+        Args:
+            property_list: Properties as list of key-value pairs in the same
+                order as corresponding list of `atoms`.
+                Keys have to match the `available_properties` of the dataset
+                plus additional structure properties, if atoms is None.
+            atoms_list: System composition and geometry. If Atoms are None,
+                the structure needs to be given as part of the property dicts
+                (using structure.Z, structure.R, structure.cell, structure.pbc)
+            atoms_metadata_list: Metadata of the atoms objects as list of key-value pairs in the same
+                order as corresponding list of `atoms`.
+                Metadata can not be used as a training property, but can be used for splitting
+                strategies (e.g. material_id, timestamp, ...).
+        """
         if atoms_list is None:
             atoms_list = [None] * len(property_list)
         if atoms_metadata_list is None:
@@ -329,6 +415,9 @@ class ASEAtomsData(torch.utils.data.Dataset):
         atoms_metadata: Optional[Dict[str, Any]] = None,
         **properties,
     ):
+        """
+        Add systems to DB.
+        """
         if atoms is None:
             try:
                 Z = properties[structure.Z]
