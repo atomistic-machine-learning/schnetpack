@@ -22,6 +22,7 @@ __all__ = [
 class SubtractCenterOfMass(Transform):
     """
     Subtract center of mass from positions.
+    
     """
 
     is_preprocessor: bool = True
@@ -44,6 +45,7 @@ class SubtractCenterOfMass(Transform):
 class SubtractCenterOfGeometry(Transform):
     """
     Subtract center of geometry from positions.
+
     """
 
     is_preprocessor: bool = True
@@ -62,8 +64,6 @@ class RemoveOffsets(Transform):
     Remove offsets from property based on the mean of the training data and/or the
     single atom reference calculations.
 
-    The `mean` and/or `atomref` are automatically obtained from the AtomsDataModule,
-    when it is used. Otherwise, they have to be provided in the init manually.
     """
 
     is_preprocessor: bool = True
@@ -90,6 +90,7 @@ class RemoveOffsets(Transform):
                 tensor.
             atomrefs: Provide single-atom references directly.
             property_mean: Provide mean property value / n_atoms.
+            estimate_atomref: If true, add estimated atomrefs.
         """
         super().__init__()
         self._property = property
@@ -255,12 +256,6 @@ class AddOffsets(Transform):
     Add offsets to property based on the mean of the training data and/or the single
     atom reference calculations.
 
-    The `mean` and/or `atomref` are automatically obtained from the AtomsDataModule,
-    when it is used. Otherwise, they have to be provided in the init manually.
-
-    Hint:
-        Place this postprocessor after casting to float64 for higher numerical
-        precision.
     """
 
     is_preprocessor: bool = False
@@ -288,6 +283,7 @@ class AddOffsets(Transform):
                 tensor.
             atomrefs: Provide single-atom references directly.
             property_mean: Provide mean property value / n_atoms.
+            estimate_atomref: If true, add estimated atomrefs.
         """
         super().__init__()
         self._property = property
