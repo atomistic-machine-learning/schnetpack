@@ -1,16 +1,18 @@
+# @package data
 defaults:
   - custom
 
-_target_: schnetpack.datasets.ANI1
+dataset:
+  _target_: schnetpack.datasets.ANI1
+  datapath: ${run.data_dir}/ani1.db # data_dir is specified in train.yaml
+  num_heavy_atoms: 8
+  high_energies: false
+  distance_unit: Ang
+  property_units:
+    energy: eV
+  transforms: ${data.transforms}
 
-datapath: ${run.data_dir}/ani1.db  # data_dir is specified in train.yaml
+
 batch_size: 32
 num_train: 10000000
 num_val: 100000
-num_heavy_atoms: 8
-high_energies: False
-
-# convert to typically used units
-distance_unit: Ang
-property_units:
-  energy: eV

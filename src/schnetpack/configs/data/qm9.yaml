@@ -2,11 +2,6 @@
 defaults:
   - custom
 
-datapath: ${run.data_dir}/qm9.db
-#legacy inputs
-train_sampler_cls: null
-train_sampler_args: {}
-
 dataset:
   _target_: schnetpack.datasets.qm9.QM9
   datapath: ${run.data_dir}/qm9.db
@@ -22,6 +17,7 @@ dataset:
     lumo: eV
     gap: eV
     zpve: eV
+  transforms: ${data.transforms}
 
 batch_size: 100
 num_train: 110000

@@ -1,26 +1,25 @@
 # @package data
 _target_: schnetpack.data.datamodule_v2.AtomsDataModuleV2
 
-# dataset must be provided by concrete config
 dataset:
   _target_: schnetpack.data.ASEAtomsData
   datapath: ???
   load_properties: null
   distance_unit: Ang
   property_units: {}
+  transforms: ${data.transforms}
+  train_transforms: null
+  val_transforms: null
+  test_transforms: null
 
 batch_size: 10
 num_train: ???
 num_val: ???
 num_test: null
-
 split_file: ${run.data_dir}/split.npz
 splitting: null
-
-transforms: ${data.transforms}
-train_transforms: null
-val_transforms: null
-test_transforms: null
-
 num_workers: 8
+train_sampler_cls: null
+train_sampler_args: {}
+pin_memory: false
 
