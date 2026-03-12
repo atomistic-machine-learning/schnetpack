@@ -95,17 +95,6 @@ class QM7X(ASEAtomsData):
     FMBD = "FMBD"
     RMSD = "rmsd"
 
-    property_unit_dict = {
-        forces: "eV/Ang",
-        energy: "eV",
-        Eat: "eV",
-        EPBE0: "eV",
-        EMBD: "eV",
-        FPBE0: "eV/Ang",
-        FMBD: "eV/Ang",
-        RMSD: "Ang",
-    }
-
     property_dataset_keys = {
         forces: "totFOR",
         energy: "ePBE0+MBD",
@@ -184,6 +173,19 @@ class QM7X(ASEAtomsData):
 
         self._apply_structure_filter(original_subset_idx=subset_idx)
 
+    @staticmethod
+    def _native_property_units() -> Dict[str, str]:
+        return {
+            QM7X.forces: "totFOR",
+            QM7X.energy: "ePBE0+MBD",
+            QM7X.Eat: "eAT",
+            QM7X.EPBE0: "ePBE0",
+            QM7X.EMBD: "eMBD",
+            QM7X.FPBE0: "pbe0FOR",
+            QM7X.FMBD: "vdwFOR",
+            QM7X.RMSD: "sRMSD",
+        }
+
     def _apply_structure_filter(self, original_subset_idx: Optional[List[int]]) -> None:
         effective_subset = original_subset_idx
 
@@ -228,7 +230,7 @@ class QM7X(ASEAtomsData):
             dataset = ASEAtomsData.create(
                 datapath=datapath,
                 distance_unit=distance_unit,
-                property_unit_dict=QM7X.property_unit_dict,
+                property_unit_dict=self._native_property_units(),
                 atomrefs=atomrefs,
             )
 
@@ -317,7 +319,7 @@ class QM7X(ASEAtomsData):
                             key: np.array(
                                 conf[QM7X.property_dataset_keys[key]], dtype=np.float64
                             )
-                            for key in QM7X.property_unit_dict.keys()
+                            for key in QM7X._native_property_units().keys()
                         }
 
                         if "opt" in conf_id:
