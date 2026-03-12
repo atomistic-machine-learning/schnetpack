@@ -10,7 +10,6 @@ import numpy as np
 from ase import Atoms
 
 import schnetpack.properties as structure
-from schnetpack.data import AtomsDataFormat
 from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
 
 __all__ = ["MD17"]
@@ -34,7 +33,6 @@ class GDMLDataset(ASEAtomsData):
         molecule: str,
         tmpdir: str = "gdml_tmp",
         atomrefs: Optional[Dict[str, List[float]]] = None,
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
         transforms: Optional[List[torch.nn.Module]] = None,
         subset_idx: Optional[List[int]] = None,
@@ -50,7 +48,6 @@ class GDMLDataset(ASEAtomsData):
             molecule: name of the molecule.
             tmpdir: name of temporary directory used for parsing.
             atomrefs: properties of free atoms.
-            format: dataset format (e.g: ASE).
             load_properties: subset of properties to load.
             transforms: Transform applied to each system separately before batching.
             subset_idx: indices of the subset to load.
@@ -62,7 +59,6 @@ class GDMLDataset(ASEAtomsData):
         self.download_url = download_url
         self._native_atomrefs = atomrefs
         self.tmpdir = tmpdir
-        self.format = format
 
         if molecule not in self.datasets_dict:
             raise AtomsDataError(f"Molecule {molecule} is not supported!")
@@ -170,7 +166,6 @@ class MD17(GDMLDataset):
         self,
         datapath: str,
         molecule: str,
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
         transforms=None,
         subset_idx: Optional[List[int]] = None,
@@ -182,7 +177,6 @@ class MD17(GDMLDataset):
         Args:
             datapath: path to dataset.
             molecule: name of the molecule.
-            format: dataset format (e.g: ASE).
             load_properties: subset of properties to load.
             transforms: Transform applied to each system separately before batching.
             subset_idx: indices of the subset to load.
@@ -223,7 +217,6 @@ class MD17(GDMLDataset):
             tmpdir="md17",
             molecule=molecule,
             datapath=datapath,
-            format=format,
             load_properties=load_properties,
             transforms=transforms,
             subset_idx=subset_idx,

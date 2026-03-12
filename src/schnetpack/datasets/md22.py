@@ -1,6 +1,5 @@
 from typing import Optional, Dict, List
 import torch
-from schnetpack.data import AtomsDataFormat
 from schnetpack.datasets.md17 import GDMLDataset
 
 __all__ = ["MD22"]
@@ -18,7 +17,6 @@ class MD22(GDMLDataset):
         self,
         datapath: str,
         molecule: str,
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
         transforms: Optional[List[torch.nn.Module]] = None,
         subset_idx: Optional[List[int]] = None,
@@ -30,7 +28,6 @@ class MD22(GDMLDataset):
         Args:
             datapath: path to dataset
             molecule: name of the molecule
-            format: dataset format
             load_properties: subset of properties to load
             transforms: Transform applied to each system separately before batching.
             subset_idx: indices of the subset to load.
@@ -68,7 +65,6 @@ class MD22(GDMLDataset):
             tmpdir="md22",
             molecule=molecule,
             datapath=datapath,
-            format=format,
             load_properties=load_properties,
             transforms=transforms,
             subset_idx=subset_idx,

@@ -12,7 +12,6 @@ import numpy as np
 from ase.db import connect
 from tqdm import tqdm
 
-from schnetpack.data import AtomsDataFormat
 from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
 
 __all__ = ["ISO17"]
@@ -43,7 +42,6 @@ class ISO17(ASEAtomsData):
         self,
         datapath: str,
         fold: str,
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
         transforms: Optional[List[torch.nn.Module]] = None,
         subset_idx: Optional[List[int]] = None,
@@ -55,7 +53,6 @@ class ISO17(ASEAtomsData):
         Args:
             datapath: path to dataset
             fold: select a specific dataset of iso17
-            format: dataset format
             load_properties: subset of properties to load
             transforms: Transform applied to each system separately before batching
             subset_idx: indices of the subset to load
@@ -68,7 +65,6 @@ class ISO17(ASEAtomsData):
 
         self.root_path = datapath
         self.fold = fold
-        self.format = format
 
         dbpath = os.path.join(datapath, "iso17", fold + ".db")
 

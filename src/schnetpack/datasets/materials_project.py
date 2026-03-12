@@ -6,7 +6,6 @@ import torch
 import numpy as np
 from ase import Atoms
 
-from schnetpack.data import AtomsDataFormat
 from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
 from schnetpack.transform.base import Transform
 
@@ -33,7 +32,6 @@ class MaterialsProject(ASEAtomsData):
     def __init__(
         self,
         datapath: str,
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
         transforms: Optional[List[torch.nn.Module]] = None,
         subset_idx: Optional[List[int]] = None,
@@ -57,7 +55,6 @@ class MaterialsProject(ASEAtomsData):
             )
 
         self.apikey = apikey
-        self.format = format
 
         self.download(
             datapath=datapath,

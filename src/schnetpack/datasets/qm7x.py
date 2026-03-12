@@ -15,7 +15,6 @@ import progressbar
 from ase import Atoms
 
 import schnetpack.properties as structure
-from schnetpack.data import AtomsDataFormat
 from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
 
 __all__ = ["QM7X"]
@@ -134,7 +133,6 @@ class QM7X(ASEAtomsData):
         remove_duplicates: bool = True,
         only_equilibrium: bool = False,
         only_non_equilibrium: bool = False,
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
         transforms: Optional[List[torch.nn.Module]] = None,
         subset_idx: Optional[List[int]] = None,
@@ -149,7 +147,6 @@ class QM7X(ASEAtomsData):
             remove_duplicates: do not include duplicate molecules
             only_equilibrium: only include equilibrium molecules
             only_non_equilibrium: only include non-equilibrium molecules
-            format: dataset format
             load_properties: subset of properties to load
             transforms: Transform applied to each system separately before batching
             subset_idx: indices of the subset to load
@@ -168,7 +165,6 @@ class QM7X(ASEAtomsData):
         self.duplicates_ids = None
         self.only_equilibrium = only_equilibrium
         self.only_non_equilibrium = only_non_equilibrium
-        self.format = format
 
         self.download(
             datapath=datapath,

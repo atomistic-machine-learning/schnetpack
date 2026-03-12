@@ -11,8 +11,7 @@ import h5py
 import numpy as np
 from ase import Atoms
 
-from schnetpack.data import AtomsDataFormat
-from schnetpack.data.atoms import ASEAtomsData, AtomsDataError, load_dataset
+from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
 from schnetpack.transform.base import Transform
 
 __all__ = ["ANI1"]
@@ -42,7 +41,6 @@ class ANI1(ASEAtomsData):
         datapath: str,
         num_heavy_atoms: int = 8,
         high_energies: bool = False,
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
         transforms: Optional[List[torch.nn.Module]] = None,
         subset_idx: Optional[List[int]] = None,
@@ -55,7 +53,6 @@ class ANI1(ASEAtomsData):
             datapath: path to dataset
             num_heavy_atoms: number of heavy atoms
             high_energies: whether to include high-energy conformations
-            format: dataset format
             load_properties: subset of properties to load
             transforms: Transform applied to each system separately before batching
             subset_idx: indices of the subset to load
@@ -65,7 +62,6 @@ class ANI1(ASEAtomsData):
         """
         self.num_heavy_atoms = num_heavy_atoms
         self.high_energies = high_energies
-        self.format = format
 
         self.download(
             datapath=datapath,

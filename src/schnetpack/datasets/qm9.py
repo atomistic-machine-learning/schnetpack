@@ -16,7 +16,6 @@ from ase.io.extxyz import read_xyz
 from tqdm import tqdm
 
 import schnetpack.properties as structure
-from schnetpack.data import AtomsDataFormat
 from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
 
 __all__ = ["QM9"]
@@ -56,7 +55,6 @@ class QM9(ASEAtomsData):
     def __init__(
         self,
         datapath: str,
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         remove_uncharacterized: bool = False,
         load_properties: Optional[List[str]] = None,
         transforms: Optional[List[torch.nn.Module]] = None,
@@ -68,7 +66,6 @@ class QM9(ASEAtomsData):
         """
         Args:
             datapath: path to dataset
-            format: dataset format
             remove_uncharacterized: do not include uncharacterized molecules.
             load_properties: subset of properties to load
             transforms: Transform applied to each system separately before batching.
@@ -78,7 +75,6 @@ class QM9(ASEAtomsData):
             **kwargs: additional keyword arguments.
         """
         self.remove_uncharacterized = remove_uncharacterized
-        self.format = format
 
         self.download(
             datapath=datapath,
@@ -145,7 +141,7 @@ class QM9(ASEAtomsData):
         try:
             atomrefs = self._download_atomrefs(tmpdir)
 
-            dataset = ASEAtomsData.create(
+            self.create(
                 datapath=datapath,
                 distance_unit=distance_unit,
                 property_unit_dict=self._native_property_units(),
@@ -157,7 +153,7 @@ class QM9(ASEAtomsData):
             else:
                 uncharacterized = None
 
-            self._download_data(tmpdir, dataset, uncharacterized)
+            self._download_data(tmpdir, uncharacterized)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -208,7 +204,7 @@ class QM9(ASEAtomsData):
     def _download_data(
         self,
         tmpdir: str,
-        dataset: ASEAtomsData,
+        # dataset: ASEAtomsData,
         uncharacterized: Optional[List[int]],
     ) -> None:
 
@@ -244,7 +240,7 @@ class QM9(ASEAtomsData):
                 lines = f.readlines()
                 values = lines[1].split()[2:]
 
-                for pname, value in zip(dataset.available_properties, values):
+                for pname, value in zip(self.available_properties, values):
                     properties[pname] = np.array([float(value)])
 
                 for line in lines:
@@ -261,5 +257,5 @@ class QM9(ASEAtomsData):
             property_list.append(properties)
 
         logging.info("Write atoms to db...")
-        dataset.add_systems(property_list=property_list)
+        self.add_systems(property_list=property_list)
         logging.info("Done.")

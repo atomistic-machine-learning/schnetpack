@@ -12,7 +12,6 @@ import numpy as np
 from ase import Atoms
 
 import schnetpack.properties as structure
-from schnetpack.data import AtomsDataFormat
 from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
 from schnetpack.transform.base import Transform
 
@@ -69,7 +68,6 @@ class rMD17(ASEAtomsData):
         self,
         datapath: str,
         molecule: str,
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
         transforms: Optional[List[torch.nn.Module]] = None,
         subset_idx: Optional[List[int]] = None,
@@ -81,7 +79,6 @@ class rMD17(ASEAtomsData):
         Args:
             datapath: path to dataset
             molecule: name of the molecule
-            format: dataset format
             load_properties: subset of properties to load
             transforms: Transform applied to each system separately before batching.
             subset_idx: indices of the subset to load.
@@ -94,7 +91,6 @@ class rMD17(ASEAtomsData):
             raise AtomsDataError(f"Molecule {molecule} is not supported!")
 
         self.molecule = molecule
-        self.format = format
 
         self.download(
             datapath=datapath,

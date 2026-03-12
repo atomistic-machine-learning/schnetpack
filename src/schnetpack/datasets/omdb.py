@@ -37,7 +37,6 @@ class OrganicMaterialsDatabase(AtomsDataModule):
         num_val: Optional[int] = None,
         num_test: Optional[int] = None,
         split_file: Optional[str] = "split.npz",
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
         load_properties: Optional[List[str]] = None,
         val_batch_size: Optional[int] = None,
         test_batch_size: Optional[int] = None,
@@ -61,7 +60,6 @@ class OrganicMaterialsDatabase(AtomsDataModule):
             num_val: number of validation examples
             num_test: number of test examples
             split_file: path to npz file with data partitions
-            format: dataset format
             load_properties: subset of properties to load
             val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
             test_batch_size: test batch size. If None, use val_batch_size, then batch_size.
@@ -83,7 +81,6 @@ class OrganicMaterialsDatabase(AtomsDataModule):
             num_val=num_val,
             num_test=num_test,
             split_file=split_file,
-            format=format,
             load_properties=load_properties,
             val_batch_size=val_batch_size,
             test_batch_size=test_batch_size,
@@ -106,14 +103,13 @@ class OrganicMaterialsDatabase(AtomsDataModule):
 
             dataset = ASEAtomsData(
                 datapath=self.datapath,
-                # format=self.format,
                 distance_unit="Ang",
                 property_unit_dict=property_unit_dict,
             )
 
             self._convert(dataset)
         else:
-            dataset = load_dataset(self.datapath, self.format)
+            dataset = ASEAtomsData(self.datapath)
 
     def _convert(self, dataset):
         """
