@@ -22,7 +22,7 @@ __all__ = [
 class SubtractCenterOfMass(Transform):
     """
     Subtract center of mass from positions.
-    
+
     """
 
     is_preprocessor: bool = True

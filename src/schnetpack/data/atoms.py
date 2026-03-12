@@ -14,7 +14,6 @@ References
 import copy
 import logging
 import os
-from enum import Enum
 from typing import Optional, List, Dict, Any, Iterable, Union
 
 import torch
@@ -72,18 +71,11 @@ class ASEAtomsData(torch.utils.data.Dataset):
         self._check_db()
         self.conn = connect(self.datapath, use_lock_file=False)
 
-        self.transforms: List[Transform] = (
-            list(transforms) if transforms is not None else []
-        )
-        self.train_transforms: Optional[List[Transform]] = (
-            list(train_transforms) if train_transforms is not None else None
-        )
-        self.val_transforms: Optional[List[Transform]] = (
-            list(val_transforms) if val_transforms is not None else None
-        )
-        self.test_transforms: Optional[List[Transform]] = (
-            list(test_transforms) if test_transforms is not None else None
-        )
+        self.transforms = list(transforms or [])
+        self.train_transforms = list(train_transforms) if train_transforms else None
+        self.val_transforms = list(val_transforms) if val_transforms else None
+        self.test_transforms = list(test_transforms) if test_transforms else None
+
         self._load_properties: Optional[List[str]] = None
         self.load_structure = load_structure
 

@@ -39,24 +39,25 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         **kwargs,
     ):
         """
-        dataset: prebuilt ASEAtomsData dataset instance
-        batch_size: (train) batch size
-        num_train: number of training examples (absolute or relative)
-        num_val: number of validation examples (absolute or relative)
-        num_test: number of test examples (absolute or relative)
-        split_file: path to npz file with data partitions
-        splitting: Method to generate train/validation/test partitions
-                (default: RandomSplit)
-        num_workers: Number of data loader workers
-        val_batch_size: validation batch size. If None, use test_batch_size, then
-            batch_size
-        test_batch_size: test batch size. If None, use val_batch_size, then
-            batch_size
-        train_sampler_cls: type of torch training sampler.
-            This is by default wrapped into a torch.utils.data.BatchSampler.
-        train_sampler_args: dict of train_sampler keyword arguments.
-        pin_memory: If true, pin memory of loaded data to GPU. Default: Will be
-                set to true, when GPUs are used.
+        Args:
+            dataset: prebuilt ASEAtomsData dataset instance
+            batch_size: (train) batch size
+            num_train: number of training examples (absolute or relative)
+            num_val: number of validation examples (absolute or relative)
+            num_test: number of test examples (absolute or relative)
+            split_file: path to npz file with data partitions
+            splitting: Method to generate train/validation/test partitions
+                    (default: RandomSplit)
+            num_workers: Number of data loader workers
+            val_batch_size: validation batch size. If None, use test_batch_size, then
+                batch_size
+            test_batch_size: test batch size. If None, use val_batch_size, then
+                batch_size
+            train_sampler_cls: type of torch training sampler.
+                This is by default wrapped into a torch.utils.data.BatchSampler.
+            train_sampler_args: dict of train_sampler keyword arguments.
+            pin_memory: If true, pin memory of loaded data to GPU. Default: Will be
+                    set to true, when GPUs are used.
         """
         legacy_args = {
             "datapath",
