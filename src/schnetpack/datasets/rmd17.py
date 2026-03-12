@@ -6,7 +6,6 @@ import tempfile
 from typing import Dict, List, Optional
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
-import torch
 
 import numpy as np
 from ase import Atoms
@@ -69,7 +68,10 @@ class rMD17(ASEAtomsData):
         datapath: str,
         molecule: str,
         load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
+        transforms: Optional[List[Transform]] = None,
+        train_transforms: Optional[List[Transform]] = None,
+        val_transforms: Optional[List[Transform]] = None,
+        test_transforms: Optional[List[Transform]] = None,
         subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
@@ -80,11 +82,13 @@ class rMD17(ASEAtomsData):
             datapath: path to dataset
             molecule: name of the molecule
             load_properties: subset of properties to load
-            transforms: Transform applied to each system separately before batching.
-            subset_idx: indices of the subset to load.
-            property_units: Dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
-            distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
-            **kwargs: additional keyword arguments.
+            transforms: transform applied to each system separately before batching
+            train_transforms: overrides transform_fn for training
+            val_transforms: overrides transform_fn for validation
+            test_transforms: overrides transform_fn for testing
+            subset_idx: indices of the subset to load
+            property_units: dictionary from property to corresponding unit as a string (eV, kcal/mol, ...)
+            distance_unit: unit of the atom positions and cell as a string (Ang, Bohr, ...)
         """
 
         if molecule not in self.datasets_dict:
@@ -101,6 +105,9 @@ class rMD17(ASEAtomsData):
             datapath=datapath,
             load_properties=load_properties,
             transforms=transforms,
+            train_transforms=train_transforms,
+            val_transforms=val_transforms,
+            test_transforms=test_transforms,
             subset_idx=subset_idx,
             property_units=property_units,
             distance_unit=distance_unit,

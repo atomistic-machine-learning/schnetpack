@@ -2,7 +2,6 @@ import logging
 import os
 from typing import List, Optional, Dict
 
-import torch
 import numpy as np
 from ase import Atoms
 
@@ -33,13 +32,29 @@ class MaterialsProject(ASEAtomsData):
         self,
         datapath: str,
         load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
+        transforms: Optional[List[Transform]] = None,
+        train_transforms: Optional[List[Transform]] = None,
+        val_transforms: Optional[List[Transform]] = None,
+        test_transforms: Optional[List[Transform]] = None,
         subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
         apikey: Optional[str] = None,
         **kwargs,
     ):
+        """
+        Args:
+            datapath: path to dataset
+            load_properties: subset of properties to load
+            transforms: transform applied to each system separately before batching
+            train_transforms: overrides transform_fn for training
+            val_transforms: overrides transform_fn for validation
+            test_transforms: overrides transform_fn for testing
+            subset_idx: indices of the subset to load
+            property_units: dictionary from property to corresponding unit as a string (eV, kcal/mol, ...)
+            distance_unit: unit of the atom positions and cell as a string (Ang, Bohr, ...)
+            apikey: api key use to get data
+        """
         if apikey is not None and len(apikey) == 16:
             raise DeprecationWarning(
                 "You are using a legacy API key. This API is deprecated and no longer "
@@ -65,6 +80,9 @@ class MaterialsProject(ASEAtomsData):
             datapath=datapath,
             load_properties=load_properties,
             transforms=transforms,
+            train_transforms=train_transforms,
+            val_transforms=val_transforms,
+            test_transforms=test_transforms,
             subset_idx=subset_idx,
             property_units=property_units,
             distance_unit=distance_unit,

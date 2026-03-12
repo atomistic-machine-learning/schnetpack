@@ -3,12 +3,11 @@ import os
 import tarfile
 from typing import List, Optional, Dict
 from ase.io import read
-
 import numpy as np
 
-import torch
 from schnetpack.data import *
 from schnetpack.data import AtomsDataModuleError, AtomsDataModule
+from schnetpack.transform.base import Transform
 
 
 __all__ = ["OrganicMaterialsDatabase"]
@@ -40,10 +39,10 @@ class OrganicMaterialsDatabase(AtomsDataModule):
         load_properties: Optional[List[str]] = None,
         val_batch_size: Optional[int] = None,
         test_batch_size: Optional[int] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
-        train_transforms: Optional[List[torch.nn.Module]] = None,
-        val_transforms: Optional[List[torch.nn.Module]] = None,
-        test_transforms: Optional[List[torch.nn.Module]] = None,
+        transforms: Optional[List[Transform]] = None,
+        train_transforms: Optional[List[Transform]] = None,
+        val_transforms: Optional[List[Transform]] = None,
+        test_transforms: Optional[List[Transform]] = None,
         num_workers: int = 2,
         num_val_workers: Optional[int] = None,
         num_test_workers: Optional[int] = None,
@@ -63,15 +62,15 @@ class OrganicMaterialsDatabase(AtomsDataModule):
             load_properties: subset of properties to load
             val_batch_size: validation batch size. If None, use test_batch_size, then batch_size.
             test_batch_size: test batch size. If None, use val_batch_size, then batch_size.
-            transforms: Transform applied to each system separately before batching.
-            train_transforms: Overrides transform_fn for training.
-            val_transforms: Overrides transform_fn for validation.
-            test_transforms: Overrides transform_fn for testing.
-            num_workers: Number of data loader workers.
-            num_val_workers: Number of validation data loader workers (overrides num_workers).
-            num_test_workers: Number of test data loader workers (overrides num_workers).
-            property_units: Dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
-            distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
+            transforms: transform applied to each system separately before batching.
+            train_transforms: overrides transform_fn for training.
+            val_transforms: overrides transform_fn for validation.
+            test_transforms: overrides transform_fn for testing.
+            num_workers: number of data loader workers.
+            num_val_workers: number of validation data loader workers (overrides num_workers).
+            num_test_workers: number of test data loader workers (overrides num_workers).
+            property_units: dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
+            distance_unit: unit of the atom positions and cell as a string (Ang, Bohr, ...).
             raw_path: path to raw tar.gz file with the data
         """
         super().__init__(

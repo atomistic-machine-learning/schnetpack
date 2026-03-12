@@ -72,13 +72,13 @@ class QM9(ASEAtomsData):
             datapath: path to dataset
             remove_uncharacterized: do not include uncharacterized molecules.
             load_properties: subset of properties to load
-            transforms: Transform applied to each system separately before batching.
-            train_transforms: optional train-only transforms
-            val_transforms: optional val-only transforms
-            test_transforms: optional test-only transforms
-            subset_idx: indices of the subset to load.
-            property_units: Dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
-            distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
+            transforms: transform applied to each system separately before batching
+            train_transforms: overrides transform_fn for training
+            val_transforms: overrides transform_fn for validation
+            test_transforms: overrides transform_fn for testing
+            subset_idx: indices of the subset to load
+            property_units: dictionary from property to corresponding unit as a string (eV, kcal/mol, ...)
+            distance_unit: unit of the atom positions and cell as a string (Ang, Bohr, ...)
         """
         self.remove_uncharacterized = remove_uncharacterized
 
@@ -91,6 +91,9 @@ class QM9(ASEAtomsData):
             datapath=datapath,
             load_properties=load_properties,
             transforms=transforms,
+            train_transforms=train_transforms,
+            val_transforms=val_transforms,
+            test_transforms=test_transforms,
             subset_idx=subset_idx,
             property_units=property_units,
             distance_unit=distance_unit,
@@ -241,7 +244,7 @@ class QM9(ASEAtomsData):
                 lines = f.readlines()
                 values = lines[1].split()[2:]
 
-                for pname, value in zip(self.available_properties, values):
+                for pname, value in zip(dataset.available_properties, values):
                     properties[pname] = np.array([float(value)])
 
                 for line in lines:
