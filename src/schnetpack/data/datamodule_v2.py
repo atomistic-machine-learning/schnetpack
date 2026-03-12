@@ -1,5 +1,6 @@
 from typing import Optional, Union, Dict, Any, Type
 import os
+import warnings
 
 import numpy as np
 import pytorch_lightning as pl
@@ -37,6 +38,52 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         pin_memory: bool = False,
         **kwargs,
     ):
+        """
+        dataset: prebuilt ASEAtomsData dataset instance
+        batch_size: (train) batch size
+        num_train: number of training examples (absolute or relative)
+        num_val: number of validation examples (absolute or relative)
+        num_test: number of test examples (absolute or relative)
+        split_file: path to npz file with data partitions
+        splitting: Method to generate train/validation/test partitions
+                (default: RandomSplit)
+        num_workers: Number of data loader workers
+        val_batch_size: validation batch size. If None, use test_batch_size, then
+            batch_size
+        test_batch_size: test batch size. If None, use val_batch_size, then
+            batch_size
+        train_sampler_cls: type of torch training sampler.
+            This is by default wrapped into a torch.utils.data.BatchSampler.
+        train_sampler_args: dict of train_sampler keyword arguments.
+        pin_memory: If true, pin memory of loaded data to GPU. Default: Will be
+                set to true, when GPUs are used.
+        """
+        legacy_args = {
+            "datapath",
+            "format",
+            "load_properties",
+            "transforms",
+            "train_transforms",
+            "val_transforms",
+            "test_transforms",
+            "num_val_workers",
+            "num_test_workers",
+            "property_units",
+            "distance_unit",
+            "data_workdir",
+            "cleanup_workdir_stage",
+        }
+        used_legacy_args = [k for k in legacy_args if k in kwargs]
+
+        if used_legacy_args:
+            warnings.warn(
+                "The following arguments are deprecated in `AtomsDataModuleV2`: "
+                f"{used_legacy_args}. "
+                "Use a prebuilt dataset instance and configure these options on the "
+                "dataset instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         super().__init__()
 
         self.dataset = dataset
