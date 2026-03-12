@@ -18,6 +18,25 @@ def calculate_stats(
     num_workers: int = 4,
     loader_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Tuple[torch.Tensor, torch.Tensor]]:
+    """
+    Use the incremental Welford algorithm described in [h1]_ to accumulate
+    the mean and standard deviation over a set of samples.
+
+    References:
+    -----------
+    .. [h1] https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+
+    Args:
+        dataset: Dataset used to compute statistics.
+        divide_by_atoms: Mapping from property name to bool indicating whether the property
+            should be divided by the number of atoms before computing statistics.
+        atomref: Optional single-atom reference values to subtract before computing statistics.
+        batch_size: Batch size used for the temporary data loader.
+        num_workers: Number of workers used by the data loader.
+
+    Returns:
+        Mapping from property name to `(mean, std)` tensors.
+    """
     loader_kwargs = loader_kwargs or {}
 
     dataloader = AtomsLoader(
@@ -83,6 +102,20 @@ def estimate_atomrefs(
     num_workers: int = 4,
     loader_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, torch.Tensor]:
+    """
+    Uses linear regression to estimate the elementwise biases (atomrefs).
+
+    Args:
+        dataset: Dataset used to estimate atom reference values.
+        is_extensive: Mapping from property name to bool indicating whether the property is
+            extensive. If False, atom type counts are divided by the number of atoms before fitting.
+        z_max: Maximum atomic number used to size the atomref tensors.
+        batch_size: Batch size used for the temporary data loader.
+        num_workers: Number of workers used by the data loader.
+
+    Returns:
+        Mapping from property name to estimated atom reference tensor.
+    """
     loader_kwargs = loader_kwargs or {}
 
     dataloader = AtomsLoader(
