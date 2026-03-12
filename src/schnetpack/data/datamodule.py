@@ -40,7 +40,7 @@ class AtomsDataModule(pl.LightningDataModule):
         num_val: Union[int, float] = None,
         num_test: Optional[Union[int, float]] = None,
         split_file: Optional[str] = "split.npz",
-        format: Optional[AtomsDataFormat] = None,
+        format=None,
         load_properties: Optional[List[str]] = None,
         val_batch_size: Optional[int] = None,
         test_batch_size: Optional[int] = None,
@@ -113,7 +113,8 @@ class AtomsDataModule(pl.LightningDataModule):
         self.num_test = num_test
         self.splitting = splitting or RandomSplit()
         self.split_file = split_file
-        # self.datapath, self.format = resolve_format(datapath, format)
+        self.datapath = datapath
+        self.format = format
         self.load_properties = load_properties
         self.num_workers = num_workers
         self.num_val_workers = self.num_workers
