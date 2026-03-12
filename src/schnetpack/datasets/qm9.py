@@ -7,7 +7,6 @@ import tarfile
 import tempfile
 from typing import Dict, List, Optional
 from urllib import request as request
-import torch
 
 import numpy as np
 from ase import Atoms
@@ -17,6 +16,8 @@ from tqdm import tqdm
 
 import schnetpack.properties as structure
 from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
+from schnetpack.transform.base import Transform
+
 
 __all__ = ["QM9"]
 
@@ -57,7 +58,10 @@ class QM9(ASEAtomsData):
         datapath: str,
         remove_uncharacterized: bool = False,
         load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
+        transforms: Optional[List[Transform]] = None,
+        train_transforms: Optional[List[Transform]] = None,
+        val_transforms: Optional[List[Transform]] = None,
+        test_transforms: Optional[List[Transform]] = None,
         subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
@@ -69,10 +73,12 @@ class QM9(ASEAtomsData):
             remove_uncharacterized: do not include uncharacterized molecules.
             load_properties: subset of properties to load
             transforms: Transform applied to each system separately before batching.
+            train_transforms: optional train-only transforms
+            val_transforms: optional val-only transforms
+            test_transforms: optional test-only transforms
             subset_idx: indices of the subset to load.
             property_units: Dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
             distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
-            **kwargs: additional keyword arguments.
         """
         self.remove_uncharacterized = remove_uncharacterized
 
@@ -93,7 +99,6 @@ class QM9(ASEAtomsData):
 
     @staticmethod
     def _native_property_units() -> Dict[str, str]:
-        # IMPORTANT: full native QM9 schema, stored in DB metadata
         return {
             QM9.A: "GHz",
             QM9.B: "GHz",
@@ -138,40 +143,36 @@ class QM9(ASEAtomsData):
             return
 
         tmpdir = tempfile.mkdtemp("qm9")
-        try:
-            atomrefs = self._download_atomrefs(tmpdir)
 
-            self.create(
-                datapath=datapath,
-                distance_unit=distance_unit,
-                property_unit_dict=self._native_property_units(),
-                atomrefs=atomrefs,
-            )
+        atomrefs = self._download_atomrefs(tmpdir)
 
-            if self.remove_uncharacterized:
-                uncharacterized = self._download_uncharacterized(tmpdir)
-            else:
-                uncharacterized = None
+        dataset = self.create(
+            datapath=datapath,
+            distance_unit=distance_unit,
+            property_unit_dict=self._native_property_units(),
+            atomrefs=atomrefs,
+        )
 
-            self._download_data(tmpdir, uncharacterized)
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+        if self.remove_uncharacterized:
+            uncharacterized = self._download_uncharacterized(tmpdir)
+        else:
+            uncharacterized = None
+
+        self._download_data(tmpdir, dataset, uncharacterized)
+
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
     def _download_file(self, file_id: str, destination: str) -> None:
         for base_url in self.base_urls:
             url = f"{base_url}{file_id}"
-            try:
-                request.urlretrieve(url, destination)
-                return
-            except Exception:
-                logging.warning(f"Could not download from {url}, trying next source...")
+            request.urlretrieve(url, destination)
+            return
 
         raise AtomsDataError(
             f"Could not download file with id {file_id} from any source."
         )
 
     def _download_uncharacterized(self, tmpdir: str) -> List[int]:
-
         logging.info("Downloading list of uncharacterized molecules...")
         tmp_path = os.path.join(tmpdir, "uncharacterized.txt")
         self._download_file(self.file_ids["uncharacterized"], tmp_path)
@@ -204,7 +205,7 @@ class QM9(ASEAtomsData):
     def _download_data(
         self,
         tmpdir: str,
-        # dataset: ASEAtomsData,
+        dataset: ASEAtomsData,
         uncharacterized: Optional[List[int]],
     ) -> None:
 
@@ -257,5 +258,5 @@ class QM9(ASEAtomsData):
             property_list.append(properties)
 
         logging.info("Write atoms to db...")
-        self.add_systems(property_list=property_list)
+        dataset.add_systems(property_list=property_list)
         logging.info("Done.")
