@@ -1,7 +1,6 @@
 from __future__ import annotations
-
-from copy import copy
 from typing import List, Optional, Union, Dict, Any, Type
+import os
 
 import numpy as np
 import pytorch_lightning as pl
@@ -31,10 +30,6 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         num_test: Optional[Union[int, float]] = None,
         split_file: Optional[str] = "split.npz",
         splitting: Optional[SplittingStrategy] = None,
-        transforms: Optional[List] = None,
-        train_transforms: Optional[List] = None,
-        val_transforms: Optional[List] = None,
-        test_transforms: Optional[List] = None,
         num_workers: int = 0,
         val_batch_size: Optional[int] = None,
         test_batch_size: Optional[int] = None,
@@ -57,10 +52,6 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         self.splitting = splitting or RandomSplit()
         self.num_workers = num_workers
         self._pin_memory = pin_memory
-
-        self.train_transforms = train_transforms or copy(transforms) or []
-        self.val_transforms = val_transforms or copy(transforms) or []
-        self.test_transforms = test_transforms or copy(transforms) or []
 
         self.train_idx = None
         self.val_idx = None
@@ -105,26 +96,30 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         self._val_dataset = self.dataset.subset(self.val_idx)
         self._test_dataset = self.dataset.subset(self.test_idx)
 
+        transforms = self.dataset.transforms or []
+
+        train_transforms = self.dataset.train_transforms or transforms
+        val_transforms = self.dataset.val_transforms or transforms
+        test_transforms = self.dataset.test_transforms or transforms
+
+        self._train_dataset.transforms = train_transforms
+        self._val_dataset.transforms = val_transforms
+        self._test_dataset.transforms = test_transforms
+
         self.provider = StatsAtomrefProvider(self._train_dataset)
 
-        self._initialize_transform_list(self.train_transforms)
-        self._initialize_transform_list(self.val_transforms)
-        self._initialize_transform_list(self.test_transforms)
+        self._initialize_transforms(self._train_dataset)
+        self._initialize_transforms(self._val_dataset)
+        self._initialize_transforms(self._test_dataset)
 
-        self._train_dataset.transforms = self.train_transforms
-        self._val_dataset.transforms = self.val_transforms
-        self._test_dataset.transforms = self.test_transforms
-
-    def _initialize_transform_list(self, transforms: List) -> None:
-        if not transforms:
+    def _initialize_transforms(self, dataset: ASEAtomsData) -> None:
+        if not dataset.transforms:
             return
 
-        for t in transforms:
+        for t in dataset.transforms:
             t.initialize(provider=self.provider, atomrefs=self.provider.train_atomrefs)
 
     def _load_partitions(self) -> None:
-        import os
-
         total_size = len(self.dataset)
 
         def _to_abs(x: Optional[Union[int, float]]) -> Optional[int]:
@@ -150,9 +145,7 @@ class AtomsDataModuleV2(pl.LightningDataModule):
             return
 
         if num_train is None or num_val is None:
-            raise ValueError(
-                "If no split file is given, num_train and num_val must be set."
-            )
+            raise ValueError("num_train and num_val must be set if no split file.")
 
         train_idx, val_idx, test_idx = self.splitting.split(
             self.dataset, num_train, num_val, num_test

@@ -10,9 +10,6 @@ import torch
 from torch.utils.data import BatchSampler
 
 from schnetpack.data import (
-    AtomsDataFormat,
-    # resolve_format,
-    load_dataset,
     ASEAtomsData,
     AtomsLoader,
     calculate_stats,
@@ -181,7 +178,7 @@ class AtomsDataModule(pl.LightningDataModule):
 
         # (re)load datasets
         if self.dataset is None:
-            self.dataset = load_dataset(
+            self.dataset = ASEAtomsData(
                 datapath,
                 self.format,
                 property_units=self.property_units,
