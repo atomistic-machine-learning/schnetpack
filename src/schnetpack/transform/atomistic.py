@@ -1,4 +1,5 @@
-from typing import Dict, Optional
+from typing import Dict
+import warnings
 
 import torch
 from ase.data import atomic_masses
@@ -145,6 +146,12 @@ class RemoveOffsets(Transform):
         """
         Legacy hook for old AtomsDataModule. Safe to remove once legacy DM is removed.
         """
+        warnings.warn(
+            "RemoveOffsets.datamodule(...) is deprecated and will be removed in a future "
+            "release. Use initialize(provider=..., atomrefs=...) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         provider = StatsAtomrefProvider(_datamodule.train_dataset)
         return self.initialize(provider, atomrefs=provider.train_atomrefs)
 
@@ -226,6 +233,12 @@ class ScaleProperty(Transform):
         """
         Legacy hook for old AtomsDataModule. Safe to remove once legacy DM is removed.
         """
+        warnings.warn(
+            "ScaleProperty.datamodule(...) is deprecated and will be removed in a future "
+            "release. Use initialize(provider=..., atomrefs=...) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         provider = StatsAtomrefProvider(_datamodule.train_dataset)
         return self.initialize(provider, atomrefs=None)
 
@@ -250,7 +263,7 @@ class AddOffsets(Transform):
         precision.
     """
 
-    is_preprocessor: bool = True
+    is_preprocessor: bool = False
     is_postprocessor: bool = True
     atomref: torch.Tensor
 
@@ -329,6 +342,12 @@ class AddOffsets(Transform):
         """
         Legacy hook for old AtomsDataModule. Safe to remove once legacy DM is removed.
         """
+        warnings.warn(
+            "AddOffsets.datamodule(...) is deprecated and will be removed in a future "
+            "release. Use initialize(provider=..., atomrefs=...) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         provider = StatsAtomrefProvider(_datamodule.train_dataset)
         return self.initialize(provider, atomrefs=provider.train_atomrefs)
 
