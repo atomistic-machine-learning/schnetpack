@@ -2,7 +2,7 @@ import copy
 import logging
 import os
 from enum import Enum
-from typing import Optional, List, Dict, Any, Iterable, Union, Tuple
+from typing import Optional, List, Dict, Any, Iterable, Union
 
 import torch
 from ase import Atoms
@@ -14,13 +14,7 @@ from schnetpack.transform.base import Transform
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["ASEAtomsData", "AtomsDataFormat", "load_dataset"]
-
-
-class AtomsDataFormat(Enum):
-    """Enumeration of data formats"""
-
-    ASE = "ase"
+__all__ = ["ASEAtomsData", "AtomsDataError"]
 
 
 class AtomsDataError(Exception):
@@ -39,6 +33,9 @@ class ASEAtomsData(torch.utils.data.Dataset):
         load_properties: Optional[List[str]] = None,
         load_structure: bool = True,
         transforms: Optional[List[Transform]] = None,
+        train_transforms: Optional[List[Transform]] = None,
+        val_transforms: Optional[List[Transform]] = None,
+        test_transforms: Optional[List[Transform]] = None,
         subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
@@ -48,9 +45,17 @@ class ASEAtomsData(torch.utils.data.Dataset):
         self._check_db()
         self.conn = connect(self.datapath, use_lock_file=False)
 
-        # merged ASEAtomsData state
         self.transforms: List[Transform] = (
             list(transforms) if transforms is not None else []
+        )
+        self.train_transforms: Optional[List[Transform]] = (
+            list(train_transforms) if train_transforms is not None else None
+        )
+        self.val_transforms: Optional[List[Transform]] = (
+            list(val_transforms) if val_transforms is not None else None
+        )
+        self.test_transforms: Optional[List[Transform]] = (
+            list(test_transforms) if test_transforms is not None else None
         )
         self._load_properties: Optional[List[str]] = None
         self.load_structure = load_structure
@@ -90,11 +95,12 @@ class ASEAtomsData(torch.utils.data.Dataset):
         self.load_properties = load_properties
 
     # ---------- merged ASEAtomsData bits ----------
+
     def subset(self, subset_idx: List[int]):
         if subset_idx is None:
             raise ValueError("subset_idx must be provided.")
         ds = copy.copy(self)
-        if ds.subset_idx:
+        if ds.subset_idx is not None:
             ds.subset_idx = [ds.subset_idx[i] for i in subset_idx]
         else:
             ds.subset_idx = subset_idx
@@ -141,13 +147,13 @@ class ASEAtomsData(torch.utils.data.Dataset):
         if not os.path.exists(self.datapath):
             raise AtomsDataError(f"ASE DB does not exist at {self.datapath}")
 
-        if self.subset_idx:
+        if self.subset_idx is not None:
             with connect(self.datapath, use_lock_file=False) as conn:
                 n_structures = conn.count()
             if max(self.subset_idx) >= n_structures:
                 raise AtomsDataError("subset_idx contains out-of-range indices")
 
-    # ---------- metadata / units ----------
+    # ---------- metadata / units -----------
 
     @property
     def metadata(self) -> Dict[str, Any]:
@@ -194,7 +200,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
         if load_structure is None:
             load_structure = self.load_structure
 
-        if self.subset_idx:
+        if self.subset_idx is not None:
             if indices is None:
                 indices = self.subset_idx
             elif isinstance(indices, int):
@@ -277,7 +283,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
                 "atomrefs": atomrefs,
             }
 
-        return ASEAtomsData(datapath, **kwargs)
+        return ASEAtomsData(datapath, **kwargs)  ##NO RETURN HERE
 
     def add_system(
         self,
@@ -355,19 +361,3 @@ class ASEAtomsData(torch.utils.data.Dataset):
                 data[pname] = properties[pname]
 
             conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
-
-
-def load_dataset(datapath: str, format: AtomsDataFormat, **kwargs) -> ASEAtomsData:
-    """
-    Load dataset.
-
-    Args:
-        datapath: file path
-        format: atoms data format
-        **kwargs: arguments for passed to AtomsData init
-
-    """
-    if format is AtomsDataFormat.ASE:
-        dataset = ASEAtomsData(datapath=datapath, **kwargs)
-    else:
-        raise AtomsDataError(f"Unknown format: {format}")
