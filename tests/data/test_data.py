@@ -108,9 +108,11 @@ def test_stats():
     atomref = {"property1": torch.ones((100,)) / 3.0}
     for bs in range(1, 7):
         stats = calculate_stats(
-            AtomsLoader(data, batch_size=bs),
+            data,
             {"property1": True, "property2": False},
             atomref=atomref,
+            batch_size=bs,
+            num_workers=0,
         )
         assert np.allclose(stats["property1"][0].numpy(), np.array([0.0]))
         assert np.allclose(stats["property1"][1].numpy(), np.array([1.0]))
