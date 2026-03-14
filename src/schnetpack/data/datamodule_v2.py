@@ -149,21 +149,25 @@ class AtomsDataModuleV2(pl.LightningDataModule):
         val_transforms = self.dataset.val_transforms or transforms
         test_transforms = self.dataset.test_transforms or transforms
 
+        self._train_dataset.transforms = []
+        self._val_dataset.transforms = []
+        self._test_dataset.transforms = []
+
+        self.provider = StatsAtomrefProvider(self._train_dataset)
+
+        self._initialize_transforms(train_transforms)
+        self._initialize_transforms(val_transforms)
+        self._initialize_transforms(test_transforms)
+
         self._train_dataset.transforms = train_transforms
         self._val_dataset.transforms = val_transforms
         self._test_dataset.transforms = test_transforms
 
-        self.provider = StatsAtomrefProvider(self._train_dataset)
-
-        self._initialize_transforms(self._train_dataset)
-        self._initialize_transforms(self._val_dataset)
-        self._initialize_transforms(self._test_dataset)
-
-    def _initialize_transforms(self, dataset: ASEAtomsData) -> None:
-        if not dataset.transforms:
+    def _initialize_transforms(self, transforms) -> None:
+        if not transforms:
             return
 
-        for t in dataset.transforms:
+        for t in transforms:
             t.initialize(provider=self.provider, atomrefs=self.provider.train_atomrefs)
 
     def _load_partitions(self) -> None:
