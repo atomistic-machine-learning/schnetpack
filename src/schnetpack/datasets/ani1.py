@@ -5,6 +5,7 @@ import tarfile
 import tempfile
 from typing import Dict, List, Optional
 from urllib import request as request
+from ase.db import connect
 
 import h5py
 import numpy as np
@@ -21,6 +22,8 @@ log = logging.getLogger(__name__)
 class ANI1(ASEAtomsData):
     """
     ANI1 benchmark dataset.
+    This class adds convenience functions to download ANI1 from figshare and
+    load the data into pytorch.
 
     References:
         .. [#ani1] https://arxiv.org/abs/1708.04987
@@ -96,20 +99,32 @@ class ANI1(ASEAtomsData):
         Ensure the ANI1 ASE DB exists.
         """
         if os.path.exists(datapath):
-            _ = ASEAtomsData(datapath, load_structure=False)
+            with connect(datapath, use_lock_file=False) as conn:
+                md = conn.metadata
+
+            if md.get("num_heavy_atoms") != self.num_heavy_atoms:
+                raise AtomsDataError(
+                    f"Existing ANI1 dataset was created with num_heavy_atoms={md.get('num_heavy_atoms')}, "
+                    f"but requested num_heavy_atoms={self.num_heavy_atoms}."
+                )
+
+            if md.get("high_energies") != self.high_energies:
+                raise AtomsDataError(
+                    f"Existing ANI1 dataset was created with high_energies={md.get('high_energies')}, "
+                    f"but requested high_energies={self.high_energies}."
+                )
             return
 
         tmpdir = tempfile.mkdtemp("ani1")
-        try:
-            dataset = ASEAtomsData.create(
-                datapath=datapath,
-                distance_unit=distance_unit,
-                property_unit_dict=self._native_property_units(),
-                atomrefs=self._create_atomrefs(),
-            )
-            self._download_data(tmpdir, dataset)
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+
+        dataset = self.create(
+            datapath=datapath,
+            distance_unit=distance_unit,
+            property_unit_dict=self._native_property_units(),
+            atomrefs=self._create_atomrefs(),
+        )
+        self._download_data(tmpdir, dataset)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
     def _download_data(self, tmpdir: str, dataset: ASEAtomsData) -> None:
         logging.info("Downloading ANI-1 data...")
