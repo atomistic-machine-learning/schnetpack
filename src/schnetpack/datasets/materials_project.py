@@ -14,6 +14,8 @@ __all__ = ["MaterialsProject"]
 class MaterialsProject(ASEAtomsData):
     """
     Materials Project (MP) database of bulk crystals.
+    This class adds convenient functions to download Materials Project data into
+    pytorch.
 
     References:
 
@@ -103,7 +105,6 @@ class MaterialsProject(ASEAtomsData):
         Ensure the Materials Project ASE DB exists.
         """
         if os.path.exists(datapath):
-            _ = ASEAtomsData(datapath, load_structure=False)
             return
 
         if self.apikey is None:
@@ -112,7 +113,7 @@ class MaterialsProject(ASEAtomsData):
                 "to get an API key."
             )
 
-        dataset = ASEAtomsData.create(
+        dataset = self.create(
             datapath=datapath,
             distance_unit=distance_unit,
             property_unit_dict=self._native_property_units(),
