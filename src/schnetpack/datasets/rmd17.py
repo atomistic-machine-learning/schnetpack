@@ -9,6 +9,7 @@ from urllib.error import HTTPError, URLError
 
 import numpy as np
 from ase import Atoms
+from ase.db import connect
 
 import schnetpack.properties as structure
 from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
@@ -91,7 +92,7 @@ class rMD17(ASEAtomsData):
             distance_unit: unit of the atom positions and cell as a string (Ang, Bohr, ...)
         """
 
-        if molecule not in self.datasets_dict:
+        if molecule not in self.datasets_dict.keys():
             raise AtomsDataError(f"Molecule {molecule} is not supported!")
 
         self.molecule = molecule
@@ -126,8 +127,8 @@ class rMD17(ASEAtomsData):
         Ensure the ASE DB exists and matches the requested molecule.
         """
         if os.path.exists(datapath):
-            dataset = ASEAtomsData(datapath, load_structure=False)
-            md = dataset.metadata
+            with connect(datapath, use_lock_file=False) as conn:
+                md = conn.metadata
 
             if "molecule" not in md:
                 raise AtomsDataError(
@@ -142,17 +143,15 @@ class rMD17(ASEAtomsData):
             return
 
         tmpdir = tempfile.mkdtemp("rmd17")
-        try:
-            dataset = ASEAtomsData.create(
-                datapath=datapath,
-                distance_unit=distance_unit,
-                property_unit_dict=self._native_property_units(),
-                atomrefs=self.atomrefs,
-            )
-            dataset.update_metadata(molecule=self.molecule)
-            self._download_data(tmpdir, dataset)
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+        dataset = self.create(
+            datapath=datapath,
+            distance_unit=distance_unit,
+            property_unit_dict=self._native_property_units(),
+            atomrefs=self.atomrefs,
+        )
+        dataset.update_metadata(molecule=self.molecule)
+        self._download_data(tmpdir, dataset)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
     def _download_data(self, tmpdir: str, dataset: ASEAtomsData) -> None:
         logging.info("Downloading %s data...", self.molecule)
