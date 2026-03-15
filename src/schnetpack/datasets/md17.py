@@ -7,6 +7,7 @@ from urllib import request as request
 
 import numpy as np
 from ase import Atoms
+from ase.db import connect
 
 import schnetpack.properties as structure
 from schnetpack.transform.base import Transform
@@ -97,8 +98,8 @@ class GDMLDataset(ASEAtomsData):
 
     def download(self, datapath: str, distance_unit: str = "Ang") -> None:
         if os.path.exists(datapath):
-            dataset = ASEAtomsData(datapath, load_structure=False)
-            md = dataset.metadata
+            with connect(datapath, use_lock_file=False) as conn:
+                md = conn.metadata
 
             if "molecule" not in md:
                 raise AtomsDataError(
@@ -113,19 +114,17 @@ class GDMLDataset(ASEAtomsData):
             return
 
         tmpdir = tempfile.mkdtemp(self.tmpdir)
-        try:
-            dataset = ASEAtomsData.create(
-                datapath=datapath,
-                distance_unit=distance_unit,
-                property_unit_dict=self._native_property_units(),
-                atomrefs=self._native_atomrefs,
-            )
-            dataset.update_metadata(molecule=self.molecule)
-            self._download_data(tmpdir)
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+        dataset = self.create(
+            datapath=datapath,
+            distance_unit=distance_unit,
+            property_unit_dict=self._native_property_units(),
+            atomrefs=self._native_atomrefs,
+        )
+        dataset.update_metadata(molecule=self.molecule)
+        self._download_data(tmpdir, dataset)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
-    def _download_data(self, tmpdir):
+    def _download_data(self, tmpdir, dataset: ASEAtomsData) -> None:
         logging.info("Downloading {} data".format(self.molecule))
         rawpath = os.path.join(tmpdir, self.datasets_dict[self.molecule])
         url = self.download_url + self.datasets_dict[self.molecule]
