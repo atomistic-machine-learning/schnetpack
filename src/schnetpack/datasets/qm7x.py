@@ -22,6 +22,9 @@ pbar = None
 
 
 def show_progress(block_num: int, block_size: int, total_size: int):
+    """
+    progress callback for files downloads
+    """
     global pbar
     if pbar is None:
         pbar = progressbar.ProgressBar(maxval=total_size)
@@ -36,6 +39,9 @@ def show_progress(block_num: int, block_size: int, total_size: int):
 
 
 def download_and_check(url: str, target_path: str, checksum: str):
+    """
+    Download file from url to tar_path and check md5 checksum.
+    """
     file_name = url.split("/")[-1]
 
     if os.path.exists(target_path):
@@ -61,6 +67,9 @@ def download_and_check(url: str, target_path: str, checksum: str):
 
 
 def extract_xz(source: str, target: str):
+    """
+    helper to extract xz files.
+    """
     s_file = source.split("/")[-1]
     t_file = target.split("/")[-1]
 
@@ -82,18 +91,31 @@ def extract_xz(source: str, target: str):
 
 class QM7X(ASEAtomsData):
     """
-    QM7-X dataset of equilibrium and non-equilibrium structures of small organic molecules.
+    QM7-X a comprehensive dataset of > 40 physicochemical properties for ~4.2 M equilibrium and non-equilibrium
+    structure of small organic molecules with up to seven non-hydrogen (C, N, O, S, Cl) atoms.
+    This class adds convenient functions to download QM7-X and load the data into pytorch.
+
+    References:
+
+        .. [#qm7x_1] https://zenodo.org/record/4288677
+
     """
 
-    forces = "forces"
-    energy = "energy"
-    Eat = "Eat"
-    EPBE0 = "EPBE0"
-    EMBD = "EMBD"
-    FPBE0 = "FPBE0"
-    FMBD = "FMBD"
-    RMSD = "rmsd"
+    # more molecular and atomic properties can be found in the original paper and added here
+    # Notice that adding more properties can drastically increase the size of the dataset
+    # adding more properties here requires to add them to the property_unit_dict
+    # and there key mapping in the raw dataset in property_dataset_keys.
 
+    forces = "forces"  # total ePBE0+MBD forces
+    energy = "energy"  # ePBE0+MBD: total energy after convergence of the PBE0 exchange-correlation functional and the MBD dispersion correction
+    Eat = "Eat"  # atomization energy using PBE0 energy per atom and ePBE0+MBD total energy
+    EPBE0 = "EPBE0"  # ePBE0: total energy at the level of PBE0
+    EMBD = "EMBD"  # eMBD: total energy at the level of MBD
+    FPBE0 = "FMBD"  # FPBE0: total ePBE0 forces
+    FMBD = "FMBD"  # FMBD: total eMBD forces
+    RMSD = "rmsd"  # root mean square deviation of the atomic positions from the equilibrium structure
+
+    # the original keys in the raw dataset to query the properties
     property_dataset_keys = {
         forces: "totFOR",
         energy: "ePBE0+MBD",
@@ -105,6 +127,7 @@ class QM7X(ASEAtomsData):
         RMSD: "sRMSD",
     }
 
+    # atom energies (atomrefs) from PBE0
     EPBE0_atom = {
         1: -13.641404161,
         6: -1027.592489146,
@@ -183,14 +206,14 @@ class QM7X(ASEAtomsData):
     @staticmethod
     def _native_property_units() -> Dict[str, str]:
         return {
-            QM7X.forces: "totFOR",
-            QM7X.energy: "ePBE0+MBD",
-            QM7X.Eat: "eAT",
-            QM7X.EPBE0: "ePBE0",
-            QM7X.EMBD: "eMBD",
-            QM7X.FPBE0: "pbe0FOR",
-            QM7X.FMBD: "vdwFOR",
-            QM7X.RMSD: "sRMSD",
+            QM7X.forces: "eV/Ang",
+            QM7X.energy: "eV",
+            QM7X.Eat: "eV",
+            QM7X.EPBE0: "eV",
+            QM7X.EMBD: "eV",
+            QM7X.FPBE0: "eV/Ang",
+            QM7X.FMBD: "eV/Ang",
+            QM7X.RMSD: "Ang",
         }
 
     def _apply_structure_filter(self, original_subset_idx: Optional[List[int]]) -> None:
@@ -222,41 +245,42 @@ class QM7X(ASEAtomsData):
         Download the QM7-X dataset and create the ASEAtomsData object.
         """
         if os.path.exists(datapath):
-            _ = ASEAtomsData(datapath, load_structure=False)
             return
 
         tar_dir = self.raw_data_path or tempfile.mkdtemp("qm7x")
-        try:
-            atomrefs = {
-                QM7X.energy: [
-                    QM7X.EPBE0_atom[i] if i in QM7X.EPBE0_atom else 0.0
-                    for i in range(0, 18)
-                ]
-            }
+        atomrefs = {
+            QM7X.energy: [
+                QM7X.EPBE0_atom[i] if i in QM7X.EPBE0_atom else 0.0
+                for i in range(0, 18)
+            ]
+        }
 
-            dataset = ASEAtomsData.create(
-                datapath=datapath,
-                distance_unit=distance_unit,
-                property_unit_dict=self._native_property_units(),
-                atomrefs=atomrefs,
-            )
+        dataset = self.create(
+            datapath=datapath,
+            distance_unit=distance_unit,
+            property_unit_dict=self._native_property_units(),
+            atomrefs=atomrefs,
+        )
 
-            hd_files = self._download_data(tar_dir)
-            if self.remove_duplicates:
-                self._download_duplicates_ids(tar_dir)
-            self._parse_data(hd_files, dataset)
+        hd_files = self._download_data(tar_dir)
+        if self.remove_duplicates:
+            self._download_duplicates_ids(tar_dir)
+        self._parse_data(hd_files, dataset)
 
-        finally:
-            if self.raw_data_path is None:
-                shutil.rmtree(tar_dir, ignore_errors=True)
+        if self.raw_data_path is None:
+            shutil.rmtree(tar_dir, ignore_errors=True)
 
     def _download_duplicates_ids(self, tar_dir: str):
+        """
+        download duplicates ids for QM7-X
+        """
         url = "https://zenodo.org/record/4288677/files/DupMols.dat"
         target_path = os.path.join(tar_dir, "DupMols.dat")
         checksum = "5d886ccac38877c8cb26c07704dd1034"
 
         download_and_check(url, target_path, checksum)
 
+        # fetch duplicates ids
         dup_mols = []
         with open(target_path, "r") as f:
             for line in f:
@@ -265,7 +289,12 @@ class QM7X(ASEAtomsData):
         self.duplicates_ids = dup_mols
 
     def _download_data(self, tar_dir: str, ignore_extracted: bool = True) -> List[str]:
+        """
+        download data and extract them
+        """
         file_ids = ["1000", "2000", "3000", "4000", "5000", "6000", "7000", "8000"]
+
+        # file fingerprints to check integrity
         checksums = [
             "b50c6a5d0a4493c274368cf22285503e",
             "4418a813daf5e0d44aa5a26544249ee6",
@@ -292,6 +321,7 @@ class QM7X(ASEAtomsData):
             xz_path = os.path.join(tar_dir, f"{file_id}.xz")
             download_and_check(url, xz_path, checksums[i])
 
+        # extract the compressed files
         extracted = []
         for file_id in file_ids:
             xz_path = os.path.join(tar_dir, f"{file_id}.xz")
@@ -302,6 +332,9 @@ class QM7X(ASEAtomsData):
         return extracted
 
     def _parse_data(self, files: List[str], dataset: ASEAtomsData):
+        """
+        Parse the downloaded data files and add them to the dataset.
+        """
         for file in files:
             logging.info(f"Parsing {os.path.basename(file)} ...")
 
@@ -317,6 +350,7 @@ class QM7X(ASEAtomsData):
             with h5py.File(file, "r") as mol_dict:
                 for _mol_id, mol in mol_dict.items():
                     for conf_id, conf in mol.items():
+                        # exclude equilibrium duplicates
                         trunc_id = conf_id[::-1].split("-", 1)[-1][::-1]
                         if self.remove_duplicates and trunc_id in self.duplicates_ids:
                             continue
@@ -329,6 +363,7 @@ class QM7X(ASEAtomsData):
                             for key in QM7X._native_property_units().keys()
                         }
 
+                        # get the hierarchical ids for each system
                         if "opt" in conf_id:
                             conf_id = conf_id[:-3] + "d0"
 
@@ -337,17 +372,20 @@ class QM7X(ASEAtomsData):
                         atoms_list.append(ats)
                         property_list.append(properties)
 
+                        # save the hierarchical ids for each system in same order as the systems
                         for key, idx in zip(groups_ids.keys(), ids):
                             groups_ids[key].append(idx)
 
             logging.info(f"Write parsed data from {os.path.basename(file)} to db ...")
             dataset.add_systems(property_list=property_list, atoms_list=atoms_list)
 
+            # add the hierarchical ids to the metadata
             md = dataset.metadata
             if "groups_ids" in md:
                 for key, ids in groups_ids.items():
                     groups_ids[key] = md["groups_ids"][key] + ids
 
+                # add the ids as in the database of the new added systems
                 last_id = md["groups_ids"]["id"][-1]
                 sys_ids = list(range(last_id + 1, last_id + len(atoms_list) + 1))
                 groups_ids["id"] = md["groups_ids"]["id"] + sys_ids
