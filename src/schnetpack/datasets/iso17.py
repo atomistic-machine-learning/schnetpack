@@ -95,63 +95,71 @@ class ISO17(ASEAtomsData):
             ISO17.forces: "eV/Ang",
         }
 
-    def download(self, datapath: str, distance_unit: str = "Ang") -> None:
+    def download(self, datapath: str) -> None:
         """
         Ensure the ISO17 DB for the selected fold exists and has proper metadata.
         """
         if os.path.exists(datapath):
-            _ = ASEAtomsData(datapath, load_structure=False)
             return
+        """
+        with connect(datapath, use_lock_file=False) as conn:
+                md = conn.metadata
+
+            if md.get("_property_unit_dict") != self._native_property_units():
+                raise AtomsDataError(
+                    f"Existing ISO17 dataset at {datapath} has incompatible property units."
+                )
+
+            if md.get("_distance_unit") != "Ang":
+                raise AtomsDataError(
+                    f"Existing ISO17 dataset at {datapath} has incompatible distance unit."
+                )
+        """
 
         self._download_data()
 
     def _download_data(self) -> None:
         logging.info("Downloading ISO17 database...")
         tmpdir = tempfile.mkdtemp("iso17")
+        tarpath = os.path.join(tmpdir, "iso17.tar.gz")
+        url = "http://www.quantum-machine.org/datasets/iso17.tar.gz"
 
         try:
-            tarpath = os.path.join(tmpdir, "iso17.tar.gz")
-            url = "http://www.quantum-machine.org/datasets/iso17.tar.gz"
+            request.urlretrieve(url, tarpath)
 
-            try:
-                request.urlretrieve(url, tarpath)
-            except HTTPError as e:
-                raise AtomsDataError(
-                    f"HTTP Error {e.code} while downloading {url}"
-                ) from e
-            except URLError as e:
-                raise AtomsDataError(
-                    f"URL Error {e.reason} while downloading {url}"
-                ) from e
+        except HTTPError as e:
+            raise AtomsDataError(f"HTTP Error {e.code} while downloading {url}") from e
 
-            with tarfile.open(tarpath) as tar:
-                tar.extractall(self.root_path)
+        except URLError as e:
+            raise AtomsDataError(f"URL Error {e.reason} while downloading {url}") from e
 
-            # update metadata + convert energy into row.data for every fold
-            for fold in self.existing_folds:
-                dbpath = os.path.join(self.root_path, "iso17", fold + ".db")
-                tmp_dbpath = os.path.join(tmpdir, f"{fold}_tmp.db")
+        with tarfile.open(tarpath) as tar:
+            tar.extractall(self.root_path)
 
-                with connect(dbpath) as conn:
-                    with connect(tmp_dbpath) as tmp_conn:
-                        tmp_conn.metadata = {
-                            "_property_unit_dict": self._native_property_units(),
-                            "_distance_unit": "Ang",
-                            "atomrefs": {},
-                        }
+        # update metadata + convert energy into row.data for every fold
+        for fold in self.existing_folds:
+            dbpath = os.path.join(self.root_path, "iso17", fold + ".db")
+            tmp_dbpath = os.path.join(tmpdir, f"{fold}_tmp.db")
 
-                        for idx in tqdm(
-                            range(len(conn)),
-                            desc=f"parsing database file {dbpath}",
-                        ):
-                            atmsrw = conn.get(idx + 1)
-                            data = atmsrw.data
-                            data[self.forces] = np.array(data[self.forces])
-                            data[self.energy] = np.array([atmsrw.total_energy])
-                            tmp_conn.write(atmsrw.toatoms(), data=data)
+            with connect(dbpath) as conn:
+                with connect(tmp_dbpath) as tmp_conn:
+                    tmp_conn.metadata = {
+                        "_property_unit_dict": self._native_property_units(),
+                        "_distance_unit": "Ang",
+                        "atomrefs": {},
+                    }
 
-                os.remove(dbpath)
-                os.rename(tmp_dbpath, dbpath)
+                    for idx in tqdm(
+                        range(len(conn)),
+                        desc=f"parsing database file {dbpath}",
+                    ):
+                        atmsrw = conn.get(idx + 1)
+                        data = atmsrw.data
+                        data[self.forces] = np.array(data[self.forces])
+                        data[self.energy] = np.array([atmsrw.total_energy])
+                        tmp_conn.write(atmsrw.toatoms(), data=data)
 
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+            os.remove(dbpath)
+            os.rename(tmp_dbpath, dbpath)
+
+        shutil.rmtree(tmpdir, ignore_errors=True)
