@@ -11,6 +11,7 @@ from urllib import request as request
 import numpy as np
 from ase import Atoms
 from ase.io.extxyz import read_xyz
+from ase.db import connect
 
 from tqdm import tqdm
 
@@ -128,16 +129,17 @@ class QM9(ASEAtomsData):
         remove_uncharacterized setting.
         """
         if os.path.exists(datapath):
-            dataset = ASEAtomsData(datapath=datapath, load_structure=False)
+            with connect(datapath, use_lock_file=False) as conn:
+                data_count = conn.count()
 
-            if self.remove_uncharacterized and len(dataset) == 133885:
+            if self.remove_uncharacterized and data_count == 133885:
                 raise AtomsDataError(
                     "The dataset at the chosen location contains the uncharacterized 3054 molecules. "
                     "Choose a different location to reload the data or set "
                     "`remove_uncharacterized=False`."
                 )
 
-            if (not self.remove_uncharacterized) and len(dataset) < 133885:
+            if (not self.remove_uncharacterized) and data_count < 133885:
                 raise AtomsDataError(
                     "The dataset at the chosen location does NOT contain the uncharacterized 3054 molecules. "
                     "Choose a different location to reload the data or set "
