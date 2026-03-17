@@ -68,6 +68,9 @@ class ASEAtomsData(torch.utils.data.Dataset):
         """
         self.datapath = datapath
         self.subset_idx = subset_idx
+        if not os.path.exists(self.datapath):
+            self.download()
+
         self._check_db()
         self.conn = connect(self.datapath, use_lock_file=False)
 
@@ -166,9 +169,13 @@ class ASEAtomsData(torch.utils.data.Dataset):
         if not os.path.exists(self.datapath):
             raise AtomsDataError(f"ASE DB does not exist at {self.datapath}")
 
+        with connect(self.datapath, use_lock_file=False) as conn:
+            n_structures = conn.count()
+
+        if n_structures == 0:
+            raise AtomsDataError(f"ASE DB at {self.datapath} is empty")
+
         if self.subset_idx is not None:
-            with connect(self.datapath, use_lock_file=False) as conn:
-                n_structures = conn.count()
             if max(self.subset_idx) >= n_structures:
                 raise AtomsDataError("subset_idx contains out-of-range indices")
 
@@ -312,7 +319,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
         property_unit_dict: Dict[str, str],
         atomrefs: Optional[Dict[str, List[float]]] = None,
         **kwargs,
-    ) -> "ASEAtomsData":
+    ) -> None:
         """
 
         Args:
@@ -345,7 +352,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
                 "atomrefs": atomrefs,
             }
 
-        return ASEAtomsData(datapath, **kwargs)  ##NO RETURN HERE
+        return
 
     def add_system(
         self,
@@ -442,3 +449,8 @@ class ASEAtomsData(torch.utils.data.Dataset):
                 data[pname] = properties[pname]
 
             conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
+
+    def download(self):
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement download()."
+        )

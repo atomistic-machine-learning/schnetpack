@@ -83,11 +83,6 @@ class QM9(ASEAtomsData):
         """
         self.remove_uncharacterized = remove_uncharacterized
 
-        self.download(
-            datapath=datapath,
-            distance_unit=distance_unit or "Ang",
-        )
-
         super().__init__(
             datapath=datapath,
             load_properties=load_properties,
@@ -100,6 +95,7 @@ class QM9(ASEAtomsData):
             distance_unit=distance_unit,
             **kwargs,
         )
+        self._check_metadata()
 
     @staticmethod
     def _native_property_units() -> Dict[str, str]:
@@ -121,39 +117,32 @@ class QM9(ASEAtomsData):
             QM9.Cv: "cal/mol/K",
         }
 
-    def download(self, datapath: str, distance_unit: str = "Ang") -> None:
-        """
-        Make sure the QM9 database exists.
+    def _check_metadata(self) -> None:
+        with connect(self.datapath, use_lock_file=False) as conn:
+            data_count = conn.count()
 
-        If the DB already exists, validate consistency with the
-        remove_uncharacterized setting.
-        """
-        if os.path.exists(datapath):
-            with connect(datapath, use_lock_file=False) as conn:
-                data_count = conn.count()
+        if self.remove_uncharacterized and data_count == 133885:
+            raise AtomsDataError(
+                "The dataset at the chosen location contains the uncharacterized 3054 molecules. "
+                "Choose a different location to reload the data or set "
+                "`remove_uncharacterized=False`."
+            )
 
-            if self.remove_uncharacterized and data_count == 133885:
-                raise AtomsDataError(
-                    "The dataset at the chosen location contains the uncharacterized 3054 molecules. "
-                    "Choose a different location to reload the data or set "
-                    "`remove_uncharacterized=False`."
-                )
+        if (not self.remove_uncharacterized) and data_count < 133885:
+            raise AtomsDataError(
+                "The dataset at the chosen location does NOT contain the uncharacterized 3054 molecules. "
+                "Choose a different location to reload the data or set "
+                "`remove_uncharacterized=True`."
+            )
 
-            if (not self.remove_uncharacterized) and data_count < 133885:
-                raise AtomsDataError(
-                    "The dataset at the chosen location does NOT contain the uncharacterized 3054 molecules. "
-                    "Choose a different location to reload the data or set "
-                    "`remove_uncharacterized=True`."
-                )
-            return
-
+    def download(self) -> None:
         tmpdir = tempfile.mkdtemp("qm9")
 
         atomrefs = self._download_atomrefs(tmpdir)
 
-        dataset = self.create(
-            datapath=datapath,
-            distance_unit=distance_unit,
+        self.create(
+            datapath=self.datapath,
+            distance_unit="Ang",
             property_unit_dict=self._native_property_units(),
             atomrefs=atomrefs,
         )
@@ -163,7 +152,7 @@ class QM9(ASEAtomsData):
         else:
             uncharacterized = None
 
-        self._download_data(tmpdir, dataset, uncharacterized)
+        self._download_data(tmpdir, uncharacterized)
 
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -210,7 +199,6 @@ class QM9(ASEAtomsData):
     def _download_data(
         self,
         tmpdir: str,
-        dataset: ASEAtomsData,
         uncharacterized: Optional[List[int]],
     ) -> None:
 
@@ -221,9 +209,8 @@ class QM9(ASEAtomsData):
         logging.info("Done.")
 
         logging.info("Extracting files...")
-        tar = tarfile.open(tar_path)
-        tar.extractall(raw_path)
-        tar.close()
+        with tarfile.open(tar_path) as tar:
+            tar.extractall(raw_path)
         logging.info("Done.")
 
         logging.info("Parse xyz files...")
@@ -246,7 +233,7 @@ class QM9(ASEAtomsData):
                 lines = f.readlines()
                 values = lines[1].split()[2:]
 
-                for pname, value in zip(dataset.available_properties, values):
+                for pname, value in zip(self.available_properties, values):
                     properties[pname] = np.array([float(value)])
 
                 for line in lines:
@@ -263,5 +250,5 @@ class QM9(ASEAtomsData):
             property_list.append(properties)
 
         logging.info("Write atoms to db...")
-        dataset.add_systems(property_list=property_list)
+        self.add_systems(property_list=property_list)
         logging.info("Done.")
