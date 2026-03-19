@@ -57,14 +57,20 @@ class MaterialsProject(ASEAtomsData):
             distance_unit: unit of the atom positions and cell as a string (Ang, Bohr, ...)
             apikey: api key use to get data
         """
-        if apikey is not None and len(apikey) == 16:
-            raise DeprecationWarning(
+        if apikey is None:
+            raise AtomsDataError(
+                "No API key provided. Visit https://next-gen.materialsproject.org/ "
+                "to get an API key."
+            )
+
+        elif len(apikey) == 16:
+            raise AtomsDataError(
                 "You are using a legacy API key. This API is deprecated and no longer "
                 "supported by Materials Project. Please use the next-gen API instead. "
                 "Visit https://next-gen.materialsproject.org/ to get a valid API key."
             )
 
-        if apikey is not None and len(apikey) != 32:
+        elif len(apikey) != 32:
             raise AtomsDataError(
                 "Invalid API key. MaterialsProject requires an API key of 32 characters. "
                 f"Your API key contains {len(apikey)} characters. "
@@ -72,11 +78,8 @@ class MaterialsProject(ASEAtomsData):
             )
 
         self.apikey = apikey
-
-        self.download(
-            datapath=datapath,
-            distance_unit=distance_unit or "Ang",
-        )
+        self.distance_unit = "Ang"
+        self.property_units = self._native_property_units()
 
         super().__init__(
             datapath=datapath,
@@ -100,28 +103,7 @@ class MaterialsProject(ASEAtomsData):
             MaterialsProject.TotalMagnetization: "None",
         }
 
-    def download(self, datapath: str, distance_unit: str = "Ang") -> None:
-        """
-        Ensure the Materials Project ASE DB exists.
-        """
-        if os.path.exists(datapath):
-            return
-
-        if self.apikey is None:
-            raise AtomsDataError(
-                "No API key provided. Visit https://next-gen.materialsproject.org/ "
-                "to get an API key."
-            )
-
-        dataset = self.create(
-            datapath=datapath,
-            distance_unit=distance_unit,
-            property_unit_dict=self._native_property_units(),
-        )
-
-        self._download_data_nextgen(dataset)
-
-    def _download_data_nextgen(self, dataset: ASEAtomsData) -> None:
+    def download(self) -> None:
         """
         Download Materials Project entries and store them in the ASE DB.
         """
@@ -182,7 +164,7 @@ class MaterialsProject(ASEAtomsData):
                     )
 
         logging.info("Write atoms to db...")
-        dataset.add_systems(
+        self.add_systems(
             atoms_list=atoms_list,
             property_list=properties_list,
             atoms_metadata_list=atoms_metadata_list,
