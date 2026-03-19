@@ -82,6 +82,8 @@ class QM9(ASEAtomsData):
             distance_unit: unit of the atom positions and cell as a string (Ang, Bohr, ...)
         """
         self.remove_uncharacterized = remove_uncharacterized
+        self.distance_unit = "Ang"
+        self.property_units = self._native_property_units()
 
         super().__init__(
             datapath=datapath,
@@ -139,13 +141,9 @@ class QM9(ASEAtomsData):
         tmpdir = tempfile.mkdtemp("qm9")
 
         atomrefs = self._download_atomrefs(tmpdir)
-
-        self.create(
-            datapath=self.datapath,
-            distance_unit="Ang",
-            property_unit_dict=self._native_property_units(),
-            atomrefs=atomrefs,
-        )
+        md = self.metadata
+        md["atomrefs"] = atomrefs
+        self._set_metadata(md)
 
         if self.remove_uncharacterized:
             uncharacterized = self._download_uncharacterized(tmpdir)
@@ -158,10 +156,11 @@ class QM9(ASEAtomsData):
 
     def _download_file(self, file_id: str, destination: str) -> None:
         for base_url in self.base_urls:
-            url = f"{base_url}{file_id}"
-            request.urlretrieve(url, destination)
-            return
-
+            try:
+                request.urlretrieve(f"{base_url}{file_id}", destination)
+                return
+            except Exception:
+                continue
         raise AtomsDataError(
             f"Could not download file with id {file_id} from any source."
         )

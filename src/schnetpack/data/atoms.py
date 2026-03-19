@@ -69,6 +69,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
         self.datapath = datapath
         self.subset_idx = subset_idx
         if not os.path.exists(self.datapath):
+            self.create()
             self.download()
 
         self._check_db()
@@ -78,6 +79,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
         self.train_transforms = list(train_transforms) if train_transforms else None
         self.val_transforms = list(val_transforms) if val_transforms else None
         self.test_transforms = list(test_transforms) if test_transforms else None
+        self.split = None
 
         self._load_properties: Optional[List[str]] = None
         self.load_structure = load_structure
@@ -109,7 +111,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
     # ---------- merged ASEAtomsData bits ----------
 
-    def subset(self, subset_idx: List[int]):
+    def subset(self, subset_idx: List[int], split: Optional[str] = None):
         if subset_idx is None:
             raise ValueError("subset_idx must be provided.")
         ds = copy.copy(self)
@@ -117,6 +119,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
             ds.subset_idx = [ds.subset_idx[i] for i in subset_idx]
         else:
             ds.subset_idx = subset_idx
+        ds.split = split
         return ds
 
     @property
@@ -152,7 +155,16 @@ class ASEAtomsData(torch.utils.data.Dataset):
     def _apply_transforms(
         self, props: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
-        for tf in self.transforms:
+        if self.split == "train" and self.train_transforms is not None:
+            transforms = self.train_transforms
+        elif self.split == "val" and self.val_transforms is not None:
+            transforms = self.val_transforms
+        elif self.split == "test" and self.test_transforms is not None:
+            transforms = self.test_transforms
+        else:
+            transforms = self.transforms
+
+        for tf in transforms:
             props = tf(props)
         return props
 
@@ -314,23 +326,10 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
     # ---------- creation / writing ----------
 
-    def create(
-        self,
-        distance_unit: str,
-        property_unit_dict: Dict[str, str],
-        atomrefs: Optional[Dict[str, List[float]]] = None,
-    ) -> None:
+    def create(self) -> None:
         """
+        Create a new ASE database at `self.datapath` and initialize its metadata.
 
-        Args:
-            distance_unit: unit of atom positions and cell
-            property_unit_dict: Defines the available properties of the datasetseta and
-                provides units for ALL properties of the dataset. If a property is
-                unit-less, you can pass "arb. unit" or `None`.
-            atomrefs: dictionary mapping properies (the keys) to lists of single-atom
-                reference values of the property. This is especially useful for
-                extensive properties such as the energy, where the single atom energies
-                contribute a major part to the overall value.
         """
         if not self.datapath.endswith(".db"):
             raise AtomsDataError("Invalid datapath! Add '.db' extension.")
@@ -339,12 +338,16 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
         os.makedirs(os.path.dirname(self.datapath) or ".", exist_ok=True)
 
-        atomrefs = atomrefs or {}
+        if self.property_units is None:
+            raise AtomsDataError("property_units is not set in dataset class.")
+        if self.distance_unit is None:
+            raise AtomsDataError("distance_unit is not set in dataset class.")
+
         with connect(self.datapath) as conn:
             conn.metadata = {
-                "_property_unit_dict": property_unit_dict,
-                "_distance_unit": distance_unit,
-                "atomrefs": atomrefs,
+                "_property_unit_dict": self.property_units,
+                "_distance_unit": self.distance_unit,
+                "atomrefs": {},
             }
 
     def add_system(
