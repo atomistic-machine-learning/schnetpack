@@ -119,6 +119,9 @@ class QM9(ASEAtomsData):
         }
 
     def _check_db(self) -> None:
+        """
+        Ensure the QM9 ASE DB exists.
+        """
         super()._check_db()
         with connect(self.datapath, use_lock_file=False) as conn:
             data_count = conn.count()
@@ -138,6 +141,9 @@ class QM9(ASEAtomsData):
             )
 
     def download(self) -> None:
+        """
+        Download the QM9 ASE DB.
+        """
         tmpdir = tempfile.mkdtemp("qm9")
 
         atomrefs = self._download_atomrefs(tmpdir)

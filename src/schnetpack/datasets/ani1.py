@@ -69,11 +69,8 @@ class ANI1(ASEAtomsData):
         """
         self.num_heavy_atoms = num_heavy_atoms
         self.high_energies = high_energies
-
-        self.download(
-            datapath=datapath,
-            distance_unit=distance_unit or "Ang",
-        )
+        self.distance_unit = "Ang"
+        self.property_units = self._native_property_units()
 
         super().__init__(
             datapath=datapath,
@@ -94,39 +91,42 @@ class ANI1(ASEAtomsData):
             ANI1.energy: "Hartree",
         }
 
-    def download(self, datapath: str, distance_unit: str = "Ang") -> None:
+    def _check_db(self) -> None:
         """
         Ensure the ANI1 ASE DB exists.
         """
-        if os.path.exists(datapath):
-            with connect(datapath, use_lock_file=False) as conn:
-                md = conn.metadata
+        super()._check_db()
+        with connect(self.datapath, use_lock_file=False) as conn:
+            md = conn.metadata
 
-            if md.get("num_heavy_atoms") != self.num_heavy_atoms:
-                raise AtomsDataError(
-                    f"Existing ANI1 dataset was created with num_heavy_atoms={md.get('num_heavy_atoms')}, "
-                    f"but requested num_heavy_atoms={self.num_heavy_atoms}."
-                )
+        if md.get("num_heavy_atoms") != self.num_heavy_atoms:
+            raise AtomsDataError(
+                f"Existing ANI1 dataset was created with num_heavy_atoms={md.get('num_heavy_atoms')}, "
+                f"but requested num_heavy_atoms={self.num_heavy_atoms}."
+            )
 
-            if md.get("high_energies") != self.high_energies:
-                raise AtomsDataError(
-                    f"Existing ANI1 dataset was created with high_energies={md.get('high_energies')}, "
-                    f"but requested high_energies={self.high_energies}."
-                )
-            return
+        if md.get("high_energies") != self.high_energies:
+            raise AtomsDataError(
+                f"Existing ANI1 dataset was created with high_energies={md.get('high_energies')}, "
+                f"but requested high_energies={self.high_energies}."
+            )
 
+    def download(self) -> None:
+        """
+        Download ANI1 data and populate the ASE DB.
+        """
         tmpdir = tempfile.mkdtemp("ani1")
 
-        dataset = self.create(
-            datapath=datapath,
-            distance_unit=distance_unit,
-            property_unit_dict=self._native_property_units(),
-            atomrefs=self._create_atomrefs(),
-        )
-        self._download_data(tmpdir, dataset)
+        md = self.metadata
+        md["atomrefs"] = self._create_atomrefs()
+        md["num_heavy_atoms"] = self.num_heavy_atoms
+        md["high_energies"] = self.high_energies
+        self._set_metadata(md)
+
+        self._download_data(tmpdir)
         shutil.rmtree(tmpdir, ignore_errors=True)
 
-    def _download_data(self, tmpdir: str, dataset: ASEAtomsData) -> None:
+    def _download_data(self, tmpdir: str) -> None:
         logging.info("Downloading ANI-1 data...")
         tar_path = os.path.join(tmpdir, "ANI1_release.tar.gz")
         raw_path = os.path.join(tmpdir, "data")
@@ -148,11 +148,11 @@ class ANI1(ASEAtomsData):
         for i in range(1, self.num_heavy_atoms + 1):
             file_name = os.path.join(raw_path, "ANI-1_release", f"ani_gdb_s0{i}.h5")
             logging.info("Start to parse %s", file_name)
-            self._load_h5_file(file_name, dataset)
+            self._load_h5_file(file_name)
 
         logging.info("Done.")
 
-    def _load_h5_file(self, file_name: str, dataset: ASEAtomsData) -> None:
+    def _load_h5_file(self, file_name: str) -> None:
         atoms_list = []
         properties_list = []
 
@@ -185,7 +185,7 @@ class ANI1(ASEAtomsData):
                             atoms_list.append(atm)
                             properties_list.append(properties)
 
-        dataset.add_systems(atoms_list=atoms_list, property_list=properties_list)
+        self.add_systems(atoms_list=atoms_list, property_list=properties_list)
 
     def _create_atomrefs(self) -> Dict[str, List[float]]:
         atref = np.zeros((100,))
