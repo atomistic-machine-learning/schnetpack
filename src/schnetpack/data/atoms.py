@@ -84,15 +84,6 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
         # units from metadata
         md = self.metadata
-        if "_distance_unit" not in md:
-            raise AtomsDataError(
-                "Dataset does not have a distance unit set. Please add units to the dataset."
-            )
-        if "_property_unit_dict" not in md:
-            raise AtomsDataError(
-                "Dataset does not have property units set. Please add units to the dataset."
-            )
-
         if distance_unit:
             self.distance_conversion = spk.units.convert_units(
                 md["_distance_unit"], distance_unit
@@ -171,9 +162,20 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
         with connect(self.datapath, use_lock_file=False) as conn:
             n_structures = conn.count()
+            md = conn.metadata
 
         if n_structures == 0:
             raise AtomsDataError(f"ASE DB at {self.datapath} is empty")
+
+        if "_distance_unit" not in md:
+            raise AtomsDataError(
+                "Dataset does not have a distance unit set. Please add units to the dataset."
+            )
+
+        if "_property_unit_dict" not in md:
+            raise AtomsDataError(
+                "Dataset does not have property units set. Please add units to the dataset."
+            )
 
         if self.subset_idx is not None:
             if max(self.subset_idx) >= n_structures:
@@ -312,18 +314,15 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
     # ---------- creation / writing ----------
 
-    @staticmethod
     def create(
-        datapath: str,
+        self,
         distance_unit: str,
         property_unit_dict: Dict[str, str],
         atomrefs: Optional[Dict[str, List[float]]] = None,
-        **kwargs,
     ) -> None:
         """
 
         Args:
-            datapath: Path to ASE DB.
             distance_unit: unit of atom positions and cell
             property_unit_dict: Defines the available properties of the datasetseta and
                 provides units for ALL properties of the dataset. If a property is
@@ -332,27 +331,21 @@ class ASEAtomsData(torch.utils.data.Dataset):
                 reference values of the property. This is especially useful for
                 extensive properties such as the energy, where the single atom energies
                 contribute a major part to the overall value.
-
-        Returns:
-            newly created ASEAtomsData
-
         """
-        if not datapath.endswith(".db"):
+        if not self.datapath.endswith(".db"):
             raise AtomsDataError("Invalid datapath! Add '.db' extension.")
-        if os.path.exists(datapath):
-            raise AtomsDataError(f"Dataset already exists: {datapath}")
+        if os.path.exists(self.datapath):
+            raise AtomsDataError(f"Dataset already exists: {self.datapath}")
 
-        os.makedirs(os.path.dirname(datapath) or ".", exist_ok=True)
+        os.makedirs(os.path.dirname(self.datapath) or ".", exist_ok=True)
 
         atomrefs = atomrefs or {}
-        with connect(datapath) as conn:
+        with connect(self.datapath) as conn:
             conn.metadata = {
                 "_property_unit_dict": property_unit_dict,
                 "_distance_unit": distance_unit,
                 "atomrefs": atomrefs,
             }
-
-        return
 
     def add_system(
         self,

@@ -95,7 +95,6 @@ class QM9(ASEAtomsData):
             distance_unit=distance_unit,
             **kwargs,
         )
-        self._check_metadata()
 
     @staticmethod
     def _native_property_units() -> Dict[str, str]:
@@ -117,7 +116,8 @@ class QM9(ASEAtomsData):
             QM9.Cv: "cal/mol/K",
         }
 
-    def _check_metadata(self) -> None:
+    def _check_db(self) -> None:
+        super()._check_db()
         with connect(self.datapath, use_lock_file=False) as conn:
             data_count = conn.count()
 
