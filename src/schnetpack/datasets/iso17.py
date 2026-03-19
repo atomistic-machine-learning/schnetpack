@@ -70,10 +70,10 @@ class ISO17(ASEAtomsData):
 
         self.root_path = datapath
         self.fold = fold
+        self.distance_unit = "Ang"
+        self.property_units = self._native_property_units()
 
         dbpath = os.path.join(datapath, "iso17", fold + ".db")
-
-        self.download(datapath=dbpath, distance_unit=distance_unit or "Ang")
 
         super().__init__(
             datapath=dbpath,
@@ -95,30 +95,7 @@ class ISO17(ASEAtomsData):
             ISO17.forces: "eV/Ang",
         }
 
-    def download(self, datapath: str) -> None:
-        """
-        Ensure the ISO17 DB for the selected fold exists and has proper metadata.
-        """
-        if os.path.exists(datapath):
-            return
-        """
-        with connect(datapath, use_lock_file=False) as conn:
-                md = conn.metadata
-
-            if md.get("_property_unit_dict") != self._native_property_units():
-                raise AtomsDataError(
-                    f"Existing ISO17 dataset at {datapath} has incompatible property units."
-                )
-
-            if md.get("_distance_unit") != "Ang":
-                raise AtomsDataError(
-                    f"Existing ISO17 dataset at {datapath} has incompatible distance unit."
-                )
-        """
-
-        self._download_data()
-
-    def _download_data(self) -> None:
+    def download(self) -> None:
         logging.info("Downloading ISO17 database...")
         tmpdir = tempfile.mkdtemp("iso17")
         tarpath = os.path.join(tmpdir, "iso17.tar.gz")
@@ -141,8 +118,8 @@ class ISO17(ASEAtomsData):
             dbpath = os.path.join(self.root_path, "iso17", fold + ".db")
             tmp_dbpath = os.path.join(tmpdir, f"{fold}_tmp.db")
 
-            with connect(dbpath) as conn:
-                with connect(tmp_dbpath) as tmp_conn:
+            with connect(dbpath, use_lock_file=False) as conn:
+                with connect(tmp_dbpath, use_lock_file=False) as tmp_conn:
                     tmp_conn.metadata = {
                         "_property_unit_dict": self._native_property_units(),
                         "_distance_unit": "Ang",
