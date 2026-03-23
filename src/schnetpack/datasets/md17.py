@@ -18,9 +18,8 @@ __all__ = ["MD17"]
 
 class GDMLDataset(ASEAtomsData):
     """
-    Base class for GDML-type datasets (e.g. MD17 or MD22).
-    Requires a dictionary translating between molecule and filenames
-    and a URL under which the molecular datasets can be found.
+    Base class for GDML type data (e.g. MD17 or MD22). Requires a dictionary translating between molecule and filenames
+    and an URL under which the molecular datasets can be found.
     """
 
     energy = "energy"
@@ -63,7 +62,7 @@ class GDMLDataset(ASEAtomsData):
         """
         self.datasets_dict = datasets_dict
         self.download_url = download_url
-        self._native_atomrefs = atomrefs
+        self._native_atomrefs = atomrefs or {}
         self.tmpdir = tmpdir
 
         if molecule not in self.datasets_dict:
@@ -71,10 +70,8 @@ class GDMLDataset(ASEAtomsData):
 
         self.molecule = molecule
 
-        self.download(
-            datapath=datapath,
-            distance_unit=distance_unit or "Ang",
-        )
+        self.distance_unit = "Ang"
+        self.property_units = self._native_property_units()
 
         super().__init__(
             datapath=datapath,
@@ -96,35 +93,32 @@ class GDMLDataset(ASEAtomsData):
             GDMLDataset.forces: "kcal/mol/Ang",
         }
 
-    def download(self, datapath: str, distance_unit: str = "Ang") -> None:
-        if os.path.exists(datapath):
-            with connect(datapath, use_lock_file=False) as conn:
-                md = conn.metadata
+    def _check_db(self) -> None:
+        super()._check_db()
+        md = self.metadata
 
-            if "molecule" not in md:
-                raise AtomsDataError(
-                    "Not a valid GDML dataset. Metadata must contain `molecule`."
-                )
+        if "molecule" not in md:
+            raise AtomsDataError(
+                "Not a valid GDML dataset. Metadata must contain `molecule`."
+            )
 
-            if md["molecule"] != self.molecule:
-                raise AtomsDataError(
-                    f"The dataset at the given location contains `{md['molecule']}` "
-                    f"instead of `{self.molecule}`."
-                )
-            return
+        if md["molecule"] != self.molecule:
+            raise AtomsDataError(
+                f"The dataset at the given location contains `{md['molecule']}` "
+                f"instead of `{self.molecule}`."
+            )
 
+    def download(self) -> None:
         tmpdir = tempfile.mkdtemp(self.tmpdir)
-        dataset = self.create(
-            datapath=datapath,
-            distance_unit=distance_unit,
-            property_unit_dict=self._native_property_units(),
-            atomrefs=self._native_atomrefs,
-        )
-        dataset.update_metadata(molecule=self.molecule)
-        self._download_data(tmpdir, dataset)
+        md = self.metadata
+        md["atomrefs"] = self._native_atomrefs
+        md["molecule"] = self.molecule
+        self._set_metadata(md)
+
+        self._download_data(tmpdir)
         shutil.rmtree(tmpdir, ignore_errors=True)
 
-    def _download_data(self, tmpdir, dataset: ASEAtomsData) -> None:
+    def _download_data(self, tmpdir) -> None:
         logging.info("Downloading {} data".format(self.molecule))
         rawpath = os.path.join(tmpdir, self.datasets_dict[self.molecule])
         url = self.download_url + self.datasets_dict[self.molecule]
@@ -152,7 +146,7 @@ class GDMLDataset(ASEAtomsData):
             property_list.append(properties)
 
         logging.info("Write atoms to db...")
-        dataset.add_systems(property_list=property_list)
+        self.add_systems(property_list=property_list)
         logging.info("Done.")
 
 
@@ -170,7 +164,10 @@ class MD17(GDMLDataset):
         datapath: str,
         molecule: str,
         load_properties: Optional[List[str]] = None,
-        transforms=None,
+        transforms: Optional[List[Transform]] = None,
+        train_transforms: Optional[List[Transform]] = None,
+        val_transforms: Optional[List[Transform]] = None,
+        test_transforms: Optional[List[Transform]] = None,
         subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
@@ -182,10 +179,12 @@ class MD17(GDMLDataset):
             molecule: name of the molecule.
             load_properties: subset of properties to load.
             transforms: Transform applied to each system separately before batching.
+            train_transforms: overrides transform_fn for training.
+            val_transforms: overrides transform_fn for validation.
+            test_transforms: overrides transform_fn for testing.
             subset_idx: indices of the subset to load.
             property_units: dictionary from property to corresponding unit as a string (eV, kcal/mol, ...).
             distance_unit: unit of the atom positions and cell as a string (Ang, Bohr, ...).
-            **kwargs: additional keyword arguments.
         """
         atomrefs = {
             self.energy: [
