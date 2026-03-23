@@ -57,11 +57,8 @@ class OrganicMaterialsDatabase(ASEAtomsData):
             raw_path: path to raw tar.gz file with the data
         """
         self.raw_path = raw_path
-
-        self.download(
-            datapath=datapath,
-            distance_unit=distance_unit or "Ang",
-        )
+        self.distance_unit = "Ang"
+        self.property_units = self._native_property_units()
 
         super().__init__(
             datapath=datapath,
@@ -81,27 +78,16 @@ class OrganicMaterialsDatabase(ASEAtomsData):
     def _native_property_units() -> Dict[str, str]:
         return {OrganicMaterialsDatabase.BandGap: "eV"}
 
-    def download(self, datapath: str, distance_unit: str = "Ang") -> None:
+    def download(self) -> None:
         """
-        Make sure the OMDB database exists.
+        Convert the OMDB raw archive into an ASE DB.
         """
-        if os.path.exists(datapath):
-            _ = ASEAtomsData(datapath=datapath, load_structure=False)
-            return
-
         if self.raw_path is None or not os.path.exists(self.raw_path):
             raise AtomsDataError(
                 "The path to the raw dataset is not provided or invalid and the db-file does "
                 "not exist!"
             )
-
-        dataset = ASEAtomsData.create(
-            datapath=datapath,
-            distance_unit=distance_unit,
-            property_unit_dict=self._native_property_units(),
-        )
-
-        self._convert(dataset)
+        self._convert()
 
     def _convert(self, dataset: ASEAtomsData) -> None:
         """
