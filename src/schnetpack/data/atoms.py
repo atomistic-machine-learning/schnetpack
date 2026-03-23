@@ -168,7 +168,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
             props = tf(props)
         return props
 
-    def _check_db(self):
+    def _check_db(self) -> None:
         if not os.path.exists(self.datapath):
             raise AtomsDataError(f"ASE DB does not exist at {self.datapath}")
 
