@@ -7,7 +7,6 @@ from urllib import request as request
 
 import numpy as np
 from ase import Atoms
-from ase.db import connect
 
 import schnetpack.properties as structure
 from schnetpack.transform.base import Transform

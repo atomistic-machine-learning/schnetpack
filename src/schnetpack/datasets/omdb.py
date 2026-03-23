@@ -5,7 +5,6 @@ from typing import List, Optional, Dict
 
 import numpy as np
 from ase.io import read
-import torch
 
 from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
 from schnetpack.transform.base import Transform

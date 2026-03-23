@@ -9,7 +9,6 @@ from urllib.error import HTTPError, URLError
 
 import numpy as np
 from ase import Atoms
-from ase.db import connect
 
 import schnetpack.properties as structure
 from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
@@ -97,10 +96,8 @@ class rMD17(ASEAtomsData):
 
         self.molecule = molecule
 
-        self.download(
-            datapath=datapath,
-            distance_unit=distance_unit or "Ang",
-        )
+        self.distance_unit = "Ang"
+        self.property_units = self._native_property_units()
 
         super().__init__(
             datapath=datapath,
@@ -122,38 +119,35 @@ class rMD17(ASEAtomsData):
             rMD17.forces: "kcal/mol/Ang",
         }
 
-    def download(self, datapath: str, distance_unit: str = "Ang") -> None:
+    def _check_db(self) -> None:
+        super()._check_db()
+        md = self.metadata
+
+        if "molecule" not in md:
+            raise AtomsDataError(
+                "Not a valid rMD17 dataset. Metadata must contain `molecule`."
+            )
+
+        if md["molecule"] != self.molecule:
+            raise AtomsDataError(
+                f"The dataset at the given location contains `{md['molecule']}` "
+                f"instead of `{self.molecule}`."
+            )
+
+    def download(self) -> None:
         """
-        Ensure the ASE DB exists and matches the requested molecule.
+        Download the requested rMD17 molecule and populate the ASE DB.
         """
-        if os.path.exists(datapath):
-            with connect(datapath, use_lock_file=False) as conn:
-                md = conn.metadata
-
-            if "molecule" not in md:
-                raise AtomsDataError(
-                    "Not a valid rMD17 dataset. Metadata must contain `molecule`."
-                )
-
-            if md["molecule"] != self.molecule:
-                raise AtomsDataError(
-                    f"The dataset at the given location contains `{md['molecule']}` "
-                    f"instead of `{self.molecule}`."
-                )
-            return
-
         tmpdir = tempfile.mkdtemp("rmd17")
-        dataset = self.create(
-            datapath=datapath,
-            distance_unit=distance_unit,
-            property_unit_dict=self._native_property_units(),
-            atomrefs=self.atomrefs,
-        )
-        dataset.update_metadata(molecule=self.molecule)
-        self._download_data(tmpdir, dataset)
+        md = self.metadata
+        md["atomrefs"] = self.atomrefs
+        md["molecule"] = self.molecule
+        self._set_metadata(md)
+
+        self._download_data(tmpdir)
         shutil.rmtree(tmpdir, ignore_errors=True)
 
-    def _download_data(self, tmpdir: str, dataset: ASEAtomsData) -> None:
+    def _download_data(self, tmpdir: str) -> None:
         logging.info("Downloading %s data...", self.molecule)
 
         raw_path = os.path.join(tmpdir, "rmd17")
@@ -200,7 +194,7 @@ class rMD17(ASEAtomsData):
                 property_list.append(properties)
 
             logging.info("Write atoms to db...")
-            dataset.add_systems(property_list=property_list)
+            self.add_systems(property_list=property_list)
             logging.info("Done.")
 
             train_splits = []
@@ -234,7 +228,7 @@ class rMD17(ASEAtomsData):
                 )
                 test_splits.append(test_split)
 
-        dataset.update_metadata(splits={"known": train_splits, "test": test_splits})
+        self.update_metadata(splits={"known": train_splits, "test": test_splits})
         logging.info("Done.")
 
     def _download_archive(self, destination: str) -> None:
