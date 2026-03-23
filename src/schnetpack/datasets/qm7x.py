@@ -182,10 +182,8 @@ class QM7X(ASEAtomsData):
         self.only_equilibrium = only_equilibrium
         self.only_non_equilibrium = only_non_equilibrium
 
-        self.download(
-            datapath=datapath,
-            distance_unit=distance_unit or "Ang",
-        )
+        self.distance_unit = "Ang"
+        self.property_units = self._native_property_units()
 
         # initialize without subset first, then apply dataset-specific filtering
         super().__init__(
@@ -240,13 +238,10 @@ class QM7X(ASEAtomsData):
 
         self.subset_idx = effective_subset
 
-    def download(self, datapath: str, distance_unit: str = "Ang") -> None:
+    def download(self) -> None:
         """
         Download the QM7-X dataset and create the ASEAtomsData object.
         """
-        if os.path.exists(datapath):
-            return
-
         tar_dir = self.raw_data_path or tempfile.mkdtemp("qm7x")
         atomrefs = {
             QM7X.energy: [
@@ -255,17 +250,10 @@ class QM7X(ASEAtomsData):
             ]
         }
 
-        dataset = self.create(
-            datapath=datapath,
-            distance_unit=distance_unit,
-            property_unit_dict=self._native_property_units(),
-            atomrefs=atomrefs,
-        )
-
         hd_files = self._download_data(tar_dir)
         if self.remove_duplicates:
             self._download_duplicates_ids(tar_dir)
-        self._parse_data(hd_files, dataset)
+        self._parse_data(hd_files)
 
         if self.raw_data_path is None:
             shutil.rmtree(tar_dir, ignore_errors=True)
@@ -331,7 +319,7 @@ class QM7X(ASEAtomsData):
 
         return extracted
 
-    def _parse_data(self, files: List[str], dataset: ASEAtomsData):
+    def _parse_data(self, files: List[str]):
         """
         Parse the downloaded data files and add them to the dataset.
         """
@@ -377,10 +365,10 @@ class QM7X(ASEAtomsData):
                             groups_ids[key].append(idx)
 
             logging.info(f"Write parsed data from {os.path.basename(file)} to db ...")
-            dataset.add_systems(property_list=property_list, atoms_list=atoms_list)
+            self.add_systems(property_list=property_list, atoms_list=atoms_list)
 
             # add the hierarchical ids to the metadata
-            md = dataset.metadata
+            md = self.metadata
             if "groups_ids" in md:
                 for key, ids in groups_ids.items():
                     groups_ids[key] = md["groups_ids"][key] + ids
@@ -392,5 +380,5 @@ class QM7X(ASEAtomsData):
             else:
                 groups_ids["id"] = list(range(1, len(atoms_list) + 1))
 
-            dataset.update_metadata(groups_ids=groups_ids)
+            self.update_metadata(groups_ids=groups_ids)
             logging.info("Done.")
