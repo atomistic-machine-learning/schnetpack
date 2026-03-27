@@ -212,8 +212,8 @@ class rMD17(ASEAtomsData):
                     )
                     .flatten()
                     .astype(int)
-                    .tolist()
-                )
+                    - 1
+                ).tolist()
                 train_splits.append(train_split)
 
                 test_split = (
@@ -224,8 +224,8 @@ class rMD17(ASEAtomsData):
                     )
                     .flatten()
                     .astype(int)
-                    .tolist()
-                )
+                    - 1
+                ).tolist()
                 test_splits.append(test_split)
 
         self.update_metadata(splits={"known": train_splits, "test": test_splits})
