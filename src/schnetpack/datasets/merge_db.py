@@ -59,11 +59,11 @@ SplitSize = Union[int, float]
 
 
 def _resolve_split_sizes(
-        total_size: int,
-        num_train: SplitSize,
-        num_val: SplitSize,
-        num_test: Optional[SplitSize],
-    ) -> Tuple[int, int, int]:
+    total_size: int,
+    num_train: SplitSize,
+    num_val: SplitSize,
+    num_test: Optional[SplitSize],
+) -> Tuple[int, int, int]:
     """
     Convert (possibly fractional) split specs to absolute counts.
     """
@@ -93,9 +93,9 @@ def _resolve_split_sizes(
 
 
 def _normalize_proportions(
-        proportions: Dict[str, float],
-        dataset_names: List[str],
-    ) -> Dict[str, float]:
+    proportions: Dict[str, float],
+    dataset_names: List[str],
+) -> Dict[str, float]:
     """
     Validate keys and normalise to sum=1.
     """
@@ -111,9 +111,9 @@ def _normalize_proportions(
 
 
 def _counts_from_proportions(
-        split_size: int,
-        proportions: Dict[str, float],
-    ) -> Dict[str, int]:
+    split_size: int,
+    proportions: Dict[str, float],
+) -> Dict[str, int]:
     """
     Distribute split_size samples across datasets according to proportions.
     Uses floor + largest-remainder to guarantee exact sum.
@@ -147,8 +147,8 @@ def _assert_compatible_distance_units(datasets: Dict[str, ASEAtomsData]) -> str:
 
 
 def _compute_merged_atomrefs(
-        datasets: Dict[str, ASEAtomsData],
-    ) -> Optional[Dict[str, torch.Tensor]]:
+    datasets: Dict[str, ASEAtomsData],
+) -> Optional[Dict[str, torch.Tensor]]:
     """
     Return atomrefs only when every component dataset provides them AND
     they are numerically identical across all datasets.  Otherwise return None.
