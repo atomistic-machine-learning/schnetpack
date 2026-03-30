@@ -3,7 +3,13 @@ import math
 import torch
 import numpy as np
 
-__all__ = ["SplittingStrategy", "RandomSplit", "SubsamplePartitions", "GroupSplit", "ProportionalSplit"]
+__all__ = [
+    "SplittingStrategy",
+    "RandomSplit",
+    "SubsamplePartitions",
+    "GroupSplit",
+    "ProportionalSplit",
+]
 
 
 def absolute_split_sizes(dsize: int, split_sizes: List[int]) -> List[int]:
@@ -243,6 +249,7 @@ class GroupSplit(SplittingStrategy):
 
         return partitions
 
+
 class ProportionalSplit(SplittingStrategy):
     """
     Splitting strategy for MergedDataset that preserves a fixed per-dataset
@@ -327,7 +334,7 @@ class ProportionalSplit(SplittingStrategy):
             offset = 0
             for split_idx, counts in enumerate(counts_per_split):
                 n = counts[name]
-                result[split_idx].extend(chosen[offset: offset + n].tolist())
+                result[split_idx].extend(chosen[offset : offset + n].tolist())
                 offset += n
 
         # Shuffle each split so datasets are interleaved, not blocked by source

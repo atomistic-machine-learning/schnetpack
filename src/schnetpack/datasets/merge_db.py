@@ -27,7 +27,7 @@ Usage
         split_file="split.npz",
     )
 
-    dm.setup() 
+    dm.setup()
 """
 
 import copy
@@ -40,6 +40,7 @@ from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
 from schnetpack.transform.base import Transform
 
 __all__ = ["MergedDataset"]
+
 
 class MergedDataset(Dataset):
     """
@@ -95,15 +96,11 @@ class MergedDataset(Dataset):
         self.add_source_index = add_source_index
 
         # Integer id per dataset name, in insertion order
-        self._dataset_ids: Dict[str, int] = {
-            name: i for i, name in enumerate(datasets)
-        }
+        self._dataset_ids: Dict[str, int] = {name: i for i, name in enumerate(datasets)}
 
         self.plan: List[Tuple[str, int]] = [
-                            (name, idx)
-                            for name, ds in datasets.items()
-                            for idx in range(len(ds))
-                        ]
+            (name, idx) for name, ds in datasets.items() for idx in range(len(ds))
+        ]
 
         self.transforms: List[Transform] = list(transforms or [])
         self.train_transforms: Optional[List[Transform]] = (
@@ -190,6 +187,7 @@ class MergedDataset(Dataset):
         to avoid double-application.
         """
         import warnings
+
         for name, ds in datasets.items():
             if getattr(ds, "transforms", None):
                 warnings.warn(
@@ -264,7 +262,7 @@ class MergedDataset(Dataset):
 
     def __len__(self) -> int:
         return len(self.plan)
-    
+
     def __getitem__(self, i: int) -> Dict[str, torch.Tensor]:
         dataset_name, index = self.plan[i]
         component_ds = self.datasets[dataset_name]
