@@ -3,7 +3,7 @@ import math
 import torch
 import numpy as np
 
-__all__ = ["SplittingStrategy", "RandomSplit", "SubsamplePartitions", "GroupSplit"]
+__all__ = ["SplittingStrategy", "RandomSplit", "SubsamplePartitions", "GroupSplit", "ProportionalSplit"]
 
 
 def absolute_split_sizes(dsize: int, split_sizes: List[int]) -> List[int]:
@@ -242,3 +242,114 @@ class GroupSplit(SplittingStrategy):
         partitions = [(torch.where(p)[0]).tolist() for p in partitions]
 
         return partitions
+
+class ProportionalSplit(SplittingStrategy):
+    """
+    Splitting strategy for MergedDataset that preserves a fixed per-dataset
+    proportion in every split (train / val / test).
+
+    ##NOTE: ASK STEFAAN
+    Sampling is without replacement — no sample appears in more than one split.
+
+    Args:
+        proportions: mapping from dataset name to relative weight.
+                     Values are normalised to sum=1 internally, so
+                     {"md17": 1, "rmd17": 1} == {"md17": 0.5, "rmd17": 0.5}.
+        seed: random seed for reproducible sampling.
+    """
+
+    def __init__(self, proportions: Dict[str, float], seed: int = 42) -> None:
+        super().__init__()
+        self.proportions = proportions
+        self.seed = seed
+
+    def split(self, dataset, *split_sizes) -> List[List[int]]:
+        """
+        Args:
+            dataset: a MergedDataset instance.
+            *split_sizes: sizes for each split (absolute or fractional),
+                          forwarded directly from AtomsDataModuleV2.
+
+        Returns:
+            List of index lists into dataset.plan, one per split.
+        """
+        # Import here to avoid circular import (MergedDataset imports splitting)
+        from schnetpack.datasets.merge_db import MergedDataset
+
+        if not isinstance(dataset, MergedDataset):
+            raise ValueError(
+                "ProportionalSplit only works with MergedDataset instances."
+            )
+
+        rng = np.random.default_rng(self.seed)
+        dataset_names = list(dataset.datasets.keys())
+
+        missing = [n for n in dataset_names if n not in self.proportions]
+        if missing:
+            raise ValueError(f"Missing proportions for datasets: {missing}")
+
+        # Normalise proportions
+        total = float(sum(self.proportions[n] for n in dataset_names))
+        norm = {n: self.proportions[n] / total for n in dataset_names}
+
+        # Resolve fractional sizes to absolute counts
+        abs_sizes = absolute_split_sizes(len(dataset), list(split_sizes))
+
+        # Per-dataset counts for each split via largest-remainder method
+        counts_per_split = [
+            self._counts_from_proportions(size, norm, dataset_names)
+            for size in abs_sizes
+        ]
+
+        # Build per-name pools: positions in dataset.plan
+        plan_indices_by_name: Dict[str, List[int]] = {n: [] for n in dataset_names}
+        for pos, (dataset_name, _) in enumerate(dataset.plan):
+            plan_indices_by_name[dataset_name].append(pos)
+
+        # Validate we have enough samples per dataset across all splits
+        for name in dataset_names:
+            needed = sum(c[name] for c in counts_per_split)
+            available = len(plan_indices_by_name[name])
+            if needed > available:
+                raise ValueError(
+                    f"Not enough samples in '{name}': "
+                    f"need {needed}, have {available}."
+                )
+
+        # Sample without replacement then slice into splits
+        result: List[List[int]] = [[] for _ in abs_sizes]
+
+        for name in dataset_names:
+            pool = np.array(plan_indices_by_name[name])
+            total_needed = sum(c[name] for c in counts_per_split)
+            chosen = rng.choice(pool, size=total_needed, replace=False)
+
+            offset = 0
+            for split_idx, counts in enumerate(counts_per_split):
+                n = counts[name]
+                result[split_idx].extend(chosen[offset: offset + n].tolist())
+                offset += n
+
+        # Shuffle each split so datasets are interleaved, not blocked by source
+        for split_indices in result:
+            rng.shuffle(split_indices)
+
+        return result
+
+    @staticmethod
+    def _counts_from_proportions(
+        split_size: int,
+        proportions: Dict[str, float],
+        names: List[str],
+    ) -> Dict[str, int]:
+        """Largest-remainder allocation of split_size across datasets."""
+        raw = {n: proportions[n] * split_size for n in names}
+        base = {n: int(np.floor(raw[n])) for n in names}
+        remainder = split_size - sum(base.values())
+
+        if remainder > 0:
+            order = sorted(names, key=lambda n: raw[n] - base[n], reverse=True)
+            for i in range(remainder):
+                base[order[i % len(order)]] += 1
+
+        return base
