@@ -1,5 +1,5 @@
 # @package data
-_target_: schnetpack.data.datamodule_v2.AtomsDataModuleV2
+_target_: schnetpack.data.datamodule.AtomsDataModule
 
 dataset:
   _target_: schnetpack.data.ASEAtomsData

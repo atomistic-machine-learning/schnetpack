@@ -51,6 +51,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
         subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
+        **kwargs,
     ):
         """
         Args:
