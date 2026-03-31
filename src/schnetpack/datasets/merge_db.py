@@ -89,8 +89,8 @@ class MergedDataset(Dataset):
         if not datasets:
             raise AtomsDataError("datasets must not be empty.")
 
-        self._validate_compatibility(datasets)
-        self._warn_if_component_transforms(datasets)
+        self._validate_compatibility(datasets)  ## removed
+        self._warn_if_component_transforms(datasets)  ## Not necessary
 
         self.datasets = datasets
         self.add_source_index = add_source_index
@@ -99,7 +99,9 @@ class MergedDataset(Dataset):
         self._dataset_ids: Dict[str, int] = {name: i for i, name in enumerate(datasets)}
 
         self.plan: List[Tuple[str, int]] = [
-            (name, idx) for name, ds in datasets.items() for idx in range(len(ds))
+            (name, idx)
+            for name, ds in datasets.items()
+            for idx in range(len(ds))  # ('rmd17',5)
         ]
 
         self.transforms: List[Transform] = list(transforms or [])
@@ -264,7 +266,7 @@ class MergedDataset(Dataset):
         return len(self.plan)
 
     def __getitem__(self, i: int) -> Dict[str, torch.Tensor]:
-        dataset_name, index = self.plan[i]
+        dataset_name, index = self.plan[i]  # ("rmd17", 5)
         component_ds = self.datasets[dataset_name]
 
         saved_transforms = component_ds.transforms

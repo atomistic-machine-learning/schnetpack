@@ -1,7 +1,8 @@
-from typing import Optional, List, Dict, Tuple, Union
+from typing import Optional, List, Dict, Union
 import math
 import torch
 import numpy as np
+
 
 __all__ = [
     "SplittingStrategy",
@@ -280,7 +281,6 @@ class ProportionalSplit(SplittingStrategy):
         Returns:
             List of index lists into dataset.plan, one per split.
         """
-        # Import here to avoid circular import (MergedDataset imports splitting)
         from schnetpack.datasets.merge_db import MergedDataset
 
         if not isinstance(dataset, MergedDataset):
@@ -302,9 +302,11 @@ class ProportionalSplit(SplittingStrategy):
         # Resolve fractional sizes to absolute counts
         abs_sizes = absolute_split_sizes(len(dataset), list(split_sizes))
 
-        # Per-dataset counts for each split via largest-remainder method
+        # Per-dataset counts for each split
         counts_per_split = [
-            self._counts_from_proportions(size, norm, dataset_names)
+            self._counts_from_proportions(
+                size, norm, dataset_names
+            )  ## largest-remainder method for safety
             for size in abs_sizes
         ]
 
@@ -360,3 +362,52 @@ class ProportionalSplit(SplittingStrategy):
                 base[order[i % len(order)]] += 1
 
         return base
+
+
+"""
+- MD17: 200,000 samples
+- rMD17: 80,000 samples
+- Total merged: 300,000
+- `num_train=0.8` → 240,000 train samples 120 
+- `num_val=0.1` → 30,000 val samples
+- `num_test=0.1` → 30,000 test samples
+- Proportions: `{"md17": 0.7, "rmd17": 0.3}`
+
+Step 1 — Normalise proportions**
+
+md17:  0.7 / (0.7+0.3) = 0.7
+rmd17: 0.3 / (0.7+0.3) = 0.3
+
+Step 2 — Figure out how many samples per dataset per split
+
+For train (240,000 total):
+md17:  0.7 x 240,000 = 168,000
+rmd17: 0.3 x 240,000 =  72,000
+
+For val (30,000 total):
+md17:  0.7 x 30,000 = 21,000
+rmd17: 0.3 x 30,000 =  9,000
+
+For test (30,000 total):
+md17:  0.7 x 30,000 = 21,000
+rmd17: 0.3 x 30,000 =  9,000
+
+Step 3 — Check availability
+md17  needs: 168,000 + 21,000 + 21,000 = 210,000 — have 200,000  → raises error
+rmd17 needs:  72,000 +  9,000 +  9,000 =  90,000 — have 100,000 
+
+Step 4 — Build per-name index pools
+plan_indices_by_name = {
+    "md17":  [0, 1, 2, ..., 199999],   # positions in the plan
+    "rmd17": [200000, 200001, ..., 299999],
+}
+
+Step 5 — Sample without replacement
+md17 chosen = rng.choice(200000 indices, size=210000)  # error, not enough
+rmd17 chosen = rng.choice(100000 indices, size=90000, replace=False)
+  → first 72000 go to train
+  → next   9000 go to val
+  → last   9000 go to test
+
+Step 6 — Shuffle each split
+"""
