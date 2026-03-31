@@ -78,7 +78,7 @@ class AtomsDataModule(pl.LightningDataModule):
 
         if used_legacy_args:
             warnings.warn(
-                "The following arguments are deprecated in `AtomsDataModuleV2`: "
+                "The following arguments are deprecated in `AtomsDataModule`: "
                 f"{used_legacy_args}. "
                 "Use a prebuilt dataset instance and configure these options on the "
                 "dataset instead.",
