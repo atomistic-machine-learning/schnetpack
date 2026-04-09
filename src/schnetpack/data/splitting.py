@@ -255,14 +255,10 @@ class ProportionalSplit(SplittingStrategy):
     """
     Splitting strategy for MergedDataset that preserves a fixed per-dataset
     proportion in every split (train / val / test).
-
-    ##NOTE: ASK STEFAAN
-    Sampling is without replacement — no sample appears in more than one split.
-
     Args:
         proportions: mapping from dataset name to relative weight.
-                     Values are normalised to sum=1 internally, so
-                     {"md17": 1, "rmd17": 1} == {"md17": 0.5, "rmd17": 0.5}.
+                     Normalised to sum=1 internally, so
+                     {"md17": 1, "rmd17": 9} == {"md17": 0.1, "rmd17": 0.9}.
         seed: random seed for reproducible sampling.
     """
 
@@ -274,16 +270,14 @@ class ProportionalSplit(SplittingStrategy):
     def split(self, dataset, *split_sizes) -> List[List[int]]:
         """
         Args:
-            dataset: a MergedDataset instance.
+            dataset: a MergedDataset instance (duck-typed via plan + datasets).
             *split_sizes: sizes for each split (absolute or fractional),
                           forwarded directly from AtomsDataModuleV2.
 
         Returns:
             List of index lists into dataset.plan, one per split.
         """
-        from schnetpack.datasets.merge_db import MergedDataset
-
-        if not isinstance(dataset, MergedDataset):
+        if not hasattr(dataset, "plan") or not hasattr(dataset, "datasets"):
             raise ValueError(
                 "ProportionalSplit only works with MergedDataset instances."
             )
@@ -299,31 +293,17 @@ class ProportionalSplit(SplittingStrategy):
         total = float(sum(self.proportions[n] for n in dataset_names))
         norm = {n: self.proportions[n] / total for n in dataset_names}
 
-        # Resolve fractional sizes to absolute counts
+        # Resolve fractional/absolute split sizes to absolute counts
         abs_sizes = absolute_split_sizes(len(dataset), list(split_sizes))
-
-        # Per-dataset counts for each split
-        counts_per_split = [
-            self._counts_from_proportions(
-                size, norm, dataset_names
-            )  ## largest-remainder method for safety
-            for size in abs_sizes
-        ]
 
         # Build per-name pools: positions in dataset.plan
         plan_indices_by_name: Dict[str, List[int]] = {n: [] for n in dataset_names}
         for pos, (dataset_name, _) in enumerate(dataset.plan):
             plan_indices_by_name[dataset_name].append(pos)
 
-        # Validate we have enough samples per dataset across all splits
-        for name in dataset_names:
-            needed = sum(c[name] for c in counts_per_split)
-            available = len(plan_indices_by_name[name])
-            if needed > available:
-                raise ValueError(
-                    f"Not enough samples in '{name}': "
-                    f"need {needed}, have {available}."
-                )
+        counts_per_split = self._proportional_counts(
+            plan_indices_by_name, abs_sizes, norm, dataset_names
+        )
 
         # Sample without replacement then slice into splits
         result: List[List[int]] = [[] for _ in abs_sizes]
@@ -331,6 +311,13 @@ class ProportionalSplit(SplittingStrategy):
         for name in dataset_names:
             pool = np.array(plan_indices_by_name[name])
             total_needed = sum(c[name] for c in counts_per_split)
+
+            if total_needed > len(pool):
+                raise ValueError(
+                    f"Not enough samples in '{name}': "
+                    f"need {total_needed}, have {len(pool)}."
+                )
+
             chosen = rng.choice(pool, size=total_needed, replace=False)
 
             offset = 0
@@ -339,75 +326,42 @@ class ProportionalSplit(SplittingStrategy):
                 result[split_idx].extend(chosen[offset : offset + n].tolist())
                 offset += n
 
-        # Shuffle each split so datasets are interleaved, not blocked by source
+        # Shuffle so datasets are interleaved within each split
         for split_indices in result:
             rng.shuffle(split_indices)
 
         return result
 
     @staticmethod
-    def _counts_from_proportions(
-        split_size: int,
-        proportions: Dict[str, float],
-        names: List[str],
-    ) -> Dict[str, int]:
-        """Largest-remainder allocation of split_size across datasets."""
-        raw = {n: proportions[n] * split_size for n in names}
-        base = {n: int(np.floor(raw[n])) for n in names}
-        remainder = split_size - sum(base.values())
+    def _proportional_counts(
+        plan_indices_by_name: Dict[str, List[int]],
+        abs_sizes: List[int],
+        norm: Dict[str, float],
+        dataset_names: List[str],
+    ) -> List[Dict[str, int]]:
+        """
+        Split each dataset's available pool across train/val/test
+        using the same ratio as abs_sizes, ignoring target proportions.
+        DatasetBalancedSampler handles the proportion imbalance during training.
+        """
+        total = sum(abs_sizes)
+        split_ratios = [s / total for s in abs_sizes]
 
-        if remainder > 0:
-            order = sorted(names, key=lambda n: raw[n] - base[n], reverse=True)
+        counts_per_split: List[Dict[str, int]] = [{} for _ in abs_sizes]
+
+        for name in dataset_names:
+            available = len(plan_indices_by_name[name])
+            # split this dataset's pool by the same train/val/test ratio
+            raw = [r * available for r in split_ratios]
+            base = [int(np.floor(r)) for r in raw]
+            remainder = available - sum(base)
+            # distribute remainder by largest fractional part
+            order = sorted(
+                range(len(abs_sizes)), key=lambda i: raw[i] - base[i], reverse=True
+            )
             for i in range(remainder):
                 base[order[i % len(order)]] += 1
+            for split_idx, count in enumerate(base):
+                counts_per_split[split_idx][name] = count
 
-        return base
-
-
-"""
-- MD17: 200,000 samples
-- rMD17: 80,000 samples
-- Total merged: 300,000
-- `num_train=0.8` → 240,000 train samples 120 
-- `num_val=0.1` → 30,000 val samples
-- `num_test=0.1` → 30,000 test samples
-- Proportions: `{"md17": 0.7, "rmd17": 0.3}`
-
-Step 1 — Normalise proportions**
-
-md17:  0.7 / (0.7+0.3) = 0.7
-rmd17: 0.3 / (0.7+0.3) = 0.3
-
-Step 2 — Figure out how many samples per dataset per split
-
-For train (240,000 total):
-md17:  0.7 x 240,000 = 168,000
-rmd17: 0.3 x 240,000 =  72,000
-
-For val (30,000 total):
-md17:  0.7 x 30,000 = 21,000
-rmd17: 0.3 x 30,000 =  9,000
-
-For test (30,000 total):
-md17:  0.7 x 30,000 = 21,000
-rmd17: 0.3 x 30,000 =  9,000
-
-Step 3 — Check availability
-md17  needs: 168,000 + 21,000 + 21,000 = 210,000 — have 200,000  → raises error
-rmd17 needs:  72,000 +  9,000 +  9,000 =  90,000 — have 100,000 
-
-Step 4 — Build per-name index pools
-plan_indices_by_name = {
-    "md17":  [0, 1, 2, ..., 199999],   # positions in the plan
-    "rmd17": [200000, 200001, ..., 299999],
-}
-
-Step 5 — Sample without replacement
-md17 chosen = rng.choice(200000 indices, size=210000)  # error, not enough
-rmd17 chosen = rng.choice(100000 indices, size=90000, replace=False)
-  → first 72000 go to train
-  → next   9000 go to val
-  → last   9000 go to test
-
-Step 6 — Shuffle each split
-"""
+        return counts_per_split
