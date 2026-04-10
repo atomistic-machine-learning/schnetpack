@@ -5,21 +5,21 @@ on the fly — no merged DB is written to disk.
 Key design decisions
 --------------------
 - Each component dataset is fully independent: its own properties, units,
-  distance unit, atomrefs, and transforms. No compatibility checks.
+  distance unit, atomrefs, and transforms.
 - Transforms live on the component datasets, not on MergedDataset.
-  MergedDataset.__getitem__ just fetches the already-transformed sample.
 - subset_sizes controls how many samples are randomly drawn from each
   component at construction time (without replacement).
-- dataset_id and source_index are injected into every sample so downstream
-  models and samplers know which database a sample came from.
-- Splitting and weighted sampling are handled externally by
-  ProportionalSplit and DatasetBalancedSampler.
-
+- If subset_sizes[name] > len(dataset[name]), a warning is issued and
+  all available samples are used. DatasetBalancedSampler compensates.
+- dataset_id and source_index are injected into every sample.
+- initialize_transforms() is overridden to build per-component providers
+  via MergedStatsAtomrefProvider and initialize each component's transforms
+  with its own stats.
 """
 
 import copy
-from typing import Dict, List, Optional, Tuple
 import warnings
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -33,10 +33,6 @@ __all__ = ["MergedDataset"]
 class MergedDataset(Dataset):
     """
     Virtual merged dataset.
-
-    Per-sample fields injected into every sample dict:
-        dataset_id   (int64, shape [1]) — stable id per component (insertion order)
-        source_index (int64, shape [1]) — original index in the component dataset
     """
 
     def __init__(
@@ -50,28 +46,24 @@ class MergedDataset(Dataset):
         Args:
             datasets: component datasets keyed by an arbitrary name.
                       Insertion order determines dataset_id (0, 1, 2, …).
-                      Each dataset handles its own transforms independently.
+                      Each dataset carries its own transforms independently.
             subset_sizes: number of samples to randomly draw from each dataset
                           without replacement. If None, all samples are used.
-                          Keys must match datasets.
+                          If size > available, warns and uses all available.
             seed: random seed for reproducible subset sampling.
             add_source_index: inject ``source_index`` into each sample.
         """
-        self.transforms = []
-        self.train_transforms = None
-        self.val_transforms = None
-        self.test_transforms = None
-
         if not datasets:
             raise AtomsDataError("datasets must not be empty.")
 
+        # Validate and cap subset_sizes
         if subset_sizes is not None:
             missing = [n for n in datasets if n not in subset_sizes]
             if missing:
                 raise AtomsDataError(
                     f"subset_sizes missing keys for datasets: {missing}"
                 )
-            for name, size in subset_sizes.items():
+            for name, size in list(subset_sizes.items()):
                 available = len(datasets[name])
                 if size > available:
                     warnings.warn(
@@ -94,7 +86,14 @@ class MergedDataset(Dataset):
         # Build flat plan: (dataset_name, index_in_component)
         self.plan: List[Tuple[str, int]] = self._build_plan(seed)
 
-        # Set by subset() — required by AtomsDataModuleV2
+        # Required by AtomsDataModule.setup() — always empty on MergedDataset
+        # since transforms live on component datasets
+        self.transforms = []
+        self.train_transforms = None
+        self.val_transforms = None
+        self.test_transforms = None
+
+        # Set by subset() — used by component datasets' split-aware dispatch
         self.split: Optional[str] = None
 
     # ------------------------------------------------------------------
@@ -103,8 +102,8 @@ class MergedDataset(Dataset):
 
     def _build_plan(self, seed: int) -> List[Tuple[str, int]]:
         """
-        Build the flat plan by randomly sampling subset_sizes indices
-        from each component dataset (without replacement).
+        Randomly sample subset_sizes indices from each component dataset
+        without replacement and concatenate into a flat plan.
         If subset_sizes is None, use all indices in order.
         """
         rng = np.random.default_rng(seed)
@@ -123,8 +122,7 @@ class MergedDataset(Dataset):
         return plan
 
     # ------------------------------------------------------------------
-    # subset() — called by AtomsDataModuleV2.setup() to build
-    # train / val / test views
+    # subset() — called by AtomsDataModule.setup()
     # ------------------------------------------------------------------
 
     def subset(
@@ -134,11 +132,43 @@ class MergedDataset(Dataset):
     ) -> "MergedDataset":
         """
         Return a shallow copy restricted to the given indices into self.plan.
+        Sets split on each component dataset so their split-aware transform
+        dispatch works correctly.
         """
         ds = copy.copy(self)
         ds.plan = [self.plan[i] for i in subset_idx]
         ds.split = split
+
+        # propagate split to component datasets so their get_split_transforms()
+        # dispatches correctly (train_transforms vs val_transforms vs transforms)
+        for component_ds in ds.datasets.values():
+            component_ds.split = split
+
         return ds
+
+    # ------------------------------------------------------------------
+    # initialize_transforms
+    # ------------------------------------------------------------------
+
+    def initialize_transforms(self, provider=None) -> None:
+        """
+        Initialize transforms on each component dataset.
+
+        Args:
+            provider: MergedStatsAtomrefProvider, each component gets its own
+            per-component provider with stats computed from its own train samples only.
+        """
+        from schnetpack.data.provider import MergedStatsAtomrefProvider
+
+        if isinstance(provider, MergedStatsAtomrefProvider):
+            for name, ds in self.datasets.items():
+                if name not in provider.providers:
+                    continue
+                ds.initialize_transforms(provider.providers[name])
+        else:
+            # fallback — same merged StatsAtomrefProvider for all components
+            for ds in self.datasets.values():
+                ds.initialize_transforms(provider)
 
     # ------------------------------------------------------------------
     # Core Dataset interface
@@ -151,8 +181,8 @@ class MergedDataset(Dataset):
         dataset_name, index = self.plan[i]
         component_ds = self.datasets[dataset_name]
 
-        # Each component applies its own transforms internally.
-        # No bypassing needed — transforms are fully independent per dataset.
+        # Component applies its own transforms — split is already set
+        # on the component by subset(), so train/val/test dispatch works.
         sample = component_ds[index]
 
         # Inject provenance
