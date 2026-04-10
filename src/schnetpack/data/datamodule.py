@@ -113,7 +113,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self._val_dataloader = None
         self._test_dataloader = None
 
-        self.provider = provider or StatsAtomrefProvider
+        self.provider_cls = provider or StatsAtomrefProvider
 
         self.train_sampler_cls = train_sampler_cls
         self.train_sampler_args = train_sampler_args or {}
@@ -148,7 +148,7 @@ class AtomsDataModule(pl.LightningDataModule):
             else None
         )
 
-        self.provider = self.provider(self._train_dataset)
+        self.provider = self.provider_cls(self._train_dataset)
 
         self._train_dataset.initialize_transforms(provider=self.provider)
         self._val_dataset.initialize_transforms(provider=self.provider)
