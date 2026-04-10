@@ -35,6 +35,7 @@ class AtomsDataModule(pl.LightningDataModule):
         train_sampler_cls: Optional[Type] = None,
         train_sampler_args: Optional[Dict[str, Any]] = None,
         pin_memory: bool = False,
+        provider: Optional[Type] = None,
         **kwargs,
     ):
         """
@@ -52,11 +53,12 @@ class AtomsDataModule(pl.LightningDataModule):
                 batch_size
             test_batch_size: test batch size. If None, use val_batch_size, then
                 batch_size
-            train_sampler_cls: type of torch training sampler.
+            train_sampler_cls: torch training sampler.
                 This is by default wrapped into a torch.utils.data.BatchSampler.
             train_sampler_args: dict of train_sampler keyword arguments.
             pin_memory: If true, pin memory of loaded data to GPU. Default: Will be
                     set to true, when GPUs are used.
+            provider: Stats provider class to use. If None, use StatsAtomrefProvider.
         """
         legacy_args = {
             "datapath",
@@ -111,7 +113,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self._val_dataloader = None
         self._test_dataloader = None
 
-        self.provider: Optional[StatsAtomrefProvider] = None
+        self.provider = provider or StatsAtomrefProvider
 
         self.train_sampler_cls = train_sampler_cls
         self.train_sampler_args = train_sampler_args or {}
@@ -146,21 +148,12 @@ class AtomsDataModule(pl.LightningDataModule):
             else None
         )
 
-        self.provider = StatsAtomrefProvider(self._train_dataset)
+        self.provider = self.provider(self._train_dataset)
 
-        self._train_dataset.initialize_transforms(
-            provider=self.provider,
-            atomrefs=self.provider.train_atomrefs,
-        )
-        self._val_dataset.initialize_transforms(
-            provider=self.provider,
-            atomrefs=self.provider.train_atomrefs,
-        )
+        self._train_dataset.initialize_transforms(provider=self.provider)
+        self._val_dataset.initialize_transforms(provider=self.provider)
         if self._test_dataset is not None:
-            self._test_dataset.initialize_transforms(
-                provider=self.provider,
-                atomrefs=self.provider.train_atomrefs,
-            )
+            self._test_dataset.initialize_transforms(provider=self.provider)
 
     def _load_partitions(self) -> None:
         total_size = len(self.dataset)
