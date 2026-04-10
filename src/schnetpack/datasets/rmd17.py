@@ -31,7 +31,7 @@ class rMD17(ASEAtomsData):
     energy = "energy"
     forces = "forces"
 
-    atomrefs = {
+    _atomrefs = {
         energy: [
             0.0,
             -313.5150902000774,
@@ -140,7 +140,7 @@ class rMD17(ASEAtomsData):
         """
         tmpdir = tempfile.mkdtemp("rmd17")
         md = self.metadata
-        md["atomrefs"] = self.atomrefs
+        md["atomrefs"] = self._atomrefs
         md["molecule"] = self.molecule
         self._set_metadata(md)
 
