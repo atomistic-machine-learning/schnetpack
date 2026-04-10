@@ -14,11 +14,10 @@ from schnetpack.data.loader import AtomsLoader
 
 class AtomsDataModule(pl.LightningDataModule):
     """
-    V2 DataModule:
-      - accepts a dataset instance
-      - handles splitting
-      - builds StatsAtomrefProvider from train split
-      - initializes transforms
+    - accepts a dataset instance
+    - handles splitting
+    - builds StatsAtomrefProvider from train split
+    - - delegates transform initialization to dataset
     """
 
     def __init__(
@@ -139,36 +138,29 @@ class AtomsDataModule(pl.LightningDataModule):
         if self.train_idx is None:
             self._load_partitions()
 
-        self._train_dataset = self.dataset.subset(self.train_idx)
-        self._val_dataset = self.dataset.subset(self.val_idx)
-        self._test_dataset = self.dataset.subset(self.test_idx)
-
-        transforms = self.dataset.transforms or []
-
-        train_transforms = self.dataset.train_transforms or transforms
-        val_transforms = self.dataset.val_transforms or transforms
-        test_transforms = self.dataset.test_transforms or transforms
-
-        self._train_dataset.transforms = []
-        self._val_dataset.transforms = []
-        self._test_dataset.transforms = []
+        self._train_dataset = self.dataset.subset(self.train_idx, split="train")
+        self._val_dataset = self.dataset.subset(self.val_idx, split="val")
+        self._test_dataset = (
+            self.dataset.subset(self.test_idx, split="test")
+            if self.test_idx is not None
+            else None
+        )
 
         self.provider = StatsAtomrefProvider(self._train_dataset)
 
-        self._initialize_transforms(train_transforms)
-        self._initialize_transforms(val_transforms)
-        self._initialize_transforms(test_transforms)
-
-        self._train_dataset.transforms = train_transforms
-        self._val_dataset.transforms = val_transforms
-        self._test_dataset.transforms = test_transforms
-
-    def _initialize_transforms(self, transforms) -> None:
-        if not transforms:
-            return
-
-        for t in transforms:
-            t.initialize(provider=self.provider, atomrefs=self.provider.train_atomrefs)
+        self._train_dataset.initialize_transforms(
+            provider=self.provider,
+            atomrefs=self.provider.train_atomrefs,
+        )
+        self._val_dataset.initialize_transforms(
+            provider=self.provider,
+            atomrefs=self.provider.train_atomrefs,
+        )
+        if self._test_dataset is not None:
+            self._test_dataset.initialize_transforms(
+                provider=self.provider,
+                atomrefs=self.provider.train_atomrefs,
+            )
 
     def _load_partitions(self) -> None:
         total_size = len(self.dataset)
