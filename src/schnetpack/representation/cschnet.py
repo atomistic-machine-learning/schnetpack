@@ -165,20 +165,19 @@ class ConditionalSchNet(nn.Module):
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # Standard inputs
-        #print(f"forward dataset_id: {inputs['dataset_id'].squeeze().tolist()}")
-        atomic_numbers = inputs[properties.Z]       # [n_atoms]
-        r_ij = inputs[properties.Rij]               # [n_pairs, 3]
-        idx_i = inputs[properties.idx_i]            # [n_pairs]
-        idx_j = inputs[properties.idx_j]            # [n_pairs]
-        idx_m = inputs[properties.idx_m]            # [n_atoms] molecule index per atom
+        # print(f"forward dataset_id: {inputs['dataset_id'].squeeze().tolist()}")
+        atomic_numbers = inputs[properties.Z]  # [n_atoms]
+        r_ij = inputs[properties.Rij]  # [n_pairs, 3]
+        idx_i = inputs[properties.idx_i]  # [n_pairs]
+        idx_j = inputs[properties.idx_j]  # [n_pairs]
+        idx_m = inputs[properties.idx_m]  # [n_atoms] molecule index per atom
 
         # dataset_id is per-molecule: shape [n_molecules, 1] or [n_molecules]
         dataset_id = inputs["dataset_id"].squeeze(-1)  # [n_molecules]
-        
+
         # Expand dataset_id from per-molecule to per-atom using idx_m
         # idx_m[i] = molecule index of atom i
-        dataset_id_per_atom = dataset_id[idx_m]    # [n_atoms]
-
+        dataset_id_per_atom = dataset_id[idx_m]  # [n_atoms]
 
         # Compute pair features — same as standard SchNet
         d_ij = torch.norm(r_ij, dim=1)
@@ -186,7 +185,7 @@ class ConditionalSchNet(nn.Module):
         rcut_ij = self.cutoff_fn(d_ij)
 
         # Initial atomic embedding
-        x = self.embedding(atomic_numbers)          # [n_atoms, n_atom_basis]
+        x = self.embedding(atomic_numbers)  # [n_atoms, n_atom_basis]
 
         # Add dataset-conditional embedding — the only change vs standard SchNet
         x = x + self.dataset_embedding(dataset_id_per_atom)  # [n_atoms, n_atom_basis]
