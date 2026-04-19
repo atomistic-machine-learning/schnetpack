@@ -1,27 +1,3 @@
-"""
-conditional_schnet.py
-
-Conditional SchNet that conditions on dataset_id via additive embedding
-at the input level. Everything else — interactions, output, forces via
-autograd — is identical to the standard SchNet.
-
-The only change vs standard SchNet:
-    x = embedding(Z) + dataset_embedding(dataset_id_per_atom)
-
-This lets the model learn dataset-specific atomic representations while
-sharing all interaction blocks and output layers across datasets.
-
-Usage
------
-    model = ConditionalSchNet(
-        n_atom_basis=64,
-        n_interactions=3,
-        n_datasets=2,          # number of component datasets in MergedDataset
-        radial_basis=radial_basis,
-        cutoff_fn=cutoff_fn,
-    )
-"""
-
 from typing import Callable, Dict, List, Optional, Union
 
 import torch
@@ -37,8 +13,7 @@ __all__ = ["ConditionalSchNet", "ConditionalSchNetInteraction"]
 
 class ConditionalSchNetInteraction(nn.Module):
     """
-    Standard SchNet interaction block — unchanged from original.
-    Kept as a separate class for clarity.
+    Standard SchNet interaction block (unchanged from original)
     """
 
     def __init__(
@@ -165,7 +140,6 @@ class ConditionalSchNet(nn.Module):
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # Standard inputs
-        # print(f"forward dataset_id: {inputs['dataset_id'].squeeze().tolist()}")
         atomic_numbers = inputs[properties.Z]  # [n_atoms]
         r_ij = inputs[properties.Rij]  # [n_pairs, 3]
         idx_i = inputs[properties.idx_i]  # [n_pairs]
@@ -200,7 +174,7 @@ class ConditionalSchNet(nn.Module):
             x = x + v
 
         # Store scalar representation — same key as standard SchNet
-        # so output modules (Atomwise, Forces) work without any changes
+        # output modules (Atomwise, Forces)
         inputs["scalar_representation"] = x
 
         return inputs
