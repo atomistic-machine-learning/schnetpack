@@ -12,6 +12,7 @@ __all__ = ["ConditionalSchNet", "ConditionalSchNetInteraction"]
 
 CONDITIONING_MODES = ("input", "mlp_layer")
 
+
 class ConditionalSchNetInteraction(nn.Module):
     """
     Standard SchNet interaction block — identical to original.
@@ -193,10 +194,10 @@ class ConditionalSchNet(nn.Module):
         Compute the conditioning vector y for each atom.
 
         "input" mode:
-            y = dataset_embedding[dataset_id]        
+            y = dataset_embedding[dataset_id]
 
         "mlp_layer" mode:
-            y = MLP(dataset_embedding[dataset_id])   
+            y = MLP(dataset_embedding[dataset_id])
         """
         emb = self.dataset_embedding(dataset_id_per_atom)  # [n_atoms, n_atom_basis]
         if self.conditioning_mode == "mlp_layer":
@@ -205,30 +206,32 @@ class ConditionalSchNet(nn.Module):
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # --- Standard inputs ---
-        atomic_numbers = inputs[properties.Z]       # [n_atoms]
-        r_ij           = inputs[properties.Rij]     # [n_pairs, 3]
-        idx_i          = inputs[properties.idx_i]   # [n_pairs]
-        idx_j          = inputs[properties.idx_j]   # [n_pairs]
-        idx_m          = inputs[properties.idx_m]   # [n_atoms]
+        atomic_numbers = inputs[properties.Z]  # [n_atoms]
+        r_ij = inputs[properties.Rij]  # [n_pairs, 3]
+        idx_i = inputs[properties.idx_i]  # [n_pairs]
+        idx_j = inputs[properties.idx_j]  # [n_pairs]
+        idx_m = inputs[properties.idx_m]  # [n_atoms]
 
         # dataset_id: per-molecule → expand to per-atom via idx_m
-        dataset_id          = inputs["dataset_id"].squeeze(-1)  # [n_molecules]
-        dataset_id_per_atom = dataset_id[idx_m]                 # [n_atoms]
+        dataset_id = inputs["dataset_id"].squeeze(-1)  # [n_molecules]
+        dataset_id_per_atom = dataset_id[idx_m]  # [n_atoms]
 
         # --- Pair features (same as standard SchNet) ---
-        d_ij    = torch.norm(r_ij, dim=1)
-        f_ij    = self.radial_basis(d_ij)
+        d_ij = torch.norm(r_ij, dim=1)
+        f_ij = self.radial_basis(d_ij)
         rcut_ij = self.cutoff_fn(d_ij)
 
         # --- Conditioning vector y ---
         # Computed once, reused at every layer in mlp_layer mode.
         # In "input" mode:     y = dataset_embedding[id]
         # In "mlp_layer" mode: y = MLP(dataset_embedding[id])
-        y = self._get_conditioning_vector(dataset_id_per_atom)  # [n_atoms, n_atom_basis]
+        y = self._get_conditioning_vector(
+            dataset_id_per_atom
+        )  # [n_atoms, n_atom_basis]
 
         # --- Initial atomic embedding ---
         x = self.embedding(atomic_numbers)  # [n_atoms, n_atom_basis]
-        x = x + y                           # inject conditioning at input (both modes)
+        x = x + y  # inject conditioning at input (both modes)
 
         # --- Electronic embeddings (same as standard SchNet) ---
         for emb in self.electronic_embeddings:
