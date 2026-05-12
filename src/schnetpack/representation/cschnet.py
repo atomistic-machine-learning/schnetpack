@@ -10,10 +10,11 @@ import schnetpack.nn as snn
 
 __all__ = ["ConditionalSchNet", "ConditionalSchNetInteraction"]
 
+CONDITIONING_MODES = ("input", "mlp_layer")
 
 class ConditionalSchNetInteraction(nn.Module):
     """
-    Standard SchNet interaction block (unchanged from original)
+    Standard SchNet interaction block — identical to original.
     """
 
     def __init__(
@@ -45,7 +46,6 @@ class ConditionalSchNetInteraction(nn.Module):
         x = self.in2f(x)
         Wij = self.filter_network(f_ij)
         Wij = Wij * rcut_ij[:, None]
-
         x_j = x[idx_j]
         x_ij = x_j * Wij
         x = scatter_add(x_ij, idx_i, dim_size=x.shape[0])
@@ -53,37 +53,71 @@ class ConditionalSchNetInteraction(nn.Module):
         return x
 
 
+class ConditioningMLP(nn.Module):
+    """
+    Small MLP that maps a raw dataset embedding to a conditioning vector y.
+
+    Architecture:
+        dataset_emb (n_atom_basis)
+            → Linear(n_atom_basis, n_atom_basis)
+            → shifted_softplus
+            → Linear(n_atom_basis, n_atom_basis)
+            → y  (n_atom_basis)
+
+    Used in "mlp_layer" mode only.
+
+    NOTE: We do NOT zero-init the MLP weights here. The dataset_embedding
+    itself is zero-initialized in ConditionalSchNet, so at the start of
+    training the MLP receives a zero input and produces a fixed learned
+    bias — but crucially, gradients still flow back through both the MLP
+    and the embedding, allowing both to update from step 1.
+
+    Zero-initializing the MLP's last layer on top of a zero-init embedding
+    causes a dead-gradient trap where nothing ever learns.
+    """
+
+    def __init__(self, n_atom_basis: int, activation: Callable = shifted_softplus):
+        super().__init__()
+        self.net = nn.Sequential(
+            Dense(n_atom_basis, n_atom_basis, activation=activation),
+            Dense(n_atom_basis, n_atom_basis, activation=None),
+        )
+        # Use default Kaiming uniform init (PyTorch default for Linear/Dense).
+        # Do NOT zero-init here — see class docstring.
+
+    def forward(self, emb: torch.Tensor) -> torch.Tensor:
+        return self.net(emb)
+
+
 class ConditionalSchNet(nn.Module):
     """
-    Conditional SchNet.
+    Conditional SchNet with switchable conditioning mode.
 
-    Identical to standard SchNet except the initial atomic embedding
-    is augmented with a dataset-specific embedding:
-
-        x = nuclear_embedding(Z) + dataset_embedding(dataset_id)
-
-    dataset_embedding has shape [n_datasets, n_atom_basis] — same
-    dimension as the nuclear embedding so addition works directly.
-    dataset_id is per-molecule (shape [n_molecules]) and is expanded
-    to per-atom using idx_m from the collated batch.
-
-    All interaction blocks, output layers, and force computation via
-    autograd are identical to standard SchNet.
-
-    Args:
-        n_atom_basis: size of atomic embedding vectors.
-        n_interactions: number of interaction blocks.
-        n_datasets: number of component datasets (size of dataset_id vocabulary).
-                    Must match the number of datasets in MergedDataset.
-        radial_basis: layer for expanding interatomic distances.
-        cutoff_fn: cutoff function.
-        n_filters: number of filters in continuous-filter convolution.
-                   Defaults to n_atom_basis.
-        shared_interactions: share weights across interaction blocks.
-        activation: activation function.
-        nuclear_embedding: custom nuclear embedding. Defaults to
-                           nn.Embedding(100, n_atom_basis).
-        electronic_embeddings: list of additional electronic embeddings.
+    n_atom_basis : int
+        Size of atomic embedding vectors.
+    n_interactions : int
+        Number of interaction blocks.
+    n_datasets : int
+        Number of component datasets — size of the dataset_id vocabulary.
+        Must match the number of datasets in MergedDataset.
+    radial_basis : nn.Module
+        Layer for expanding interatomic distances in a basis set.
+    cutoff_fn : Callable
+        Cutoff function.
+    conditioning_mode : str
+        "input"     — add dataset embedding once at input (default).
+        "mlp_layer" — pass embedding through MLP, inject at input and
+                      after every interaction layer.
+    n_filters : int, optional
+        Number of filters in cfconv. Defaults to n_atom_basis.
+    shared_interactions : bool
+        Share weights across interaction blocks.
+    activation : Callable
+        Activation function.
+    nuclear_embedding : nn.Module, optional
+        Custom nuclear embedding. Defaults to nn.Embedding(100, n_atom_basis).
+    electronic_embeddings : list, optional
+        Additional electronic embeddings (e.g. spin, charge).
     """
 
     def __init__(
@@ -93,6 +127,7 @@ class ConditionalSchNet(nn.Module):
         n_datasets: int,
         radial_basis: nn.Module,
         cutoff_fn: Callable,
+        conditioning_mode: str = "input",
         n_filters: int = None,
         shared_interactions: bool = False,
         activation: Union[Callable, nn.Module] = shifted_softplus,
@@ -101,32 +136,45 @@ class ConditionalSchNet(nn.Module):
     ):
         super().__init__()
 
+        if conditioning_mode not in CONDITIONING_MODES:
+            raise ValueError(
+                f"conditioning_mode must be one of {CONDITIONING_MODES}, "
+                f"got '{conditioning_mode}'."
+            )
+
         self.n_atom_basis = n_atom_basis
         self.n_filters = n_filters or n_atom_basis
         self.radial_basis = radial_basis
         self.cutoff_fn = cutoff_fn
         self.cutoff = cutoff_fn.cutoff
+        self.conditioning_mode = conditioning_mode
 
-        # Nuclear embedding — same as standard SchNet
+        # --- Nuclear embedding (same as standard SchNet) ---
         if nuclear_embedding is None:
             nuclear_embedding = nn.Embedding(100, n_atom_basis)
         self.embedding = nuclear_embedding
 
-        # Dataset-conditional embedding — maps dataset_id → n_atom_basis vector
-        # Added to nuclear embedding before interactions
+        # --- Dataset embedding ---
+        # Shape: [n_datasets, n_atom_basis]
+        # Zero-initialized so model starts as standard SchNet at epoch 0.
+        # In "input" mode:     y = dataset_embedding[id]        (direct use)
+        # In "mlp_layer" mode: y = MLP(dataset_embedding[id])   (MLP uses default init,
+        #                      so gradients flow immediately from step 1)
         self.dataset_embedding = nn.Embedding(n_datasets, n_atom_basis)
-
-        # Initialize dataset embedding to zero so at the start of training
-        # the model behaves like a standard SchNet — conditioning is learned
-        # gradually from scratch
         nn.init.zeros_(self.dataset_embedding.weight)
 
-        # Electronic embeddings — same as standard SchNet
+        # --- Conditioning MLP (mlp_layer mode only) ---
+        # MLP uses DEFAULT (Kaiming) init — not zero-init.
+        # See ConditioningMLP docstring for explanation.
+        if conditioning_mode == "mlp_layer":
+            self.conditioning_mlp = ConditioningMLP(n_atom_basis, activation)
+        else:
+            self.conditioning_mlp = None
+
         if electronic_embeddings is None:
             electronic_embeddings = []
         self.electronic_embeddings = nn.ModuleList(electronic_embeddings)
 
-        # Interaction blocks — identical to standard SchNet
         self.interactions = snn.replicate_module(
             lambda: ConditionalSchNetInteraction(
                 n_atom_basis=self.n_atom_basis,
@@ -138,43 +186,64 @@ class ConditionalSchNet(nn.Module):
             shared_interactions,
         )
 
+    def _get_conditioning_vector(
+        self, dataset_id_per_atom: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Compute the conditioning vector y for each atom.
+
+        "input" mode:
+            y = dataset_embedding[dataset_id]        
+
+        "mlp_layer" mode:
+            y = MLP(dataset_embedding[dataset_id])   
+        """
+        emb = self.dataset_embedding(dataset_id_per_atom)  # [n_atoms, n_atom_basis]
+        if self.conditioning_mode == "mlp_layer":
+            return self.conditioning_mlp(emb)
+        return emb
+
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        # Standard inputs
-        atomic_numbers = inputs[properties.Z]  # [n_atoms]
-        r_ij = inputs[properties.Rij]  # [n_pairs, 3]
-        idx_i = inputs[properties.idx_i]  # [n_pairs]
-        idx_j = inputs[properties.idx_j]  # [n_pairs]
-        idx_m = inputs[properties.idx_m]  # [n_atoms] molecule index per atom
+        # --- Standard inputs ---
+        atomic_numbers = inputs[properties.Z]       # [n_atoms]
+        r_ij           = inputs[properties.Rij]     # [n_pairs, 3]
+        idx_i          = inputs[properties.idx_i]   # [n_pairs]
+        idx_j          = inputs[properties.idx_j]   # [n_pairs]
+        idx_m          = inputs[properties.idx_m]   # [n_atoms]
 
-        # dataset_id is per-molecule: shape [n_molecules, 1] or [n_molecules]
-        dataset_id = inputs["dataset_id"].squeeze(-1)  # [n_molecules]
+        # dataset_id: per-molecule → expand to per-atom via idx_m
+        dataset_id          = inputs["dataset_id"].squeeze(-1)  # [n_molecules]
+        dataset_id_per_atom = dataset_id[idx_m]                 # [n_atoms]
 
-        # Expand dataset_id from per-molecule to per-atom using idx_m
-        # idx_m[i] = molecule index of atom i
-        dataset_id_per_atom = dataset_id[idx_m]  # [n_atoms]
-
-        # Compute pair features — same as standard SchNet
-        d_ij = torch.norm(r_ij, dim=1)
-        f_ij = self.radial_basis(d_ij)
+        # --- Pair features (same as standard SchNet) ---
+        d_ij    = torch.norm(r_ij, dim=1)
+        f_ij    = self.radial_basis(d_ij)
         rcut_ij = self.cutoff_fn(d_ij)
 
-        # Initial atomic embedding
+        # --- Conditioning vector y ---
+        # Computed once, reused at every layer in mlp_layer mode.
+        # In "input" mode:     y = dataset_embedding[id]
+        # In "mlp_layer" mode: y = MLP(dataset_embedding[id])
+        y = self._get_conditioning_vector(dataset_id_per_atom)  # [n_atoms, n_atom_basis]
+
+        # --- Initial atomic embedding ---
         x = self.embedding(atomic_numbers)  # [n_atoms, n_atom_basis]
+        x = x + y                           # inject conditioning at input (both modes)
 
-        # Add dataset-conditional embedding — the only change vs standard SchNet
-        x = x + self.dataset_embedding(dataset_id_per_atom)  # [n_atoms, n_atom_basis]
+        # --- Electronic embeddings (same as standard SchNet) ---
+        for emb in self.electronic_embeddings:
+            x = x + emb(x, inputs)
 
-        # Electronic embeddings — same as standard SchNet
-        for embedding in self.electronic_embeddings:
-            x = x + embedding(x, inputs)
-
-        # Interaction blocks — same as standard SchNet
+        # --- Interaction blocks ---
         for interaction in self.interactions:
             v = interaction(x, f_ij, idx_i, idx_j, rcut_ij)
-            x = x + v
 
-        # Store scalar representation — same key as standard SchNet
-        # output modules (Atomwise, Forces)
+            if self.conditioning_mode == "mlp_layer":
+                # Re-inject conditioning after every interaction (supervisor's approach)
+                x = x + v + y
+            else:
+                # Standard residual — no re-injection ("input" mode)
+                x = x + v
+
         inputs["scalar_representation"] = x
-
         return inputs
