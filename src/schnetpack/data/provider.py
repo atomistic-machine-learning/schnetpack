@@ -7,7 +7,6 @@ import copy
 
 from schnetpack.data.atoms import ASEAtomsData
 from schnetpack.data.stats import calculate_stats, estimate_atomrefs
-from schnetpack.transform.atomistic import ConditionalRemoveOffsets
 
 
 class StatsAtomrefProvider:
