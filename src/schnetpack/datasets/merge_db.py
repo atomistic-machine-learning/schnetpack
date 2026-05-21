@@ -26,6 +26,7 @@ import torch
 from torch.utils.data import Dataset
 
 from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
+from schnetpack.transform.atomistic import ConditionalRemoveOffsets
 
 __all__ = ["MergedDataset"]
 
@@ -153,22 +154,46 @@ class MergedDataset(Dataset):
     def initialize_transforms(self, provider=None) -> None:
         """
         Initialize transforms on each component dataset.
-
-        Args:
-            provider: MergedStatsAtomrefProvider, each component gets its own
-            per-component provider with stats computed from its own train samples only.
         """
         from schnetpack.data.provider import MergedStatsAtomrefProvider
 
-        if isinstance(provider, MergedStatsAtomrefProvider):
-            for name, ds in self.datasets.items():
-                if name not in provider.providers:
+        # Track already-initialized transform instances to avoid double-init
+        # when both datasets share the same transform object (e.g. ${data.transforms})
+        initialized = set()
+
+        for name, ds in self.datasets.items():
+            for transform in getattr(ds, "transforms", []):
+                if not hasattr(transform, "initialize"):
                     continue
-                ds.initialize_transforms(provider.providers[name])
-        else:
-            # fallback — same merged StatsAtomrefProvider for all components
-            for ds in self.datasets.values():
-                ds.initialize_transforms(provider)
+
+                # Skip if this exact instance was already initialized
+                if id(transform) in initialized:
+                    continue
+                initialized.add(id(transform))
+
+                if isinstance(transform, ConditionalRemoveOffsets):
+                    # Needs full MergedStatsAtomrefProvider — not per-component
+                    try:
+                        transform.initialize(provider)
+                    except TypeError as e:
+                        raise TypeError(
+                            f"ConditionalRemoveOffsets.initialize() failed for "
+                            f"dataset '{name}': {e}"
+                        ) from e
+
+                elif isinstance(provider, MergedStatsAtomrefProvider):
+                    # All other transforms get the per-component provider
+                    component_provider = provider.providers.get(name)
+                    try:
+                        transform.initialize(component_provider)
+                    except TypeError:
+                        transform.initialize()
+
+                else:
+                    try:
+                        transform.initialize(provider)
+                    except TypeError:
+                        transform.initialize()
 
     # ------------------------------------------------------------------
     # Core Dataset interface
@@ -180,16 +205,30 @@ class MergedDataset(Dataset):
     def __getitem__(self, i: int) -> Dict[str, torch.Tensor]:
         dataset_name, index = self.plan[i]
         component_ds = self.datasets[dataset_name]
+        dataset_id = self._dataset_ids[dataset_name]
 
-        # Component applies its own transforms — split is already set
-        # on the component by subset(), so train/val/test dispatch works.
-        sample = component_ds[index]
-
-        # Inject provenance
-        sample["dataset_id"] = torch.tensor(
-            [self._dataset_ids[dataset_name]], dtype=torch.long
+        # Load raw properties WITHOUT applying transforms yet
+        actual_idx = (
+            component_ds.subset_idx[index]
+            if component_ds.subset_idx is not None
+            else index
         )
-        if self.add_source_index:
-            sample["source_index"] = torch.tensor([index], dtype=torch.long)
+        props = component_ds._get_properties(
+            component_ds.conn,
+            actual_idx,
+            component_ds.load_properties,
+            component_ds.load_structure,
+        )
 
-        return sample
+        # Inject provenance BEFORE transforms so ConditionalRemoveOffsets
+        # can find _source_index in forward()
+        props["dataset_id"] = torch.tensor([dataset_id], dtype=torch.long)
+        if self.add_source_index:
+            props["source_index"] = torch.tensor([dataset_id], dtype=torch.long)
+            # _source_index = dataset_id (0=md17, 1=rmd17), NOT the sample index
+            # This is what ConditionalRemoveOffsets and ConditionalAddOffsets route on
+
+        # Now apply transforms with _source_index already present
+        props = component_ds._apply_transforms(props)
+
+        return props
