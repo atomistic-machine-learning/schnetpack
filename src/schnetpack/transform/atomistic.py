@@ -419,10 +419,10 @@ class ConditionalAddOffsets(Transform):
         # One mean scalar and one atomref vector per dataset.
         #   means    : [n_datasets, 1]
         #   atomrefs : [n_datasets, zmax]
-        self.register_buffer("means",    torch.zeros(self._n, 1))
+        self.register_buffer("means", torch.zeros(self._n, 1))
         self.register_buffer("atomrefs", torch.zeros(self._n, zmax))
 
-        self._mean_initialized     = [False] * self._n
+        self._mean_initialized = [False] * self._n
         self._atomrefs_initialized = [False] * self._n
 
     # ------------------------------------------------------------------
@@ -486,26 +486,26 @@ class ConditionalAddOffsets(Transform):
         inputs[structure.n_atoms]: [batch_size]  int
         inputs[structure.Z]      : [n_atoms]     int, atomic numbers
         """
-        source_idx = inputs[self.SOURCE_INDEX_KEY]   # [batch_size]
-        idx_m      = inputs[structure.idx_m]          # [n_atoms]
-        n_atoms    = inputs[structure.n_atoms]         # [batch_size]
+        source_idx = inputs[self.SOURCE_INDEX_KEY]  # [batch_size]
+        idx_m = inputs[structure.idx_m]  # [n_atoms]
+        n_atoms = inputs[structure.n_atoms]  # [batch_size]
 
         if self.add_mean:
             # means[source_idx] → [batch_size, 1] → squeeze → [batch_size]
-            per_mol_mean = self.means[source_idx].squeeze(-1)   # [batch_size]
+            per_mol_mean = self.means[source_idx].squeeze(-1)  # [batch_size]
             if self.is_extensive:
-                per_mol_mean = per_mol_mean * n_atoms            # scale by size
+                per_mol_mean = per_mol_mean * n_atoms  # scale by size
             inputs[self._property] += per_mol_mean
 
         if self.add_atomrefs:
             # Build a per-atom atomref lookup:
             #   dataset_idx_per_atom : which dataset each atom belongs to
             #   Z_per_atom           : atomic number of each atom
-            dataset_idx_per_atom = source_idx[idx_m]             # [n_atoms]
-            Z = inputs[structure.Z]                               # [n_atoms]
+            dataset_idx_per_atom = source_idx[idx_m]  # [n_atoms]
+            Z = inputs[structure.Z]  # [n_atoms]
 
             # atomrefs[dataset_idx_per_atom, Z] → [n_atoms]
-            per_atom_ref = self.atomrefs[dataset_idx_per_atom, Z] # [n_atoms]
+            per_atom_ref = self.atomrefs[dataset_idx_per_atom, Z]  # [n_atoms]
 
             # Scatter-sum over molecules → [batch_size]
             batch_size = int(idx_m[-1]) + 1
@@ -517,6 +517,7 @@ class ConditionalAddOffsets(Transform):
             inputs[self._property] += per_mol_ref
 
         return inputs
+
 
 class ConditionalRemoveOffsets(Transform):
     """
@@ -561,12 +562,11 @@ class ConditionalRemoveOffsets(Transform):
         # Stacked buffers — same layout as ConditionalAddOffsets
         # means    : [n_datasets, 1]
         # atomrefs : [n_datasets, zmax]
-        self.register_buffer("means",    torch.zeros(self._n, 1))
+        self.register_buffer("means", torch.zeros(self._n, 1))
         self.register_buffer("atomrefs", torch.zeros(self._n, zmax))
 
-        self._mean_initialized     = [False] * self._n
+        self._mean_initialized = [False] * self._n
         self._atomrefs_initialized = [False] * self._n
-
 
     def initialize(self, provider, atomrefs=None) -> None:
         """
@@ -608,7 +608,6 @@ class ConditionalRemoveOffsets(Transform):
                 length = ar_tensor.shape[0]
                 self.atomrefs[idx, :length] = ar_tensor
                 self._atomrefs_initialized[idx] = True
-
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         source_idx = inputs[self.SOURCE_INDEX_KEY].view(-1).long()
