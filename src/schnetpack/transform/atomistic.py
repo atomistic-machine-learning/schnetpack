@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List, Optional
 import warnings
 
 import torch
@@ -16,6 +16,8 @@ __all__ = [
     "AddOffsets",
     "RemoveOffsets",
     "ScaleProperty",
+    "ConditionalAddOffsets",
+    "ConditionalRemoveOffsets",
 ]
 
 
@@ -370,5 +372,268 @@ class AddOffsets(Transform):
                 y0 /= inputs[structure.n_atoms]
 
             inputs[self._property] += y0
+
+        return inputs
+
+
+class ConditionalAddOffsets(Transform):
+    """
+    Per-dataset variant of AddOffsets for use with MergedDataset.
+    """
+
+    is_preprocessor: bool = False
+    is_postprocessor: bool = True
+
+    SOURCE_INDEX_KEY = "source_index"
+
+    def __init__(
+        self,
+        property: str,
+        dataset_names: List[str],
+        add_mean: bool = False,
+        add_atomrefs: bool = False,
+        is_extensive: bool = True,
+        zmax: int = 100,
+        estimate_atomref: bool = False,
+    ):
+        """
+        Args:
+            property: The property to add the offsets to.
+            dataset_names: List of dataset names.
+            add_mean: If true, add mean of the dataset.
+            add_atomrefs: If true, add single-atom references.
+            is_extensive: Set true if the property is extensive.
+            zmax: Set the maximum atomic number, to determine the size of the atomref
+                tensor.
+            estimate_atomref: If true, add estimated atomrefs.
+        """
+        super().__init__()
+        self._property = property
+        self.dataset_names = dataset_names  # index 0 → name[0], etc.
+        self.add_mean = add_mean
+        self.add_atomrefs = add_atomrefs
+        self.is_extensive = is_extensive
+        self.estimate_atomref = estimate_atomref
+        self._n = len(dataset_names)
+
+        # One mean scalar and one atomref vector per dataset.
+        #   means    : [n_datasets, 1]
+        #   atomrefs : [n_datasets, zmax]
+        self.register_buffer("means",    torch.zeros(self._n, 1))
+        self.register_buffer("atomrefs", torch.zeros(self._n, zmax))
+
+        self._mean_initialized     = [False] * self._n
+        self._atomrefs_initialized = [False] * self._n
+
+    # ------------------------------------------------------------------
+    # Initialization
+    # ------------------------------------------------------------------
+
+    def initialize(self, provider, atomrefs=None) -> None:
+        """
+        Populate per-dataset buffers from a MergedStatsAtomrefProvider.
+        """
+        if not hasattr(provider, "providers"):
+            raise TypeError(
+                "ConditionalAddOffsets requires a MergedStatsAtomrefProvider "
+                f"(got {type(provider).__name__}). "
+                "Make sure your datamodule uses provider: MergedStatsAtomrefProvider."
+            )
+
+        for idx, name in enumerate(self.dataset_names):
+            component_provider = provider.providers[name]
+
+            if self.add_mean and not self._mean_initialized[idx]:
+                mean, _ = component_provider.get_stats(
+                    self._property, self.is_extensive, self.add_atomrefs
+                )
+                self.means[idx] = mean.detach()
+                self._mean_initialized[idx] = True
+
+            if self.add_atomrefs and not self._atomrefs_initialized[idx]:
+                if self.estimate_atomref:
+                    atrefs = component_provider.get_atomrefs(
+                        self._property, self.is_extensive
+                    )
+                else:
+                    # fall back to precomputed train atomrefs stored on the provider
+                    train_ar = provider.train_atomrefs.get(name)
+                    if train_ar is None or self._property not in train_ar:
+                        raise RuntimeError(
+                            f"No precomputed atomrefs for dataset '{name}', "
+                            f"property '{self._property}'. "
+                            "Set estimate_atomref=True or supply atomrefs manually."
+                        )
+                    atrefs = train_ar
+
+                ar_tensor = atrefs[self._property].detach()
+                length = ar_tensor.shape[0]
+                self.atomrefs[idx, :length] = ar_tensor
+                self._atomrefs_initialized[idx] = True
+
+    # ------------------------------------------------------------------
+    # Forward
+    # ------------------------------------------------------------------
+
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Add per-sample offsets back to ``inputs[self._property]``.
+
+        Batch layout
+        ------------
+        inputs[SOURCE_INDEX_KEY] : [batch_size]  int, one entry per molecule
+        inputs[structure.idx_m]  : [n_atoms]     int, maps atom → molecule
+        inputs[structure.n_atoms]: [batch_size]  int
+        inputs[structure.Z]      : [n_atoms]     int, atomic numbers
+        """
+        source_idx = inputs[self.SOURCE_INDEX_KEY]   # [batch_size]
+        idx_m      = inputs[structure.idx_m]          # [n_atoms]
+        n_atoms    = inputs[structure.n_atoms]         # [batch_size]
+
+        if self.add_mean:
+            # means[source_idx] → [batch_size, 1] → squeeze → [batch_size]
+            per_mol_mean = self.means[source_idx].squeeze(-1)   # [batch_size]
+            if self.is_extensive:
+                per_mol_mean = per_mol_mean * n_atoms            # scale by size
+            inputs[self._property] += per_mol_mean
+
+        if self.add_atomrefs:
+            # Build a per-atom atomref lookup:
+            #   dataset_idx_per_atom : which dataset each atom belongs to
+            #   Z_per_atom           : atomic number of each atom
+            dataset_idx_per_atom = source_idx[idx_m]             # [n_atoms]
+            Z = inputs[structure.Z]                               # [n_atoms]
+
+            # atomrefs[dataset_idx_per_atom, Z] → [n_atoms]
+            per_atom_ref = self.atomrefs[dataset_idx_per_atom, Z] # [n_atoms]
+
+            # Scatter-sum over molecules → [batch_size]
+            batch_size = int(idx_m[-1]) + 1
+            per_mol_ref = scatter_add(per_atom_ref, idx_m, dim_size=batch_size)
+
+            if not self.is_extensive:
+                per_mol_ref = per_mol_ref / n_atoms
+
+            inputs[self._property] += per_mol_ref
+
+        return inputs
+
+class ConditionalRemoveOffsets(Transform):
+    """
+    Per-dataset variant of RemoveOffsets for use with MergedDataset.
+    """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
+
+    SOURCE_INDEX_KEY = "source_index"
+
+    def __init__(
+        self,
+        property: str,
+        dataset_names: List[str],
+        remove_mean: bool = False,
+        remove_atomrefs: bool = False,
+        is_extensive: bool = True,
+        zmax: int = 100,
+        estimate_atomref: bool = False,
+    ):
+        """
+        Args:
+            property: The property to add the offsets to.
+            dataset_names: List of dataset names.
+            add_mean: If true, add mean of the dataset.
+            add_atomrefs: If true, add single-atom references.
+            is_extensive: Set true if the property is extensive.
+            zmax: Set the maximum atomic number, to determine the size of the atomref
+                tensor.
+            estimate_atomref: If true, add estimated atomrefs.
+        """
+        super().__init__()
+        self._property = property
+        self.dataset_names = dataset_names
+        self.remove_mean = remove_mean
+        self.remove_atomrefs = remove_atomrefs
+        self.is_extensive = is_extensive
+        self.estimate_atomref = estimate_atomref
+        self._n = len(dataset_names)
+
+        # Stacked buffers — same layout as ConditionalAddOffsets
+        # means    : [n_datasets, 1]
+        # atomrefs : [n_datasets, zmax]
+        self.register_buffer("means",    torch.zeros(self._n, 1))
+        self.register_buffer("atomrefs", torch.zeros(self._n, zmax))
+
+        self._mean_initialized     = [False] * self._n
+        self._atomrefs_initialized = [False] * self._n
+
+
+    def initialize(self, provider, atomrefs=None) -> None:
+        """
+        Populate per-dataset buffers from a MergedStatsAtomrefProvider.
+        """
+        if not hasattr(provider, "providers"):
+            raise TypeError(
+                "ConditionalRemoveOffsets requires a MergedStatsAtomrefProvider "
+                f"(got {type(provider).__name__}). "
+                "Make sure your datamodule uses provider: MergedStatsAtomrefProvider."
+            )
+
+        for idx, name in enumerate(self.dataset_names):
+            component_provider = provider.providers[name]
+
+            if self.remove_mean and not self._mean_initialized[idx]:
+                mean, _ = component_provider.get_stats(
+                    self._property, self.is_extensive, self.remove_atomrefs
+                )
+                self.means[idx] = mean.detach()
+                self._mean_initialized[idx] = True
+
+            if self.remove_atomrefs and not self._atomrefs_initialized[idx]:
+                if self.estimate_atomref:
+                    atrefs = component_provider.get_atomrefs(
+                        self._property, self.is_extensive
+                    )
+                else:
+                    train_ar = provider.train_atomrefs.get(name)
+                    if train_ar is None or self._property not in train_ar:
+                        raise RuntimeError(
+                            f"No precomputed atomrefs for dataset '{name}', "
+                            f"property '{self._property}'. "
+                            "Set estimate_atomref=True or supply atomrefs manually."
+                        )
+                    atrefs = train_ar
+
+                ar_tensor = atrefs[self._property].detach()
+                length = ar_tensor.shape[0]
+                self.atomrefs[idx, :length] = ar_tensor
+                self._atomrefs_initialized[idx] = True
+
+
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        source_idx = inputs[self.SOURCE_INDEX_KEY].view(-1).long()
+        n_atoms = inputs[structure.n_atoms].view(-1)
+
+        if self.remove_mean:
+            per_mol_mean = self.means[source_idx].squeeze(-1)
+
+            if self.is_extensive:
+                per_mol_mean = per_mol_mean * n_atoms
+
+            inputs[self._property] -= per_mol_mean
+
+        if self.remove_atomrefs:
+            idx_m = inputs[structure.idx_m]
+            dataset_idx_per_atom = source_idx[idx_m]
+            Z = inputs[structure.Z]
+
+            per_atom_ref = self.atomrefs[dataset_idx_per_atom, Z]
+            batch_size = int(idx_m[-1]) + 1
+            per_mol_ref = scatter_add(per_atom_ref, idx_m, dim_size=batch_size)
+
+            if not self.is_extensive:
+                per_mol_ref = per_mol_ref / n_atoms
+
+            inputs[self._property] -= per_mol_ref
 
         return inputs
