@@ -17,7 +17,7 @@ class AtomsDataModule(pl.LightningDataModule):
     - accepts a dataset instance
     - handles splitting
     - builds StatsAtomrefProvider from train split
-    - - delegates transform initialization to dataset
+    - delegates transform initialization to dataset
     """
 
     def __init__(

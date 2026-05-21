@@ -6,6 +6,7 @@ min_epochs: null
 max_epochs: 100000
 
 # prints
+enable_progress_bar: true
 enable_model_summary: True
 profiler: null
 
