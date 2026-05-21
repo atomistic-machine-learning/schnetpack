@@ -1,8 +1,13 @@
-from typing import Dict, Tuple, Optional
+from __future__ import annotations
+
+from typing import Dict, Optional, Tuple
+
 import torch
+import copy
 
 from schnetpack.data.atoms import ASEAtomsData
 from schnetpack.data.stats import calculate_stats, estimate_atomrefs
+from schnetpack.transform.atomistic import ConditionalRemoveOffsets
 
 
 class StatsAtomrefProvider:
@@ -87,26 +92,40 @@ class MergedStatsAtomrefProvider:
             )
 
         self.train_dataset = train_dataset
-
-        # Build one StatsAtomrefProvider per component dataset
-        # using only that component's samples from the train split
         self.providers: Dict[str, StatsAtomrefProvider] = {}
 
         for name in train_dataset.datasets:
-            # positions in train_dataset.plan that belong to this component
-            component_idx = [
-                i for i, (n, _) in enumerate(train_dataset.plan) if n == name
+            # Get the LOCAL indices within the component dataset
+            # that appear in the training plan for this component
+            local_indices = [
+                local_idx
+                for (ds_name, local_idx) in train_dataset.plan
+                if ds_name == name
             ]
 
-            if not component_idx:
+            if not local_indices:
                 continue
 
-            # subset of the train split containing only this component's samples
-            component_train = train_dataset.subset(component_idx)
+            # Work directly with the ASEAtomsData component — NOT MergedDataset
+            # This bypasses MergedDataset.__getitem__ entirely, so no source_index
+            # or idx_m injection is needed during stats calculation
+            component_ds = copy.copy(train_dataset.datasets[name])
 
-            self.providers[name] = StatsAtomrefProvider(component_train)
+            # Strip transforms that require source_index or idx_m —
+            # stats must be computed on raw properties only
+            component_ds.transforms = []
 
-        # train_atomrefs per component — None if not available
+            # Also strip train/val/test overrides to be safe
+            component_ds.train_transforms = None
+            component_ds.val_transforms = None
+            component_ds.test_transforms = None
+
+            # Subset to only the training indices for this component
+            component_subset = component_ds.subset(local_indices)
+
+            self.providers[name] = StatsAtomrefProvider(component_subset)
+
+        # train_atomrefs per component
         self.train_atomrefs: Dict[str, Optional[Dict[str, torch.Tensor]]] = {
             name: provider.train_atomrefs for name, provider in self.providers.items()
         }
