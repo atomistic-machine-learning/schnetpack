@@ -1,0 +1,70 @@
+# @package _global_
+
+defaults:
+  - override /model: nnp
+  - override /data: merged
+
+run:
+  experiment: conditional_md17_rmd17_${data.molecule}
+
+globals:
+  cutoff: 5.0
+  lr: 5e-4
+  energy_key: energy
+  forces_key: forces
+
+model:
+  representation:
+    _target_: schnetpack.representation.cschnet.ConditionalSchNet
+    n_atom_basis: 128
+    n_interactions: 6
+    n_datasets: 2
+    conditioning_mode: mlp_layer
+
+  output_modules:
+    - _target_: schnetpack.atomistic.Atomwise
+      output_key: ${globals.energy_key}
+      n_in: ${model.representation.n_atom_basis}
+      aggregation_mode: sum
+
+    - _target_: schnetpack.atomistic.Forces
+      energy_key: ${globals.energy_key}
+      force_key: ${globals.forces_key}
+
+  postprocessors:
+    - _target_: schnetpack.transform.CastTo64
+
+    - _target_: schnetpack.transform.ConditionalAddOffsets
+      property: ${globals.energy_key}
+      dataset_names:      
+        - md17
+        - rmd17
+      add_mean: True
+      add_atomrefs: False
+      is_extensive: False
+
+task:
+  outputs:
+    - _target_: schnetpack.task.ModelOutput
+      name: ${globals.energy_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 0.01
+
+    - _target_: schnetpack.task.ModelOutput
+      name: ${globals.forces_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 0.99

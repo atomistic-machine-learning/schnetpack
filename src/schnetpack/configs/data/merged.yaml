@@ -1,0 +1,69 @@
+# @package data
+defaults:
+  - sampler/dataset_balancer
+
+_target_: schnetpack.data.datamodule.AtomsDataModule
+
+molecule: ethanol
+
+dataset:
+  _target_: schnetpack.datasets.merged_db.MergedDataset
+
+  datasets:
+    md17:
+      _target_: schnetpack.datasets.md17.MD17
+      datapath: ${run.data_dir}/md17_${data.molecule}.db
+      molecule: ${data.molecule}
+      transforms: ${data.transforms}
+
+    rmd17:
+      _target_: schnetpack.datasets.rmd17.rMD17
+      datapath: ${run.data_dir}/rmd17_${data.molecule}.db
+      molecule: ${data.molecule}
+      transforms: ${data.transforms}
+
+  subset_sizes:
+    md17: 500
+    rmd17: 500
+
+  seed: 42
+  add_source_index: True
+
+batch_size: 32
+num_train: 0.8
+num_val: 0.1
+
+split_file: ${run.data_dir}/split_conditional_md17_rmd17.npz
+num_workers: 4
+
+distance_unit: Ang
+
+property_units:
+  energy: kcal/mol
+  forces: kcal/mol/Ang
+
+transforms:
+  - _target_: schnetpack.transform.MatScipyNeighborList  
+    cutoff: ${globals.cutoff}
+
+  - _target_: schnetpack.transform.ConditionalRemoveOffsets  
+    property: ${globals.energy_key}
+    dataset_names:
+      - md17
+      - rmd17
+    remove_mean: True
+    remove_atomrefs: False
+    is_extensive: False
+
+  - _target_: schnetpack.transform.CastTo32  
+
+provider:
+  _target_: schnetpack.data.MergedStatsAtomrefProvider
+  _partial_: true
+
+splitting:
+  _target_: schnetpack.data.splitting.ProportionalSplit
+  proportions:
+    md17: 0.5
+    rmd17: 0.5
+  seed: 42
