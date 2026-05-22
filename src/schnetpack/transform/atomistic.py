@@ -425,10 +425,6 @@ class ConditionalAddOffsets(Transform):
         self._mean_initialized = [False] * self._n
         self._atomrefs_initialized = [False] * self._n
 
-    # ------------------------------------------------------------------
-    # Initialization
-    # ------------------------------------------------------------------
-
     def initialize(self, provider, atomrefs=None) -> None:
         """
         Populate per-dataset buffers from a MergedStatsAtomrefProvider.
@@ -470,10 +466,6 @@ class ConditionalAddOffsets(Transform):
                 length = ar_tensor.shape[0]
                 self.atomrefs[idx, :length] = ar_tensor
                 self._atomrefs_initialized[idx] = True
-
-    # ------------------------------------------------------------------
-    # Forward
-    # ------------------------------------------------------------------
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
