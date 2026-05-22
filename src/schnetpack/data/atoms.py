@@ -176,7 +176,7 @@ class BaseAtomsData(ABC):
         self,
         property_list: List[Dict[str, Any]],
         atoms_list: Optional[List[Atoms]] = None,
-        key_value_list: Optional[List[Dict[str, Any]]] = None,
+        atoms_metadata_list: Optional[List[Dict[str, Any]]] = None,
     ):
         pass
 
@@ -374,13 +374,14 @@ class ASEAtomsData(BaseAtomsData):
         return properties
 
     # Metadata
-
     @property
     def metadata(self):
-        return self.conn.metadata
+        with connect(self.datapath, use_lock_file=False) as conn:
+            return conn.metadata
 
     def _set_metadata(self, val: Dict[str, Any]):
-        self.conn.metadata = val
+        with connect(self.datapath, use_lock_file=False) as conn:
+            conn.metadata = val
 
     def update_metadata(self, **kwargs):
         assert all(
@@ -477,7 +478,7 @@ class ASEAtomsData(BaseAtomsData):
                 `available_properties` of the dataset.
 
         """
-        self._add_system(self.conn, atoms, atoms_metadata, **properties)
+        self._add_system(atoms, atoms_metadata, **properties)
 
     def add_systems(
         self,
@@ -511,7 +512,6 @@ class ASEAtomsData(BaseAtomsData):
             atoms_list, property_list, atoms_metadata_list
         ):
             self._add_system(
-                self.conn,
                 atoms,
                 atoms_metadata,
                 **prop,
@@ -519,7 +519,6 @@ class ASEAtomsData(BaseAtomsData):
 
     def _add_system(
         self,
-        conn,
         atoms: Optional[Atoms] = None,
         atoms_metadata: Optional[Dict[str, Any]] = None,
         **properties,
@@ -540,28 +539,33 @@ class ASEAtomsData(BaseAtomsData):
                     "Property dict does not contain all necessary structure keys"
                 ) from e
 
-        # add available properties to database
-        valid_props = set().union(
-            conn.metadata["_property_unit_dict"].keys(),
-            [structure.Z, structure.R, structure.cell, structure.pbc],
-        )
-        for pname in properties:
-            if pname not in valid_props:
-                logger.warning(
-                    f"Property `{pname}` is not a defined property for this dataset and "
-                    + f"will be ignored. If it should be included, it has to be "
-                    + f"provided together with its unit when calling "
-                    + f"AseAtomsData.create()."
-                )
+        if atoms_metadata is None:
+            atoms_metadata = {}
 
-        data = {}
-        for pname in conn.metadata["_property_unit_dict"].keys():
-            if pname in properties:
-                data[pname] = properties[pname]
-            else:
-                raise AtomsDataError("Required property missing:" + pname)
+        with connect(self.datapath, use_lock_file=False) as conn:
+            prop_keys = conn.metadata["_property_unit_dict"].keys()
 
-        conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
+            valid_props = set().union(
+                prop_keys,
+                [structure.Z, structure.R, structure.cell, structure.pbc],
+            )
+            for pname in properties:
+                if pname not in valid_props:
+                    logger.warning(
+                        f"Property `{pname}` is not a defined property for this dataset and "
+                        + f"will be ignored. If it should be included, it has to be "
+                        + f"provided together with its unit when calling "
+                        + f"AseAtomsData.create()."
+                    )
+
+            data = {}
+            for pname in prop_keys:
+                if pname in properties:
+                    data[pname] = properties[pname]
+                else:
+                    raise AtomsDataError("Required property missing:" + pname)
+
+            conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
 
 
 def create_dataset(

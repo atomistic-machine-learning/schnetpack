@@ -14,6 +14,18 @@ Basic layers
     Dense
 
 
+Embeddings
+------------
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+    :template: classtemplate.rst
+
+    NuclearEmbedding
+    ElectronicEmbedding
+
+
 Equivariant layers
 ------------------
 

@@ -40,6 +40,7 @@ Neighbor lists
 
     MatScipyNeighborList
     ASENeighborList
+    VesinNeighborList
     TorchNeighborList
     CachedNeighborList
     CountNeighbors
