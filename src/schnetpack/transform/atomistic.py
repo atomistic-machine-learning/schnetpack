@@ -9,7 +9,6 @@ from .base import Transform
 from schnetpack.nn import scatter_add
 from schnetpack.data.provider import StatsAtomrefProvider
 
-
 __all__ = [
     "SubtractCenterOfMass",
     "SubtractCenterOfGeometry",
@@ -384,7 +383,8 @@ class ConditionalAddOffsets(Transform):
     is_preprocessor: bool = False
     is_postprocessor: bool = True
 
-    SOURCE_INDEX_KEY = "source_index"
+    SOURCE_INDEX_KEY = "source_index"  #TODO: change it to dataset_id
+    #my test commit from hydra
 
     def __init__(
         self,
