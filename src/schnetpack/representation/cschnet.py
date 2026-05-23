@@ -131,6 +131,7 @@ class ConditionalSchNet(nn.Module):
         conditioning_mode: str = "input",
         n_filters: int = None,
         shared_interactions: bool = False,
+        shared_filters: bool = False,
         activation: Union[Callable, nn.Module] = shifted_softplus,
         nuclear_embedding: Optional[nn.Module] = None,
         electronic_embeddings: Optional[List] = None,
@@ -172,10 +173,12 @@ class ConditionalSchNet(nn.Module):
         else:
             self.conditioning_mlp = None
 
+        # --- Electronic embeddings (same as standard SchNet) ---
         if electronic_embeddings is None:
             electronic_embeddings = []
         self.electronic_embeddings = nn.ModuleList(electronic_embeddings)
 
+        # --- Interaction blocks (same as standard SchNet) ---
         self.interactions = snn.replicate_module(
             lambda: ConditionalSchNetInteraction(
                 n_atom_basis=self.n_atom_basis,
@@ -194,10 +197,10 @@ class ConditionalSchNet(nn.Module):
         Compute the conditioning vector y for each atom.
 
         "input" mode:
-            y = dataset_embedding[dataset_id]
+            y = dataset_embedding[dataset_id]        shape [n_atoms, n_atom_basis]
 
         "mlp_layer" mode:
-            y = MLP(dataset_embedding[dataset_id])
+            y = MLP(dataset_embedding[dataset_id])   shape [n_atoms, n_atom_basis]
         """
         emb = self.dataset_embedding(dataset_id_per_atom)  # [n_atoms, n_atom_basis]
         if self.conditioning_mode == "mlp_layer":
