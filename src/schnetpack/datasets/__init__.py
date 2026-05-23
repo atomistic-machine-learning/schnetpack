@@ -8,4 +8,4 @@ from .materials_project import *
 from .omdb import *
 from .tmqm import *
 from .qm7x import *
-from .merge_db import *
+from .merged_db import *

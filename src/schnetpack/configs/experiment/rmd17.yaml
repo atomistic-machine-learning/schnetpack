@@ -5,7 +5,7 @@ defaults:
   - override /data: rmd17
 
 run:
-  experiment: md17_${data.molecule}
+  experiment: rmd17_${data.molecule}
 
 globals:
   cutoff: 5.
