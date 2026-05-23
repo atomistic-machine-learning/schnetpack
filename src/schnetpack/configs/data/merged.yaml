@@ -29,7 +29,7 @@ dataset:
   seed: 42
   add_source_index: True
 
-batch_size: 32
+batch_size: 10
 num_train: 0.8
 num_val: 0.1
 
