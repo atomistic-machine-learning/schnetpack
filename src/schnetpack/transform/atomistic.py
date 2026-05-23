@@ -383,8 +383,8 @@ class ConditionalAddOffsets(Transform):
     is_preprocessor: bool = False
     is_postprocessor: bool = True
 
-    SOURCE_INDEX_KEY = "source_index"  #TODO: change it to dataset_id
-    #my test commit from hydra
+    SOURCE_INDEX_KEY = "source_index"  # TODO: change it to dataset_id
+    # my test commit from hydra
 
     def __init__(
         self,
