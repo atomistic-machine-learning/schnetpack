@@ -135,3 +135,6 @@ checkpoints/*
 checkpoints_mlp/*
 evaluation/*
 data/*
+train_merged.sub
+train_baseline.sub
+
