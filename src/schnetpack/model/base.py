@@ -113,7 +113,13 @@ class AtomisticModel(nn.Module):
     def initialize_transforms(self, datamodule):
         for module in self.modules():
             if isinstance(module, Transform):
-                module.datamodule(datamodule)
+                if (
+                    hasattr(datamodule, "provider")
+                    and type(module).initialize is not Transform.initialize
+                ):
+                    module.initialize(datamodule.provider)
+                else:
+                    module.datamodule(datamodule)
 
     def postprocess(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         if self.do_postprocessing:
