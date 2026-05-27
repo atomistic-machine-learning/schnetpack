@@ -132,7 +132,7 @@ class AtomisticTask(pl.LightningModule):
         self.save_hyperparameters()
 
     def setup(self, stage=None):
-        if stage == "fit":
+        if stage in ("fit", "test", "predict"):
             self.model.initialize_transforms(self.trainer.datamodule)
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
