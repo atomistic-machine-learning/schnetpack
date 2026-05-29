@@ -343,6 +343,15 @@ class AtomisticTask(pl.LightningModule):
         else:
             return optimizer
 
+    def on_before_optimizer_step(self, optimizer):
+        total_norm = 0.0
+        for p in self.parameters():
+            if p.grad is not None:
+                total_norm += p.grad.data.norm(2).item() ** 2
+        self.log(
+            "grad_norm", total_norm**0.5, on_step=True, on_epoch=False, prog_bar=False
+        )
+
     def optimizer_step(
         self,
         epoch: int = None,
