@@ -1,0 +1,2 @@
+grad_norm:
+    _target_: schnetpack.train.GradientNormLogger

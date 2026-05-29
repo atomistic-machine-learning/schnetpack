@@ -15,7 +15,12 @@ from schnetpack import properties
 from collections import defaultdict
 
 
-__all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
+__all__ = [
+    "ModelCheckpoint",
+    "PredictionWriter",
+    "ExponentialMovingAverage",
+    "GradientNormLogger",
+]
 
 
 class PredictionWriter(BasePredictionWriter):
@@ -153,3 +158,15 @@ class ExponentialMovingAverage(Callback):
 
     def state_dict(self):
         return {"ema": self.ema.state_dict()}
+
+
+class GradientNormLogger(Callback):
+    def on_before_optimizer_step(self, trainer, pl_module, optimizer):
+        total_norm = 0.0
+        for p in pl_module.parameters():
+            if p.grad is not None:
+                total_norm += p.grad.data.norm(2).item() ** 2
+        total_norm = total_norm**0.5
+        pl_module.log(
+            "grad_norm", total_norm, on_step=True, on_epoch=False, prog_bar=False
+        )
