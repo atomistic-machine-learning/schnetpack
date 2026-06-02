@@ -7,8 +7,9 @@ import torch.nn.functional as F
 import schnetpack as spk
 import schnetpack.nn as snn
 import schnetpack.properties as properties
+from schnetpack.representation.cschnet import DatasetHead
 
-__all__ = ["Atomwise", "DipoleMoment", "Polarizability"]
+__all__ = ["Atomwise", "DipoleMoment", "Polarizability", "MultiHeadAtomwise"]
 
 
 class Atomwise(nn.Module):
@@ -290,4 +291,83 @@ class Polarizability(nn.Module):
         alpha = snn.scatter_add(alpha, idx_m, dim_size=maxm)
 
         inputs[self.polarizability_key] = alpha
+        return inputs
+
+
+class MultiHeadAtomwise(nn.Module):
+    """
+    Output module for multi_head conditioning mode.
+
+    Runs all per-dataset heads on the full shared representation,
+    stacks predictions, selects the correct head output per atom
+    using dataset_id, aggregates to molecular energy via scatter_add,
+    and stores the result so the downstream Forces module can
+    differentiate w.r.t positions.
+
+    Args:
+        n_datasets: number of datasets / heads.
+        n_in: input dimension (n_atom_basis).
+        n_hidden: hidden layer size(s) for each DatasetHead MLP.
+        n_layers: number of layers in each DatasetHead MLP.
+        activation: activation function.
+        output_key: key under which total energy is stored.
+        per_atom_output_key: if set, per-atom energies are also stored.
+    """
+
+    def __init__(
+        self,
+        n_datasets: int,
+        n_in: int,
+        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_layers: int = 2,
+        activation: Callable = F.silu,
+        output_key: str = "energy",
+        per_atom_output_key: Optional[str] = None,
+    ):
+        super().__init__()
+        self.n_datasets = n_datasets
+        self.output_key = output_key
+        self.per_atom_output_key = per_atom_output_key
+        self.model_outputs = [output_key]
+        if per_atom_output_key is not None:
+            self.model_outputs.append(per_atom_output_key)
+
+        self.heads = nn.ModuleList(
+            [
+                DatasetHead(
+                    n_in=n_in,
+                    n_hidden=n_hidden,
+                    n_layers=n_layers,
+                    activation=activation,
+                )
+                for _ in range(n_datasets)
+            ]
+        )
+
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        x = inputs["scalar_representation"]  # [n_atoms, n_atom_basis]
+        idx_m = inputs[properties.idx_m]  # [n_atoms]
+        dataset_id = inputs["dataset_id"].squeeze(-1)  # [n_molecules]
+        dataset_id_per_atom = dataset_id[idx_m]  # [n_atoms]
+
+        # run all heads on all atoms → [n_atoms, n_datasets]
+        per_head = torch.cat(
+            [head(x) for head in self.heads], dim=-1
+        )  # [n_atoms, n_datasets]
+
+        # select correct head per atom → [n_atoms, 1]
+        y = per_head[
+            torch.arange(x.shape[0], device=x.device),
+            dataset_id_per_atom,
+        ].unsqueeze(-1)
+
+        if self.per_atom_output_key is not None:
+            inputs[self.per_atom_output_key] = y
+
+        # aggregate to molecular energy → [n_molecules]
+        maxm = int(idx_m[-1]) + 1
+        y = snn.scatter_add(y, idx_m, dim_size=maxm)
+        y = torch.squeeze(y, -1)
+
+        inputs[self.output_key] = y
         return inputs
