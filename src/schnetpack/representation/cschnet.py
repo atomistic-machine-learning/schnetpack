@@ -136,6 +136,8 @@ class ConditionalSchNet(nn.Module):
         "input"     — add dataset embedding once at input (default).
         "mlp_layer" — pass embedding through MLP, inject at input and
                       after every interaction layer.
+        "multi_head" — add per-dataset embedding once at input,
+                      apply per-dataset head after interaction blocks.
     n_filters : int, optional
         Number of filters in cfconv. Defaults to n_atom_basis.
     shared_interactions : bool
@@ -184,14 +186,7 @@ class ConditionalSchNet(nn.Module):
             nuclear_embedding = nn.Embedding(100, n_atom_basis)
         self.embedding = nuclear_embedding
 
-        # --- Dataset embedding ---
-        # Shape: [n_datasets, n_atom_basis]
-        # Zero-initialized so model starts as standard SchNet at epoch 0.
-        # In "input" mode:     y = dataset_embedding[id]        (direct use)
-        # In "mlp_layer" mode: y = MLP(dataset_embedding[id])   (MLP uses default init,
-        #                      so gradients flow immediately from step 1)
         self.dataset_embedding = nn.Embedding(n_datasets, n_atom_basis)
-        nn.init.zeros_(self.dataset_embedding.weight)
 
         # --- Conditioning MLP (mlp_layer mode only) ---
         if conditioning_mode == "mlp_layer":
@@ -260,7 +255,7 @@ class ConditionalSchNet(nn.Module):
         x = self.embedding(atomic_numbers)
 
         # ── input injection
-        if y is not None:
+        if self.conditioning_mode == "input":
             x = x + y
 
         for emb in self.electronic_embeddings:
@@ -269,11 +264,11 @@ class ConditionalSchNet(nn.Module):
         # ── interaction blocks
         for interaction in self.interactions:
             v = interaction(x, f_ij, idx_i, idx_j, rcut_ij)
+            x = x + v
 
-            if self.conditioning_mode == "mlp_layer":
-                x = x + v + y
-            else:
-                x = x + v  # input mode AND multi_head both land here
+        # ── post-interaction shift (mlp_layer mode only)
+        if self.conditioning_mode == "mlp_layer":
+            x = x + y
 
         # ── per-dataset head (multi_head only)
         if self.conditioning_mode == "multi_head":
