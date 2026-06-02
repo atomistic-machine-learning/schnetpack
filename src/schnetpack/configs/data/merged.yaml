@@ -29,9 +29,9 @@ dataset:
   seed: 42
   add_source_index: True
 
-batch_size: 10
-num_train: 0.8
-num_val: 0.1
+batch_size: 64 #10
+num_train: 1000
+num_val: 200
 
 split_file: ${run.data_dir}/split_conditional_md17_rmd17.npz
 num_workers: 4
@@ -53,7 +53,7 @@ transforms:
       - rmd17
     remove_mean: True
     remove_atomrefs: False
-    is_extensive: False
+    is_extensive: True
 
   - _target_: schnetpack.transform.CastTo32  
 

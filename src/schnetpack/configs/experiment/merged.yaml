@@ -16,8 +16,8 @@ globals:
 model:
   representation:
     _target_: schnetpack.representation.cschnet.ConditionalSchNet
-    n_atom_basis: 128
-    n_interactions: 6
+    n_atom_basis: 128 #128 , 256
+    n_interactions: 6 #6, 8
     n_datasets: 2
     conditioning_mode: mlp_layer
 
