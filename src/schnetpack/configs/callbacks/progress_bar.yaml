@@ -1,2 +1,3 @@
-_target_: pytorch_lightning.callbacks.TQDMProgressBar
-leave: True
+progress_bar:
+    _target_: pytorch_lightning.callbacks.TQDMProgressBar
+    leave: True
