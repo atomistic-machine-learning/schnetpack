@@ -178,7 +178,6 @@ def train(config: DictConfig):
         model=task,
         datamodule=datamodule,
         ckpt_path=config.run.ckpt_path,
-        weights_only=False,
     )
 
     # Evaluate model on test set after training
