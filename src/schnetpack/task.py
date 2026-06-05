@@ -230,8 +230,14 @@ class AtomisticTask(pl.LightningModule):
         pred = self.predict_without_postprocessing(batch)
         pred, targets = self.apply_constraints(pred, targets)
 
-        loss = self.loss_fn(pred, targets)
+        # stash for DatasetMetrics callback — only when using MergedDataset
+        if "dataset_id" in batch:
+            batch["_pred_energy"] = pred["energy"].detach()
+            batch["_pred_forces"] = pred["forces"].detach()
+            batch["_true_energy"] = targets["energy"]
+            batch["_true_forces"] = targets["forces"]
 
+        loss = self.loss_fn(pred, targets)
         self.log(
             "test_loss",
             loss,
