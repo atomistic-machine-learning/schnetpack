@@ -4,7 +4,7 @@ defaults:
 
 _target_: schnetpack.data.datamodule.AtomsDataModule
 
-molecule: ethanol
+molecule: aspirin
 
 dataset:
   _target_: schnetpack.datasets.merged_db.MergedDataset
@@ -22,16 +22,17 @@ dataset:
       molecule: ${data.molecule}
       transforms: ${data.transforms}
 
-  subset_sizes:
-    md17: 500
-    rmd17: 500
+  #subset_sizes:
+  #  md17: 500
+  #  rmd17: 500
 
   seed: 42
   add_source_index: True
 
-batch_size: 64 #10
+batch_size: 10 #10
 num_train: 1000
 num_val: 200
+num_test: 100
 
 split_file: ${run.data_dir}/split_conditional_md17_rmd17.npz
 num_workers: 4
@@ -43,6 +44,7 @@ property_units:
   forces: kcal/mol/Ang
 
 transforms:
+  - _target_: schnetpack.transform.SubtractCenterOfMass
   - _target_: schnetpack.transform.MatScipyNeighborList  
     cutoff: ${globals.cutoff}
 

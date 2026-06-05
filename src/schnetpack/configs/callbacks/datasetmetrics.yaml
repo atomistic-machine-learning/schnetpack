@@ -1,0 +1,7 @@
+dataset_metrics:
+  _target_: schnetpack.train.DatasetMetrics
+  dataset_names:
+    - md17
+    - rmd17
+  energy_key: ${globals.energy_key}
+  forces_key: ${globals.forces_key}
