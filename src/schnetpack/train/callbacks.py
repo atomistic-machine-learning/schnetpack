@@ -1,5 +1,5 @@
 from copy import copy
-from typing import Dict
+from typing import Dict, List, Optional
 
 from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.callbacks import ModelCheckpoint as BaseModelCheckpoint
@@ -14,8 +14,14 @@ from schnetpack.task import AtomisticTask
 from schnetpack import properties
 from collections import defaultdict
 
+from torchmetrics import MeanAbsoluteError, MeanSquaredError
 
-__all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
+__all__ = [
+    "ModelCheckpoint",
+    "PredictionWriter",
+    "ExponentialMovingAverage",
+    "DatasetMetrics",
+]
 
 
 class PredictionWriter(BasePredictionWriter):
@@ -153,3 +159,112 @@ class ExponentialMovingAverage(Callback):
 
     def state_dict(self):
         return {"ema": self.ema.state_dict()}
+
+
+class DatasetMetrics(Callback):
+    """
+    Computes per-dataset MAE and RMSE for energy and forces at test time.
+    """
+
+    def __init__(
+        self,
+        dataset_names: List[str],
+        energy_key: str = "energy",
+        forces_key: str = "forces",
+    ):
+        super().__init__()
+        self.dataset_names = dataset_names
+        self.energy_key = energy_key
+        self.forces_key = forces_key
+
+        # metrics are created in setup() so they land on the correct device
+        self.energy_mae: Optional[Dict] = None
+        self.energy_rmse: Optional[Dict] = None
+        self.forces_mae: Optional[Dict] = None
+        self.forces_rmse: Optional[Dict] = None
+
+    def _init_metrics(self, device):
+        print(f"[DatasetMetrics] _init_metrics called, device={device}")
+        self.energy_mae = {
+            n: MeanAbsoluteError().to(device) for n in self.dataset_names
+        }
+        self.energy_rmse = {
+            n: MeanSquaredError(squared=False).to(device) for n in self.dataset_names
+        }
+        self.forces_mae = {
+            n: MeanAbsoluteError().to(device) for n in self.dataset_names
+        }
+        self.forces_rmse = {
+            n: MeanSquaredError(squared=False).to(device) for n in self.dataset_names
+        }
+
+    def setup(self, trainer, pl_module, stage: str):
+        self._init_metrics(pl_module.device)  # always init regardless of stage
+
+    def on_test_batch_end(
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
+    ):
+        if self.energy_mae is None:
+            self._init_metrics(pl_module.device)
+
+        idx_m = batch[properties.idx_m]
+        dataset_id = batch["dataset_id"].squeeze(-1)
+        dataset_id_per_atom = dataset_id[idx_m]
+
+        pred_energy = batch["_pred_energy"]
+        true_energy = batch["_true_energy"]
+        pred_forces = batch["_pred_forces"]
+        true_forces = batch["_true_forces"]
+
+        if batch_idx == 0:
+            print(f"pred_energy: {pred_energy[:5]}")
+            print(f"true_energy: {true_energy[:5]}")
+
+        for d, name in enumerate(self.dataset_names):
+            mol_mask = dataset_id == d
+            if mol_mask.any():
+                self.energy_mae[name].update(
+                    pred_energy[mol_mask], true_energy[mol_mask]
+                )
+                self.energy_rmse[name].update(
+                    pred_energy[mol_mask], true_energy[mol_mask]
+                )
+
+            atom_mask = dataset_id_per_atom == d
+            if atom_mask.any():
+                self.forces_mae[name].update(
+                    pred_forces[atom_mask].reshape(-1),
+                    true_forces[atom_mask].reshape(-1),
+                )
+                self.forces_rmse[name].update(
+                    pred_forces[atom_mask].reshape(-1),
+                    true_forces[atom_mask].reshape(-1),
+                )
+
+    def on_test_epoch_end(self, trainer, pl_module):
+        for name in self.dataset_names:
+            pl_module.log(
+                f"test/{name}_energy_mae",
+                self.energy_mae[name].compute(),
+                sync_dist=False,
+            )
+            pl_module.log(
+                f"test/{name}_energy_rmse",
+                self.energy_rmse[name].compute(),
+                sync_dist=False,
+            )
+            pl_module.log(
+                f"test/{name}_forces_mae",
+                self.forces_mae[name].compute(),
+                sync_dist=False,
+            )
+            pl_module.log(
+                f"test/{name}_forces_rmse",
+                self.forces_rmse[name].compute(),
+                sync_dist=False,
+            )
+
+            self.energy_mae[name].reset()
+            self.energy_rmse[name].reset()
+            self.forces_mae[name].reset()
+            self.forces_rmse[name].reset()
