@@ -178,6 +178,9 @@ def train(config: DictConfig):
         model=task,
         datamodule=datamodule,
         ckpt_path=config.run.ckpt_path,
+        # schnetpack checkpoints pickle the full model via save_hyperparameters(),
+        # so they cannot be loaded with PyTorch 2.6+'s weights_only=True default.
+        weights_only=False,
     )
 
     # Evaluate model on test set after training
