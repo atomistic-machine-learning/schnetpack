@@ -9,11 +9,11 @@ import schnetpack.properties as properties
 import schnetpack.nn as snn
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.representation.painn import PaiNNInteraction, PaiNNMixing
-from schnetpack.representation.cschnet import ConditioningMLP, DatasetHead
+from schnetpack.representation.cschnet import DatasetHead
 
 __all__ = ["ConditionalPaiNN"]
 
-CONDITIONING_MODES = ("input", "mlp_layer", "multi_head")
+CONDITIONING_MODES = ("input", "output_shift", "multi_head")
 
 
 class ConditionalPaiNN(nn.Module):
@@ -23,9 +23,8 @@ class ConditionalPaiNN(nn.Module):
     Modes
     -----
     input       : dataset embedding added once to scalar embedding q at input.
-    mlp_layer   : backbone runs vanilla PaiNN, dataset embedding passed
-                  through ConditioningMLP and added to scalar_representation
-                  after all interaction+mixing blocks.
+    output_shift   : backbone runs vanilla PaiNN, dataset embedding added directly
+                  to scalar_representation after all interaction+mixing blocks.
     multi_head  : backbone runs vanilla PaiNN, per-dataset DatasetHead MLPs
                   produce atomic energies directly. Use MultiHeadAtomwise as
                   the output module instead of Atomwise.
@@ -36,7 +35,7 @@ class ConditionalPaiNN(nn.Module):
         n_datasets: number of component datasets.
         radial_basis: layer for expanding interatomic distances in a basis set.
         cutoff_fn: cutoff function.
-        conditioning_mode: one of ("input", "mlp_layer", "multi_head").
+        conditioning_mode: one of ("input", "output_shift", "multi_head").
         activation: activation function.
         shared_interactions: share weights across interaction blocks.
         shared_filters: share filter network weights.
@@ -81,13 +80,12 @@ class ConditionalPaiNN(nn.Module):
             nuclear_embedding = nn.Embedding(100, n_atom_basis)
         self.embedding = nuclear_embedding
 
-        # --- Dataset embedding (input + mlp_layer modes only) ---
+        # --- Dataset embedding (input + output_shift modes only) ---
+        # input mode    : added to nuclear embedding before message passing.
+        # output_shift mode: added directly to scalar_representation after all blocks.
         self.dataset_embedding = None
-        self.conditioning_mlp = None
-        if conditioning_mode in ("input", "mlp_layer"):
+        if conditioning_mode in ("input", "output_shift"):
             self.dataset_embedding = nn.Embedding(n_datasets, n_atom_basis)
-            if conditioning_mode == "mlp_layer":
-                self.conditioning_mlp = ConditioningMLP(n_atom_basis, shifted_softplus)
 
         # --- Electronic embeddings ---
         if electronic_embeddings is None:
@@ -128,13 +126,16 @@ class ConditionalPaiNN(nn.Module):
     def _get_conditioning_vector(
         self, dataset_id_per_atom: torch.Tensor
     ) -> Optional[torch.Tensor]:
-        """Compute y for input / mlp_layer modes. Returns None for multi_head."""
+        """
+        Compute conditioning vector per atom.
+
+        input mode    : returns [n_atoms, n_atom_basis] -- added to nuclear embedding.
+        output_shift mode: returns [n_atoms, n_atom_basis] -- added to scalar_representation.
+        multi_head    : returns None.
+        """
         if self.dataset_embedding is None:
             return None
-        emb = self.dataset_embedding(dataset_id_per_atom)
-        if self.conditioning_mlp is not None:
-            return self.conditioning_mlp(emb)
-        return emb
+        return self.dataset_embedding(dataset_id_per_atom)
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         atomic_numbers = inputs[properties.Z]
@@ -186,8 +187,8 @@ class ConditionalPaiNN(nn.Module):
 
         q = q.squeeze(1)  # [n_atoms, n_atom_basis]
 
-        # mlp_layer mode: inject dataset signal at scalar_representation
-        if self.conditioning_mode == "mlp_layer":
+        # output_shift mode: inject dataset signal at scalar_representation
+        if self.conditioning_mode == "output_shift":
             q = q + y
 
         inputs["scalar_representation"] = q
