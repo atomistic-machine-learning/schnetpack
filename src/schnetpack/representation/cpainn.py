@@ -13,7 +13,7 @@ from schnetpack.representation.cschnet import DatasetHead
 
 __all__ = ["ConditionalPaiNN"]
 
-CONDITIONING_MODES = ("input", "output_shift", "multi_head")
+CONDITIONING_MODES = ("input", "output_head", "multi_head")
 
 
 class ConditionalPaiNN(nn.Module):
@@ -23,7 +23,7 @@ class ConditionalPaiNN(nn.Module):
     Modes
     -----
     input       : dataset embedding added once to scalar embedding q at input.
-    output_shift   : backbone runs vanilla PaiNN, dataset embedding added directly
+    output_head   : backbone runs vanilla PaiNN, dataset embedding added directly
                   to scalar_representation after all interaction+mixing blocks.
     multi_head  : backbone runs vanilla PaiNN, per-dataset DatasetHead MLPs
                   produce atomic energies directly. Use MultiHeadAtomwise as
@@ -35,7 +35,7 @@ class ConditionalPaiNN(nn.Module):
         n_datasets: number of component datasets.
         radial_basis: layer for expanding interatomic distances in a basis set.
         cutoff_fn: cutoff function.
-        conditioning_mode: one of ("input", "output_shift", "multi_head").
+        conditioning_mode: one of ("input", "output_head", "multi_head").
         activation: activation function.
         shared_interactions: share weights across interaction blocks.
         shared_filters: share filter network weights.
@@ -80,11 +80,11 @@ class ConditionalPaiNN(nn.Module):
             nuclear_embedding = nn.Embedding(100, n_atom_basis)
         self.embedding = nuclear_embedding
 
-        # --- Dataset embedding (input + output_shift modes only) ---
+        # --- Dataset embedding (input + output_head modes only) ---
         # input mode    : added to nuclear embedding before message passing.
-        # output_shift mode: added directly to scalar_representation after all blocks.
+        # output_head mode: added directly to scalar_representation after all blocks.
         self.dataset_embedding = None
-        if conditioning_mode in ("input", "output_shift"):
+        if conditioning_mode in ("input", "output_head"):
             self.dataset_embedding = nn.Embedding(n_datasets, n_atom_basis)
 
         # --- Electronic embeddings ---
@@ -130,7 +130,7 @@ class ConditionalPaiNN(nn.Module):
         Compute conditioning vector per atom.
 
         input mode    : returns [n_atoms, n_atom_basis] -- added to nuclear embedding.
-        output_shift mode: returns [n_atoms, n_atom_basis] -- added to scalar_representation.
+        output_head mode: returns [n_atoms, n_atom_basis] -- added to scalar_representation.
         multi_head    : returns None.
         """
         if self.dataset_embedding is None:
@@ -187,8 +187,8 @@ class ConditionalPaiNN(nn.Module):
 
         q = q.squeeze(1)  # [n_atoms, n_atom_basis]
 
-        # output_shift mode: inject dataset signal at scalar_representation
-        if self.conditioning_mode == "output_shift":
+        # output_head mode: inject dataset signal at scalar_representation
+        if self.conditioning_mode == "output_head":
             q = q + y
 
         inputs["scalar_representation"] = q
