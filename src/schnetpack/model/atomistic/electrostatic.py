@@ -13,7 +13,7 @@ __all__ = ["CoulombPotential", "DampedCoulombPotential", "EnergyCoulomb", "Energ
 
 class CoulombPotential(nn.Module):
     """
-    Basic 1/r Coulomb component. For use in `schnetpack.atomistic.EnergyCoulomb`.
+    Basic 1/r Coulomb component. For use in `schnetpack.model.EnergyCoulomb`.
     """
 
     def __init__(self):
@@ -25,7 +25,7 @@ class CoulombPotential(nn.Module):
 
 class DampedCoulombPotential(nn.Module):
     """
-    Compute a damped Coulomb potential as described in [#physnet1]_ For use in `schnetpack.atomistic.EnergyCoulomb`.
+    Compute a damped Coulomb potential as described in [#physnet1]_ For use in `schnetpack.model.EnergyCoulomb`.
 
     Args:
         switch_fn (torch.nn.Module): Switch function.

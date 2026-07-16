@@ -26,7 +26,7 @@ data:
 
 model:
   output_modules:
-    - _target_: schnetpack.atomistic.Atomwise
+    - _target_: schnetpack.model.Atomwise
       output_key: ${globals.property}
       n_in: ${model.representation.n_atom_basis}
       aggregation_mode: ${globals.aggregation}

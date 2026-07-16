@@ -21,7 +21,7 @@ data:
 
 model:
   output_modules:
-    - _target_: schnetpack.atomistic.DipoleMoment
+    - _target_: schnetpack.model.DipoleMoment
       dipole_key: ${globals.property}
       n_in: ${model.representation.n_atom_basis}
       predict_magnitude: True

@@ -56,12 +56,10 @@ Contents
    :maxdepth: 1
 
    api/schnetpack
-   api/atomistic
    api/data
    api/datasets
    api/task
    api/model
-   api/representation
    api/nn
    api/train
    api/transform

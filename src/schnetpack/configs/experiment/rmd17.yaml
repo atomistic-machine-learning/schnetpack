@@ -29,11 +29,11 @@ data:
 
 model:
   output_modules:
-    - _target_: schnetpack.atomistic.Atomwise
+    - _target_: schnetpack.model.Atomwise
       output_key: ${globals.energy_key}
       n_in: ${model.representation.n_atom_basis}
       aggregation_mode: sum
-    - _target_: schnetpack.atomistic.Forces
+    - _target_: schnetpack.model.Forces
       energy_key: ${globals.energy_key}
       force_key: ${globals.forces_key}
   postprocessors:

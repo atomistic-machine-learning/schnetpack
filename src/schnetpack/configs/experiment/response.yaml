@@ -38,18 +38,18 @@ data:
 
 model:
   input_modules:
-    - _target_: schnetpack.atomistic.PairwiseDistances
-    - _target_: schnetpack.atomistic.StaticExternalFields
+    - _target_: schnetpack.model.PairwiseDistances
+    - _target_: schnetpack.model.StaticExternalFields
       response_properties: ${globals.response_properties}
   output_modules:
-    - _target_: schnetpack.atomistic.Atomwise
+    - _target_: schnetpack.model.Atomwise
       output_key: ${globals.energy_key}
       n_in: ${model.representation.n_atom_basis}
       aggregation_mode: sum
     - _target_: schnetpack.transform.ScaleProperty
       input_key: ${globals.energy_key}
       output_key: ${globals.energy_key}
-    - _target_: schnetpack.atomistic.Response
+    - _target_: schnetpack.model.Response
       energy_key: ${globals.energy_key}
       response_properties: ${globals.response_properties}
     - _target_: schnetpack.transform.SplitShielding

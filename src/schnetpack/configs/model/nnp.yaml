@@ -4,5 +4,5 @@ defaults:
 _target_: schnetpack.model.NeuralNetworkPotential
 
 input_modules:
-  - _target_: schnetpack.atomistic.PairwiseDistances
+  - _target_: schnetpack.model.PairwiseDistances
 output_modules: ???

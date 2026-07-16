@@ -6,7 +6,7 @@ import schnetpack as spk
 import numpy as np
 from ase.neighborlist import neighbor_list
 
-from schnetpack.representation.schnet import SchNet
+from schnetpack.model.representation.schnet import SchNet
 
 # TODO:make proper timing and golden tests
 

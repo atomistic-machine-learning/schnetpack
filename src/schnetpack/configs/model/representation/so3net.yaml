@@ -1,7 +1,7 @@
 defaults:
   - radial_basis: gaussian
 
-_target_: schnetpack.representation.SO3net
+_target_: schnetpack.model.SO3net
 n_atom_basis: 128
 n_interactions: 3
 lmax: 2

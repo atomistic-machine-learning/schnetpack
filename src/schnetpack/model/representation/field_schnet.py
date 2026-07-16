@@ -7,7 +7,7 @@ from torch.nn.init import zeros_
 import schnetpack.properties as structure
 from schnetpack.nn import Dense, scatter_add
 from schnetpack.nn.activations import shifted_softplus
-from schnetpack.representation.schnet import SchNetInteraction
+from schnetpack.model.representation.schnet import SchNetInteraction
 from schnetpack.utils import required_fields_from_properties
 
 from schnetpack import properties

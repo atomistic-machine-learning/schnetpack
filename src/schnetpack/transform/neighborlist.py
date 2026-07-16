@@ -287,7 +287,7 @@ class SkinNeighborList(Transform):
         self.cutoff_skin = cutoff_skin
         self.neighbor_list._cutoff = self.cutoff + cutoff_skin
         self.nbh_transforms = nbh_transforms or []
-        self.distance_calculator = spk.atomistic.PairwiseDistances()
+        self.distance_calculator = spk.model.PairwiseDistances()
         self.previous_inputs = {}
 
     # @timeit

@@ -64,7 +64,7 @@ the command::
     │
     ├── model
     │   └── representation:
-    │         _target_: schnetpack.representation.PaiNN
+    │         _target_: schnetpack.model.PaiNN
     │         n_atom_basis: 128
     │         n_interactions: 3
     │         shared_interactions: false
@@ -78,9 +78,9 @@ the command::
     │           cutoff: ${globals.cutoff}
     │       _target_: schnetpack.model.NeuralNetworkPotential
     │       input_modules:
-    │       - _target_: schnetpack.atomistic.PairwiseDistances
+    │       - _target_: schnetpack.model.PairwiseDistances
     │       output_modules:
-    │       - _target_: schnetpack.atomistic.Atomwise
+    │       - _target_: schnetpack.model.Atomwise
     │         output_key: ${globals.property}
     │         n_in: ${model.representation.n_atom_basis}
     │         aggregation_mode: sum
@@ -301,7 +301,7 @@ and data loaded above are overridden::
 
     model:
       output_modules:
-        - _target_: schnetpack.atomistic.Atomwise
+        - _target_: schnetpack.model.Atomwise
           output_key: ${globals.property}
           n_in: ${model.representation.n_atom_basis}
           aggregation_mode: sum
@@ -368,7 +368,7 @@ single value. The config would be changed by this as follows::
     ...
     ├── model
     │   └── representation:
-    │         _target_: schnetpack.representation.SchNet
+    │         _target_: schnetpack.model.SchNet
     │         n_atom_basis: 128
     │         n_interactions: 6
     │         radial_basis:

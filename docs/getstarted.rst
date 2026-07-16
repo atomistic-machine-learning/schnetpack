@@ -97,7 +97,7 @@ corresponds to the following part of the config: ::
 
     model:
       representation:
-        _target_: schnetpack.representation.PaiNN
+        _target_: schnetpack.model.PaiNN
         n_atom_basis: 128
         n_interactions: 3
         shared_interactions: false

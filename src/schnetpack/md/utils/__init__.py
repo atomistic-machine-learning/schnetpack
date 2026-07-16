@@ -9,7 +9,7 @@ from typing import Optional
 
 from schnetpack import properties
 from schnetpack.model import AtomisticModel
-from schnetpack.atomistic import Response, Forces, Strain
+from schnetpack.model import Response, Forces, Strain
 
 
 class CalculatorError(Exception):

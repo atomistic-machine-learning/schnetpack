@@ -11,7 +11,7 @@ from schnetpack.md.calculators import SchNetPackCalculator
 
 from schnetpack import properties
 import schnetpack.nn as snn
-from schnetpack.atomistic import Forces, PairwiseDistances, Strain
+from schnetpack.model import Forces, PairwiseDistances, Strain
 
 __all__ = ["LJCalculator", "LJModel"]
 

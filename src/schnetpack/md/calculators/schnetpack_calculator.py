@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Union, List, Dict, TYPE_CHECKING
 
-import schnetpack.atomistic.response
+import schnetpack.model.atomistic.response
 from schnetpack.utils import load_model
 
 if TYPE_CHECKING:

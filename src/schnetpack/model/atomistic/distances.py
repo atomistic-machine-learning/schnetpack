@@ -5,6 +5,8 @@ import torch.nn as nn
 
 import schnetpack.properties as properties
 
+__all__ = ["PairwiseDistances"]
+
 
 class PairwiseDistances(nn.Module):
     """
