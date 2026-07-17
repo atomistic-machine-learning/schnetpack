@@ -1,3 +1,4 @@
+import copy
 import math
 
 import pytest
@@ -9,13 +10,14 @@ from schnetpack.generative import (
     Path,
     VELinearPath,
     VEPath,
+    VPISSNRPath,
     VPPath,
     expand_t,
 )
 
 
 def all_paths():
-    return [VPPath(), VEPath(), VELinearPath(), FMPath(), EDMPath()]
+    return [VPPath(), VEPath(), VELinearPath(), FMPath(), EDMPath(), VPISSNRPath()]
 
 
 def path_ids():
@@ -154,6 +156,191 @@ def test_per_sample_times_broadcast(vp):
     assert x_t.shape == x0.shape
     assert vp.g2(t).shape == t.shape
     assert vp.f(t).shape == t.shape
+
+
+# --- the two schedule routes ---------------------------------------------- #
+
+
+def test_tv_and_snr_agree_with_alpha_sigma(path):
+    # The TV/SNR pair, whichever way round the path defined itself.
+    t = interior_times(path)
+    alpha, sigma = path.alpha_sigma(t)
+    assert torch.allclose(path.tv(t), alpha**2 + sigma**2, rtol=1e-6)
+    assert torch.allclose(path.log_snr(t), torch.log(alpha**2 / sigma**2), rtol=1e-6)
+
+
+def test_a_path_redefined_through_tv_snr_is_the_same_path(path):
+    # The heart of it: read TV and log-SNR off a path defined by alpha/sigma,
+    # feed them back through the other route, and the coefficients must return.
+    # If the inversion were wrong this is what would catch it.
+    class Mirror(Path):
+        def tv(self, t):
+            return path.tv(t)
+
+        def log_snr(self, t):
+            return path.log_snr(t)
+
+    mirror = Mirror(t_min=path.t_min, t_max=path.t_max)
+    t = interior_times(path)
+
+    assert torch.allclose(mirror.alpha(t), path.alpha(t), rtol=1e-6, atol=1e-9)
+    assert torch.allclose(mirror.sigma(t), path.sigma(t), rtol=1e-6, atol=1e-9)
+    # and so must everything derived from them
+    assert torch.allclose(mirror.g2(t), path.g2(t), rtol=1e-4, atol=1e-7)
+
+
+def test_vp_issnr_is_variance_preserving():
+    p = VPISSNRPath()
+    t = interior_times(p, n=9)
+    assert torch.allclose(p.tv(t), torch.ones_like(t))
+    assert torch.allclose(p.alpha(t) ** 2 + p.sigma(t) ** 2, torch.ones_like(t))
+
+
+def test_vp_issnr_recovers_flow_matching_alpha_sigma_up_to_the_tv_factor():
+    # eta=2, kappa=0 gives log SNR = 2 log((1-t)/t), the SNR of the linear
+    # interpolant. VP-ISSNR shares that SNR but flattens TV to 1, so its
+    # coefficients are FMPath's divided by FMPath's total variance.
+    p = VPISSNRPath(eta=2.0, kappa=0.0)
+    fm = FMPath(sigma_max=1.0)
+    t = interior_times(p, n=7)
+
+    assert torch.allclose(p.log_snr(t), fm.log_snr(t), rtol=1e-6)
+
+    tv = torch.sqrt(fm.tv(t))
+    assert torch.allclose(p.alpha(t), fm.alpha(t) / tv, rtol=1e-6)
+    assert torch.allclose(p.sigma(t), fm.sigma(t) / tv, rtol=1e-6)
+
+
+def test_defining_neither_schedule_pair_is_a_type_error():
+    # Both routes derive the other, so a path with neither would recurse. That
+    # has to fail at class definition, naming the class, not at first call.
+    with pytest.raises(TypeError, match="defines no schedule"):
+
+        class Halfway(Path):
+            def alpha(self, t):  # sigma missing -> neither pair is complete
+                return torch.ones_like(t)
+
+
+# --- the log-derivative identity ------------------------------------------ #
+
+
+def test_log_derivatives_equal_the_quotients_they_replace(path):
+    # d/dt log x = x_dot / x. Away from the endpoints both forms are fine and
+    # must agree; the identity earns its keep where they are not.
+    t = interior_times(path)
+    assert torch.allclose(
+        path.log_alpha_dot(t), path.alpha_dot(t) / path.alpha(t), rtol=1e-6
+    )
+    assert torch.allclose(
+        path.log_sigma_dot(t), path.sigma_dot(t) / path.sigma(t), rtol=1e-6
+    )
+    assert torch.allclose(
+        path.log_snr_dot(t),
+        2.0 * (path.log_alpha_dot(t) - path.log_sigma_dot(t)),
+        rtol=1e-6,
+    )
+
+
+def test_g2_equals_the_quotient_free_form(path):
+    # g^2 = -sigma^2 d/dt log SNR is the same number as 2 sigma sigma' - 2 f
+    # sigma^2, which is what g2 no longer computes.
+    t = interior_times(path)
+    sigma = path.sigma(t)
+    old_form = 2.0 * sigma * path.sigma_dot(t) - 2.0 * path.f(t) * sigma**2
+    assert torch.allclose(path.g2(t), old_form, rtol=1e-6, atol=1e-9)
+
+
+def test_log_snr_decreases_so_g2_is_non_negative(path):
+    t = interior_times(path, n=9)
+    assert (path.log_snr_dot(t) <= 0).all()
+    assert (path.g2(t) >= 0).all()
+
+
+def test_a_closed_form_log_derivative_survives_a_0_over_0_quotient():
+    # Why f routes through log_alpha_dot rather than dividing. Give alpha a
+    # double zero and alpha_dot vanishes with it, so alpha_dot/alpha is 0/0 =
+    # nan. A path that knows d/dt log alpha in closed form -- as VPPath knows
+    # -beta/2 -- never forms the quotient and answers correctly.
+    #
+    # Note the autograd *default* would not save you here: it applies the chain
+    # rule as (1/alpha) * alpha_dot, which is the same 0/0. The identity buys
+    # the override, not magic.
+    class DoubleZero(Path):
+        def alpha(self, t):
+            return (1.0 - t) ** 2
+
+        def sigma(self, t):
+            return t
+
+        def log_alpha_dot(self, t):
+            return -2.0 / (1.0 - t)  # closed form: alpha never appears
+
+    p = DoubleZero(t_min=0.0, t_max=1.0)
+
+    t = torch.tensor([0.5], dtype=torch.float64)
+    assert torch.allclose(p.f(t), torch.full_like(t, -4.0))  # agrees away from 0
+
+    at_zero = torch.ones(1, dtype=torch.float64)  # alpha(1) == alpha_dot(1) == 0
+    assert torch.isnan(p.alpha_dot(at_zero) / p.alpha(at_zero)).all()
+    assert torch.isneginf(p.f(at_zero)).all()
+
+
+def test_g2_is_finite_where_the_old_form_needed_a_singular_f():
+    # The TV/SNR payoff. VPISSNRPath(eta=4) has alpha ~ (1-t)^2 near t=1, so the
+    # old g^2 = 2 sigma sigma' - 2 f sigma^2 needs f = alpha'/alpha -> 0/0 there.
+    # Routing through log_snr_dot differentiates the schedule as written, so no
+    # alpha is ever formed and g^2 stays finite.
+    p = VPISSNRPath(eta=4.0)
+    t = torch.tensor([1.0 - 1e-12], dtype=torch.float64)
+    assert torch.isfinite(p.g2(t)).all()
+    assert (p.g2(t) >= 0).all()
+
+
+# --- autograd derivatives ------------------------------------------------- #
+
+
+def test_autograd_derivatives_match_the_analytic_ones(path):
+    # Every path here overrides alpha_dot/sigma_dot for speed. Strip the
+    # overrides and the base class's autograd must reproduce them, which is what
+    # makes those overrides an optimization rather than a second source of truth.
+    Auto = type(
+        f"Auto{type(path).__name__}",
+        (type(path),),
+        {"alpha_dot": Path.alpha_dot, "sigma_dot": Path.sigma_dot},
+    )
+    auto = copy.copy(path)
+    auto.__class__ = Auto
+
+    t = interior_times(path)
+    assert torch.allclose(auto.alpha_dot(t), path.alpha_dot(t), rtol=1e-6, atol=1e-9)
+    assert torch.allclose(auto.sigma_dot(t), path.sigma_dot(t), rtol=1e-6, atol=1e-9)
+
+
+def test_autograd_derivatives_survive_no_grad(path):
+    # Sampling runs under torch.no_grad(); the derivative still has to build its
+    # own graph there or every reverse step would fail.
+    t = interior_times(path)
+    with torch.no_grad():
+        assert torch.isfinite(Path.alpha_dot(path, t)).all()
+        assert torch.isfinite(Path.sigma_dot(path, t)).all()
+
+
+def test_autograd_derivative_of_a_constant_schedule_is_zero():
+    # alpha = ones_like(t) has no grad_fn at all: autograd calls it unused, not
+    # zero. VE-type paths would crash on their own alpha without the fallback.
+    ve = VEPath()
+    t = interior_times(ve)
+    assert torch.allclose(Path.alpha_dot(ve, t), torch.zeros_like(t))
+
+
+def test_autograd_derivatives_return_a_plain_tensor(path):
+    # No graph comes back out, even when the caller's t carries one. Diffuse
+    # builds targets in the dataloader, and a target with a grad_fn cannot be
+    # pickled to a worker process.
+    t = interior_times(path).requires_grad_(True)
+    for dot in (Path.alpha_dot(path, t), Path.sigma_dot(path, t)):
+        assert not dot.requires_grad
+        assert dot.grad_fn is None
 
 
 # --- the gamma hook ------------------------------------------------------- #
