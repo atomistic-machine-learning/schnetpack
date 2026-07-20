@@ -3,10 +3,10 @@ import os
 import shutil
 import tarfile
 import tempfile
-from typing import Dict, List, Optional
+import tarfile
+from typing import List, Optional, Dict
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError, URLError
-
+from urllib.error import URLError, HTTPError
 import numpy as np
 from ase import Atoms
 
@@ -152,18 +152,47 @@ class rMD17(ASEAtomsData):
 
         raw_path = os.path.join(tmpdir, "rmd17")
         tar_path = os.path.join(tmpdir, "rmd17.tar")
+        urls = [
+            "https://figshare.com/ndownloader/files/23950376",
+            "https://archive.materialscloud.org/records/pfffs-fff86/files/rmd17.tar.bz2?download=1",  # Fallback mirror
+        ]
 
-        self._download_archive(tar_path)
+        downloaded = False
+        last_error = None
+
+        for u in urls:
+            try:
+                logging.info(f"Downloading from: {u}")
+                req = Request(u)
+                with urlopen(req, timeout=600) as resp, open(tar_path, "wb") as f:
+                    shutil.copyfileobj(resp, f)
+
+                size = os.path.getsize(tar_path)
+                ctype = (resp.headers.get("Content-Type") or "").lower()
+
+                if size == 0 or "text/html" in ctype:
+                    raise RuntimeError(
+                        f"Blocked or invalid download (size={size}, Content-Type={ctype})"
+                    )
+                logging.info(f"Download successful rMD17.")
+                downloaded = True
+                break
+
+            except (HTTPError, URLError, RuntimeError) as e:
+                last_error = e
+                logging.warning(f"Download failed from {u}: {e}")
+
+        if not downloaded:
+            raise RuntimeError(
+                "rMD17 download failed from both sources. " f"Error: {last_error}"
+            )
         logging.info("Done.")
 
         logging.info("Extracting data...")
-        os.makedirs(raw_path, exist_ok=True)
-
-        with tarfile.open(tar_path, mode="r:*") as tar:
-            tar.extract(
-                path=raw_path,
-                member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}",
-            )
+        tar = tarfile.open(tar_path, mode="r:*")
+        tar.extract(
+            path=raw_path, member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}"
+        )
 
             logging.info("Parsing molecule %s", self.molecule)
 
