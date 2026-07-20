@@ -194,68 +194,64 @@ class rMD17(ASEAtomsData):
             path=raw_path, member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}"
         )
 
-            logging.info("Parsing molecule %s", self.molecule)
+        logging.info("Parsing molecule %s", self.molecule)
 
-            data = np.load(
-                os.path.join(
-                    raw_path,
-                    "rmd17",
-                    "npz_data",
-                    self.datasets_dict[self.molecule],
-                )
+        data = np.load(
+            os.path.join(
+                raw_path,
+                "rmd17",
+                "npz_data",
+                self.datasets_dict[self.molecule],
             )
+        )
 
-            numbers = data["nuclear_charges"]
-            property_list = []
+        numbers = data["nuclear_charges"]
+        property_list = []
 
-            for positions, energies, forces in zip(
-                data["coords"], data["energies"], data["forces"]
-            ):
-                ats = Atoms(positions=positions, numbers=numbers)
-                properties = {
-                    rMD17.energy: np.array([energies]),
-                    rMD17.forces: forces,
-                    structure.Z: ats.numbers,
-                    structure.R: ats.positions,
-                    structure.cell: ats.cell,
-                    structure.pbc: ats.pbc,
-                }
-                property_list.append(properties)
+        for positions, energies, forces in zip(
+            data["coords"], data["energies"], data["forces"]
+        ):
+            ats = Atoms(positions=positions, numbers=numbers)
+            properties = {
+                rMD17.energy: np.array([energies]),
+                rMD17.forces: forces,
+                structure.Z: ats.numbers,
+                structure.R: ats.positions,
+                structure.cell: ats.cell,
+                structure.pbc: ats.pbc,
+            }
+            property_list.append(properties)
 
-            logging.info("Write atoms to db...")
-            self.add_systems(property_list=property_list)
-            logging.info("Done.")
+        logging.info("Write atoms to db...")
+        self.add_systems(property_list=property_list)
+        logging.info("Done.")
 
-            train_splits = []
-            test_splits = []
+        train_splits = []
+        test_splits = []
 
-            for i in range(1, 6):
-                tar.extract(path=raw_path, member=f"rmd17/splits/index_train_0{i}.csv")
-                tar.extract(path=raw_path, member=f"rmd17/splits/index_test_0{i}.csv")
+        for i in range(1, 6):
+            tar.extract(path=raw_path, member=f"rmd17/splits/index_train_0{i}.csv")
+            tar.extract(path=raw_path, member=f"rmd17/splits/index_test_0{i}.csv")
 
-                train_split = (
-                    np.loadtxt(
-                        os.path.join(
-                            raw_path, "rmd17", "splits", f"index_train_0{i}.csv"
-                        )
-                    )
-                    .flatten()
-                    .astype(int)
-                    - 1
-                ).tolist()
-                train_splits.append(train_split)
+            train_split = (
+                np.loadtxt(
+                    os.path.join(raw_path, "rmd17", "splits", f"index_train_0{i}.csv")
+                )
+                .flatten()
+                .astype(int)
+                - 1
+            ).tolist()
+            train_splits.append(train_split)
 
-                test_split = (
-                    np.loadtxt(
-                        os.path.join(
-                            raw_path, "rmd17", "splits", f"index_test_0{i}.csv"
-                        )
-                    )
-                    .flatten()
-                    .astype(int)
-                    - 1
-                ).tolist()
-                test_splits.append(test_split)
+            test_split = (
+                np.loadtxt(
+                    os.path.join(raw_path, "rmd17", "splits", f"index_test_0{i}.csv")
+                )
+                .flatten()
+                .astype(int)
+                - 1
+            ).tolist()
+            test_splits.append(test_split)
 
         self.update_metadata(splits={"known": train_splits, "test": test_splits})
         logging.info("Done.")
