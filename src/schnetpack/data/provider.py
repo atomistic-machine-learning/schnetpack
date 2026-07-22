@@ -94,9 +94,7 @@ class StatsAtomrefProvider:
         with fasteners.InterProcessLock(_SPLITTING_LOCK):
             entries = self._load_valid_entries()
             entries[entry_key] = value
-            np.savez(
-                self.stats_file, fingerprint=np.array(self.fingerprint), **entries
-            )
+            np.savez(self.stats_file, fingerprint=np.array(self.fingerprint), **entries)
 
     # ---------- queries ----------
 

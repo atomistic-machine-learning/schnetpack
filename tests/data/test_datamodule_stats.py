@@ -74,9 +74,7 @@ def test_train_fingerprint_is_deterministic_across_create_and_load(
     assert dm_load.train_fingerprint == dm_create.train_fingerprint
 
 
-def test_train_fingerprint_changes_with_partition(
-    stats_dbpath, tmp_path, monkeypatch
-):
+def test_train_fingerprint_changes_with_partition(stats_dbpath, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     dm_a = _make_dm(stats_dbpath, tmp_path / "split_a.npz", num_train=10)
@@ -87,9 +85,7 @@ def test_train_fingerprint_changes_with_partition(
     assert dm_a.train_fingerprint != dm_b.train_fingerprint
 
 
-def test_second_datamodule_reads_stats_from_disk(
-    stats_dbpath, tmp_path, monkeypatch
-):
+def test_second_datamodule_reads_stats_from_disk(stats_dbpath, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     calls = _count_stats_calls(monkeypatch)
     split_file = tmp_path / "split.npz"
@@ -117,17 +113,13 @@ def test_stats_file_written_next_to_split_file(stats_dbpath, tmp_path, monkeypat
     assert os.path.exists(tmp_path / "split_stats.npz")
 
 
-def test_fingerprint_mismatch_triggers_recompute(
-    stats_dbpath, tmp_path, monkeypatch
-):
+def test_fingerprint_mismatch_triggers_recompute(stats_dbpath, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     calls = _count_stats_calls(monkeypatch)
     stats_file = str(tmp_path / "stats.npz")
     dataset = ASEAtomsData(stats_dbpath)
 
-    provider_a = StatsAtomrefProvider(
-        dataset, list(range(10)), stats_file=stats_file
-    )
+    provider_a = StatsAtomrefProvider(dataset, list(range(10)), stats_file=stats_file)
     provider_a.get_stats(ENERGY, True, False)
     assert len(calls) == 1
 
@@ -139,9 +131,7 @@ def test_fingerprint_mismatch_triggers_recompute(
     assert len(calls) == 1
 
     # different partition: stored entries are invalid, recompute
-    provider_b = StatsAtomrefProvider(
-        dataset, list(range(12)), stats_file=stats_file
-    )
+    provider_b = StatsAtomrefProvider(dataset, list(range(12)), stats_file=stats_file)
     provider_b.get_stats(ENERGY, True, False)
     assert len(calls) == 2
 
