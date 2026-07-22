@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import zipfile
 from typing import Callable, Dict, List, Optional, Tuple
 
 import fasteners
@@ -69,11 +70,16 @@ class StatsAtomrefProvider:
     # ---------- disk persistence ----------
 
     def _load_valid_entries(self) -> Dict[str, np.ndarray]:
-        """Stored entries, or {} if absent or written for another partition."""
+        """Stored entries, or {} if absent, unreadable, or another partition's."""
         if not os.path.exists(self.stats_file):
             return {}
-        with np.load(self.stats_file) as data:
-            entries = dict(data)
+        try:
+            with np.load(self.stats_file) as data:
+                entries = dict(data)
+        except (OSError, ValueError, EOFError, zipfile.BadZipFile):
+            # An unreadable cache file (e.g. left by a crash mid-write) must
+            # never break setup — recompute and overwrite it instead.
+            return {}
         if str(entries.pop("fingerprint", None)) != self.fingerprint:
             return {}
         return entries

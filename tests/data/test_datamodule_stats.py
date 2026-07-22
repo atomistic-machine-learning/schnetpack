@@ -136,6 +136,28 @@ def test_fingerprint_mismatch_triggers_recompute(stats_dbpath, tmp_path, monkeyp
     assert len(calls) == 2
 
 
+def test_corrupt_stats_file_is_ignored_and_rewritten(
+    stats_dbpath, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    calls = _count_stats_calls(monkeypatch)
+    stats_file = tmp_path / "stats.npz"
+    stats_file.write_bytes(b"not an npz file")  # e.g. a crash mid-write
+
+    provider = StatsAtomrefProvider(
+        ASEAtomsData(stats_dbpath), list(range(10)), stats_file=str(stats_file)
+    )
+    provider.get_stats(ENERGY, True, False)
+    assert len(calls) == 1  # computed despite the unreadable file
+
+    # the file was rewritten: a second provider reads instead of recomputes
+    provider_second = StatsAtomrefProvider(
+        ASEAtomsData(stats_dbpath), list(range(10)), stats_file=str(stats_file)
+    )
+    provider_second.get_stats(ENERGY, True, False)
+    assert len(calls) == 1
+
+
 def test_stats_file_none_disables_persistence(stats_dbpath, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     calls = _count_stats_calls(monkeypatch)
