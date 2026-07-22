@@ -1,10 +1,11 @@
+import os
+import numpy as np
 import pytest
 import torch
-import numpy as np
-from schnetpack.data import *
-import os
+from ase.db import connect
+
 import schnetpack.properties as structure
-from schnetpack.data import calculate_stats, AtomsLoader
+from schnetpack.data import ASEAtomsData, calculate_stats
 
 
 @pytest.fixture
@@ -14,16 +15,22 @@ def asedbpath(tmpdir):
 
 @pytest.fixture(scope="function")
 def asedb(asedbpath, example_data, property_units):
+    with connect(asedbpath, use_lock_file=False) as conn:
+        conn.metadata = {
+            "_property_unit_dict": property_units,
+            "_distance_unit": "Ang",
+            "atomrefs": {},
+        }
 
-    asedb = ASEAtomsData.create(
-        datapath=asedbpath, distance_unit="A", property_unit_dict=property_units
-    )
+        for atoms, props in example_data:
+            conn.write(atoms, data=props)
 
-    atoms_list, prop_list = zip(*example_data)
-    asedb.add_systems(property_list=prop_list, atoms_list=atoms_list)
+    asedb = ASEAtomsData(datapath=asedbpath, distance_unit="Ang")
+
     yield asedb
 
-    os.remove(asedb.datapath)
+    if os.path.exists(asedbpath):
+        os.remove(asedbpath)
     del asedb
 
 
@@ -126,6 +133,7 @@ def test_asedb_add(asedb, example_data):
     at, props = example_data[0]
     asedb.add_system(atoms=at, **props)
 
+    props = dict(props)
     props.update(
         {
             structure.Z: at.numbers,
@@ -140,5 +148,5 @@ def test_asedb_add(asedb, example_data):
     p2 = asedb[l + 1]
     for k, v in p1.items():
         if k != "_idx":
-            assert type(v) == torch.Tensor, k
+            assert isinstance(v, torch.Tensor), k
             assert (p2[k] == v).all(), v

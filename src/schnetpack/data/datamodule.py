@@ -21,7 +21,7 @@ class AtomsDataModule(pl.LightningDataModule):
 
       - accepts a prebuilt :class:`ASEAtomsData` instance,
       - handles train/val/test splitting,
-      - builds a :class:`StatsAtomrefProvider` from the train split,
+      - builds a stats provider from the train split,
       - initializes the dataset transforms with it.
     """
 
@@ -60,6 +60,7 @@ class AtomsDataModule(pl.LightningDataModule):
         train_sampler_cls: Optional[Type] = None,
         train_sampler_args: Optional[Dict[str, Any]] = None,
         pin_memory: bool = False,
+        provider: Optional[Type] = None,
         **kwargs,
     ):
         """
@@ -82,6 +83,8 @@ class AtomsDataModule(pl.LightningDataModule):
             train_sampler_args: dict of train_sampler keyword arguments.
             pin_memory: If true, pin memory of loaded data to GPU. Default: Will be
                     set to true, when GPUs are used.
+            provider: stats provider class built from the train split during
+                setup(). If None, use StatsAtomrefProvider.
         """
         # Unknown kwargs other than the legacy arguments are tolerated
         # silently, because hydra data configs use top-level keys as
@@ -121,6 +124,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self._val_dataloader = None
         self._test_dataloader = None
 
+        self._provider_cls = provider or StatsAtomrefProvider
         self.provider: Optional[StatsAtomrefProvider] = None
 
         self.train_sampler_cls = train_sampler_cls
@@ -159,20 +163,11 @@ class AtomsDataModule(pl.LightningDataModule):
         self._val_dataset = self.dataset.subset(self.val_idx, split="val")
         self._test_dataset = self.dataset.subset(self.test_idx, split="test")
 
-        self.provider = StatsAtomrefProvider(self._train_dataset)
+        self.provider = self._provider_cls(self._train_dataset)
 
-        transforms = self.dataset.transforms or []
-        train_transforms = self.dataset.train_transforms or transforms
-        val_transforms = self.dataset.val_transforms or transforms
-        test_transforms = self.dataset.test_transforms or transforms
-
-        self._initialize_transforms(train_transforms)
-        self._initialize_transforms(val_transforms)
-        self._initialize_transforms(test_transforms)
-
-        self._train_dataset.transforms = train_transforms
-        self._val_dataset.transforms = val_transforms
-        self._test_dataset.transforms = test_transforms
+        self._train_dataset.initialize_transforms(provider=self.provider)
+        self._val_dataset.initialize_transforms(provider=self.provider)
+        self._test_dataset.initialize_transforms(provider=self.provider)
 
     def teardown(self, stage: Optional[str] = None) -> None:
         # Transforms with external resources (e.g. cached neighbor lists)
@@ -180,7 +175,7 @@ class AtomsDataModule(pl.LightningDataModule):
         for ds in (self._train_dataset, self._val_dataset, self._test_dataset):
             if ds is None:
                 continue
-            for t in ds.transforms:
+            for t in ds.get_split_transforms():
                 t.teardown()
 
     # Model postprocessors (e.g. AddOffsets) are initialized through
@@ -200,13 +195,6 @@ class AtomsDataModule(pl.LightningDataModule):
         if self.provider is None:
             raise RuntimeError("Call setup() before accessing atomrefs.")
         return self.provider.get_atomrefs(property, is_extensive)
-
-    def _initialize_transforms(self, transforms) -> None:
-        if not transforms:
-            return
-
-        for t in transforms:
-            t.initialize(provider=self.provider, atomrefs=self.provider.train_atomrefs)
 
     def _load_partitions(self) -> None:
         # Serialize split creation with an inter-process lock, so concurrent

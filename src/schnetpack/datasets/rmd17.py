@@ -67,7 +67,7 @@ class rMD17(DownloadableASEAtomsData):
     energy = "energy"
     forces = "forces"
 
-    atomrefs = {
+    _atomrefs = {
         energy: [
             0.0,
             -313.5150902000774,
@@ -176,7 +176,7 @@ class rMD17(DownloadableASEAtomsData):
         """
         tmpdir = tempfile.mkdtemp("rmd17")
         md = self.metadata
-        md["atomrefs"] = self.atomrefs
+        md["atomrefs"] = self._atomrefs
         md["molecule"] = self.molecule
         self._set_metadata(md)
 
@@ -248,8 +248,8 @@ class rMD17(DownloadableASEAtomsData):
                     )
                     .flatten()
                     .astype(int)
-                    .tolist()
-                )
+                    - 1
+                ).tolist()
                 train_splits.append(train_split)
 
                 test_split = (
@@ -260,8 +260,8 @@ class rMD17(DownloadableASEAtomsData):
                     )
                     .flatten()
                     .astype(int)
-                    .tolist()
-                )
+                    - 1
+                ).tolist()
                 test_splits.append(test_split)
 
         self.update_metadata(splits={"known": train_splits, "test": test_splits})

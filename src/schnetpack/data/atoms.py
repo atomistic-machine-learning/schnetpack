@@ -156,19 +156,25 @@ class ASEAtomsData(torch.utils.data.Dataset):
         )
         return self._apply_transforms(props)
 
+    def get_split_transforms(self) -> List[Transform]:
+        if self.split == "train" and self.train_transforms is not None:
+            return self.train_transforms
+        if self.split == "val" and self.val_transforms is not None:
+            return self.val_transforms
+        if self.split == "test" and self.test_transforms is not None:
+            return self.test_transforms
+        return self.transforms
+
+    def initialize_transforms(self, provider=None) -> None:
+        atomrefs = self.atomrefs  # read atomrefs once
+        for tf in self.get_split_transforms():
+            if hasattr(tf, "initialize"):
+                tf.initialize(provider=provider, atomrefs=atomrefs)
+
     def _apply_transforms(
         self, props: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
-        if self.split == "train" and self.train_transforms is not None:
-            transforms = self.train_transforms
-        elif self.split == "val" and self.val_transforms is not None:
-            transforms = self.val_transforms
-        elif self.split == "test" and self.test_transforms is not None:
-            transforms = self.test_transforms
-        else:
-            transforms = self.transforms
-
-        for tf in transforms:
+        for tf in self.get_split_transforms():
             props = tf(props)
         return props
 
