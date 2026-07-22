@@ -5,6 +5,11 @@ import numpy as np
 
 __all__ = ["SplittingStrategy", "RandomSplit", "SubsamplePartitions", "GroupSplit"]
 
+# Inter-process lock file serializing split creation and the persisted-stats
+# read-modify-write. One shared constant: stats writes must take the *same*
+# lock as split creation.
+SPLITTING_LOCK = "splitting.lock"
+
 
 def absolute_split_sizes(dsize: int, split_sizes: List[int]) -> List[int]:
     """

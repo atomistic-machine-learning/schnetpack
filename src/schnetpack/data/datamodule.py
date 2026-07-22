@@ -9,7 +9,7 @@ from torch.utils.data import BatchSampler
 
 from schnetpack.data.atoms import ASEAtomsData
 from schnetpack.data.provider import StatsAtomrefProvider, train_partition_fingerprint
-from schnetpack.data.splitting import RandomSplit, SplittingStrategy
+from schnetpack.data.splitting import SPLITTING_LOCK, RandomSplit, SplittingStrategy
 from schnetpack.data.loader import AtomsLoader
 
 __all__ = ["AtomsDataModule"]
@@ -231,7 +231,7 @@ class AtomsDataModule(pl.LightningDataModule):
         # Serialize split creation with an inter-process lock, so concurrent
         # DDP ranks / jobs cannot race on writing split.npz and end up with
         # different partitions per rank.
-        lock = fasteners.InterProcessLock("splitting.lock")
+        lock = fasteners.InterProcessLock(SPLITTING_LOCK)
 
         with lock:
             total_size = len(self.dataset)

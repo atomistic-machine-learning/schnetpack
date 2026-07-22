@@ -3,21 +3,17 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import fasteners
 import numpy as np
 import torch
 
 from schnetpack.data.atoms import ASEAtomsData
+from schnetpack.data.splitting import SPLITTING_LOCK
 from schnetpack.data.stats import calculate_stats, estimate_atomrefs
 
 __all__ = ["StatsAtomrefProvider", "train_partition_fingerprint"]
-
-# Same inter-process lock as split creation: statistics have the same lineage
-# as the split, and sharing the lock means concurrent DDP ranks compute each
-# entry at most once.
-_SPLITTING_LOCK = "splitting.lock"
 
 
 def train_partition_fingerprint(dataset_length: int, train_idx: List[int]) -> str:
@@ -82,19 +78,27 @@ class StatsAtomrefProvider:
             return {}
         return entries
 
-    def _read_entry(self, entry_key: str) -> Optional[np.ndarray]:
-        if self.stats_file is None:
-            return None
-        with fasteners.InterProcessLock(_SPLITTING_LOCK):
-            return self._load_valid_entries().get(entry_key)
+    def _read_or_compute(
+        self, entry_key: str, compute: Callable[[], np.ndarray]
+    ) -> np.ndarray:
+        """
+        Return the persisted entry, or compute and persist it.
 
-    def _write_entry(self, entry_key: str, value: np.ndarray) -> None:
+        The lock — the same one that serializes split creation — is held
+        across the whole miss → compute → write cycle, so concurrent ranks
+        compute each entry at most once.
+        """
         if self.stats_file is None:
-            return
-        with fasteners.InterProcessLock(_SPLITTING_LOCK):
+            return compute()
+        with fasteners.InterProcessLock(SPLITTING_LOCK):
             entries = self._load_valid_entries()
+            stored = entries.get(entry_key)
+            if stored is not None:
+                return stored
+            value = compute()
             entries[entry_key] = value
             np.savez(self.stats_file, fingerprint=np.array(self.fingerprint), **entries)
+            return value
 
     # ---------- queries ----------
 
@@ -105,27 +109,20 @@ class StatsAtomrefProvider:
         if key in self._stats_cache:
             return self._stats_cache[key]
 
-        entry_key = "stats:" + json.dumps(list(key))
-        stored = self._read_entry(entry_key)
-        if stored is not None:
-            stats = (torch.tensor(stored[0]), torch.tensor(stored[1]))
-            self._stats_cache[key] = stats
-            return stats
+        def compute() -> np.ndarray:
+            atomref = self.train_atomrefs if remove_atomref else None
+            mean, std = calculate_stats(
+                self.dataset,
+                divide_by_atoms={property: divide_by_atoms},
+                atomref=atomref,
+                indices=self.train_idx,
+            )[property]
+            return np.array([mean.item(), std.item()], dtype=np.float64)
 
-        atomref = self.train_atomrefs if remove_atomref else None
-
-        stats = calculate_stats(
-            self.dataset,
-            divide_by_atoms={property: divide_by_atoms},
-            atomref=atomref,
-            indices=self.train_idx,
-        )[property]
+        stored = self._read_or_compute("stats:" + json.dumps(list(key)), compute)
+        stats = (torch.tensor(stored[0]), torch.tensor(stored[1]))
 
         self._stats_cache[key] = stats
-        mean, std = stats
-        self._write_entry(
-            entry_key, np.array([mean.item(), std.item()], dtype=np.float64)
-        )
         return stats
 
     def get_atomrefs(
@@ -147,19 +144,20 @@ class StatsAtomrefProvider:
         if key in self._atomref_cache:
             return {property: self._atomref_cache[key]}
 
-        entry_key = "atomrefs:" + json.dumps(list(key))
-        stored = self._read_entry(entry_key)
-        if stored is not None:
-            atomref = torch.tensor(stored)
-            self._atomref_cache[key] = atomref
-            return {property: atomref}
+        def compute() -> np.ndarray:
+            return (
+                estimate_atomrefs(
+                    self.dataset,
+                    is_extensive={property: is_extensive},
+                    indices=self.train_idx,
+                )[property]
+                .detach()
+                .cpu()
+                .numpy()
+            )
 
-        atomref = estimate_atomrefs(
-            self.dataset,
-            is_extensive={property: is_extensive},
-            indices=self.train_idx,
-        )[property]
+        stored = self._read_or_compute("atomrefs:" + json.dumps(list(key)), compute)
+        atomref = torch.tensor(stored)
 
         self._atomref_cache[key] = atomref
-        self._write_entry(entry_key, atomref.detach().cpu().numpy())
         return {property: atomref}
