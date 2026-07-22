@@ -19,7 +19,6 @@ import schnetpack.properties as structure
 from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 from schnetpack.transform.base import Transform
 
-
 __all__ = ["QM9"]
 
 

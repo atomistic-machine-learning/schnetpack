@@ -3,7 +3,6 @@ import torch
 import warnings
 from typing import Any, Type, Union
 
-
 __all__ = ["load_model", "load_task_from_checkpoint"]
 
 

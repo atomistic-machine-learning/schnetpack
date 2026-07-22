@@ -20,7 +20,6 @@ from torch import nn
 from schnetpack.units import convert_units
 from schnetpack.interfaces.ase_interface import AtomsConverter
 
-
 __all__ = [
     "ASEBatchwiseLBFGS",
     "BatchwiseCalculator",

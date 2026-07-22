@@ -14,7 +14,6 @@ from schnetpack.task import AtomisticTask
 from schnetpack import properties
 from collections import defaultdict
 
-
 __all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
 
 

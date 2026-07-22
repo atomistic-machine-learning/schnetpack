@@ -9,7 +9,6 @@ from ase.io import read
 from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 from schnetpack.transform.base import Transform
 
-
 __all__ = ["OrganicMaterialsDatabase"]
 
 

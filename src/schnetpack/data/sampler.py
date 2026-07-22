@@ -6,7 +6,6 @@ from torch.utils.data import Sampler, WeightedRandomSampler
 from schnetpack import properties
 from schnetpack.data import ASEAtomsData
 
-
 __all__ = [
     "StratifiedSampler",
     "NumberOfAtomsCriterion",

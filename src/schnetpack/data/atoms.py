@@ -488,6 +488,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
             conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
 
+
 class DownloadableASEAtomsData(ASEAtomsData, ABC):
     """
     Base class for datasets that can download and build their own ASE database.

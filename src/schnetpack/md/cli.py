@@ -38,16 +38,14 @@ def simulate(config: DictConfig):
     General training routine for all models defined by the provided hydra configs.
 
     """
-    print(
-        """
+    print("""
            _____      __    _   __     __  ____             __    __  __    ___
           / ___/_____/ /_  / | / /__  / /_/ __ \____ ______/ /__ |  \/  |  |   \\
           \__ \/ ___/ __ \/  |/ / _ \/ __/ /_/ / __ `/ ___/ //_/ | |\/| |  | |) |
          ___/ / /__/ / / / /|  /  __/ /_/ ____/ /_/ / /__/ ,<    |_|__|_|  |___/
         /____/\___/_/ /_/_/ |_/\___/\__/_/    \__,_/\___/_/|_|  _|""  ""|_|""  ""|
                                                                 "`-0--0-'"`-0--0-'
-        """
-    )
+        """)
 
     original_wd = hydra.utils.get_original_cwd()
     hydra_wd = os.getcwd()

@@ -7,7 +7,6 @@ import schnetpack.properties as structure
 from .base import Transform
 from schnetpack.nn import scatter_add
 
-
 __all__ = [
     "SubtractCenterOfMass",
     "SubtractCenterOfGeometry",
