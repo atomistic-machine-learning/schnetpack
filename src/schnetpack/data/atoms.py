@@ -165,11 +165,10 @@ class ASEAtomsData(torch.utils.data.Dataset):
             return self.test_transforms
         return self.transforms
 
-    def initialize_transforms(self, provider=None) -> None:
-        atomrefs = self.atomrefs  # read atomrefs once
+    def initialize_transforms(self, stats=None) -> None:
         for tf in self.get_split_transforms():
             if hasattr(tf, "initialize"):
-                tf.initialize(provider=provider, atomrefs=atomrefs)
+                tf.initialize(stats)
 
     def _apply_transforms(
         self, props: Dict[str, torch.Tensor]

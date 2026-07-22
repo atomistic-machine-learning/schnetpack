@@ -166,9 +166,9 @@ class AtomsDataModule(pl.LightningDataModule):
 
         self.provider = self._provider_cls(self.dataset, self.train_idx)
 
-        self._train_dataset.initialize_transforms(provider=self.provider)
-        self._val_dataset.initialize_transforms(provider=self.provider)
-        self._test_dataset.initialize_transforms(provider=self.provider)
+        self._train_dataset.initialize_transforms(self.provider)
+        self._val_dataset.initialize_transforms(self.provider)
+        self._test_dataset.initialize_transforms(self.provider)
 
     def teardown(self, stage: Optional[str] = None) -> None:
         # Transforms with external resources (e.g. cached neighbor lists)

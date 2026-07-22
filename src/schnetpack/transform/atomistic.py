@@ -117,23 +117,19 @@ class RemoveOffsets(Transform):
             property_mean = property_mean or torch.zeros((1,))
             self.register_buffer("mean", property_mean)
 
-    def initialize(self, provider, atomrefs=None, **kwargs) -> None:
+    def initialize(self, stats) -> None:
         """
-        Initialize mean and/or atomref using a StatsAtomrefProvider.
+        Initialize mean and/or atomrefs from a stats source (any object with
+        ``get_stats``/``get_atomrefs``, e.g. the datamodule or its provider).
         """
         if self.remove_atomrefs and not self._atomrefs_initialized:
-            if self.estimate_atomref:
-                atrefs = provider.get_atomrefs(self._property, self.is_extensive)
-            else:
-                if atomrefs is None:
-                    raise RuntimeError(
-                        "RemoveOffsets requires dataset atomrefs when estimate_atomref=False."
-                    )
-                atrefs = atomrefs
+            atrefs = stats.get_atomrefs(
+                self._property, self.is_extensive, estimate=self.estimate_atomref
+            )
             self.atomref = atrefs[self._property].detach()
 
         if self.remove_mean and not self._mean_initialized:
-            mean, _std = provider.get_stats(
+            mean, _std = stats.get_stats(
                 self._property, self.is_extensive, self.remove_atomrefs
             )
             self.mean = mean.detach()
@@ -226,12 +222,12 @@ class ScaleProperty(Transform):
         scale = scale or torch.ones((1,))
         self.register_buffer("scale", scale)
 
-    def initialize(self, provider, atomrefs=None) -> None:
+    def initialize(self, stats) -> None:
         """
         Initialize scaling using training statistics.
         """
         if not self._initialized:
-            mean, std = provider.get_stats(self._target_key, True, False)
+            mean, std = stats.get_stats(self._target_key, True, False)
             scale = mean if self._scale_by_mean else std
             self.scale = torch.abs(scale).detach()
 
@@ -313,23 +309,19 @@ class AddOffsets(Transform):
         self.register_buffer("atomref", atomrefs)
         self.register_buffer("mean", property_mean)
 
-    def initialize(self, provider, atomrefs=None) -> None:
+    def initialize(self, stats) -> None:
         """
-        Initialize mean and/or atomref using a StatsAtomrefProvider.
+        Initialize mean and/or atomrefs from a stats source (any object with
+        ``get_stats``/``get_atomrefs``, e.g. the datamodule or its provider).
         """
         if self.add_atomrefs and not self._atomrefs_initialized:
-            if self.estimate_atomref:
-                atrefs = provider.get_atomrefs(self._property, self.is_extensive)
-            else:
-                if atomrefs is None:
-                    raise RuntimeError(
-                        "AddOffsets requires dataset atomrefs when estimate_atomref=False."
-                    )
-                atrefs = atomrefs
+            atrefs = stats.get_atomrefs(
+                self._property, self.is_extensive, estimate=self.estimate_atomref
+            )
             self.atomref = atrefs[self._property].detach()
 
         if self.add_mean and not self._mean_initialized:
-            mean, _std = provider.get_stats(
+            mean, _std = stats.get_stats(
                 self._property, self.is_extensive, self.add_atomrefs
             )
             self.mean = mean.detach()

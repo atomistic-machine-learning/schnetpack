@@ -50,8 +50,12 @@ class Transform(nn.Module):
     def teardown(self):
         pass
 
-    def initialize(self, **kwargs) -> None:
+    def initialize(self, stats=None) -> None:
         """
-        Initialization hook for transforms that require training
+        Initialization hook for transforms that require training statistics.
+
+        Args:
+            stats: A stats source — any object providing ``get_stats`` and
+                ``get_atomrefs`` (e.g. the datamodule or its stats provider).
         """
         return
