@@ -14,6 +14,10 @@ from schnetpack.data.loader import AtomsLoader
 
 __all__ = ["AtomsDataModule"]
 
+# Default for stats_file: derive the path from split_file. A sentinel (not
+# None) because None means "persistence off".
+_DERIVE_STATS_FILE = "<derive from split_file>"
+
 
 class AtomsDataModule(pl.LightningDataModule):
     """
@@ -53,6 +57,7 @@ class AtomsDataModule(pl.LightningDataModule):
         num_val: Union[int, float],
         num_test: Optional[Union[int, float]] = None,
         split_file: Optional[str] = "split.npz",
+        stats_file: Optional[str] = _DERIVE_STATS_FILE,
         splitting: Optional[SplittingStrategy] = None,
         num_workers: int = 0,
         val_batch_size: Optional[int] = None,
@@ -71,6 +76,11 @@ class AtomsDataModule(pl.LightningDataModule):
             num_val: number of validation examples (absolute or relative)
             num_test: number of test examples (absolute or relative)
             split_file: path to npz file with data partitions
+            stats_file: path to the npz file persisting training statistics
+                and estimated atomrefs, keyed by the train-partition
+                fingerprint. By default derived from split_file
+                (<split>_stats.npz next to it). Set to None to disable
+                persistence; reruns then recompute statistics.
             splitting: Method to generate train/validation/test partitions
                     (default: RandomSplit)
             num_workers: Number of data loader workers
@@ -109,6 +119,13 @@ class AtomsDataModule(pl.LightningDataModule):
         self.num_val = num_val
         self.num_test = num_test
         self.split_file = split_file
+        if stats_file == _DERIVE_STATS_FILE:
+            stats_file = (
+                os.path.splitext(split_file)[0] + "_stats.npz"
+                if split_file is not None
+                else None
+            )
+        self.stats_file = stats_file
         self.splitting = splitting or RandomSplit()
         self.num_workers = num_workers
         self._pin_memory = pin_memory
@@ -171,7 +188,12 @@ class AtomsDataModule(pl.LightningDataModule):
         self._val_dataset = self.dataset.subset(self.val_idx, split="val")
         self._test_dataset = self.dataset.subset(self.test_idx, split="test")
 
-        self.provider = self._provider_cls(self.dataset, self.train_idx)
+        self.provider = self._provider_cls(
+            self.dataset,
+            self.train_idx,
+            stats_file=self.stats_file,
+            fingerprint=self.train_fingerprint,
+        )
 
         self._train_dataset.initialize_transforms(self.provider)
         self._val_dataset.initialize_transforms(self.provider)
