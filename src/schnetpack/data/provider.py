@@ -57,6 +57,11 @@ class StatsAtomrefProvider:
         self.dataset = dataset
         self.train_idx = list(train_idx)
         self.train_atomrefs = getattr(dataset, "atomrefs", None)
+        # np.savez appends ".npz" to paths missing it; normalize up front so
+        # the read path (which checks the verbatim path) finds what was
+        # written.
+        if stats_file is not None and not stats_file.endswith(".npz"):
+            stats_file += ".npz"
         self.stats_file = stats_file
         self.fingerprint = fingerprint or train_partition_fingerprint(
             len(dataset), self.train_idx

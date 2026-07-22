@@ -136,6 +136,23 @@ def test_fingerprint_mismatch_triggers_recompute(stats_dbpath, tmp_path, monkeyp
     assert len(calls) == 2
 
 
+def test_stats_file_without_npz_extension_is_read_back(
+    stats_dbpath, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    calls = _count_stats_calls(monkeypatch)
+    stats_file = str(tmp_path / "mystats")  # np.savez appends ".npz"
+    dataset = ASEAtomsData(stats_dbpath)
+
+    provider_a = StatsAtomrefProvider(dataset, list(range(10)), stats_file=stats_file)
+    provider_a.get_stats(ENERGY, True, False)
+    assert len(calls) == 1
+
+    provider_b = StatsAtomrefProvider(dataset, list(range(10)), stats_file=stats_file)
+    provider_b.get_stats(ENERGY, True, False)
+    assert len(calls) == 1  # read from disk, not recomputed
+
+
 def test_corrupt_stats_file_is_ignored_and_rewritten(
     stats_dbpath, tmp_path, monkeypatch
 ):
