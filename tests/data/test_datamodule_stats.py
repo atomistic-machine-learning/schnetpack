@@ -5,11 +5,18 @@ fingerprint and the on-disk statistics cache derived from the split file.
 
 import os
 
+import torch
+
 import schnetpack.data.provider
-from schnetpack.data import ASEAtomsData, AtomsDataModule, calculate_stats
+from schnetpack.data import (
+    ASEAtomsData,
+    AtomsDataModule,
+    calculate_stats,
+    estimate_atomrefs,
+)
 from schnetpack.data.provider import StatsAtomrefProvider
 
-from .conftest import ENERGY
+from .conftest import ENERGY, H_ATOMREF
 
 
 def _make_dm(datapath, split_file, num_train=10, **kwargs):
@@ -33,6 +40,19 @@ def _count_stats_calls(monkeypatch):
 
     monkeypatch.setattr(
         schnetpack.data.provider, "calculate_stats", counting_calculate_stats
+    )
+    return calls
+
+
+def _count_atomref_calls(monkeypatch):
+    calls = []
+
+    def counting_estimate_atomrefs(*args, **kwargs):
+        calls.append(1)
+        return estimate_atomrefs(*args, **kwargs)
+
+    monkeypatch.setattr(
+        schnetpack.data.provider, "estimate_atomrefs", counting_estimate_atomrefs
     )
     return calls
 
@@ -141,3 +161,39 @@ def test_stats_file_none_disables_persistence(stats_dbpath, tmp_path, monkeypatc
     dm_second.setup()
     dm_second.get_stats(ENERGY, True, False)
     assert len(calls) == 2  # nothing persisted, so it recomputes
+
+
+def test_second_datamodule_reads_estimated_atomrefs_from_disk(
+    stats_dbpath, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    calls = _count_atomref_calls(monkeypatch)
+    split_file = tmp_path / "split.npz"
+
+    dm_first = _make_dm(stats_dbpath, split_file)
+    dm_first.setup()
+    first = dm_first.get_atomrefs(ENERGY, True)[ENERGY]
+    assert len(calls) == 1
+
+    dm_second = _make_dm(stats_dbpath, split_file)
+    dm_second.setup()
+    second = dm_second.get_atomrefs(ENERGY, True)[ENERGY]
+
+    assert len(calls) == 1  # read from disk, not re-estimated
+    assert torch.equal(second, first)
+
+
+def test_dataset_atomrefs_are_never_persisted(
+    stats_dbpath_with_atomrefs, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    calls = _count_atomref_calls(monkeypatch)
+
+    dm = _make_dm(stats_dbpath_with_atomrefs, tmp_path / "split.npz")
+    dm.setup()
+    refs = dm.get_atomrefs(ENERGY, True)[ENERGY]
+
+    assert refs[1] == H_ATOMREF
+    assert len(calls) == 0
+    # dataset-provided atomrefs live in the DB metadata; nothing to persist
+    assert not os.path.exists(tmp_path / "split_stats.npz")

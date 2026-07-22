@@ -143,10 +143,18 @@ class StatsAtomrefProvider:
                 "and atomref estimation is disabled."
             )
 
-        # 2) Otherwise estimate and cache
+        # 2) Otherwise estimate and cache. Only estimated atomrefs are
+        # persisted — dataset-provided ones already live in the DB metadata.
         key = (property, is_extensive)
         if key in self._atomref_cache:
             return {property: self._atomref_cache[key]}
+
+        entry_key = "atomrefs:" + json.dumps(list(key))
+        stored = self._read_entry(entry_key)
+        if stored is not None:
+            atomref = torch.tensor(stored)
+            self._atomref_cache[key] = atomref
+            return {property: atomref}
 
         atomref = estimate_atomrefs(
             self.dataset,
@@ -155,4 +163,5 @@ class StatsAtomrefProvider:
         )[property]
 
         self._atomref_cache[key] = atomref
+        self._write_entry(entry_key, atomref.detach().cpu().numpy())
         return {property: atomref}
