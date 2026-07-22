@@ -83,8 +83,9 @@ class AtomsDataModule(pl.LightningDataModule):
             train_sampler_args: dict of train_sampler keyword arguments.
             pin_memory: If true, pin memory of loaded data to GPU. Default: Will be
                     set to true, when GPUs are used.
-            provider: stats provider class built from the train split during
-                setup(). If None, use StatsAtomrefProvider.
+            provider: stats provider class, constructed during setup() from
+                the base dataset and the train index list. If None, use
+                StatsAtomrefProvider.
         """
         # Unknown kwargs other than the legacy arguments are tolerated
         # silently, because hydra data configs use top-level keys as
@@ -163,7 +164,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self._val_dataset = self.dataset.subset(self.val_idx, split="val")
         self._test_dataset = self.dataset.subset(self.test_idx, split="test")
 
-        self.provider = self._provider_cls(self._train_dataset)
+        self.provider = self._provider_cls(self.dataset, self.train_idx)
 
         self._train_dataset.initialize_transforms(provider=self.provider)
         self._val_dataset.initialize_transforms(provider=self.provider)

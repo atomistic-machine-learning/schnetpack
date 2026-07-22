@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import copy
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 
@@ -13,22 +12,19 @@ __all__ = ["StatsAtomrefProvider"]
 
 class StatsAtomrefProvider:
     """
-    Compute and cache statistics and atom references from the training dataset.
+    Compute and cache statistics and atom references of the training data.
+
+    Statistics are a pure function of the base dataset and the train index
+    list: the stats functions build their own raw (transform-free) view from
+    the explicit indices, so the provider may be queried at any time — even
+    after the dataset has its transforms attached — without ever computing
+    on transformed data.
     """
 
-    def __init__(self, train_dataset: ASEAtomsData) -> None:
-        self.train_dataset = train_dataset
-        self.train_atomrefs = getattr(train_dataset, "atomrefs", None)
-
-        # Statistics must always be computed on the *raw* training data. The
-        # provider may be queried lazily (e.g. by AddOffsets during model
-        # setup) after the train dataset already has its transforms attached —
-        # computing stats through RemoveOffsets etc. would silently yield
-        # wrong means. Use a shallow copy with transforms stripped, so timing
-        # no longer matters.
-        self._raw_train_dataset = copy.copy(train_dataset)
-        self._raw_train_dataset.transforms = []
-        self._raw_train_dataset.split = None
+    def __init__(self, dataset: ASEAtomsData, train_idx: List[int]) -> None:
+        self.dataset = dataset
+        self.train_idx = list(train_idx)
+        self.train_atomrefs = getattr(dataset, "atomrefs", None)
 
         self._stats_cache: Dict[
             Tuple[str, bool, bool], Tuple[torch.Tensor, torch.Tensor]
@@ -45,9 +41,10 @@ class StatsAtomrefProvider:
         atomref = self.train_atomrefs if remove_atomref else None
 
         stats = calculate_stats(
-            self._raw_train_dataset,
+            self.dataset,
             divide_by_atoms={property: divide_by_atoms},
             atomref=atomref,
+            indices=self.train_idx,
         )[property]
 
         self._stats_cache[key] = stats
@@ -66,8 +63,9 @@ class StatsAtomrefProvider:
             return {property: self._atomref_cache[key]}
 
         atomref = estimate_atomrefs(
-            self._raw_train_dataset,
+            self.dataset,
             is_extensive={property: is_extensive},
+            indices=self.train_idx,
         )[property]
 
         self._atomref_cache[key] = atomref
