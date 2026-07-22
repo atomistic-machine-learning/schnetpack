@@ -153,6 +153,26 @@ def test_stats_file_without_npz_extension_is_read_back(
     assert len(calls) == 1  # read from disk, not recomputed
 
 
+def test_regenerated_split_invalidates_persisted_stats(
+    stats_dbpath, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    calls = _count_stats_calls(monkeypatch)
+    split_file = tmp_path / "split.npz"
+
+    dm_first = _make_dm(stats_dbpath, split_file, num_train=10)
+    dm_first.setup()
+    dm_first.get_stats(ENERGY, True, False)
+    assert len(calls) == 1
+
+    # regenerate the split: same files, different train partition
+    os.remove(split_file)
+    dm_new = _make_dm(stats_dbpath, split_file, num_train=12)
+    dm_new.setup()
+    dm_new.get_stats(ENERGY, True, False)
+    assert len(calls) == 2  # stored stats belong to the old partition
+
+
 def test_corrupt_stats_file_is_ignored_and_rewritten(
     stats_dbpath, tmp_path, monkeypatch
 ):
