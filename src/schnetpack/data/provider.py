@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Dict, List, Optional, Tuple
 
 import torch
@@ -7,7 +9,22 @@ import torch
 from schnetpack.data.atoms import ASEAtomsData
 from schnetpack.data.stats import calculate_stats, estimate_atomrefs
 
-__all__ = ["StatsAtomrefProvider"]
+__all__ = ["StatsAtomrefProvider", "train_partition_fingerprint"]
+
+
+def train_partition_fingerprint(dataset_length: int, train_idx: List[int]) -> str:
+    """
+    Short deterministic fingerprint of a train partition.
+
+    Statistics are a pure function of the dataset and the train partition;
+    the fingerprint keys persisted statistics to that partition. The index
+    list is sorted first — permutations of the same partition yield the same
+    statistics.
+    """
+    payload = json.dumps(
+        [int(dataset_length), sorted(int(i) for i in train_idx)]
+    ).encode()
+    return hashlib.sha256(payload).hexdigest()[:16]
 
 
 class StatsAtomrefProvider:

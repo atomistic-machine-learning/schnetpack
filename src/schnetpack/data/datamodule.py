@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import BatchSampler
 
 from schnetpack.data.atoms import ASEAtomsData
-from schnetpack.data.provider import StatsAtomrefProvider
+from schnetpack.data.provider import StatsAtomrefProvider, train_partition_fingerprint
 from schnetpack.data.splitting import RandomSplit, SplittingStrategy
 from schnetpack.data.loader import AtomsLoader
 
@@ -116,6 +116,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self.train_idx = None
         self.val_idx = None
         self.test_idx = None
+        self.train_fingerprint: Optional[str] = None
 
         self._train_dataset = None
         self._val_dataset = None
@@ -157,6 +158,12 @@ class AtomsDataModule(pl.LightningDataModule):
 
         if self.train_idx is None:
             self._load_partitions()
+
+        # Statistics are a pure function of (dataset, train partition); the
+        # fingerprint identifies that partition, e.g. for persisted stats.
+        self.train_fingerprint = train_partition_fingerprint(
+            len(self.dataset), self.train_idx
+        )
 
         # The split label activates the per-split transform selection of
         # ASEAtomsData for anyone touching the subsets directly.
