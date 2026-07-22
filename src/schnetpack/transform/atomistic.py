@@ -1,5 +1,4 @@
 from typing import Dict
-import warnings
 
 import torch
 from ase.data import atomic_masses
@@ -7,7 +6,6 @@ from ase.data import atomic_masses
 import schnetpack.properties as structure
 from .base import Transform
 from schnetpack.nn import scatter_add
-from schnetpack.data.provider import StatsAtomrefProvider
 
 
 __all__ = [
@@ -114,7 +112,6 @@ class RemoveOffsets(Transform):
             self._mean_initialized = False
 
         if self.remove_atomrefs:
-            # atomrefs = atomrefs or torch.zeros((zmax,)) #NOTE: this was the original code
             atomrefs = atomrefs if atomrefs is not None else torch.zeros((zmax,))
             self.register_buffer("atomref", atomrefs)
         if self.remove_mean:
@@ -142,19 +139,28 @@ class RemoveOffsets(Transform):
             )
             self.mean = mean.detach()
 
-    # legacy hook for old AtomsDataModule
     def datamodule(self, _datamodule):
         """
-        Legacy hook for old AtomsDataModule. Safe to remove once legacy DM is removed.
+        Hook called with the AtomsDataModule when using the PyTorch Lightning
+        integration (see AtomisticModel.initialize_transforms).
         """
-        warnings.warn(
-            "RemoveOffsets.datamodule(...) is deprecated and will be removed in a future "
-            "release. Use initialize(provider=..., atomrefs=...) instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        provider = StatsAtomrefProvider(_datamodule.train_dataset)
-        return self.initialize(provider, atomrefs=provider.train_atomrefs)
+        # Statistics must come from the datamodule's cached provider:
+        # recomputing them here would run on data whose transforms have
+        # already removed the offsets.
+        if self.remove_atomrefs and not self._atomrefs_initialized:
+            if self.estimate_atomref:
+                atrefs = _datamodule.get_atomrefs(
+                    property=self._property, is_extensive=self.is_extensive
+                )
+            else:
+                atrefs = _datamodule.train_dataset.atomrefs
+            self.atomref = atrefs[self._property].detach()
+
+        if self.remove_mean and not self._mean_initialized:
+            stats = _datamodule.get_stats(
+                self._property, self.is_extensive, self.remove_atomrefs
+            )
+            self.mean = stats[0].detach()
 
     def forward(
         self,
@@ -232,16 +238,13 @@ class ScaleProperty(Transform):
 
     def datamodule(self, _datamodule):
         """
-        Legacy hook for old AtomsDataModule. Safe to remove once legacy DM is removed.
+        Hook called with the AtomsDataModule when using the PyTorch Lightning
+        integration.
         """
-        warnings.warn(
-            "ScaleProperty.datamodule(...) is deprecated and will be removed in a future "
-            "release. Use initialize(provider=..., atomrefs=...) instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        provider = StatsAtomrefProvider(_datamodule.train_dataset)
-        return self.initialize(provider, atomrefs=None)
+        if not self._initialized:
+            stats = _datamodule.get_stats(self._target_key, True, False)
+            scale = stats[0] if self._scale_by_mean else stats[1]
+            self.scale = torch.abs(scale).detach()
 
     def forward(
         self,
@@ -255,7 +258,6 @@ class AddOffsets(Transform):
     """
     Add offsets to property based on the mean of the training data and/or the single
     atom reference calculations.
-
     """
 
     is_preprocessor: bool = False
@@ -307,7 +309,6 @@ class AddOffsets(Transform):
         else:
             self._mean_initialized = False
 
-        # atomrefs = atomrefs or torch.zeros((zmax,)) #NOTE: this was the original code
         atomrefs = atomrefs if atomrefs is not None else torch.zeros((zmax,))
         property_mean = property_mean or torch.zeros((1,))
         self.register_buffer("atomref", atomrefs)
@@ -336,16 +337,26 @@ class AddOffsets(Transform):
 
     def datamodule(self, _datamodule):
         """
-        Legacy hook for old AtomsDataModule. Safe to remove once legacy DM is removed.
+        Hook called with the AtomsDataModule when using the PyTorch Lightning
+        integration (see AtomisticModel.initialize_transforms).
         """
-        warnings.warn(
-            "AddOffsets.datamodule(...) is deprecated and will be removed in a future "
-            "release. Use initialize(provider=..., atomrefs=...) instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        provider = StatsAtomrefProvider(_datamodule.train_dataset)
-        return self.initialize(provider, atomrefs=provider.train_atomrefs)
+        # Statistics must come from the datamodule's cached provider:
+        # recomputing them here would run on data whose transforms have
+        # already removed the offsets, yielding a near-zero mean.
+        if self.add_atomrefs and not self._atomrefs_initialized:
+            if self.estimate_atomref:
+                atrefs = _datamodule.get_atomrefs(
+                    property=self._property, is_extensive=self.is_extensive
+                )
+            else:
+                atrefs = _datamodule.train_dataset.atomrefs
+            self.atomref = atrefs[self._property].detach()
+
+        if self.add_mean and not self._mean_initialized:
+            stats = _datamodule.get_stats(
+                self._property, self.is_extensive, self.add_atomrefs
+            )
+            self.mean = stats[0].detach()
 
     def forward(
         self,

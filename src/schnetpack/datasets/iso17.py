@@ -12,12 +12,12 @@ from ase.db import connect
 from tqdm import tqdm
 
 from schnetpack.transform.base import Transform
-from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 
 __all__ = ["ISO17"]
 
 
-class ISO17(ASEAtomsData):
+class ISO17(DownloadableASEAtomsData):
     """
     ISO17 benchmark dataset for molecular dynamics of C7O2H10 isomers
     containing molecular forces.

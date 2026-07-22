@@ -4,5 +4,4 @@ from .stats import *
 from .splitting import *
 from .datamodule import *
 from .sampler import *
-from .datamodule_v2 import *
 from .provider import *

@@ -20,7 +20,7 @@ from schnetpack.utils.script import log_hyperparameters, print_config
 from schnetpack.data import ASEAtomsData, AtomsLoader
 from schnetpack.train import PredictionWriter
 from schnetpack import properties
-from schnetpack.utils import load_model
+from schnetpack.utils import load_model, load_task_from_checkpoint
 
 
 log = logging.getLogger(__name__)
@@ -176,18 +176,20 @@ def train(config: DictConfig):
     log.info("Starting training.")
     trainer.fit(model=task, datamodule=datamodule, ckpt_path=config.run.ckpt_path)
 
-    # Evaluate model on test set after training
-    log.info("Starting testing.")
-    trainer.test(
-        model=task, datamodule=datamodule, ckpt_path="best", weights_only=False
-    )
-
-    # Store best model
+    # Load the best checkpoint through the compatibility helper (it handles
+    # `weights_only` across PL versions) and test that task directly, instead
+    # of having Lightning re-load the checkpoint internally via
+    # ckpt_path="best", whose weights_only handling is version-dependent.
     best_path = trainer.checkpoint_callback.best_model_path
     log.info(f"Best checkpoint path:\n{best_path}")
+    best_task = load_task_from_checkpoint(type(task), best_path)
 
+    # Evaluate best model on test set after training
+    log.info("Starting testing.")
+    trainer.test(model=best_task, datamodule=datamodule)
+
+    # Store best model
     log.info(f"Store best model")
-    best_task = type(task).load_from_checkpoint(best_path, weights_only=False)
     torch.save(best_task, config.globals.model_path + ".task")
 
     best_task.save_model(config.globals.model_path, do_postprocessing=True)

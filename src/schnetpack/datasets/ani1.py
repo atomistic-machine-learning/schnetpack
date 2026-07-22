@@ -11,7 +11,7 @@ import h5py
 import numpy as np
 from ase import Atoms
 
-from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 from schnetpack.transform.base import Transform
 
 __all__ = ["ANI1"]
@@ -19,7 +19,7 @@ __all__ = ["ANI1"]
 log = logging.getLogger(__name__)
 
 
-class ANI1(ASEAtomsData):
+class ANI1(DownloadableASEAtomsData):
     """
     ANI1 benchmark dataset.
     This class adds convenience functions to download ANI1 from figshare and
@@ -99,15 +99,33 @@ class ANI1(ASEAtomsData):
         with connect(self.datapath, use_lock_file=False) as conn:
             md = conn.metadata
 
-        if md.get("num_heavy_atoms") != self.num_heavy_atoms:
+        # DBs created with older schnetpack versions do not carry the
+        # `num_heavy_atoms` / `high_energies` metadata keys. Only enforce the
+        # consistency check when the keys are present, so legacy ani1.db
+        # files keep loading; warn instead of rejecting them.
+        md_num_heavy_atoms = md.get("num_heavy_atoms")
+        if md_num_heavy_atoms is None:
+            log.warning(
+                "The ANI1 database does not store `num_heavy_atoms` (created "
+                "with an older schnetpack version) — cannot verify that it "
+                f"matches the requested num_heavy_atoms={self.num_heavy_atoms}."
+            )
+        elif md_num_heavy_atoms != self.num_heavy_atoms:
             raise AtomsDataError(
-                f"Existing ANI1 dataset was created with num_heavy_atoms={md.get('num_heavy_atoms')}, "
+                f"Existing ANI1 dataset was created with num_heavy_atoms={md_num_heavy_atoms}, "
                 f"but requested num_heavy_atoms={self.num_heavy_atoms}."
             )
 
-        if md.get("high_energies") != self.high_energies:
+        md_high_energies = md.get("high_energies")
+        if md_high_energies is None:
+            log.warning(
+                "The ANI1 database does not store `high_energies` (created "
+                "with an older schnetpack version) — cannot verify that it "
+                f"matches the requested high_energies={self.high_energies}."
+            )
+        elif md_high_energies != self.high_energies:
             raise AtomsDataError(
-                f"Existing ANI1 dataset was created with high_energies={md.get('high_energies')}, "
+                f"Existing ANI1 dataset was created with high_energies={md_high_energies}, "
                 f"but requested high_energies={self.high_energies}."
             )
 

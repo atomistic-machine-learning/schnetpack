@@ -16,14 +16,14 @@ from ase.db import connect
 from tqdm import tqdm
 
 import schnetpack.properties as structure
-from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 from schnetpack.transform.base import Transform
 
 
 __all__ = ["QM9"]
 
 
-class QM9(ASEAtomsData):
+class QM9(DownloadableASEAtomsData):
     """
     QM9 benchmark database for organic molecules.
     """

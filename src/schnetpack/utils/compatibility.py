@@ -1,9 +1,34 @@
+import inspect
 import torch
 import warnings
-from typing import Any, Union
+from typing import Any, Type, Union
 
 
-__all__ = ["load_model"]
+__all__ = ["load_model", "load_task_from_checkpoint"]
+
+
+def load_task_from_checkpoint(task_cls: Type, ckpt_path: str, **kwargs: Any):
+    """
+    Load a task (LightningModule) from a Lightning checkpoint, handling
+    `weights_only` compatibility across PyTorch Lightning versions.
+
+    With torch >= 2.6 the checkpoint must be loaded with `weights_only=False`,
+    but the corresponding `load_from_checkpoint` argument only exists in newer
+    PyTorch Lightning versions — on PL <= 2.5.x it would be routed into the
+    hparams overrides and break the task constructor. This helper passes the
+    argument only when the installed PL supports it.
+
+    Args:
+        task_cls: The LightningModule subclass (e.g. AtomisticTask) to load.
+        ckpt_path: Path to the Lightning checkpoint.
+        **kwargs: Additional arguments for `load_from_checkpoint`.
+
+    Returns:
+        The loaded task instance.
+    """
+    if "weights_only" in inspect.signature(task_cls.load_from_checkpoint).parameters:
+        kwargs.setdefault("weights_only", False)
+    return task_cls.load_from_checkpoint(ckpt_path, **kwargs)
 
 
 def load_model(

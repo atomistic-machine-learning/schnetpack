@@ -6,14 +6,14 @@ from typing import List, Optional, Dict
 import numpy as np
 from ase.io import read
 
-from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 from schnetpack.transform.base import Transform
 
 
 __all__ = ["OrganicMaterialsDatabase"]
 
 
-class OrganicMaterialsDatabase(ASEAtomsData):
+class OrganicMaterialsDatabase(DownloadableASEAtomsData):
     """
     Organic Materials Database (OMDB) of bulk organic crystals.
     Registration to the OMDB is free for academic users. This database contains DFT
@@ -88,7 +88,7 @@ class OrganicMaterialsDatabase(ASEAtomsData):
             )
         self._convert()
 
-    def _convert(self, dataset: ASEAtomsData) -> None:
+    def _convert(self) -> None:
         """
         Converts .tar.gz to a .db file
         """
@@ -113,7 +113,7 @@ class OrganicMaterialsDatabase(ASEAtomsData):
                 {OrganicMaterialsDatabase.BandGap: np.array([y[i]], dtype=np.float64)}
             )
 
-        dataset.add_systems(atoms_list=atoms_list, property_list=property_list)
+        self.add_systems(atoms_list=atoms_list, property_list=property_list)
 
         for name in names:
             path = os.path.join(extract_dir, name)

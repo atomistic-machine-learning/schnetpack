@@ -10,8 +10,6 @@ dataset:
   distance_unit: Ang
   property_units:
     energy: eV
-  transforms: ${data.transforms}
-
 
 batch_size: 32
 num_train: 10000000

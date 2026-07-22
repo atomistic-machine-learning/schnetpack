@@ -32,7 +32,7 @@ class Transform(nn.Module):
 
     def datamodule(self, value):
         """
-        Legacy hook for transforms initialized from an old AtomsDataModule.
+        Hook for transforms initialized from an AtomsDataModule.
         Extract all required information from data module automatically when using
         PyTorch Lightning integration. The transform should also implement a way to
         set these things manually, to make it usable independent of PL.

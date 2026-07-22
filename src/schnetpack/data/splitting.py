@@ -141,6 +141,16 @@ class SubsamplePartitions(SplittingStrategy):
         self.base_splitting = base_splitting or RandomSplit()
 
     def split(self, dataset, *split_sizes):
+        # A predefined partition must be selected here — dataset-specific
+        # fallbacks (e.g. rMD17's random split when no benchmark split is
+        # chosen) belong to the dataset (see rMD17Split), not to this generic
+        # strategy.
+        if self.split_id is None:
+            raise ValueError(
+                "SubsamplePartitions requires an integer `split_id` selecting "
+                "one of the predefined splits."
+            )
+
         if len(split_sizes) != len(self.split_partition_sources):
             raise ValueError(
                 f"The number of `split_sizes`({len(split_sizes)}) needs to match the "

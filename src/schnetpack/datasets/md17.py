@@ -10,12 +10,12 @@ from ase import Atoms
 
 import schnetpack.properties as structure
 from schnetpack.transform.base import Transform
-from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 
 __all__ = ["MD17"]
 
 
-class GDMLDataset(ASEAtomsData):
+class GDMLDataset(DownloadableASEAtomsData):
     """
     Base class for GDML type data (e.g. MD17 or MD22). Requires a dictionary translating between molecule and filenames
     and an URL under which the molecular datasets can be found.
@@ -220,6 +220,9 @@ class MD17(GDMLDataset):
             datapath=datapath,
             load_properties=load_properties,
             transforms=transforms,
+            train_transforms=train_transforms,
+            val_transforms=val_transforms,
+            test_transforms=test_transforms,
             subset_idx=subset_idx,
             property_units=property_units,
             distance_unit=distance_unit,

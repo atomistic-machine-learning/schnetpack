@@ -14,8 +14,10 @@ References
 import copy
 import logging
 import os
+from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any, Iterable, Union
 
+import fasteners
 import torch
 from ase import Atoms
 from ase.db import connect
@@ -26,7 +28,7 @@ from schnetpack.transform.base import Transform
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["ASEAtomsData", "AtomsDataError"]
+__all__ = ["ASEAtomsData", "DownloadableASEAtomsData", "AtomsDataError"]
 
 
 class AtomsDataError(Exception):
@@ -68,9 +70,11 @@ class ASEAtomsData(torch.utils.data.Dataset):
         """
         self.datapath = datapath
         self.subset_idx = subset_idx
+        # ASEAtomsData is a pure reader of existing DBs — a missing file is
+        # always an error here. Datasets that can fetch their own data
+        # subclass DownloadableASEAtomsData instead.
         if not os.path.exists(self.datapath):
-            self.create()
-            self.download()
+            raise AtomsDataError(f"ASE DB does not exist at {self.datapath}")
 
         self._check_db()
         self.conn = connect(self.datapath, use_lock_file=False)
@@ -176,8 +180,8 @@ class ASEAtomsData(torch.utils.data.Dataset):
             n_structures = conn.count()
             md = conn.metadata
 
-        if n_structures == 0:
-            raise AtomsDataError(f"ASE DB at {self.datapath} is empty")
+        # An empty DB is legal: it is the starting point of the `create()` +
+        # `add_systems()` workflow used for custom datasets.
 
         if "_distance_unit" not in md:
             raise AtomsDataError(
@@ -326,28 +330,60 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
     # ---------- creation / writing ----------
 
-    def create(self) -> None:
+    @classmethod
+    def create(
+        cls,
+        datapath: str,
+        distance_unit: str,
+        property_unit_dict: Dict[str, str],
+        atomrefs: Optional[Dict[str, List[float]]] = None,
+        **kwargs,
+    ) -> "ASEAtomsData":
         """
-        Create a new ASE database at `self.datapath` and initialize its metadata.
+        Create a new, empty ASE database and return a dataset for it.
 
+        This is the public creation API for custom datasets:
+        ``ASEAtomsData.create(...)`` followed by ``add_systems(...)``.
+
+        Args:
+            datapath: Path to the new ASE DB (must end in ``.db``).
+            distance_unit: unit of atom positions and cell.
+            property_unit_dict: available properties of the dataset mapped to
+                their units. If a property is unit-less, pass "arb. unit" or
+                `None`.
+            atomrefs: dictionary mapping properties to lists of single-atom
+                reference values.
+            kwargs: passed on to the constructor.
+
+        Returns:
+            newly created dataset instance
         """
-        if not self.datapath.endswith(".db"):
+        cls._write_empty_db(datapath, distance_unit, property_unit_dict, atomrefs)
+        return cls(datapath, **kwargs)
+
+    @staticmethod
+    def _write_empty_db(
+        datapath: str,
+        distance_unit: str,
+        property_unit_dict: Dict[str, str],
+        atomrefs: Optional[Dict[str, List[float]]] = None,
+    ) -> None:
+        if not datapath.endswith(".db"):
             raise AtomsDataError("Invalid datapath! Add '.db' extension.")
-        if os.path.exists(self.datapath):
-            raise AtomsDataError(f"Dataset already exists: {self.datapath}")
+        if os.path.exists(datapath):
+            raise AtomsDataError(f"Dataset already exists: {datapath}")
+        if property_unit_dict is None:
+            raise AtomsDataError("property_unit_dict must be provided.")
+        if distance_unit is None:
+            raise AtomsDataError("distance_unit must be provided.")
 
-        os.makedirs(os.path.dirname(self.datapath) or ".", exist_ok=True)
+        os.makedirs(os.path.dirname(datapath) or ".", exist_ok=True)
 
-        if self.property_units is None:
-            raise AtomsDataError("property_units is not set in dataset class.")
-        if self.distance_unit is None:
-            raise AtomsDataError("distance_unit is not set in dataset class.")
-
-        with connect(self.datapath) as conn:
+        with connect(datapath) as conn:
             conn.metadata = {
-                "_property_unit_dict": self.property_units,
-                "_distance_unit": self.distance_unit,
-                "atomrefs": {},
+                "_property_unit_dict": property_unit_dict,
+                "_distance_unit": distance_unit,
+                "atomrefs": atomrefs or {},
             }
 
     def add_system(
@@ -446,7 +482,67 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
             conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
 
+class DownloadableASEAtomsData(ASEAtomsData, ABC):
+    """
+    Base class for datasets that can download and build their own ASE database.
+
+    On instantiation, if `datapath` does not exist (and `download=True`), an
+    empty DB is created from the subclass's native units and `download()` is
+    called to fill it. Subclasses must set `self.property_units` (native
+    property unit dict) and `self.distance_unit` BEFORE calling
+    `super().__init__()`, and must implement `download()`.
+    """
+
+    def __init__(self, datapath: str, download: bool = True, **kwargs):
+        """
+        Args:
+            datapath: Path to ASE DB.
+            download: If True (default), download the dataset if `datapath`
+                does not exist. If False, a missing `datapath` raises instead.
+            **kwargs: arguments passed on to the ASEAtomsData constructor.
+        """
+        self.datapath = datapath
+        if not os.path.exists(self.datapath):
+            if not download:
+                raise AtomsDataError(
+                    f"ASE DB does not exist at {self.datapath}. "
+                    "Pass download=True to download the dataset."
+                )
+
+            # Downloads happen in __init__, which every DDP rank executes.
+            # Serialize concurrent creators with an inter-process lock; late
+            # ranks find the finished DB and skip the download.
+            os.makedirs(os.path.dirname(self.datapath) or ".", exist_ok=True)
+            lock = fasteners.InterProcessLock(self.datapath + ".lock")
+            with lock:
+                if not os.path.exists(self.datapath):
+                    # Write the empty DB from the subclass's native units,
+                    # then let download() fill it.
+                    self._write_empty_db(
+                        self.datapath, self.distance_unit, self.property_units
+                    )
+                    try:
+                        self.download()
+                    except BaseException:
+                        # A failed download must not leave a 0-row DB behind —
+                        # it would permanently block retries, since the next
+                        # run sees the file and skips the download.
+                        if os.path.exists(self.datapath):
+                            os.remove(self.datapath)
+                        raise
+                    # Catch download() implementations that return without
+                    # writing anything.
+                    with connect(self.datapath, use_lock_file=False) as conn:
+                        if conn.count() == 0:
+                            os.remove(self.datapath)
+                            raise AtomsDataError(
+                                f"download() of {self.__class__.__name__} "
+                                f"produced an empty database at {self.datapath}"
+                            )
+
+        super().__init__(datapath=datapath, **kwargs)
+
+    @abstractmethod
     def download(self):
-        raise NotImplementedError(
-            f"{self.__class__.__name__} must implement download()."
-        )
+        """Fill the freshly created, empty DB at `self.datapath`."""
+        ...

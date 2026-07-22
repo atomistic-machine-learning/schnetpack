@@ -14,7 +14,7 @@ import progressbar
 from ase import Atoms
 
 from schnetpack.transform.base import Transform
-from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 
 __all__ = ["QM7X"]
 
@@ -89,7 +89,7 @@ def extract_xz(source: str, target: str):
     logging.info("Done.")
 
 
-class QM7X(ASEAtomsData):
+class QM7X(DownloadableASEAtomsData):
     """
     QM7-X a comprehensive dataset of > 40 physicochemical properties for ~4.2 M equilibrium and non-equilibrium
     structure of small organic molecules with up to seven non-hydrogen (C, N, O, S, Cl) atoms.
@@ -249,6 +249,12 @@ class QM7X(ASEAtomsData):
                 for i in range(0, 18)
             ]
         }
+
+        # Write the PBE0 single-atom reference energies into the DB metadata,
+        # like the other datasets do.
+        md = self.metadata
+        md["atomrefs"] = atomrefs
+        self._set_metadata(md)
 
         hd_files = self._download_data(tar_dir)
         if self.remove_duplicates:

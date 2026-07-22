@@ -15,7 +15,10 @@ def calculate_stats(
     divide_by_atoms: Dict[str, bool],
     atomref: Dict[str, torch.Tensor] = None,
     batch_size: int = 10000,
-    num_workers: int = 4,
+    # num_workers=0: spawning workers by default breaks on platforms with
+    # spawn start method (the dataset holds a DB connection), and stats are a
+    # one-off pass anyway.
+    num_workers: int = 0,
     loader_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Tuple[torch.Tensor, torch.Tensor]]:
     """
@@ -42,7 +45,9 @@ def calculate_stats(
     dataloader = AtomsLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=True,
+        # Shuffling is irrelevant for mean/std over the full dataset; keep
+        # iteration deterministic.
+        shuffle=False,
         num_workers=num_workers,
         **loader_kwargs,
     )
@@ -99,7 +104,8 @@ def estimate_atomrefs(
     is_extensive: Dict[str, bool],
     z_max: int = 100,
     batch_size: int = 10000,
-    num_workers: int = 4,
+    # num_workers=0: see calculate_stats — safe, deterministic defaults.
+    num_workers: int = 0,
     loader_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, torch.Tensor]:
     """
@@ -121,7 +127,9 @@ def estimate_atomrefs(
     dataloader = AtomsLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=True,
+        # Linear regression over all samples — order does not matter, keep
+        # iteration deterministic.
+        shuffle=False,
         num_workers=num_workers,
         **loader_kwargs,
     )

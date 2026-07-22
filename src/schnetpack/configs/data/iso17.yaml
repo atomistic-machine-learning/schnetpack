@@ -2,10 +2,14 @@
 defaults:
   - custom
 
+fold: reference
+
 dataset:
   _target_: schnetpack.datasets.ISO17
-  datapath: ${run.data_dir}/${data.folder}.db # data_dir is specified in train.yaml
-  folder: reference
+  # ISO17 takes the data root directory and stores the databases under
+  # <datapath>/iso17/<fold>.db itself.
+  datapath: ${run.data_dir}
+  fold: ${data.fold}
 
 batch_size: 32
 num_train: 0.9

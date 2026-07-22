@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import copy
 from typing import Dict, Optional, Tuple
 
 import torch
 
 from schnetpack.data.atoms import ASEAtomsData
 from schnetpack.data.stats import calculate_stats, estimate_atomrefs
+
+__all__ = ["StatsAtomrefProvider"]
 
 
 class StatsAtomrefProvider:
@@ -16,6 +19,16 @@ class StatsAtomrefProvider:
     def __init__(self, train_dataset: ASEAtomsData) -> None:
         self.train_dataset = train_dataset
         self.train_atomrefs = getattr(train_dataset, "atomrefs", None)
+
+        # Statistics must always be computed on the *raw* training data. The
+        # provider may be queried lazily (e.g. by AddOffsets during model
+        # setup) after the train dataset already has its transforms attached —
+        # computing stats through RemoveOffsets etc. would silently yield
+        # wrong means. Use a shallow copy with transforms stripped, so timing
+        # no longer matters.
+        self._raw_train_dataset = copy.copy(train_dataset)
+        self._raw_train_dataset.transforms = []
+        self._raw_train_dataset.split = None
 
         self._stats_cache: Dict[
             Tuple[str, bool, bool], Tuple[torch.Tensor, torch.Tensor]
@@ -32,7 +45,7 @@ class StatsAtomrefProvider:
         atomref = self.train_atomrefs if remove_atomref else None
 
         stats = calculate_stats(
-            self.train_dataset,
+            self._raw_train_dataset,
             divide_by_atoms={property: divide_by_atoms},
             atomref=atomref,
         )[property]
@@ -53,7 +66,7 @@ class StatsAtomrefProvider:
             return {property: self._atomref_cache[key]}
 
         atomref = estimate_atomrefs(
-            self.train_dataset,
+            self._raw_train_dataset,
             is_extensive={property: is_extensive},
         )[property]
 

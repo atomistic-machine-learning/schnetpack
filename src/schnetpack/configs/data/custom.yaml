@@ -1,13 +1,15 @@
 # @package data
-_target_: schnetpack.data.datamodule_v2.AtomsDataModuleV2
+_target_: schnetpack.data.AtomsDataModule
 
 dataset:
   _target_: schnetpack.data.ASEAtomsData
   datapath: ???
   load_properties: null
-  distance_unit: Ang
-  property_units: {}
-  transforms: ${data.transforms}
+  # null: keep the dataset's native units — setting a unit here converts on
+  # load.
+  distance_unit: null
+  property_units: null
+  transforms: null
   train_transforms: null
   val_transforms: null
   test_transforms: null
@@ -22,4 +24,3 @@ num_workers: 8
 train_sampler_cls: null
 train_sampler_args: {}
 pin_memory: false
-

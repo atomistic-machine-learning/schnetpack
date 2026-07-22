@@ -11,13 +11,49 @@ import numpy as np
 from ase import Atoms
 
 import schnetpack.properties as structure
-from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.splitting import (
+    RandomSplit,
+    SplittingStrategy,
+    SubsamplePartitions,
+)
 from schnetpack.transform.base import Transform
 
-__all__ = ["rMD17"]
+__all__ = ["rMD17", "rMD17Split"]
 
 
-class rMD17(ASEAtomsData):
+class rMD17Split(SplittingStrategy):
+    """
+    Splitting strategy for the published rMD17 benchmark splits.
+
+    With ``split_id`` (0-4), train/val are subsampled from the predefined
+    "known" partition and the test set from the predefined "test" partition
+    stored in the dataset metadata. With ``split_id=None`` (default), a plain
+    random split is used instead.
+    """
+
+    # The split_id semantics — including "no split_id means a plain random
+    # split" — are rMD17-specific, so they live here, next to the dataset
+    # that writes the partitions. The generic SubsamplePartitions strategy
+    # stays strict (an integer split_id is required there).
+    def __init__(self, split_id: Optional[int] = None):
+        """
+        Args:
+            split_id: The id of the predefined rMD17 train/test splits (0-4).
+                If None, a random split is used.
+        """
+        self.split_id = split_id
+
+    def split(self, dataset, *split_sizes):
+        if self.split_id is None:
+            return RandomSplit().split(dataset, *split_sizes)
+        return SubsamplePartitions(
+            split_partition_sources=["known", "known", "test"],
+            split_id=self.split_id,
+        ).split(dataset, *split_sizes)
+
+
+class rMD17(DownloadableASEAtomsData):
     """
     Revised MD17 benchmark dataset for molecular dynamics of small molecules
     containing molecular forces.

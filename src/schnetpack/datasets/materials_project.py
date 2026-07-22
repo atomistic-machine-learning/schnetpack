@@ -1,16 +1,17 @@
 import logging
+import os
 from typing import List, Optional, Dict
 
 import numpy as np
 from ase import Atoms
 
-from schnetpack.data.atoms import ASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 from schnetpack.transform.base import Transform
 
 __all__ = ["MaterialsProject"]
 
 
-class MaterialsProject(ASEAtomsData):
+class MaterialsProject(DownloadableASEAtomsData):
     """
     Materials Project (MP) database of bulk crystals.
     This class adds convenient functions to download Materials Project data into
@@ -56,25 +57,11 @@ class MaterialsProject(ASEAtomsData):
             distance_unit: unit of the atom positions and cell as a string (Ang, Bohr, ...)
             apikey: api key use to get data
         """
-        if apikey is None:
-            raise AtomsDataError(
-                "No API key provided. Visit https://next-gen.materialsproject.org/ "
-                "to get an API key."
-            )
-
-        elif len(apikey) == 16:
-            raise AtomsDataError(
-                "You are using a legacy API key. This API is deprecated and no longer "
-                "supported by Materials Project. Please use the next-gen API instead. "
-                "Visit https://next-gen.materialsproject.org/ to get a valid API key."
-            )
-
-        elif len(apikey) != 32:
-            raise AtomsDataError(
-                "Invalid API key. MaterialsProject requires an API key of 32 characters. "
-                f"Your API key contains {len(apikey)} characters. "
-                "Visit https://next-gen.materialsproject.org/ to get a valid API key."
-            )
+        # Only validate the API key when a download is actually needed —
+        # opening an already-downloaded materials_project.db without a key is
+        # a valid workflow.
+        if not os.path.exists(datapath):
+            self._validate_apikey(apikey)
 
         self.apikey = apikey
         self.distance_unit = "Ang"
@@ -92,6 +79,28 @@ class MaterialsProject(ASEAtomsData):
             distance_unit=distance_unit,
             **kwargs,
         )
+
+    @staticmethod
+    def _validate_apikey(apikey: Optional[str]) -> None:
+        if apikey is None:
+            raise AtomsDataError(
+                "No API key provided. Visit https://next-gen.materialsproject.org/ "
+                "to get an API key."
+            )
+
+        if len(apikey) == 16:
+            raise AtomsDataError(
+                "You are using a legacy API key. This API is deprecated and no longer "
+                "supported by Materials Project. Please use the next-gen API instead. "
+                "Visit https://next-gen.materialsproject.org/ to get a valid API key."
+            )
+
+        if len(apikey) != 32:
+            raise AtomsDataError(
+                "Invalid API key. MaterialsProject requires an API key of 32 characters. "
+                f"Your API key contains {len(apikey)} characters. "
+                "Visit https://next-gen.materialsproject.org/ to get a valid API key."
+            )
 
     @staticmethod
     def _native_property_units() -> Dict[str, str]:
