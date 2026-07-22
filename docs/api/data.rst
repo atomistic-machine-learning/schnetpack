@@ -34,5 +34,7 @@ Statistics
     :template: classtemplate.rst
 
     calculate_stats
+    estimate_atomrefs
+    StatsAtomrefProvider
     NumberOfAtomsCriterion
     PropertyCriterion

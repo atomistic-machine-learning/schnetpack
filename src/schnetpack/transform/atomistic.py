@@ -156,10 +156,11 @@ class RemoveOffsets(Transform):
 
 class ScaleProperty(Transform):
     """
-    Scale an entry of the input or results dioctionary.
+    Scale an entry of the input or results dictionary.
 
-    The `scale` can be automatically obtained from the AtomsDataModule,
-    when it is used. Otherwise, it has to be provided in the init manually.
+    The `scale` can be obtained automatically from training statistics via
+    `initialize(stats)`. Otherwise, it has to be provided in the init
+    manually.
 
     """
 

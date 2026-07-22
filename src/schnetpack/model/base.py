@@ -68,8 +68,9 @@ class AtomisticModel(nn.Module):
         """
         Args:
             postprocessors: Post-processing transforms that may be
-                initialized using the `datamodule`, but are not
-                applied during training.
+                initialized with training statistics (via
+                `initialize_transforms`), but are not applied during
+                training.
             input_dtype: The dtype of real inputs as string.
             do_postprocessing: If true, post-processing is activated.
         """
@@ -158,8 +159,9 @@ class NeuralNetworkPotential(AtomisticModel):
                 modify input or add additional tensors for response properties.
             output_modules: Modules that predict output properties from the
                 representation.
-            postprocessors: Post-processing transforms that may be initialized using the
-                `datamodule`, but are not applied during training.
+            postprocessors: Post-processing transforms that may be initialized with
+                training statistics (via `initialize_transforms`), but are not
+                applied during training.
             input_dtype_str: The dtype of real inputs.
             do_postprocessing: If true, post-processing is activated.
         """
