@@ -191,11 +191,11 @@ class AtomsDataModule(pl.LightningDataModule):
         return self.provider.get_stats(property, divide_by_atoms, remove_atomref)
 
     def get_atomrefs(
-        self, property: str, is_extensive: bool
+        self, property: str, is_extensive: bool, estimate: bool = True
     ) -> Dict[str, torch.Tensor]:
         if self.provider is None:
             raise RuntimeError("Call setup() before accessing atomrefs.")
-        return self.provider.get_atomrefs(property, is_extensive)
+        return self.provider.get_atomrefs(property, is_extensive, estimate)
 
     def _load_partitions(self) -> None:
         # Serialize split creation with an inter-process lock, so concurrent

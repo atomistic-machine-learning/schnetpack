@@ -7,14 +7,16 @@ from ase import Atoms
 from schnetpack.data import ASEAtomsData
 
 ENERGY = "energy"
+H_ATOMREF = -2.5
+O_ATOMREF = 4.5
 
 
-@pytest.fixture
-def stats_dbpath(tmp_path):
-    """Small deterministic H/O dataset with known energies."""
-    datapath = os.path.join(tmp_path, "stats_test.db")
+def _build_stats_db(datapath, atomrefs=None):
     db = ASEAtomsData.create(
-        datapath, distance_unit="Ang", property_unit_dict={ENERGY: "eV"}
+        datapath,
+        distance_unit="Ang",
+        property_unit_dict={ENERGY: "eV"},
+        atomrefs=atomrefs,
     )
 
     rng = np.random.RandomState(42)
@@ -32,3 +34,21 @@ def stats_dbpath(tmp_path):
 
     db.add_systems(property_list, atoms_list)
     return datapath
+
+
+@pytest.fixture
+def stats_dbpath(tmp_path):
+    """Small deterministic H/O dataset with known energies, no atomrefs."""
+    return _build_stats_db(os.path.join(tmp_path, "stats_test.db"))
+
+
+@pytest.fixture
+def stats_dbpath_with_atomrefs(tmp_path):
+    """Same dataset, with single-atom references in the DB metadata."""
+    atomrefs = [0.0] * 100
+    atomrefs[1] = H_ATOMREF
+    atomrefs[8] = O_ATOMREF
+    return _build_stats_db(
+        os.path.join(tmp_path, "stats_test_atomrefs.db"),
+        atomrefs={ENERGY: atomrefs},
+    )

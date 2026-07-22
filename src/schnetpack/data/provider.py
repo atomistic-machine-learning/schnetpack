@@ -51,11 +51,17 @@ class StatsAtomrefProvider:
         return stats
 
     def get_atomrefs(
-        self, property: str, is_extensive: bool
+        self, property: str, is_extensive: bool, estimate: bool = True
     ) -> Dict[str, torch.Tensor]:
         # 1) If dataset already has atomrefs for this property, use them directly
         if self.train_atomrefs is not None and property in self.train_atomrefs:
             return {property: self.train_atomrefs[property]}
+
+        if not estimate:
+            raise RuntimeError(
+                f"The dataset provides no atomrefs for property '{property}' "
+                "and atomref estimation is disabled."
+            )
 
         # 2) Otherwise estimate and cache
         key = (property, is_extensive)
