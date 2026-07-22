@@ -26,9 +26,7 @@ def _build_stats_db(datapath, atomrefs=None):
         n_h = 1 + i % 4
         n_o = 1 + (i * 3) % 5
         numbers = [1] * n_h + [8] * n_o
-        atoms_list.append(
-            Atoms(numbers=numbers, positions=rng.randn(len(numbers), 3))
-        )
+        atoms_list.append(Atoms(numbers=numbers, positions=rng.randn(len(numbers), 3)))
         energy = -2.0 * n_h + 5.0 * n_o + 0.1 * (i % 7)
         property_list.append({ENERGY: np.array([energy])})
 

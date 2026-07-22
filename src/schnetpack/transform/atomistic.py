@@ -134,29 +134,6 @@ class RemoveOffsets(Transform):
             )
             self.mean = mean.detach()
 
-    def datamodule(self, _datamodule):
-        """
-        Hook called with the AtomsDataModule when using the PyTorch Lightning
-        integration (see AtomisticModel.initialize_transforms).
-        """
-        # Statistics must come from the datamodule's cached provider:
-        # recomputing them here would run on data whose transforms have
-        # already removed the offsets.
-        if self.remove_atomrefs and not self._atomrefs_initialized:
-            if self.estimate_atomref:
-                atrefs = _datamodule.get_atomrefs(
-                    property=self._property, is_extensive=self.is_extensive
-                )
-            else:
-                atrefs = _datamodule.train_dataset.atomrefs
-            self.atomref = atrefs[self._property].detach()
-
-        if self.remove_mean and not self._mean_initialized:
-            stats = _datamodule.get_stats(
-                self._property, self.is_extensive, self.remove_atomrefs
-            )
-            self.mean = stats[0].detach()
-
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
@@ -229,16 +206,6 @@ class ScaleProperty(Transform):
         if not self._initialized:
             mean, std = stats.get_stats(self._target_key, True, False)
             scale = mean if self._scale_by_mean else std
-            self.scale = torch.abs(scale).detach()
-
-    def datamodule(self, _datamodule):
-        """
-        Hook called with the AtomsDataModule when using the PyTorch Lightning
-        integration.
-        """
-        if not self._initialized:
-            stats = _datamodule.get_stats(self._target_key, True, False)
-            scale = stats[0] if self._scale_by_mean else stats[1]
             self.scale = torch.abs(scale).detach()
 
     def forward(
@@ -325,29 +292,6 @@ class AddOffsets(Transform):
                 self._property, self.is_extensive, self.add_atomrefs
             )
             self.mean = mean.detach()
-
-    def datamodule(self, _datamodule):
-        """
-        Hook called with the AtomsDataModule when using the PyTorch Lightning
-        integration (see AtomisticModel.initialize_transforms).
-        """
-        # Statistics must come from the datamodule's cached provider:
-        # recomputing them here would run on data whose transforms have
-        # already removed the offsets, yielding a near-zero mean.
-        if self.add_atomrefs and not self._atomrefs_initialized:
-            if self.estimate_atomref:
-                atrefs = _datamodule.get_atomrefs(
-                    property=self._property, is_extensive=self.is_extensive
-                )
-            else:
-                atrefs = _datamodule.train_dataset.atomrefs
-            self.atomref = atrefs[self._property].detach()
-
-        if self.add_mean and not self._mean_initialized:
-            stats = _datamodule.get_stats(
-                self._property, self.is_extensive, self.add_atomrefs
-            )
-            self.mean = stats[0].detach()
 
     def forward(
         self,

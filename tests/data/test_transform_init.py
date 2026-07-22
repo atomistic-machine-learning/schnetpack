@@ -20,9 +20,7 @@ TRAIN_IDX = list(range(10))
 def test_remove_offsets_reads_dataset_atomrefs_from_stats_source(
     stats_dbpath_with_atomrefs,
 ):
-    provider = StatsAtomrefProvider(
-        ASEAtomsData(stats_dbpath_with_atomrefs), TRAIN_IDX
-    )
+    provider = StatsAtomrefProvider(ASEAtomsData(stats_dbpath_with_atomrefs), TRAIN_IDX)
     transform = RemoveOffsets(
         ENERGY, remove_atomrefs=True, estimate_atomref=False, is_extensive=True
     )
@@ -36,9 +34,7 @@ def test_remove_offsets_reads_dataset_atomrefs_from_stats_source(
 def test_add_offsets_reads_dataset_atomrefs_from_stats_source(
     stats_dbpath_with_atomrefs,
 ):
-    provider = StatsAtomrefProvider(
-        ASEAtomsData(stats_dbpath_with_atomrefs), TRAIN_IDX
-    )
+    provider = StatsAtomrefProvider(ASEAtomsData(stats_dbpath_with_atomrefs), TRAIN_IDX)
     transform = AddOffsets(
         ENERGY, add_atomrefs=True, estimate_atomref=False, is_extensive=True
     )
@@ -68,9 +64,7 @@ def test_scale_property_initializes_from_stats_source(stats_dbpath):
 
     transform.initialize(provider)
 
-    per_atom = [
-        dataset[i][ENERGY] / dataset[i][structure.n_atoms] for i in TRAIN_IDX
-    ]
+    per_atom = [dataset[i][ENERGY] / dataset[i][structure.n_atoms] for i in TRAIN_IDX]
     expected_std = torch.cat(per_atom).double().std(correction=0)
     assert torch.allclose(transform.scale.double(), expected_std)
 

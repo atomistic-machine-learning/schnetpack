@@ -58,9 +58,7 @@ def test_provider_estimates_atomrefs_on_raw_train_indices(stats_dbpath):
 
 
 def test_get_atomrefs_strict_returns_dataset_values(stats_dbpath_with_atomrefs):
-    provider = StatsAtomrefProvider(
-        ASEAtomsData(stats_dbpath_with_atomrefs), TRAIN_IDX
-    )
+    provider = StatsAtomrefProvider(ASEAtomsData(stats_dbpath_with_atomrefs), TRAIN_IDX)
 
     refs = provider.get_atomrefs(ENERGY, True, estimate=False)[ENERGY]
 

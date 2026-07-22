@@ -45,9 +45,9 @@ def test_calculate_stats_with_indices_yields_raw_statistics(stats_dbpath):
     view = _transformed_view(stats_dbpath)
     indices = list(range(10))
 
-    mean, _std = calculate_stats(
-        view, divide_by_atoms={ENERGY: True}, indices=indices
-    )[ENERGY]
+    mean, _std = calculate_stats(view, divide_by_atoms={ENERGY: True}, indices=indices)[
+        ENERGY
+    ]
 
     expected = _manual_per_atom_mean(stats_dbpath, indices)
     expected_all = _manual_per_atom_mean(stats_dbpath, range(len(view)))

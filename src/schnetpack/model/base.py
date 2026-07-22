@@ -111,9 +111,13 @@ class AtomisticModel(nn.Module):
         return inputs
 
     def initialize_transforms(self, datamodule):
+        # The datamodule satisfies the stats-source protocol
+        # (get_stats/get_atomrefs) and shares one cached provider with the
+        # data-pipeline transforms, so late initialization here yields the
+        # same raw-training-data statistics.
         for module in self.modules():
             if isinstance(module, Transform):
-                module.datamodule(datamodule)
+                module.initialize(datamodule)
 
     def postprocess(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         if self.do_postprocessing:

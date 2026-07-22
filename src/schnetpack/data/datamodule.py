@@ -179,8 +179,9 @@ class AtomsDataModule(pl.LightningDataModule):
             for t in ds.get_split_transforms():
                 t.teardown()
 
-    # Model postprocessors (e.g. AddOffsets) are initialized through
-    # `Transform.datamodule(dm)` and must read from the *same* cached provider
+    # The datamodule itself satisfies the stats-source protocol: model
+    # postprocessors (e.g. AddOffsets) are initialized late via
+    # `initialize(datamodule)` and must read from the *same* cached provider
     # as the data-pipeline transforms — otherwise they would recompute
     # statistics on already-transformed data and end up with wrong offsets.
     def get_stats(
