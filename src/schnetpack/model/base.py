@@ -68,8 +68,9 @@ class AtomisticModel(nn.Module):
         """
         Args:
             postprocessors: Post-processing transforms that may be
-                initialized using the `datamodule`, but are not
-                applied during training.
+                initialized with training statistics (via
+                `initialize_transforms`), but are not applied during
+                training.
             input_dtype: The dtype of real inputs as string.
             do_postprocessing: If true, post-processing is activated.
         """
@@ -111,9 +112,13 @@ class AtomisticModel(nn.Module):
         return inputs
 
     def initialize_transforms(self, datamodule):
+        # The datamodule satisfies the stats-source protocol
+        # (get_stats/get_atomrefs) and shares one cached provider with the
+        # data-pipeline transforms, so late initialization here yields the
+        # same raw-training-data statistics.
         for module in self.modules():
             if isinstance(module, Transform):
-                module.datamodule(datamodule)
+                module.initialize(datamodule)
 
     def postprocess(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         if self.do_postprocessing:
@@ -154,8 +159,9 @@ class NeuralNetworkPotential(AtomisticModel):
                 modify input or add additional tensors for response properties.
             output_modules: Modules that predict output properties from the
                 representation.
-            postprocessors: Post-processing transforms that may be initialized using the
-                `datamodule`, but are not applied during training.
+            postprocessors: Post-processing transforms that may be initialized with
+                training statistics (via `initialize_transforms`), but are not
+                applied during training.
             input_dtype_str: The dtype of real inputs.
             do_postprocessing: If true, post-processing is activated.
         """

@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any
 
 import torch
 from tqdm import tqdm
@@ -8,6 +8,21 @@ from schnetpack.data.atoms import ASEAtomsData
 from schnetpack.data.loader import AtomsLoader
 
 __all__ = ["calculate_stats", "estimate_atomrefs"]
+
+
+def _raw_view(dataset: ASEAtomsData, indices: Optional[List[int]]) -> ASEAtomsData:
+    """
+    Statistics must always be computed on raw data. Build an index-restricted
+    view of the dataset with no transforms and no split label, so that
+    whatever view the caller holds (transformed, split-labeled) can never leak
+    into statistics computation.
+    """
+    if indices is None:
+        return dataset
+    view = dataset.subset(list(indices))
+    view.transforms = []
+    view.split = None
+    return view
 
 
 def calculate_stats(
@@ -20,6 +35,7 @@ def calculate_stats(
     # one-off pass anyway.
     num_workers: int = 0,
     loader_kwargs: Optional[Dict[str, Any]] = None,
+    indices: Optional[List[int]] = None,
 ) -> Dict[str, Tuple[torch.Tensor, torch.Tensor]]:
     """
     Use the incremental Welford algorithm described in [h1]_ to accumulate
@@ -36,11 +52,15 @@ def calculate_stats(
         atomref: Optional single-atom reference values to subtract before computing statistics.
         batch_size: Batch size used for the temporary data loader.
         num_workers: Number of workers used by the data loader.
+        indices: Optional indices into `dataset` to restrict the computation
+            to. When given, statistics are computed on a raw view of these
+            entries — any transforms or split label on `dataset` are ignored.
 
     Returns:
         Mapping from property name to `(mean, std)` tensors.
     """
     loader_kwargs = loader_kwargs or {}
+    dataset = _raw_view(dataset, indices)
 
     dataloader = AtomsLoader(
         dataset,
@@ -107,6 +127,7 @@ def estimate_atomrefs(
     # num_workers=0: see calculate_stats — safe, deterministic defaults.
     num_workers: int = 0,
     loader_kwargs: Optional[Dict[str, Any]] = None,
+    indices: Optional[List[int]] = None,
 ) -> Dict[str, torch.Tensor]:
     """
     Uses linear regression to estimate the elementwise biases (atomrefs).
@@ -118,11 +139,15 @@ def estimate_atomrefs(
         z_max: Maximum atomic number used to size the atomref tensors.
         batch_size: Batch size used for the temporary data loader.
         num_workers: Number of workers used by the data loader.
+        indices: Optional indices into `dataset` to restrict the computation
+            to. When given, atomrefs are estimated on a raw view of these
+            entries — any transforms or split label on `dataset` are ignored.
 
     Returns:
         Mapping from property name to estimated atom reference tensor.
     """
     loader_kwargs = loader_kwargs or {}
+    dataset = _raw_view(dataset, indices)
 
     dataloader = AtomsLoader(
         dataset,

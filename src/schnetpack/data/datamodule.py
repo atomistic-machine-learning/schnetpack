@@ -8,11 +8,15 @@ import torch
 from torch.utils.data import BatchSampler
 
 from schnetpack.data.atoms import ASEAtomsData
-from schnetpack.data.provider import StatsAtomrefProvider
-from schnetpack.data.splitting import RandomSplit, SplittingStrategy
+from schnetpack.data.provider import StatsAtomrefProvider, train_partition_fingerprint
+from schnetpack.data.splitting import SPLITTING_LOCK, RandomSplit, SplittingStrategy
 from schnetpack.data.loader import AtomsLoader
 
 __all__ = ["AtomsDataModule"]
+
+# Default for stats_file: derive the path from split_file. A sentinel (not
+# None) because None means "persistence off".
+_DERIVE_STATS_FILE = "<derive from split_file>"
 
 
 class AtomsDataModule(pl.LightningDataModule):
@@ -53,6 +57,7 @@ class AtomsDataModule(pl.LightningDataModule):
         num_val: Union[int, float],
         num_test: Optional[Union[int, float]] = None,
         split_file: Optional[str] = "split.npz",
+        stats_file: Optional[str] = _DERIVE_STATS_FILE,
         splitting: Optional[SplittingStrategy] = None,
         num_workers: int = 0,
         val_batch_size: Optional[int] = None,
@@ -71,6 +76,11 @@ class AtomsDataModule(pl.LightningDataModule):
             num_val: number of validation examples (absolute or relative)
             num_test: number of test examples (absolute or relative)
             split_file: path to npz file with data partitions
+            stats_file: path to the npz file persisting training statistics
+                and estimated atomrefs, keyed by the train-partition
+                fingerprint. By default derived from split_file
+                (<split>_stats.npz next to it). Set to None to disable
+                persistence; reruns then recompute statistics.
             splitting: Method to generate train/validation/test partitions
                     (default: RandomSplit)
             num_workers: Number of data loader workers
@@ -83,8 +93,9 @@ class AtomsDataModule(pl.LightningDataModule):
             train_sampler_args: dict of train_sampler keyword arguments.
             pin_memory: If true, pin memory of loaded data to GPU. Default: Will be
                     set to true, when GPUs are used.
-            provider: stats provider class built from the train split during
-                setup(). If None, use StatsAtomrefProvider.
+            provider: stats provider class, constructed during setup() from
+                the base dataset and the train index list. If None, use
+                StatsAtomrefProvider.
         """
         # Unknown kwargs other than the legacy arguments are tolerated
         # silently, because hydra data configs use top-level keys as
@@ -108,6 +119,13 @@ class AtomsDataModule(pl.LightningDataModule):
         self.num_val = num_val
         self.num_test = num_test
         self.split_file = split_file
+        if stats_file == _DERIVE_STATS_FILE:
+            stats_file = (
+                os.path.splitext(split_file)[0] + "_stats.npz"
+                if split_file is not None
+                else None
+            )
+        self.stats_file = stats_file
         self.splitting = splitting or RandomSplit()
         self.num_workers = num_workers
         self._pin_memory = pin_memory
@@ -115,6 +133,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self.train_idx = None
         self.val_idx = None
         self.test_idx = None
+        self.train_fingerprint: Optional[str] = None
 
         self._train_dataset = None
         self._val_dataset = None
@@ -157,17 +176,28 @@ class AtomsDataModule(pl.LightningDataModule):
         if self.train_idx is None:
             self._load_partitions()
 
+        # Statistics are a pure function of (dataset, train partition); the
+        # fingerprint identifies that partition, e.g. for persisted stats.
+        self.train_fingerprint = train_partition_fingerprint(
+            len(self.dataset), self.train_idx
+        )
+
         # The split label activates the per-split transform selection of
         # ASEAtomsData for anyone touching the subsets directly.
         self._train_dataset = self.dataset.subset(self.train_idx, split="train")
         self._val_dataset = self.dataset.subset(self.val_idx, split="val")
         self._test_dataset = self.dataset.subset(self.test_idx, split="test")
 
-        self.provider = self._provider_cls(self._train_dataset)
+        self.provider = self._provider_cls(
+            self.dataset,
+            self.train_idx,
+            stats_file=self.stats_file,
+            fingerprint=self.train_fingerprint,
+        )
 
-        self._train_dataset.initialize_transforms(provider=self.provider)
-        self._val_dataset.initialize_transforms(provider=self.provider)
-        self._test_dataset.initialize_transforms(provider=self.provider)
+        self._train_dataset.initialize_transforms(self.provider)
+        self._val_dataset.initialize_transforms(self.provider)
+        self._test_dataset.initialize_transforms(self.provider)
 
     def teardown(self, stage: Optional[str] = None) -> None:
         # Transforms with external resources (e.g. cached neighbor lists)
@@ -178,8 +208,9 @@ class AtomsDataModule(pl.LightningDataModule):
             for t in ds.get_split_transforms():
                 t.teardown()
 
-    # Model postprocessors (e.g. AddOffsets) are initialized through
-    # `Transform.datamodule(dm)` and must read from the *same* cached provider
+    # The datamodule itself satisfies the stats-source protocol: model
+    # postprocessors (e.g. AddOffsets) are initialized late via
+    # `initialize(datamodule)` and must read from the *same* cached provider
     # as the data-pipeline transforms — otherwise they would recompute
     # statistics on already-transformed data and end up with wrong offsets.
     def get_stats(
@@ -190,17 +221,17 @@ class AtomsDataModule(pl.LightningDataModule):
         return self.provider.get_stats(property, divide_by_atoms, remove_atomref)
 
     def get_atomrefs(
-        self, property: str, is_extensive: bool
+        self, property: str, is_extensive: bool, estimate: bool = True
     ) -> Dict[str, torch.Tensor]:
         if self.provider is None:
             raise RuntimeError("Call setup() before accessing atomrefs.")
-        return self.provider.get_atomrefs(property, is_extensive)
+        return self.provider.get_atomrefs(property, is_extensive, estimate)
 
     def _load_partitions(self) -> None:
         # Serialize split creation with an inter-process lock, so concurrent
         # DDP ranks / jobs cannot race on writing split.npz and end up with
         # different partitions per rank.
-        lock = fasteners.InterProcessLock("splitting.lock")
+        lock = fasteners.InterProcessLock(SPLITTING_LOCK)
 
         with lock:
             total_size = len(self.dataset)
