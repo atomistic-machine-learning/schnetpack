@@ -8,7 +8,6 @@ from schnetpack.nn.activations import shifted_softplus
 from schnetpack.nn.blocks import ResidualMLP
 from typing import Callable, Union
 
-
 __all__ = ["NuclearEmbedding", "ElectronicEmbedding"]
 
 

@@ -14,18 +14,19 @@ globals:
   forces_key: forces
 
 data:
-  distance_unit: Ang
-  property_units:
-    energy: kcal/mol
-    forces: kcal/mol/Ang
-  transforms:
-    - _target_: schnetpack.transform.SubtractCenterOfMass
-    - _target_: schnetpack.transform.RemoveOffsets
-      property: energy
-      remove_mean: True
-    - _target_: schnetpack.transform.MatScipyNeighborList
-      cutoff: ${globals.cutoff}
-    - _target_: schnetpack.transform.CastTo32
+  dataset:
+    distance_unit: Ang
+    property_units:
+      energy: kcal/mol
+      forces: kcal/mol/Ang
+    transforms:
+      - _target_: schnetpack.transform.SubtractCenterOfMass
+      - _target_: schnetpack.transform.RemoveOffsets
+        property: energy
+        remove_mean: True
+      - _target_: schnetpack.transform.MatScipyNeighborList
+        cutoff: ${globals.cutoff}
+      - _target_: schnetpack.transform.CastTo32
 
 model:
   output_modules:

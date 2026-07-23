@@ -11,185 +11,34 @@ References
    Journal of Physics: Condensed Matter, 9, 27. 2017.
 """
 
+import copy
 import logging
 import os
 from abc import ABC, abstractmethod
-from enum import Enum
-from typing import Optional, List, Dict, Any, Iterable, Union, Tuple
+from typing import Optional, List, Dict, Any, Iterable, Union
 
+import fasteners
 import torch
-import copy
 from ase import Atoms
 from ase.db import connect
 
 import schnetpack as spk
 import schnetpack.properties as structure
-from schnetpack.transform import Transform
+from schnetpack.transform.base import Transform
 
 logger = logging.getLogger(__name__)
 
-__all__ = [
-    "ASEAtomsData",
-    "BaseAtomsData",
-    "AtomsDataFormat",
-    "resolve_format",
-    "create_dataset",
-    "load_dataset",
-]
-
-
-class AtomsDataFormat(Enum):
-    """Enumeration of data formats"""
-
-    ASE = "ase"
+__all__ = ["ASEAtomsData", "DownloadableASEAtomsData", "AtomsDataError"]
 
 
 class AtomsDataError(Exception):
     pass
 
 
-extension_map = {AtomsDataFormat.ASE: ".db"}
-
-
-class BaseAtomsData(ABC):
-    """
-    Base mixin class for atomistic data. Use together with PyTorch Dataset or
-    IterableDataset to implement concrete data formats.
-    """
-
-    def __init__(
-        self,
-        load_properties: Optional[List[str]] = None,
-        load_structure: bool = True,
-        transforms: Optional[List[Transform]] = None,
-        subset_idx: Optional[List[int]] = None,
-    ):
-        """
-        Args:
-            load_properties: Set of properties to be loaded and returned.
-                If None, all properties in the ASE dB will be returned.
-            load_structure: If True, load structure properties.
-            transforms: preprocessing transforms (see schnetpack.data.transforms)
-            subset: List of data indices.
-        """
-        self._transform_module = None
-        self.load_properties = load_properties
-        self.load_structure = load_structure
-        self.transforms = transforms
-        self.subset_idx = subset_idx
-
-    def __len__(self) -> int:
-        raise NotImplementedError
-
-    @property
-    def transforms(self):
-        return self._transforms
-
-    @transforms.setter
-    def transforms(self, value: Optional[List[Transform]]):
-        self._transforms = []
-        self._transform_module = None
-
-        if value is not None:
-            for tf in value:
-                self._transforms.append(tf)
-            self._transform_module = torch.nn.Sequential(*self._transforms)
-
-    def subset(self, subset_idx: List[int]):
-        assert (
-            subset_idx is not None
-        ), "Indices for creation of the subset need to be provided!"
-        ds = copy.copy(self)
-        if ds.subset_idx:
-            ds.subset_idx = [ds.subset_idx[i] for i in subset_idx]
-        else:
-            ds.subset_idx = subset_idx
-        return ds
-
-    @property
-    @abstractmethod
-    def available_properties(self) -> List[str]:
-        """Available properties in the dataset"""
-        pass
-
-    @property
-    @abstractmethod
-    def units(self) -> Dict[str, str]:
-        """Property to unit dict"""
-        pass
-
-    @property
-    def load_properties(self) -> List[str]:
-        """Properties to be loaded"""
-        if self._load_properties is None:
-            return self.available_properties
-        else:
-            return self._load_properties
-
-    @load_properties.setter
-    def load_properties(self, val: List[str]):
-        if val is not None:
-            props = self.available_properties
-            assert all(
-                [p in props for p in val]
-            ), "Not all given properties are available in the dataset!"
-        self._load_properties = val
-
-    @property
-    @abstractmethod
-    def metadata(self) -> Dict[str, Any]:
-        """Global metadata"""
-        pass
-
-    @property
-    @abstractmethod
-    def atomrefs(self) -> Dict[str, torch.Tensor]:
-        """Single-atom reference values for properties"""
-        pass
-
-    @abstractmethod
-    def update_metadata(self, **kwargs):
-        pass
-
-    @abstractmethod
-    def iter_properties(
-        self,
-        indices: Union[int, Iterable[int]] = None,
-        load_properties: List[str] = None,
-        load_structure: Optional[bool] = None,
-    ):
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def create(
-        datapath: str,
-        position_unit: str,
-        property_unit_dict: Dict[str, str],
-        atomrefs: Dict[str, List[float]],
-        **kwargs,
-    ) -> "BaseAtomsData":
-        pass
-
-    @abstractmethod
-    def add_systems(
-        self,
-        property_list: List[Dict[str, Any]],
-        atoms_list: Optional[List[Atoms]] = None,
-        atoms_metadata_list: Optional[List[Dict[str, Any]]] = None,
-    ):
-        pass
-
-    @abstractmethod
-    def add_system(self, atoms: Optional[Atoms] = None, **properties):
-        pass
-
-
-class ASEAtomsData(BaseAtomsData):
+class ASEAtomsData(torch.utils.data.Dataset):
     """
     PyTorch dataset for atomistic data. The raw data is stored in the specified
     ASE database.
-
     """
 
     def __init__(
@@ -197,7 +46,10 @@ class ASEAtomsData(BaseAtomsData):
         datapath: str,
         load_properties: Optional[List[str]] = None,
         load_structure: bool = True,
-        transforms: Optional[List[torch.nn.Module]] = None,
+        transforms: Optional[List[Transform]] = None,
+        train_transforms: Optional[List[Transform]] = None,
+        val_transforms: Optional[List[Transform]] = None,
+        test_transforms: Optional[List[Transform]] = None,
         subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
@@ -209,36 +61,35 @@ class ASEAtomsData(BaseAtomsData):
                 If None, all properties in the ASE dB will be returned.
             load_structure: If True, load structure properties.
             transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
+            train_transforms: overrides transform_fn for training
+            val_transforms: overrides transform_fn for validation
+            test_transforms: overrides transform_fn for testing
             subset_idx: List of data indices.
-            units: property-> unit string dictionary that overwrites the native units
-                of the dataset. Units are converted automatically during loading.
+            property_units: dictionary from property to corresponding unit as a string (eV, kcal/mol, ...)
+            distance_unit: unit of the atom positions and cell as a string (Ang, Bohr, ...)
         """
         self.datapath = datapath
-        self.conn = connect(self.datapath, use_lock_file=False)
-
-        BaseAtomsData.__init__(
-            self,
-            load_properties=load_properties,
-            load_structure=load_structure,
-            transforms=transforms,
-            subset_idx=subset_idx,
-        )
+        self.subset_idx = subset_idx
+        # ASEAtomsData is a pure reader of existing DBs — a missing file is
+        # always an error here. Datasets that can fetch their own data
+        # subclass DownloadableASEAtomsData instead.
+        if not os.path.exists(self.datapath):
+            raise AtomsDataError(f"ASE DB does not exist at {self.datapath}")
 
         self._check_db()
+        self.conn = connect(self.datapath, use_lock_file=False)
 
-        # initialize units
+        self.transforms = list(transforms or [])
+        self.train_transforms = list(train_transforms) if train_transforms else None
+        self.val_transforms = list(val_transforms) if val_transforms else None
+        self.test_transforms = list(test_transforms) if test_transforms else None
+        self.split = None
+
+        self._load_properties: Optional[List[str]] = None
+        self.load_structure = load_structure
+
+        # units from metadata
         md = self.metadata
-        if "_distance_unit" not in md.keys():
-            raise AtomsDataError(
-                "Dataset does not have a distance unit set. Please add units to the "
-                + "dataset using `spkconvert`!"
-            )
-        if "_property_unit_dict" not in md.keys():
-            raise AtomsDataError(
-                "Dataset does not have a property units set. Please add units to the "
-                + "dataset using `spkconvert`!"
-            )
-
         if distance_unit:
             self.distance_conversion = spk.units.convert_units(
                 md["_distance_unit"], distance_unit
@@ -250,6 +101,8 @@ class ASEAtomsData(BaseAtomsData):
 
         self._units = md["_property_unit_dict"]
         self.conversions = {prop: 1.0 for prop in self._units}
+
+        # apply unit overrides on load only
         if property_units is not None:
             for prop, unit in property_units.items():
                 self.conversions[prop] = spk.units.convert_units(
@@ -257,42 +110,137 @@ class ASEAtomsData(BaseAtomsData):
                 )
                 self._units[prop] = unit
 
+        # now validate load_properties against available_properties
+        self.load_properties = load_properties
+
+    # ---------- merged ASEAtomsData bits ----------
+
+    def subset(self, subset_idx: List[int], split: Optional[str] = None):
+        if subset_idx is None:
+            raise ValueError("subset_idx must be provided.")
+        ds = copy.copy(self)
+        if ds.subset_idx is not None:
+            ds.subset_idx = [ds.subset_idx[i] for i in subset_idx]
+        else:
+            ds.subset_idx = subset_idx
+        ds.split = split
+        return ds
+
+    @property
+    def load_properties(self) -> List[str]:
+        if self._load_properties is None:
+            return self.available_properties
+        return self._load_properties
+
+    @load_properties.setter
+    def load_properties(self, val: Optional[List[str]]):
+        if val is not None:
+            props = self.available_properties
+            missing = [p for p in val if p not in props]
+            if missing:
+                raise AtomsDataError(f"Properties not available in dataset: {missing}")
+        self._load_properties = val
+
+    # ---------- core dataset API ----------
+
     def __len__(self) -> int:
         if self.subset_idx is not None:
             return len(self.subset_idx)
-
         return self.conn.count()
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         if self.subset_idx is not None:
             idx = self.subset_idx[idx]
-
         props = self._get_properties(
             self.conn, idx, self.load_properties, self.load_structure
         )
-        props = self._apply_transforms(props)
+        return self._apply_transforms(props)
 
+    def get_split_transforms(self) -> List[Transform]:
+        if self.split == "train" and self.train_transforms is not None:
+            return self.train_transforms
+        if self.split == "val" and self.val_transforms is not None:
+            return self.val_transforms
+        if self.split == "test" and self.test_transforms is not None:
+            return self.test_transforms
+        return self.transforms
+
+    def initialize_transforms(self, stats=None) -> None:
+        for tf in self.get_split_transforms():
+            if hasattr(tf, "initialize"):
+                tf.initialize(stats)
+
+    def _apply_transforms(
+        self, props: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
+        for tf in self.get_split_transforms():
+            props = tf(props)
         return props
 
-    def _apply_transforms(self, props):
-        if self._transform_module is not None:
-            props = self._transform_module(props)
-        return props
-
-    def _check_db(self):
+    def _check_db(self) -> None:
         if not os.path.exists(self.datapath):
             raise AtomsDataError(f"ASE DB does not exist at {self.datapath}")
 
-        if self.subset_idx:
-            with connect(self.datapath, use_lock_file=False) as conn:
-                n_structures = conn.count()
+        with connect(self.datapath, use_lock_file=False) as conn:
+            n_structures = conn.count()
+            md = conn.metadata
 
-            assert max(self.subset_idx) < n_structures
+        # An empty DB is legal: it is the starting point of the `create()` +
+        # `add_systems()` workflow used for custom datasets.
+
+        if "_distance_unit" not in md:
+            raise AtomsDataError(
+                "Dataset does not have a distance unit set. Please add units to the dataset."
+            )
+
+        if "_property_unit_dict" not in md:
+            raise AtomsDataError(
+                "Dataset does not have property units set. Please add units to the dataset."
+            )
+
+        if self.subset_idx is not None:
+            if max(self.subset_idx) >= n_structures:
+                raise AtomsDataError("subset_idx contains out-of-range indices")
+
+    # ---------- metadata / units -----------
+
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        with connect(self.datapath, use_lock_file=False) as conn:
+            return conn.metadata
+
+    def _set_metadata(self, val: Dict[str, Any]):
+        with connect(self.datapath, use_lock_file=False) as conn:
+            conn.metadata = val
+
+    def update_metadata(self, **kwargs):
+        if not all(k and k[0] != "_" for k in kwargs):
+            raise AtomsDataError("Metadata keys starting with '_' are protected!")
+        md = self.metadata
+        md.update(kwargs)
+        self._set_metadata(md)
+
+    @property
+    def available_properties(self) -> List[str]:
+        md = self.metadata
+        return list(md["_property_unit_dict"].keys())
+
+    @property
+    def units(self) -> Dict[str, str]:
+        return self._units
+
+    @property
+    def atomrefs(self) -> Dict[str, torch.Tensor]:
+        md = self.metadata
+        arefs = md.get("atomrefs", {})
+        return {k: self.conversions[k] * torch.tensor(v) for k, v in arefs.items()}
+
+    # ---------- iteration ----------
 
     def iter_properties(
         self,
         indices: Union[int, Iterable[int]] = None,
-        load_properties: List[str] = None,
+        load_properties: Optional[List[str]] = None,
         load_structure: Optional[bool] = None,
         load_metadata: bool = False,
     ):
@@ -311,22 +259,22 @@ class ASEAtomsData(BaseAtomsData):
         """
         if load_properties is None:
             load_properties = self.load_properties
-        load_structure = load_structure or self.load_structure
+        if load_structure is None:
+            load_structure = self.load_structure
 
-        if self.subset_idx:
+        if self.subset_idx is not None:
             if indices is None:
                 indices = self.subset_idx
-            elif type(indices) is int:
+            elif isinstance(indices, int):
                 indices = [self.subset_idx[indices]]
             else:
                 indices = [self.subset_idx[i] for i in indices]
         else:
             if indices is None:
                 indices = range(len(self))
-            elif type(indices) is int:
+            elif isinstance(indices, int):
                 indices = [indices]
 
-        # read from ase db
         for i in indices:
             yield self._get_properties(
                 self.conn,
@@ -344,12 +292,24 @@ class ASEAtomsData(BaseAtomsData):
         load_structure: bool,
         load_metadata: bool = False,
     ):
-        row = conn.get(idx + 1)
+        """
+        Load properties of a single system from the ASE database.
 
-        # extract properties
+        Args:
+            conn: ASE database connection.
+            idx: Zero-based system index.
+            load_properties: Properties to load.
+            load_structure: Whether to load structural information.
+            load_metadata: Whether to load metadata.
+
+        Returns:
+            Dict[str, torch.Tensor]: Dictionary containing the requested properties.
+        """
+        row = conn.get(idx + 1)
         # TODO: can the copies be avoided?
-        properties = {}
+        properties: Dict[str, torch.Tensor] = {}
         properties[structure.idx] = torch.tensor([idx])
+
         for pname in load_properties:
             properties[pname] = (
                 torch.tensor(row.data[pname].copy()) * self.conversions[pname]
@@ -373,46 +333,11 @@ class ASEAtomsData(BaseAtomsData):
 
         return properties
 
-    # Metadata
-    @property
-    def metadata(self):
-        with connect(self.datapath, use_lock_file=False) as conn:
-            return conn.metadata
+    # ---------- creation / writing ----------
 
-    def _set_metadata(self, val: Dict[str, Any]):
-        with connect(self.datapath, use_lock_file=False) as conn:
-            conn.metadata = val
-
-    def update_metadata(self, **kwargs):
-        assert all(
-            key[0] != 0 for key in kwargs
-        ), "Metadata keys starting with '_' are protected!"
-
-        md = self.metadata
-        md.update(kwargs)
-        self._set_metadata(md)
-
-    @property
-    def available_properties(self) -> List[str]:
-        md = self.metadata
-        return list(md["_property_unit_dict"].keys())
-
-    @property
-    def units(self) -> Dict[str, str]:
-        """Dictionary of properties to units"""
-        return self._units
-
-    @property
-    def atomrefs(self) -> Dict[str, torch.Tensor]:
-        md = self.metadata
-        arefs = md["atomrefs"]
-        arefs = {k: self.conversions[k] * torch.tensor(v) for k, v in arefs.items()}
-        return arefs
-
-    ## Creation
-
-    @staticmethod
+    @classmethod
     def create(
+        cls,
         datapath: str,
         distance_unit: str,
         property_unit_dict: Dict[str, str],
@@ -420,44 +345,52 @@ class ASEAtomsData(BaseAtomsData):
         **kwargs,
     ) -> "ASEAtomsData":
         """
+        Create a new, empty ASE database and return a dataset for it.
+
+        This is the public creation API for custom datasets:
+        ``ASEAtomsData.create(...)`` followed by ``add_systems(...)``.
 
         Args:
-            datapath: Path to ASE DB.
-            distance_unit: unit of atom positions and cell
-            property_unit_dict: Defines the available properties of the datasetseta and
-                provides units for ALL properties of the dataset. If a property is
-                unit-less, you can pass "arb. unit" or `None`.
-            atomrefs: dictionary mapping properies (the keys) to lists of single-atom
-                reference values of the property. This is especially useful for
-                extensive properties such as the energy, where the single atom energies
-                contribute a major part to the overall value.
-            kwargs: Pass arguments to init.
+            datapath: Path to the new ASE DB (must end in ``.db``).
+            distance_unit: unit of atom positions and cell.
+            property_unit_dict: available properties of the dataset mapped to
+                their units. If a property is unit-less, pass "arb. unit" or
+                `None`.
+            atomrefs: dictionary mapping properties to lists of single-atom
+                reference values.
+            kwargs: passed on to the constructor.
 
         Returns:
-            newly created ASEAtomsData
-
+            newly created dataset instance
         """
-        if not datapath.endswith(".db"):
-            raise AtomsDataError(
-                "Invalid datapath! Please make sure to add the file extension '.db' to "
-                "your dbpath."
-            )
+        cls._write_empty_db(datapath, distance_unit, property_unit_dict, atomrefs)
+        return cls(datapath, **kwargs)
 
+    @staticmethod
+    def _write_empty_db(
+        datapath: str,
+        distance_unit: str,
+        property_unit_dict: Dict[str, str],
+        atomrefs: Optional[Dict[str, List[float]]] = None,
+    ) -> None:
+        if not datapath.endswith(".db"):
+            raise AtomsDataError("Invalid datapath! Add '.db' extension.")
         if os.path.exists(datapath):
             raise AtomsDataError(f"Dataset already exists: {datapath}")
+        if property_unit_dict is None:
+            raise AtomsDataError("property_unit_dict must be provided.")
+        if distance_unit is None:
+            raise AtomsDataError("distance_unit must be provided.")
 
-        atomrefs = atomrefs or {}
+        os.makedirs(os.path.dirname(datapath) or ".", exist_ok=True)
 
         with connect(datapath) as conn:
             conn.metadata = {
                 "_property_unit_dict": property_unit_dict,
                 "_distance_unit": distance_unit,
-                "atomrefs": atomrefs,
+                "atomrefs": atomrefs or {},
             }
 
-        return ASEAtomsData(datapath, **kwargs)
-
-    # add systems
     def add_system(
         self,
         atoms: Optional[Atoms] = None,
@@ -490,13 +423,13 @@ class ASEAtomsData(BaseAtomsData):
         Add atoms data to the dataset.
 
         Args:
-            atoms_list: System composition and geometry. If Atoms are None,
-                the structure needs to be given as part of the property dicts
-                (using structure.Z, structure.R, structure.cell, structure.pbc)
             property_list: Properties as list of key-value pairs in the same
                 order as corresponding list of `atoms`.
                 Keys have to match the `available_properties` of the dataset
                 plus additional structure properties, if atoms is None.
+            atoms_list: System composition and geometry. If Atoms are None,
+                the structure needs to be given as part of the property dicts
+                (using structure.Z, structure.R, structure.cell, structure.pbc)
             atoms_metadata_list: Metadata of the atoms objects as list of key-value pairs in the same
                 order as corresponding list of `atoms`.
                 Metadata can not be used as a training property, but can be used for splitting
@@ -504,18 +437,13 @@ class ASEAtomsData(BaseAtomsData):
         """
         if atoms_list is None:
             atoms_list = [None] * len(property_list)
-
         if atoms_metadata_list is None:
             atoms_metadata_list = [{}] * len(property_list)
 
         for atoms, prop, atoms_metadata in zip(
             atoms_list, property_list, atoms_metadata_list
         ):
-            self._add_system(
-                atoms,
-                atoms_metadata,
-                **prop,
-            )
+            self._add_system(atoms, atoms_metadata, **prop)
 
     def _add_system(
         self,
@@ -526,7 +454,6 @@ class ASEAtomsData(BaseAtomsData):
         """
         Add systems to DB.
         """
-        # create atoms object if not provided
         if atoms is None:
             try:
                 Z = properties[structure.Z]
@@ -535,9 +462,7 @@ class ASEAtomsData(BaseAtomsData):
                 pbc = properties[structure.pbc]
                 atoms = Atoms(numbers=Z, positions=R, cell=cell, pbc=pbc)
             except KeyError as e:
-                raise AtomsDataError(
-                    "Property dict does not contain all necessary structure keys"
-                ) from e
+                raise AtomsDataError("Missing structure keys in properties") from e
 
         if atoms_metadata is None:
             atoms_metadata = {}
@@ -545,104 +470,85 @@ class ASEAtomsData(BaseAtomsData):
         with connect(self.datapath, use_lock_file=False) as conn:
             prop_keys = conn.metadata["_property_unit_dict"].keys()
 
-            valid_props = set().union(
-                prop_keys,
-                [structure.Z, structure.R, structure.cell, structure.pbc],
+            valid_props = set(prop_keys).union(
+                {structure.Z, structure.R, structure.cell, structure.pbc}
             )
             for pname in properties:
                 if pname not in valid_props:
                     logger.warning(
-                        f"Property `{pname}` is not a defined property for this dataset and "
-                        + f"will be ignored. If it should be included, it has to be "
-                        + f"provided together with its unit when calling "
-                        + f"AseAtomsData.create()."
+                        f"Property `{pname}` is not defined for this dataset and will be ignored."
                     )
 
             data = {}
             for pname in prop_keys:
-                if pname in properties:
-                    data[pname] = properties[pname]
-                else:
-                    raise AtomsDataError("Required property missing:" + pname)
+                if pname not in properties:
+                    raise AtomsDataError("Required property missing: " + pname)
+                data[pname] = properties[pname]
 
             conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
 
 
-def create_dataset(
-    datapath: str,
-    format: AtomsDataFormat,
-    distance_unit: str,
-    property_unit_dict: Dict[str, str],
-    **kwargs,
-) -> BaseAtomsData:
+class DownloadableASEAtomsData(ASEAtomsData, ABC):
     """
-    Create a new atoms dataset.
+    Base class for datasets that can download and build their own ASE database.
 
-    Args:
-        datapath: file path
-        format: atoms data format
-        distance_unit: unit of atom positiona etc. as string
-        property_unit_dict: dictionary that maps properties to units,
-            e.g. {"energy": "kcal/mol"}
-        **kwargs: arguments for passed to AtomsData init
-
-    Returns:
-
+    On instantiation, if `datapath` does not exist (and `download=True`), an
+    empty DB is created from the subclass's native units and `download()` is
+    called to fill it. Subclasses must set `self.property_units` (native
+    property unit dict) and `self.distance_unit` BEFORE calling
+    `super().__init__()`, and must implement `download()`.
     """
-    if format is AtomsDataFormat.ASE:
-        dataset = ASEAtomsData.create(
-            datapath=datapath,
-            distance_unit=distance_unit,
-            property_unit_dict=property_unit_dict,
-            **kwargs,
-        )
-    else:
-        raise AtomsDataError(f"Unknown format: {format}")
-    return dataset
 
+    def __init__(self, datapath: str, download: bool = True, **kwargs):
+        """
+        Args:
+            datapath: Path to ASE DB.
+            download: If True (default), download the dataset if `datapath`
+                does not exist. If False, a missing `datapath` raises instead.
+            **kwargs: arguments passed on to the ASEAtomsData constructor.
+        """
+        self.datapath = datapath
+        if not os.path.exists(self.datapath):
+            if not download:
+                raise AtomsDataError(
+                    f"ASE DB does not exist at {self.datapath}. "
+                    "Pass download=True to download the dataset."
+                )
 
-def load_dataset(datapath: str, format: AtomsDataFormat, **kwargs) -> BaseAtomsData:
-    """
-    Load dataset.
+            # Downloads happen in __init__, which every DDP rank executes.
+            # Serialize concurrent creators with an inter-process lock; late
+            # ranks find the finished DB and skip the download.
+            os.makedirs(os.path.dirname(self.datapath) or ".", exist_ok=True)
+            lock = fasteners.InterProcessLock(self.datapath + ".lock")
+            with lock:
+                if not os.path.exists(self.datapath):
+                    # Write the empty DB from the subclass's native units,
+                    # then let download() fill it.
+                    self._write_empty_db(
+                        self.datapath, self.distance_unit, self.property_units
+                    )
+                    try:
+                        self.download()
+                    except BaseException:
+                        # A failed download must not leave a 0-row DB behind —
+                        # it would permanently block retries, since the next
+                        # run sees the file and skips the download.
+                        if os.path.exists(self.datapath):
+                            os.remove(self.datapath)
+                        raise
+                    # Catch download() implementations that return without
+                    # writing anything.
+                    with connect(self.datapath, use_lock_file=False) as conn:
+                        if conn.count() == 0:
+                            os.remove(self.datapath)
+                            raise AtomsDataError(
+                                f"download() of {self.__class__.__name__} "
+                                f"produced an empty database at {self.datapath}"
+                            )
 
-    Args:
-        datapath: file path
-        format: atoms data format
-        **kwargs: arguments for passed to AtomsData init
+        super().__init__(datapath=datapath, **kwargs)
 
-    """
-    if format is AtomsDataFormat.ASE:
-        dataset = ASEAtomsData(datapath=datapath, **kwargs)
-    else:
-        raise AtomsDataError(f"Unknown format: {format}")
-    return dataset
-
-
-def resolve_format(
-    datapath: str, format: Optional[AtomsDataFormat] = None
-) -> Tuple[str, AtomsDataFormat]:
-    """
-    Extract data format from file suffix, check for consistency with (optional) given
-    format, or append suffix to file path.
-
-    Args:
-        datapath: path to atoms data
-        format: atoms data format
-
-    """
-    file, suffix = os.path.splitext(datapath)
-    if suffix == ".db":
-        if format is None:
-            format = AtomsDataFormat.ASE
-        assert (
-            format is AtomsDataFormat.ASE
-        ), f"File extension {suffix} is not compatible with chosen format {format}"
-    elif len(suffix) == 0 and format:
-        datapath = datapath + extension_map[format]
-    elif len(suffix) == 0 and format is None:
-        raise AtomsDataError(
-            "If format is not given, `datapath` needs a supported file extension!"
-        )
-    else:
-        raise AtomsDataError(f"Unsupported file extension: {suffix}")
-    return datapath, format
+    @abstractmethod
+    def download(self):
+        """Fill the freshly created, empty DB at `self.datapath`."""
+        ...

@@ -13,11 +13,12 @@ globals:
   property: dipole_moment
 
 data:
-  transforms:
-    - _target_: schnetpack.transform.SubtractCenterOfMass
-    - _target_: schnetpack.transform.MatScipyNeighborList
-      cutoff: ${globals.cutoff}
-    - _target_: schnetpack.transform.CastTo32
+  dataset:
+    transforms:
+      - _target_: schnetpack.transform.SubtractCenterOfMass
+      - _target_: schnetpack.transform.MatScipyNeighborList
+        cutoff: ${globals.cutoff}
+      - _target_: schnetpack.transform.CastTo32
 
 model:
   output_modules:

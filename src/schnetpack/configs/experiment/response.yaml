@@ -22,19 +22,20 @@ globals:
     - ${globals.shielding_key}
 
 data:
-  distance_unit: 1.0
   batch_size: 10
-  transforms:
-    - _target_: schnetpack.transform.SubtractCenterOfMass
-    - _target_: schnetpack.transform.RemoveOffsets
-      property: ${globals.energy_key}
-      remove_mean: true
-    - _target_: schnetpack.transform.MatScipyNeighborList
-      cutoff: ${globals.cutoff}
-    - _target_: schnetpack.transform.CastTo32
-    - _target_: schnetpack.transform.SplitShielding
-      shielding_key: ${globals.shielding_key}
-      atomic_numbers: ${globals.shielding_elements}
+  dataset:
+    distance_unit: 1.0
+    transforms:
+      - _target_: schnetpack.transform.SubtractCenterOfMass
+      - _target_: schnetpack.transform.RemoveOffsets
+        property: ${globals.energy_key}
+        remove_mean: true
+      - _target_: schnetpack.transform.MatScipyNeighborList
+        cutoff: ${globals.cutoff}
+      - _target_: schnetpack.transform.CastTo32
+      - _target_: schnetpack.transform.SplitShielding
+        shielding_key: ${globals.shielding_key}
+        atomic_numbers: ${globals.shielding_elements}
 
 model:
   input_modules:

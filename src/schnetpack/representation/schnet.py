@@ -7,7 +7,6 @@ from schnetpack.nn.activations import shifted_softplus
 
 import schnetpack.nn as snn
 
-
 __all__ = ["SchNet", "SchNetInteraction"]
 
 

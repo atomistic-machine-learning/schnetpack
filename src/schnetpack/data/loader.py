@@ -59,7 +59,7 @@ def _atoms_collate_fn(batch):
 
 
 class AtomsLoader(DataLoader):
-    """Data loader for subclasses of BaseAtomsData"""
+    """Data loader for subclasses of ASEAtomsData"""
 
     def __init__(
         self,

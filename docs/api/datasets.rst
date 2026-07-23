@@ -16,7 +16,6 @@ Molecules
     ISO17
     MD22
     QM7X
-    TMQM
 
 Materials
 ---------
