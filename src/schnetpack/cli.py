@@ -58,13 +58,11 @@ def train(config: DictConfig):
         return
 
     if not ("model" in config and "data" in config):
-        log.error(
-            f"""
+        log.error(f"""
         Config incomplete! You have to specify at least `data` and `model`!
         For an example, try one of our pre-defined experiments:
         > spktrain experiment=qm9_atomwise
-        """
-        )
+        """)
         return
 
     if os.path.exists("config.yaml"):

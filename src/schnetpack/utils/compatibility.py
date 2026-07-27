@@ -3,7 +3,11 @@ import torch
 import warnings
 from typing import Any, Type, Union
 
-__all__ = ["load_model", "load_task_from_checkpoint", "trainer_fit_kwargs_for_checkpoint"]
+__all__ = [
+    "load_model",
+    "load_task_from_checkpoint",
+    "trainer_fit_kwargs_for_checkpoint",
+]
 
 
 def trainer_fit_kwargs_for_checkpoint(trainer) -> dict:
