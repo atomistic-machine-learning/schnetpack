@@ -20,7 +20,11 @@ from schnetpack.utils.script import log_hyperparameters, print_config
 from schnetpack.data import ASEAtomsData, AtomsLoader
 from schnetpack.train import PredictionWriter
 from schnetpack import properties
-from schnetpack.utils import load_model, load_task_from_checkpoint
+from schnetpack.utils import (
+    load_model,
+    load_task_from_checkpoint,
+    trainer_fit_kwargs_for_checkpoint,
+)
 
 log = logging.getLogger(__name__)
 
@@ -173,7 +177,17 @@ def train(config: DictConfig):
 
     # Train the model
     log.info("Starting training.")
-    trainer.fit(model=task, datamodule=datamodule, ckpt_path=config.run.ckpt_path)
+    fit_kwargs = (
+        trainer_fit_kwargs_for_checkpoint(trainer)
+        if config.run.ckpt_path is not None
+        else {}
+    )
+    trainer.fit(
+        model=task,
+        datamodule=datamodule,
+        ckpt_path=config.run.ckpt_path,
+        **fit_kwargs,
+    )
 
     # Load the best checkpoint through the compatibility helper (it handles
     # `weights_only` across PL versions) and test that task directly, instead
