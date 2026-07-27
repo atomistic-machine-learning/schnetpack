@@ -1,0 +1,4 @@
+_target_: schnetpack.nn.radial.BernsteinRBF
+n_rbf: 32
+cutoff: ${globals.cutoff}
+init_alpha: 0.95
