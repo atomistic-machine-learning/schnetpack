@@ -118,26 +118,33 @@ class ExponentialMovingAverage(Callback):
         self.decay = decay
         self.ema = None
         self._to_load = None
+        # whether pl_module.model currently holds the EMA average rather
+        # than the raw training weights; persisted so a resumed run knows
+        # which kind of weights the checkpoint's model state_dict holds
+        self.avg_is_active = False
 
     def on_fit_start(self, trainer, pl_module: AtomisticTask):
         if self.ema is None:
             self.ema = EMA(pl_module.model.parameters(), decay=self.decay)
         if self._to_load is not None:
-            self.ema.load_state_dict(self._to_load)
+            self.ema.load_state_dict(self._to_load["ema"])
+            avg_was_active = self._to_load.get("avg_is_active", False)
             self._to_load = None
-            if self.ema.collected_params is not None:
-                # checkpoints hold the EMA average (saved during validation);
-                # restore the raw training weights before store()/copy_to()
+            if avg_was_active and self.ema.collected_params is not None:
+                # checkpoint's model weights are the EMA average, not raw;
+                # restore the raw weights before store()/copy_to() below
                 self.ema.restore()
 
         # load average parameters, to have same starting point as after validation
         self.ema.store()
         self.ema.copy_to()
+        self.avg_is_active = True
 
     def on_train_epoch_start(
         self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
     ) -> None:
         self.ema.restore()
+        self.avg_is_active = False
 
     def on_train_batch_end(self, trainer, pl_module: AtomisticTask, *args, **kwargs):
         self.ema.update()
@@ -151,13 +158,15 @@ class ExponentialMovingAverage(Callback):
             return
         self.ema.store()
         self.ema.copy_to()
+        self.avg_is_active = True
 
     def load_state_dict(self, state_dict):
         if "ema" in state_dict:
             if self.ema is None:
-                self._to_load = state_dict["ema"]
+                self._to_load = state_dict
             else:
                 self.ema.load_state_dict(state_dict["ema"])
+                self.avg_is_active = state_dict.get("avg_is_active", False)
 
     def state_dict(self):
-        return {"ema": self.ema.state_dict()}
+        return {"ema": self.ema.state_dict(), "avg_is_active": self.avg_is_active}
