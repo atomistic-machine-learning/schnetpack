@@ -3,7 +3,26 @@ import torch
 import warnings
 from typing import Any, Type, Union
 
-__all__ = ["load_model", "load_task_from_checkpoint"]
+__all__ = [
+    "load_model",
+    "load_task_from_checkpoint",
+    "trainer_fit_kwargs_for_checkpoint",
+]
+
+
+def trainer_fit_kwargs_for_checkpoint(trainer) -> dict:
+    """
+    Return kwargs for ``Trainer.fit`` when resuming from a checkpoint.
+
+    PyTorch >= 2.6 defaults ``torch.load(..., weights_only=True)``, which
+    cannot unpickle SchNetPack checkpoints that embed custom model classes.
+    Newer PyTorch Lightning versions expose ``weights_only`` on ``fit``; pass
+    it only when supported (same pattern as ``load_task_from_checkpoint``).
+    """
+    kwargs = {}
+    if "weights_only" in inspect.signature(trainer.fit).parameters:
+        kwargs["weights_only"] = False
+    return kwargs
 
 
 def load_task_from_checkpoint(task_cls: Type, ckpt_path: str, **kwargs: Any):
