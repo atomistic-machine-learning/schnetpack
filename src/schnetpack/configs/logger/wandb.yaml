@@ -3,9 +3,6 @@ wandb:
     project: ${project}
     entity: null
     name: ${run.id}
-    # id + resume: allow lets a resumed training run (same run.id, ckpt_path
-    # auto-detected in cli.py) reconnect to the same wandb run instead of
-    # starting a new one; a fresh run.id always starts a fresh wandb run
     id: ${run.id}
     resume: allow
     notes: "none"
