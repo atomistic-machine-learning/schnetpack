@@ -3,7 +3,7 @@
 import torch
 
 from schnetpack.generative.integrators.base import Integrator
-from schnetpack.generative.paths import expand_t
+from schnetpack.generative.processes import expand_t
 
 __all__ = ["AncestralDDPM"]
 
@@ -18,7 +18,7 @@ class AncestralDDPM(Integrator):
     i.e. a particular discretization of the reverse VP process. Unlike the
     generic solvers it is written in terms of the raw score rather than the
     drift, so it needs a
-    :class:`~schnetpack.generative.reverse.ReverseProcess` (for its ``path``
+    :class:`~schnetpack.generative.reverse.ReverseProcess` (for its ``g2``
     and ``score``) built on a VP-type path. That is a deliberate exception to
     the rule that integrators see only drift and diffusion: the step *is* a
     statement about the score, and rewriting it through the drift would only
@@ -30,6 +30,6 @@ class AncestralDDPM(Integrator):
     """
 
     def step(self, process, x, t, dt):
-        beta = expand_t(process.path.g2(t), x) * dt.abs()
+        beta = expand_t(process.g2(t), x) * dt.abs()
         mean = (x + beta * process.score(x, t)) / torch.sqrt(1.0 - beta)
         return mean + beta.sqrt() * torch.randn_like(x)

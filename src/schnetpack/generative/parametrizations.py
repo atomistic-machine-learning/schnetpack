@@ -1,30 +1,45 @@
 """
 Parametrizations — what the network predicts, and everything that follows.
 
-A parametrization is bound to a :class:`~schnetpack.generative.paths.Path` and
-owns both directions of the contract with a generative head:
+A parametrization is *stateless*: pure field math, holding nothing. Every
+method takes the
+:class:`~schnetpack.generative.processes.Process` it is applied
+to, and the consumers that need both — :class:`~schnetpack.generative.transforms.Diffuse`,
+:class:`~schnetpack.generative.losses.MatchingLoss`,
+:class:`~schnetpack.generative.sampler.Sampler`,
+:class:`~schnetpack.generative.reverse.ReverseProcess` — take the pair
+``(process, parametrization)`` explicitly. It owns both directions of the
+contract with a generative head:
 
 - :meth:`Parametrization.target` builds the training target from an endpoint
   pair (consumed by :mod:`schnetpack.generative.losses`);
 - the ``to_*`` methods convert a raw output into the canonical fields
-  (consumed by reverse processes at sampling time);
-- :meth:`Parametrization.reverse` builds the reverse-time process.
+  (consumed by reverse processes at sampling time).
 
-The field math lives here rather than on the path because a target is the
-*definition* of a parametrization, not a property of a noise schedule. Adding a
-parametrization must not mean editing ``paths.py`` — that would be the
-parametrization axis reaching into the path axis, which is exactly what the
-separation exists to prevent. The path supplies alpha, sigma and their
-derivatives; this module decides what to do with them.
+The field math lives here rather than on the process because a target is the
+*definition* of a parametrization, not a property of a noise schedule. Adding
+a parametrization must not mean editing ``processes.py`` — that would be the
+parametrization axis reaching into the schedule axis, which is exactly what
+the separation exists to prevent. The process is the one interface everything
+here reads: the dimensionless a, b and their derivatives, the endpoint's
+scale ``process.std``, and the noise level sigma(t) = b(t) * prior.std —
+declared once, on the prior, and never mirrored. Nothing here touches
+``process.prior`` directly.
 
-The binding runs this way round because the dependency does: every method here
-needs a path, while a path is perfectly usable without a parametrization (for
-noising, priors, or just its schedule). So the parametrization holds the path,
-never the reverse.
+Validity still settles at assembly, not mid-run: the score and noise targets
+are statements about a Gaussian kernel, so :class:`ScoreParametrization` and
+:class:`EpsParametrization` override :meth:`Parametrization.validate` to
+demand :attr:`~schnetpack.generative.processes.Process.has_gaussian_kernel`
+— and every consumer calls ``parametrization.validate(process)`` in its
+constructor. The x0, velocity and pseudo-force targets are plain conditional
+expectations and accept any process. What the split gives up is a single
+bound object: training and sampling each name the pair, so keeping them
+consistent (same process on both sides) is the caller's job — share the
+objects, don't rebuild them.
 
 Two identities are load-bearing and worth stating up front.
 
-1. ``f sigma^2 - sigma sigma' = -1/2 g^2`` — immediate from the definition of
+1. ``f b^2 - b b' = -1/2 g^2`` — immediate from the definition of
    g^2. Hence
 
        velocity = f x - 1/2 g^2 score
@@ -50,14 +65,11 @@ Nothing here wraps it.
 """
 
 import abc
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import torch
 
-from schnetpack.generative.paths import Path, expand_t
-
-if TYPE_CHECKING:
-    from schnetpack.generative.reverse import ReverseProcess
+from schnetpack.generative.processes import Process, expand_t
 
 __all__ = [
     "Parametrization",
@@ -69,21 +81,40 @@ __all__ = [
 ]
 
 
-class Parametrization(abc.ABC):
-    """Contract between a raw model output and the score/velocity/x0 fields."""
+def _require_gaussian(process: Process, cls: type) -> None:
+    """Raise unless ``process`` has the one-sided Gaussian kernel."""
+    obstruction = process.gaussian_kernel_obstruction()
+    if obstruction is not None:
+        raise TypeError(
+            f"{cls.__name__} regresses a target that is a statement about a "
+            f"Gaussian kernel, which this process does not have: "
+            f"{obstruction}. Fix the configuration, or switch to a "
+            "velocity, x0 or pseudo-force parametrization — those targets "
+            "are plain conditional expectations, valid for any process."
+        )
 
-    def __init__(self, path: Path):
+
+class Parametrization(abc.ABC):
+    """
+    Contract between a raw model output and the score/velocity/x0 fields.
+
+    Stateless: every method takes the process it is applied to. Consumers
+    call :meth:`validate` at their own construction, so an invalid pairing
+    still fails at assembly.
+    """
+
+    def validate(self, process: Process) -> None:
         """
-        Args:
-            path: interpolant supplying the schedule this parametrization reads
+        Raise unless this parametrization's target is meaningful for
+        ``process``. Called by every consumer constructor.
         """
-        self.path = path
 
     # -- training --------------------------------------------------------- #
 
     @abc.abstractmethod
     def target(
         self,
+        process: Process,
         x0: torch.Tensor,
         x1: torch.Tensor,
         t: torch.Tensor,
@@ -93,16 +124,21 @@ class Parametrization(abc.ABC):
         Training target the head regresses.
 
         Takes the endpoint pair rather than the diffused sample on purpose:
-        recovering x1 from x_t means dividing by sigma, which is zero at t = 0.
-        The caller drew x1, so handing it over is free — and it leaves every
+        recovering x1 from x_t means dividing by b, which is zero at t = 0.
+        The process drew x1, so handing it over is free — and it leaves every
         target here a multiply-add, bar the score's.
 
         Args:
+            process: forward process the pair was drawn from; supplies the
+                path geometry and the endpoint scale
             x0: data endpoint
-            x1: prior endpoint (the noise, under the independent coupling)
+            x1: prior endpoint (the noise, up to scale, under a Gaussian
+                prior)
             t: path time, per-sample or scalar
-            eps: bridge noise realization; unused while gamma is zero, and
-                reserved for the bridge targets that will need it
+            eps: bridge noise realization, exactly the one
+                :meth:`~schnetpack.generative.processes.Process.perturb`
+                drew; unused while gamma is zero, and reserved for the bridge
+                targets that will need it
         """
         raise NotImplementedError
 
@@ -110,108 +146,110 @@ class Parametrization(abc.ABC):
 
     @abc.abstractmethod
     def to_score(
-        self, output: torch.Tensor, x_t: torch.Tensor, t: torch.Tensor
+        self,
+        process: Process,
+        output: torch.Tensor,
+        x_t: torch.Tensor,
+        t: torch.Tensor,
     ) -> torch.Tensor:
         """Score of the marginal p_t, from the raw output."""
         raise NotImplementedError
 
     def to_velocity(
-        self, output: torch.Tensor, x_t: torch.Tensor, t: torch.Tensor
+        self,
+        process: Process,
+        output: torch.Tensor,
+        x_t: torch.Tensor,
+        t: torch.Tensor,
     ) -> torch.Tensor:
         """Probability-flow velocity v = f x - 1/2 g^2 score, from the raw output."""
-        score = self.to_score(output, x_t, t)
-        f = expand_t(self.path.f(t), x_t)
-        g2 = expand_t(self.path.g2(t), x_t)
+        score = self.to_score(process, output, x_t, t)
+        f = expand_t(process.f(t), x_t)
+        g2 = expand_t(process.g2(t), x_t)
         return f * x_t - 0.5 * g2 * score
 
     def to_x0(
-        self, output: torch.Tensor, x_t: torch.Tensor, t: torch.Tensor
+        self,
+        process: Process,
+        output: torch.Tensor,
+        x_t: torch.Tensor,
+        t: torch.Tensor,
     ) -> torch.Tensor:
         """
-        Denoised sample x0 = (x + sigma^2 score) / alpha, from the raw output.
+        Denoised sample x0 = (x + sigma^2 score) / a, from the raw output.
 
-        Singular where alpha -> 0 (flow matching at t = 1, VP at large t).
+        Singular where a -> 0 (flow matching at t = 1, VP at large t).
         """
-        score = self.to_score(output, x_t, t)
-        alpha = expand_t(self.path.alpha(t), x_t)
-        sigma = expand_t(self.path.sigma(t), x_t)
-        return (x_t + sigma**2 * score) / alpha
-
-    # -- reverse ---------------------------------------------------------- #
-
-    def reverse(self, model, churn: float = 1.0, cond=None) -> "ReverseProcess":
-        """
-        Reverse-time process driven by ``model``, as a
-        :class:`~schnetpack.generative.reverse.ReverseProcess`.
-
-        Args:
-            model: callable (x, t, cond) -> raw output in this parametrization
-            churn: stochasticity in [0, 1]; 1 = reverse-time SDE, 0 =
-                probability-flow ODE. Equals eta^2 of the Anderson family.
-            cond: conditioning passed through to the model
-        """
-        from schnetpack.generative.reverse import ReverseProcess
-
-        return ReverseProcess(self, model, churn=churn, cond=cond)
-
-    def probability_flow(self, model, cond=None) -> "ReverseProcess":
-        """Deterministic ODE sharing the path's marginals."""
-        return self.reverse(model, churn=0.0, cond=cond)
+        score = self.to_score(process, output, x_t, t)
+        a = expand_t(process.a(t), x_t)
+        sigma = expand_t(process.sigma(t), x_t)
+        return (x_t + sigma**2 * score) / a
 
 
 class ScoreParametrization(Parametrization):
     """
     The head predicts the score directly.
 
-    Its target -x1 / sigma is the only one that divides, so it grows without
-    bound as sigma -> 0 and spans whatever range sigma does. On a geometric VE
-    schedule that is orders of magnitude, and an unweighted L2 will see only the
-    low-noise end — pass ``weight=lambda t: path.sigma(t)**2`` to the loss,
-    which makes the objective identical to noise matching.
+    Requires a process with
+    :attr:`~schnetpack.generative.processes.Process.has_gaussian_kernel`:
+    the target below is the score *of the Gaussian kernel*, meaningless for
+    any other endpoint.
+
+    Its target -x1 / (b std^2) is the only one that divides, so it grows
+    without bound as b -> 0 and spans whatever range b does. On a geometric
+    VE schedule that is orders of magnitude, and an unweighted L2 will see
+    only the low-noise end — pass ``weight=lambda t: path.b(t)**2`` to the
+    loss, which makes the objective identical to noise matching up to the
+    constant endpoint scale.
     """
 
-    def target(self, x0, x1, t, eps=None):
-        return -x1 / expand_t(self.path.sigma(t), x1)
+    def validate(self, process):
+        _require_gaussian(process, type(self))
 
-    def to_score(self, output, x_t, t):
+    def target(self, process, x0, x1, t, eps=None):
+        # score of p(x_t | x0): -(x_t - a x0) / sigma^2 = -x1 / (b std^2)
+        return -x1 / expand_t(process.b(t) * process.std**2, x1)
+
+    def to_score(self, process, output, x_t, t):
         return output
 
 
 class EpsParametrization(Parametrization):
     """
-    The head predicts the noise (DDPM convention); the target is x1 itself.
+    The head predicts the unit noise (DDPM convention): eps = x1 / std.
 
-    Valid only for Gaussian x1, where x1 *is* the noise realization — under a
-    bridge coupling x1 is a data endpoint and this target is meaningless.
+    The target keeps unit variance at every noise level and endpoint scale,
+    which is the convention's whole appeal. Requires a process with
+    :attr:`~schnetpack.generative.processes.Process.has_gaussian_kernel`,
+    where x1 *is* a noise realization — under any other endpoint this target
+    is meaningless.
     """
 
-    def target(self, x0, x1, t, eps=None):
-        return x1
+    def validate(self, process):
+        _require_gaussian(process, type(self))
 
-    def to_score(self, output, x_t, t):
-        return -output / expand_t(self.path.sigma(t), output)
+    def target(self, process, x0, x1, t, eps=None):
+        return x1 / process.std
+
+    def to_score(self, process, output, x_t, t):
+        # score = -eps / sigma
+        return -output / expand_t(process.sigma(t), output)
 
 
 class X0Parametrization(Parametrization):
-    """
-    The head predicts the clean sample — the denoiser convention EDM builds on.
+    """The head predicts the clean sample — the denoiser convention."""
 
-    Pairs with :class:`~schnetpack.generative.preconditioning.PrecondDenoiser`,
-    which turns a raw net into a preconditioned denoiser without changing this
-    contract.
-    """
-
-    def target(self, x0, x1, t, eps=None):
+    def target(self, process, x0, x1, t, eps=None):
         return x0
 
-    def to_score(self, output, x_t, t):
-        # Tweedie: score = (alpha x0_hat - x) / sigma^2
-        alpha = expand_t(self.path.alpha(t), x_t)
-        sigma = expand_t(self.path.sigma(t), x_t)
-        return (alpha * output - x_t) / sigma**2
+    def to_score(self, process, output, x_t, t):
+        # Tweedie: score = (a x0_hat - x) / sigma^2
+        a = expand_t(process.a(t), x_t)
+        sigma = expand_t(process.sigma(t), x_t)
+        return (a * output - x_t) / sigma**2
 
-    def to_x0(self, output, x_t, t):
-        # Direct: the round trip through the score would divide by alpha.
+    def to_x0(self, process, output, x_t, t):
+        # Direct: the round trip through the score would divide by a.
         return output
 
 
@@ -219,8 +257,8 @@ class VelocityParametrization(Parametrization):
     """
     The head predicts the velocity d/dt x_t — the flow-matching convention.
 
-    Its target alpha' x0 + sigma' x1 is the only one valid for every coupling,
-    which is why flow, OT and bridge matching all regress it.
+    Its target a' x0 + b' x1 is a plain conditional expectation, valid for
+    every process — which is why flow, OT and bridge matching all regress it.
 
     Note that :meth:`to_score` inverts a relation that degenerates as g^2 -> 0
     (t -> 0 for the VE-type and flow-matching paths). Reverse processes only ask
@@ -228,18 +266,18 @@ class VelocityParametrization(Parametrization):
     churn = 0 the velocity is used directly and the inverse never runs.
     """
 
-    def target(self, x0, x1, t, eps=None):
-        alpha_dot = expand_t(self.path.alpha_dot(t), x0)
-        sigma_dot = expand_t(self.path.sigma_dot(t), x1)
-        return alpha_dot * x0 + sigma_dot * x1
+    def target(self, process, x0, x1, t, eps=None):
+        a_dot = expand_t(process.a_dot(t), x0)
+        b_dot = expand_t(process.b_dot(t), x1)
+        return a_dot * x0 + b_dot * x1
 
-    def to_score(self, output, x_t, t):
+    def to_score(self, process, output, x_t, t):
         # Invert v = f x - 1/2 g^2 s.
-        f = expand_t(self.path.f(t), x_t)
-        g2 = expand_t(self.path.g2(t), x_t)
+        f = expand_t(process.f(t), x_t)
+        g2 = expand_t(process.g2(t), x_t)
         return 2.0 * (f * x_t - output) / g2
 
-    def to_velocity(self, output, x_t, t):
+    def to_velocity(self, process, output, x_t, t):
         return output
 
 
@@ -251,49 +289,56 @@ class PseudoForceParametrization(Parametrization):
     answers "which way, and how far, back to a clean sample". Substituting the
     interpolant gives the target without ever forming x_t::
 
-        F = 2 (x0 - (alpha x0 + sigma x1)) = 2 ((1 - alpha) x0 - sigma x1)
+        F = 2 (x0 - (a x0 + b x1)) = 2 ((1 - a) x0 - b x1)
 
-    It is x0 up to an affine map, so it is exact wherever
+    A plain conditional expectation like the x0 and velocity targets, so it
+    is valid for *any* process — plain GPFF on a Gaussian-endpoint
+    :class:`~schnetpack.generative.processes.VE`, GPFF with a shape prior or
+    aligned noise on the same class with those parts swapped in. It is x0 up
+    to an affine map, so it is exact wherever
     :class:`X0Parametrization` is and shares its best property: recovering x0
-    costs no division (x0 = x_t + F/2), so nothing degenerates as sigma -> 0.
+    costs no division (x0 = x_t + F/2), so nothing degenerates as b -> 0.
 
     What makes it worth a class of its own is what happens on a *variance
-    exploding* path, where alpha = 1 and the target collapses to
+    exploding* path, where a = 1 and the target collapses to
 
-        F = -2 sigma x1
+        F = -2 b x1
 
-    — the noise, scaled by how far the sample was pushed. The scale of F then
-    carries sigma, so a sampler can estimate the noise level from the prediction
-    alone and the head needs no time input at all. That is the whole point of the
-    method, and it is VE-specific: on a VP-type path the (1 - alpha) x0 term
-    mixes the data back in and the magnitude no longer reads as sigma.
+    — the noise endpoint, scaled by how far the sample was pushed. The
+    magnitude of F then carries the noise level sigma = b std, so a
+    sampler can estimate it from the prediction alone and the head needs no
+    time input at all. That is the whole point of the method, and it is
+    VE-specific: on a VP-type path the (1 - a) x0 term mixes the data back in
+    and the magnitude no longer reads as sigma.
 
     The same scaling is the cost. An eps head regresses a unit-variance target at
-    every noise level; this one regresses a target whose scale runs with sigma,
+    every noise level; this one regresses a target whose scale runs with b,
     over the orders of magnitude a geometric VE schedule spans. Unweighted, the
-    large-sigma end is the only thing an L2 can see. Pass
+    large-b end is the only thing an L2 can see. Pass
 
-        weight=lambda t: (1.0 / path.sigma(t) ** 2).clamp(max=1.0)
+        weight=lambda t: (1.0 / path.b(t) ** 2).clamp(max=1.0)
 
-    to the loss. The 1/sigma^2 undoes the scaling exactly — it makes the
-    objective noise matching again — and the clip is what keeps it distinct from
-    an eps head: it stops a handful of nearly-clean samples, where the unclipped
-    weight would reach 1/sigma_min^2, from dominating every gradient, at the
-    price of spending capacity where the correction is large rather than where it
-    is small.
+    to the loss. The 1/b^2 undoes the scaling exactly — it makes the
+    objective noise matching again — and the clip is what keeps it distinct
+    from an eps head: it stops a handful of nearly-clean samples, where the
+    unclipped weight would reach 1/b_min^2, from dominating every gradient,
+    at the price of spending capacity where the correction is large rather
+    than where it is small.
     """
 
-    def target(self, x0, x1, t, eps=None):
-        alpha = expand_t(self.path.alpha(t), x0)
-        sigma = expand_t(self.path.sigma(t), x1)
-        return 2.0 * ((1.0 - alpha) * x0 - sigma * x1)
+    def target(self, process, x0, x1, t, eps=None):
+        a = expand_t(process.a(t), x0)
+        b = expand_t(process.b(t), x1)
+        return 2.0 * ((1.0 - a) * x0 - b * x1)
 
-    def to_x0(self, output, x_t, t):
-        # Direct, and exact at sigma = 0 — the definition of F rearranged.
+    def to_x0(self, process, output, x_t, t):
+        # Direct, and exact at b = 0 — the definition of F rearranged.
+        # Needs no sigma either, which is what keeps GPFF's direct-denoising
+        # sampler available under priors that declare no scalar scale.
         return x_t + 0.5 * output
 
-    def to_score(self, output, x_t, t):
+    def to_score(self, process, output, x_t, t):
         # Tweedie on the recovered x0; for VE this reduces to F / (2 sigma^2).
-        alpha = expand_t(self.path.alpha(t), x_t)
-        sigma = expand_t(self.path.sigma(t), x_t)
-        return (alpha * self.to_x0(output, x_t, t) - x_t) / sigma**2
+        a = expand_t(process.a(t), x_t)
+        sigma = expand_t(process.sigma(t), x_t)
+        return (a * self.to_x0(process, output, x_t, t) - x_t) / sigma**2

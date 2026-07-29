@@ -1,101 +1,126 @@
 """
-Couplings — how (x0, x1) endpoint pairs are drawn.
+Couplings — how already-drawn endpoint batches are paired.
 
-The path fixes the marginals; the coupling fixes the joint law the marginals
-leave open. Diffusion and vanilla flow matching pair every data point with
-fresh independent noise, which is why the axis usually goes unnoticed. It
-becomes the whole story for minibatch-OT flow matching, bridge matching and
-Schrödinger bridges, where x1 is a *matched* endpoint rather than a free draw.
+The prior decides what x1 *is*; the path decides *when* it takes over. The
+coupling sits between them and fixes the joint law of (x0, x1): given a data
+batch and a batch of prior draws, which x1 goes with which x0. The default
+leaves the pairing alone — diffusion and vanilla flow matching pair every
+sample with the fresh draw it was handed, which is why the axis usually goes
+unnoticed. It becomes the whole story for minibatch-OT flow matching and for
+alignment tricks that shorten and de-cross the transport paths a model has
+to learn.
 
-Only the training loss (:mod:`schnetpack.generative.losses`) consumes this;
-sampling never does, since by then the endpoints are whatever the prior gives.
+A coupling never draws x1 — that is the prior's job (see
+:mod:`schnetpack.generative.priors`). What it must declare is what its
+pairing does to x1's *marginal*:
+
+- :attr:`Coupling.preserves_marginal` is True for anything that at most
+  re-orders x1 across the batch (identity, permutation, OT): re-pairing
+  leaves the marginal law untouched, which is the property that lets the
+  training prior double as the sampling start
+  (:meth:`~schnetpack.generative.processes.Process.sampling_prior`),
+  and — for exchangeable Gaussian draws — keeps the score/noise targets
+  valid (judged by
+  :meth:`~schnetpack.generative.processes.Process.gaussian_kernel_obstruction`).
+  It is False
+  for anything that reshapes x1 from the data's values, where no data-free
+  start distribution exists and the sampler demands an explicit
+  :class:`~schnetpack.generative.priors.Prior`. The default is False: a
+  wrong True starts sampling from the wrong distribution silently, a wrong
+  False merely asks for an explicit prior.
 """
 
 import abc
-from typing import Optional, Tuple
+from typing import Tuple
 
 import torch
 
 __all__ = [
     "Coupling",
-    "IndependentCoupling",
+    "IdentityCoupling",
     "PermutationCoupling",
     "PCVarianceCoupling",
     "OTCoupling",
-    "DataToDataCoupling",
 ]
 
 
 class Coupling(abc.ABC):
-    """Joint law over endpoint pairs (x0, x1)."""
+    """Joint law of the endpoint pair (x0, x1), as a re-pairing of batches."""
+
+    preserves_marginal: bool = False
+    """Whether :meth:`pair` leaves x1's marginal law untouched.
+
+    True for pure re-orderings; False for anything data-dependent. Defaults
+    to False — a custom coupling must opt in explicitly, because a wrong
+    True samples from the wrong start silently while a wrong False merely
+    demands an explicit prior.
+    """
 
     @abc.abstractmethod
-    def sample(
-        self, x0: torch.Tensor, x1: Optional[torch.Tensor] = None
+    def pair(
+        self, x0: torch.Tensor, x1: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Pair up a batch of data with prior endpoints.
+        Re-pair a data batch with a batch of prior draws.
 
         Args:
             x0: data batch, shape (n_samples, ...)
-            x1: candidate prior endpoints; drawn or ignored depending on the
-                coupling
+            x1: prior endpoints, shaped like x0
 
         Returns:
-            (x0, x1), both shaped like the input x0.
+            (x0, x1), both shaped like the inputs.
         """
         raise NotImplementedError
 
 
-class IndependentCoupling(Coupling):
+class IdentityCoupling(Coupling):
     """
-    Product coupling pi = p0 x p1: every sample gets fresh standard normal noise.
+    Leave the pairing exactly as drawn: the product coupling pi = p0 x p1.
 
-    This is what VE, VP, EDM and plain flow matching use — and the reason their
-    score and noise training targets are valid, since x1 then *is* the noise
-    realization.
+    Every sample keeps the fresh endpoint the prior handed it — what VE, VP
+    and plain flow matching use, and the reason their score and noise
+    training targets are valid: x1 stays the independent noise realization
+    the kernel math assumes.
     """
 
-    def sample(self, x0, x1=None):
-        """Draw fresh noise; a given ``x1`` is ignored by construction."""
-        return x0, torch.randn_like(x0)
+    preserves_marginal = True
+
+    def pair(self, x0, x1):
+        return x0, x1
 
 
 class PermutationCoupling(Coupling):
     """
     Reorder the prior endpoints by their optimal assignment against the data.
 
-    A single-sample special case of :class:`OTCoupling`: the transport plan
+    A single-batch special case of :class:`OTCoupling`: the transport plan
     between the two point sets is constrained to a *permutation*, so every x0
     row keeps exactly one x1 partner. Solving the linear assignment problem
-    under a squared-distance cost gives the permutation of x1 that minimizes the
-    total straight-line transport, which shortens and de-crosses the paths the
-    model has to learn.
+    under a squared-distance cost gives the permutation of x1 that minimizes
+    the total straight-line transport, which shortens and de-crosses the
+    paths the model has to learn.
 
     The leading axis is treated as the sample axis of one point cloud and the
     rest is flattened into the cost's feature vector — for positions that is
-    atoms in 3D, so the assignment pairs each atom with the nearest noise point.
-    Because a Gaussian prior is exchangeable, permuting x1 leaves its marginal
-    untouched; only the joint with x0 changes. A provided ``x1`` is reordered in
-    place of fresh noise, which lets a caller inject constrained noise (e.g.
-    zero-COM) and still get the assignment.
+    atoms in 3D, so the assignment pairs each atom with the nearest noise
+    point. Because re-ordering exchangeable draws leaves the marginal
+    untouched, ``preserves_marginal`` holds; only the joint with x0 changes.
 
     Needs SciPy for the exact solve (``scipy.optimize.linear_sum_assignment``).
     """
 
+    preserves_marginal = True
+
     def __init__(self, cost_power: float = 2.0):
         """
         Args:
-            cost_power: exponent on the pairwise Euclidean distance used as the
-                assignment cost. 2.0 is the squared-distance (OT) cost; 1.0 is
-                plain distance.
+            cost_power: exponent on the pairwise Euclidean distance used as
+                the assignment cost. 2.0 is the squared-distance (OT) cost;
+                1.0 is plain distance.
         """
         self.cost_power = cost_power
 
-    def sample(self, x0, x1=None):
-        if x1 is None:
-            x1 = torch.randn_like(x0)
-
+    def pair(self, x0, x1):
         a = x0.reshape(x0.shape[0], -1)
         b = x1.reshape(x1.shape[0], -1)
         cost = torch.cdist(a, b) ** self.cost_power
@@ -105,7 +130,7 @@ class PermutationCoupling(Coupling):
         except ImportError as err:
             raise ImportError(
                 "PermutationCoupling needs SciPy for the assignment solve; "
-                "install scipy or use IndependentCoupling."
+                "install scipy or use IdentityCoupling."
             ) from err
 
         _, col = linear_sum_assignment(cost.detach().cpu().numpy())
@@ -122,14 +147,18 @@ class PCVarianceCoupling(Coupling):
     principal component so the variance of x1 along its k-th axis equals the
     variance of x0 along x0's k-th axis (both sorted descending). The prior
     keeps its own random orientation but takes on the data's *shape* — a long
-    molecule is met by an elongated noise cloud — so the transport is closer to
-    a rotation than a stretch.
+    molecule is met by an elongated noise cloud — so the transport is closer
+    to a rotation than a stretch.
 
-    Unlike :class:`PermutationCoupling` this changes x1's marginal law, so the
-    noise/score training targets no longer hold; pair it with a velocity
-    parametrization. The leading axis is the sample axis and the rest is
-    flattened, so for positions the principal axes are the point cloud's 3D
-    geometric axes. A provided ``x1`` is reshaped in place of fresh noise.
+    Unlike :class:`PermutationCoupling` this changes x1's marginal law from
+    the data's values (``preserves_marginal`` is False), with two enforced
+    consequences: the process loses its Gaussian kernel (use a velocity, x0
+    or pseudo-force parametrization — the score/noise ones refuse), and
+    sampling needs an explicit
+    :class:`~schnetpack.generative.priors.Prior` whose covariance matches the
+    statistics trained under. The leading axis is the sample axis and the
+    rest is flattened, so for positions the principal axes are the point
+    cloud's 3D geometric axes.
     """
 
     def __init__(self, eps: float = 1e-8):
@@ -141,10 +170,7 @@ class PCVarianceCoupling(Coupling):
         """
         self.eps = eps
 
-    def sample(self, x0, x1=None):
-        if x1 is None:
-            x1 = torch.randn_like(x0)
-
+    def pair(self, x0, x1):
         a = x0.reshape(x0.shape[0], -1)
         b = x1.reshape(x1.shape[0], -1)
         n = a.shape[0]
@@ -170,32 +196,18 @@ class OTCoupling(Coupling):
     """
     Minibatch optimal-transport pairing (OT flow matching / rectified flow).
 
-    Solves the OT problem between the data and noise batches and permutes x1 to
-    match x0, which straightens the learned velocity field and cuts the number
-    of sampling steps. Lands with the OT milestone; the plan is a POT-based
-    ``emd`` solve over the squared-distance cost, falling back to a torch-only
-    Sinkhorn when POT is absent.
+    Solves the OT problem between the data and prior batches and permutes x1
+    to match x0, which straightens the learned velocity field and cuts the
+    number of sampling steps. Lands with the OT milestone; the plan is a
+    POT-based ``emd`` solve over the squared-distance cost, falling back to a
+    torch-only Sinkhorn when POT is absent. Like the permutation special
+    case, re-pairing leaves x1's marginal untouched.
     """
 
-    def sample(self, x0, x1=None):
+    preserves_marginal = True
+
+    def pair(self, x0, x1):
         raise NotImplementedError(
             "OTCoupling lands with the optimal-transport milestone. "
-            "Use IndependentCoupling for standard flow matching."
-        )
-
-
-class DataToDataCoupling(Coupling):
-    """
-    Paired endpoints for bridge matching: x1 is a data point, not noise.
-
-    Both endpoints come from data (or from a previous bridge iterate), which is
-    what turns matching into a Schrödinger-bridge half-step. Requires a path
-    with a nonzero :meth:`~schnetpack.generative.paths.Path.gamma`, since a
-    bridge's x_t carries its own noise on top of the two endpoints. Note that
-    the score and noise targets are invalid here — regress the velocity.
-    """
-
-    def sample(self, x0, x1=None):
-        raise NotImplementedError(
-            "DataToDataCoupling lands with the Schrödinger-bridge milestone."
+            "Use IdentityCoupling for standard flow matching."
         )

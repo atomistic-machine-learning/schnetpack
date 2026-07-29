@@ -2,9 +2,9 @@
 Reverse-time processes, derived generically from a parametrization and a model.
 
 There is exactly one class here and no hierarchy: reverse processes are never
-implemented per path. Build them with
-:meth:`~schnetpack.generative.parametrizations.Parametrization.reverse` or
-:meth:`~schnetpack.generative.parametrizations.Parametrization.probability_flow`.
+implemented per schedule. Construct one from the ``(process, parametrization)``
+pair and a model; the churn knob selects between the reverse-time SDE
+(churn = 1) and the probability-flow ODE (churn = 0).
 """
 
 from typing import Callable
@@ -12,14 +12,14 @@ from typing import Callable
 import torch
 
 from schnetpack.generative.parametrizations import Parametrization
-from schnetpack.generative.paths import Path, expand_t
+from schnetpack.generative.processes import Process, expand_t
 
 __all__ = ["ReverseProcess"]
 
 
 class ReverseProcess:
     """
-    Time reversal of a path's forward process, as a one-parameter family
+    Time reversal of a forward process, as a one-parameter family
 
         dx = [ v(x, t) - 1/2 churn g^2 score(x, t) ] dt + sqrt(churn) g dw,
 
@@ -41,6 +41,7 @@ class ReverseProcess:
 
     def __init__(
         self,
+        process: Process,
         parametrization: Parametrization,
         model: Callable,
         churn: float = 1.0,
@@ -48,38 +49,43 @@ class ReverseProcess:
     ):
         """
         Args:
-            parametrization: contract between the model output and the fields;
-                supplies the path
+            process: forward process being reversed; supplies the schedule
+                and the endpoint scale
+            parametrization: contract between the model output and the fields
             model: callable (x, t, cond) -> raw output in ``parametrization``
             churn: stochasticity in [0, 1]; 1 = reverse SDE, 0 = probability-flow
                 ODE. Equals eta^2 of the Anderson family.
             cond: conditioning passed through to the model on every call
         """
+        parametrization.validate(process)
+        self.process = process
         self.parametrization = parametrization
         self.model = model
         self.churn = churn
         self.cond = cond
 
-    @property
-    def path(self) -> Path:
-        """The path being reversed. Integrators that need g^2 read it here."""
-        return self.parametrization.path
+    def g2(self, t: torch.Tensor) -> torch.Tensor:
+        """
+        Squared diffusion of the process being reversed, endpoint scale
+        included. Integrators that need g^2 read it here.
+        """
+        return self.process.g2(t)
 
     def drift(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         """Reverse drift, shaped like x. Costs one model evaluation."""
         raw = self.model(x, t, self.cond)
-        velocity = self.parametrization.to_velocity(raw, x, t)
+        velocity = self.parametrization.to_velocity(self.process, raw, x, t)
         if self.churn == 0.0:
             return velocity
         # Same raw output, second conversion — never a second model call.
-        score = self.parametrization.to_score(raw, x, t)
-        return velocity - 0.5 * self.churn * expand_t(self.path.g2(t), x) * score
+        score = self.parametrization.to_score(self.process, raw, x, t)
+        return velocity - 0.5 * self.churn * expand_t(self.g2(t), x) * score
 
     def diffusion(self, t: torch.Tensor) -> torch.Tensor:
         """Diffusion sqrt(churn) g(t), shaped like t; zero on the ODE."""
         if self.churn == 0.0:
             return torch.zeros_like(t)
-        return torch.sqrt(self.churn * self.path.g2(t))
+        return torch.sqrt(self.churn * self.g2(t))
 
     def score(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         """
@@ -90,4 +96,6 @@ class ReverseProcess:
         of the raw score, such as
         :class:`~schnetpack.generative.integrators.ancestral.AncestralDDPM`.
         """
-        return self.parametrization.to_score(self.model(x, t, self.cond), x, t)
+        return self.parametrization.to_score(
+            self.process, self.model(x, t, self.cond), x, t
+        )

@@ -8,7 +8,7 @@ import schnetpack as spk
 import schnetpack.nn as snn
 import schnetpack.properties as properties
 
-__all__ = ["Atomwise", "DipoleMoment", "Polarizability"]
+__all__ = ["Atomwise", "AtomwiseVector", "DipoleMoment", "Polarizability"]
 
 
 class Atomwise(nn.Module):
@@ -85,6 +85,68 @@ class Atomwise(nn.Module):
                 y = y / inputs[properties.n_atoms]
 
         inputs[self.output_key] = y
+        return inputs
+
+
+class AtomwiseVector(nn.Module):
+    """
+    Predicts an atom-wise vector quantity of shape (n_atoms, 3) from scalar and
+    vector features using gated equivariant blocks [#painn1]_, e.g. directly
+    predicted forces or the per-atom output of a diffusion model.
+
+    Requires a representation that supplies equivariant vector features
+    (e.g. PaiNN).
+
+    References:
+
+    .. [#painn1] Schütt, Unke, Gastegger.
+       Equivariant message passing for the prediction of tensorial properties and molecular spectra.
+       ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
+    """
+
+    def __init__(
+        self,
+        n_in: int,
+        n_layers: int = 1,
+        n_hidden: Optional[int] = None,
+        activation: Callable = F.silu,
+        output_key: str = "vector",
+    ):
+        """
+        Args:
+            n_in: input dimension of the scalar and vector representation
+            n_layers: number of gated equivariant blocks
+            n_hidden: number of hidden units per block (default: n_in)
+            activation: internal activation function
+            output_key: the key under which the result will be stored
+        """
+        super().__init__()
+        self.output_key = output_key
+        self.model_outputs = [output_key]
+        n_hidden = n_hidden or n_in
+
+        self.blocks = nn.ModuleList(
+            [
+                snn.GatedEquivariantBlock(
+                    n_sin=n_in,
+                    n_vin=n_in,
+                    n_sout=n_in if i < n_layers - 1 else 1,
+                    n_vout=n_in if i < n_layers - 1 else 1,
+                    n_hidden=n_hidden,
+                    activation=activation,
+                    sactivation=activation if i < n_layers - 1 else None,
+                )
+                for i in range(n_layers)
+            ]
+        )
+
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        scalars = inputs["scalar_representation"]
+        vectors = inputs["vector_representation"]
+        for block in self.blocks:
+            scalars, vectors = block((scalars, vectors))
+
+        inputs[self.output_key] = vectors.squeeze(-1)
         return inputs
 
 

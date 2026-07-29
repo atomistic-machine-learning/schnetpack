@@ -1,5 +1,6 @@
 """
-Composition of parametrization, integrator, grid and prior into a sampler.
+Composition of process, parametrization, integrator, grid and prior into a
+sampler.
 """
 
 from typing import Callable, Optional, Sequence
@@ -9,8 +10,9 @@ import torch
 from schnetpack.generative.grids import TimeGrid, UniformGrid
 from schnetpack.generative.integrators.base import Integrator
 from schnetpack.generative.parametrizations import Parametrization
-from schnetpack.generative.paths import Path
-from schnetpack.generative.priors import PathPrior, Prior
+from schnetpack.generative.priors import Prior
+from schnetpack.generative.processes import Process
+from schnetpack.generative.reverse import ReverseProcess
 
 __all__ = ["Sampler"]
 
@@ -19,9 +21,16 @@ class Sampler:
     """
     Thin composition wrapper: prior -> reverse process -> integrator.
 
-    Takes a parametrization rather than a (path, parametrization) pair: the
-    parametrization already carries its path, and passing both would let them
-    disagree.
+    Takes the ``(process, parametrization)`` pair — the same pair the model
+    was trained under; keeping the two sides consistent is the caller's job,
+    so share the objects with the training code rather than rebuilding them.
+    The pairing is checked at construction via
+    :meth:`~schnetpack.generative.parametrizations.Parametrization.validate`.
+    The starting distribution is not asked for by default — it *is* the
+    process's sampling prior (the training prior itself, since b(t_max) = 1
+    and the coupling preserves the marginal), so deriving it beats restating
+    it. An explicit ``prior`` overrides that, and is required when the
+    process cannot state its own start (a marginal-changing coupling).
 
     Operates at tensor level. ``model`` is any callable
     ``(x, t, cond) -> raw output`` in the parametrization; the sample axis is
@@ -31,12 +40,13 @@ class Sampler:
     port; this class stays unaware of it.
 
     Method-specific behavior belongs in the composed parts. If you find
-    yourself subclassing this, the logic probably belongs in a path,
+    yourself subclassing this, the logic probably belongs in a process,
     parametrization, integrator or grid — that is what the axes are for.
     """
 
     def __init__(
         self,
+        process: Process,
         parametrization: Parametrization,
         integrator: Integrator,
         grid: Optional[TimeGrid] = None,
@@ -47,30 +57,29 @@ class Sampler:
     ):
         """
         Args:
-            parametrization: contract the model was trained under; supplies the
-                path
+            process: forward process the model was trained on; supplies the
+                schedule and the training prior
+            parametrization: contract the model was trained under
             integrator: numerical solver for the reverse process
             grid: where to place the steps (default: uniform)
-            prior: starting distribution (default: the path's terminal
-                distribution)
+            prior: explicit starting distribution; overrides the process's
+                own. Required when the process's coupling changes x1's
+                marginal, where there is no data-free start to derive.
             churn: stochasticity of the reverse process; 1 = reverse SDE,
                 0 = probability-flow ODE. Equals eta^2 of the Anderson family.
-            t_min: time to stop integration at (default: ``path.t_min``);
-                the score diverges as sigma -> 0
-            t_max: time to start integration from (default: ``path.t_max``)
+            t_min: time to stop integration at (default: ``process.t_min``);
+                the score diverges as b -> 0
+            t_max: time to start integration from (default: ``process.t_max``)
         """
+        parametrization.validate(process)
+        self.process = process
         self.parametrization = parametrization
         self.integrator = integrator
         self.grid = grid if grid is not None else UniformGrid()
-        self.prior = prior if prior is not None else PathPrior(self.path)
+        self.prior = prior if prior is not None else process.sampling_prior()
         self.churn = churn
-        self.t_min = t_min if t_min is not None else self.path.t_min
-        self.t_max = t_max if t_max is not None else self.path.t_max
-
-    @property
-    def path(self) -> Path:
-        """The path being sampled, via the parametrization."""
-        return self.parametrization.path
+        self.t_min = t_min if t_min is not None else process.t_min
+        self.t_max = t_max if t_max is not None else process.t_max
 
     def sample(
         self,
@@ -121,5 +130,7 @@ class Sampler:
             cond: conditioning passed through to the model
         """
         ts = self.grid(t_start, self.t_min, n_steps, dtype=x_t.dtype, device=x_t.device)
-        reverse = self.parametrization.reverse(model, churn=self.churn, cond=cond)
+        reverse = ReverseProcess(
+            self.process, self.parametrization, model, churn=self.churn, cond=cond
+        )
         return self.integrator.integrate(reverse, x_t, ts)

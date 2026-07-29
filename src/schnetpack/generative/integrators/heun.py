@@ -3,7 +3,7 @@
 import torch
 
 from schnetpack.generative.integrators.base import Integrator
-from schnetpack.generative.paths import expand_t
+from schnetpack.generative.processes import expand_t
 
 __all__ = ["Heun"]
 
