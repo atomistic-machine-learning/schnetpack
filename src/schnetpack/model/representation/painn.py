@@ -138,6 +138,7 @@ class PaiNN(nn.Module):
         shared_interactions: bool = False,
         shared_filters: bool = False,
         epsilon: float = 1e-8,
+        norm_epsilon: float = 0.0,
         nuclear_embedding: Optional[nn.Module] = None,
         electronic_embeddings: Optional[List] = None,
     ):
@@ -154,6 +155,11 @@ class PaiNN(nn.Module):
             shared_interactions: if True, share the weights across
                 filter-generating networks.
             epsilon: numerical stability parameter
+            norm_epsilon: offset added to the distance when normalizing pair
+                directions, ``dir_ij = r_ij / (d_ij + norm_epsilon)``. The
+                default 0 gives unit vectors; a positive value keeps messages
+                bounded as atoms overlap, e.g. on heavily noised structures in
+                generative models (GPFF trains with 1).
             nuclear_embedding: custom nuclear embedding (e.g. spk.nn.embeddings.NuclearEmbedding)
             electronic_embeddings: list of electronic embeddings. E.g. for spin and
                 charge (see spk.nn.embeddings.ElectronicEmbedding)
@@ -165,6 +171,7 @@ class PaiNN(nn.Module):
         self.cutoff_fn = cutoff_fn
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = radial_basis
+        self.norm_epsilon = norm_epsilon
 
         # initialize embeddings
         if nuclear_embedding is None:
@@ -225,7 +232,7 @@ class PaiNN(nn.Module):
 
         # compute atom and pair features
         d_ij = torch.norm(r_ij, dim=1, keepdim=True)
-        dir_ij = r_ij / d_ij
+        dir_ij = r_ij / (d_ij + self.norm_epsilon)
         phi_ij = self.radial_basis(d_ij)
         fcut = self.cutoff_fn(d_ij)
 
