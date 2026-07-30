@@ -499,6 +499,7 @@ class Process(abc.ABC):
         x1: Optional[torch.Tensor] = None,
         t: Optional[torch.Tensor] = None,
         context=None,
+        groups: Optional[torch.Tensor] = None,
     ) -> Tuple[
         torch.Tensor,
         torch.Tensor,
@@ -521,6 +522,12 @@ class Process(abc.ABC):
             t: path times, per-sample or scalar; drawn from
                 :meth:`sample_t` if not given
             context: generation-time conditioning handed to the prior
+            groups: labels restricting which rows the coupling may exchange
+                endpoints between — for a collated batch of molecules,
+                ``(idx_m, Z)``, so the re-pairing stays inside one molecule and
+                one element. Passed straight to
+                :meth:`~schnetpack.generative.couplings.Coupling.pair`; without
+                it a batch is one unrestricted point cloud.
 
         Returns:
             (x_t, x0, x1, t, eps) — the perturbed batch, the (possibly
@@ -529,7 +536,12 @@ class Process(abc.ABC):
         """
         if x1 is None:
             x1 = self.prior.sample_like(x0, context)
-        x0, x1 = self.coupling.pair(x0, x1)
+        # only passed when asked for, so couplings written against the
+        # two-argument `pair` keep working
+        if groups is None:
+            x0, x1 = self.coupling.pair(x0, x1)
+        else:
+            x0, x1 = self.coupling.pair(x0, x1, groups)
         if t is None:
             t = self.sample_t(x0.shape[0], x0.device).to(x0.dtype)
         eps = None if self.gamma(t) is None else torch.randn_like(x0)

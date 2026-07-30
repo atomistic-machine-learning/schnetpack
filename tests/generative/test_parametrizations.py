@@ -109,6 +109,61 @@ def test_permutation_coupling_is_a_pure_reordering():
     assert torch.allclose(sorted_in, sorted_out)
 
 
+def test_permutation_coupling_stays_inside_its_groups():
+    # Atoms may only trade endpoints with atoms of the same element in the same
+    # molecule: two molecules of C2H2, laid out as one collated batch.
+    torch.manual_seed(0)
+    idx_m = torch.tensor([0, 0, 0, 0, 1, 1, 1, 1])
+    Z = torch.tensor([6, 6, 1, 1, 6, 6, 1, 1])
+    groups = torch.stack([idx_m, Z], dim=-1)
+    x0 = torch.randn(8, 3)
+    x1 = torch.randn(8, 3)
+
+    _, paired = PermutationCoupling().pair(x0, x1, groups)
+
+    # every endpoint landed on a row it was interchangeable with
+    src = torch.tensor([int((x1 == row).all(-1).nonzero()[0]) for row in paired])
+    assert torch.equal(idx_m[src], idx_m), "endpoint crossed a molecule boundary"
+    assert torch.equal(Z[src], Z), "endpoint crossed an element boundary"
+    assert sorted(src.tolist()) == list(range(8)), "not a permutation"
+
+
+def test_permutation_groups_can_only_lengthen_transport():
+    # Restricting the assignment cannot beat the unrestricted optimum.
+    torch.manual_seed(1)
+    x0, x1 = torch.randn(12, 3), torch.randn(12, 3)
+    groups = torch.tensor([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
+    _, free = PermutationCoupling().pair(x0, x1)
+    _, blocked = PermutationCoupling().pair(x0, x1, groups)
+    assert (x0 - blocked).norm(dim=-1).sum() >= (x0 - free).norm(dim=-1).sum() - 1e-6
+
+
+def test_single_row_groups_are_the_identity():
+    # A block of one has nothing to trade with.
+    x0, x1 = torch.randn(5, 3), torch.randn(5, 3)
+    _, paired = PermutationCoupling().pair(x0, x1, torch.arange(5))
+    assert torch.equal(paired, x1)
+
+
+def test_groups_must_cover_every_row():
+    with pytest.raises(ValueError, match="covers 3 rows but the batch has 5"):
+        PermutationCoupling().pair(torch.randn(5, 3), torch.randn(5, 3), torch.zeros(3))
+
+
+def test_identity_coupling_accepts_groups():
+    x0, x1 = torch.randn(4, 3), torch.randn(4, 3)
+    out0, out1 = IdentityCoupling().pair(x0, x1, torch.tensor([0, 0, 1, 1]))
+    assert torch.equal(out0, x0) and torch.equal(out1, x1)
+
+
+def test_pc_variance_coupling_refuses_groups():
+    # It rescales one cloud's ellipsoid; per-element blocks are the wrong unit.
+    with pytest.raises(NotImplementedError, match="no grouped form"):
+        PCVarianceCoupling().pair(
+            torch.randn(4, 3), torch.randn(4, 3), torch.tensor([0, 0, 1, 1])
+        )
+
+
 def test_couplings_never_draw():
     # A custom coupling must opt in to preserving the marginal explicitly.
     class Undeclared(Coupling):

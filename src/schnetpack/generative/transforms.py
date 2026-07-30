@@ -25,7 +25,7 @@ Unlike the rest of the subpackage this module reaches into
 definition a statement about batch dicts. Nothing here imports Lightning.
 """
 
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 import torch
 
@@ -64,6 +64,14 @@ class Diffuse(Transform):
     MSE broadcasts ``(n_structures,)`` against ``(n_atoms,)`` and silently
     optimizes the wrong thing.
 
+    It *does* tell the coupling which rows are interchangeable. The tensor-level
+    core sees one anonymous sample axis; only here is it known that those rows
+    are atoms, which molecule each belongs to and which element it is. So
+    ``group_keys`` is read off the batch and handed to
+    :meth:`~schnetpack.generative.processes.Process.perturb`, and a re-pairing
+    coupling keeps its permutation inside one molecule and one element instead
+    of trading endpoints across the whole batch.
+
     Two things this deliberately does *not* do:
 
     - **It does not center the structure.** Compose
@@ -94,6 +102,7 @@ class Diffuse(Transform):
         time_key: str = "t",
         structure_time_key: Optional[str] = "t_structure",
         original_key: Optional[str] = None,
+        group_keys: Optional[Sequence[str]] = (properties.idx_m, properties.Z),
     ):
         """
         Args:
@@ -110,6 +119,13 @@ class Diffuse(Transform):
             time_key: key for the per-element time, for conditioning
             structure_time_key: key for the per-structure time; None to skip
             original_key: key to keep the clean property under; None to skip
+            group_keys: batch entries labelling which rows a re-pairing
+                coupling may exchange endpoints between — by default the
+                molecule index and the atomic number, so an atom trades only
+                with atoms of its own element in its own molecule. Keys absent
+                from the batch, or not one label per diffused row, are skipped;
+                ``None`` or ``()`` leaves the assignment unrestricted. Ignored
+                by couplings that do not re-pair.
         """
         super().__init__()
         parametrization.validate(process)
@@ -121,6 +137,18 @@ class Diffuse(Transform):
         self.time_key = time_key
         self.structure_time_key = structure_time_key
         self.original_key = original_key
+        self.group_keys = tuple(group_keys or ())
+
+    def _groups(self, inputs, n: int) -> Optional[torch.Tensor]:
+        """Stack the available group labels into one (n, k) tensor, or None."""
+        columns = [
+            inputs[key]
+            for key in self.group_keys
+            if key in inputs
+            and inputs[key].ndim == 1
+            and inputs[key].shape[0] == n  # per-structure properties have none
+        ]
+        return torch.stack(columns, dim=-1) if columns else None
 
     def forward(self, inputs):
         x0 = inputs[self.diffuse_property]
@@ -130,7 +158,9 @@ class Diffuse(Transform):
         t = sample_t(1, x0.device).to(x0.dtype)
         t_elements = t.repeat(x0.shape[0])
 
-        x_t, x0, x1, t_elements, eps = self.process.perturb(x0, t=t_elements)
+        x_t, x0, x1, t_elements, eps = self.process.perturb(
+            x0, t=t_elements, groups=self._groups(inputs, x0.shape[0])
+        )
 
         inputs[self.diffuse_property] = x_t
         inputs[self.label_key] = self.parametrization.target(
