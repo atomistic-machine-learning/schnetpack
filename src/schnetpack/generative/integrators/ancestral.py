@@ -1,11 +1,41 @@
-"""Exact DDPM ancestral sampling as an integrator."""
+"""Ancestral sampling as integrators."""
 
 import torch
 
 from schnetpack.generative.integrators.base import Integrator
 from schnetpack.generative.processes import expand_t
 
-__all__ = ["AncestralDDPM"]
+__all__ = ["Ancestral", "AncestralDDPM"]
+
+
+class Ancestral(Integrator):
+    """
+    Generic ancestral update — the exact posterior step
+
+        x0_hat ~ model,   x_s ~ p(x_s | x_t, x0_hat),
+
+    i.e. estimate x0 from the model, then draw from the closed-form Gaussian
+    posterior the process already knows
+    (:meth:`~schnetpack.generative.processes.Process.posterior`). Schedule
+    logic lives entirely in that closed form, so one class covers every
+    process with a Gaussian kernel: on VP it is the textbook DDPM ancestral
+    step with the exact (beta-tilde) posterior variance, on VE it reduces to
+    the familiar score-form update x + score (sigma_t^2 - sigma_s^2) plus
+    matched noise — the GPFF/NCSN ancestral sampler.
+
+    Like :class:`AncestralDDPM` it discretizes the reverse process through
+    something other than drift/diffusion — here the
+    :class:`~schnetpack.generative.reverse.ReverseProcess`'s ``x0`` and the
+    forward process's posterior — and, being intrinsically stochastic, it
+    ignores the reverse process's ``churn``. Requires
+    :attr:`~schnetpack.generative.processes.Process.has_gaussian_kernel`
+    (the posterior raises otherwise).
+    """
+
+    def step(self, process, x, t, dt):
+        x0_hat = process.x0(x, t)
+        mean, std = process.process.posterior(x, x0_hat, t, t + dt)
+        return mean + expand_t(std, x) * torch.randn_like(x)
 
 
 class AncestralDDPM(Integrator):

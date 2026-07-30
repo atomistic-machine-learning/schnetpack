@@ -2,6 +2,7 @@ import pytest
 import torch
 
 from schnetpack.generative import (
+    Ancestral,
     AncestralDDPM,
     EulerMaruyama,
     FlowMatching,
@@ -233,6 +234,58 @@ def test_denoise_partial(vp):
     x_t = torch.randn(8, 5, 3)
     out = sampler.denoise(analytic_score(vp, 0.0, 1.0), x_t, t_start=0.5, n_steps=10)
     assert out.shape == x_t.shape
+
+
+# --- generic ancestral sampling ------------------------------------------- #
+
+
+def test_ancestral_recovers_data_stats(vp):
+    torch.manual_seed(0)
+    mu0, s0 = -0.5, 0.8
+    sampler = Sampler(vp, ScoreParametrization(), Ancestral())
+    samples = sampler.sample(analytic_score(vp, mu0, s0), (4096, 1), 1000)
+    assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
+    assert samples.std().item() == pytest.approx(s0, abs=0.15)
+
+
+def test_ancestral_on_ve_matches_the_score_form_update():
+    # On VE the exact-posterior step must reduce to the classic ancestral
+    # update x + score (sigma_t^2 - sigma_s^2) + matched noise — the
+    # GPFF/NCSN sampler, here recovered rather than reimplemented.
+    process = VE(0.01, 3.0)
+    score_fn = analytic_score(process, 0.5, 0.7, x1_std=process.std)
+    reverse = ReverseProcess(process, ScoreParametrization(), score_fn)
+
+    x = torch.randn(32, 2, dtype=torch.float64)
+    t = torch.full((32,), 0.8, dtype=torch.float64)
+    dt = torch.tensor(-0.1, dtype=torch.float64)
+
+    torch.manual_seed(1)
+    stepped = Ancestral().step(reverse, x, t, dt)
+
+    sig_t = expand_t(process.sigma(t), x)
+    sig_s = expand_t(process.sigma(t + dt), x)
+    torch.manual_seed(1)
+    z = torch.randn_like(x)
+    expected = (
+        x
+        + score_fn(x, t) * (sig_t**2 - sig_s**2)
+        + z * (sig_s**2 * (sig_t**2 - sig_s**2) / sig_t**2).sqrt()
+    )
+    assert torch.allclose(stepped, expected, rtol=1e-10)
+
+
+def test_ancestral_on_scaled_ve_recovers_data_stats():
+    torch.manual_seed(0)
+    scale = 10.0
+    process = VE(scale=scale)
+    mu0, s0 = 0.5, 1.0
+    sampler = Sampler(process, ScoreParametrization(), Ancestral())
+    samples = sampler.sample(
+        analytic_score(process, mu0, s0, x1_std=scale), (4096, 1), 500
+    )
+    assert samples.mean().item() == pytest.approx(mu0, abs=0.15)
+    assert samples.std().item() == pytest.approx(s0, abs=0.15)
 
 
 # --- flow matching -------------------------------------------------------- #

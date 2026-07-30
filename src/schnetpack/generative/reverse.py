@@ -99,3 +99,17 @@ class ReverseProcess:
         return self.parametrization.to_score(
             self.process, self.model(x, t, self.cond), x, t
         )
+
+    def x0(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        """
+        x0-estimate of the marginal at t, with ``cond`` bound.
+
+        Like :meth:`score`, this exists for the integrators that discretize
+        the reverse process through something other than drift/diffusion —
+        here the exact Gaussian posterior p(x_s | x_t, x0), which
+        :class:`~schnetpack.generative.integrators.ancestral.Ancestral`
+        steps through with this estimate in x0's place.
+        """
+        return self.parametrization.to_x0(
+            self.process, self.model(x, t, self.cond), x, t
+        )
