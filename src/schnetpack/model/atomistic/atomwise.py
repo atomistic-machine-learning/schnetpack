@@ -107,8 +107,8 @@ class AtomwiseVector(nn.Module):
     def __init__(
         self,
         n_in: int,
-        n_layers: int = 1,
-        n_hidden: Optional[int] = None,
+        n_layers: int = 2,
+        n_hidden: Optional[Union[int, Sequence[int]]] = None,
         activation: Callable = F.silu,
         output_key: str = "vector",
     ):
@@ -116,35 +116,31 @@ class AtomwiseVector(nn.Module):
         Args:
             n_in: input dimension of the scalar and vector representation
             n_layers: number of gated equivariant blocks
-            n_hidden: number of hidden units per block (default: n_in)
+            n_hidden: number of hidden units per block.
+                If an integer, same number of node is used for all hidden
+                layers resulting in a rectangular network.
+                If None, the number of neurons is divided by two after each
+                layer starting n_in resulting in a pyramidal network.
             activation: internal activation function
             output_key: the key under which the result will be stored
         """
         super().__init__()
         self.output_key = output_key
         self.model_outputs = [output_key]
-        n_hidden = n_hidden or n_in
 
-        self.blocks = nn.ModuleList(
-            [
-                snn.GatedEquivariantBlock(
-                    n_sin=n_in,
-                    n_vin=n_in,
-                    n_sout=n_in if i < n_layers - 1 else 1,
-                    n_vout=n_in if i < n_layers - 1 else 1,
-                    n_hidden=n_hidden,
-                    activation=activation,
-                    sactivation=activation if i < n_layers - 1 else None,
-                )
-                for i in range(n_layers)
-            ]
+        self.outnet = snn.build_gated_equivariant_mlp(
+            n_in=n_in,
+            n_out=1,
+            n_hidden=n_hidden,
+            n_layers=n_layers,
+            activation=activation,
+            sactivation=activation,
         )
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         scalars = inputs["scalar_representation"]
         vectors = inputs["vector_representation"]
-        for block in self.blocks:
-            scalars, vectors = block((scalars, vectors))
+        _, vectors = self.outnet((scalars, vectors))
 
         inputs[self.output_key] = vectors.squeeze(-1)
         return inputs
