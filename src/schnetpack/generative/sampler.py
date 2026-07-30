@@ -14,7 +14,7 @@ from schnetpack.generative.priors import Prior
 from schnetpack.generative.processes import Process
 from schnetpack.generative.reverse import ReverseProcess
 
-__all__ = ["Sampler"]
+__all__ = ["DirectDenoisingSampler", "Sampler"]
 
 
 class Sampler:
@@ -134,3 +134,111 @@ class Sampler:
             self.process, self.parametrization, model, churn=self.churn, cond=cond
         )
         return self.integrator.integrate(reverse, x_t, ts)
+
+
+class DirectDenoisingSampler:
+    """
+    GPFF's direct denoising: repeat "inject noise, jump to the model's
+    x0-estimate".
+
+    Each of the ``n_steps`` iterations does
+
+        x <- x + lambda (1 - k/N) z,  z ~ N(0, I)   (decaying noise injection)
+        x <- x0_hat(x)                              (jump to the x0-estimate)
+
+    There is no time grid, no reverse SDE/ODE and no noise schedule, which is
+    why this is a sibling of :class:`Sampler` rather than an integrator: the
+    only ingredients are ``parametrization.to_x0`` and the injection above.
+    ``stochastic_lambda = 0`` disables the injection entirely (GPFF's plain
+    direct denoising); positive values give the stochastic variant, whose
+    injected noise is what buys sample diversity. lambda is in data units
+    (Angstrom, for positions).
+
+    The model is evaluated at t = 0 throughout — the sampler never knows the
+    noise level of its iterate, so it presumes the *time-free* contract that
+    makes GPFF's method possible in the first place: a model that ignores its
+    t argument, under a parametrization whose ``to_x0`` never reads t either
+    (the pseudo-force and x0 heads; a score-type head divides by sigma(t) and
+    would read the lie). Time-conditioned models belong in :class:`Sampler`.
+    """
+
+    def __init__(
+        self,
+        process: Process,
+        parametrization: Parametrization,
+        prior: Optional[Prior] = None,
+        stochastic_lambda: float = 1.0,
+    ):
+        """
+        Args:
+            process: forward process the model was trained on; supplies the
+                sampling prior
+            parametrization: contract the model was trained under; its
+                ``to_x0`` is the jump
+            prior: explicit starting distribution; overrides the process's
+                own. Required when the process's coupling changes x1's
+                marginal.
+            stochastic_lambda: scale of the injected noise, in data units;
+                0 disables the injection
+        """
+        parametrization.validate(process)
+        self.process = process
+        self.parametrization = parametrization
+        self.prior = prior if prior is not None else process.sampling_prior()
+        self.stochastic_lambda = stochastic_lambda
+
+    def sample(
+        self,
+        model: Callable,
+        shape: Sequence[int],
+        n_steps: int,
+        x_init: Optional[torch.Tensor] = None,
+        cond=None,
+        dtype: Optional[torch.dtype] = None,
+        device: Optional[torch.device] = None,
+    ) -> torch.Tensor:
+        """
+        Draw samples by direct denoising from the prior.
+
+        Args:
+            model: callable (x, t, cond) -> raw output in the sampler's
+                parametrization; called with t = 0, so it must be time-free
+            shape: shape of the sample batch, (n_samples, ...)
+            n_steps: number of denoising iterations
+            x_init: optional starting states; drawn from the prior if not given
+            cond: conditioning passed through to the model
+        """
+        if x_init is None:
+            x_init = self.prior.sample(shape, dtype=dtype, device=device)
+        return self.denoise(model, x_init, n_steps, cond=cond)
+
+    def denoise(
+        self,
+        model: Callable,
+        x_t: torch.Tensor,
+        n_steps: int,
+        cond=None,
+    ) -> torch.Tensor:
+        """
+        Denoise given states — the partial-denoising entry point.
+
+        Unlike :meth:`Sampler.denoise` there is no ``t_start`` to declare:
+        the loop never uses the noise level, which is exactly what makes
+        relaxing structures of unknown noisiness this sampler's home turf.
+
+        Args:
+            model: callable (x, t, cond) -> raw output in the sampler's
+                parametrization; called with t = 0, so it must be time-free
+            x_t: states to denoise, shape (n_samples, ...)
+            n_steps: number of denoising iterations
+            cond: conditioning passed through to the model
+        """
+        x = x_t
+        t = torch.zeros(x.shape[0], dtype=x.dtype, device=x.device)
+        for k in range(1, n_steps + 1):
+            noise_scale = self.stochastic_lambda * (1.0 - k / n_steps)
+            if noise_scale > 0.0:
+                x = x + noise_scale * torch.randn_like(x)
+            raw = model(x, t, cond)
+            x = self.parametrization.to_x0(self.process, raw, x, t)
+        return x

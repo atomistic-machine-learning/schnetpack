@@ -4,6 +4,8 @@ import torch
 from schnetpack.generative import (
     Ancestral,
     AncestralDDPM,
+    DirectDenoisingSampler,
+    PseudoForceParametrization,
     EulerMaruyama,
     FlowMatching,
     GaussianPrior,
@@ -286,6 +288,111 @@ def test_ancestral_on_scaled_ve_recovers_data_stats():
     )
     assert samples.mean().item() == pytest.approx(mu0, abs=0.15)
     assert samples.std().item() == pytest.approx(s0, abs=0.15)
+
+
+# --- direct denoising ------------------------------------------------------ #
+
+
+def test_direct_denoising_ends_on_the_x0_estimate():
+    # The last iteration injects nothing (noise ratio 0) and then jumps, so a
+    # model whose x0-estimate is a fixed point lands there exactly.
+    mu0 = 1.5
+    process = VE(0.01, 3.0)
+    sampler = DirectDenoisingSampler(process, PseudoForceParametrization())
+
+    def model(x, t, cond=None):
+        return 2.0 * (mu0 - x)  # pseudo force straight to mu0
+
+    out = sampler.sample(model, (16, 3), 5)
+    assert torch.allclose(out, torch.full_like(out, mu0))
+
+
+def test_direct_denoising_is_time_free_and_threads_cond():
+    marker = object()
+    seen_t, seen_cond = [], []
+
+    def model(x, t, cond=None):
+        seen_t.append(t)
+        seen_cond.append(cond)
+        return torch.zeros_like(x)
+
+    process = VE(0.01, 3.0)
+    sampler = DirectDenoisingSampler(process, PseudoForceParametrization())
+    sampler.sample(model, (4, 1), 3, cond=marker)
+
+    assert len(seen_t) == 3
+    assert all((t == 0.0).all() for t in seen_t)
+    assert all(c is marker for c in seen_cond)
+
+
+def test_direct_denoising_lambda_zero_is_deterministic():
+    process = VE(0.01, 3.0)
+    sampler = DirectDenoisingSampler(
+        process, PseudoForceParametrization(), stochastic_lambda=0.0
+    )
+
+    def model(x, t, cond=None):
+        return -x  # some deterministic field
+
+    x_init = torch.randn(8, 2)
+    out1 = sampler.sample(model, (8, 2), 10, x_init=x_init.clone())
+    out2 = sampler.sample(model, (8, 2), 10, x_init=x_init.clone())
+    assert torch.equal(out1, out2)
+
+
+def test_direct_denoising_validates_pair_and_prior():
+    # Same construction contract as Sampler: the pair is validated, and a
+    # marginal-changing coupling has no data-free start to derive.
+    reshaped = VP(coupling=PCVarianceCoupling())
+    with pytest.raises(TypeError, match="Gaussian kernel"):
+        DirectDenoisingSampler(reshaped, ScoreParametrization(), prior=GaussianPrior())
+    with pytest.raises(ValueError, match="marginal"):
+        DirectDenoisingSampler(reshaped, PseudoForceParametrization())
+
+    explicit = GaussianPrior()
+    sampler = DirectDenoisingSampler(
+        reshaped, PseudoForceParametrization(), prior=explicit
+    )
+    assert sampler.prior is explicit
+
+
+class TimeFreeToyNet(torch.nn.Module):
+    """An MLP on x alone — the time-free contract direct denoising presumes."""
+
+    def __init__(self):
+        super().__init__()
+        self.layers = torch.nn.Sequential(
+            torch.nn.Linear(1, 64),
+            torch.nn.SiLU(),
+            torch.nn.Linear(64, 64),
+            torch.nn.SiLU(),
+            torch.nn.Linear(64, 1),
+        )
+
+    def forward(self, x, t, cond=None):
+        return self.layers(x)
+
+
+def test_direct_denoising_trained_gpff_assembly():
+    # The full GPFF recipe end to end: scaled VE + pseudo-force head with the
+    # clipped 1/b^2 weight, a time-free net, and the stochastic
+    # direct-denoising loop.
+    torch.manual_seed(0)
+    mu, sd = 1.0, 0.5
+    process = VE(0.01, 3.0)
+    parametrization = PseudoForceParametrization()
+    loss = MatchingLoss(
+        process,
+        parametrization,
+        weight=lambda t: (1.0 / process.b(t) ** 2).clamp(max=1.0),
+    )
+    model = train_toy(loss, TimeFreeToyNet(), mu, sd)
+
+    sampler = DirectDenoisingSampler(process, parametrization, stochastic_lambda=1.0)
+    samples = sampler.sample(model, (4096, 1), 50)
+
+    assert torch.isfinite(samples).all()
+    assert samples.mean().item() == pytest.approx(mu, abs=0.2)
 
 
 # --- flow matching -------------------------------------------------------- #
