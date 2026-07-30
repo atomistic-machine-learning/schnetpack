@@ -81,9 +81,13 @@ class Diffuse(Transform):
     - **It does not decide how the noise is drawn.** That is the process's
       job — its prior. For molecules, translation-invariant networks cannot
       predict a center-of-mass displacement, so the noise must be drawn in
-      the same zero-COM subspace as the data — express that as a
+      the same zero-COM subspace as the data;
+      :class:`~schnetpack.generative.priors.GaussianPrior` does that by
+      default (``centered=True``). Express any other endpoint law as a
       :class:`~schnetpack.generative.priors.Prior` on the process, not by
-      editing this class.
+      editing this class. This transform's part is only to hand the prior the
+      batch as context, so a centered draw is centered per molecule rather
+      than across the whole batch.
 
     Order matters in the transform list: put any neighbor list *after* this one,
     or it will be built on the clean structure and be wrong for x_t.
@@ -158,8 +162,15 @@ class Diffuse(Transform):
         t = sample_t(1, x0.device).to(x0.dtype)
         t_elements = t.repeat(x0.shape[0])
 
+        # the batch goes to the prior as context: a prior that must respect the
+        # layout (centering per molecule) reads idx_m out of it, and one that
+        # does not ignores it. Running per structure there is no idx_m, and the
+        # whole leading axis is the one molecule anyway.
         x_t, x0, x1, t_elements, eps = self.process.perturb(
-            x0, t=t_elements, groups=self._groups(inputs, x0.shape[0])
+            x0,
+            t=t_elements,
+            context=inputs,
+            groups=self._groups(inputs, x0.shape[0]),
         )
 
         inputs[self.diffuse_property] = x_t

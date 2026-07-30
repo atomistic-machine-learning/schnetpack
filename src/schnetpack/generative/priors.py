@@ -35,10 +35,13 @@ A prior also declares what its draws *are*:
   the data scale (see :class:`~schnetpack.generative.processes.VE`).
 
 The ``context`` argument is what an endpoint may legitimately depend on at
-generation time too — composition, atom count, scaffold indices — never the
-data values themselves. A distribution shaped by the *data batch* is a
-coupling, not a prior (see
-:class:`~schnetpack.generative.couplings.PCVarianceCoupling`).
+generation time too — composition, atom count, scaffold indices, the batch
+layout a draw must respect — never the data values themselves. A distribution
+shaped by the *data batch* is a coupling, not a prior (see
+:class:`~schnetpack.generative.couplings.PCVarianceCoupling`). Structure is
+not values: :class:`GaussianPrior` reads ``idx_m`` out of the context to
+center each molecule's draw on its own, which is available at generation time
+and says nothing about where the atoms go.
 
 Structured priors (per-molecule covariance, scaffolds, second datasets) plug
 in through this same interface; starting below t_max from a structured state
@@ -49,6 +52,8 @@ import abc
 from typing import Optional, Sequence
 
 import torch
+
+from schnetpack import properties
 
 __all__ = ["Prior", "GaussianPrior"]
 
@@ -106,7 +111,7 @@ class Prior(abc.ABC):
 
 class GaussianPrior(Prior):
     """
-    Isotropic zero-mean Gaussian N(0, std^2 I).
+    Isotropic zero-mean Gaussian N(0, std^2 I), centered per molecule.
 
     The endpoint of every plain diffusion and flow-matching process: std = 1
     for the variance-preserving family, sigma_max for VE — where it must
@@ -114,16 +119,108 @@ class GaussianPrior(Prior):
     :class:`~schnetpack.generative.processes.VE`). Exact as a sampling start
     when a(t_max) = 0 (flow matching); for the diffusion paths it is the
     usual approximation that the residual a(t_max) x0 term is negligible.
+
+    :attr:`centered` (default True) subtracts each molecule's mean from its
+    draw, putting x1 in the same zero-COM subspace that
+    :class:`~schnetpack.transform.SubtractCenterOfGeometry` puts x0 in. That
+    is what molecules need: a translation-invariant network can never predict
+    a displacement of a whole structure, so an off-subspace endpoint is
+    unlearnable noise in every training target and an offset nothing removes
+    in every sampling start. Uncentered, a draw carries a center of geometry
+    of scale ``std * sqrt(d / n)`` per molecule (n atoms in d dimensions) —
+    4.6 A for a 12-atom molecule at ``std = 10``, larger than the molecule.
+
+    **Centering does not cost the Gaussian kernel.** Projecting a standard
+    normal onto a subspace gives a standard normal *on that subspace*, with
+    the same per-direction variance, so :attr:`gaussian` stays True and the
+    score/noise parametrizations stay exact. Only the space changes — which
+    makes the precondition load-bearing: **x0 must be centered too** (compose
+    ``SubtractCenterOfGeometry`` before
+    :class:`~schnetpack.generative.transforms.Diffuse`). Centered noise on
+    uncentered data leaves x_t's mean drifting with a(t), and the kernel is no
+    longer the one the targets assume.
+
+    Which rows share a mean comes from ``context``, so centering is per
+    molecule rather than per batch:
+
+    - a mapping (a SchNetPack batch dict): ``segment_key`` is read out of it.
+      :class:`~schnetpack.generative.transforms.Diffuse` passes the batch it
+      is diffusing, and
+      :meth:`~schnetpack.generative.sampler.Sampler.sample` forwards whatever
+      it is given, so both sides supply ``idx_m`` on their own.
+    - a 1-D integer tensor: segment ids directly, one per row.
+    - ``None``, or a mapping without ``segment_key``: the whole leading axis
+      is one group. Correct where that axis *is* one molecule — a transform
+      running per structure inside the dataloader — and wrong for a collated
+      batch, which is why the atomistic paths pass their layout rather than
+      relying on this.
+
+    Set ``centered=False`` for data with no translation symmetry to quotient
+    out, or when the leading axis is independent samples rather than the atoms
+    of one structure — centering couples the rows it spans.
     """
 
     gaussian = True
 
-    def __init__(self, std: float = 1.0):
+    def __init__(
+        self,
+        std: float = 1.0,
+        centered: bool = True,
+        segment_key: str = properties.idx_m,
+    ):
         """
         Args:
-            std: standard deviation of the endpoint
+            std: standard deviation of the endpoint, before centering
+            centered: draw in the zero-mean subspace of each segment
+            segment_key: key holding the segment ids when ``context`` is a
+                mapping; defaults to SchNetPack's molecule index
         """
         self.std = std
+        self.centered = centered
+        self.segment_key = segment_key
 
     def sample(self, shape, dtype=None, device=None, context=None):
-        return self.std * torch.randn(*shape, dtype=dtype, device=device)
+        x = self.std * torch.randn(*shape, dtype=dtype, device=device)
+        if not self.centered:
+            return x
+        return self.center(x, self.segments(context))
+
+    def segments(self, context) -> Optional[torch.Tensor]:
+        """Resolve ``context`` to per-row segment ids, or None for one group."""
+        if context is None or torch.is_tensor(context):
+            return context
+        if hasattr(context, "get"):
+            return context.get(self.segment_key)
+        raise TypeError(
+            f"{type(self).__name__} takes context as segment ids, a mapping "
+            f"holding {self.segment_key!r}, or None for a single group; got "
+            f"{type(context).__name__}."
+        )
+
+    @staticmethod
+    def center(x: torch.Tensor, segments: Optional[torch.Tensor]) -> torch.Tensor:
+        """
+        Subtract each segment's mean along the leading axis.
+
+        Args:
+            x: batch to center, shape (n, ...)
+            segments: segment id per row, shape (n,); None centers x as one
+                group
+        """
+        if segments is None:
+            return x - x.mean(0, keepdim=True)
+        if segments.shape[0] != x.shape[0]:
+            raise ValueError(
+                f"segment ids must be one per row: got {segments.shape[0]} "
+                f"for {x.shape[0]} rows."
+            )
+        n_segments = int(segments.max()) + 1 if segments.numel() else 0
+        index = segments.reshape(-1, *(1,) * (x.ndim - 1)).expand_as(x)
+        totals = torch.zeros(
+            n_segments, *x.shape[1:], dtype=x.dtype, device=x.device
+        ).scatter_add_(0, index, x)
+        counts = torch.zeros(n_segments, dtype=x.dtype, device=x.device).scatter_add_(
+            0, segments, torch.ones_like(segments, dtype=x.dtype)
+        )
+        means = totals / counts.reshape(-1, *(1,) * (x.ndim - 1))
+        return x - means[segments]

@@ -88,6 +88,7 @@ class Sampler:
         n_steps: int,
         x_init: Optional[torch.Tensor] = None,
         cond=None,
+        context=None,
         dtype: Optional[torch.dtype] = None,
         device: Optional[torch.device] = None,
     ) -> torch.Tensor:
@@ -101,9 +102,20 @@ class Sampler:
             n_steps: number of integrator steps
             x_init: optional starting states; drawn from the prior if not given
             cond: conditioning passed through to the model
+            context: generation-time conditioning handed to the prior — the
+                same argument the forward process passes it during training,
+                so a prior that needs more than a shape is reachable from
+                here: composition, scaffold indices, or the batch layout a
+                :class:`~schnetpack.generative.priors.GaussianPrior` centers
+                by. Pass the batch dict to generate a batch of molecules, or
+                each draw is centered against the whole cloud instead of its
+                own structure. Ignored when ``x_init`` is given, and by priors
+                that do not read it.
         """
         if x_init is None:
-            x_init = self.prior.sample(shape, dtype=dtype, device=device)
+            x_init = self.prior.sample(
+                shape, dtype=dtype, device=device, context=context
+            )
         return self.denoise(model, x_init, self.t_max, n_steps, cond=cond)
 
     def denoise(
