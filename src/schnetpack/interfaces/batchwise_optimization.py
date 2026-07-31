@@ -81,9 +81,9 @@ class BatchwiseCalculator:
 
     def __init__(
         self,
-        model: nn.Module or str,
+        model: nn.Module | str,
         atoms_converter: AtomsConverter,
-        device: str or torch.device = "cpu",
+        device: str | torch.device = "cpu",
         auxiliary_output_modules: Optional[List] = None,
         energy_key: str = "energy",
         force_key: str = "forces",
@@ -433,7 +433,10 @@ class BatchwiseDynamics(Dynamics):
         self.calculator = calculator
         self.trajectory = trajectory
         self.log_every_step = log_every_step
-        self.fixed_atoms_mask = ~torch.tensor(fixed_atoms_mask)
+        if fixed_atoms_mask:
+            self.fixed_atoms_mask = ~torch.tensor(fixed_atoms_mask)
+        else:
+            self.fixed_atoms_mask = None
 
         self.inputs = inputs
         self.n_configs = inputs["_n_atoms"].shape[0]
@@ -828,9 +831,13 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         then take it"""
 
         if f is None:
-            f = self.calculator.get_forces(
-                self.inputs, fixed_atoms_mask=self.fixed_atoms_mask
-            ).to(self.device)
+            f = (
+                self.calculator.get_forces(
+                    self.inputs, fixed_atoms_mask=self.fixed_atoms_mask
+                )
+                .to(torch.float64)
+                .to(self.device)
+            )
 
         ts = time.time()
 
