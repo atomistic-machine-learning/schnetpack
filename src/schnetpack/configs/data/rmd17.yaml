@@ -1,11 +1,21 @@
+# @package data
 defaults:
   - custom
 
-_target_: schnetpack.datasets.rMD17
-
-datapath: ${run.data_dir}/rmd17_${data.molecule}.db  # data_dir is specified in train.yaml
 molecule: aspirin
+
+dataset:
+  _target_: schnetpack.datasets.rMD17
+  datapath: ${run.data_dir}/rmd17_${data.molecule}.db  # data_dir is specified in train.yaml
+  molecule: ${data.molecule}
+
+# rMD17-specific strategy for the published benchmark splits. split_id 0-4
+# selects a predefined split (override with `data.splitting.split_id=0`);
+# null = random split.
+splitting:
+  _target_: schnetpack.datasets.rMD17Split
+  split_id: null
+
 batch_size: 10
 num_train: 950
 num_val: 50
-split_id: null

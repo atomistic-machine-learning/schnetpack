@@ -14,15 +14,16 @@ globals:
   aggregation: sum
 
 data:
-  transforms:
-    - _target_: schnetpack.transform.SubtractCenterOfMass
-    - _target_: schnetpack.transform.RemoveOffsets
-      property: ${globals.property}
-      remove_atomrefs: True
-      remove_mean: True
-    - _target_: schnetpack.transform.MatScipyNeighborList
-      cutoff: ${globals.cutoff}
-    - _target_: schnetpack.transform.CastTo32
+  dataset:
+    transforms:
+      - _target_: schnetpack.transform.SubtractCenterOfMass
+      - _target_: schnetpack.transform.RemoveOffsets
+        property: ${globals.property}
+        remove_atomrefs: True
+        remove_mean: True
+      - _target_: schnetpack.transform.MatScipyNeighborList
+        cutoff: ${globals.cutoff}
+      - _target_: schnetpack.transform.CastTo32
 
 model:
   output_modules:

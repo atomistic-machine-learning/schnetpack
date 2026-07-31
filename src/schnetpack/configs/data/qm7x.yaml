@@ -1,9 +1,20 @@
+# @package data
 defaults:
   - custom
 
-_target_: schnetpack.datasets.QM7X
+dataset:
+  _target_: schnetpack.datasets.QM7X
+  datapath: ${run.data_dir}/qm7x.db  # data_dir is specified in train.yaml
+  remove_duplicates: true
+  only_equilibrium: false
+  only_non_equilibrium: false
 
-datapath: ${run.data_dir}/qm7x.db  # data_dir is specified in train.yaml
+# GroupSplit on smiles_id, so that conformers of the same molecule never
+# leak across train/val/test.
+splitting:
+  _target_: schnetpack.data.GroupSplit
+  splitting_key: smiles_id
+
 batch_size: 100
 num_train: 5550
 num_val: 700

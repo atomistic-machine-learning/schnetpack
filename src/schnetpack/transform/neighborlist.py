@@ -1,6 +1,7 @@
 import os
 import torch
 import shutil
+import fasteners
 from ase import Atoms
 from ase.neighborlist import neighbor_list as ase_neighbor_list
 from matscipy.neighbours import neighbour_list as msp_neighbor_list
@@ -8,10 +9,12 @@ from .base import Transform
 from dirsync import sync
 import numpy as np
 from typing import Optional, Dict, List
+from vesin import NeighborList as vesin_nl
 
 __all__ = [
     "ASENeighborList",
     "MatScipyNeighborList",
+    "VesinNeighborList",
     "TorchNeighborList",
     "CountNeighbors",
     "CollectAtomTriples",
@@ -24,7 +27,6 @@ __all__ = [
 
 import schnetpack as spk
 from schnetpack import properties
-import fasteners
 
 
 class CacheException(Exception):
@@ -105,7 +107,7 @@ class CachedNeighborList(Transform):
 
         # try to read cached NBL
         try:
-            data = torch.load(cache_file)
+            data = torch.load(cache_file, weights_only=True)
             inputs.update(data)
         except IOError:
             # acquire lock for caching
@@ -117,7 +119,7 @@ class CachedNeighborList(Transform):
             with lock:
                 # retry reading, in case other process finished in the meantime
                 try:
-                    data = torch.load(cache_file)
+                    data = torch.load(cache_file, weights_only=True)
                     inputs.update(data)
                 except IOError:
                     # now it is save to calculate and cache
@@ -199,6 +201,14 @@ class NeighborListTransform(Transform):
         """Override with specific neighbor list implementation"""
         raise NotImplementedError
 
+    def _convert_inputs_to_numpy(self, Z, positions, cell, pbc):
+        pos_np = positions.detach().cpu().numpy()
+        cell_np = cell.detach().cpu().numpy()
+        pbc_np_bool = pbc.detach().cpu().numpy()
+        pbc_np_int = pbc_np_bool.astype(int)
+
+        return pos_np, cell_np, pbc_np_bool, pbc_np_int
+
 
 class ASENeighborList(NeighborListTransform):
     """
@@ -214,6 +224,35 @@ class ASENeighborList(NeighborListTransform):
         S = torch.from_numpy(S).to(dtype=positions.dtype)
         offset = torch.mm(S, cell)
         return idx_i, idx_j, offset
+
+
+class VesinNeighborList(NeighborListTransform):
+    """
+    Calculate neighbor list using Vesin.
+    """
+
+    def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
+        pos_np, cell_np, pbc_np_bool, pbc_np_int = self._convert_inputs_to_numpy(
+            Z, positions, cell, pbc
+        )
+
+        device = positions.device
+        dtype = positions.dtype
+
+        if pbc_np_bool.all():
+            periodic = True
+        elif (~pbc_np_bool).all():
+            periodic = False
+        else:
+            raise ValueError("vesin neighbor list does not support mixed PBC settings.")
+        results = vesin_nl(cutoff=float(cutoff), full_list=True).compute(
+            points=pos_np, box=cell_np, periodic=periodic, quantities="ijS"
+        )
+        idx_i = torch.from_numpy(results[0]).to(device).to(torch.long)
+        idx_j = torch.from_numpy(results[1]).to(device).to(torch.long)
+        S = torch.from_numpy(results[2]).to(dtype=dtype, device=device)
+        offsets_cart = S @ cell.to(device)
+        return idx_i, idx_j, offsets_cart
 
 
 class MatScipyNeighborList(NeighborListTransform):
@@ -568,6 +607,7 @@ class CollectAtomTriples(Transform):
         these arrays generate the indices involved in the atom triples.
 
         Example:
+            idx_i_triples -> i atom in triple
             idx_j[idx_j_triples] -> j atom in triple
             idx_j[idx_k_triples] -> k atom in triple
             Rij[idx_j_triples] -> Rij vector in triple
@@ -575,18 +615,20 @@ class CollectAtomTriples(Transform):
         """
         idx_i = inputs[properties.idx_i]
 
-        _, n_neighbors = torch.unique_consecutive(idx_i, return_counts=True)
+        atom_idxes, n_neighbors = torch.unique_consecutive(idx_i, return_counts=True)
 
         offset = 0
         idx_i_triples = ()
         idx_jk_triples = ()
-        for idx in range(n_neighbors.shape[0]):
+        for atom_idx, cur_n_neighbors in zip(atom_idxes, n_neighbors):
             triples = torch.combinations(
-                torch.arange(offset, offset + n_neighbors[idx]), r=2
+                torch.arange(offset, offset + cur_n_neighbors), r=2
             )
-            idx_i_triples += (torch.ones(triples.shape[0], dtype=torch.long) * idx,)
+            idx_i_triples += (
+                torch.ones(triples.shape[0], dtype=torch.long) * atom_idx,
+            )
             idx_jk_triples += (triples,)
-            offset += n_neighbors[idx]
+            offset += cur_n_neighbors
 
         idx_i_triples = torch.cat(idx_i_triples)
 

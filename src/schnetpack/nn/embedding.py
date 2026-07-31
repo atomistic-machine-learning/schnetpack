@@ -8,7 +8,6 @@ from schnetpack.nn.activations import shifted_softplus
 from schnetpack.nn.blocks import ResidualMLP
 from typing import Callable, Union
 
-
 __all__ = ["NuclearEmbedding", "ElectronicEmbedding"]
 
 
@@ -174,7 +173,7 @@ class NuclearEmbedding(nn.Module):
         Args:
         num_features: Dimensions of feature space.
         Zmax: Maximum nuclear charge of atoms. The default is 100, so all
-            elements up to Fermium (Fe) (Z=100) are supported.
+            elements up to Fermium (Fm) (Z=100) are supported.
             Can be kept at the default value (has minimal memory impact).
         zero_init: If True, initialize the embedding with zeros. Otherwise, use
             uniform initialization.

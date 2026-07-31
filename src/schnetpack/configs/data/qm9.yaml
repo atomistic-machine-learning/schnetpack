@@ -1,22 +1,26 @@
+# @package data
 defaults:
   - custom
 
-_target_: schnetpack.datasets.QM9
+dataset:
+  _target_: schnetpack.datasets.qm9.QM9
+  datapath: ${run.data_dir}/qm9.db
+  remove_uncharacterized: true
+  load_properties: null
+  distance_unit: Ang
+  property_units:
+    energy_U0: eV
+    energy_U: eV
+    enthalpy_H: eV
+    free_energy: eV
+    homo: eV
+    lumo: eV
+    gap: eV
+    zpve: eV
 
-datapath: ${run.data_dir}/qm9.db  # data_dir is specified in train.yaml
 batch_size: 100
 num_train: 110000
 num_val: 10000
-remove_uncharacterized: True
-
-# convert to typically used units
-distance_unit: Ang
-property_units:
-  energy_U0: eV
-  energy_U: eV
-  enthalpy_H: eV
-  free_energy: eV
-  homo: eV
-  lumo: eV
-  gap: eV
-  zpve: eV
+# null: use all remaining molecules (10831) as the test set
+num_test: null
+num_workers: 2

@@ -20,7 +20,6 @@ from torch import nn
 from schnetpack.units import convert_units
 from schnetpack.interfaces.ase_interface import AtomsConverter
 
-
 __all__ = [
     "ASEBatchwiseLBFGS",
     "BatchwiseCalculator",
@@ -157,7 +156,9 @@ class BatchwiseCalculator:
         self._initialize_model(model)
 
     def _load_model(self, model: str) -> nn.Module:
-        return torch.load(model, map_location="cpu").to(torch.float64)
+        return torch.load(model, map_location="cpu", weights_only=False).to(
+            torch.float64
+        )
 
     def _initialize_model(self, model: nn.Module) -> None:
         for auxiliary_output_module in self.auxiliary_output_modules:
@@ -295,9 +296,11 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
         # create module list
         models = torch.nn.ModuleList()
         for m_path in model_paths:
-            m = torch.load(os.path.join(m_path, "best_model"), map_location="cpu").to(
-                torch.float64
-            )
+            m = torch.load(
+                os.path.join(m_path, "best_model"),
+                map_location="cpu",
+                weights_only=False,
+            ).to(torch.float64)
             models.append(m)
 
         return models

@@ -17,16 +17,19 @@ from pytorch_lightning.loggers.logger import Logger
 import schnetpack as spk
 from schnetpack.utils import str2class
 from schnetpack.utils.script import log_hyperparameters, print_config
-from schnetpack.data import BaseAtomsData, AtomsLoader
+from schnetpack.data import ASEAtomsData, AtomsLoader
 from schnetpack.train import PredictionWriter
 from schnetpack import properties
-from schnetpack.utils import load_model
-
+from schnetpack.utils import (
+    load_model,
+    load_task_from_checkpoint,
+    trainer_fit_kwargs_for_checkpoint,
+)
 
 log = logging.getLogger(__name__)
 
 
-OmegaConf.register_new_resolver("uuid", lambda: str(uuid.uuid1()))
+OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()), use_cache=True)
 OmegaConf.register_new_resolver("petname", lambda: petname.generate())
 OmegaConf.register_new_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
 
@@ -174,18 +177,32 @@ def train(config: DictConfig):
 
     # Train the model
     log.info("Starting training.")
-    trainer.fit(model=task, datamodule=datamodule, ckpt_path=config.run.ckpt_path)
+    fit_kwargs = (
+        trainer_fit_kwargs_for_checkpoint(trainer)
+        if config.run.ckpt_path is not None
+        else {}
+    )
+    trainer.fit(
+        model=task,
+        datamodule=datamodule,
+        ckpt_path=config.run.ckpt_path,
+        **fit_kwargs,
+    )
 
-    # Evaluate model on test set after training
-    log.info("Starting testing.")
-    trainer.test(model=task, datamodule=datamodule, ckpt_path="best")
-
-    # Store best model
+    # Load the best checkpoint through the compatibility helper (it handles
+    # `weights_only` across PL versions) and test that task directly, instead
+    # of having Lightning re-load the checkpoint internally via
+    # ckpt_path="best", whose weights_only handling is version-dependent.
     best_path = trainer.checkpoint_callback.best_model_path
     log.info(f"Best checkpoint path:\n{best_path}")
+    best_task = load_task_from_checkpoint(type(task), best_path)
 
+    # Evaluate best model on test set after training
+    log.info("Starting testing.")
+    trainer.test(model=best_task, datamodule=datamodule)
+
+    # Store best model
     log.info(f"Store best model")
-    best_task = type(task).load_from_checkpoint(best_path)
     torch.save(best_task, config.globals.model_path + ".task")
 
     best_task.save_model(config.globals.model_path, do_postprocessing=True)
@@ -195,7 +212,7 @@ def train(config: DictConfig):
 @hydra.main(config_path="configs", config_name="predict", version_base="1.2")
 def predict(config: DictConfig):
     log.info(f"Load data from `{config.data.datapath}`")
-    dataset: BaseAtomsData = hydra.utils.instantiate(config.data)
+    dataset: ASEAtomsData = hydra.utils.instantiate(config.data)
     loader = AtomsLoader(dataset, batch_size=config.batch_size, num_workers=8)
 
     model = load_model("best_model")
