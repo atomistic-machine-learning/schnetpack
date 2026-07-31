@@ -8,7 +8,7 @@ These are deselected by default. Run them with::
 
 import pytest
 
-from .test_bw_vs_sequ_optimizer import (
+from .test_bw_optimizer import (
     FMAX,
     MAX_STEPS,
     build_batchwise_optimizer,
