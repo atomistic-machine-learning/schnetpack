@@ -37,6 +37,9 @@ cases with bespoke logic:
   the process it is applied to, and reads everything from it.
 - :mod:`~schnetpack.generative.integrators` — how a reverse process is
   solved, with :mod:`~schnetpack.generative.grids` choosing where the steps go.
+- :mod:`~schnetpack.generative.times` — the mirror of that choice on the
+  training side: which times the forward pass draws, uniform or stated as a
+  density over sigma (EDM/GPFF).
 
 The axes stay separate in both directions: adding a parametrization never
 touches ``processes.py``, and adding a schedule never touches
@@ -90,4 +93,5 @@ from schnetpack.generative.priors import *
 from schnetpack.generative.processes import *
 from schnetpack.generative.reverse import *
 from schnetpack.generative.sampler import *
+from schnetpack.generative.times import *
 from schnetpack.generative.transforms import *

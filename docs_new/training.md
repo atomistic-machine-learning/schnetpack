@@ -56,9 +56,42 @@ one document it ([parametrizations.md](parametrizations.md)):
 `(n, device) -> (n,)`. The default is the process's own `sample_t`, uniform
 on $[t_{\min}, t_{\max}]$ — stopping short of $t = 0$ because the *score*
 target diverges there. The noise and denoiser targets are well behaved at
-0, so for those you may widen the range back; the EDM/GPFF
-log-normal-$\sigma$ density enters through this same hook. Note the hook
-shape is shared with `Diffuse`, so one sampler can serve both routes.
+0, so for those you may widen the range back. Note the hook shape is shared
+with `Diffuse`, so one sampler can serve both routes.
+
+Any callable of that shape works; [times.py](../src/schnetpack/generative/times.py)
+names the two densities that recur:
+
+| sampler | density | when |
+| --- | --- | --- |
+| `UniformTimes(process)` | uniform on $[t_{\min}, t_{\max}]$ | the default, as an object — pass `t_min=0.0` to widen the range for a non-score head |
+| `LogNormalSigmaTimes(process, mean, std)` | $\log\sigma \sim \mathcal{N}(\text{mean}, \text{std}^2)$ | EDM/GPFF — state the density where it is meaningful |
+
+The second is the interesting one. The schedule fixes what $\sigma(t)$ *is*,
+but not where the model spends its capacity, and uniform $t$ on a geometric
+`VE` is log-uniform in $\sigma$: samples spread evenly over orders of
+magnitude, including the deep-noise end where the target is nearly the
+endpoint itself. Stating the density in $\sigma$ instead concentrates
+training on the band where denoising is hard — with GPFF's defaults
+(`mean=-0.7, std=1.2`) a median $\sigma$ of ~0.5 Å and 74% of the mass below
+1 Å, against 47% for uniform on `VE(0.05, 30)`.
+
+The conversion runs through `Process.t_of_sigma`, the inverse of `sigma(t)`
+(bisection generically; closed form on `VE`). On a geometric schedule $t$ is
+*affine* in $\log\sigma$, so the induced density over $t$ is exactly normal:
+
+$$
+t \sim \mathcal{N}\!\left(t_{\max}\Big(1 + \frac{\text{mean} - \log\sigma_{\max}}{L}\Big),\
+\Big(\frac{t_{\max}\,\text{std}}{L}\Big)^{2}\right),
+\qquad L = \log\frac{\sigma_{\max}}{\sigma_{\min}}
+$$
+
+— `LogNormalSigmaTimes.induced_normal()` returns that pair. The class does
+not depend on the shape, though: it draws in $\sigma$ and converts, so a
+non-geometric schedule gets the same $\sigma$ density rather than the same
+$t$ density. A log-normal has tails and a schedule does not, so draws outside
+$[\sigma_{\min}, \sigma_{\max}]$ are clamped onto the bounds by default, or
+rejected and redrawn with `truncate=True` (GPFF's choice at its upper end).
 
 
 ## 2. `Diffuse` — the data-pipeline route

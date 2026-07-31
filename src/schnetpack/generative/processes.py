@@ -209,9 +209,7 @@ class Process(abc.ABC):
             return
 
         has_a_b = cls.a is not Process.a and cls.b is not Process.b
-        has_tv_snr = (
-            cls.tv is not Process.tv and cls.log_snr is not Process.log_snr
-        )
+        has_tv_snr = cls.tv is not Process.tv and cls.log_snr is not Process.log_snr
         if not (has_a_b or has_tv_snr):
             raise TypeError(
                 f"{cls.__name__} defines no schedule. A Process must "
@@ -463,6 +461,51 @@ class Process(abc.ABC):
         """
         return self.b(t) * self.std
 
+    def t_of_sigma(self, sigma: torch.Tensor) -> torch.Tensor:
+        """
+        The inverse of :meth:`sigma` — where on the path a noise level sits.
+
+        Everything that reasons in noise levels rather than times needs this:
+        a training density stated in sigma
+        (:class:`~schnetpack.generative.times.LogNormalSigmaTimes`), a
+        sigma-spaced sampling grid (Karras/EDM). They speak sigma because
+        that is the physical quantity, while the rest of the library speaks
+        t, and only the process knows the map between them.
+
+        Solved by bisection on the whole schedule, which needs no more than
+        b's monotonicity — true of every shipped schedule, since a b that
+        turned around would revisit the same noise level twice and the
+        inverse would not be a function. Subclasses with a closed form
+        override this (see :meth:`VE.t_of_sigma`); the fallback exists so a
+        new schedule gets the capability for free, not because bisection is
+        the intended route.
+
+        Args:
+            sigma: noise levels, any shape
+
+        Returns:
+            Times of the same shape, clamped to [t_min, t_max] — a sigma
+            outside the schedule's range maps to the nearest endpoint rather
+            than raising, so a density with tails wider than the schedule
+            piles them on the ends instead of failing mid-epoch.
+        """
+        sigma = torch.as_tensor(sigma)
+        lo = torch.full_like(sigma, self.t_min, dtype=torch.float64)
+        hi = torch.full_like(sigma, self.t_max, dtype=torch.float64)
+        target = sigma.to(torch.float64)
+        # b is monotone but its direction is the schedule's business: read it
+        # off the endpoints rather than assuming noise grows with t.
+        ends = torch.tensor([self.t_min, self.t_max], dtype=torch.float64)
+        s_min, s_max = self.sigma(ends).to(torch.float64)
+        increasing = bool(s_max >= s_min)
+        for _ in range(60):  # float64 exhausted; 60 halvings of [0, 1]
+            mid = 0.5 * (lo + hi)
+            below = self.sigma(mid.to(sigma.dtype)).to(torch.float64) < target
+            take_upper = below if increasing else ~below
+            lo = torch.where(take_upper, mid, lo)
+            hi = torch.where(take_upper, hi, mid)
+        return (0.5 * (lo + hi)).to(sigma.dtype).clamp(self.t_min, self.t_max)
+
     # -- interpolant ------------------------------------------------------ #
 
     def interpolate(
@@ -548,9 +591,7 @@ class Process(abc.ABC):
         x_t = self.interpolate(x0, x1, t, eps=eps)
         return x_t, x0, x1, t, eps
 
-    def sample_t(
-        self, n: int, device: Optional[torch.device] = None
-    ) -> torch.Tensor:
+    def sample_t(self, n: int, device: Optional[torch.device] = None) -> torch.Tensor:
         """
         Training-time distribution p(t): uniform on [t_min, t_max].
 
@@ -882,6 +923,18 @@ class VE(Process):
 
     def b_dot(self, t):
         return self.b(t) * math.log(1.0 / self.b_min) / self.t_max
+
+    def t_of_sigma(self, sigma):
+        # b is geometric, so t is *affine in log sigma* — invert in closed
+        # form rather than bisecting. Writing L = log(sigma_max/sigma_min),
+        # sigma(t) = sigma_max b_min^(1 - t/t_max) gives
+        #     t = t_max (1 + (log sigma - log sigma_max) / L).
+        # The affine shape is what makes a log-normal density over sigma a
+        # plain normal over t (see LogNormalSigmaTimes).
+        sigma = torch.as_tensor(sigma)
+        log_range = -math.log(self.b_min)
+        t = self.t_max * (1.0 + (torch.log(sigma) - math.log(self.std)) / log_range)
+        return t.clamp(self.t_min, self.t_max)
 
 
 class VELinear(Process):
