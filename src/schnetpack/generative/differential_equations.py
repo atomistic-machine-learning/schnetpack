@@ -18,7 +18,6 @@ differential equations:
   probability-flow ODE (churn = 0).
 - :class:`ReverseODE` — continuity-equation transport dx = v dt, which
   exists for *any* endpoint law and never touches the chart.
-- :func:`reverse` — the assembly entry point that picks between the two.
 
 The chart is deliberately this module's *only* home: every chart object
 exists exactly when the one-sided Gaussian kernel holds, so the check runs
@@ -35,21 +34,24 @@ x0/pseudo-force recovery via
 it.
 
 Reverse processes are never implemented per schedule; they split by
-capability, and :func:`reverse` dispatches from the assembly — the
-``(parametrization, churn)`` pair plus any integrator demand — so callers
-keep a single churn knob. Both reverse classes expose the
+capability, and both take a single *bound field* — a score or a velocity,
+callable (x, t) — rather than a (model, parametrization, cond) triple.
+Composing that triple into the field, and picking the class from the
+assembly (the ``(parametrization, churn)`` pair plus any integrator
+demand), is the assembler's job —
+:meth:`~schnetpack.generative.sampler.Sampler.denoise` for the head route,
+or by hand for a ready field. Both reverse classes expose the
 ``drift``/``diffusion`` interface every integrator consumes; integration
 runs backwards in time, so integrators pass dt < 0.
 """
 
-from typing import Callable, Optional, Tuple
+from typing import Callable, Tuple
 
 import torch
 
-from schnetpack.generative.parametrizations import Parametrization
 from schnetpack.generative.processes import Process, expand_t
 
-__all__ = ["SDE", "ReverseSDE", "ReverseODE", "reverse"]
+__all__ = ["SDE", "ReverseSDE", "ReverseODE"]
 
 
 class SDE:
@@ -165,26 +167,43 @@ class SDE:
         std = torch.sqrt(torch.clamp(sig_s**2 * var_ts / sig_t**2, min=0.0))
         return mean, std
 
+    def x0_from_score(
+        self, x_t: torch.Tensor, score: torch.Tensor, t: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Tweedie's formula on the kernel: x0 = (x_t + sigma^2 score) / a.
+
+        A chart statement, like the kernel it inverts — which is why it lives
+        here and not on a parametrization. Singular where a -> 0 (flow
+        matching at t = 1, VP at large t). For a score obtained from an
+        x0-predicting head the round trip is algebraically exact: the
+        sigma^2 of Tweedie's two directions cancels.
+        """
+        a, sigma = self.kernel(t)
+        return (x_t + expand_t(sigma**2, x_t) * score) / expand_t(a, x_t)
+
 
 class ReverseSDE:
     """
     Time reversal of a forward SDE, as a one-parameter family
 
-        dx = [ v(x, t) - 1/2 churn g^2 score(x, t) ] dt + sqrt(churn) g dw,
+        dx = [ f x - 1/2 (1 + churn) g^2 score(x, t) ] dt + sqrt(churn) g dw,
 
     for churn in [0, 1]. Every member shares the forward marginals: churn = 1
     is the Anderson (1982) reverse-time SDE, churn = 0 the probability-flow
     ODE, and values in between trade discretization error against stochastic
-    churn. It maps onto the usual eta knob by churn = eta^2, since
-    v - 1/2 eta^2 g^2 s equals the Anderson drift f x - 1/2 (1 + eta^2) g^2 s.
+    churn. It maps onto the usual eta knob by churn = eta^2, since the
+    Anderson drift f x - 1/2 (1 + eta^2) g^2 s equals v - 1/2 eta^2 g^2 s.
 
-    Everything here crosses the (f, g) chart — the churn > 0 members through
-    g^2 outright, and even churn = 0 through the score-to-velocity conversion
-    for non-velocity parametrizations. Taking the :class:`SDE` in the
-    constructor states that dependency where it cannot be missed: no chart,
-    no ReverseSDE. The one reverse route that never crosses the chart —
-    a velocity head at churn = 0 — is :class:`ReverseODE`, and
-    :func:`reverse` picks between them.
+    Pure chart math: the constructor takes the :class:`SDE` and a *bound
+    score field* ``score_fn(x, t) -> score`` — no model, no parametrization,
+    no cond. How a raw head output becomes the score is the assembler's
+    business — :class:`~schnetpack.generative.sampler.Sampler` binds
+    ``parametrization.to_score`` and the model into that callable; a ready
+    score field passes straight in. Taking the :class:`SDE` states the chart
+    dependency where it cannot be missed: no chart, no ReverseSDE. The one
+    reverse route that never crosses the chart — a velocity head at
+    churn = 0 — is :class:`ReverseODE`.
 
     Exposes the drift/diffusion interface every integrator consumes.
     Integration runs backwards in time, so integrators pass dt < 0.
@@ -193,28 +212,23 @@ class ReverseSDE:
     def __init__(
         self,
         sde: SDE,
-        parametrization: Parametrization,
-        model: Callable,
+        score_fn: Callable,
         churn: float = 1.0,
-        cond=None,
     ):
         """
         Args:
             sde: the (f, g) chart of the forward process being reversed —
                 from :meth:`~schnetpack.generative.processes.Process.sde`
-            parametrization: contract between the model output and the fields
-            model: callable (x, t, cond) -> raw output in ``parametrization``
+            score_fn: bound score field, callable (x, t) -> score of the
+                marginal p_t; model, parametrization and conditioning are
+                already composed inside
             churn: stochasticity in [0, 1]; 1 = reverse SDE, 0 = probability-flow
                 ODE. Equals eta^2 of the Anderson family.
-            cond: conditioning passed through to the model on every call
         """
-        parametrization.validate(sde.process)
         self.sde = sde
         self.process = sde.process
-        self.parametrization = parametrization
-        self.model = model
+        self.score_fn = score_fn
         self.churn = churn
-        self.cond = cond
 
     def g2(self, t: torch.Tensor) -> torch.Tensor:
         """
@@ -224,14 +238,14 @@ class ReverseSDE:
         return self.sde.g2(t)
 
     def drift(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        """Reverse drift, shaped like x. Costs one model evaluation."""
-        raw = self.model(x, t, self.cond)
-        velocity = self.parametrization.to_velocity(self.process, raw, x, t)
-        if self.churn == 0.0:
-            return velocity
-        # Same raw output, second conversion — never a second model call.
-        score = self.parametrization.to_score(self.process, raw, x, t)
-        return velocity - 0.5 * self.churn * expand_t(self.g2(t), x) * score
+        """
+        Anderson drift f x - 1/2 (1 + churn) g^2 score, shaped like x.
+        Costs one evaluation of the score field.
+        """
+        score = self.score_fn(x, t)
+        f = expand_t(self.sde.f(t), x)
+        g2 = expand_t(self.g2(t), x)
+        return f * x - 0.5 * (1.0 + self.churn) * g2 * score
 
     def diffusion(self, t: torch.Tensor) -> torch.Tensor:
         """Diffusion sqrt(churn) g(t), shaped like t; zero on the ODE."""
@@ -241,30 +255,15 @@ class ReverseSDE:
 
     def score(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         """
-        Score of the marginal p_t, with ``cond`` bound.
+        Score of the marginal p_t — the bound field itself.
 
         Integrators normally need only :meth:`drift` and :meth:`diffusion`;
-        this exists for the ones that discretize the reverse process in terms
-        of the raw score, such as
-        :class:`~schnetpack.generative.integrators.ancestral.AncestralDDPM`.
+        this exists for the ones that discretize the reverse process through
+        the chart's closed forms instead — the ancestral steps, which read
+        the raw score directly or convert it through
+        :meth:`SDE.x0_from_score`.
         """
-        return self.parametrization.to_score(
-            self.process, self.model(x, t, self.cond), x, t
-        )
-
-    def x0(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        """
-        x0-estimate of the marginal at t, with ``cond`` bound.
-
-        Like :meth:`score`, this exists for the integrators that discretize
-        the reverse process through something other than drift/diffusion —
-        here the exact Gaussian posterior p(x_s | x_t, x0), which
-        :class:`~schnetpack.generative.integrators.ancestral.Ancestral`
-        steps through with this estimate in x0's place, via :attr:`sde`.
-        """
-        return self.parametrization.to_x0(
-            self.process, self.model(x, t, self.cond), x, t
-        )
+        return self.score_fn(x, t)
 
 
 class ReverseODE:
@@ -273,81 +272,30 @@ class ReverseODE:
 
     The continuity equation makes this valid for any endpoint law — Gaussian
     or structured, chart or no chart (see docs_new/flow_matching_sde.md §8.2)
-    — which is exactly why it must not depend on the :class:`SDE`. The price
-    of that generality: only parametrizations whose velocity conversion
-    never crosses the chart qualify (``velocity_needs_chart`` is False — a
-    velocity head). A score, noise or x0 head reaches the velocity through
-    f and g^2, and belongs on :class:`ReverseSDE` even at churn = 0.
+    — which is exactly why it must not depend on the :class:`SDE`. Like
+    :class:`ReverseSDE` it takes a *bound field*: ``velocity_fn(x, t) -> v``,
+    with model, parametrization and conditioning already composed inside.
+    Guarding that the composition never crosses the chart
+    (``velocity_needs_chart`` is False — a velocity head) is the assembler's
+    job — :class:`~schnetpack.generative.sampler.Sampler` sends a score,
+    noise or x0 head, which reaches the velocity through f and g^2, to
+    :class:`ReverseSDE` even at churn = 0.
     """
 
-    def __init__(
-        self,
-        process: Process,
-        parametrization: Parametrization,
-        model: Callable,
-        cond=None,
-    ):
+    def __init__(self, velocity_fn: Callable):
         """
         Args:
-            process: forward process being reversed; supplies the schedule
-            parametrization: contract between the model output and the
-                velocity; must have ``velocity_needs_chart = False``
-            model: callable (x, t, cond) -> raw output in ``parametrization``
-            cond: conditioning passed through to the model on every call
+            velocity_fn: bound velocity field, callable (x, t) -> velocity;
+                must not cross the (f, g) chart
         """
-        parametrization.validate(process)
-        if parametrization.velocity_needs_chart:
-            raise TypeError(
-                f"{type(parametrization).__name__} reaches the velocity "
-                "through the (f, g) chart (velocity_needs_chart is True), "
-                "so its reverse process is a ReverseSDE — use "
-                "reverse(process, parametrization, model, churn=0.0) to "
-                "assemble the probability-flow ODE through the chart."
-            )
-        self.process = process
-        self.parametrization = parametrization
-        self.model = model
-        self.cond = cond
+        self.velocity_fn = velocity_fn
 
     def drift(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        """The learned velocity, shaped like x. Costs one model evaluation."""
-        raw = self.model(x, t, self.cond)
-        return self.parametrization.to_velocity(self.process, raw, x, t)
+        """The learned velocity, shaped like x. Costs one field evaluation."""
+        return self.velocity_fn(x, t)
 
     def diffusion(self, t: torch.Tensor) -> torch.Tensor:
         """Zero — this is the ODE."""
         return torch.zeros_like(t)
 
 
-def reverse(
-    process: Process,
-    parametrization: Parametrization,
-    model: Callable,
-    churn: float = 1.0,
-    cond=None,
-    require_sde: bool = False,
-) -> "ReverseODE | ReverseSDE":
-    """
-    Assemble the reverse process for a ``(process, parametrization)`` pair.
-
-    Returns the chart-free :class:`ReverseODE` exactly when nothing in the
-    assembly needs the chart — churn = 0, a chart-free velocity head, and no
-    integrator demand — and a :class:`ReverseSDE` otherwise, acquiring the
-    chart via :meth:`~schnetpack.generative.processes.Process.sde` so that a
-    configuration without the Gaussian kernel fails here, at assembly, with
-    the obstruction named.
-
-    Args:
-        process: forward process the model was trained on
-        parametrization: contract the model was trained under
-        model: callable (x, t, cond) -> raw output in ``parametrization``
-        churn: stochasticity in [0, 1]; 1 = reverse SDE, 0 = probability-flow
-            ODE. Equals eta^2 of the Anderson family.
-        cond: conditioning passed through to the model on every call
-        require_sde: force the :class:`ReverseSDE` even at churn = 0 — for
-            integrators that discretize through the chart's closed forms
-            (ancestral steps) rather than drift/diffusion
-    """
-    if churn == 0.0 and not parametrization.velocity_needs_chart and not require_sde:
-        return ReverseODE(process, parametrization, model, cond=cond)
-    return ReverseSDE(process.sde(), parametrization, model, churn=churn, cond=cond)

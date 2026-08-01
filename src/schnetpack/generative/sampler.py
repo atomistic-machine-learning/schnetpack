@@ -12,7 +12,7 @@ from schnetpack.generative.integrators.base import Integrator
 from schnetpack.generative.parametrizations import Parametrization
 from schnetpack.generative.priors import Prior
 from schnetpack.generative.processes import Process
-from schnetpack.generative.differential_equations import reverse
+from schnetpack.generative.differential_equations import ReverseODE, ReverseSDE
 
 __all__ = ["DirectDenoisingSampler", "Sampler"]
 
@@ -76,8 +76,12 @@ class Sampler:
         # will cross the (f, g) chart — stochastic sampling, a non-velocity
         # head's conversion, an ancestral integrator — acquire the chart
         # once now, so a configuration without it fails with the obstruction
-        # named instead of sampling garbage.
-        if churn > 0.0 or parametrization.velocity_needs_chart or integrator.requires_sde:
+        # named instead of sampling garbage. The same fact picks the reverse
+        # class in denoise().
+        self.needs_chart = (
+            churn > 0.0 or parametrization.velocity_needs_chart or integrator.requires_sde
+        )
+        if self.needs_chart:
             process.sde()
         self.process = process
         self.parametrization = parametrization
@@ -149,14 +153,22 @@ class Sampler:
             cond: conditioning passed through to the model
         """
         ts = self.grid(t_start, self.t_min, n_steps, dtype=x_t.dtype, device=x_t.device)
-        rev = reverse(
-            self.process,
-            self.parametrization,
-            model,
-            churn=self.churn,
-            cond=cond,
-            require_sde=self.integrator.requires_sde,
-        )
+        if self.needs_chart:
+
+            def score_fn(x, t):
+                return self.parametrization.to_score(
+                    self.process, model(x, t, cond), x, t
+                )
+
+            rev = ReverseSDE(self.process.sde(), score_fn, churn=self.churn)
+        else:
+
+            def velocity_fn(x, t):
+                return self.parametrization.to_velocity(
+                    self.process, model(x, t, cond), x, t
+                )
+
+            rev = ReverseODE(velocity_fn)
         return self.integrator.integrate(rev, x_t, ts)
 
 

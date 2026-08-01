@@ -24,18 +24,20 @@ class Ancestral(Integrator):
     matched noise — the GPFF/NCSN ancestral sampler.
 
     Like :class:`AncestralDDPM` it discretizes the reverse process through
-    something other than drift/diffusion — here the
-    :class:`~schnetpack.generative.differential_equations.ReverseSDE`'s ``x0`` and its chart's
-    posterior — and, being intrinsically stochastic, it ignores the reverse
-    process's ``churn``. ``requires_sde`` is how it says so: the Sampler
-    then assembles a ReverseSDE even at churn = 0, and a configuration
-    without the Gaussian kernel is refused at assembly.
+    something other than drift/diffusion — the reverse process's ``score``,
+    converted to an x0-estimate through the chart
+    (:meth:`~schnetpack.generative.differential_equations.SDE.x0_from_score`),
+    then stepped through the chart's posterior — and, being intrinsically
+    stochastic, it ignores the reverse process's ``churn``. ``requires_sde``
+    is how it says so: the Sampler then assembles a ReverseSDE even at
+    churn = 0, and a configuration without the Gaussian kernel is refused
+    at assembly.
     """
 
     requires_sde = True
 
     def step(self, dynamics, x, t, dt):
-        x0_hat = dynamics.x0(x, t)
+        x0_hat = dynamics.sde.x0_from_score(x, dynamics.score(x, t), t)
         mean, std = dynamics.sde.posterior(x, x0_hat, t, t + dt)
         return mean + expand_t(std, x) * torch.randn_like(x)
 

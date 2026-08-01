@@ -27,10 +27,10 @@ cases with bespoke logic:
   the chart, and the consumers that need it fail at assembly with the
   obstruction named. And its reversal: a single churn knob spanning the
   probability-flow ODE (churn = 0) and the reverse-time SDE (churn = 1),
-  never implemented per schedule but split by capability —
-  :func:`~differential_equations.reverse` assembles the chart-free
-  ``ReverseODE`` when nothing needs the chart and the ``ReverseSDE``
-  otherwise.
+  never implemented per schedule but split by capability — the
+  :class:`~sampler.Sampler` assembles the chart-free ``ReverseODE`` when
+  nothing needs the chart and the ``ReverseSDE`` otherwise, each taking a
+  bound score/velocity field.
 - :mod:`~schnetpack.generative.priors` — what the x1 endpoint *is*: the
   distribution drawn at both training time (per data sample) and sampling
   time (the start state). Isotropic Gaussian for VE/VP/FM; structured

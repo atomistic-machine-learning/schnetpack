@@ -111,7 +111,7 @@ class Parametrization(abc.ABC):
     score and the probability-flow identity v = f x - 1/2 g^2 s, both chart
     statements. A parametrization whose head *is* the velocity overrides
     this to False — its conversion returns the output untouched — which is
-    what lets :func:`~schnetpack.generative.differential_equations.reverse` assemble a
+    what lets the :class:`~schnetpack.generative.sampler.Sampler` assemble a
     chart-free :class:`~schnetpack.generative.differential_equations.ReverseODE` for it at
     churn = 0, the one reverse route valid for any endpoint law.
     """
