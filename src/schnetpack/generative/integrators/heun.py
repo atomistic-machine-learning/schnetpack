@@ -19,10 +19,10 @@ class Heun(Integrator):
     first-order solvers.
     """
 
-    def step(self, process, x, t, dt):
-        f1 = process.drift(x, t)
+    def step(self, dynamics, x, t, dt):
+        f1 = dynamics.drift(x, t)
         x_pred = x + f1 * dt
-        f2 = process.drift(x_pred, t + dt)
+        f2 = dynamics.drift(x_pred, t + dt)
         x = x + 0.5 * (f1 + f2) * dt
-        g = expand_t(process.diffusion(t), x)
+        g = expand_t(dynamics.diffusion(t), x)
         return x + g * dt.abs().sqrt() * torch.randn_like(x)
