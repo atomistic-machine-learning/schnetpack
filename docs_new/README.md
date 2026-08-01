@@ -53,7 +53,7 @@ special cases with bespoke logic:
 | TV/SNR ISSNR | `VPISSNR(eta, kappa)` | unit Gaussian | identity | any | any |
 
 Every row shares the same machinery. There is one `perturb`, one training
-step, one `ReverseProcess`, one set of integrators — never a
+step, one reverse family, one set of integrators — never a
 `DDPMSampler` next to an `FMSampler`.
 
 
@@ -103,7 +103,8 @@ Adding a parametrization never touches `processes.py`; adding a schedule
 never touches `parametrizations.py`. Neither holds the other: a
 parametrization is stateless field math taking the process as an argument,
 and the consumers that need both — `Diffuse`, `MatchingLoss`, `Sampler`,
-`ReverseProcess` — take the `(process, parametrization)` pair explicitly.
+the reverse processes — take the `(process, parametrization)` pair
+explicitly.
 
 *Prevents:* the $N \times M$ explosion. Five predictions times five
 schedules times two endpoint families is fifty classes if the axes are
@@ -117,6 +118,12 @@ behind the score/noise targets and the closed-form posterior — depends on the
 *prior*, the *coupling* and the *bridge noise*, all constructor arguments.
 So it is judged from them: `Process.has_gaussian_kernel` /
 `gaussian_kernel_obstruction()`, not from a `GaussianDiffusion` subclass.
+What the judgment gates is still a nameable type — the `SDE` chart returned
+by `process.sde()`, whose *construction* is the check — so the consumers
+that need the machinery (`ReverseSDE`, the ancestral integrators) demand
+the chart in their signatures instead of probing a boolean, while the
+chart-free routes (`ReverseODE`, `DirectDenoisingSampler`) visibly never
+acquire one.
 
 The decisive observation: Gaussianity is not aligned with the schedule axis.
 `FlowMatching` under its default Gaussian prior *has* an exact Gaussian
@@ -145,9 +152,9 @@ Every consumer constructor calls `parametrization.validate(process)`. A
 score head on a shape-prior process fails when the `MatchingLoss` or
 `Sampler` is *built*, with a message naming the obstruction — not mid-run,
 not silently. Boolean declarations default to the safe side
-(`Prior.gaussian = False`, `Coupling.preserves_marginal = False`): a wrong
-`False` raises and asks for explicitness, a wrong `True` would train or
-sample garbage silently.
+(`Prior.gaussian = False`, `Coupling.preserves_marginal = False`,
+`Coupling.independent_pairs = False`): a wrong `False` raises and asks for
+explicitness, a wrong `True` would train or sample garbage silently.
 
 ### 5. The interpolant is the primitive; the SDE is derived
 

@@ -3,7 +3,8 @@
 How the forward and reverse process of flow matching are represented in the
 drift/diffusion language of score-based diffusion — the representation
 `schnetpack.generative` uses to run every schedule, flow matching included,
-through one `ReverseProcess`.
+through one reverse family (`ReverseSDE`, with the chart-free velocity ODE
+as `ReverseODE`).
 
 The punchline first: flow matching and Gaussian diffusion are two *charts* on
 the same object. The interpolant $x_t = a(t)\,x_0 + b(t)\,x_1$ is one chart;
@@ -102,7 +103,8 @@ g^2 = (\sigma^2)' - 2 f \sigma^2
     = -\,\sigma^2\,\frac{\mathrm{d}}{\mathrm{d}t}\log \operatorname{SNR}.
 $$
 
-The code computes the right-hand form (`Process.g2`): one log-derivative of
+The code computes the right-hand form (`SDE.g2`, on the chart
+`process.sde()`): one log-derivative of
 one schedule quantity, no quotient that degenerates where $a$ or $b$ vanish,
 and the sign is readable — $g^2 \ge 0$ exactly because signal only ever turns
 into noise.
@@ -113,7 +115,8 @@ independent of $x_0$. Those are precisely the conditions
 they fail. Note that a coupling which re-pairs endpoints *within a batch*
 changes the conditional law $p(x_1 \mid x_0)$ even when it preserves $x_1$'s
 marginal, so the one-sided kernel — and with it this whole chart — has to be
-re-examined per coupling, not assumed from the marginal alone.
+re-examined per coupling, not assumed from the marginal alone (declared as
+`Coupling.independent_pairs`, distinct from `preserves_marginal`).
 
 
 ## 3. The flow-matching schedule, specialized
@@ -249,7 +252,7 @@ written so this inversion never runs.
 
 Reversing the forward SDE ([Anderson 1982]) gives the reverse-time SDE with
 drift $f x - g^2 s$; the probability-flow ODE shares its marginals with drift
-$f x - \tfrac12 g^2 s = v$. `ReverseProcess` interpolates between them as a
+$f x - \tfrac12 g^2 s = v$. `ReverseSDE` interpolates between them as a
 one-parameter family in the churn $\chi = \eta^2 \in [0, 1]$:
 
 $$
@@ -267,9 +270,11 @@ knob moves the path measure, never the marginals.
 
 **Churn $= 0$ is vanilla flow matching.** The drift is $v$ itself — for a
 velocity-predicting model, the raw output, used directly. Neither $g^2$ nor
-the score inversion is ever evaluated (`ReverseProcess.drift` returns early),
-which is why the ODE path tolerates $t_{\max} = 1$ and priors with no scalar
-scale, and why flow matching "costs nothing it shouldn't" in this framework.
+the score inversion is ever evaluated: the assembly is a `ReverseODE`,
+which holds no chart at all — which is why the ODE path tolerates
+$t_{\max} = 1$ and priors with no scalar scale, and why flow matching
+"costs nothing it shouldn't" in this framework. (A score/eps/x0 head at
+churn $= 0$ still converts through the chart, and rides `ReverseSDE`.)
 
 **Churn $= 1$ is the stochastic flow-matching sampler.** Explicitly, with
 $\tfrac12 g^2 = \tfrac{t\,\sigma_1^2}{1-t}$:
@@ -298,7 +303,7 @@ closed forms usually filed under "diffusion":
 - **Exact posterior, hence ancestral/DDIM steps.** With
   $p(x_t \mid x_0) = \mathcal{N}((1-t)x_0,\, t^2\sigma_1^2 I)$ the two-time
   posterior $p(x_s \mid x_t, x_0)$, $s < t$, is Gaussian in closed form
-  (`Process.posterior`, with mean ratio $r = a_t/a_s = \tfrac{1-t}{1-s}$).
+  (`SDE.posterior`, with mean ratio $r = a_t/a_s = \tfrac{1-t}{1-s}$).
   An `Ancestral` step — estimate $x_0$ from the model, draw from the exact
   posterior — is therefore a perfectly valid flow-matching sampler, no
   drift/diffusion discretization involved.
@@ -434,13 +439,16 @@ Two smaller boundaries, same spirit:
   coupling, not read off the marginal.
 
 In the code the judgment is `Process.gaussian_kernel_obstruction` /
-`has_gaussian_kernel` — which is why the same `FlowMatching` class is a
-Gaussian diffusion under its default prior and a general stochastic
-interpolant under a structured one, with the closed forms gated by the
-configuration rather than the class. Under a non-Gaussian endpoint the
-supported surface is: velocity / $x_0$ / pseudo-force training, churn $= 0$
-`Sampler`, and `DirectDenoisingSampler`; the score/noise parametrizations
-refuse at `validate`, and the Gaussian closed forms raise when reached.
+`has_gaussian_kernel`, and the machinery it gates is the chart object
+`process.sde()` — which is why the same `FlowMatching` class is a Gaussian
+diffusion under its default prior and a general stochastic interpolant
+under a structured one, with the closed forms gated by the configuration
+rather than the class. Under a non-Gaussian endpoint the supported surface
+is: velocity / $x_0$ / pseudo-force training, the churn $= 0$ velocity
+`Sampler` (a `ReverseODE`), and `DirectDenoisingSampler`; the score/noise
+parametrizations refuse at `validate`, and the chart refuses to exist —
+every consumer that would need it fails at its own construction, with the
+obstruction named.
 
 And the two time-endpoint guards of §3, restated in code terms:
 $t_{\max} < 1$ protects consumers of $f, g^2$ (churn $> 0$,
@@ -456,17 +464,17 @@ the genuine collapse of $\sigma \to 0$, and no chart waives that.
 | $a(t),\ b(t)$ | `Process.a`, `Process.b` (`FlowMatching`: $1-t$, $t$) |
 | $\sigma_1$ | `Process.std` (= `prior.std`) |
 | $\sigma(t) = b\,\sigma_1$ | `Process.sigma` |
-| $f = \mathrm{d}/\mathrm{d}t \log a$ | `Process.f` (= `Process.log_a_dot`) |
-| $g^2 = -\sigma^2\,(\log\operatorname{SNR})'$ | `Process.g2` |
+| $f = \mathrm{d}/\mathrm{d}t \log a$ | `SDE.f` (= `Process.log_a_dot`), on the chart `process.sde()` |
+| $g^2 = -\sigma^2\,(\log\operatorname{SNR})'$ | `SDE.g2` |
 | $\log\operatorname{SNR} = 2(\log a - \log b)$ | `Process.log_snr` |
 | $x_t = a x_0 + b x_1$ | `Process.interpolate` / `Process.perturb` |
-| $p(x_t \mid x_0) = \mathcal{N}(a x_0, \sigma^2 I)$ | `Process.kernel`, gated by `has_gaussian_kernel` |
-| $p(x_s \mid x_t, x_0)$ | `Process.posterior`; stepped by `integrators.Ancestral` |
+| $p(x_t \mid x_0) = \mathcal{N}(a x_0, \sigma^2 I)$ | `SDE.kernel` — the chart's construction is the gate |
+| $p(x_s \mid x_t, x_0)$ | `SDE.posterior`; stepped by `integrators.Ancestral` |
 | velocity target $\dot a\,x_0 + \dot b\,x_1$ | `VelocityParametrization.target` |
 | $v = f x - \tfrac12 g^2 s$ | `Parametrization.to_velocity` |
 | $s = 2(f x - v)/g^2$ | `VelocityParametrization.to_score` |
 | Tweedie $\mathbb{E}[x_0 \mid x_t] = (x + \sigma^2 s)/a$ | `Parametrization.to_x0` / `X0Parametrization.to_score` |
-| churn family drift / diffusion, $\chi = \eta^2$ (the $\varepsilon = \tfrac12 \chi g^2$ instance of §8.2) | `ReverseProcess.drift` / `ReverseProcess.diffusion`, `churn` |
+| churn family drift / diffusion, $\chi = \eta^2$ (the $\varepsilon = \tfrac12 \chi g^2$ instance of §8.2) | `ReverseSDE.drift` / `ReverseSDE.diffusion`, `churn`; chart-free velocity ODE: `ReverseODE` |
 | bridge noise $\gamma(t)\,\epsilon$; $s = -\mathbb{E}[\epsilon \mid x_t]/\gamma$ | `Process.gamma`; the `eps` drawn and returned by `Process.perturb` |
 
 

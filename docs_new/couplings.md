@@ -41,38 +41,46 @@ pairing is a genuine degree of freedom, and the literature uses it:
 Both are one knob on the same object; nothing else in the stack changes.
 
 
-## 2. The one declared property: `preserves_marginal`
+## 2. The two declared properties: marginal and conditional
 
-`Coupling.preserves_marginal` (default `False`) states whether `pair` leaves
-$x_1$'s **marginal law** untouched. It is `True` for pure re-orderings
-(identity, permutation, OT) and `False` for anything that reshapes values
-from the data. Two consumers read it:
+A coupling states two facts about the joint law it builds, and they gate
+different consumers:
 
-- **The sampling start.** With $b(t_{\max}) = 1$, sampling must start from
-  $x_1$'s marginal. If the coupling only re-pairs, that marginal is the
-  training prior itself, and `Process.sampling_prior()` returns the very
-  same object. A marginal-*changing* coupling has no data-free start
-  distribution, and the `Sampler` demands an explicit `Prior` matching the
-  statistics trained under — refusing to guess.
-- **The Gaussian-kernel judgment**
-  ([`gaussian_kernel_obstruction`](processes.md#5-the-gaussian-kernel-a-property-not-a-class)),
-  which gates the score/noise parametrizations and the closed forms.
+**`preserves_marginal`** (default `False`) — whether `pair` leaves $x_1$'s
+**marginal law** untouched. `True` for pure re-orderings (identity,
+permutation, OT), `False` for anything that reshapes values from the data.
+Read by **the sampling start**: with $b(t_{\max}) = 1$, sampling must start
+from $x_1$'s marginal. If the coupling only re-pairs, that marginal is the
+training prior itself, and `Process.sampling_prior()` returns the very same
+object. A marginal-*changing* coupling has no data-free start distribution,
+and the `Sampler` demands an explicit `Prior` matching the statistics
+trained under — refusing to guess.
 
-The default is `False` for the usual asymmetry: a wrong `True` silently
-samples from the wrong start; a wrong `False` merely asks for an explicit
-prior.
+**`independent_pairs`** (default `False`) — the stronger, **conditional**
+statement: the pairing never looks at the values, so $p(x_1 \mid x_0)$ is
+still the prior's marginal. `True` only for the identity coupling. Read by
+**the Gaussian-kernel judgment**
+([`gaussian_kernel_obstruction`](processes.md#5-the-gaussian-kernel-a-property-not-a-class)),
+which gates the score/noise parametrizations and the
+[SDE chart](processes.md#3-derived-quantities-the-sde-chart).
 
-> **A subtlety worth internalizing: marginal ≠ conditional.** Re-pairing
-> preserves $x_1$'s *marginal* — which is exactly what the sampling start
-> needs — but any pairing chosen by looking at the data changes the
-> *conditional* law $p(x_1 \mid x_0)$. The one-sided kernel
+Both default to `False` for the usual asymmetry: a wrong `True` fails
+silently (sampling from the wrong start; training a biased score), a wrong
+`False` merely asks for an explicit prior or a conditional-expectation
+target.
+
+> **The subtlety the second flag encodes: marginal ≠ conditional.**
+> Re-pairing preserves $x_1$'s *marginal* — which is exactly what the
+> sampling start needs — but any pairing chosen by looking at the data
+> changes the *conditional* law $p(x_1 \mid x_0)$: an optimal assignment
+> hands each $x_0$ its *closest* draw, and conditionally on $x_0$ that
+> selection is not Gaussian. The one-sided kernel
 > $p(x_t \mid x_0) = \mathcal{N}(a x_0, \sigma^2 I)$ behind the score/noise
-> targets is a statement about that conditional: it needs $x_1$ independent
-> of $x_0$, which only the identity coupling gives exactly. With a
-> data-dependent re-pairing, prefer the targets that are plain conditional
-> expectations — velocity, $x_0$, pseudo-force — which are valid under
-> *any* joint law (they regress $\mathbb{E}[\,\cdot \mid x_t]$ for whatever
-> path law the coupling induces). This is also the standard practice in the
+> targets is a statement about that conditional. With a data-dependent
+> re-pairing, use the targets that are plain conditional expectations —
+> velocity, $x_0$, pseudo-force — which are valid under *any* joint law
+> (they regress $\mathbb{E}[\,\cdot \mid x_t]$ for whatever path law the
+> coupling induces). This is also the standard practice in the
 > OT-flow-matching literature, which trains velocities.
 
 
@@ -108,7 +116,8 @@ against the two-argument `pair` keep working.
 Leaves the pairing exactly as drawn: $\pi = p_0 \times p_1$. What VE, VP and
 plain flow matching use, and the reason their score/noise targets are valid:
 $x_1$ stays the independent noise realization the kernel math assumes.
-`preserves_marginal = True` trivially.
+`preserves_marginal` and `independent_pairs` both hold trivially — the only
+shipped coupling for which the second does.
 
 ### `PermutationCoupling` — single-batch optimal assignment
 
@@ -117,7 +126,9 @@ against the data under a `cost_power` distance cost (2.0 = the squared-cost
 OT special case where the plan is a permutation). Each $x_0$ row keeps
 exactly one $x_1$ partner; with `groups`, one solve per block. Marginal
 preserved (a re-ordering); the joint with $x_0$ — and hence the path
-geometry — is what changes. Needs SciPy
+geometry — is what changes, so `independent_pairs` is `False` and the
+score/noise heads refuse this coupling: train a velocity, $x_0$ or
+pseudo-force head on it. Needs SciPy
 (`scipy.optimize.linear_sum_assignment`).
 
 ### `PCVarianceCoupling` — match the data's variance ellipsoid
@@ -163,6 +174,9 @@ Guidelines:
   it is given.
 - Declare `preserves_marginal` honestly, and only for genuine
   re-orderings. If values change as a function of the data, it is `False`.
+  Declare `independent_pairs` only when the pairing never looks at the
+  values at all — a data-dependent *assignment* already breaks it, even
+  though it preserves the marginal.
 - Accept `groups` (even if only to raise, as `PCVarianceCoupling` does):
   refusing a granularity you cannot honor beats silently using the wrong
   one.

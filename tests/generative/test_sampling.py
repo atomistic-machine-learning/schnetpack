@@ -11,18 +11,21 @@ from schnetpack.generative import (
     GaussianPrior,
     Heun,
     PCVarianceCoupling,
-    ReverseProcess,
+    Prior,
+    ReverseSDE,
     Sampler,
     ScoreParametrization,
     UniformGrid,
     VE,
     VelocityParametrization,
     VP,
+    X0Parametrization,
     EpsParametrization,
     expand_t,
     generate,
 )
 from schnetpack.generative import MatchingLoss
+from schnetpack.generative.reverse import ReverseODE, reverse
 
 
 @pytest.fixture
@@ -107,15 +110,17 @@ def test_sampler_validates_the_pair():
 
 def test_sampler_refuses_when_the_process_cannot_state_its_start():
     # A coupling that reshapes x1's marginal has no data-free start; the
-    # sampler must refuse rather than guess.
+    # sampler must refuse rather than guess. (churn = 0 with a velocity head
+    # so the chart is never demanded — this test is about the start, and
+    # churn > 0 on this configuration is refused earlier, for the chart.)
     process = VP(coupling=PCVarianceCoupling())
     with pytest.raises(ValueError, match="marginal"):
-        Sampler(process, VelocityParametrization(), EulerMaruyama())
+        Sampler(process, VelocityParametrization(), EulerMaruyama(), churn=0.0)
 
     # An explicit prior always wins.
     explicit = GaussianPrior()
     sampler = Sampler(
-        process, VelocityParametrization(), EulerMaruyama(), prior=explicit
+        process, VelocityParametrization(), EulerMaruyama(), prior=explicit, churn=0.0
     )
     assert sampler.prior is explicit
 
@@ -126,35 +131,37 @@ def test_sampler_refuses_when_the_process_cannot_state_its_start():
 def test_reverse_drift_at_churn_one_matches_the_anderson_form(vp):
     # Anderson: f x - 1/2 (1 + eta^2) g^2 s, at eta = 1 (churn = eta^2 = 1).
     score_fn = analytic_score(vp, 0.5, 1.0)
-    reverse = ReverseProcess(vp, ScoreParametrization(), score_fn, churn=1.0)
+    rev = ReverseSDE(vp.sde(), ScoreParametrization(), score_fn, churn=1.0)
 
     x = torch.randn(16, 2, dtype=torch.float64)
     t = torch.full((16,), 0.5, dtype=torch.float64)
 
     s = score_fn(x, t)
-    expected = expand_t(vp.f(t), x) * x - expand_t(vp.g2(t), x) * s
-    assert torch.allclose(reverse.drift(x, t), expected, rtol=1e-8)
+    sde = vp.sde()
+    expected = expand_t(sde.f(t), x) * x - expand_t(sde.g2(t), x) * s
+    assert torch.allclose(rev.drift(x, t), expected, rtol=1e-8)
 
 
 def test_reverse_drift_at_churn_zero_is_the_probability_flow(vp):
     score_fn = analytic_score(vp, 0.5, 1.0)
-    reverse = ReverseProcess(vp, ScoreParametrization(), score_fn, churn=0.0)
+    rev = ReverseSDE(vp.sde(), ScoreParametrization(), score_fn, churn=0.0)
 
     x = torch.randn(16, 2, dtype=torch.float64)
     t = torch.full((16,), 0.5, dtype=torch.float64)
 
     s = score_fn(x, t)
-    expected = expand_t(vp.f(t), x) * x - 0.5 * expand_t(vp.g2(t), x) * s
-    assert torch.allclose(reverse.drift(x, t), expected, rtol=1e-8)
+    sde = vp.sde()
+    expected = expand_t(sde.f(t), x) * x - 0.5 * expand_t(sde.g2(t), x) * s
+    assert torch.allclose(rev.drift(x, t), expected, rtol=1e-8)
 
 
 @pytest.mark.parametrize("churn", [0.0, 0.25, 1.0])
 def test_reverse_diffusion(vp, churn):
     t = torch.tensor([0.3, 0.7], dtype=torch.float64)
-    reverse = ReverseProcess(
-        vp, ScoreParametrization(), analytic_score(vp, 0.0, 1.0), churn=churn
+    rev = ReverseSDE(
+        vp.sde(), ScoreParametrization(), analytic_score(vp, 0.0, 1.0), churn=churn
     )
-    assert torch.allclose(reverse.diffusion(t), torch.sqrt(churn * vp.g2(t)))
+    assert torch.allclose(rev.diffusion(t), torch.sqrt(churn * vp.sde().g2(t)))
 
 
 @pytest.mark.parametrize("churn", [0.0, 1.0])
@@ -167,24 +174,89 @@ def test_drift_costs_exactly_one_model_evaluation(vp, churn):
         calls.append(1)
         return analytic_score(vp, 0.0, 1.0)(x, t)
 
-    reverse = ReverseProcess(vp, ScoreParametrization(), counting_model, churn=churn)
-    reverse.drift(torch.randn(4, 2), torch.full((4,), 0.5))
+    rev = ReverseSDE(vp.sde(), ScoreParametrization(), counting_model, churn=churn)
+    rev.drift(torch.randn(4, 2), torch.full((4,), 0.5))
     assert len(calls) == 1
 
 
 def test_reverse_process_exposes_the_reversed_process(vp):
-    reverse = ReverseProcess(
-        vp, ScoreParametrization(), analytic_score(vp, 0.0, 1.0), churn=0.5
+    rev = ReverseSDE(
+        vp.sde(), ScoreParametrization(), analytic_score(vp, 0.0, 1.0), churn=0.5
     )
-    assert reverse.process is vp
-    assert reverse.churn == 0.5
+    assert rev.process is vp
+    assert rev.churn == 0.5
 
 
 def test_churn_zero_has_no_diffusion(vp):
-    reverse = ReverseProcess(
-        vp, ScoreParametrization(), analytic_score(vp, 0.0, 1.0), churn=0.0
+    rev = ReverseSDE(
+        vp.sde(), ScoreParametrization(), analytic_score(vp, 0.0, 1.0), churn=0.0
     )
-    assert torch.equal(reverse.diffusion(torch.rand(4)), torch.zeros(4))
+    assert torch.equal(rev.diffusion(torch.rand(4)), torch.zeros(4))
+
+
+# --- assembly: who gets the chart, who never touches it -------------------- #
+
+
+class ShapedPrior(Prior):
+    """A non-Gaussian endpoint *with* a declared scale — the configuration
+    that used to sail through f/g2 and Tweedie silently."""
+
+    gaussian = False
+    std = 2.0
+
+    def sample(self, shape, dtype=None, device=None, context=None):
+        u = torch.rand(*shape, dtype=dtype, device=device)
+        return self.std * (2.0 * u - 1.0)
+
+
+def test_reverse_dispatch_by_capability(vp):
+    model = analytic_score(vp, 0.0, 1.0)
+    assert isinstance(
+        reverse(vp, VelocityParametrization(), model, churn=0.0), ReverseODE
+    )
+    assert isinstance(
+        reverse(vp, VelocityParametrization(), model, churn=1.0), ReverseSDE
+    )
+    # churn = 0 is not chart-free for a non-velocity head: the PF-ODE drift
+    # still converts through f and g^2.
+    assert isinstance(
+        reverse(vp, ScoreParametrization(), model, churn=0.0), ReverseSDE
+    )
+    # an ancestral integrator forces the chart even on a velocity head
+    assert isinstance(
+        reverse(vp, VelocityParametrization(), model, churn=0.0, require_sde=True),
+        ReverseSDE,
+    )
+
+
+def test_sde_refuses_without_the_gaussian_kernel():
+    with pytest.raises(ValueError, match="chart"):
+        VE(b_min=1e-2, prior=ShapedPrior()).sde()
+
+
+def test_reverse_ode_refuses_chart_bound_parametrizations(vp):
+    with pytest.raises(TypeError, match="velocity_needs_chart"):
+        ReverseODE(vp, ScoreParametrization(), analytic_score(vp, 0.0, 1.0))
+
+
+def test_shape_prior_with_declared_scale_fails_at_assembly_not_silently():
+    # Defect the split fixes: an x0/velocity head on a non-Gaussian prior with
+    # a declared std validates fine (its target is a plain conditional
+    # expectation) but its sampling conversions are Gaussian-kernel
+    # statements. The Sampler must refuse at construction, naming the
+    # obstruction — before this, f/g2 and Tweedie returned wrong numbers
+    # without a raise.
+    process = VE(b_min=1e-2, prior=ShapedPrior())
+    with pytest.raises(ValueError, match="chart"):
+        Sampler(process, X0Parametrization(), EulerMaruyama(), churn=1.0)
+    with pytest.raises(ValueError, match="chart"):
+        Sampler(process, X0Parametrization(), Heun(), churn=0.0)  # PF-ODE converts too
+    with pytest.raises(ValueError, match="chart"):
+        Sampler(process, VelocityParametrization(), Ancestral(), churn=0.0)
+
+    # The chart-free assemblies stay open on the same configuration.
+    Sampler(process, VelocityParametrization(), Heun(), churn=0.0)
+    DirectDenoisingSampler(process, PseudoForceParametrization())
 
 
 # --- end-to-end recovery of the data distribution ------------------------- #
@@ -256,14 +328,14 @@ def test_ancestral_on_ve_matches_the_score_form_update():
     # GPFF/NCSN sampler, here recovered rather than reimplemented.
     process = VE(0.01, 3.0)
     score_fn = analytic_score(process, 0.5, 0.7, x1_std=process.std)
-    reverse = ReverseProcess(process, ScoreParametrization(), score_fn)
+    rev = ReverseSDE(process.sde(), ScoreParametrization(), score_fn)
 
     x = torch.randn(32, 2, dtype=torch.float64)
     t = torch.full((32,), 0.8, dtype=torch.float64)
     dt = torch.tensor(-0.1, dtype=torch.float64)
 
     torch.manual_seed(1)
-    stepped = Ancestral().step(reverse, x, t, dt)
+    stepped = Ancestral().step(rev, x, t, dt)
 
     sig_t = expand_t(process.sigma(t), x)
     sig_s = expand_t(process.sigma(t + dt), x)

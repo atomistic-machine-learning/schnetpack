@@ -15,7 +15,7 @@ canonical fields** of the generative model. It owns both directions:
 
 It is **stateless**: pure field math, holding nothing. Every method takes
 the process it is applied to, and the consumers that need both — `Diffuse`,
-`MatchingLoss`, `Sampler`, `ReverseProcess` — take the
+`MatchingLoss`, `Sampler`, the reverse processes — take the
 `(process, parametrization)` pair explicitly.
 
 
@@ -128,9 +128,10 @@ at the price of spending capacity where the correction is large.
 
 `Parametrization.validate(process)` raises unless the head's target is
 meaningful for the process, and **every consumer calls it in its
-constructor** (`MatchingLoss`, `Diffuse`, `Sampler`, `ReverseProcess`). The
-score and eps heads override it to demand `has_gaussian_kernel`; the
-resulting error names the obstruction and the alternatives:
+constructor** (`MatchingLoss`, `Diffuse`, `Sampler`, the reverse
+processes). The score and eps heads override it to demand
+`has_gaussian_kernel`; the resulting error names the obstruction and the
+alternatives:
 
 ```
 EpsParametrization regresses a target that is a statement about a Gaussian
@@ -143,6 +144,16 @@ are plain conditional expectations, valid for any process.
 So an invalid assembly fails when it is *built*, not after an epoch of
 training — the
 [validity-at-assembly principle](README.md#4-validity-settles-at-assembly).
+
+The sampling-side conversions have a gate of their own: `to_score` and the
+generic `to_velocity`/`to_x0` routes are statements about the
+[(f, g) chart](processes.md#3-derived-quantities-the-sde-chart), so each
+parametrization declares `velocity_needs_chart` — `True` except for the
+velocity head, whose conversion returns the output untouched. The reverse
+processes read it at assembly: a chart-bound head on a chartless
+configuration is refused when the `Sampler` is built, while a velocity head
+at churn 0 rides the chart-free `ReverseODE`
+([sampling.md](sampling.md#1-the-reverse-process-one-family-one-knob)).
 
 
 ## 4. Choosing a head

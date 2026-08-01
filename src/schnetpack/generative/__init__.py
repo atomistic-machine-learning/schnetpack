@@ -11,14 +11,20 @@ cases with bespoke logic:
   :class:`FlowMatching`, ... — each defines a(t), b(t) or the TV/SNR pair
   and nothing else, in the literature's vocabulary), while the endpoint and
   the pairing stay swappable constructor arguments. The process owns the
-  whole forward side: the noise level sigma(t) = b(t) * std, the SDE
-  diffusion, the endpoint draw (:meth:`~processes.Process.perturb`) and the
-  sampling start. Whether the one-sided Gaussian kernel holds — what the
-  score/noise targets and the closed-form posterior assume — is judged from
-  the actual configuration
-  (:attr:`~processes.Process.has_gaussian_kernel`), not from the class: the
-  same schedule is a Gaussian diffusion under a Gaussian prior and a
-  general stochastic interpolant under a structured one.
+  whole forward side: the noise level sigma(t) = b(t) * std, the endpoint
+  draw (:meth:`~processes.Process.perturb`) and the sampling start. Whether
+  the one-sided Gaussian kernel holds — what the score/noise targets and
+  the closed-form posterior assume — is judged from the actual
+  configuration (:attr:`~processes.Process.has_gaussian_kernel`), not from
+  the class: the same schedule is a Gaussian diffusion under a Gaussian
+  prior and a general stochastic interpolant under a structured one.
+- :mod:`~schnetpack.generative.sde` — the (f, g) chart of a process: the
+  linear SDE sharing the interpolant's marginals, with the drift f, the
+  diffusion g^2 and the Gaussian closed forms (perturbation kernel, exact
+  posterior). Acquired via :meth:`~processes.Process.sde`, whose
+  construction *is* the Gaussian-kernel check — configurations without the
+  kernel cannot obtain the chart, and the consumers that need it fail at
+  assembly with the obstruction named.
 - :mod:`~schnetpack.generative.priors` — what the x1 endpoint *is*: the
   distribution drawn at both training time (per data sample) and sampling
   time (the start state). Isotropic Gaussian for VE/VP/FM; structured
@@ -45,7 +51,7 @@ The axes stay separate in both directions: adding a parametrization never
 touches ``processes.py``, and adding a schedule never touches
 ``parametrizations.py``. Neither holds the other: a parametrization is
 stateless field math, and the consumers that need both — ``Diffuse``,
-``MatchingLoss``, ``Sampler``, ``ReverseProcess`` — take the
+``MatchingLoss``, ``Sampler``, the reverse processes — take the
 ``(process, parametrization)`` pair explicitly. Validity is a construction
 invariant, checked where the pair meets: each consumer calls
 ``parametrization.validate(process)`` in its constructor, and the
@@ -57,10 +63,12 @@ must name the *same* pair — share the objects, don't rebuild them.
 
 Around them:
 
-- :mod:`~schnetpack.generative.reverse` — one generic reverse process, derived
-  from a process, a parametrization and a model, with a single churn knob spanning the
-  probability-flow ODE (churn = 0) and the reverse-time SDE (churn = 1).
-  Never implemented per schedule.
+- :mod:`~schnetpack.generative.reverse` — reverse processes, derived from a
+  process, a parametrization and a model, with a single churn knob spanning
+  the probability-flow ODE (churn = 0) and the reverse-time SDE (churn = 1).
+  Never implemented per schedule; split by capability instead —
+  :func:`~reverse.reverse` assembles the chart-free ``ReverseODE`` when
+  nothing needs the chart and the ``ReverseSDE`` otherwise.
 - :mod:`~schnetpack.generative.losses` — score, flow and bridge matching as one
   training step.
 - :mod:`~schnetpack.generative.transforms` — the same training step as a
@@ -93,5 +101,6 @@ from schnetpack.generative.priors import *
 from schnetpack.generative.processes import *
 from schnetpack.generative.reverse import *
 from schnetpack.generative.sampler import *
+from schnetpack.generative.sde import *
 from schnetpack.generative.times import *
 from schnetpack.generative.transforms import *

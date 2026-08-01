@@ -15,8 +15,8 @@ class Ancestral(Integrator):
         x0_hat ~ model,   x_s ~ p(x_s | x_t, x0_hat),
 
     i.e. estimate x0 from the model, then draw from the closed-form Gaussian
-    posterior the process already knows
-    (:meth:`~schnetpack.generative.processes.Process.posterior`). Schedule
+    posterior of the chart
+    (:meth:`~schnetpack.generative.sde.SDE.posterior`). Schedule
     logic lives entirely in that closed form, so one class covers every
     process with a Gaussian kernel: on VP it is the textbook DDPM ancestral
     step with the exact (beta-tilde) posterior variance, on VE it reduces to
@@ -25,16 +25,18 @@ class Ancestral(Integrator):
 
     Like :class:`AncestralDDPM` it discretizes the reverse process through
     something other than drift/diffusion — here the
-    :class:`~schnetpack.generative.reverse.ReverseProcess`'s ``x0`` and the
-    forward process's posterior — and, being intrinsically stochastic, it
-    ignores the reverse process's ``churn``. Requires
-    :attr:`~schnetpack.generative.processes.Process.has_gaussian_kernel`
-    (the posterior raises otherwise).
+    :class:`~schnetpack.generative.sde.ReverseSDE`'s ``x0`` and its chart's
+    posterior — and, being intrinsically stochastic, it ignores the reverse
+    process's ``churn``. ``requires_sde`` is how it says so: the Sampler
+    then assembles a ReverseSDE even at churn = 0, and a configuration
+    without the Gaussian kernel is refused at assembly.
     """
+
+    requires_sde = True
 
     def step(self, process, x, t, dt):
         x0_hat = process.x0(x, t)
-        mean, std = process.process.posterior(x, x0_hat, t, t + dt)
+        mean, std = process.sde.posterior(x, x0_hat, t, t + dt)
         return mean + expand_t(std, x) * torch.randn_like(x)
 
 
@@ -48,16 +50,18 @@ class AncestralDDPM(Integrator):
     i.e. a particular discretization of the reverse VP process. Unlike the
     generic solvers it is written in terms of the raw score rather than the
     drift, so it needs a
-    :class:`~schnetpack.generative.reverse.ReverseProcess` (for its ``g2``
-    and ``score``) built on a VP-type path. That is a deliberate exception to
-    the rule that integrators see only drift and diffusion: the step *is* a
-    statement about the score, and rewriting it through the drift would only
-    obscure it.
+    :class:`~schnetpack.generative.sde.ReverseSDE` (for its ``g2``
+    and ``score``) built on a VP-type path — hence ``requires_sde``. That is
+    a deliberate exception to the rule that integrators see only drift and
+    diffusion: the step *is* a statement about the score, and rewriting it
+    through the drift would only obscure it.
 
     Uses the DDPM ``sigma_t^2 = beta_t`` variance choice. Being intrinsically
     stochastic, it ignores the reverse process's ``churn``: a Sampler
     configured with ``churn=0`` and this integrator still samples the SDE.
     """
+
+    requires_sde = True
 
     def step(self, process, x, t, dt):
         beta = expand_t(process.g2(t), x) * dt.abs()

@@ -114,7 +114,7 @@ with autograd is tested. Two subtleties worth knowing:
   $\dot a / a$ becomes $0/0$.
 
 
-## 3. Derived quantities: the SDE coefficients
+## 3. Derived quantities: the SDE chart
 
 When the endpoint is an independent isotropic Gaussian, the interpolant's
 conditional marginals are those of the linear SDE
@@ -135,11 +135,21 @@ $g^2 \ge 0$ precisely because signal only ever turns into noise. A constant
 endpoint scale multiplies $\sigma^2$ and leaves $\log\mathrm{SNR}$
 unchanged, which is why the scale enters as a plain factor.
 
+This machinery does not live on the process: it is the **SDE chart**, a
+separate view `process.sde()` returning an `SDE` object with `f`, `g2` and
+the Gaussian closed forms (§5). The chart exists exactly when the one-sided
+Gaussian kernel holds, and *constructing it is the check* — a shape prior,
+a value-dependent coupling or bridge noise cannot obtain one, and the error
+names the obstruction. Consumers that need the chart acquire it at their
+own construction; the routes that never do (velocity sampling at churn 0,
+direct $x_0$/pseudo-force recovery) never call `sde()`, which is visible in
+the code rather than asserted in prose.
+
 Two things $g^2$ is *not*: it is not defined for priors that declare no
-scalar scale (the `Process.std` property raises with a diagnosis), and it is
-not an intrinsic property of the interpolant — it is the canonical choice
-that makes the forward drift linear. Samplers decide how much of it to use
-via their churn knob; flow matching at churn 0 never evaluates it.
+scalar scale (the chart refuses to exist, with a diagnosis), and it is not
+an intrinsic property of the interpolant — it is the canonical choice that
+makes the forward drift linear. Samplers decide how much of it to use via
+their churn knob; flow matching at churn 0 never evaluates it.
 
 
 ## 4. The forward move: `perturb`
@@ -181,14 +191,18 @@ which holds exactly when three configuration facts do:
 
 1. the prior declares its draws isotropic Gaussian (`prior.gaussian`),
 2. with a scalar scale (`prior.std` is not `None`),
-3. the coupling preserves $x_1$'s marginal, and the schedule carries no
-   bridge noise ($\gamma \equiv 0$).
+3. the coupling pairs endpoints without looking at the values
+   (`coupling.independent_pairs` — the kernel is a statement about the
+   *conditional* $p(x_1 \mid x_0)$, so a marginal-preserving optimal
+   assignment breaks it; see [couplings.md §2](couplings.md)), and the
+   schedule carries no bridge noise ($\gamma \equiv 0$).
 
 `Process.gaussian_kernel_obstruction()` checks these against the *actual
 configuration* and names the first failure as a readable sentence;
 `has_gaussian_kernel` is the boolean. Score/noise parametrizations demand it
 in their `validate` (called by every consumer constructor), and the
-Gaussian-only closed forms call it before answering.
+Gaussian-only closed forms live on the chart (`process.sde()`), whose
+construction runs the same check once — no chart, no closed forms.
 
 Judging the configuration rather than the class is what lets one schedule
 serve both modes: the same `VE` is a Gaussian diffusion under a
@@ -198,6 +212,8 @@ no false type-level claims in either mode. See the
 [design argument](README.md#2-properties-are-judged-from-the-configuration-not-the-class).
 
 ### The closed forms
+
+Both live on the chart: `process.sde().kernel(...)` / `.posterior(...)`.
 
 **`kernel(t)`** returns $(a(t), \sigma(t))$ of the perturbation kernel.
 
@@ -356,7 +372,9 @@ for flow matching there is no intrinsic $g$ to start from.
 **Why the Gaussian kernel is judged, not subclassed.** Because it is decided
 by constructor arguments, a type could not check it; and because it cuts
 *across* the schedule axis, a hierarchy would duplicate every schedule into
-Gaussian and non-Gaussian variants. See the
-[README](README.md#the-design-argument) for the full argument, and
-[flow_matching_sde.md](flow_matching_sde.md) for what mathematically
-survives on the far side of the boundary.
+Gaussian and non-Gaussian variants. What the judgment *gates* is still a
+nameable object — the `SDE` chart — so consumers that need the machinery
+demand the chart rather than probe a boolean, and acquiring it is the one
+place the check runs. See the [README](README.md#the-design-argument) for
+the full argument, and [flow_matching_sde.md](flow_matching_sde.md) for
+what mathematically survives on the far side of the boundary.

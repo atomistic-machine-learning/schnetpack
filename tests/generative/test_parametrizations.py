@@ -78,14 +78,21 @@ def test_gaussian_prior_draws_at_the_declared_scale():
     assert x1.std().item() == pytest.approx(50.0, rel=0.05)
 
 
-def test_couplings_declare_whether_they_preserve_the_marginal():
-    # Re-ordering leaves x1's marginal untouched; reshaping from the data does
-    # not. This is what gates the Gaussian kernel and the derived sampling
-    # prior.
+def test_couplings_declare_marginal_and_conditional_facts_separately():
+    # Two declarations, two facts. Re-ordering leaves x1's *marginal*
+    # untouched (gates the derived sampling prior); only a pairing that never
+    # looks at the values leaves the *conditional* p(x1|x0) untouched (gates
+    # the Gaussian kernel). The assignment couplings preserve the first and
+    # break the second.
     assert IdentityCoupling.preserves_marginal
     assert PermutationCoupling.preserves_marginal
     assert OTCoupling.preserves_marginal
     assert not PCVarianceCoupling.preserves_marginal
+
+    assert IdentityCoupling.independent_pairs
+    assert not PermutationCoupling.independent_pairs
+    assert not OTCoupling.independent_pairs
+    assert not PCVarianceCoupling.independent_pairs
 
 
 def test_identity_coupling_leaves_endpoints_untouched():
@@ -171,6 +178,7 @@ def test_couplings_never_draw():
             return x0, x1
 
     assert not Undeclared.preserves_marginal
+    assert not Undeclared.independent_pairs
 
 
 def test_coupling_is_abstract():
@@ -199,12 +207,15 @@ def test_score_and_noise_parametrizations_require_the_gaussian_kernel():
 
 
 def test_the_configuration_is_judged_not_the_class():
-    # A permutation coupling re-pairs exchangeable Gaussian draws, which
-    # leaves the kernel intact — so the score/noise heads accept it. The old
-    # class-based check refused this valid assembly; the property does not.
-    repaired = VP(coupling=PermutationCoupling())
+    # The same VP class is accepted or refused by its *configuration*: under
+    # the identity coupling the kernel holds and the score/noise heads
+    # validate; under an optimal-assignment coupling the marginal survives
+    # but the conditional p(x1|x0) does not — each x0 gets its closest draw —
+    # and the same heads are refused, naming the value-dependence.
     for cls in GAUSSIAN_ONLY:
-        cls().validate(repaired)  # must not raise
+        cls().validate(VP(coupling=IdentityCoupling()))  # must not raise
+        with pytest.raises(TypeError, match="depending on the values"):
+            cls().validate(VP(coupling=PermutationCoupling()))
 
 
 def test_conditional_expectation_parametrizations_accept_any_process():

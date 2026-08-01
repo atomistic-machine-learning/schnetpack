@@ -1,8 +1,9 @@
 # Sampling: reverse processes, integrators, grids, samplers
 
-*Modules: `schnetpack.generative.reverse`, `.integrators`, `.grids`,
-`.sampler` · classes `ReverseProcess`, `Integrator`, `EulerMaruyama`,
-`Heun`, `Ancestral`, `AncestralDDPM`, `TimeGrid`, `UniformGrid`, `Sampler`,
+*Modules: `schnetpack.generative.sde`, `.reverse`, `.integrators`,
+`.grids`, `.sampler` · classes `ReverseSDE`, `ReverseODE` (assembled by
+`reverse()`), `Integrator`, `EulerMaruyama`, `Heun`, `Ancestral`,
+`AncestralDDPM`, `TimeGrid`, `UniformGrid`, `Sampler`,
 `DirectDenoisingSampler`.*
 
 Generation runs the forward process backwards. The machinery factors the
@@ -12,7 +13,7 @@ derived — never implemented per schedule), **how** each step is computed
 composition that binds them (the sampler).
 
 ```
-prior.sample() ──> x at t_max ──[ integrator steps on ReverseProcess ]──> x at t_min
+prior.sample() ──> x at t_max ──[ integrator steps on the reverse process ]──> x at t_min
                                      │ grid: which times      │
                                      │ churn: how stochastic  │
 ```
@@ -21,7 +22,7 @@ prior.sample() ──> x at t_max ──[ integrator steps on ReverseProcess ]�
 ## 1. The reverse process: one family, one knob
 
 For a forward process with drift $f x$ and diffusion $g$
-([derived from the schedule](processes.md#3-derived-quantities-the-sde-coefficients)),
+([the SDE chart](processes.md#3-derived-quantities-the-sde-chart)),
 the time reversal (Anderson 1982) and the probability-flow ODE are the two
 ends of a one-parameter family, written around the **velocity**:
 
@@ -43,22 +44,30 @@ usual $\eta$ by $\chi = \eta^2$.
 Writing the family around the velocity rather than the score is a
 deliberate choice: the route from a velocity back to a score divides by
 $g^2$ and blows up as $t \to 0$, and on the ODE path that route is **never
-taken** — `ReverseProcess.drift` returns the velocity directly at
-$\chi = 0$. Flow matching therefore costs nothing it shouldn't. At
-$\chi > 0$ the score is a *second conversion of the same raw output* —
-never a second model call.
+taken**. Flow matching therefore costs nothing it shouldn't. At $\chi > 0$
+the score is a *second conversion of the same raw output* — never a second
+model call.
 
-`ReverseProcess(process, parametrization, model, churn, cond)` validates
-the pairing at construction and exposes:
+Reverse processes are never implemented per schedule; they split by
+**capability** instead, and the factory
+`reverse(process, parametrization, model, churn, cond, require_sde)` picks:
 
-- `drift(x, t)`, `diffusion(t)` — what generic integrators consume;
-- `score(x, t)`, `x0(x, t)` — for the integrators that discretize through
-  something other than drift/diffusion (ancestral steps);
-- `g2(t)` — the forward diffusion, read through to the process.
+- **`ReverseSDE(process.sde(), ...)`** — everything that crosses the
+  [(f, g) chart](processes.md#3-derived-quantities-the-sde-chart):
+  churn $> 0$ outright, and churn $= 0$ for any non-velocity head (the
+  PF-ODE drift converts through $f$ and $g^2$). Taking the `SDE` in its
+  constructor means it *cannot exist* for a configuration without the
+  Gaussian kernel — the refusal happens at assembly and names the
+  obstruction. Exposes `drift(x, t)`/`diffusion(t)` for the generic
+  integrators, `score(x, t)`/`x0(x, t)` for the ancestral ones, and
+  `g2(t)`/`sde` read through to the chart.
+- **`ReverseODE(process, ...)`** — continuity-equation transport
+  $\mathrm{d}x = v\,\mathrm{d}t$, valid for **any** endpoint law
+  ([flow_matching_sde.md §8.2](flow_matching_sde.md)); accepts only
+  chart-free velocity heads. This is vanilla flow matching's path, and the
+  reason shape-prior velocity sampling never touches the chart.
 
-There is exactly one class and no hierarchy: reverse processes are never
-implemented per schedule. Method-specific behavior belongs in the composed
-parts.
+Method-specific behavior belongs in the composed parts.
 
 
 ## 2. Integrators
@@ -88,22 +97,22 @@ The generic ancestral update: estimate $x_0$ from the model, then draw from
 the closed-form Gaussian posterior the process already knows,
 
 $$
-\hat x_0 = \texttt{process.x0}(x, t),
+\hat x_0 = \texttt{reverse.x0}(x, t),
 \qquad
 x_s \sim p(x_s \mid x_t, \hat x_0)
-\quad\text{via } \texttt{Process.posterior}.
+\quad\text{via } \texttt{SDE.posterior}.
 $$
 
 Schedule logic lives entirely in
 [the closed form](processes.md#the-closed-forms), so one class covers every
 process with a Gaussian kernel: on `VP` it is the textbook DDPM ancestral
 step with the exact ($\tilde\beta$) posterior variance; on `VE` it reduces
-to the familiar NCSN/GPFF ancestral update. Requires
-`has_gaussian_kernel` (the posterior raises otherwise), works with any
-head that can produce an $x_0$-estimate, and — being intrinsically
-stochastic — **ignores `churn`**. Note this also means ancestral sampling
-is perfectly valid for a flow-matching model under its default Gaussian
-prior.
+to the familiar NCSN/GPFF ancestral update. Declares `requires_sde`, so
+the `Sampler` assembles a `ReverseSDE` even at churn 0 and a configuration
+without the Gaussian kernel is refused at assembly. Works with any head
+that can produce an $x_0$-estimate, and — being intrinsically stochastic —
+**ignores `churn`**. Note this also means ancestral sampling is perfectly
+valid for a flow-matching model under its default Gaussian prior.
 
 ### `AncestralDDPM` — the score-form DDPM step
 
@@ -186,9 +195,12 @@ Design points worth knowing:
 - **`context` flows to the prior** exactly as during training — a
   `CenteredGaussianPrior`-style endpoint reads the molecule layout
   (`idx_m`) out of it, so per-molecule centering works on both sides.
-- **The pairing is validated at construction**
-  (`parametrization.validate(process)`), so an invalid assembly fails when
-  built.
+- **The assembly is validated at construction**: the pairing via
+  `parametrization.validate(process)`, and — whenever churn $> 0$, the head
+  is not a chart-free velocity, or the integrator declares `requires_sde` —
+  the chart via `process.sde()`. An invalid assembly fails when built, with
+  the obstruction named; nothing is left to fail mid-run or, worse, to
+  return plausible wrong numbers.
 - **`denoise(model, x_t, t_start, n_steps)`** is the partial-denoising
   entry point: relaxation of given structures, scaffolded generation, and
   structured priors that start below $t_{\max}$ all enter here — `sample`

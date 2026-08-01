@@ -6,8 +6,9 @@ method takes the
 :class:`~schnetpack.generative.processes.Process` it is applied
 to, and the consumers that need both — :class:`~schnetpack.generative.transforms.Diffuse`,
 :class:`~schnetpack.generative.losses.MatchingLoss`,
-:class:`~schnetpack.generative.sampler.Sampler`,
-:class:`~schnetpack.generative.reverse.ReverseProcess` — take the pair
+:class:`~schnetpack.generative.sampler.Sampler`, the reverse processes
+(:class:`~schnetpack.generative.sde.ReverseSDE`,
+:class:`~schnetpack.generative.reverse.ReverseODE`) — take the pair
 ``(process, parametrization)`` explicitly. It owns both directions of the
 contract with a generative head:
 
@@ -103,6 +104,18 @@ class Parametrization(abc.ABC):
     still fails at assembly.
     """
 
+    velocity_needs_chart: bool = True
+    """Whether :meth:`to_velocity` crosses the (f, g) chart.
+
+    True on the base: the generic route to the velocity goes through the
+    score and the probability-flow identity v = f x - 1/2 g^2 s, both chart
+    statements. A parametrization whose head *is* the velocity overrides
+    this to False — its conversion returns the output untouched — which is
+    what lets :func:`~schnetpack.generative.reverse.reverse` assemble a
+    chart-free :class:`~schnetpack.generative.reverse.ReverseODE` for it at
+    churn = 0, the one reverse route valid for any endpoint law.
+    """
+
     def validate(self, process: Process) -> None:
         """
         Raise unless this parametrization's target is meaningful for
@@ -164,8 +177,9 @@ class Parametrization(abc.ABC):
     ) -> torch.Tensor:
         """Probability-flow velocity v = f x - 1/2 g^2 score, from the raw output."""
         score = self.to_score(process, output, x_t, t)
-        f = expand_t(process.f(t), x_t)
-        g2 = expand_t(process.g2(t), x_t)
+        sde = process.sde()
+        f = expand_t(sde.f(t), x_t)
+        g2 = expand_t(sde.g2(t), x_t)
         return f * x_t - 0.5 * g2 * score
 
     def to_x0(
@@ -266,6 +280,8 @@ class VelocityParametrization(Parametrization):
     churn = 0 the velocity is used directly and the inverse never runs.
     """
 
+    velocity_needs_chart = False  # the head *is* the velocity
+
     def target(self, process, x0, x1, t, eps=None):
         a_dot = expand_t(process.a_dot(t), x0)
         b_dot = expand_t(process.b_dot(t), x1)
@@ -273,8 +289,9 @@ class VelocityParametrization(Parametrization):
 
     def to_score(self, process, output, x_t, t):
         # Invert v = f x - 1/2 g^2 s.
-        f = expand_t(process.f(t), x_t)
-        g2 = expand_t(process.g2(t), x_t)
+        sde = process.sde()
+        f = expand_t(sde.f(t), x_t)
+        g2 = expand_t(sde.g2(t), x_t)
         return 2.0 * (f * x_t - output) / g2
 
     def to_velocity(self, process, output, x_t, t):

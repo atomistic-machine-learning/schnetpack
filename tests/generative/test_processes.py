@@ -107,12 +107,13 @@ def test_g2_scales_with_std_squared():
     unit = VE()
     scaled = VE(scale=7.0)
     t = torch.linspace(0.1, 0.9, 5)
-    assert torch.allclose(scaled.g2(t), 49.0 * unit.g2(t), rtol=1e-6)
+    assert torch.allclose(scaled.sde().g2(t), 49.0 * unit.sde().g2(t), rtol=1e-6)
 
 
-def test_sigma_and_g2_raise_without_a_declared_scale():
-    # A shape-prior-like endpoint (std=None) has no single noise level; the
-    # methods that need one must say so rather than return garbage.
+def test_sigma_and_the_chart_raise_without_a_declared_scale():
+    # A shape-prior-like endpoint (std=None) has no single noise level; sigma
+    # must say so rather than return garbage, and the (f, g) chart — whose
+    # g^2 needs sigma — must refuse to exist at all.
     class NoScalePrior(GaussianPrior):
         def __init__(self):
             self.std = None
@@ -123,7 +124,7 @@ def test_sigma_and_g2_raise_without_a_declared_scale():
     with pytest.raises(ValueError, match="no scalar endpoint scale"):
         process.sigma(t)
     with pytest.raises(ValueError, match="no scalar endpoint scale"):
-        process.g2(t)
+        process.sde()
 
 
 def test_scale_and_prior_together_are_refused():
@@ -164,11 +165,17 @@ def test_default_assemblies_have_the_gaussian_kernel():
         assert process.gaussian_kernel_obstruction() is None
 
 
-def test_marginal_preserving_couplings_keep_the_gaussian_kernel():
-    # Re-pairing exchangeable Gaussian draws leaves the marginal Gaussian, so
-    # the kernel is judged valid — the configuration decides, not the class.
+def test_only_value_independent_couplings_keep_the_gaussian_kernel():
+    # The kernel is a statement about the conditional p(x1 | x0), so marginal
+    # preservation is not enough: an optimal assignment permutes exchangeable
+    # draws (marginal survives) but hands each x0 its closest one
+    # (conditional does not). The configuration decides, not the class.
     assert VP(coupling=IdentityCoupling()).has_gaussian_kernel
-    assert VP(coupling=PermutationCoupling()).has_gaussian_kernel
+    repaired = VP(coupling=PermutationCoupling())
+    assert not repaired.has_gaussian_kernel
+    assert "depending on the values" in repaired.gaussian_kernel_obstruction()
+    # ... while the sampling start still derives, because the marginal holds
+    assert repaired.sampling_prior() is repaired.prior
 
 
 def test_a_non_gaussian_prior_obstructs_the_kernel():
@@ -193,7 +200,7 @@ def test_a_prior_without_a_scale_obstructs_the_kernel():
 def test_a_marginal_changing_coupling_obstructs_the_kernel():
     process = VE(scale=30.0, coupling=PCVarianceCoupling())
     assert not process.has_gaussian_kernel
-    assert "marginal" in process.gaussian_kernel_obstruction()
+    assert "depending on the values" in process.gaussian_kernel_obstruction()
 
 
 def test_bridge_noise_obstructs_the_kernel():
@@ -216,24 +223,24 @@ def test_zero_bridge_noise_does_not_obstruct():
     assert ZeroBridgeVP().has_gaussian_kernel
 
 
-# --- Gaussian-only closed forms ------------------------------------------- #
+# --- Gaussian-only closed forms, on the chart ------------------------------ #
 
 
 def test_kernel_matches_the_perturbation_kernel():
     process = VE(0.3, 30.0)
     t = torch.linspace(0.1, 0.9, 5, dtype=torch.float64)
-    a, sigma = process.kernel(t)
+    a, sigma = process.sde().kernel(t)
     assert torch.allclose(a, process.a(t))
     assert torch.allclose(sigma, process.sigma(t))
 
 
-def test_closed_forms_refuse_without_the_gaussian_kernel():
+def test_the_chart_refuses_without_the_gaussian_kernel():
+    # The closed forms live on the chart, and a configuration without the
+    # kernel cannot construct it — one refusal, at acquisition, instead of a
+    # check per closed form.
     process = VE(scale=30.0, coupling=PCVarianceCoupling())
-    t = torch.linspace(0.1, 0.9, 5, dtype=torch.float64)
-    with pytest.raises(ValueError, match="Gaussian kernel"):
-        process.kernel(t)
-    with pytest.raises(ValueError, match="Gaussian kernel"):
-        process.posterior(torch.randn(5, 1), torch.randn(5, 1), t, t * 0.5)
+    with pytest.raises(ValueError, match="chart"):
+        process.sde()
 
 
 def test_posterior_matches_the_ve_closed_form():
@@ -246,7 +253,7 @@ def test_posterior_matches_the_ve_closed_form():
     x_t = torch.randn(16, 1, dtype=torch.float64)
     x0 = torch.randn(16, 1, dtype=torch.float64)
 
-    mean, std = process.posterior(x_t, x0, t, s)
+    mean, std = process.sde().posterior(x_t, x0, t, s)
 
     sig_t = process.sigma(t).reshape(-1, 1)
     sig_s = process.sigma(s).reshape(-1, 1)
@@ -267,7 +274,7 @@ def test_posterior_recovers_the_ddpm_marginal_variance_on_vp():
     s = torch.full((8,), 0.5 - 1e-6, dtype=torch.float64)
     x_t = torch.randn(8, 1, dtype=torch.float64)
     x0 = torch.randn(8, 1, dtype=torch.float64)
-    mean, std = process.posterior(x_t, x0, t, s)
+    mean, std = process.sde().posterior(x_t, x0, t, s)
     # as s -> t the posterior concentrates on x_t
     assert torch.allclose(mean, x_t, atol=1e-4)
     assert std.max().item() < 1e-2

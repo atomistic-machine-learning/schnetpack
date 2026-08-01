@@ -69,24 +69,24 @@ def test_g2_matches_db2_dt_minus_2_f_b2(process):
     eps = 1e-6 * (process.t_max - process.t_min)
 
     db2 = (process.b(t + eps) ** 2 - process.b(t - eps) ** 2) / (2 * eps)
-    expected = db2 - 2.0 * process.f(t) * process.b(t) ** 2
+    expected = db2 - 2.0 * process.sde().f(t) * process.b(t) ** 2
 
-    assert torch.allclose(process.g2(t), expected, rtol=1e-4, atol=1e-6)
+    assert torch.allclose(process.sde().g2(t), expected, rtol=1e-4, atol=1e-6)
 
 
 def test_vp_derived_drift_and_diffusion_match_analytic(vp):
     # The VP process is defined in the literature by f = -beta/2 and g^2 = beta.
     # Deriving both from (a, b) must reproduce exactly that.
     t = torch.linspace(0.05, 1.0, 10, dtype=torch.float64)
-    assert torch.allclose(vp.f(t), -0.5 * vp.beta(t), rtol=1e-6)
-    assert torch.allclose(vp.g2(t), vp.beta(t), rtol=1e-6)
+    assert torch.allclose(vp.sde().f(t), -0.5 * vp.beta(t), rtol=1e-6)
+    assert torch.allclose(vp.sde().g2(t), vp.beta(t), rtol=1e-6)
 
 
 def test_ve_derived_diffusion_matches_analytic(ve):
     t = torch.linspace(0.0, 1.0, 10, dtype=torch.float64)
     expected = 2.0 * math.log(1.0 / ve.b_min) * ve.b(t) ** 2
-    assert torch.allclose(ve.g2(t), expected, rtol=1e-6)
-    assert torch.allclose(ve.f(t), torch.zeros_like(t), atol=1e-12)
+    assert torch.allclose(ve.sde().g2(t), expected, rtol=1e-6)
+    assert torch.allclose(ve.sde().f(t), torch.zeros_like(t), atol=1e-12)
 
 
 def test_fm_diffusion_is_finite_on_usable_range():
@@ -94,7 +94,7 @@ def test_fm_diffusion_is_finite_on_usable_range():
     # whole usable range finite.
     fm = FlowMatching()
     t = torch.linspace(fm.t_min, fm.t_max, 100, dtype=torch.float64)
-    g2 = fm.g2(t)
+    g2 = fm.sde().g2(t)
     assert torch.isfinite(g2).all()
     assert (g2 >= 0).all()
 
@@ -163,8 +163,8 @@ def test_per_sample_times_broadcast(vp):
 
     x_t = vp.interpolate(x0, torch.randn_like(x0), t)
     assert x_t.shape == x0.shape
-    assert vp.g2(t).shape == t.shape
-    assert vp.f(t).shape == t.shape
+    assert vp.sde().g2(t).shape == t.shape
+    assert vp.sde().f(t).shape == t.shape
 
 
 # --- the two schedule routes ---------------------------------------------- #
@@ -195,7 +195,7 @@ def test_a_schedule_redefined_through_tv_snr_is_the_same_schedule(process):
     assert torch.allclose(mirror.a(t), process.a(t), rtol=1e-6, atol=1e-9)
     assert torch.allclose(mirror.b(t), process.b(t), rtol=1e-6, atol=1e-9)
     # and so must everything derived from them
-    assert torch.allclose(mirror.g2(t), process.g2(t), rtol=1e-4, atol=1e-7)
+    assert torch.allclose(mirror.sde().g2(t), process.sde().g2(t), rtol=1e-4, atol=1e-7)
 
 
 def test_vp_issnr_is_variance_preserving():
@@ -255,14 +255,14 @@ def test_g2_equals_the_quotient_free_form(process):
     # 2 b b' - 2 f b^2, which is what g2 no longer computes.
     t = interior_times(process)
     b = process.b(t)
-    old_form = 2.0 * b * process.b_dot(t) - 2.0 * process.f(t) * b**2
-    assert torch.allclose(process.g2(t), old_form, rtol=1e-6, atol=1e-9)
+    old_form = 2.0 * b * process.b_dot(t) - 2.0 * process.sde().f(t) * b**2
+    assert torch.allclose(process.sde().g2(t), old_form, rtol=1e-6, atol=1e-9)
 
 
 def test_log_snr_decreases_so_g2_is_non_negative(process):
     t = interior_times(process, n=9)
     assert (process.log_snr_dot(t) <= 0).all()
-    assert (process.g2(t) >= 0).all()
+    assert (process.sde().g2(t) >= 0).all()
 
 
 def test_a_closed_form_log_derivative_survives_a_0_over_0_quotient():
@@ -287,11 +287,11 @@ def test_a_closed_form_log_derivative_survives_a_0_over_0_quotient():
     p = DoubleZero(t_min=0.0, t_max=1.0)
 
     t = torch.tensor([0.5], dtype=torch.float64)
-    assert torch.allclose(p.f(t), torch.full_like(t, -4.0))  # agrees away from 0
+    assert torch.allclose(p.sde().f(t), torch.full_like(t, -4.0))  # agrees away from 0
 
     at_zero = torch.ones(1, dtype=torch.float64)  # a(1) == a_dot(1) == 0
     assert torch.isnan(p.a_dot(at_zero) / p.a(at_zero)).all()
-    assert torch.isneginf(p.f(at_zero)).all()
+    assert torch.isneginf(p.sde().f(at_zero)).all()
 
 
 def test_g2_is_finite_where_the_old_form_needed_a_singular_f():
@@ -301,8 +301,8 @@ def test_g2_is_finite_where_the_old_form_needed_a_singular_f():
     # a is ever formed and g^2 stays finite.
     p = VPISSNR(eta=4.0)
     t = torch.tensor([1.0 - 1e-12], dtype=torch.float64)
-    assert torch.isfinite(p.g2(t)).all()
-    assert (p.g2(t) >= 0).all()
+    assert torch.isfinite(p.sde().g2(t)).all()
+    assert (p.sde().g2(t) >= 0).all()
 
 
 # --- autograd derivatives ------------------------------------------------- #

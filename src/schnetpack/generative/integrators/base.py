@@ -16,6 +16,18 @@ __all__ = ["Integrator"]
 class Integrator(abc.ABC):
     """Base class for SDE/ODE solvers."""
 
+    requires_sde: bool = False
+    """Whether this integrator steps through the (f, g) chart's closed forms.
+
+    False for the generic solvers, which consume only ``drift`` and
+    ``diffusion`` and work on any reverse process. True for the ones that
+    discretize through the chart itself — the ancestral steps, which read
+    the exact posterior or the raw score — so the
+    :class:`~schnetpack.generative.sampler.Sampler` can demand a
+    :class:`~schnetpack.generative.sde.ReverseSDE` at assembly instead of
+    failing mid-run.
+    """
+
     @abc.abstractmethod
     def step(
         self, process, x: torch.Tensor, t: torch.Tensor, dt: torch.Tensor

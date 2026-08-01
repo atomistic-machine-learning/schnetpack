@@ -18,11 +18,10 @@ One class carries three roles, still factored internally:
   defines either (a, b) or (tv, log_snr) — the total variance a^2 + b^2 and
   the log signal-to-noise ratio log(a^2 / b^2), the TV/SNR reparametrization
   of Kahouli et al. (2025), arXiv:2502.08598. Each pair derives the other,
-  time derivatives default to autograd, and everything else — the forward
-  SDE drift f = a'/a, the diffusion g^2, the closed-form marginals that make
-  simulation-free training possible — follows. :class:`VP`, :class:`VE` and
-  :class:`FlowMatching` are subclasses whose whole content is a schedule,
-  spelled in the literature's vocabulary.
+  time derivatives default to autograd, and the closed-form marginals that
+  make simulation-free training possible follow. :class:`VP`, :class:`VE`
+  and :class:`FlowMatching` are subclasses whose whole content is a
+  schedule, spelled in the literature's vocabulary.
 - **The endpoint** — the prior (:mod:`schnetpack.generative.priors`), which
   owns what x1 is, including its scale: the noise level of the process is
   sigma(t) = b(t) * prior.std, and ``VE(sigma_min=0.3, sigma_max=30.0)``
@@ -44,19 +43,24 @@ perturb draws it and returns it.
 **The Gaussian kernel is a property, not a class.** The score and noise
 training targets are statements about the one-sided kernel
 p(x_t | x0) = N(a x0, sigma^2 I), which holds exactly when the prior is an
-isotropic Gaussian of declared scale, the coupling preserves x1's marginal,
-and the schedule carries no bridge noise.
+isotropic Gaussian of declared scale, the coupling pairs endpoints
+independently of the values, and the schedule carries no bridge noise.
 :meth:`Process.gaussian_kernel_obstruction` checks those conditions against
 the actual configuration and names the first that fails;
-:attr:`Process.has_gaussian_kernel` is the boolean. It gates the score/noise
-parametrizations (checked in their ``validate``, called by every consumer
-constructor) and the Gaussian-only closed forms — the perturbation
-:meth:`Process.kernel` and the exact :meth:`Process.posterior` that
-ancestral sampling and DDIM discretize. Judging the configuration rather
-than the class is what lets one schedule serve both modes: the same
-:class:`VE` is a Gaussian diffusion under a ``GaussianPrior`` and a general
-stochastic interpolant (Albergo et al., arXiv:2303.08797) under a shape
-prior, with no second hierarchy.
+:attr:`Process.has_gaussian_kernel` is the boolean. Judging the
+configuration rather than the class is what lets one schedule serve both
+modes: the same :class:`VE` is a Gaussian diffusion under a
+``GaussianPrior`` and a general stochastic interpolant (Albergo et al.,
+arXiv:2303.08797) under a shape prior, with no second hierarchy.
+
+**The SDE chart lives elsewhere.** When the kernel holds, the same marginals
+admit the linear SDE dx = f x dt + g dw, and everything built on it — f,
+g^2, the perturbation kernel, the exact posterior that ancestral sampling
+and DDIM discretize. That machinery is :class:`~schnetpack.generative.sde.SDE`,
+acquired via :meth:`Process.sde`, whose *construction* is the kernel check:
+a configuration without the kernel cannot obtain the chart, and the error
+names the obstruction. This file owns only what every process has — the
+interpolant.
 
 What the network predicts — the training targets and the conversions
 between score, noise, denoiser and velocity — lives on
@@ -79,9 +83,12 @@ rely on.
 import abc
 import inspect
 import math
-from typing import Callable, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, Optional, Tuple
 
 import torch
+
+if TYPE_CHECKING:
+    from schnetpack.generative.sde import SDE
 
 from schnetpack.generative.couplings import Coupling, IdentityCoupling
 from schnetpack.generative.priors import GaussianPrior, Prior
@@ -319,10 +326,11 @@ class Process(abc.ABC):
         two, and — for a schedule defined the TV/SNR way — the derivative of
         the closed form the subclass actually wrote, with no a or b formed
         along the way and so no quotient to degenerate. That is what makes
-        :meth:`g2` well behaved on schedules whose a reaches zero.
+        the chart's diffusion (:meth:`~schnetpack.generative.sde.SDE.g2`)
+        well behaved on schedules whose a reaches zero.
 
         Non-positive for any sensible schedule — signal only ever turns into
-        noise — which is what makes :meth:`g2` non-negative.
+        noise — which is what makes that g^2 non-negative.
         """
         return self._time_derivative(self.log_snr, t)
 
@@ -385,43 +393,6 @@ class Process(abc.ABC):
         interpolant coefficient.
         """
         return None
-
-    # -- derived scalars -------------------------------------------------- #
-
-    def f(self, t: torch.Tensor) -> torch.Tensor:
-        """
-        Drift coefficient f(t) = a'/a of the forward SDE.
-
-        Which is d/dt log a — see :meth:`log_a_dot`, where the quotient
-        is avoided rather than computed.
-        """
-        return self.log_a_dot(t)
-
-    def g2(self, t: torch.Tensor) -> torch.Tensor:
-        """
-        Squared diffusion of the forward SDE, g^2 = -sigma^2 d/dt log SNR.
-
-        The usual unit-scale form is g^2 = 2 b b' - 2 f b^2. Factoring b^2
-        out of both terms leaves the two log-derivatives,
-
-            g^2 = 2 b^2 (d/dt log b - d/dt log a),
-
-        and log SNR = 2 (log a - log b) makes that bracket exactly
-        -1/2 d/dt log SNR. So the whole diffusion is one log-derivative of
-        one schedule — no quotient, and nothing that degenerates where a or
-        b vanish. It also puts the sign where it can be read: g^2 >= 0
-        precisely because SNR decreases. A constant endpoint scale
-        multiplies the noise level everywhere and leaves d/dt log SNR
-        unchanged, which is why the scale enters simply as sigma^2 in place
-        of b^2.
-
-        This is the diffusion that shares the process's marginals. It is a
-        *canonical* choice rather than an intrinsic property of the
-        interpolant: any g gives the same marginals as long as the drift
-        matches, and the sampler picks how much of it to use via its churn
-        knob. Flow matching runs at churn = 0 and never touches this.
-        """
-        return -self.sigma(t) ** 2 * self.log_snr_dot(t)
 
     def a_b(self, t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Both marginal coefficients at once, each shaped like t."""
@@ -634,18 +605,21 @@ class Process(abc.ABC):
         Why the one-sided Gaussian kernel does not hold — or None if it does.
 
         The kernel p(x_t | x0) = N(a x0, sigma^2 I) is exact iff the prior
-        is an isotropic Gaussian with a declared scale, the coupling at most
-        re-orders x1 across the batch (re-pairing exchangeable draws leaves
-        the marginal Gaussian), and the schedule carries no bridge noise (a
-        Gaussian endpoint plus gamma is still Gaussian, but then
-        sigma^2 = b^2 std^2 + gamma^2 — fold it into the noise coefficient
-        first). Those are exactly the assumptions behind the score/noise
-        training targets and the closed forms :meth:`kernel` and
-        :meth:`posterior`.
+        is an isotropic Gaussian with a declared scale, the coupling pairs
+        x1 with x0 *independently of the values* (the kernel is a statement
+        about the conditional p(x1 | x0), so even a marginal-preserving
+        assignment like optimal transport breaks it — see
+        :attr:`~schnetpack.generative.couplings.Coupling.independent_pairs`),
+        and the schedule carries no bridge noise (a Gaussian endpoint plus
+        gamma is still Gaussian, but then sigma^2 = b^2 std^2 + gamma^2 —
+        fold it into the noise coefficient first). Those are exactly the
+        assumptions behind the score/noise training targets and the closed
+        forms on the :class:`~schnetpack.generative.sde.SDE` chart.
 
         Returns the first failed condition as a readable sentence, so the
         callers that must refuse — the score/noise parametrizations'
-        ``validate``, the closed forms — can say *why*.
+        ``validate``, the :class:`~schnetpack.generative.sde.SDE`
+        constructor — can say *why*.
         """
         if not self.prior.gaussian:
             return (
@@ -657,11 +631,12 @@ class Process(abc.ABC):
                 f"{type(self.prior).__name__} declares no scalar endpoint "
                 "scale (prior.std is None)"
             )
-        if not self.coupling.preserves_marginal:
+        if not self.coupling.independent_pairs:
             return (
-                f"{type(self.coupling).__name__} reshapes x1's marginal "
-                "from the data, so the endpoint is no longer the declared "
-                "isotropic Gaussian"
+                f"{type(self.coupling).__name__} pairs endpoints depending "
+                "on the values, so conditionally on x0 the endpoint is no "
+                "longer the declared isotropic Gaussian (the marginal may "
+                "survive; the one-sided kernel does not)"
             )
         # Probe gamma on interior times: None means no bridge noise by the
         # gamma contract, and a returned tensor still has to actually
@@ -683,73 +658,24 @@ class Process(abc.ABC):
         """
         return self.gaussian_kernel_obstruction() is None
 
-    def _require_gaussian_kernel(self) -> None:
-        obstruction = self.gaussian_kernel_obstruction()
-        if obstruction is not None:
-            raise ValueError(
-                f"This closed form is a statement about the Gaussian kernel "
-                f"p(x_t | x0) = N(a x0, sigma^2 I), which this process does "
-                f"not have: {obstruction}."
-            )
-
-    # -- Gaussian-only closed forms ----------------------------------------#
-
-    def kernel(self, t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def sde(self) -> "SDE":
         """
-        Mean coefficient and std of the perturbation kernel p(x_t | x0),
-        i.e. (a(t), sigma(t)) with p(x_t | x0) = N(a x0, sigma^2 I).
+        The (f, g) chart of this process — the linear SDE
+        dx = f x dt + g dw sharing the interpolant's conditional marginals.
 
-        Raises unless :attr:`has_gaussian_kernel`.
+        The chart exists exactly when the one-sided Gaussian kernel holds,
+        so this raises, naming the obstruction, for any other configuration;
+        acquiring the chart *is* the validity check. Consumers that need
+        f, g^2 or the Gaussian closed forms (kernel, posterior) acquire it
+        at their own construction — see :mod:`schnetpack.generative.sde` —
+        so an invalid assembly fails there rather than mid-run. The routes
+        that never form the chart (velocity sampling at churn = 0, direct
+        x0/pseudo-force recovery) never call this.
         """
-        self._require_gaussian_kernel()
-        return self.a(t), self.sigma(t)
+        # Local import: sde.py imports Process for its type and helpers.
+        from schnetpack.generative.sde import SDE
 
-    def posterior(
-        self,
-        x_t: torch.Tensor,
-        x0: torch.Tensor,
-        t: torch.Tensor,
-        s: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Mean and std of the exact Gaussian posterior p(x_s | x_t, x0), s < t.
-
-        The linear-Gaussian Markov structure gives x_t | x_s ~
-        N((a_t/a_s) x_s, sigma_t^2 - (a_t/a_s)^2 sigma_s^2), and
-        conditioning the joint on (x_t, x0) yields
-
-            mean = (r sigma_s^2 / sigma_t^2) x_t + (a_s var_ts / sigma_t^2) x0,
-            var  = sigma_s^2 var_ts / sigma_t^2,
-
-        with r = a_t/a_s and var_ts = sigma_t^2 - r^2 sigma_s^2. For VP at
-        the DDPM discretization this is the textbook ancestral posterior;
-        for VE (a = 1) it reduces to the familiar
-        mean = (sigma_s^2/sigma_t^2) x_t + (1 - sigma_s^2/sigma_t^2) x0.
-        This is what ancestral sampling and DDIM discretize — with a known
-        x0 (or a model's x0-estimate in its place) the step is exact, no
-        score reconstruction involved.
-
-        Raises unless :attr:`has_gaussian_kernel`.
-
-        Args:
-            x_t: states at time t
-            x0: clean data (or its estimate)
-            t: current times, per-sample or scalar
-            s: target times, s < t elementwise
-
-        Returns:
-            (mean, std): mean shaped like x_t, std shaped like t.
-        """
-        a_t, sig_t = self.kernel(t)
-        a_s, sig_s = self.kernel(s)
-        r = a_t / a_s
-        var_ts = sig_t**2 - r**2 * sig_s**2
-        mean = (
-            expand_t(r * sig_s**2 / sig_t**2, x_t) * x_t
-            + expand_t(a_s * var_ts / sig_t**2, x0) * x0
-        )
-        std = torch.sqrt(torch.clamp(sig_s**2 * var_ts / sig_t**2, min=0.0))
-        return mean, std
+        return SDE(self)
 
 
 class VP(Process):

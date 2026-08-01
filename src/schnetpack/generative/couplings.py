@@ -33,20 +33,28 @@ atoms: ``groups`` is just labels, and the atomistic edge
 (:class:`~schnetpack.generative.transforms.Diffuse`) is what turns a batch into
 them.
 
-- :attr:`Coupling.preserves_marginal` is True for anything that at most
-  re-orders x1 across the batch (identity, permutation, OT): re-pairing
-  leaves the marginal law untouched, which is the property that lets the
-  training prior double as the sampling start
-  (:meth:`~schnetpack.generative.processes.Process.sampling_prior`),
-  and — for exchangeable Gaussian draws — keeps the score/noise targets
-  valid (judged by
-  :meth:`~schnetpack.generative.processes.Process.gaussian_kernel_obstruction`).
-  It is False
-  for anything that reshapes x1 from the data's values, where no data-free
-  start distribution exists and the sampler demands an explicit
-  :class:`~schnetpack.generative.priors.Prior`. The default is False: a
-  wrong True starts sampling from the wrong distribution silently, a wrong
-  False merely asks for an explicit prior.
+Two declarations, two different facts — a coupling states both:
+
+- :attr:`Coupling.preserves_marginal` is a *marginal* statement: True for
+  anything that at most re-orders x1 across the batch (identity,
+  permutation, OT), where re-pairing leaves the marginal law untouched.
+  This is the property that lets the training prior double as the sampling
+  start (:meth:`~schnetpack.generative.processes.Process.sampling_prior`).
+  It is False for anything that reshapes x1 from the data's values, where
+  no data-free start distribution exists and the sampler demands an
+  explicit :class:`~schnetpack.generative.priors.Prior`.
+- :attr:`Coupling.independent_pairs` is the stronger, *conditional*
+  statement: the pairing never looks at the values, so p(x1 | x0) is still
+  the prior's marginal. This — not marginal preservation — is what the
+  one-sided Gaussian kernel and the score/noise targets need (judged by
+  :meth:`~schnetpack.generative.processes.Process.gaussian_kernel_obstruction`):
+  an optimal assignment permutes exchangeable draws, so the marginal
+  survives, but it hands each x0 the *closest* draw, and conditionally on
+  x0 that selection is not Gaussian.
+
+Both default to False: a wrong True fails silently (sampling from the wrong
+start; training a biased score), a wrong False merely demands an explicit
+prior or a conditional-expectation target.
 """
 
 import abc
@@ -103,10 +111,22 @@ class Coupling(abc.ABC):
     preserves_marginal: bool = False
     """Whether :meth:`pair` leaves x1's marginal law untouched.
 
-    True for pure re-orderings; False for anything data-dependent. Defaults
-    to False — a custom coupling must opt in explicitly, because a wrong
-    True samples from the wrong start silently while a wrong False merely
-    demands an explicit prior.
+    True for pure re-orderings; False for anything that reshapes the values.
+    Defaults to False — a custom coupling must opt in explicitly, because a
+    wrong True samples from the wrong start silently while a wrong False
+    merely demands an explicit prior.
+    """
+
+    independent_pairs: bool = False
+    """Whether :meth:`pair` assigns endpoints without looking at the values.
+
+    The conditional statement the one-sided Gaussian kernel needs: with a
+    value-independent pairing, p(x1 | x0) is still the prior's marginal.
+    Implies :attr:`preserves_marginal`, but not conversely — an optimal
+    assignment preserves the marginal while biasing each x0's partner
+    toward it. Defaults to False for the same reason as above: a wrong True
+    trains a biased score/noise head silently, a wrong False merely refuses
+    those targets and asks for a conditional-expectation one.
     """
 
     @abc.abstractmethod
@@ -145,6 +165,7 @@ class IdentityCoupling(Coupling):
     """
 
     preserves_marginal = True
+    independent_pairs = True
 
     def pair(self, x0, x1, groups=None):
         # the identity permutation is block-diagonal under any labelling, so
@@ -167,7 +188,11 @@ class PermutationCoupling(Coupling):
     rest is flattened into the cost's feature vector — for positions that is
     atoms in 3D, so the assignment pairs each atom with the nearest noise
     point. Because re-ordering exchangeable draws leaves the marginal
-    untouched, ``preserves_marginal`` holds; only the joint with x0 changes.
+    untouched, ``preserves_marginal`` holds; but the assignment *looks at
+    the values*, so ``independent_pairs`` does not: conditionally on x0 the
+    chosen partner is the closest draw, not a Gaussian one. The one-sided
+    kernel is gone with it — train a velocity, x0 or pseudo-force head on
+    this coupling, not a score/noise one.
 
     Pass ``groups`` to keep the assignment inside sets of interchangeable rows:
     one solve per block instead of one global solve. For a collated batch of
@@ -288,7 +313,10 @@ class OTCoupling(Coupling):
     number of sampling steps. Lands with the OT milestone; the plan is a
     POT-based ``emd`` solve over the squared-distance cost, falling back to a
     torch-only Sinkhorn when POT is absent. Like the permutation special
-    case, re-pairing leaves x1's marginal untouched.
+    case, re-pairing leaves x1's marginal untouched — and like there, the
+    assignment is value-dependent, so the one-sided kernel does not survive
+    (``independent_pairs`` stays False): pair with conditional-expectation
+    targets (velocity, x0, pseudo-force).
     """
 
     preserves_marginal = True

@@ -12,7 +12,7 @@ from schnetpack.generative.integrators.base import Integrator
 from schnetpack.generative.parametrizations import Parametrization
 from schnetpack.generative.priors import Prior
 from schnetpack.generative.processes import Process
-from schnetpack.generative.reverse import ReverseProcess
+from schnetpack.generative.reverse import reverse
 
 __all__ = ["DirectDenoisingSampler", "Sampler"]
 
@@ -72,6 +72,13 @@ class Sampler:
             t_max: time to start integration from (default: ``process.t_max``)
         """
         parametrization.validate(process)
+        # Validity settles here, not mid-run: if anything in this assembly
+        # will cross the (f, g) chart — stochastic sampling, a non-velocity
+        # head's conversion, an ancestral integrator — acquire the chart
+        # once now, so a configuration without it fails with the obstruction
+        # named instead of sampling garbage.
+        if churn > 0.0 or parametrization.velocity_needs_chart or integrator.requires_sde:
+            process.sde()
         self.process = process
         self.parametrization = parametrization
         self.integrator = integrator
@@ -142,10 +149,15 @@ class Sampler:
             cond: conditioning passed through to the model
         """
         ts = self.grid(t_start, self.t_min, n_steps, dtype=x_t.dtype, device=x_t.device)
-        reverse = ReverseProcess(
-            self.process, self.parametrization, model, churn=self.churn, cond=cond
+        rev = reverse(
+            self.process,
+            self.parametrization,
+            model,
+            churn=self.churn,
+            cond=cond,
+            require_sde=self.integrator.requires_sde,
         )
-        return self.integrator.integrate(reverse, x_t, ts)
+        return self.integrator.integrate(rev, x_t, ts)
 
 
 class DirectDenoisingSampler:
