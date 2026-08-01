@@ -24,7 +24,7 @@ class Integrator(abc.ABC):
     discretize through the chart itself — the ancestral steps, which read
     the exact posterior or the raw score — so the
     :class:`~schnetpack.generative.sampler.Sampler` can demand a
-    :class:`~schnetpack.generative.sde.ReverseSDE` at assembly instead of
+    :class:`~schnetpack.generative.differential_equations.ReverseSDE` at assembly instead of
     failing mid-run.
     """
 

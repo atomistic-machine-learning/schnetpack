@@ -16,7 +16,7 @@ class Ancestral(Integrator):
 
     i.e. estimate x0 from the model, then draw from the closed-form Gaussian
     posterior of the chart
-    (:meth:`~schnetpack.generative.sde.SDE.posterior`). Schedule
+    (:meth:`~schnetpack.generative.differential_equations.SDE.posterior`). Schedule
     logic lives entirely in that closed form, so one class covers every
     process with a Gaussian kernel: on VP it is the textbook DDPM ancestral
     step with the exact (beta-tilde) posterior variance, on VE it reduces to
@@ -25,7 +25,7 @@ class Ancestral(Integrator):
 
     Like :class:`AncestralDDPM` it discretizes the reverse process through
     something other than drift/diffusion — here the
-    :class:`~schnetpack.generative.sde.ReverseSDE`'s ``x0`` and its chart's
+    :class:`~schnetpack.generative.differential_equations.ReverseSDE`'s ``x0`` and its chart's
     posterior — and, being intrinsically stochastic, it ignores the reverse
     process's ``churn``. ``requires_sde`` is how it says so: the Sampler
     then assembles a ReverseSDE even at churn = 0, and a configuration
@@ -50,7 +50,7 @@ class AncestralDDPM(Integrator):
     i.e. a particular discretization of the reverse VP process. Unlike the
     generic solvers it is written in terms of the raw score rather than the
     drift, so it needs a
-    :class:`~schnetpack.generative.sde.ReverseSDE` (for its ``g2``
+    :class:`~schnetpack.generative.differential_equations.ReverseSDE` (for its ``g2``
     and ``score``) built on a VP-type path — hence ``requires_sde``. That is
     a deliberate exception to the rule that integrators see only drift and
     diffusion: the step *is* a statement about the score, and rewriting it

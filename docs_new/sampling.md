@@ -1,8 +1,8 @@
 # Sampling: reverse processes, integrators, grids, samplers
 
-*Modules: `schnetpack.generative.sde`, `.reverse`, `.integrators`,
-`.grids`, `.sampler` · classes `ReverseSDE`, `ReverseODE` (assembled by
-`reverse()`), `Integrator`, `EulerMaruyama`, `Heun`, `Ancestral`,
+*Modules: `schnetpack.generative.differential_equations`, `.integrators`,
+`.grids`, `.sampler` · classes `SDE`, `ReverseSDE`, `ReverseODE` (assembled
+by `reverse()`), `Integrator`, `EulerMaruyama`, `Heun`, `Ancestral`,
 `AncestralDDPM`, `TimeGrid`, `UniformGrid`, `Sampler`,
 `DirectDenoisingSampler`.*
 

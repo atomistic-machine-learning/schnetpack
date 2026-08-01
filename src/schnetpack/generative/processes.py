@@ -56,7 +56,7 @@ arXiv:2303.08797) under a shape prior, with no second hierarchy.
 **The SDE chart lives elsewhere.** When the kernel holds, the same marginals
 admit the linear SDE dx = f x dt + g dw, and everything built on it — f,
 g^2, the perturbation kernel, the exact posterior that ancestral sampling
-and DDIM discretize. That machinery is :class:`~schnetpack.generative.sde.SDE`,
+and DDIM discretize. That machinery is :class:`~schnetpack.generative.differential_equations.SDE`,
 acquired via :meth:`Process.sde`, whose *construction* is the kernel check:
 a configuration without the kernel cannot obtain the chart, and the error
 names the obstruction. This file owns only what every process has — the
@@ -88,7 +88,7 @@ from typing import TYPE_CHECKING, Callable, Optional, Tuple
 import torch
 
 if TYPE_CHECKING:
-    from schnetpack.generative.sde import SDE
+    from schnetpack.generative.differential_equations import SDE
 
 from schnetpack.generative.couplings import Coupling, IdentityCoupling
 from schnetpack.generative.priors import GaussianPrior, Prior
@@ -326,7 +326,7 @@ class Process(abc.ABC):
         two, and — for a schedule defined the TV/SNR way — the derivative of
         the closed form the subclass actually wrote, with no a or b formed
         along the way and so no quotient to degenerate. That is what makes
-        the chart's diffusion (:meth:`~schnetpack.generative.sde.SDE.g2`)
+        the chart's diffusion (:meth:`~schnetpack.generative.differential_equations.SDE.g2`)
         well behaved on schedules whose a reaches zero.
 
         Non-positive for any sensible schedule — signal only ever turns into
@@ -614,11 +614,11 @@ class Process(abc.ABC):
         gamma is still Gaussian, but then sigma^2 = b^2 std^2 + gamma^2 —
         fold it into the noise coefficient first). Those are exactly the
         assumptions behind the score/noise training targets and the closed
-        forms on the :class:`~schnetpack.generative.sde.SDE` chart.
+        forms on the :class:`~schnetpack.generative.differential_equations.SDE` chart.
 
         Returns the first failed condition as a readable sentence, so the
         callers that must refuse — the score/noise parametrizations'
-        ``validate``, the :class:`~schnetpack.generative.sde.SDE`
+        ``validate``, the :class:`~schnetpack.generative.differential_equations.SDE`
         constructor — can say *why*.
         """
         if not self.prior.gaussian:
@@ -667,13 +667,13 @@ class Process(abc.ABC):
         so this raises, naming the obstruction, for any other configuration;
         acquiring the chart *is* the validity check. Consumers that need
         f, g^2 or the Gaussian closed forms (kernel, posterior) acquire it
-        at their own construction — see :mod:`schnetpack.generative.sde` —
+        at their own construction — see :mod:`schnetpack.generative.differential_equations` —
         so an invalid assembly fails there rather than mid-run. The routes
         that never form the chart (velocity sampling at churn = 0, direct
         x0/pseudo-force recovery) never call this.
         """
         # Local import: sde.py imports Process for its type and helpers.
-        from schnetpack.generative.sde import SDE
+        from schnetpack.generative.differential_equations import SDE
 
         return SDE(self)
 

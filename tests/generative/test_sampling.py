@@ -25,7 +25,7 @@ from schnetpack.generative import (
     generate,
 )
 from schnetpack.generative import MatchingLoss
-from schnetpack.generative.reverse import ReverseODE, reverse
+from schnetpack.generative.differential_equations import ReverseODE, reverse
 
 
 @pytest.fixture

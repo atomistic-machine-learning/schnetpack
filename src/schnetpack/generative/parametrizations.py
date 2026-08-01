@@ -7,8 +7,8 @@ method takes the
 to, and the consumers that need both — :class:`~schnetpack.generative.transforms.Diffuse`,
 :class:`~schnetpack.generative.losses.MatchingLoss`,
 :class:`~schnetpack.generative.sampler.Sampler`, the reverse processes
-(:class:`~schnetpack.generative.sde.ReverseSDE`,
-:class:`~schnetpack.generative.reverse.ReverseODE`) — take the pair
+(:class:`~schnetpack.generative.differential_equations.ReverseSDE`,
+:class:`~schnetpack.generative.differential_equations.ReverseODE`) — take the pair
 ``(process, parametrization)`` explicitly. It owns both directions of the
 contract with a generative head:
 
@@ -51,7 +51,7 @@ Two identities are load-bearing and worth stating up front.
 2. The Anderson (1982) reverse-time drift f x - 1/2 (1 + eta^2) g^2 s equals
    v - 1/2 eta^2 g^2 s. So the reverse process is a one-knob family around the
    velocity, with ``churn = eta^2`` (see
-   :mod:`schnetpack.generative.reverse`). At churn = 0 a velocity-predicting
+   :mod:`schnetpack.generative.differential_equations`). At churn = 0 a velocity-predicting
    model is used directly, and the singular velocity -> score conversion never
    runs.
 
@@ -111,8 +111,8 @@ class Parametrization(abc.ABC):
     score and the probability-flow identity v = f x - 1/2 g^2 s, both chart
     statements. A parametrization whose head *is* the velocity overrides
     this to False — its conversion returns the output untouched — which is
-    what lets :func:`~schnetpack.generative.reverse.reverse` assemble a
-    chart-free :class:`~schnetpack.generative.reverse.ReverseODE` for it at
+    what lets :func:`~schnetpack.generative.differential_equations.reverse` assemble a
+    chart-free :class:`~schnetpack.generative.differential_equations.ReverseODE` for it at
     churn = 0, the one reverse route valid for any endpoint law.
     """
 

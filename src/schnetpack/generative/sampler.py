@@ -12,7 +12,7 @@ from schnetpack.generative.integrators.base import Integrator
 from schnetpack.generative.parametrizations import Parametrization
 from schnetpack.generative.priors import Prior
 from schnetpack.generative.processes import Process
-from schnetpack.generative.reverse import reverse
+from schnetpack.generative.differential_equations import reverse
 
 __all__ = ["DirectDenoisingSampler", "Sampler"]
 

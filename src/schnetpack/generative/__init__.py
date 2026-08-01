@@ -18,13 +18,19 @@ cases with bespoke logic:
   configuration (:attr:`~processes.Process.has_gaussian_kernel`), not from
   the class: the same schedule is a Gaussian diffusion under a Gaussian
   prior and a general stochastic interpolant under a structured one.
-- :mod:`~schnetpack.generative.sde` — the (f, g) chart of a process: the
-  linear SDE sharing the interpolant's marginals, with the drift f, the
-  diffusion g^2 and the Gaussian closed forms (perturbation kernel, exact
-  posterior). Acquired via :meth:`~processes.Process.sde`, whose
-  construction *is* the Gaussian-kernel check — configurations without the
-  kernel cannot obtain the chart, and the consumers that need it fail at
-  assembly with the obstruction named.
+- :mod:`~schnetpack.generative.differential_equations` — the process's
+  continuous-time dynamics. The (f, g) chart (``SDE``): the linear SDE
+  sharing the interpolant's marginals, with the drift f, the diffusion g^2
+  and the Gaussian closed forms (perturbation kernel, exact posterior),
+  acquired via :meth:`~processes.Process.sde`, whose construction *is* the
+  Gaussian-kernel check — configurations without the kernel cannot obtain
+  the chart, and the consumers that need it fail at assembly with the
+  obstruction named. And its reversal: a single churn knob spanning the
+  probability-flow ODE (churn = 0) and the reverse-time SDE (churn = 1),
+  never implemented per schedule but split by capability —
+  :func:`~differential_equations.reverse` assembles the chart-free
+  ``ReverseODE`` when nothing needs the chart and the ``ReverseSDE``
+  otherwise.
 - :mod:`~schnetpack.generative.priors` — what the x1 endpoint *is*: the
   distribution drawn at both training time (per data sample) and sampling
   time (the start state). Isotropic Gaussian for VE/VP/FM; structured
@@ -63,12 +69,6 @@ must name the *same* pair — share the objects, don't rebuild them.
 
 Around them:
 
-- :mod:`~schnetpack.generative.reverse` — reverse processes, derived from a
-  process, a parametrization and a model, with a single churn knob spanning
-  the probability-flow ODE (churn = 0) and the reverse-time SDE (churn = 1).
-  Never implemented per schedule; split by capability instead —
-  :func:`~reverse.reverse` assembles the chart-free ``ReverseODE`` when
-  nothing needs the chart and the ``ReverseSDE`` otherwise.
 - :mod:`~schnetpack.generative.losses` — score, flow and bridge matching as one
   training step.
 - :mod:`~schnetpack.generative.transforms` — the same training step as a
@@ -99,8 +99,7 @@ from schnetpack.generative.losses import *
 from schnetpack.generative.parametrizations import *
 from schnetpack.generative.priors import *
 from schnetpack.generative.processes import *
-from schnetpack.generative.reverse import *
+from schnetpack.generative.differential_equations import *
 from schnetpack.generative.sampler import *
-from schnetpack.generative.sde import *
 from schnetpack.generative.times import *
 from schnetpack.generative.transforms import *
