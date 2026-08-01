@@ -9,7 +9,13 @@ from .base import Transform
 from dirsync import sync
 import numpy as np
 from typing import Optional, Dict, List
-from vesin import NeighborList as vesin_nl
+try:
+    from vesin import NeighborList as vesin_nl
+except ImportError:
+    # vesin is a declared dependency, but environments built before it was
+    # added (e.g. older containers) should still import; only
+    # VesinNeighborList actually needs it.
+    vesin_nl = None
 
 __all__ = [
     "ASENeighborList",
@@ -232,6 +238,11 @@ class VesinNeighborList(NeighborListTransform):
     """
 
     def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
+        if vesin_nl is None:
+            raise ImportError(
+                "VesinNeighborList requires the 'vesin' package "
+                "(pip install vesin)."
+            )
         pos_np, cell_np, pbc_np_bool, pbc_np_int = self._convert_inputs_to_numpy(
             Z, positions, cell, pbc
         )
