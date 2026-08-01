@@ -4,7 +4,6 @@ from typing import Optional, Dict, List
 from schnetpack.data import *
 from schnetpack.datasets.md17 import GDMLDataModule
 
-
 all = ["MD22"]
 
 

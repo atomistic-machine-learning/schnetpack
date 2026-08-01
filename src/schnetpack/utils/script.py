@@ -8,7 +8,6 @@ from pytorch_lightning.utilities import rank_zero_only
 from rich.syntax import Syntax
 from rich.tree import Tree
 
-
 __all__ = ["log_hyperparameters", "print_config"]
 
 

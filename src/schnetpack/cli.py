@@ -21,7 +21,6 @@ from schnetpack.train import PredictionWriter
 from schnetpack import properties
 from schnetpack.utils import load_model
 
-
 log = logging.getLogger(__name__)
 
 

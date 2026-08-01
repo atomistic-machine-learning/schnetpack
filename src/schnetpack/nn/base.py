@@ -7,7 +7,6 @@ from torch.nn.init import xavier_uniform_
 
 from torch.nn.init import zeros_
 
-
 __all__ = ["Dense"]
 
 

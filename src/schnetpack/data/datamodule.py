@@ -21,7 +21,6 @@ from schnetpack.data import (
     RandomSplit,
 )
 
-
 __all__ = ["AtomsDataModule", "AtomsDataModuleError"]
 
 

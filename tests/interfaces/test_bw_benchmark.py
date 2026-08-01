@@ -17,7 +17,6 @@ from .test_bw_optimizer import (
     spk_calculator,
 )
 
-
 # ensure that batch size appears in ascending order
 N_VALUES = [pytest.param(n, id=f"{n:02d}") for n in (1, 3, 9, 18)]
 ROUNDS = 3

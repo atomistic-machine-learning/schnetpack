@@ -26,7 +26,6 @@ from schnetpack.interfaces.batchwise_optimization import (
 )
 from schnetpack.utils.compatibility import load_model
 
-
 TESTDATA = os.path.join(os.path.dirname(__file__), "..", "testdata")
 MODEL_PATH = os.path.join(TESTDATA, "md_ethanol.model")
 STRUCTURE_PATH = os.path.join(TESTDATA, "ethanol_conformers.xyz")

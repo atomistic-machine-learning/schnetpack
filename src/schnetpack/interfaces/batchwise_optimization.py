@@ -22,7 +22,6 @@ from schnetpack.interfaces.ase_interface import AtomsConverter
 from schnetpack import properties
 from schnetpack.utils.compatibility import load_model
 
-
 __all__ = [
     "ASEBatchwiseLBFGS",
     "BatchwiseCalculator",

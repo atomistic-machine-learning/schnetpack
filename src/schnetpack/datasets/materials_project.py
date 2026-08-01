@@ -9,7 +9,6 @@ import numpy as np
 from schnetpack.data import *
 from schnetpack.data import AtomsDataModuleError, AtomsDataModule
 
-
 __all__ = ["MaterialsProject"]
 
 

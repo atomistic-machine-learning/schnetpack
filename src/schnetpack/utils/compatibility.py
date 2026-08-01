@@ -2,7 +2,6 @@ import torch
 import warnings
 from typing import Any, Union
 
-
 __all__ = ["load_model"]
 
 

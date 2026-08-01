@@ -5,7 +5,6 @@ from typing import Union, Callable, Dict, Optional
 from schnetpack import properties
 import schnetpack.units as spk_units
 
-
 __all__ = ["CovalentBond"]
 
 
