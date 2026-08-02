@@ -42,6 +42,7 @@ Neighbor lists
     ASENeighborList
     VesinNeighborList
     TorchNeighborList
+    AllToAllNeighborList
     CachedNeighborList
     CountNeighbors
     FilterNeighbors

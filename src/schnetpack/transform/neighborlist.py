@@ -18,6 +18,7 @@ except ImportError:
     vesin_nl = None
 
 __all__ = [
+    "AllToAllNeighborList",
     "ASENeighborList",
     "MatScipyNeighborList",
     "VesinNeighborList",
@@ -295,6 +296,42 @@ class MatScipyNeighborList(NeighborListTransform):
         offset = torch.mm(S, cell)
 
         return idx_i, idx_j, offset
+
+
+class AllToAllNeighborList(Transform):
+    """
+    Every ordered pair (i, j), i != j, is a neighbor — no cutoff, no cell.
+
+    For finite systems whose positions range over the whole schedule of a
+    diffusion process: a distance-based list built on x_t at one noise level
+    is wrong at another, and with a cutoff chosen to cover the noised scale
+    anyway (e.g. GPFF's 5 * sigma_max) the distance search finds all pairs at
+    distance-search cost. This transform states that directly. Pairs beyond
+    the model's cutoff function contribute zero, so it is numerically
+    identical to any distance list whose cutoff the cutoff function covers.
+
+    Periodic systems need a real neighbor list — cells are ignored here and
+    offsets are zero.
+    """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
+
+    def forward(
+        self,
+        inputs: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+        n_atoms = inputs[properties.Z].shape[0]
+        idx = torch.arange(n_atoms)
+        idx_i = idx.repeat_interleave(n_atoms)
+        idx_j = idx.repeat(n_atoms)
+        keep = idx_i != idx_j
+        inputs[properties.idx_i] = idx_i[keep]
+        inputs[properties.idx_j] = idx_j[keep]
+        inputs[properties.offsets] = torch.zeros(
+            (n_atoms * (n_atoms - 1), 3), dtype=inputs[properties.R].dtype
+        )
+        return inputs
 
 
 class SkinNeighborList(Transform):
