@@ -1,4 +1,4 @@
-"""Compare ``ASEBatchwiseLBFGS`` against a sequential loop over ase ``LBFGS``.
+"""Compare ``BatchwiseLBFGS`` against a sequential loop over ase ``LBFGS``.
 
 The comparison is on the outcome of the relaxation only: both optimizers must land in
 the same minima, and a structure must relax the same way alone as inside a batch. Wall
@@ -19,10 +19,15 @@ from ase.io import read
 from ase.optimize import LBFGS
 
 import schnetpack as spk
-from schnetpack.interfaces.ase_interface import AtomsConverter, SpkCalculator
+from schnetpack import properties
+from schnetpack.interfaces.ase_interface import (
+    AtomsConverter,
+    SpkCalculator,
+    batch_to_atoms,
+)
 from schnetpack.interfaces.batchwise_optimization import (
-    ASEBatchwiseLBFGS,
     BatchwiseCalculator,
+    BatchwiseLBFGS,
 )
 from schnetpack.utils.compatibility import load_model
 
@@ -36,6 +41,7 @@ N_STRUCTURES = 9  # multiple of number of conformers
 NOISE = 0.05  # added to atomic positions
 FMAX = 0.01
 MAX_STEPS = 200
+CUTOFF_SKIN = 0.3  # Ang, reuse the neighbor list while atoms move less than half
 ENERGY_UNIT = "kcal/mol"
 POSITION_UNIT = "Ang"
 
@@ -48,9 +54,23 @@ class RelaxationResult:
     steps: List[int]  # optimizer steps, per structure for the sequential run
 
 
-def _neighbor_list():
+def _neighbor_list(cutoff_skin: float = 0.0):
+    """The neighbor list both optimizers get.
+
+    ``cutoff_skin > 0`` wraps it in a ``SkinNeighborList``, which lets a relaxation
+    reuse the previous list while no atom has moved more than half the skin. That is
+    what makes the batch-wise path worth using, so the batch-wise optimizer gets it
+    and the sequential ase reference does not (ase rebuilds per structure anyway).
+    """
     model = load_model(MODEL_PATH, device=DEVICE)
-    return spk.transform.MatScipyNeighborList(cutoff=model.representation.cutoff.item())
+    neighbor_list = spk.transform.MatScipyNeighborList(
+        cutoff=model.representation.cutoff.item()
+    )
+    if cutoff_skin > 0.0:
+        neighbor_list = spk.transform.SkinNeighborList(
+            neighbor_list=neighbor_list, cutoff_skin=cutoff_skin
+        )
+    return neighbor_list
 
 
 def spk_calculator():
@@ -77,12 +97,14 @@ def make_structures(n_structures: int = N_STRUCTURES) -> List[Atoms]:
     return structures
 
 
-def build_batchwise_optimizer(atoms_list: List[Atoms]) -> ASEBatchwiseLBFGS:
+def build_batchwise_optimizer(atoms_list: List[Atoms]) -> BatchwiseLBFGS:
     """Everything needed to relax a batch, short of actually running it.
 
     Kept separate from the run so the benchmark can time only the relaxation.
     """
-    converter = AtomsConverter(neighbor_list=_neighbor_list(), device=DEVICE)
+    converter = AtomsConverter(
+        neighbor_list=_neighbor_list(cutoff_skin=CUTOFF_SKIN), device=DEVICE
+    )
     calculator = BatchwiseCalculator(
         model=MODEL_PATH,
         atoms_converter=converter,
@@ -93,24 +115,22 @@ def build_batchwise_optimizer(atoms_list: List[Atoms]) -> ASEBatchwiseLBFGS:
     inputs = converter(deepcopy(atoms_list))
 
     n_atoms = len(atoms_list[0])
-    return ASEBatchwiseLBFGS(
+    return BatchwiseLBFGS(
         calculator=calculator,
         inputs=inputs,
         logfile=None,
-        trajectory=None,
-        log_every_step=False,
         fixed_atoms_mask=[False] * (n_atoms * len(atoms_list)),
-        device=DEVICE,
     )
 
 
 def relax_batchwise(atoms_list: List[Atoms]) -> RelaxationResult:
-    """Relax a batch of structures in parallel with ``ASEBatchwiseLBFGS``."""
+    """Relax a batch of structures in parallel with ``BatchwiseLBFGS``."""
     optimizer = build_batchwise_optimizer(atoms_list)
     optimizer.run(fmax=FMAX, steps=MAX_STEPS)
 
+    # the optimizer hands back tensors; ase structures are a boundary conversion
     relaxed, _ = optimizer.get_relaxation_results()
-    return RelaxationResult(atoms=relaxed, steps=[optimizer.nsteps])
+    return RelaxationResult(atoms=batch_to_atoms(relaxed), steps=[optimizer.nsteps])
 
 
 def relax_sequential(atoms_list: List[Atoms], calculator) -> RelaxationResult:
@@ -210,3 +230,45 @@ def test_batch_size_invariance(batchwise_result, single_structure_atoms):
             f"structure {idx} relaxed differently inside a batch of {N_STRUCTURES} "
             f"than on its own: max deviation {deviation:.2e} Ang"
         )
+
+
+@pytest.mark.parametrize("trajectory_interval", [0, 1])
+def test_forces_are_computed_once_per_step(
+    initial_structures, tmp_path, trajectory_interval
+):
+    """The convergence check, the frame written from it, and the step share one call.
+
+    The calculator caches its results and decides whether they are still valid from
+    the identity and mutation counter of the position tensor. If that check ever goes
+    wrong in the conservative direction, relaxations silently cost twice as much.
+    Writing a frame on every step must not cost a second call either, which is why
+    ``trajectory_interval=1`` is covered here too.
+    """
+    optimizer = build_batchwise_optimizer(initial_structures[:3])
+    optimizer.trajectory = str(tmp_path / "relax.hdf5")
+    optimizer.trajectory_interval = trajectory_interval
+    calculate = optimizer.calculator.calculate
+    calls = []
+
+    def counting_calculate(inputs):
+        calls.append(None)
+        return calculate(inputs)
+
+    optimizer.calculator.calculate = counting_calculate
+    optimizer.run(fmax=FMAX, steps=MAX_STEPS)
+    optimizer.close()
+
+    # one for the initial forces, one per step taken
+    assert len(calls) == optimizer.nsteps + 1
+
+
+def test_cached_forces_are_dropped_when_the_positions_move(initial_structures):
+    """The other direction: a structure that changed must not return stale forces."""
+    optimizer = build_batchwise_optimizer(initial_structures[:2])
+    calculator, inputs = optimizer.calculator, optimizer.inputs
+
+    before = calculator.get_forces(inputs).clone()
+    assert torch.equal(calculator.get_forces(inputs), before), "cache should have hit"
+
+    inputs[properties.R] += 0.1
+    assert not torch.equal(calculator.get_forces(inputs), before)

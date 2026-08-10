@@ -129,3 +129,5 @@ interfaces/lammps/examples/*/deployed_model
 
 # batchwise optimizer examples
 examples/howtos/howto_batchwise_relaxations_outputs/*
+
+.plans

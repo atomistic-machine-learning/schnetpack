@@ -1,4 +1,4 @@
-"""Wall clock scaling of ``ASEBatchwiseLBFGS`` against sequential ase ``LBFGS``.
+"""Wall clock scaling of ``BatchwiseLBFGS`` against sequential ase ``LBFGS``.
 
 Nothing here asserts on time, since wall clock thresholds are machine dependent.
 

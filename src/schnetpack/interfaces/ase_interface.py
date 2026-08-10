@@ -12,7 +12,6 @@ References
 """
 
 import os
-import time
 import ase
 import numpy as np
 from abc import ABC, abstractmethod
@@ -48,7 +47,13 @@ from typing import Optional, List, Union, Dict
 
 log = logging.getLogger(__name__)
 
-__all__ = ["SpkCalculator", "AseInterface", "AtomsConverter", "SpkEnsembleCalculator"]
+__all__ = [
+    "SpkCalculator",
+    "AseInterface",
+    "AtomsConverter",
+    "SpkEnsembleCalculator",
+    "batch_to_atoms",
+]
 
 
 class AtomsConverterError(Exception):
@@ -118,9 +123,6 @@ class AtomsConverter:
         else:
             raise AtomsConverterError(f"Unrecognized precision {dtype}")
 
-        self.converter_time = 0.0
-        self.converter_iterations = 0
-
     def __call__(self, atoms: List[Atoms] or Atoms):
         """
 
@@ -130,8 +132,6 @@ class AtomsConverter:
         Returns:
             dict[str, torch.Tensor]: input batch for model.
         """
-
-        ts = time.time()
 
         # check input type and prepare for conversion
         if type(atoms) == list:
@@ -185,10 +185,6 @@ class AtomsConverter:
             self.previous_idx_j = inputs[properties.idx_j]
             self.previous_offsets = inputs[properties.offsets]
 
-        te = time.time()
-        self.converter_time += te - ts
-        self.converter_iterations += 1
-
         return inputs
 
     def _requires_new_nbh_list(self, inputs):
@@ -214,37 +210,37 @@ class AtomsConverter:
         return True
 
     def _transform_inputs(self, inputs):
-        n_configs = inputs["_n_atoms"].shape[0]
-        inputs_tmp = []
-        for config_idx in range(n_configs):
-            spl_input = {}
-            spl_input.update(
-                {
-                    properties.n_atoms: inputs[properties.n_atoms][
-                        config_idx
-                    ].unsqueeze(0)
-                }
-            )
-            spl_input.update(
-                {properties.Z: inputs[properties.Z][inputs["_idx_m"] == config_idx]}
-            )
-            spl_input.update(
-                {properties.R: inputs[properties.R][inputs["_idx_m"] == config_idx]}
-            )
-            spl_input.update(
-                {properties.cell: inputs[properties.cell][config_idx].unsqueeze(0)}
-            )
-            spl_input.update(
-                {properties.pbc: inputs[properties.pbc][config_idx].unsqueeze(0)}
-            )
-            spl_input.update(
-                {properties.idx: inputs[properties.idx][config_idx].unsqueeze(0)}
-            )
-            spl_input.update(self.additional_inputs)
+        """Split a batch back into single structures, re-run the transforms, recollate.
 
-            # Cast to double and move input batch to cpu
+        The neighbor lists are built per structure on cpu, so everything is moved
+        there in one go rather than once per structure and property.
+        """
+        n_atoms = inputs[properties.n_atoms].cpu()
+        cpu = torch.device("cpu")
+
+        # a batch is contiguous in _idx_m, so a single split replaces one boolean
+        # mask per structure and property
+        atomic_numbers = torch.split(inputs[properties.Z].cpu(), n_atoms.tolist())
+        positions = torch.split(inputs[properties.R].cpu(), n_atoms.tolist())
+        cells = inputs[properties.cell].cpu()
+        pbc = inputs[properties.pbc].cpu()
+        idx = inputs[properties.idx].cpu()
+        additional_inputs = {k: v.to(cpu) for k, v in self.additional_inputs.items()}
+
+        inputs_tmp = []
+        for config_idx in range(n_atoms.shape[0]):
+            spl_input = {
+                properties.n_atoms: n_atoms[config_idx].unsqueeze(0),
+                properties.Z: atomic_numbers[config_idx],
+                properties.R: positions[config_idx],
+                properties.cell: cells[config_idx].unsqueeze(0),
+                properties.pbc: pbc[config_idx].unsqueeze(0),
+                properties.idx: idx[config_idx].unsqueeze(0),
+            }
+            spl_input.update(additional_inputs)
+
+            # Cast to double, the precision the neighbor list providers expect
             spl_input = CastTo64()(spl_input)
-            spl_input = {p: spl_input[p].to(torch.device("cpu")) for p in spl_input}
 
             for transform in self.transforms:
                 spl_input = transform(spl_input)
@@ -258,8 +254,6 @@ class AtomsConverter:
         return inputs
 
     def update_inputs(self, inputs):
-
-        ts = time.time()
 
         if self.cutoff_skin is None:
             inputs = self._transform_inputs(inputs)
@@ -282,11 +276,40 @@ class AtomsConverter:
             inputs[properties.idx_j] = self.previous_idx_j
             inputs[properties.offsets] = self.previous_offsets
 
-        te = time.time()
-        self.converter_time += te - ts
-        self.converter_iterations += 1
-
         return inputs
+
+
+def batch_to_atoms(inputs: Dict[str, torch.Tensor]) -> List[Atoms]:
+    """Turn a schnetpack input batch back into ase structures.
+
+    The inverse of :meth:`AtomsConverter.__call__`, and the one place in schnetpack
+    that does this conversion -- code that works on batches of tensors (the batch-wise
+    optimizer, for instance) can stay free of ase and call this at its boundary.
+
+    Args:
+        inputs: input batch. Only positions, atomic numbers, cells, pbc and the atom
+            counts are read, so a batch straight out of an optimizer works.
+
+    Returns:
+        list(ase.Atoms): one structure per entry of the batch, in batch order.
+    """
+    n_atoms = inputs[properties.n_atoms].detach().cpu()
+    positions = inputs[properties.R].detach().cpu().numpy()
+    atomic_numbers = inputs[properties.Z].detach().cpu().numpy()
+    cells = inputs[properties.cell].detach().cpu().numpy().reshape(-1, 3, 3)
+    pbc = inputs[properties.pbc].detach().cpu().numpy().reshape(-1, 3)
+
+    # split rather than slice by a fixed width, so ragged batches work too
+    offsets = np.pad(np.cumsum(n_atoms.numpy()), (1, 0))
+    return [
+        Atoms(
+            positions=positions[offsets[idx] : offsets[idx + 1]],
+            numbers=atomic_numbers[offsets[idx] : offsets[idx + 1]],
+            cell=cells[idx],
+            pbc=pbc[idx],
+        )
+        for idx in range(len(n_atoms))
+    ]
 
 
 class SpkCalculatorError(Exception):
@@ -373,9 +396,6 @@ class SpkCalculator(Calculator):
 
         # Container for basic ml model ouputs
         self.model_results = None
-
-        self.total_fwd_time = 0.0
-        self.n_fwd_iterations = 0
 
     def _load_model(
         self,
