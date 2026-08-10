@@ -38,9 +38,8 @@ You are ready to go!
 Visualization with Tensorboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 SchNetPack supports multiple logging backends over PyTorch Lightning.
-The default logger is Tensorboard, which can be installed via::
-
-   $ pip install tensorboard
+The default logger is Tensorboard, which is installed automatically
+alongside SchNetPack.
 
 
 Training your first models
