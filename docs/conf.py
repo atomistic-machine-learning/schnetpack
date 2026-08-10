@@ -18,6 +18,7 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 import os
+import re
 import sys
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as get_version
