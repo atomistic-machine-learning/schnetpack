@@ -202,12 +202,13 @@ class NeighborListTransform(Transform):
         raise NotImplementedError
 
     def _convert_inputs_to_numpy(self, Z, positions, cell, pbc):
+        Z_np = Z.detach().cpu().numpy()
         pos_np = positions.detach().cpu().numpy()
         cell_np = cell.detach().cpu().numpy()
         pbc_np_bool = pbc.detach().cpu().numpy()
         pbc_np_int = pbc_np_bool.astype(int)
 
-        return pos_np, cell_np, pbc_np_bool, pbc_np_int
+        return Z_np, pos_np, cell_np, pbc_np_bool, pbc_np_int
 
 
 class ASENeighborList(NeighborListTransform):
@@ -216,7 +217,10 @@ class ASENeighborList(NeighborListTransform):
     """
 
     def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
-        at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
+        Z_np, pos_np, cell_np, pbc_np_bool, _ = self._convert_inputs_to_numpy(
+            Z, positions, cell, pbc
+        )
+        at = Atoms(numbers=Z_np, positions=pos_np, cell=cell_np, pbc=pbc_np_bool)
 
         idx_i, idx_j, S = ase_neighbor_list("ijS", at, cutoff, self_interaction=False)
         idx_i = torch.from_numpy(idx_i)
@@ -232,7 +236,7 @@ class VesinNeighborList(NeighborListTransform):
     """
 
     def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
-        pos_np, cell_np, pbc_np_bool, pbc_np_int = self._convert_inputs_to_numpy(
+        _, pos_np, cell_np, pbc_np_bool, _ = self._convert_inputs_to_numpy(
             Z, positions, cell, pbc
         )
 
@@ -266,7 +270,10 @@ class MatScipyNeighborList(NeighborListTransform):
     def _build_neighbor_list(
         self, Z, positions, cell, pbc, cutoff, eps=1e-6, buffer=1.0
     ):
-        at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
+        Z_np, pos_np, cell_np, pbc_np_bool, _ = self._convert_inputs_to_numpy(
+            Z, positions, cell, pbc
+        )
+        at = Atoms(numbers=Z_np, positions=pos_np, cell=cell_np, pbc=pbc_np_bool)
 
         # Add cell if none is present (volume = 0)
         if at.cell.volume < eps:
