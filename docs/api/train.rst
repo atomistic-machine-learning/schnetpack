@@ -1,6 +1,6 @@
 schnetpack.train
 ================
-.. currentmodule:: train
+.. currentmodule:: schnetpack.train
 
 
 Callbacks

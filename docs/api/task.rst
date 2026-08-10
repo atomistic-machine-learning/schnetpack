@@ -1,6 +1,6 @@
 schnetpack.task
 ===============
-.. currentmodule:: task
+.. currentmodule:: schnetpack.task
 
 .. autosummary::
     :toctree: generated

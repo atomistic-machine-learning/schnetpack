@@ -1,6 +1,6 @@
 schnetpack.md
 =============
-.. currentmodule:: md
+.. currentmodule:: schnetpack.md
 
 This module contains all functionality for performing various molecular dynamics simulations using SchNetPack.
 
@@ -18,7 +18,7 @@ System
 Initial Conditions
 ------------------
 
-.. currentmodule:: md.initial_conditions
+.. currentmodule:: schnetpack.md.initial_conditions
 
 .. autosummary::
     :toctree: generated
@@ -33,7 +33,7 @@ Initial Conditions
 Integrators
 -----------
 
-.. currentmodule:: md.integrators
+.. currentmodule:: schnetpack.md.integrators
 
 Integrators for NVE and NVT simulations:
 
@@ -60,7 +60,7 @@ Integrators for NPT simulations:
 Calculators
 -----------
 
-.. currentmodule:: md.calculators
+.. currentmodule:: schnetpack.md.calculators
 
 Basic calculators:
 
@@ -89,7 +89,7 @@ Neural network potentials and ORCA calculators:
 Neighbor List
 -------------
 
-.. currentmodule:: md.neighborlist_md
+.. currentmodule:: schnetpack.md.neighborlist_md
 
 .. autosummary::
     :toctree: generated
@@ -102,7 +102,7 @@ Neighbor List
 Simulator
 ---------
 
-.. currentmodule:: md
+.. currentmodule:: schnetpack.md
 
 .. autosummary::
     :toctree: generated
@@ -115,7 +115,7 @@ Simulator
 Simulation hooks
 ----------------
 
-.. currentmodule:: md.simulation_hooks
+.. currentmodule:: schnetpack.md.simulation_hooks
 
 Basic hooks:
 
@@ -193,7 +193,7 @@ Logging and callback
 Simulation data and postprocessing
 ----------------------------------
 
-.. currentmodule:: md.data
+.. currentmodule:: schnetpack.md.data
 
 Data loading:
 
@@ -220,7 +220,7 @@ Vibrational spectra:
 ORCA output parsing
 -------------------
 
-.. currentmodule:: md.parsers
+.. currentmodule:: schnetpack.md.parsers
 
 .. autosummary::
     :toctree: generated
@@ -238,7 +238,7 @@ ORCA output parsing
 MD utilities
 ------------
 
-.. currentmodule:: md.utils
+.. currentmodule:: schnetpack.md.utils
 
 .. autosummary::
     :toctree: generated
@@ -249,7 +249,7 @@ MD utilities
 
 Utilities for thermostats
 
-.. currentmodule:: md.utils.thermostat_utils
+.. currentmodule:: schnetpack.md.utils.thermostat_utils
 
 .. autosummary::
     :toctree: generated

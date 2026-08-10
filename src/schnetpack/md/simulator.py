@@ -166,12 +166,12 @@ class Simulator(nn.Module):
         """
         State dict used to restart the simulation. Generates a dictionary with
         the following entries:
+
             - step: current simulation step
             - systems: state dict of the system holding current positions,
-                       momenta, forces, etc...
+              momenta, forces, etc...
             - simulator_hooks: dict of state dicts of the various hooks used
-                               during simulation using their basic class
-                               name as keys.
+              during simulation using their basic class name as keys.
 
         Returns:
             dict: State dict containing the current step, the system

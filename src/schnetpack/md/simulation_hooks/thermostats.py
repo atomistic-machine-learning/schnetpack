@@ -193,7 +193,9 @@ class BerendsenThermostat(ThermostatHook):
 
 class LangevinThermostat(ThermostatHook):
     """
-    Basic stochastic Langevin thermostat, see e.g. [#langevin_thermostat1]_ for more details.
+    Basic stochastic Langevin thermostat.
+
+    See e.g. [#langevin_thermostat1]_ for more details.
 
     Args:
         temperature_bath (float): Temperature of the external heat bath in Kelvin.

@@ -378,9 +378,11 @@ class PIGLETThermostat(RPMDGLEThermostat):
 
 class NHCRingPolymerThermostat(NHCThermostat):
     """
-    Nose-Hoover chain thermostat for ring polymer molecular dynamics simulations as e.g. described in
-    [#stochastic_thermostats4]_. This is based on the massive setting of the standard NHC thermostat but operates in
-    the normal mode representation and uses specially initialized thermostat masses.
+    Nose-Hoover chain thermostat for ring polymer molecular dynamics simulations.
+
+    The scheme is described e.g. in [#stochastic_thermostats4]_. This is based on the massive
+    setting of the standard NHC thermostat but operates in the normal mode representation and
+    uses specially initialized thermostat masses.
 
     Args:
         temperature_bath (float): Temperature of the external heat bath in Kelvin.

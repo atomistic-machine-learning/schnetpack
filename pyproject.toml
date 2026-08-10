@@ -51,7 +51,7 @@ dev = ["pre-commit", "black[jupyter]==24.4.2"]
 doc = [
     "ipykernel",
     "nbsphinx",
-    "sphinx==7.1.2",
+    "sphinx",
     "sphinx_rtd_theme",
 ]
 

@@ -112,8 +112,9 @@ class VelocityVerlet(Integrator):
 
 class RingPolymer(Integrator):
     """
-    Integrator for ring polymer molecular dynamics, as e.g. described in
-    [#rpmd1]_
+    Integrator for ring polymer molecular dynamics.
+
+    The scheme is described e.g. in [#rpmd1]_.
 
     During the main step, ring polymer positions and momenta are transformed
     from bead to normal mode representation, propagated deterministically and

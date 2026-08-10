@@ -1,6 +1,6 @@
 schnetpack.representation
 =========================
-.. currentmodule:: representation
+.. currentmodule:: schnetpack.representation
 
 
 .. rubric:: Message-passing neural networks
