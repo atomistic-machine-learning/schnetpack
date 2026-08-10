@@ -55,7 +55,7 @@ def _neighbor_list():
 
 def spk_calculator():
     return SpkCalculator(
-        model_file=MODEL_PATH,
+        model=MODEL_PATH,
         neighbor_list=_neighbor_list(),
         device=DEVICE,
         energy_unit=ENERGY_UNIT,

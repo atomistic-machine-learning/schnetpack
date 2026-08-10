@@ -175,15 +175,10 @@ class NeighborListTransform(Transform):
         super().__init__()
         self._cutoff = cutoff
 
-        self.total_nbh_time = 0.0
-        self.n_nbh_iterations = 0
-
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-
-        ts = time.time()
 
         Z = inputs[properties.Z]
         R = inputs[properties.R]
@@ -194,11 +189,6 @@ class NeighborListTransform(Transform):
         inputs[properties.idx_i] = idx_i.detach()
         inputs[properties.idx_j] = idx_j.detach()
         inputs[properties.offsets] = offset
-
-        te = time.time()
-
-        self.total_nbh_time += te - ts
-        self.n_nbh_iterations += 1
 
         return inputs
 
@@ -341,24 +331,13 @@ class SkinNeighborList(Transform):
         self.distance_calculator = spk.atomistic.PairwiseDistances()
         self.previous_inputs = {}
 
-        self.total_nbh_time = 0.0
-        self.n_nbh_iterations = 0
-
     # @timeit
     def forward(
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
 
-        ts = time.time()
-
         update_required, inputs = self._update(inputs)
-
-        te = time.time()
-
-        if update_required:
-            self.total_nbh_time += te - ts
-            self.n_nbh_iterations += 1
 
         return inputs
 
