@@ -2,4 +2,4 @@ repos:
 -   repo: https://github.com/python/black
     rev: 24.4.2
     hooks:
-    - id: black
+    - id: black-jupyter

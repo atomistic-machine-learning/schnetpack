@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -47,14 +47,17 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-datadir", "pytest-benchmark"]
-dev = ["pre-commit", "black==24.4.2", "black[jupyter]==24.4.2"]
+dev = ["pre-commit", "black[jupyter]==24.4.2"]
 doc = [
     "ipykernel",
     "nbsphinx",
     "sphinx==7.1.2",
     "sphinx_rtd_theme",
-    "readthedocs-sphinx-search",
 ]
+
+[project.urls]
+Repository = "https://github.com/atomistic-machine-learning/schnetpack"
+Documentation = "https://schnetpack.readthedocs.io"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
