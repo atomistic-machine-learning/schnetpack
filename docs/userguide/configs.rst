@@ -6,7 +6,7 @@ Configuration and CLI
 SchNetPack models and tasks can be defined using hierarchical
 `Hydra <https://hydra.cc/>`_ config files in YAML format and modified using command
 line arguments. Here, we will introduce the structure and basic syntax of the
-configuration. Please refer to the `Hydra documentation <https://hydra.cc/>`_ for more
+configuration. Please refer to the `Hydra documentation <https://hydra.cc/>`__ for more
 extensive information.
 
 We will explain the structure of the config at the example of training PaiNN on QM9
@@ -240,7 +240,7 @@ designed it to provide a unique identifier that is cached using the provided arg
 i.e. calling ``${uuid:1}`` twice in your config will result in the same identifier.
 Calling it with another argument such as ``${uuid:2}`` will provide a second identifier.
 More information on available resolvers can be found in the 
-`Hydra documentation <https://hydra.cc/docs/configure_hydra/intro/#resolvers-provided-by-hydra>`_.
+`Hydra documentation <https://hydra.cc/docs/configure_hydra/intro/#resolvers-provided-by-hydra>`__.
 
 Defining experiments
 ====================

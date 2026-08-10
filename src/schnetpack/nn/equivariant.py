@@ -11,7 +11,8 @@ __all__ = ["GatedEquivariantBlock"]
 class GatedEquivariantBlock(nn.Module):
     """
     Gated equivariant block as used for the prediction of tensorial properties by PaiNN.
-    Transforms scalar and vector representation using gated nonlinearities.
+    Transforms scalar and vector representation using gated nonlinearities, as
+    introduced in [#painn1]_.
 
     References:
 

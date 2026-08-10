@@ -171,12 +171,12 @@ class NuclearEmbedding(nn.Module):
     def __init__(self, max_z: int, num_features: int, zero_init: bool = True):
         """
         Args:
-        num_features: Dimensions of feature space.
-        Zmax: Maximum nuclear charge of atoms. The default is 100, so all
-            elements up to Fermium (Fm) (Z=100) are supported.
-            Can be kept at the default value (has minimal memory impact).
-        zero_init: If True, initialize the embedding with zeros. Otherwise, use
-            uniform initialization.
+            num_features: Dimensions of feature space.
+            max_z: Maximum nuclear charge of atoms. The default is 100, so all
+                elements up to Fermium (Fm) (Z=100) are supported.
+                Can be kept at the default value (has minimal memory impact).
+            zero_init: If True, initialize the embedding with zeros. Otherwise, use
+                uniform initialization.
         """
         super(NuclearEmbedding, self).__init__()
         self.num_features = num_features

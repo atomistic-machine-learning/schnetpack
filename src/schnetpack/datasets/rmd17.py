@@ -58,10 +58,13 @@ class rMD17(DownloadableASEAtomsData):
     Revised MD17 benchmark dataset for molecular dynamics of small molecules
     containing molecular forces.
 
+    The raw data is provided by [#md17_1]_, see also [#md17_2]_.
+
     References:
-        .. [#md17_1] https://figshare.com/articles/dataset/
-            Revised_MD17_dataset_rMD17_/12672038?file=24013628
-        .. [#md17_2] http://quantum-machine.org/gdml/#datasets
+
+    .. [#md17_1] `Revised MD17 dataset (rMD17) on figshare
+       <https://figshare.com/articles/dataset/Revised_MD17_dataset_rMD17_/12672038>`_
+    .. [#md17_2] http://quantum-machine.org/gdml/#datasets
     """
 
     energy = "energy"

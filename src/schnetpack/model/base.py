@@ -27,8 +27,9 @@ class AtomisticModel(nn.Module):
     `input = self.postprocess(input)` at the end of its `forward`. The post processors
     will only be applied if `do_postprocessing=True`.
 
-    Example:
-         class SimpleModel(AtomisticModel):
+    Example::
+
+        class SimpleModel(AtomisticModel):
             def __init__(
                 self,
                 representation: nn.Module,

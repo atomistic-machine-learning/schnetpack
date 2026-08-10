@@ -22,6 +22,8 @@ class ISO17(DownloadableASEAtomsData):
     ISO17 benchmark dataset for molecular dynamics of C7O2H10 isomers
     containing molecular forces.
 
+    The raw data is provided by [#iso17]_.
+
     References:
 
     .. [#iso17] http://quantum-machine.org/datasets/

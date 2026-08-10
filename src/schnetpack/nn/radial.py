@@ -83,6 +83,8 @@ class BesselRBF(nn.Module):
     """
     Sine for radial basis functions with coulomb decay (0th order bessel).
 
+    Introduced in [#dimenet]_.
+
     References:
 
     .. [#dimenet] Klicpera, Groß, Günnemann:

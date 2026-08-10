@@ -17,9 +17,11 @@ class MaterialsProject(DownloadableASEAtomsData):
     This class adds convenient functions to download Materials Project data into
     pytorch.
 
+    The raw data is provided by [#matproj]_.
+
     References:
 
-        .. [#matproj] https://materialsproject.org/
+    .. [#matproj] https://materialsproject.org/
     """
 
     # properties

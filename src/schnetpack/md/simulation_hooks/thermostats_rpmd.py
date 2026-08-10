@@ -32,8 +32,10 @@ __all__ = [
 
 class PILELocalThermostat(LangevinThermostat):
     """
-    Langevin thermostat for ring polymer molecular dynamics as introduced in [#stochastic_thermostats2]_.
-    Applies specially initialized Langevin thermostats to the beads of the ring polymer in normal mode representation.
+    Langevin thermostat for ring polymer molecular dynamics.
+
+    Introduced in [#stochastic_thermostats2]_. Applies specially initialized Langevin
+    thermostats to the beads of the ring polymer in normal mode representation.
 
     Args:
         temperature_bath (float): Temperature of the external heat bath in Kelvin.
@@ -121,9 +123,11 @@ class PILELocalThermostat(LangevinThermostat):
 
 class PILEGlobalThermostat(PILELocalThermostat):
     """
-    Global variant of the ring polymer Langevin thermostat as suggested in [#stochastic_thermostats3]_. This thermostat
-    applies a stochastic velocity rescaling thermostat [#stochastic_velocity_rescaling1]_ to the ring polymer centroid
-    in normal mode representation.
+    Global variant of the ring polymer Langevin thermostat.
+
+    Suggested in [#stochastic_thermostats3]_. This thermostat applies a stochastic
+    velocity rescaling thermostat [#stochastic_velocity_rescaling1]_ to the ring polymer
+    centroid in normal mode representation.
 
     Args:
         temperature_bath (float): Temperature of the external heat bath in Kelvin.
@@ -210,9 +214,10 @@ class PILEGlobalThermostat(PILELocalThermostat):
 
 class TRPMDThermostat(PILELocalThermostat):
     """
-    Thermostatted ring polymer molecular dynamics thermostat variant of the local PILE thermostat as introduced in
-    [#trpmd_thermostat1]_. Here, no thermostat is applied to the centroid and the dynamics of the system are damped via
-    a given damping factor.
+    Thermostatted ring polymer molecular dynamics variant of the local PILE thermostat.
+
+    Introduced in [#trpmd_thermostat1]_. Here, no thermostat is applied to the centroid
+    and the dynamics of the system are damped via a given damping factor.
 
     Args:
         temperature_bath (float): Temperature of the external heat bath in Kelvin.
@@ -297,10 +302,11 @@ class RPMDGLEThermostat(GLEThermostat):
 
 class PIGLETThermostat(RPMDGLEThermostat):
     """
-    Efficient generalized Langevin equation stochastic thermostat for ring polymer dynamics simulations, see
-    [#piglet_thermostat1]_ for a detailed description. In contrast to the standard GLE thermostat, every normal mode
-    of the ring polymer is
-    thermostated seperately.
+    Efficient generalized Langevin equation stochastic thermostat for ring polymer
+    dynamics simulations.
+
+    See [#piglet_thermostat1]_ for a detailed description. In contrast to the standard
+    GLE thermostat, every normal mode of the ring polymer is thermostatted separately.
 
 
     Args:

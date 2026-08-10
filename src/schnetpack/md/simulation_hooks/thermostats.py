@@ -148,8 +148,10 @@ class ThermostatHook(SimulationHook):
 
 class BerendsenThermostat(ThermostatHook):
     """
-    Berendsen velocity rescaling thermostat, as described in [#berendsen1]_. Simple thermostat for e.g. equilibrating
-    the system, does not sample the canonical ensemble.
+    Berendsen velocity rescaling thermostat.
+
+    Simple thermostat for e.g. equilibrating the system, as described in [#berendsen1]_.
+    Does not sample the canonical ensemble.
 
     Args:
         temperature_bath (float): Temperature of the external heat bath in Kelvin.
@@ -263,8 +265,11 @@ class LangevinThermostat(ThermostatHook):
 
 class NHCThermostat(ThermostatHook):
     """
-    Nose-Hover chain thermostat, which links the system to a chain of deterministic Nose-Hoover thermostats first
-    introduced in [#nhc_thermostat1]_ and described in great detail in [#nhc_thermostat2]_. Advantage of the NHC
+    Nose-Hover chain thermostat, which links the system to a chain of deterministic
+    Nose-Hoover thermostats.
+
+    The scheme was first introduced in [#nhc_thermostat1]_ and is described in great
+    detail in [#nhc_thermostat2]_. Advantage of the NHC
     thermostat is, that it does not apply random perturbations to the system and is hence fully deterministic. However,
     this comes at an increased numerical cost compared to e.g. the stochastic thermostats described above.
 

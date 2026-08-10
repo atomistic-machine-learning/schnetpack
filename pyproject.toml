@@ -23,7 +23,7 @@ requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.0.0",
     "sympy>=1.13",
-    "ase>=3.21",
+    "ase>=3.23",
     "h5py",
     "pyyaml",
     "hydra-core>=1.1.0",

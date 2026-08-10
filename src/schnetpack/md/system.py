@@ -33,7 +33,8 @@ class System(UninitializedMixin, nn.Module):
 
     In order to simulate multiple systems efficiently dynamics properties
     (positions, momenta, forces) are torch tensors with the following
-    dimensions:
+    dimensions::
+
         n_replicas x (n_molecules * n_atoms) x 3
 
     Here n_replicas is the number of copies for every molecule. In a normal
@@ -45,7 +46,8 @@ class System(UninitializedMixin, nn.Module):
     same system (once again for sampling) or completely different molecules.
     Atoms of multiple molecules are concatenated.
 
-    Static properties are stored in tensors of the shape:
+    Static properties are stored in tensors of the shape::
+
         n_atoms : n_molecules (the same for all replicas)
         masses : 1 x (n_molecules * n_atoms) x 1 (the same for all replicas)
         atom_types : (n_molecules * n_atoms)

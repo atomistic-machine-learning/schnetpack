@@ -72,6 +72,9 @@ class SchNetInteraction(nn.Module):
 class SchNet(nn.Module):
     """SchNet architecture for learning representations of atomistic systems
 
+    Continuous-filter convolutional network for modeling quantum interactions
+    [#schnet1]_ [#schnet_transfer]_ [#schnet3]_.
+
     References:
 
     .. [#schnet1] Schütt, Arbabzadah, Chmiela, Müller, Tkatchenko:

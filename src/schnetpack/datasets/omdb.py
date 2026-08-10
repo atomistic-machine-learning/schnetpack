@@ -18,11 +18,13 @@ class OrganicMaterialsDatabase(DownloadableASEAtomsData):
     Registration to the OMDB is free for academic users. This database contains DFT
     (PBE) band gap (OMDB-GAP1 database) for 12500 non-magnetic materials.
 
+    The dataset is described in [#omdb]_.
+
     References:
 
-        .. [#omdb] Bart Olsthoorn, R. Matthias Geilhufe, Stanislav S. Borysov, Alexander V. Balatsky.
-           Band gap prediction for large organic crystal structures with machine learning.
-           https://arxiv.org/abs/1810.12814
+    .. [#omdb] Bart Olsthoorn, R. Matthias Geilhufe, Stanislav S. Borysov, Alexander V. Balatsky.
+       Band gap prediction for large organic crystal structures with machine learning.
+       https://arxiv.org/abs/1810.12814
     """
 
     BandGap = "band_gap"

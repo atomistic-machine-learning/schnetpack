@@ -154,8 +154,11 @@ class MD17(GDMLDataset):
     MD17 benchmark data set for molecular dynamics of small molecules
     containing molecular forces.
 
+    The raw data is provided by [#md17_1]_.
+
     References:
-        .. [#md17_1] http://quantum-machine.org/gdml/#datasets
+
+    .. [#md17_1] http://quantum-machine.org/gdml/#datasets
     """
 
     def __init__(

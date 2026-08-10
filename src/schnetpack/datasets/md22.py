@@ -9,8 +9,11 @@ class MD22(GDMLDataset):
     """
     MD22 benchmark data set for extended molecules containing molecular forces.
 
+    The raw data is provided by [#md22_1]_.
+
     References:
-        .. [#md22_1] http://quantum-machine.org/gdml/#datasets
+
+    .. [#md22_1] http://quantum-machine.org/gdml/#datasets
     """
 
     def __init__(

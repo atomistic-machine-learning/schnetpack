@@ -25,8 +25,11 @@ class ANI1(DownloadableASEAtomsData):
     This class adds convenience functions to download ANI1 from figshare and
     load the data into pytorch.
 
+    The dataset is described in [#ani1]_.
+
     References:
-        .. [#ani1] https://arxiv.org/abs/1708.04987
+
+    .. [#ani1] https://arxiv.org/abs/1708.04987
     """
 
     energy = "energy"

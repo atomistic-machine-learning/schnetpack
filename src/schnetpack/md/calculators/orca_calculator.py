@@ -20,10 +20,11 @@ __all__ = ["OrcaCalculator"]
 
 class OrcaCalculator(QMCalculator):
     """
-    Calculator for interfacing the ORCA code package [#orca1]_ with SchNetPack molecular dynamics.
-    Requires ORCA to be installed and an input file template.
+    Calculator for interfacing the ORCA code package with SchNetPack molecular dynamics.
+
+    Requires ORCA [#orca1]_ to be installed and an input file template.
     This template is a standard ORCA input file, with everything past the specification of coordinate
-    format, charge and multiplicity removed (coordinates and final `*`).
+    format, charge and multiplicity removed (coordinates and final ``*``).
     If desired, a Queuer can be give, which will attempt to send all jobs to a grid engine queue.
 
     In general, the calculator will take the current System to generate inputs, perform the calculation
@@ -35,8 +36,8 @@ class OrcaCalculator(QMCalculator):
         compdir (str): Directory in which computations are performed.
         qm_executable (str): Path to the ORCA executable.
         orca_template (str): Path to an ORCA template which will be used to generate input files. This should be a full
-                             ORCA input, where the geometry section between *xyz and * is replaced by the string
-                             `{geometry}`.
+                             ORCA input, where the geometry section between ``*xyz`` and ``*`` is replaced by
+                             the string ``{geometry}``.
         energy_unit (str, float): Energy units returned by the internal computation model.
         position_unit (str, float): Unit conversion for the length used in the model computing all properties. E.g. if
                              the model needs Angstrom, one has to provide the conversion factor converting from the

@@ -240,7 +240,7 @@ class QMCalculator(MDCalculator):
     Calculator for interfacing the ORCA code package with SchNetPack molecular dynamics.
     Requires ORCA to be installed and an input file template.
     This template is a standard ORCA input file, with everything past the specification of coordinate
-    format, charge and multiplicity removed (coordinates and final *).
+    format, charge and multiplicity removed (coordinates and final ``*``).
     If desired, a Queuer can be give, which will attempt to send all jobs to a grid engine queue.
 
     In general, the calculator will take the current System to generate inputs, perform the calculation

@@ -119,6 +119,9 @@ class PaiNNMixing(nn.Module):
 class PaiNN(nn.Module):
     """PaiNN - polarizable interaction neural network
 
+    Equivariant message-passing network for the prediction of tensorial properties
+    and molecular spectra [#painn1]_.
+
     References:
 
     .. [#painn1] Schütt, Unke, Gastegger:

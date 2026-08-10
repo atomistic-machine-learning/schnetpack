@@ -16,17 +16,18 @@ Data
 ====
 .. currentmodule:: data
 
-SchNetPack currently supports data sets stored in ASE format using
-:class:`ASEAtomsData`, but other formats can be added by implementing
-:class:`BaseAtomsData`. These classes are compatible with PyTorch dataloaders and
-provide an additional interface to store metadata, e.g. property units and
-single-atom reference values.
+SchNetPack stores data sets in ASE format using :class:`ASEAtomsData`. Data sets
+that fetch their raw data from a remote source subclass
+:class:`DownloadableASEAtomsData`. These classes are compatible with PyTorch
+dataloaders and provide an additional interface to store metadata, e.g. property
+units and single-atom reference values.
 
 An important aspect are the transforms that can be passed to the data classes. Those
 are PyTorch modules that perform preprocessing task on the data *before* batching.
 Typically, this is performed on the CPU as part of the multi-processing of PyTorch
 dataloaders.
-Important preprocessing :class:`Transform`s include removing of offsets from target properties
+Important preprocessing :class:`Transform` modules include removing of offsets from
+target properties
 and calculation of neighbor lists.
 
 Furthermore, we support PyTorch Lightning datamodules through :class:`AtomsDataModule`,
@@ -57,9 +58,10 @@ The particular features and requirements are:
    in `layer.required_derivatives = ["input_key"]`. The `requires_grad` of the input
    tensor is then set automatically.
 
-.. currentmodule::transform
+.. currentmodule:: transform
+
 * **Post-processing:**
-   The atomistic model can take a list of non-trainable :class:`Transform`s that are
+   The atomistic model can take a list of non-trainable :class:`Transform` modules that are
    used to post-process the output dictionary. These are not applied during training.
    A common use case are energy values that a large offsets and require double
    precision. To be able to still run a single precision model on GPU, one can substract
@@ -67,6 +69,7 @@ The particular features and requirements are:
    to the model prediction in post-processing after casting to double.
 
 .. currentmodule:: model
+
 While :class:`AtomisticModel` is a fairly general class, the models provided in
 SchNetPack follow a structure defined in the subclass :class:`NeuralNetworkPotential`:
 

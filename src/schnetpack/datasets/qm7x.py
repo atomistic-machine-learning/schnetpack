@@ -95,9 +95,11 @@ class QM7X(DownloadableASEAtomsData):
     structure of small organic molecules with up to seven non-hydrogen (C, N, O, S, Cl) atoms.
     This class adds convenient functions to download QM7-X and load the data into pytorch.
 
+    The raw data is provided by [#qm7x_1]_.
+
     References:
 
-        .. [#qm7x_1] https://zenodo.org/record/4288677
+    .. [#qm7x_1] https://zenodo.org/record/4288677
 
     """
 
