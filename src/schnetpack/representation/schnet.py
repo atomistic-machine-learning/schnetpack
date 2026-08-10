@@ -70,7 +70,10 @@ class SchNetInteraction(nn.Module):
 
 
 class SchNet(nn.Module):
-    """Continuous-filter convolutional network for learning representations of atomistic systems [#schnet1]_ [#schnet_transfer]_ [#schnet3]_.
+    """Continuous-filter convolutional network for learning representations of
+    atomistic systems.
+
+    Introduced in [#schnet1]_ [#schnet_transfer]_ [#schnet3]_.
 
     References:
 
