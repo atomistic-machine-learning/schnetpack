@@ -15,4 +15,4 @@ pytorch_lightning>=2.0.0
 hydra-core>=1.1.0
 hydra-colorlog>=1.1.0
 torchmetrics==1.0.1
-protobuf==3.20.2
+protobuf>=4.25.8

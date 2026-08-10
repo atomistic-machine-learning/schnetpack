@@ -24,7 +24,7 @@ from ase.io import read
 
 log = logging.getLogger(__name__)
 
-OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()))
+OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()), use_cache=True)
 OmegaConf.register_new_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
 
 
@@ -43,7 +43,7 @@ def simulate(config: DictConfig):
            _____      __    _   __     __  ____             __    __  __    ___
           / ___/_____/ /_  / | / /__  / /_/ __ \____ ______/ /__ |  \/  |  |   \\
           \__ \/ ___/ __ \/  |/ / _ \/ __/ /_/ / __ `/ ___/ //_/ | |\/| |  | |) |
-         ___/ / /__/ / / / /|  /  __/ /_/ ____/ /_/ / /__/ ,<    |_|__|_|  |___/ 
+         ___/ / /__/ / / / /|  /  __/ /_/ ____/ /_/ / /__/ ,<    |_|__|_|  |___/
         /____/\___/_/ /_/_/ |_/\___/\__/_/    \__,_/\___/_/|_|  _|""  ""|_|""  ""|
                                                                 "`-0--0-'"`-0--0-'
         """
@@ -122,7 +122,8 @@ def simulate(config: DictConfig):
     system = schnetpack.md.System()
     if config.system.load_system_state is not None:
         state_dict = torch.load(
-            hydra.utils.to_absolute_path(config.system.load_system_state)
+            hydra.utils.to_absolute_path(config.system.load_system_state),
+            weights_only=False,
         )
         system.load_system_state(state_dict["system"])
         log.info(
@@ -318,7 +319,7 @@ def simulate(config: DictConfig):
     if config.restart is not None:
         checkpoint = hydra.utils.to_absolute_path(config.restart)
         logging.info("Restarting simulation from checkpoint {:s}...".format(checkpoint))
-        state_dict = torch.load(checkpoint)
+        state_dict = torch.load(checkpoint, weights_only=False)
         simulator.restart_simulation(state_dict)
 
     # Set devices and precision

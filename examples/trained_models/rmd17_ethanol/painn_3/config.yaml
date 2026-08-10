@@ -1,0 +1,163 @@
+print_config: true
+run:
+  work_dir: ${hydra:runtime.cwd}
+  data_dir: ${run.work_dir}/data
+  path: ${run.work_dir}/runs
+  experiment: md17_${data.molecule}
+  id: model3
+  ckpt_path: null
+globals:
+  model_path: best_model
+  cutoff: 5.0
+  lr: 0.001
+  energy_key: energy
+  forces_key: forces
+trainer:
+  _target_: pytorch_lightning.Trainer
+  devices: 1
+  min_epochs: null
+  max_epochs: 1000
+  enable_model_summary: true
+  profiler: null
+  gradient_clip_val: null
+  accumulate_grad_batches: 1
+  val_check_interval: 1.0
+  check_val_every_n_epoch: 1
+  num_sanity_val_steps: 0
+  fast_dev_run: false
+  overfit_batches: 0
+  limit_train_batches: 1.0
+  limit_val_batches: 1.0
+  limit_test_batches: 1.0
+  detect_anomaly: false
+  precision: 32
+  accelerator: auto
+  num_nodes: 1
+  deterministic: false
+  inference_mode: false
+callbacks:
+  model_checkpoint:
+    _target_: schnetpack.train.ModelCheckpoint
+    monitor: val_loss
+    save_top_k: 1
+    save_last: true
+    mode: min
+    verbose: false
+    dirpath: checkpoints/
+    filename: '{epoch:02d}'
+    model_path: ${globals.model_path}
+  early_stopping:
+    _target_: pytorch_lightning.callbacks.EarlyStopping
+    monitor: val_loss
+    patience: 200
+    mode: min
+    min_delta: 0.0
+    check_on_train_epoch_end: false
+  lr_monitor:
+    _target_: pytorch_lightning.callbacks.LearningRateMonitor
+    logging_interval: epoch
+  ema:
+    _target_: schnetpack.train.ExponentialMovingAverage
+    decay: 0.995
+task:
+  _target_: schnetpack.AtomisticTask
+  outputs:
+  - _target_: schnetpack.task.ModelOutput
+    name: ${globals.energy_key}
+    loss_fn:
+      _target_: torch.nn.MSELoss
+    metrics:
+      mae:
+        _target_: torchmetrics.regression.MeanAbsoluteError
+      rmse:
+        _target_: torchmetrics.regression.MeanSquaredError
+        squared: false
+    loss_weight: 0.01
+  - _target_: schnetpack.task.ModelOutput
+    name: ${globals.forces_key}
+    loss_fn:
+      _target_: torch.nn.MSELoss
+    metrics:
+      mae:
+        _target_: torchmetrics.regression.MeanAbsoluteError
+      rmse:
+        _target_: torchmetrics.regression.MeanSquaredError
+        squared: false
+    loss_weight: 0.99
+  warmup_steps: 0
+  optimizer_cls: torch.optim.AdamW
+  optimizer_args:
+    lr: ${globals.lr}
+    weight_decay: 0.0
+  scheduler_cls: schnetpack.train.ReduceLROnPlateau
+  scheduler_monitor: val_loss
+  scheduler_args:
+    mode: min
+    factor: 0.5
+    patience: 75
+    threshold: 0.0
+    threshold_mode: rel
+    cooldown: 10
+    min_lr: 0.0
+    smoothing_factor: 0.0
+model:
+  representation:
+    radial_basis:
+      _target_: schnetpack.nn.radial.GaussianRBF
+      n_rbf: 20
+      cutoff: ${globals.cutoff}
+    _target_: schnetpack.representation.PaiNN
+    n_atom_basis: 128
+    n_interactions: 3
+    shared_interactions: false
+    shared_filters: false
+    cutoff_fn:
+      _target_: schnetpack.nn.cutoff.CosineCutoff
+      cutoff: ${globals.cutoff}
+  _target_: schnetpack.model.NeuralNetworkPotential
+  input_modules:
+  - _target_: schnetpack.atomistic.PairwiseDistances
+  output_modules:
+  - _target_: schnetpack.atomistic.Atomwise
+    output_key: ${globals.energy_key}
+    n_in: ${model.representation.n_atom_basis}
+    aggregation_mode: sum
+  - _target_: schnetpack.atomistic.Forces
+    energy_key: ${globals.energy_key}
+    force_key: ${globals.forces_key}
+  postprocessors:
+  - _target_: schnetpack.transform.CastTo64
+  - _target_: schnetpack.transform.AddOffsets
+    property: energy
+    add_mean: true
+data:
+  _target_: schnetpack.datasets.rMD17
+  datapath: /tmp/rmd17_ethanol.db
+  data_workdir: null
+  batch_size: 10
+  num_train: 900
+  num_val: 100
+  num_test: null
+  num_workers: 4
+  num_val_workers: 4
+  num_test_workers: 4
+  train_sampler_cls: null
+  molecule: ethanol
+  split_id: null
+  distance_unit: Ang
+  property_units:
+    energy: kcal/mol
+    forces: kcal/mol/Ang
+  transforms:
+  - _target_: schnetpack.transform.SubtractCenterOfMass
+  - _target_: schnetpack.transform.RemoveOffsets
+    property: energy
+    remove_mean: true
+  - _target_: schnetpack.transform.MatScipyNeighborList
+    cutoff: ${globals.cutoff}
+  - _target_: schnetpack.transform.CastTo32
+logger:
+  tensorboard:
+    _target_: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
+    save_dir: tensorboard/
+    name: default

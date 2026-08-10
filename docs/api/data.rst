@@ -10,23 +10,10 @@ Atoms data
     :recursive:
     :template: classtemplate.rst
 
-    BaseAtomsData
     ASEAtomsData
+    DownloadableASEAtomsData
     AtomsLoader
-    resolve_format
-    AtomsDataFormat
     StratifiedSampler
-
-
-Creation
---------
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
-    :template: classtemplate.rst
-
-    create_dataset
-    load_dataset
 
 Data modules
 ------------
@@ -47,5 +34,7 @@ Statistics
     :template: classtemplate.rst
 
     calculate_stats
+    estimate_atomrefs
+    StatsAtomrefProvider
     NumberOfAtomsCriterion
     PropertyCriterion

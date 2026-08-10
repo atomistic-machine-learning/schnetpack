@@ -47,7 +47,7 @@ def int2precision(precision: Union[int, torch.dtype]):
         precision (int, torch.dtype): Target precision.
 
     Returns:
-        torch.dtupe: Floating point precision.
+        torch.dtype: Floating point precision.
     """
     if isinstance(precision, torch.dtype):
         return precision

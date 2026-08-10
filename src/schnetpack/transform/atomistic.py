@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict
 
 import torch
 from ase.data import atomic_masses
@@ -19,6 +19,7 @@ __all__ = [
 class SubtractCenterOfMass(Transform):
     """
     Subtract center of mass from positions.
+
     """
 
     is_preprocessor: bool = True
@@ -41,6 +42,7 @@ class SubtractCenterOfMass(Transform):
 class SubtractCenterOfGeometry(Transform):
     """
     Subtract center of geometry from positions.
+
     """
 
     is_preprocessor: bool = True
@@ -59,8 +61,6 @@ class RemoveOffsets(Transform):
     Remove offsets from property based on the mean of the training data and/or the
     single atom reference calculations.
 
-    The `mean` and/or `atomref` are automatically obtained from the AtomsDataModule,
-    when it is used. Otherwise, they have to be provided in the init manually.
     """
 
     is_preprocessor: bool = True
@@ -87,6 +87,7 @@ class RemoveOffsets(Transform):
                 tensor.
             atomrefs: Provide single-atom references directly.
             property_mean: Provide mean property value / n_atoms.
+            estimate_atomref: If true, add estimated atomrefs.
         """
         super().__init__()
         self._property = property
@@ -110,30 +111,28 @@ class RemoveOffsets(Transform):
             self._mean_initialized = False
 
         if self.remove_atomrefs:
-            atomrefs = atomrefs or torch.zeros((zmax,))
+            atomrefs = atomrefs if atomrefs is not None else torch.zeros((zmax,))
             self.register_buffer("atomref", atomrefs)
         if self.remove_mean:
             property_mean = property_mean or torch.zeros((1,))
             self.register_buffer("mean", property_mean)
 
-    def datamodule(self, _datamodule):
+    def initialize(self, stats) -> None:
         """
-        Sets mean and atomref automatically when using PyTorchLightning integration.
+        Initialize mean and/or atomrefs from a stats source (any object with
+        ``get_stats``/``get_atomrefs``, e.g. the datamodule or its provider).
         """
         if self.remove_atomrefs and not self._atomrefs_initialized:
-            if self.estimate_atomref:
-                atrefs = _datamodule.get_atomrefs(
-                    property=self._property, is_extensive=self.is_extensive
-                )
-            else:
-                atrefs = _datamodule.train_dataset.atomrefs
+            atrefs = stats.get_atomrefs(
+                self._property, self.is_extensive, estimate=self.estimate_atomref
+            )
             self.atomref = atrefs[self._property].detach()
 
         if self.remove_mean and not self._mean_initialized:
-            stats = _datamodule.get_stats(
+            mean, _std = stats.get_stats(
                 self._property, self.is_extensive, self.remove_atomrefs
             )
-            self.mean = stats[0].detach()
+            self.mean = mean.detach()
 
     def forward(
         self,
@@ -146,21 +145,22 @@ class RemoveOffsets(Transform):
                 else self.mean
             )
             inputs[self._property] -= mean
+
         if self.remove_atomrefs:
             atomref_bias = torch.sum(self.atomref[inputs[structure.Z]])
             if not self.is_extensive:
-                atomref_bias /= inputs[structure.n_atoms].item()
+                atomref_bias = atomref_bias / inputs[structure.n_atoms]
             inputs[self._property] -= atomref_bias
-
         return inputs
 
 
 class ScaleProperty(Transform):
     """
-    Scale an entry of the input or results dioctionary.
+    Scale an entry of the input or results dictionary.
 
-    The `scale` can be automatically obtained from the AtomsDataModule,
-    when it is used. Otherwise, it has to be provided in the init manually.
+    The `scale` can be obtained automatically from training statistics via
+    `initialize(stats)`. Otherwise, it has to be provided in the init
+    manually.
 
     """
 
@@ -200,10 +200,13 @@ class ScaleProperty(Transform):
         scale = scale or torch.ones((1,))
         self.register_buffer("scale", scale)
 
-    def datamodule(self, _datamodule):
+    def initialize(self, stats) -> None:
+        """
+        Initialize scaling using training statistics.
+        """
         if not self._initialized:
-            stats = _datamodule.get_stats(self._target_key, True, False)
-            scale = stats[0] if self._scale_by_mean else stats[1]
+            mean, std = stats.get_stats(self._target_key, True, False)
+            scale = mean if self._scale_by_mean else std
             self.scale = torch.abs(scale).detach()
 
     def forward(
@@ -218,16 +221,9 @@ class AddOffsets(Transform):
     """
     Add offsets to property based on the mean of the training data and/or the single
     atom reference calculations.
-
-    The `mean` and/or `atomref` are automatically obtained from the AtomsDataModule,
-    when it is used. Otherwise, they have to be provided in the init manually.
-
-    Hint:
-        Place this postprocessor after casting to float64 for higher numerical
-        precision.
     """
 
-    is_preprocessor: bool = True
+    is_preprocessor: bool = False
     is_postprocessor: bool = True
     atomref: torch.Tensor
 
@@ -252,6 +248,7 @@ class AddOffsets(Transform):
                 tensor.
             atomrefs: Provide single-atom references directly.
             property_mean: Provide mean property value / n_atoms.
+            estimate_atomref: If true, add estimated atomrefs.
         """
         super().__init__()
         self._property = property
@@ -275,26 +272,27 @@ class AddOffsets(Transform):
         else:
             self._mean_initialized = False
 
-        atomrefs = atomrefs or torch.zeros((zmax,))
+        atomrefs = atomrefs if atomrefs is not None else torch.zeros((zmax,))
         property_mean = property_mean or torch.zeros((1,))
         self.register_buffer("atomref", atomrefs)
         self.register_buffer("mean", property_mean)
 
-    def datamodule(self, _datamodule):
+    def initialize(self, stats) -> None:
+        """
+        Initialize mean and/or atomrefs from a stats source (any object with
+        ``get_stats``/``get_atomrefs``, e.g. the datamodule or its provider).
+        """
         if self.add_atomrefs and not self._atomrefs_initialized:
-            if self.estimate_atomref:
-                atrefs = _datamodule.get_atomrefs(
-                    property=self._property, is_extensive=self.is_extensive
-                )
-            else:
-                atrefs = _datamodule.train_dataset.atomrefs
+            atrefs = stats.get_atomrefs(
+                self._property, self.is_extensive, estimate=self.estimate_atomref
+            )
             self.atomref = atrefs[self._property].detach()
 
         if self.add_mean and not self._mean_initialized:
-            stats = _datamodule.get_stats(
+            mean, _std = stats.get_stats(
                 self._property, self.is_extensive, self.add_atomrefs
             )
-            self.mean = stats[0].detach()
+            self.mean = mean.detach()
 
     def forward(
         self,

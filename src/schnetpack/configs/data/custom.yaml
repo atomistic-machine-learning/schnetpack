@@ -1,12 +1,26 @@
+# @package data
 _target_: schnetpack.data.AtomsDataModule
 
-datapath: ???
-data_workdir: null
+dataset:
+  _target_: schnetpack.data.ASEAtomsData
+  datapath: ???
+  load_properties: null
+  # null: keep the dataset's native units — setting a unit here converts on
+  # load.
+  distance_unit: null
+  property_units: null
+  transforms: null
+  train_transforms: null
+  val_transforms: null
+  test_transforms: null
+
 batch_size: 10
 num_train: ???
 num_val: ???
 num_test: null
+split_file: ${run.data_dir}/split.npz
+splitting: null
 num_workers: 8
-num_val_workers: null
-num_test_workers: null
 train_sampler_cls: null
+train_sampler_args: {}
+pin_memory: false

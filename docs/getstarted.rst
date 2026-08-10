@@ -6,9 +6,10 @@ Installation
 Requirements
 ^^^^^^^^^^^^
 
-* `Python <http://www.python.org/>`_ (>=3.8)
-* `PyTorch <https://pytorch.org/docs/stable/index.html>`_ (>=1.9)
-* `PyTorchLightning <https://www.pytorchlightning.ai/>`_ (>=1.9.0)
+* `Python <http://www.python.org/>`_ (>=3.12)
+* `PyTorch <https://pytorch.org/docs/stable/index.html>`_ (>=2.5.0)
+* `PyTorchLightning <https://www.pytorchlightning.ai/>`_ (>=2.0.0)
+* `NumPy <https://www.numpy.org/>`_ (>=2.0.0)
 * `Hydra <https://hydra.cc/>`_ (>=1.1.0)
 * `ASE <https://wiki.fysik.dtu.dk/ase/index.html>`_ (>=3.21)
 

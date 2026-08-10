@@ -31,8 +31,11 @@ and calculation of neighbor lists.
 
 Furthermore, we support PyTorch Lightning datamodules through :class:`AtomsDataModule`,
 which combines :class:`ASEAtomsData` with code for preparation, setup and partitioning
-into train/validation/test splits. We provide specific implementations of
-:class:`AtomsDataModule` for several benchmark datasets.
+into train/validation/test splits. The datamodule also owns the training statistics
+(per-property mean/std and atom references): it exposes them via ``get_stats`` and
+``get_atomrefs``, initializes all transforms that require them, and persists computed
+values next to the split file so reruns read instead of recompute. We provide specific
+implementations of :class:`AtomsDataModule` for several benchmark datasets.
 
 
 Model
