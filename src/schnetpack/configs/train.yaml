@@ -19,6 +19,9 @@ defaults:
 
 print_config: True
 
+# wandb project name, referenced by configs/logger/wandb.yaml
+project: default
+
 # hydra configuration
 hydra:
     job:
