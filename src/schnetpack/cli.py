@@ -163,9 +163,9 @@ def train(config: DictConfig):
         for _, lg_conf in config["logger"].items():
             if "_target_" in lg_conf:
                 log.info(f"Instantiating logger <{lg_conf._target_}>")
-                l = hydra.utils.instantiate(lg_conf)
+                lg = hydra.utils.instantiate(lg_conf)
 
-                logger.append(l)
+                logger.append(lg)
 
     # Init Lightning trainer
     log.info(f"Instantiating trainer <{config.trainer._target_}>")

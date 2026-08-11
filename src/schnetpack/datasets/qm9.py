@@ -193,9 +193,9 @@ class QM9(DownloadableASEAtomsData):
 
         with open(tmp_path) as f:
             lines = f.readlines()
-            for z, l in zip([1, 6, 7, 8, 9], lines[5:10]):
+            for z, line in zip([1, 6, 7, 8, 9], lines[5:10]):
                 for i, p in enumerate(props):
-                    atref[p][z] = float(l.split()[i + 1])
+                    atref[p][z] = float(line.split()[i + 1])
 
         return {k: v.tolist() for k, v in atref.items()}
 

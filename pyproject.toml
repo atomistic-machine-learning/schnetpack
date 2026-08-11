@@ -86,10 +86,6 @@ ignore = [
     # ~876 hits, almost all docstrings and comments that the formatter will not
     # reflow. Code width is enforced by `ruff format`, not by a lint rule.
     "E501",
-    # `l` is angular momentum and `I` a moment of inertia. This is physics code.
-    "E741",
-    # function call in default argument: pervasive torch/hydra idiom here.
-    "B008",
     # zip() without strict=: noisy, and not a bug in this codebase's usage.
     "B905",
     # legacy np.random.* is deliberate in test fixtures and tutorials, where a
@@ -109,6 +105,10 @@ ignore = [
 # Tutorial notebooks are teaching material: `for step in tqdm(...)` reads better
 # than `for _step in ...` even when the variable is unused.
 "examples/**" = ["B007"]
+# E741 flags `l` as visually confusable with `1`. Here it is the spherical
+# harmonic degree (angular momentum), and kept as `l`
+"src/schnetpack/nn/so3.py" = ["E741"]
+"src/schnetpack/nn/ops/so3.py" = ["E741"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["schnetpack"]
