@@ -4,7 +4,8 @@ molecular dynamics simulations.
 """
 
 from __future__ import annotations
-from typing import Optional, Tuple, TYPE_CHECKING
+
+from typing import TYPE_CHECKING, Optional, Tuple
 
 if TYPE_CHECKING:
     from schnetpack.md import Simulator, System
@@ -470,7 +471,7 @@ class NHCBarostatIsotropic(BarostatHook):
         # Update cell momenta
         self._scale_cell(scaling_thermostat_cell)
 
-    def _scale_cell(self, scaling_thermostat_cell: torch.tensor):
+    def _scale_cell(self, scaling_thermostat_cell: torch.Tensor):
         """
         Auxiliary routine for scaling the cell, since the scaling factor will be missing one dimension in the
         anisotropic barostat
@@ -507,7 +508,7 @@ class NHCBarostatIsotropic(BarostatHook):
         """
         return self.b_masses_cell * self.b_velocities_cell**2
 
-    def _update_inner_t_forces(self, kinetic_energy_particles: torch.tensor):
+    def _update_inner_t_forces(self, kinetic_energy_particles: torch.Tensor):
         """
         Update the forces acting on the innermost chain of the particle thermostat.
 
@@ -519,7 +520,7 @@ class NHCBarostatIsotropic(BarostatHook):
             - self.degrees_of_freedom_particles * self.kb_temperature
         ) / self.t_masses[..., 0]
 
-    def _update_inner_t_forces_cell(self, kinetic_energy_cell: torch.tensor):
+    def _update_inner_t_forces_cell(self, kinetic_energy_cell: torch.Tensor):
         """
         Update the forces acting on the innermost chain of the cell thermostat.
 
@@ -795,7 +796,7 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
             6, dtype=simulator.dtype, device=simulator.device
         )
 
-    def _scale_cell(self, scaling_thermostat_cell: torch.tensor):
+    def _scale_cell(self, scaling_thermostat_cell: torch.Tensor):
         """
         Auxiliary routine for scaling the cell, here the scaling factor needs one additional dimension compared to the
         isotropic case.

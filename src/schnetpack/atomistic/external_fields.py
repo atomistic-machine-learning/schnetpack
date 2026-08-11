@@ -1,4 +1,4 @@
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
@@ -23,9 +23,11 @@ class StaticExternalFields(nn.Module):
 
     def __init__(
         self,
-        external_fields: List[str] = [],
+        external_fields: Optional[List[str]] = None,
         response_properties: Optional[List[str]] = None,
     ):
+        if external_fields is None:
+            external_fields = []
         super(StaticExternalFields, self).__init__()
 
         if response_properties is not None:

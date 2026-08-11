@@ -12,21 +12,21 @@ References
     Journal of Physics: Condensed Matter, 9, 27. 2017.
 """
 
+import logging
 import os
-import numpy as np
 from abc import ABC, abstractmethod
+from copy import deepcopy
+from typing import Dict, List, Optional, Union
+
+import numpy as np
 import torch
 import torch.nn as nn
-import logging
-from copy import deepcopy
-
-from ase import Atoms
-from ase import units
-from ase.constraints import FixAtoms
+from ase import Atoms, units
 from ase.calculators.calculator import Calculator, all_changes
+from ase.constraints import FixAtoms
 from ase.io import read, write
 from ase.io.trajectory import Trajectory
-from ase.md import VelocityVerlet, Langevin, MDLogger
+from ase.md import Langevin, MDLogger, VelocityVerlet
 from ase.md.velocitydistribution import (
     MaxwellBoltzmannDistribution,
     Stationary,
@@ -37,12 +37,10 @@ from ase.vibrations import Vibrations
 
 from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
+from schnetpack.md.utils import activate_model_stress
 from schnetpack.transform import CastTo32, CastTo64, Transform
 from schnetpack.units import convert_units
 from schnetpack.utils import load_model
-from schnetpack.md.utils import activate_model_stress
-
-from typing import Optional, List, Union, Dict
 
 log = logging.getLogger(__name__)
 
@@ -65,7 +63,7 @@ class AtomsConverter:
         transforms: Union[Transform, List[Transform]] = None,
         device: Union[str, torch.device] = "cpu",
         dtype: torch.dtype = torch.float32,
-        additional_inputs: Dict[str, torch.Tensor] = None,
+        additional_inputs: Optional[Dict[str, torch.Tensor]] = None,
     ):
         """
         Args:
@@ -91,7 +89,7 @@ class AtomsConverter:
 
         # convert transforms and neighbor_list to list
         transforms = transforms or []
-        if type(transforms) != list:
+        if type(transforms) is not list:
             transforms = [transforms]
         neighbor_list = [] if neighbor_list is None else [neighbor_list]
 
@@ -106,7 +104,7 @@ class AtomsConverter:
         else:
             raise AtomsConverterError(f"Unrecognized precision {dtype}")
 
-    def __call__(self, atoms: List[Atoms] or Atoms):
+    def __call__(self, atoms: Union[List[Atoms], Atoms]):
         """
 
         Args:
@@ -117,9 +115,9 @@ class AtomsConverter:
         """
 
         # check input type and prepare for conversion
-        if type(atoms) == list:
+        if type(atoms) is list:
             pass
-        elif type(atoms) == Atoms:
+        elif type(atoms) is Atoms:
             atoms = [atoms]
         else:
             raise TypeError(
@@ -130,7 +128,6 @@ class AtomsConverter:
 
         inputs_batch = []
         for at_idx, at in enumerate(atoms):
-
             inputs = {
                 properties.n_atoms: torch.tensor([at.get_global_number_of_atoms()]),
                 properties.Z: torch.from_numpy(at.get_atomic_numbers()),
@@ -185,7 +182,7 @@ class SpkCalculator(Calculator):
         dtype: torch.dtype = torch.float32,
         converter: callable = AtomsConverter,
         transforms: Union[Transform, List[Transform]] = None,
-        additional_inputs: Dict[str, torch.Tensor] = None,
+        additional_inputs: Optional[Dict[str, torch.Tensor]] = None,
         **kwargs,
     ):
         """
@@ -277,7 +274,7 @@ class SpkCalculator(Calculator):
         self,
         atoms: Atoms = None,
         # properties is just a placeholder and will be ignored
-        properties: List[str] = ["energy"],
+        properties: Optional[List[str]] = None,
         system_changes: List[str] = all_changes,
     ):
         """
@@ -291,6 +288,8 @@ class SpkCalculator(Calculator):
         # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
 
         # make a list of all properties available in the model
+        if properties is None:
+            properties = ["energy"]
         properties = [
             p_key for p_key, p_value in self.property_map.items() if p_value is not None
         ]
@@ -367,7 +366,6 @@ class Uncertainty(ABC):
 
 
 class AbsoluteUncertainty(Uncertainty):
-
     def __call__(self, predictions: Dict[str, List[np.ndarray]]) -> float:
         uncertainty = 0
 
@@ -395,7 +393,6 @@ class AbsoluteUncertainty(Uncertainty):
 
 
 class RelativeUncertainty(Uncertainty):
-
     def __call__(self, predictions: Dict[str, List[np.ndarray]]) -> float:
         uncertainty = 0
 
@@ -452,8 +449,8 @@ class SpkEnsembleCalculator(SpkCalculator):
         dtype: torch.dtype = torch.float32,
         converter: callable = AtomsConverter,
         transforms: Optional[Union[Transform, List[Transform]]] = None,
-        uncertainty_fn: callable = None,
-        additional_inputs: Dict[str, torch.Tensor] = None,
+        uncertainty_fn: Optional[callable] = None,
+        additional_inputs: Optional[Dict[str, torch.Tensor]] = None,
         **kwargs,
     ):
         """
@@ -533,9 +530,11 @@ class SpkEnsembleCalculator(SpkCalculator):
         self,
         atoms: Atoms = None,
         # properties is just a placeholder and will be ignored
-        properties: List[str] = ["energy"],
+        properties: Optional[List[str]] = None,
         system_changes: List[str] = all_changes,
     ):
+        if properties is None:
+            properties = ["energy"]
         properties = [
             p_key for p_key, p_value in self.property_map.items() if p_value is not None
         ]
@@ -616,7 +615,7 @@ class AseInterface:
         optimizer_class: type = QuasiNewton,
         fixed_atoms: Optional[List[int]] = None,
         transforms: Union[Transform, List[Transform]] = None,
-        additional_inputs: Dict[str, torch.Tensor] = None,
+        additional_inputs: Optional[Dict[str, torch.Tensor]] = None,
     ):
         """
         Args:
@@ -793,7 +792,7 @@ class AseInterface:
         """
         if not self.dynamics:
             raise AttributeError(
-                "Dynamics need to be initialized using the" " 'setup_md' function"
+                "Dynamics need to be initialized using the 'setup_md' function"
             )
 
         self.dynamics.run(steps)

@@ -6,16 +6,15 @@ integrator simulates multiple replicas of the system coupled by harmonic springs
 a certain extent of nuclear quantum effects (e.g. tunneling).
 """
 
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
+from ase import units as ase_units
 
 import schnetpack as spk
+from schnetpack import units as spk_units
 from schnetpack.md import System
 from schnetpack.md.simulation_hooks import BarostatHook
-
-from ase import units as ase_units
-from schnetpack import units as spk_units
 
 __all__ = ["VelocityVerlet", "RingPolymer", "NPTVelocityVerlet", "NPTRingPolymer"]
 

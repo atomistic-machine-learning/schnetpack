@@ -1,12 +1,12 @@
 import logging
 import os
 import tarfile
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 import numpy as np
 from ase.io import read
 
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
 
 __all__ = ["OrganicMaterialsDatabase"]

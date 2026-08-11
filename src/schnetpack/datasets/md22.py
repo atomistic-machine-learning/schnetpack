@@ -1,4 +1,5 @@
-from typing import Optional, Dict, List
+from typing import Dict, List, Optional
+
 from schnetpack.datasets.md17 import GDMLDataset
 from schnetpack.transform.base import Transform
 

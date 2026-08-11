@@ -1,7 +1,8 @@
-from typing import Optional, List, Dict, Tuple, Union
 import math
-import torch
+from typing import List, Optional, Union
+
 import numpy as np
+import torch
 
 __all__ = ["SplittingStrategy", "RandomSplit", "SubsamplePartitions", "GroupSplit"]
 
@@ -47,7 +48,7 @@ def absolute_split_sizes(dsize: int, split_sizes: List[int]) -> List[int]:
     return split_sizes
 
 
-def random_split(dsize: int, *split_sizes: Union[int, float]) -> List[torch.tensor]:
+def random_split(dsize: int, *split_sizes: Union[int, float]) -> List[torch.Tensor]:
     """
     Randomly split the dataset
 
@@ -75,7 +76,7 @@ class SplittingStrategy:
     def __init__(self):
         pass
 
-    def split(self, dataset, *split_sizes) -> List[torch.tensor]:
+    def split(self, dataset, *split_sizes) -> List[torch.Tensor]:
         """
         Args:
             dataset - The dataset that is supposed to be split (an instance of ASEAtomsData).
@@ -95,7 +96,7 @@ class RandomSplit(SplittingStrategy):
     Splitting strategy that partitions the data randomly into the given sizes
     """
 
-    def split(self, dataset, *split_sizes) -> List[torch.tensor]:
+    def split(self, dataset, *split_sizes) -> List[torch.Tensor]:
         dsize = len(dataset)
         partition_sizes_idx = random_split(dsize, *split_sizes)
         return partition_sizes_idx
@@ -175,7 +176,6 @@ class SubsamplePartitions(SplittingStrategy):
         split_indices = [None] * len(split_sizes)
         for src in self._unique_sources:
             partition = partitions[src][self.split_id]
-            print(len(partition))
             partition_split_indices = random_split(
                 len(partition), *split_partition_sizes[src]
             )
@@ -217,7 +217,7 @@ class GroupSplit(SplittingStrategy):
         self.meta_key = meta_key
         self.dataset_ids_key = dataset_ids_key
 
-    def split(self, dataset, *split_sizes) -> List[torch.tensor]:
+    def split(self, dataset, *split_sizes) -> List[torch.Tensor]:
         md = dataset.metadata
 
         groups_ids = torch.tensor(md[self.meta_key][self.splitting_key])
@@ -235,10 +235,10 @@ class GroupSplit(SplittingStrategy):
 
         try:
             groups_ids = groups_ids[_subset_ids]
-        except:
+        except IndexError as e:
             raise ValueError(
                 "the subset used of the dataset and the groups ids arrays provided doesn't match."
-            )
+            ) from e
 
         # check the split sizes
         unique_groups = torch.unique(groups_ids)

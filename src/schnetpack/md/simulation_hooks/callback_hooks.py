@@ -3,20 +3,20 @@ This module contains different hooks for monitoring the simulation and checkpoin
 """
 
 from __future__ import annotations
-from typing import Union, List, Dict, Tuple, Any
-from typing import TYPE_CHECKING
+
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import schnetpack.units
 
 if TYPE_CHECKING:
-    from schnetpack.md import System
-    from schnetpack.md import Simulator
+    from schnetpack.md import Simulator, System
 
-import torch
 import json
 import os
+
 import h5py
 import numpy as np
+import torch
 
 from schnetpack.md.simulation_hooks import SimulationHook
 
@@ -82,8 +82,8 @@ class DataStream:
     def _precision(precision: int):
         try:
             return getattr(np, f"float{precision}")
-        except AttributeError:
-            raise AttributeError(f"Unknown float precision {precision}")
+        except AttributeError as e:
+            raise AttributeError(f"Unknown float precision {precision}") from e
 
     def init_data_stream(
         self,
@@ -322,7 +322,7 @@ class PropertyStream(DataStream):
                                   to None, which means all properties are stored.
     """
 
-    def __init__(self, target_properties: List[str] = None):
+    def __init__(self, target_properties: Optional[List[str]] = None):
         super(PropertyStream, self).__init__("properties")
         self.n_replicas = None
         self.n_molecules = None
@@ -382,7 +382,7 @@ class PropertyStream(DataStream):
                 simulator.system.properties[p].contiguous().view(self.n_replicas, -1)
             ).detach()
 
-    def _get_properties_structures(self, property_dict: Dict[str, torch.tensor]):
+    def _get_properties_structures(self, property_dict: Dict[str, torch.Tensor]):
         """
         Auxiliary function to get the names, shapes and positions used in the property stream based on the property
         dictionary of the system.
@@ -404,7 +404,6 @@ class PropertyStream(DataStream):
             self.target_properties = list(property_dict.keys())
 
         for p in self.target_properties:
-
             if p not in property_dict:
                 raise FileLoggerError(
                     "Property {:s} not found in system properties".format(p)
@@ -451,10 +450,12 @@ class FileLogger(SimulationHook):
         self,
         filename: str,
         buffer_size: int,
-        data_streams: List[DataStream] = [],
+        data_streams: Optional[List[DataStream]] = None,
         every_n_steps: int = 1,
         precision: int = 32,
     ):
+        if data_streams is None:
+            data_streams = []
         super(FileLogger, self).__init__()
 
         self.every_n_steps = every_n_steps
@@ -488,7 +489,6 @@ class FileLogger(SimulationHook):
 
         # Check, whether file already exists
         if os.path.exists(self.filename):
-
             # If file exists and it is the first call of a simulator without restart,
             # raise and error.
             if (not simulator.restart) and (simulator.effective_steps == 0):

@@ -1,15 +1,15 @@
+from typing import Optional
+
 import torch
 import torch.nn as nn
+
+from schnetpack import properties
+from schnetpack.atomistic import Forces, Response, Strain
+from schnetpack.model import AtomisticModel
 
 from .md_config import *
 from .normal_model_transformation import *
 from .thermostat_utils import *
-
-from typing import Optional
-
-from schnetpack import properties
-from schnetpack.model import AtomisticModel
-from schnetpack.atomistic import Response, Forces, Strain
 
 
 class CalculatorError(Exception):
@@ -57,7 +57,6 @@ def activate_model_stress(model: AtomisticModel, stress_key: str) -> AtomisticMo
                 module.calc_stress = True
                 module.basic_derivatives["dEds"] = properties.strain
                 module.derivative_instructions["dEds"] = True
-                module.basic_derivatives["dEds"] = properties.strain
 
                 module.map_properties[properties.stress] = properties.stress
 

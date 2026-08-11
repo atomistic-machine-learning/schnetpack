@@ -1,5 +1,5 @@
-from typing import Optional, Union, Dict, Any, Type, Tuple
 import os
+from typing import Any, Dict, Optional, Tuple, Type, Union
 
 import fasteners
 import numpy as np
@@ -8,9 +8,9 @@ import torch
 from torch.utils.data import BatchSampler
 
 from schnetpack.data.atoms import ASEAtomsData
+from schnetpack.data.loader import AtomsLoader
 from schnetpack.data.provider import StatsAtomrefProvider, train_partition_fingerprint
 from schnetpack.data.splitting import SPLITTING_LOCK, RandomSplit, SplittingStrategy
-from schnetpack.data.loader import AtomsLoader
 
 __all__ = ["AtomsDataModule"]
 

@@ -4,14 +4,13 @@ import torch
 import torch.nn as nn
 from torch.nn.init import zeros_
 
+import schnetpack.nn as snn
 import schnetpack.properties as structure
+from schnetpack import properties
 from schnetpack.nn import Dense, scatter_add
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.representation.schnet import SchNetInteraction
 from schnetpack.utils import required_fields_from_properties
-
-from schnetpack import properties
-import schnetpack.nn as snn
 
 __all__ = ["FieldSchNet", "NuclearMagneticMomentEmbedding"]
 
@@ -266,11 +265,11 @@ class FieldSchNet(nn.Module):
         n_atom_basis: int,
         n_interactions: int,
         radial_basis: nn.Module,
-        external_fields: List[str] = [],
+        external_fields: Optional[List[str]] = None,
         response_properties: Optional[List[str]] = None,
         cutoff_fn: Optional[Callable] = None,
         activation: Optional[Callable] = shifted_softplus,
-        n_filters: int = None,
+        n_filters: Optional[int] = None,
         shared_interactions: bool = False,
         max_z: int = 100,
         electric_field_modifier: Optional[nn.Module] = None,
@@ -294,6 +293,8 @@ class FieldSchNet(nn.Module):
             electric_field_modifier (torch.nn.Module): If provided, use this module to modify the electric field. E.g.
                                                        for solvent models or fields from point charges in QM/MM.
         """
+        if external_fields is None:
+            external_fields = []
         super().__init__()
         self.n_atom_basis = n_atom_basis
         self.size = (self.n_atom_basis,)
@@ -415,7 +416,7 @@ class FieldSchNet(nn.Module):
             )
 
         for (
-            i,
+            _i,
             (interaction, field_interaction, dipole_interaction, dipole_update),
         ) in enumerate(
             zip(

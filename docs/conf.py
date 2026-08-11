@@ -4,7 +4,7 @@ Built by Read the Docs (see ``readthedocs.yaml``), which installs the package
 with its ``doc`` extra before running Sphinx.  For a local build:
 
     pip install -e ".[doc]"
-    make -C docs html   
+    make -C docs html
     # for clean build use: make clean && make html
 """
 

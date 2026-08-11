@@ -1,5 +1,34 @@
+# This file is the single source of truth for linter/formatter versions.
+ci:
+  autoupdate_schedule: monthly
+  autofix_prs: true
+
 repos:
--   repo: https://github.com/python/black
-    rev: 24.4.2
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.0
     hooks:
-    - id: black-jupyter
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  # Strips notebook outputs and execution counts before commit.
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.1
+    hooks:
+      - id: nbstripout
+        # --keep-id: without it nbstripout renumbers every nbformat>=4.5 cell id
+        # to a sequential integer, rewriting all ~180 cells across the notebooks
+        # for no benefit and churning the diff on every unrelated edit.
+        args: [--keep-id]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+        # hydra configs use `???` for mandatory-missing values and `_self_` in
+        # defaults lists; keep the checker away from that tree.
+        exclude: ^src/schnetpack/(configs|md/md_configs)/
+      - id: check-added-large-files
+      - id: check-merge-conflict

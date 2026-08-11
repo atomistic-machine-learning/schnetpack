@@ -1,11 +1,12 @@
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 from ase.data import atomic_masses
 
 import schnetpack.properties as structure
-from .base import Transform
 from schnetpack.nn import scatter_add
+
+from .base import Transform
 
 __all__ = [
     "SubtractCenterOfMass",
@@ -96,9 +97,9 @@ class RemoveOffsets(Transform):
         self.is_extensive = is_extensive
         self.estimate_atomref = estimate_atomref
 
-        assert not (
-            estimate_atomref and atomrefs is not None
-        ), "You can not set `atomrefs` and use `estimate_atomrefs=True!`"
+        assert not (estimate_atomref and atomrefs is not None), (
+            "You can not set `atomrefs` and use `estimate_atomrefs=True!`"
+        )
 
         if atomrefs is not None:
             self._atomrefs_initialized = True
@@ -170,8 +171,8 @@ class ScaleProperty(Transform):
     def __init__(
         self,
         input_key: str,
-        target_key: str = None,
-        output_key: str = None,
+        target_key: Optional[str] = None,
+        output_key: Optional[str] = None,
         scale_by_mean: bool = False,
         scale: torch.Tensor = None,
     ):
@@ -258,9 +259,9 @@ class AddOffsets(Transform):
         self._aggregation = "sum" if self.is_extensive else "mean"
         self.estimate_atomref = estimate_atomref
 
-        assert not (
-            estimate_atomref and atomrefs is not None
-        ), "You can not set `atomrefs` and use `estimate_atomrefs=True!`"
+        assert not (estimate_atomref and atomrefs is not None), (
+            "You can not set `atomrefs` and use `estimate_atomrefs=True!`"
+        )
 
         if atomrefs is not None:
             self._atomrefs_initialized = True

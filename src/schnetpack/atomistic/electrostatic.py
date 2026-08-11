@@ -1,12 +1,12 @@
+from typing import Dict, Optional, Union
+
+import numpy as np
 import torch
 import torch.nn as nn
 
-from typing import Union, Dict, Optional
-
-from schnetpack import units as spk_units
 import schnetpack.nn as snn
 from schnetpack import properties
-import numpy as np
+from schnetpack import units as spk_units
 
 __all__ = ["CoulombPotential", "DampedCoulombPotential", "EnergyCoulomb", "EnergyEwald"]
 

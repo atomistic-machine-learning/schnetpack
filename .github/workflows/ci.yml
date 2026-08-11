@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  # Only the default branch on push: without this, every PR from a same-repo
+  # branch runs the whole workflow twice (once for push, once for pull_request).
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    # Monday 04:00 UTC - exercises the `slow`/`download` tests, which are
+    # deselected by default (see [tool.pytest.ini_options] in pyproject.toml).
+    - cron: "0 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # .pre-commit-config.yaml is the single source of truth for tool versions.
+      - uses: pre-commit/action@v3.0.1
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The floor row is load-bearing: schnetpack/data/loader.py imports
+          # private torch symbols, so a torch upgrade can break it silently.
+          - { torch: "==2.5.*", name: "torch floor" }
+          - { torch: "", name: "latest" }
+    name: test (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - name: Pin torch
+        if: matrix.torch != ''
+        run: pip install "torch${{ matrix.torch }}" --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install -e .[test] pytest-cov
+      - run: pip list
+      - run: pytest --cov=schnetpack --cov-report=term-missing
+
+  slow:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e .[test]
+      - run: pytest -m "slow or download"
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pipx run build
+      - run: pipx run twine check --strict dist/*
+      - name: Assert all hydra config files are in the wheel
+        # Guards the packaging bug where md_configs/**/*.yaml was absent from
+        # every build, leaving `spkmd` broken in wheel/sdist installs.
+        run: |
+          python - <<'EOF'
+          import glob, zipfile
+          (whl,) = glob.glob("dist/*.whl")
+          names = zipfile.ZipFile(whl).namelist()
+          n_cfg = sum(n.startswith("schnetpack/configs/") and n.endswith(".yaml") for n in names)
+          n_md = sum(n.startswith("schnetpack/md/md_configs/") and n.endswith(".yaml") for n in names)
+          print(f"configs={n_cfg} md_configs={n_md}")
+          assert n_cfg >= 45, f"schnetpack/configs yaml missing from wheel: {n_cfg}"
+          assert n_md >= 31, f"schnetpack/md/md_configs yaml missing from wheel: {n_md}"
+          assert "schnetpack/py.typed" in names, "py.typed missing from wheel"
+          EOF
+      - name: Smoke-test console entry points from the installed wheel
+        run: |
+          python -m venv /tmp/v
+          /tmp/v/bin/pip install dist/*.whl
+          for c in spkconvert spkdeploy spktrain spkpredict spkmd; do
+            echo "--- $c ---"
+            /tmp/v/bin/$c --help > /dev/null
+          done

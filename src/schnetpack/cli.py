@@ -1,30 +1,35 @@
 import logging
 import os
-import uuid
-import tempfile
-import socket
-from typing import List
 import random
-import petname
+import socket
+import tempfile
+import uuid
+from typing import List
 
-import torch
 import hydra
+import petname
+import torch
 from omegaconf import DictConfig, OmegaConf, open_dict
-from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
-from pytorch_lightning import seed_everything
+from pytorch_lightning import (
+    Callback,
+    LightningDataModule,
+    LightningModule,
+    Trainer,
+    seed_everything,
+)
 from pytorch_lightning.loggers.logger import Logger
 
 import schnetpack as spk
-from schnetpack.utils import str2class
-from schnetpack.utils.script import log_hyperparameters, print_config
+from schnetpack import properties
 from schnetpack.data import ASEAtomsData, AtomsLoader
 from schnetpack.train import PredictionWriter
-from schnetpack import properties
 from schnetpack.utils import (
     load_model,
     load_task_from_checkpoint,
+    str2class,
     trainer_fit_kwargs_for_checkpoint,
 )
+from schnetpack.utils.script import log_hyperparameters, print_config
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +38,7 @@ OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()), use_cache=T
 OmegaConf.register_new_resolver("petname", lambda: petname.generate())
 OmegaConf.register_new_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
 
-header = """
+header = r"""
    _____      __    _   __     __  ____             __
   / ___/_____/ /_  / | / /__  / /_/ __ \____ ______/ /__
   \__ \/ ___/ __ \/  |/ / _ \/ __/ /_/ / __ `/ ___/ //_/
@@ -53,13 +58,13 @@ def train(config: DictConfig):
 
     if OmegaConf.is_missing(config, "run.data_dir"):
         log.error(
-            f"Config incomplete! You need to specify the data directory `data_dir`."
+            "Config incomplete! You need to specify the data directory `data_dir`."
         )
         return
 
     if not ("model" in config and "data" in config):
         log.error(
-            f"""
+            """
         Config incomplete! You have to specify at least `data` and `model`!
         For an example, try one of our pre-defined experiments:
         > spktrain experiment=qm9_atomwise
@@ -202,7 +207,7 @@ def train(config: DictConfig):
     trainer.test(model=best_task, datamodule=datamodule)
 
     # Store best model
-    log.info(f"Store best model")
+    log.info("Store best model")
     torch.save(best_task, config.globals.model_path + ".task")
 
     best_task.save_model(config.globals.model_path, do_postprocessing=True)

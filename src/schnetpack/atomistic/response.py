@@ -1,12 +1,11 @@
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-
 from torch.autograd import grad
 
-from schnetpack.nn.utils import derivative_from_molecular, derivative_from_atomic
 import schnetpack.properties as properties
+from schnetpack.nn.utils import derivative_from_atomic, derivative_from_molecular
 
 __all__ = ["Forces", "Strain", "Response"]
 
@@ -188,7 +187,6 @@ class Response(nn.Module):
         # dE / dR
         # ================================
         if self.derivative_instructions["dEdR"]:
-
             # basic distance derivatives
             if properties.forces in self.response_properties:
                 results[properties.forces] = -basic_derivatives["dEdR"]
@@ -351,7 +349,6 @@ class Response(nn.Module):
         if (properties.forces in self.response_properties) or (
             properties.hessian in self.response_properties
         ):
-
             derivative_instructions["dEdR"] = True
             required_derivatives.add(properties.R)
             basic_derivatives["dEdR"] = properties.R
@@ -374,7 +371,6 @@ class Response(nn.Module):
             or (properties.polarizability_derivatives in self.response_properties)
             or (properties.partial_charges in self.response_properties)
         ):
-
             derivative_instructions["dEdF"] = True
             required_derivatives.add(properties.electric_field)
             basic_derivatives["dEdF"] = properties.electric_field

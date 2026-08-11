@@ -1,11 +1,12 @@
-import torch
-from torch.utils.data import DataLoader
+from typing import Any, Callable, List, Optional, Sequence, TypeVar
 
-from typing import Optional, Sequence
-from torch.utils.data import Dataset, Sampler
-from torch.utils.data.dataloader import _collate_fn_t, _T_co
+import torch
+from torch.utils.data import DataLoader, Dataset, Sampler
 
 import schnetpack.properties as structure
+
+_T_co = TypeVar("_T_co", covariant=True)
+_collate_fn_t = Callable[[List[Any]], Any]
 
 __all__ = ["AtomsLoader"]
 
@@ -50,7 +51,7 @@ def _atoms_collate_fn(batch):
         if key in elem.keys():
             indices = []
             offset = 0
-            for idx, d in enumerate(batch):
+            for _idx, d in enumerate(batch):
                 indices.append(d[key] + offset)
                 offset += d[structure.idx_j].shape[0]
             coll_batch[key] = torch.cat(indices, 0)

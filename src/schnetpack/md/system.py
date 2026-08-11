@@ -4,16 +4,14 @@ It includes functionality for loading molecules from files.
 All this functionality is encoded in the :obj:`schnetpack.md.System` class.
 """
 
+from typing import List, OrderedDict, Union
+
 import torch
 import torch.nn as nn
-
-from schnetpack.md.utils import NormalModeTransformer
 from ase import Atoms
 
-from typing import Union, List, OrderedDict
-
 from schnetpack import units as spk_units
-from schnetpack.md.utils import UninitializedMixin
+from schnetpack.md.utils import NormalModeTransformer, UninitializedMixin
 
 __all__ = ["System"]
 
@@ -373,7 +371,7 @@ class System(UninitializedMixin, nn.Module):
         return self.momenta / self.masses
 
     @property
-    def kinetic_energy(self) -> torch.tensor:
+    def kinetic_energy(self) -> torch.Tensor:
         """
         Convenience property for computing the kinetic energy associated with
         each replica and molecule.
@@ -434,7 +432,7 @@ class System(UninitializedMixin, nn.Module):
         return self.energy
 
     @potential_energy.setter
-    def potential_energy(self, energy: torch.tensor):
+    def potential_energy(self, energy: torch.Tensor):
         """
         Setter for the potential energy.
 

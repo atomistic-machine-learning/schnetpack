@@ -26,5 +26,3 @@ Materials
 
     MaterialsProject
     OrganicMaterialsDatabase
-
-

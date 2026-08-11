@@ -1,6 +1,6 @@
 import math
-import torch
 
+import torch
 from torch.nn import functional
 
 __all__ = ["shifted_softplus", "softplus_inverse", "ShiftedSoftplus"]

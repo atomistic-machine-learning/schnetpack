@@ -1,9 +1,10 @@
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 import schnetpack.nn as snn
-from typing import Tuple
 
 __all__ = ["GatedEquivariantBlock"]
 

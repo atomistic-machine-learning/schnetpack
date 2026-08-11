@@ -26,9 +26,9 @@ dependencies = [
     "ase>=3.23",
     "h5py",
     "pyyaml",
-    "hydra-core>=1.1.0",
+    "hydra-core>=1.3,<2",
     "torch>=2.5.0",
-    "pytorch_lightning>=2.0.0",
+    "pytorch_lightning>=2.2,<3",
     "torchmetrics",
     "hydra-colorlog>=1.1.0",
     "rich",
@@ -39,15 +39,13 @@ dependencies = [
     "tensorboard>=2.17.1",
     "tensorboardX>=2.6.2.2",
     "tqdm",
-    "protobuf",
-    "progressbar",
     "petname",
     "vesin",
 ]
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-datadir", "pytest-benchmark"]
-dev = ["pre-commit", "black[jupyter]==24.4.2"]
+dev = ["pre-commit"]
 doc = [
     "ipykernel",
     "nbsphinx",
@@ -59,15 +57,86 @@ doc = [
 Repository = "https://github.com/atomistic-machine-learning/schnetpack"
 Documentation = "https://schnetpack.readthedocs.io"
 
+[project.scripts]
+spktrain = "schnetpack.cli:train"
+spkpredict = "schnetpack.cli:predict"
+spkmd = "schnetpack.md.cli:simulate"
+spkconvert = "schnetpack.cli_scripts.convert:main"
+spkdeploy = "schnetpack.cli_scripts.deploy:main"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = ["docs/_build", "src/schnetpack.egg-info"]
+
+[tool.ruff.lint]
+select = [
+    "F",  # pyflakes
+    "E4", # pycodestyle: import placement
+    "E7", # pycodestyle: statement/comparison bugs
+    "E9", # pycodestyle: syntax and IO errors
+    "W",  # pycodestyle warnings, incl. W605 invalid escape sequence
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "RUF013", # implicit Optional
+    "NPY",    # numpy legacy/removed API
+]
+ignore = [
+    # ~876 hits, almost all docstrings and comments that the formatter will not
+    # reflow. Code width is enforced by `ruff format`, not by a lint rule.
+    "E501",
+    # `l` is angular momentum and `I` a moment of inertia. This is physics code.
+    "E741",
+    # function call in default argument: pervasive torch/hydra idiom here.
+    "B008",
+    # zip() without strict=: noisy, and not a bug in this codebase's usage.
+    "B905",
+    # legacy np.random.* is deliberate in test fixtures and tutorials, where a
+    # seeded global RNG is the point. Not a correctness issue.
+    "NPY002",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Every star-import in the package is in an __init__.py, and those re-exports
+# ARE the public API surface (schnetpack.SchNet et al. resolve through them).
+# schnetpack/__init__.py is also load-order-sensitive, so isort must leave it
+# alone.
+"__init__.py" = ["F401", "F403", "F405", "E402", "I001"]
+# tests/data/test_transforms.py deliberately star-imports schnetpack.transform
+# to exercise the public surface the same way a user would.
+"tests/**" = ["F841", "F403", "F405"]
+# Tutorial notebooks are teaching material: `for step in tqdm(...)` reads better
+# than `for _step in ...` even when the variable is unused.
+"examples/**" = ["B007"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["schnetpack"]
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "--benchmark-skip",
+    "-m", "not slow and not download",
+]
+# Umbrella for strict_config + strict_markers + strict_xfail +
+# strict_parametrization_ids (pytest >= 9). Set as an ini option, NOT as
+# `--strict-markers` in addopts: those flags are OverrideIniAction, which only
+# fires when passed on the command line, so from addopts they are silently
+# inert and an unregistered marker stays a mere warning.
+strict = true
+markers = [
+    "slow: takes more than a few seconds; deselected by default (run with `-m slow`)",
+    "download: needs network access to fetch a dataset; deselected by default (run with `-m download`)",
+]
+filterwarnings = [
+    "error::SyntaxWarning",
+]
+
 [tool.setuptools]
 package-dir = { "" = "src" }
-script-files = [
-    "src/scripts/spkconvert",
-    "src/scripts/spktrain",
-    "src/scripts/spkpredict",
-    "src/scripts/spkmd",
-    "src/scripts/spkdeploy",
-]
 
 [tool.setuptools.dynamic]
 version = {attr = "schnetpack.__version__"}
@@ -76,4 +145,5 @@ version = {attr = "schnetpack.__version__"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-schnetpack = ["configs/**/*.yaml"]
+"schnetpack" = ["configs/**/*.yaml"]
+"schnetpack.md" = ["md_configs/**/*.yaml"]

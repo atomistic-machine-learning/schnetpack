@@ -5,13 +5,13 @@ import tarfile
 import tempfile
 from typing import Dict, List, Optional
 from urllib import request as request
-from ase.db import connect
 
 import h5py
 import numpy as np
 from ase import Atoms
+from ase.db import connect
 
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
 
 __all__ = ["ANI1"]

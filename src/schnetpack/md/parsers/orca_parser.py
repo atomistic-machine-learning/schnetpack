@@ -4,10 +4,10 @@ information from the output files, as well as gradient and hessian files generat
 the ORCA code package. Contains several predefined parsers.
 """
 
-from typing import Optional, List, Dict, Union
-
 import logging
 import os
+from typing import Dict, List, Optional, Union
+
 import numpy as np
 from ase import Atoms, units
 from tqdm import tqdm
@@ -82,9 +82,11 @@ class OrcaParser:
         target_properties: List,
         filter: Optional[Dict[str, float]] = None,
         mask_charges: bool = False,
-        property_units: Dict[str, Union[str, float]] = {},
+        property_units: Optional[Dict[str, Union[str, float]]] = None,
         distance_unit: Union[str, float] = 1.0,
     ):
+        if property_units is None:
+            property_units = {}
         self.dbpath = dbpath
 
         main_properties = []
@@ -103,7 +105,7 @@ class OrcaParser:
             elif p in self.hessian_properties:
                 hessian_properties.append(p)
             else:
-                print("Unrecognized property {:s}".format(p))
+                log.warning("Unrecognized property {:s}".format(p))
 
         if properties.electric_field in target_properties:
             dummy_properties.append(properties.electric_field)
@@ -149,9 +151,7 @@ class OrcaParser:
         property_buffer = []
 
         for file in tqdm(sorted(data_files), ncols=100):
-
             if os.path.exists(file):
-
                 atoms, properties = self._parse_molecule(file)
 
                 if properties is not None:
@@ -210,7 +210,7 @@ class OrcaParser:
         target_properties = {}
         for p in main_properties:
             if main_properties[p] is None:
-                print("Error parsers {:s}".format(p))
+                log.error("Error parsing {:s}".format(p))
                 return None, None
             elif p == "atoms":
                 atypes, coords = main_properties[p]
@@ -223,7 +223,7 @@ class OrcaParser:
                 os.path.splitext(datafile)[0] + self.file_extensions["hessian"]
             )
             if not os.path.exists(hessian_file):
-                print("Could not open Hessian file {:s}".format(hessian_file))
+                log.warning("Could not open Hessian file {:s}".format(hessian_file))
                 return atoms, None
             else:
                 self.hessian_parser.parse_file(hessian_file)
@@ -275,7 +275,7 @@ class OrcaParser:
         else:
             return True
 
-    def _mask_charges(self, main_properties: Dict[str, np.array]):
+    def _mask_charges(self, main_properties: Dict[str, np.ndarray]):
         """
         Remove the external charges Q introduced in orca input file. This is
         only necessary, if the charges are given in the input file. This in
@@ -305,7 +305,7 @@ class OrcaParser:
         return main_properties
 
 
-def format_dipole_derivatives(target_property: np.array):
+def format_dipole_derivatives(target_property: np.ndarray):
     """
     Reshape the extracted dipole derivatives to the correct
     format. Format is Natoms x (dx dy dz) x (property x y z)
@@ -322,7 +322,7 @@ def format_dipole_derivatives(target_property: np.array):
     return target_property
 
 
-def format_polarizability_derivatives(target_property: np.array):
+def format_polarizability_derivatives(target_property: np.ndarray):
     """
     Reshape the extracted polarizability derivatives to the correct
     format. Format is Natoms x (dx dy dz) x (property Tensor)
@@ -698,14 +698,13 @@ class OrcaMainFileParser(OrcaOutputParser):
     }
 
     def __init__(self, target_properties: Optional[List[str]] = None):
-
         if target_properties is None:
             to_parse = self.target_properties
         else:
             to_parse = []
             for p in target_properties:
                 if p not in self.target_properties:
-                    print("Cannot parse property {:s}".format(p))
+                    log.warning("Cannot parse property {:s}".format(p))
                 else:
                     to_parse.append(p)
 

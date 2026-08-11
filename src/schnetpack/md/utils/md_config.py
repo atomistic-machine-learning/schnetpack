@@ -1,9 +1,10 @@
 import copy
 import logging
-from omegaconf import DictConfig, open_dict, OmegaConf
-from schnetpack.utils import str2class
-
 from typing import List, Tuple
+
+from omegaconf import DictConfig, OmegaConf, open_dict
+
+from schnetpack.utils import str2class
 
 log = logging.getLogger(__name__)
 

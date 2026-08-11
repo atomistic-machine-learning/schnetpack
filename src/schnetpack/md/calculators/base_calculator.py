@@ -1,20 +1,20 @@
 from __future__ import annotations
-from typing import List, Union, Dict, Optional, Tuple
 
-from typing import TYPE_CHECKING
 from contextlib import nullcontext
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
 if TYPE_CHECKING:
     from schnetpack.md import System
 
+import os
+
 import torch
 import torch.nn as nn
-from schnetpack import units as spk_units
-from schnetpack import properties
 
-import os
+from schnetpack import properties
+from schnetpack import units as spk_units
 
 __all__ = ["MDCalculator", "MDCalculatorError", "QMCalculator", "QMCalculatorError"]
 
@@ -55,9 +55,11 @@ class MDCalculator(nn.Module):
         position_unit: Union[str, float],
         energy_key: Optional[str] = None,
         stress_key: Optional[str] = None,
-        property_conversion: Dict[str, Union[str, float]] = {},
+        property_conversion: Optional[Dict[str, Union[str, float]]] = None,
         gradients_required: bool = False,
     ):
+        if property_conversion is None:
+            property_conversion = {}
         super(MDCalculator, self).__init__()
         # Get required properties and filter non-unique entries
         self.required_properties = list(set(required_properties))
@@ -130,7 +132,7 @@ class MDCalculator(nn.Module):
             for p in self.required_properties:
                 if p not in self.results:
                     raise MDCalculatorError(
-                        "Requested property {:s} not in " "results".format(p)
+                        "Requested property {:s} not in results".format(p)
                     )
                 else:
                     dim = self.results[p].shape
@@ -276,10 +278,12 @@ class QMCalculator(MDCalculator):
         position_unit: Union[str, float],
         energy_key: Optional[str] = None,
         stress_key: Optional[str] = None,
-        property_conversion: Dict[str, Union[str, float]] = {},
+        property_conversion: Optional[Dict[str, Union[str, float]]] = None,
         overwrite: bool = True,
         adaptive: bool = False,
     ):
+        if property_conversion is None:
+            property_conversion = {}
         super(QMCalculator, self).__init__(
             required_properties=required_properties,
             force_key=force_key,
@@ -289,8 +293,6 @@ class QMCalculator(MDCalculator):
             stress_key=stress_key,
             property_conversion=property_conversion,
         )
-
-        from os import path
 
         self.qm_executable = os.path.abspath(qm_executable)
 
@@ -304,7 +306,7 @@ class QMCalculator(MDCalculator):
         self.overwrite = overwrite
         self.adaptive = adaptive
 
-    def calculate(self, system: System, samples: Optional[np.array] = None):
+    def calculate(self, system: System, samples: Optional[np.ndarray] = None):
         """
         Perform the calculation with a quantum chemistry code.
         If samples is given, only a subset of molecules is selected.
@@ -361,7 +363,7 @@ class QMCalculator(MDCalculator):
             atom_buffer, property_buffer = self._format_ase(molecules, outputs)
             return atom_buffer, property_buffer
 
-    def _extract_molecules(self, system: System, samples: Optional[np.array] = None):
+    def _extract_molecules(self, system: System, samples: Optional[np.ndarray] = None):
         """
         Extract atom types and molecular structures from the system. and convert to
         appropriate units.
@@ -398,7 +400,7 @@ class QMCalculator(MDCalculator):
         return molecules
 
     def _run_computation(
-        self, molecules: List[Tuple[np.array, np.array]], current_compdir: str
+        self, molecules: List[Tuple[np.ndarray, np.ndarray]], current_compdir: str
     ):
         """
         Placeholder performing the computation.
@@ -421,7 +423,7 @@ class QMCalculator(MDCalculator):
         raise NotImplementedError
 
     def _format_ase(
-        self, molecules: List[Tuple[np.array, np.array]], outputs: List[str]
+        self, molecules: List[Tuple[np.ndarray, np.ndarray]], outputs: List[str]
     ):
         """
         Placeholder to format the ouput for storage in an ASE database (for adaptive sampling).

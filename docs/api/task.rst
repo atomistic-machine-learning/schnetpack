@@ -10,4 +10,3 @@ schnetpack.task
     AtomisticTask
     ModelOutput
     UnsupervisedModelOutput
-

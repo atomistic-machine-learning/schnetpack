@@ -10,13 +10,14 @@ References
                Phys. Chem. Chem. Phys., 15 (18), 6608--6622. 2013.
 """
 
+import logging
+
 import numpy as np
 from ase import units as ase_units
-from schnetpack.md.data import HDF5Loader
-import logging
 
 from schnetpack import properties
 from schnetpack import units as spk_units
+from schnetpack.md.data import HDF5Loader
 
 __all__ = ["VibrationalSpectrum", "PowerSpectrum", "IRSpectrum", "RamanSpectrum"]
 
@@ -36,7 +37,7 @@ def cosine_sq_window(n_points: int):
     return window
 
 
-def fft_autocorrelation(data: np.array, n_lags: int):
+def fft_autocorrelation(data: np.ndarray, n_lags: int):
     """
     Routine for fast computation of autocorrelation using FFT and Wiener--Kinchie theorem.
 
@@ -120,7 +121,7 @@ class VibrationalSpectrum:
 
         self._process_spectrum()
 
-    def _compute_spectrum(self, autocorrelation: np.array):
+    def _compute_spectrum(self, autocorrelation: np.ndarray):
         """
         Compute the spectrum from the autocorrelation function.
 
@@ -157,7 +158,7 @@ class VibrationalSpectrum:
         return frequencies, intensities
 
     @staticmethod
-    def _compute_autocorrelations(data: np.array):
+    def _compute_autocorrelations(data: np.ndarray):
         """
         Compute the autocorrelation function of the data. A separate autocorrelation is computred
         for every array dimension except the first axis.
@@ -197,7 +198,7 @@ class VibrationalSpectrum:
         """
         raise NotImplementedError
 
-    def _process_autocorrelation(self, autocorrelation: np.array):
+    def _process_autocorrelation(self, autocorrelation: np.ndarray):
         """
         Placeholder for postprocessing the autocorrelation functions (e.g. weighting).
 
@@ -253,7 +254,7 @@ class PowerSpectrum(VibrationalSpectrum):
         relevant_data = self.data.get_velocities(molecule_idx)
         return relevant_data
 
-    def _process_autocorrelation(self, autocorrelation: np.array):
+    def _process_autocorrelation(self, autocorrelation: np.ndarray):
         """
         Sum over number of atoms and the three Cartesian components.
 
@@ -310,7 +311,7 @@ class IRSpectrum(VibrationalSpectrum):
         )
         return relevant_data
 
-    def _process_autocorrelation(self, autocorrelation: np.array):
+    def _process_autocorrelation(self, autocorrelation: np.ndarray):
         """
         Sum over the three Cartesian components.
 

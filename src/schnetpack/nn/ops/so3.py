@@ -1,9 +1,9 @@
 import math
-import torch
-from sympy.physics.wigner import clebsch_gordan
-
 from functools import lru_cache
 from typing import Tuple
+
+import torch
+from sympy.physics.wigner import clebsch_gordan
 
 
 @lru_cache(maxsize=10)

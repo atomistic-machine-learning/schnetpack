@@ -10,13 +10,12 @@ from urllib import request as request
 
 import numpy as np
 from ase import Atoms
-from ase.io.extxyz import read_xyz
 from ase.db import connect
-
+from ase.io.extxyz import read_xyz
 from tqdm import tqdm
 
 import schnetpack.properties as structure
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
 
 __all__ = ["QM9"]
@@ -205,7 +204,6 @@ class QM9(DownloadableASEAtomsData):
         tmpdir: str,
         uncharacterized: Optional[List[int]],
     ) -> None:
-
         logging.info("Downloading GDB-9 data...")
         tar_path = os.path.join(tmpdir, "gdb9.tar.gz")
         raw_path = os.path.join(tmpdir, "gdb9_xyz")

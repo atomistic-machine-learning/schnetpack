@@ -23,4 +23,3 @@ Scheduler
     :template: classtemplate.rst
 
     ReduceLROnPlateau
-

@@ -32,7 +32,7 @@ For example, the following commands will set up a corresponding conda environmen
     conda create -n spk_lammps python=3.9 cuda-toolkit=11.7 pytorch mkl-include numpy -c pytorch -c nvidia
     conda activate spk_lammps
     pip install schnetpack
-    
+
 
 Downloading LAMMPS
 ==================

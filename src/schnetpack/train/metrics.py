@@ -1,11 +1,11 @@
+from typing import Optional, Tuple
+
 import torch
 from torchmetrics import Metric
 from torchmetrics.functional.regression.mae import (
     _mean_absolute_error_compute,
     _mean_absolute_error_update,
 )
-
-from typing import Optional, Tuple
 
 __all__ = ["TensorDiagonalMeanAbsoluteError"]
 

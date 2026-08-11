@@ -1,10 +1,11 @@
+from typing import Callable, Dict, Optional, Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Union, Callable, Dict, Optional
 
-import schnetpack.properties as properties
 import schnetpack.nn as snn
+import schnetpack.properties as properties
 import schnetpack.units as spk_units
 
 __all__ = ["ZBLRepulsionEnergy"]

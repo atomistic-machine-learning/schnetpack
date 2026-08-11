@@ -6,10 +6,11 @@ In addition to loading structures, velocities, etc., various postprocessing func
 
 import json
 import logging
+from typing import Optional
+
 import h5py
 import numpy as np
 from ase import Atoms
-from typing import Optional
 from tqdm import trange
 
 from schnetpack import properties, units

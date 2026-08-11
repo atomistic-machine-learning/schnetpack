@@ -4,14 +4,14 @@ import shutil
 import tarfile
 import tempfile
 from typing import Dict, List, Optional
-from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import numpy as np
 from ase import Atoms
 
 import schnetpack.properties as structure
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.data.splitting import (
     RandomSplit,
     SplittingStrategy,

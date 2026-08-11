@@ -1,11 +1,9 @@
-from typing import Callable, Union, Optional
+from typing import Callable, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn.init import xavier_uniform_
-
-from torch.nn.init import zeros_
+from torch.nn.init import xavier_uniform_, zeros_
 
 __all__ = ["Dense"]
 

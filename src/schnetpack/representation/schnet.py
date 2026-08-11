@@ -1,11 +1,12 @@
-from typing import Callable, Dict, Union, Optional, List
+from typing import Callable, Dict, List, Optional, Union
+
 import torch
 from torch import nn
+
+import schnetpack.nn as snn
 import schnetpack.properties as properties
 from schnetpack.nn import Dense, scatter_add
 from schnetpack.nn.activations import shifted_softplus
-
-import schnetpack.nn as snn
 
 __all__ = ["SchNet", "SchNetInteraction"]
 
@@ -96,7 +97,7 @@ class SchNet(nn.Module):
         n_interactions: int,
         radial_basis: nn.Module,
         cutoff_fn: Callable,
-        n_filters: int = None,
+        n_filters: Optional[int] = None,
         shared_interactions: bool = False,
         activation: Union[Callable, nn.Module] = shifted_softplus,
         nuclear_embedding: Optional[nn.Module] = None,
@@ -147,7 +148,6 @@ class SchNet(nn.Module):
         )
 
     def forward(self, inputs: Dict[str, torch.Tensor]):
-
         # get tensors from input dictionary
         atomic_numbers = inputs[properties.Z]
         r_ij = inputs[properties.Rij]

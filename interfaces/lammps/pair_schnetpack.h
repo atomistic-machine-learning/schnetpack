@@ -20,7 +20,7 @@ PairStyle(schnetpack,PairSCHNETPACK)
 #include <torch/torch.h>
 
 namespace LAMMPS_NS {
-    
+
 class PairSCHNETPACK : public Pair {
  public:
   PairSCHNETPACK(class LAMMPS *);

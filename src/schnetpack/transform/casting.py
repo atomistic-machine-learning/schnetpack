@@ -1,8 +1,8 @@
 from typing import Dict
-from typing import Dict, Optional
-from schnetpack.utils import as_dtype
 
 import torch
+
+from schnetpack.utils import as_dtype
 
 from .base import Transform
 

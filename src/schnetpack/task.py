@@ -1,5 +1,5 @@
 import warnings
-from typing import Optional, Dict, List, Type, Any
+from typing import Any, Dict, List, Optional, Type
 
 import pytorch_lightning as pl
 import torch
@@ -164,16 +164,13 @@ class AtomisticTask(pl.LightningModule):
         return pred, targets
 
     def training_step(self, batch, batch_idx):
-
         targets = {
             output.target_property: batch[output.target_property]
             for output in self.outputs
             if not isinstance(output, UnsupervisedModelOutput)
         }
-        try:
+        if "considered_atoms" in batch:
             targets["considered_atoms"] = batch["considered_atoms"]
-        except:
-            pass
 
         pred = self.predict_without_postprocessing(batch)
         pred, targets = self.apply_constraints(pred, targets)
@@ -192,10 +189,8 @@ class AtomisticTask(pl.LightningModule):
             for output in self.outputs
             if not isinstance(output, UnsupervisedModelOutput)
         }
-        try:
+        if "considered_atoms" in batch:
             targets["considered_atoms"] = batch["considered_atoms"]
-        except:
-            pass
 
         pred = self.predict_without_postprocessing(batch)
         pred, targets = self.apply_constraints(pred, targets)
@@ -222,10 +217,8 @@ class AtomisticTask(pl.LightningModule):
             for output in self.outputs
             if not isinstance(output, UnsupervisedModelOutput)
         }
-        try:
+        if "considered_atoms" in batch:
             targets["considered_atoms"] = batch["considered_atoms"]
-        except:
-            pass
 
         pred = self.predict_without_postprocessing(batch)
         pred, targets = self.apply_constraints(pred, targets)
@@ -266,7 +259,8 @@ class AtomisticTask(pl.LightningModule):
                 warnings.warn(
                     "Learning rate scheduling is set to occur after the epoch ends. To enable scheduling before the "
                     "epoch end, please set the `val_check_interval` parameter to a value greater than 1.0, which "
-                    "indicates the number of training steps after which the model should be validated."
+                    "indicates the number of training steps after which the model should be validated.",
+                    stacklevel=2,
                 )
             # incase model is validated before epoch end (recommended use of val_check_interval)
             if self.trainer.val_check_interval > 1.0:
@@ -279,8 +273,8 @@ class AtomisticTask(pl.LightningModule):
 
     def optimizer_step(
         self,
-        epoch: int = None,
-        batch_idx: int = None,
+        epoch: Optional[int] = None,
+        batch_idx: Optional[int] = None,
         optimizer=None,
         optimizer_closure=None,
     ):

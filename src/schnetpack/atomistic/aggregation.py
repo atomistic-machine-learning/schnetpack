@@ -1,7 +1,7 @@
+from typing import Dict, List
+
 import torch
 import torch.nn as nn
-
-from typing import Dict, List
 
 __all__ = ["Aggregation"]
 

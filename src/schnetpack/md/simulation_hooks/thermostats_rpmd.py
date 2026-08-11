@@ -4,21 +4,22 @@ ring polymer molecular dynamics simulations.
 """
 
 from __future__ import annotations
-import torch
 
-from typing import Optional, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
+
+import torch
 
 if TYPE_CHECKING:
     from schnetpack.md.simulator import Simulator, System
 
+from schnetpack import units as spk_units
 from schnetpack.md.simulation_hooks.thermostats import (
-    LangevinThermostat,
     GLEThermostat,
-    ThermostatError,
+    LangevinThermostat,
     NHCThermostat,
+    ThermostatError,
 )
 from schnetpack.md.utils import load_gle_matrices
-from schnetpack import units as spk_units
 
 __all__ = [
     "PILELocalThermostat",
@@ -349,12 +350,13 @@ class PIGLETThermostat(RPMDGLEThermostat):
 
         if a_matrix is None:
             raise ThermostatError(
-                "Error reading GLE matrices " "from {:s}".format(self.gle_file)
+                "Error reading GLE matrices from {:s}".format(self.gle_file)
             )
         if a_matrix.shape[0] != simulator.system.n_replicas:
             raise ThermostatError(
-                "Expected {:d} beads but "
-                "found {:d}.".format(simulator.system.n_replicas, a_matrix.shape[0])
+                "Expected {:d} beads but found {:d}.".format(
+                    simulator.system.n_replicas, a_matrix.shape[0]
+                )
             )
 
         all_c1 = []

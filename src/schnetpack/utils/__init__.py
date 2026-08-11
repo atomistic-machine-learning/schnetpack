@@ -1,9 +1,11 @@
-from .compatibility import *
 import importlib
+from typing import List, Type, Union
+
 import torch
-from typing import Type, Union, List
 
 from schnetpack import properties as spk_properties
+
+from .compatibility import *
 
 TORCH_DTYPES = {
     "float32": torch.float32,
@@ -54,8 +56,8 @@ def int2precision(precision: Union[int, torch.dtype]):
     else:
         try:
             return getattr(torch, f"float{precision}")
-        except AttributeError:
-            raise AttributeError(f"Unknown float precision {precision}")
+        except AttributeError as e:
+            raise AttributeError(f"Unknown float precision {precision}") from e
 
 
 def str2class(class_path: str) -> Type:
