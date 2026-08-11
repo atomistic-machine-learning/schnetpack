@@ -1,15 +1,18 @@
+import logging
 import os
-import torch
 import shutil
+from typing import Dict, List, Optional
+
 import fasteners
+import numpy as np
+import torch
 from ase import Atoms
 from ase.neighborlist import neighbor_list as ase_neighbor_list
-from matscipy.neighbours import neighbour_list as msp_neighbor_list
-from .base import Transform
 from dirsync import sync
-import numpy as np
-from typing import Optional, Dict, List
+from matscipy.neighbours import neighbour_list as msp_neighbor_list
 from vesin import NeighborList as vesin_nl
+
+from .base import Transform
 
 __all__ = [
     "ASENeighborList",
@@ -27,6 +30,8 @@ __all__ = [
 
 import schnetpack as spk
 from schnetpack import properties
+
+log = logging.getLogger(__name__)
 
 
 class CacheException(Exception):
@@ -55,7 +60,7 @@ class CachedNeighborList(Transform):
         neighbor_list: Transform,
         nbh_transforms: Optional[List[torch.nn.Module]] = None,
         keep_cache: bool = False,
-        cache_workdir: str = None,
+        cache_workdir: Optional[str] = None,
     ):
         """
         Args:
@@ -133,27 +138,34 @@ class CachedNeighborList(Transform):
                     }
                     torch.save(data, cache_file)
                 except Exception as e:
-                    print(e)
+                    log.warning(
+                        "neighbor list cache write failed: %s", e, exc_info=True
+                    )
         return inputs
 
     def teardown(self):
+        # Cache cleanup is best-effort, but scope the suppression to filesystem
+        # errors: a bare `except` here also swallows KeyboardInterrupt and
+        # SystemExit, which makes a Ctrl-C during teardown look like a hang.
         if not self.keep_cache and not self.preexisting_cache:
             try:
                 shutil.rmtree(self.cache_path)
-            except:
-                pass
+            except OSError as e:
+                log.debug("could not remove cache dir %s: %s", self.cache_path, e)
 
         if self.cache_workdir is not None:
             if self.keep_cache:
                 try:
                     sync(self.cache_workdir, self.cache_path, "sync")
-                except:
-                    pass
+                except OSError as e:
+                    log.debug("could not sync cache workdir back: %s", e)
 
             try:
                 shutil.rmtree(self.cache_workdir)
-            except:
-                pass
+            except OSError as e:
+                log.debug(
+                    "could not remove cache workdir %s: %s", self.cache_workdir, e
+                )
 
 
 class NeighborListTransform(Transform):
@@ -341,7 +353,6 @@ class SkinNeighborList(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-
         update_required, inputs = self._update(inputs)
         inputs = self.distance_calculator(inputs)
         inputs = self._remove_neighbors_in_skin(inputs)
@@ -355,7 +366,6 @@ class SkinNeighborList(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-
         Rij = inputs[properties.Rij]
         idx_i = inputs[properties.idx_i]
         idx_j = inputs[properties.idx_j]
@@ -411,7 +421,6 @@ class SkinNeighborList(Transform):
         return True, inputs
 
     def _build(self, inputs):
-
         # apply all transforms to obtain new neighbor list
         inputs = self.neighbor_list(inputs)
         for nbh_transform in self.nbh_transforms:
@@ -579,7 +588,6 @@ class FilterNeighbors(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-
         n_neighbors = inputs[properties.idx_i].shape[0]
         slab_indices = inputs[self.selection_name].tolist()
         kept_nbh_indices = []
