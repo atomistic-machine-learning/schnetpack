@@ -8,7 +8,8 @@ from typing import List, Union
 import torch
 
 from schnetpack import units as spk_units
-from schnetpack.md import System
+
+from .system import System
 
 __all__ = ["Initializer", "MaxwellBoltzmannInit", "UniformInit"]
 

@@ -15,6 +15,11 @@ from tqdm import trange
 
 from schnetpack import properties, units
 
+__all__ = [
+    "HDF5LoaderError",
+    "HDF5Loader",
+]
+
 log = logging.getLogger(__name__)
 
 

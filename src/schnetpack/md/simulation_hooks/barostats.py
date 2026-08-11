@@ -13,10 +13,10 @@ if TYPE_CHECKING:
 import torch
 
 from schnetpack import units as spk_units
+from schnetpack.md.utils import StableSinhDiv, YSWeights
 
 # from schnetpack.md import System, Simulator
-from schnetpack.md.simulation_hooks import SimulationHook
-from schnetpack.md.utils import StableSinhDiv, YSWeights
+from .basic_hooks import SimulationHook
 
 __all__ = ["BarostatHook", "NHCBarostatIsotropic", "NHCBarostatAnisotropic"]
 

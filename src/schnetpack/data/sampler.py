@@ -4,7 +4,8 @@ import numpy as np
 from torch.utils.data import WeightedRandomSampler
 
 from schnetpack import properties
-from schnetpack.data import ASEAtomsData
+
+from .atoms import ASEAtomsData
 
 __all__ = [
     "StratifiedSampler",

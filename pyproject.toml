@@ -99,10 +99,10 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Every star-import in the package is in an __init__.py, and those re-exports
-# ARE the public API surface (schnetpack.SchNet et al. resolve through them).
-# schnetpack/__init__.py is also load-order-sensitive, so isort must leave it
-# alone.
-"__init__.py" = ["F401", "F403", "F405", "E402", "I001"]
+# ARE the public API surface: schnetpack.SchNet et al. resolve through them, and
+# mypy honours them even under --no-implicit-reexport because each source module
+# declares __all__.
+"__init__.py" = ["F401", "F403", "F405", "E402"]
 # tests/data/test_transforms.py deliberately star-imports schnetpack.transform
 # to exercise the public surface the same way a user would.
 "tests/**" = ["F841", "F403", "F405"]

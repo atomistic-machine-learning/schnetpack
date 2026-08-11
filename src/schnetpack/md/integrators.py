@@ -13,8 +13,9 @@ from ase import units as ase_units
 
 import schnetpack as spk
 from schnetpack import units as spk_units
-from schnetpack.md import System
 from schnetpack.md.simulation_hooks import BarostatHook
+
+from .system import System
 
 __all__ = ["VelocityVerlet", "RingPolymer", "NPTVelocityVerlet", "NPTRingPolymer"]
 

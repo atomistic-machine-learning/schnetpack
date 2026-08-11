@@ -6,6 +6,12 @@ from omegaconf import DictConfig, OmegaConf, open_dict
 
 from schnetpack.utils import str2class
 
+__all__ = [
+    "MDConfigMerger",
+    "is_rpmd_integrator",
+    "get_npt_integrator",
+]
+
 log = logging.getLogger(__name__)
 
 integrator_to_npt = {

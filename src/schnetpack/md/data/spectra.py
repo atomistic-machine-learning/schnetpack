@@ -17,7 +17,8 @@ from ase import units as ase_units
 
 from schnetpack import properties
 from schnetpack import units as spk_units
-from schnetpack.md.data import HDF5Loader
+
+from .hdf5_data import HDF5Loader
 
 __all__ = ["VibrationalSpectrum", "PowerSpectrum", "IRSpectrum", "RamanSpectrum"]
 
