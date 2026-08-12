@@ -48,6 +48,10 @@ test = ["pytest", "pytest-datadir", "pytest-benchmark"]
 dev = ["pre-commit"]
 doc = [
     "ipykernel",
+    # The tutorials are jupytext py:percent files; nbsphinx reads them through
+    # jupytext (see nbsphinx_custom_formats in docs/conf.py), so the docs build
+    # cannot parse them without it.
+    "jupytext",
     "nbsphinx",
     "sphinx",
     "sphinx_rtd_theme",
@@ -102,8 +106,8 @@ ignore = [
 # tests/data/test_transforms.py deliberately star-imports schnetpack.transform
 # to exercise the public surface the same way a user would.
 "tests/**" = ["F841", "F403", "F405"]
-# Tutorial notebooks are teaching material: `for step in tqdm(...)` reads better
-# than `for _step in ...` even when the variable is unused.
+# The tutorials are teaching material: `for step in tqdm(...)` reads better than
+# `for _step in ...` even when the variable is unused.
 "examples/**" = ["B007"]
 # E741 flags `l` as visually confusable with `1`. Here it is the spherical
 # harmonic degree (angular momentum), and kept as `l`

@@ -86,6 +86,9 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+# The tutorials are version-controlled as jupytext .py files; opening one in
+# Jupyter creates a paired .ipynb next to it (see examples/jupytext.toml).
+examples/**/*.ipynb
 
 # pyenv
 .python-version

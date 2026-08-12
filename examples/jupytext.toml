@@ -1,0 +1,10 @@
+# The .py file is the version-controlled source for every tutorial and how-to.
+# Opening one in Jupyter creates a paired .ipynb alongside it, which is gitignored,
+# so you still get outputs and a normal notebook UI while you work.
+#
+# The metadata filters are load-bearing: without them jupytext stamps a YAML header
+# into the .py containing jupytext_version and kernelspec.display_name, which differ
+# per contributor and would reintroduce exactly the diff noise this format removes.
+formats = "ipynb,py:percent"
+notebook_metadata_filter = "-all"
+cell_metadata_filter = "-all"

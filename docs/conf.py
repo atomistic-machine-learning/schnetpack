@@ -45,8 +45,22 @@ extensions = [
 ]
 
 templates_path = ["_templates"]
-source_suffix = ".rst"  # nbsphinx registers ".ipynb" on its own
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
+source_suffix = ".rst"  # nbsphinx registers the notebook formats on its own
+exclude_patterns = [
+    "_build",
+    "Thumbs.db",
+    ".DS_Store",
+    "**.ipynb_checkpoints",
+    # nbsphinx_custom_formats below registers ".py" as a source suffix, and Sphinx
+    # does not exclude its own config file, so without this it tries to render
+    # conf.py as a document.
+    "conf.py",
+    # docs/tutorials and docs/howtos are symlinks into examples/, where opening a
+    # tutorial in Jupyter leaves a paired .ipynb next to the .py. Both would claim
+    # the same docname, so Sphinx would warn "multiple files found for the
+    # document" on every local build after someone runs a notebook.
+    "**/*.ipynb",
+]
 language = "en"
 pygments_style = "sphinx"
 
@@ -65,8 +79,13 @@ autodoc_inherit_docstrings = False
 # titled sections (e.g. "Requirements", "Summary") do not collide.
 autosectionlabel_prefix_document = True
 
-# The tutorials are shipped without stored outputs and are far too expensive to
-# run during a docs build (they train models), so render them as-is.
+# The tutorials and how-tos are stored as jupytext py:percent files rather than
+# .ipynb (see examples/jupytext.toml), which is why they carry no outputs at all.
+# nbsphinx reads them through jupytext.
+nbsphinx_custom_formats = {".py": ["jupytext.reads", {"fmt": "py:percent"}]}
+
+# They are also far too expensive to run during a docs build (they train models),
+# so render them as-is, without outputs.
 nbsphinx_execute = "never"
 
 intersphinx_mapping = {

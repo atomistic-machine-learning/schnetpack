@@ -11,16 +11,6 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-  # Strips notebook outputs and execution counts before commit.
-  - repo: https://github.com/kynan/nbstripout
-    rev: 0.8.1
-    hooks:
-      - id: nbstripout
-        # --keep-id: without it nbstripout renumbers every nbformat>=4.5 cell id
-        # to a sequential integer, rewriting all ~180 cells across the notebooks
-        # for no benefit and churning the diff on every unrelated edit.
-        args: [--keep-id]
-
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
