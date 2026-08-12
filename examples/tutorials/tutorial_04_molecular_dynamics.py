@@ -1,3 +1,9 @@
+# ---
+# jupyter:
+#   nbsphinx:
+#     execute: never
+# ---
+
 # %% [markdown]
 # # Molecular dynamics in SchNetPack
 #

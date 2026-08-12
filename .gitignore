@@ -5,9 +5,10 @@ __pycache__/
 .idea
 *.DS_Store
 
-docs/tutorials/*.db
-docs/tutorials/*.xyz
-docs/tutorials/qm9tut
+# created by docs/conf.py at build time
+docs/tutorials/
+docs/howtos/
+docs/trained_models/
 
 # hydra stuff
 outputs

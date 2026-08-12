@@ -8,8 +8,35 @@ with its ``doc`` extra before running Sphinx.  For a local build:
     # for clean build use: make clean && make html
 """
 
+import shutil
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as get_version
+from pathlib import Path
+
+# -- Notebook sources --------------------------------------------------------
+
+# The tutorials and how-tos live in examples/, but they cannot be pulled in with
+# a symlink: nbsphinx links the figures an executed notebook produces relative to
+# the notebook's real path, which for a symlinked directory points outside the
+# source directory, and Sphinx then drops every one of them ("image file not
+# readable"). So copy them in for the duration of the build. The copies are
+# gitignored; examples/ stays the single source of truth.
+_HERE = Path(__file__).parent.resolve()
+_EXAMPLES = _HERE.parent / "examples"
+for _name in ("tutorials", "howtos", "trained_models"):
+    _dest = _HERE / _name
+    if _dest.is_symlink():
+        # Left over from a checkout that predates the copying.
+        _dest.unlink()
+    elif _dest.is_dir():
+        shutil.rmtree(_dest)
+    shutil.copytree(
+        _EXAMPLES / _name,
+        _dest,
+        # Opening a tutorial in Jupyter leaves a paired .ipynb next to the .py
+        # (see examples/jupytext.toml); both would claim the same docname.
+        ignore=shutil.ignore_patterns("*.ipynb", ".ipynb_checkpoints", "__pycache__"),
+    )
 
 # -- Project information -----------------------------------------------------
 
@@ -55,11 +82,11 @@ exclude_patterns = [
     # does not exclude its own config file, so without this it tries to render
     # conf.py as a document.
     "conf.py",
-    # docs/tutorials and docs/howtos are symlinks into examples/, where opening a
-    # tutorial in Jupyter leaves a paired .ipynb next to the .py. Both would claim
-    # the same docname, so Sphinx would warn "multiple files found for the
-    # document" on every local build after someone runs a notebook.
+    # Same for any notebook that ends up here anyway: it would collide with the
+    # .py of the same name.
     "**/*.ipynb",
+    # Model checkpoints for howto_ensemble_calculation, not documents.
+    "trained_models",
 ]
 language = "en"
 pygments_style = "sphinx"
@@ -84,9 +111,11 @@ autosectionlabel_prefix_document = True
 # nbsphinx reads them through jupytext.
 nbsphinx_custom_formats = {".py": ["jupytext.reads", {"fmt": "py:percent"}]}
 
-# They are also far too expensive to run during a docs build (they train models),
-# so render them as-is, without outputs.
-nbsphinx_execute = "never"
+# opt out individually with an ``nbsphinx: execute: never``
+# header in their .py file.
+nbsphinx_execute = "auto"
+
+nbsphinx_kernel_name = "python3"
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),

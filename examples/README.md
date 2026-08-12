@@ -23,6 +23,24 @@ written back to the `.py` automatically.
 If you just want to read them, the rendered versions are at
 [schnetpack.readthedocs.io](https://schnetpack.readthedocs.io).
 
+## Which ones the docs build executes
+
+The documentation build runs every notebook here so that the rendered pages show real
+outputs. The four training tutorials are too expensive for that -- they download datasets
+and train models -- so each opts out with a header at the top of its `.py`:
+
+```
+# ---
+# jupyter:
+#   nbsphinx:
+#     execute: never
+# ---
+```
+
+Add that header to any new example that cannot run in a couple of minutes on a CPU;
+without it, the example has to keep working, because the weekly `docs` CI job and Read
+the Docs both execute it.
+
 ## Tutorials
 Jupyter notebooks demonstrating general concepts and workflows
 

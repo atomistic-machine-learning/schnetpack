@@ -1,3 +1,9 @@
+# ---
+# jupyter:
+#   nbsphinx:
+#     execute: never
+# ---
+
 # %% [markdown]
 # # Preparing and loading your data
 # This tutorial introduces how SchNetPack stores and loads data.

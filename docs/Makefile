@@ -17,7 +17,7 @@ help:
 # Also drop the autosummary output; "sphinx-build -M clean" only removes BUILDDIR,
 # leaving stale api/generated/*.rst behind for classes that no longer exist.
 clean:
-	rm -rf "$(BUILDDIR)" api/generated
+	rm -rf "$(BUILDDIR)" api/generated tutorials howtos trained_models
 
 # Catch-all target: route all unknown targets to Sphinx using the new
 # "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).

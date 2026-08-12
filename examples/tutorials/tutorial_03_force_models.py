@@ -1,3 +1,9 @@
+# ---
+# jupyter:
+#   nbsphinx:
+#     execute: never
+# ---
+
 # %% [markdown]
 # # Training a model on forces and energies
 #

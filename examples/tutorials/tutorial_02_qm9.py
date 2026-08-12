@@ -1,3 +1,9 @@
+# ---
+# jupyter:
+#   nbsphinx:
+#     execute: never
+# ---
+
 # %% [markdown]
 # # Training a neural network on QM9
 #
