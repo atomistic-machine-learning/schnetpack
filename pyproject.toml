@@ -123,8 +123,8 @@ testpaths = ["tests"]
 # inert and an unregistered marker stays a mere warning.
 strict = true
 markers = [
-    "slow: takes more than a few seconds; deselected by default (run with `-m slow`)",
-    "download: needs network access to fetch a dataset; deselected by default (run with `-m download`)",
+    "slow: takes more than a few seconds; (run with `-m slow`)",
+    "download: needs network access to fetch a dataset; (run with `-m download`)",
 ]
 filterwarnings = [
     "error::SyntaxWarning",

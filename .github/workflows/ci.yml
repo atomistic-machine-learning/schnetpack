@@ -7,8 +7,9 @@ on:
     branches: [master]
   pull_request:
   schedule:
-    # Monday 04:00 UTC - exercises the `slow`/`download` tests, which are
-    # deselected by default (see [tool.pytest.ini_options] in pyproject.toml).
+    # Monday 04:00 UTC - exercises the `slow`/`download` tests. They run by
+    # default for a plain local `pytest`, but the `test` job below excludes
+    # them, so this schedule (and the `slow` job) is what covers them in CI.
     - cron: "0 4 * * 1"
 
 permissions:
@@ -53,7 +54,7 @@ jobs:
         run: pip install "torch${{ matrix.torch }}" --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -e .[test] pytest-cov
       - run: pip list
-      - run: pytest --cov=schnetpack --cov-report=term-missing
+      - run: pytest --cov=schnetpack --cov-report=term-missing -m "not slow and not download"
 
   slow:
     if: github.event_name == 'schedule'
