@@ -1,9 +1,9 @@
+from typing import Dict, List
+
 import torch
 
-from schnetpack.transform.base import Transform
 from schnetpack import properties
-
-from typing import Dict, List
+from schnetpack.transform.base import Transform
 
 __all__ = ["SplitShielding"]
 

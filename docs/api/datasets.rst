@@ -1,6 +1,6 @@
 schnetpack.datasets
 ===================
-.. currentmodule:: datasets
+.. currentmodule:: schnetpack.datasets
 
 Molecules
 ------------
@@ -26,5 +26,3 @@ Materials
 
     MaterialsProject
     OrganicMaterialsDatabase
-
-

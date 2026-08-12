@@ -6,16 +6,16 @@ integrator simulates multiple replicas of the system coupled by harmonic springs
 a certain extent of nuclear quantum effects (e.g. tunneling).
 """
 
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
+from ase import units as ase_units
 
 import schnetpack as spk
-from schnetpack.md import System
+from schnetpack import units as spk_units
 from schnetpack.md.simulation_hooks import BarostatHook
 
-from ase import units as ase_units
-from schnetpack import units as spk_units
+from .system import System
 
 __all__ = ["VelocityVerlet", "RingPolymer", "NPTVelocityVerlet", "NPTRingPolymer"]
 
@@ -112,8 +112,9 @@ class VelocityVerlet(Integrator):
 
 class RingPolymer(Integrator):
     """
-    Integrator for ring polymer molecular dynamics, as e.g. described in
-    [#rpmd1]_
+    Integrator for ring polymer molecular dynamics.
+
+    The scheme is described e.g. in [#rpmd1]_.
 
     During the main step, ring polymer positions and momenta are transformed
     from bead to normal mode representation, propagated deterministically and

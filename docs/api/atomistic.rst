@@ -1,6 +1,6 @@
 schnetpack.atomistic
 ====================
-.. currentmodule:: atomistic
+.. currentmodule:: schnetpack.atomistic
 
 Output modules
 --------------

@@ -1,18 +1,15 @@
-from copy import copy
-from typing import Dict
+import os
+from collections import defaultdict
+from typing import Any, Dict, List
 
-from pytorch_lightning.callbacks import Callback
+import pytorch_lightning as pl
+import torch
+from pytorch_lightning.callbacks import BasePredictionWriter, Callback
 from pytorch_lightning.callbacks import ModelCheckpoint as BaseModelCheckpoint
-
 from torch_ema import ExponentialMovingAverage as EMA
 
-import torch
-import os
-from pytorch_lightning.callbacks import BasePredictionWriter
-from typing import List, Any
-from schnetpack.task import AtomisticTask
 from schnetpack import properties
-from collections import defaultdict
+from schnetpack.task import AtomisticTask
 
 __all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
 

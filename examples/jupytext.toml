@@ -1,0 +1,9 @@
+# The .py file is the version-controlled source for every tutorial and how-to.
+# Opening one in Jupyter creates a paired .ipynb alongside it, which is gitignored,
+# so you still get outputs and a normal notebook UI while you work.
+#
+# Remove metadata, except nbsphinx key which carries the per-notebook `execute`
+# flag (used in docs/conf.py) that defines if a notebook is executed in CI.
+formats = "ipynb,py:percent"
+notebook_metadata_filter = "nbsphinx,-all"
+cell_metadata_filter = "-all"

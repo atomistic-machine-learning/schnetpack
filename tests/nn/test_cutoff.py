@@ -1,5 +1,5 @@
-import torch
 import numpy as np
+import torch
 
 from schnetpack.nn.cutoff import CosineCutoff, MollifierCutoff
 

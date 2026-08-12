@@ -11,9 +11,11 @@ if TYPE_CHECKING:
     from schnetpack.md import Simulator, System
 
 import torch
-from schnetpack.md.simulation_hooks import BarostatHook
+
 from schnetpack import units as spk_units
 from schnetpack.md.utils import StableSinhDiv
+
+from .barostats import BarostatHook
 
 __all__ = ["PILEBarostat"]
 

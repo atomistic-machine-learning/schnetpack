@@ -1,26 +1,22 @@
 import logging
-import uuid
-import torch
 import os
-import shutil
 import random
-
+import shutil
+import tempfile
+import uuid
 from datetime import datetime
 
 import hydra
+import torch
+from ase.io import read
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf, open_dict
-
-import tempfile
-
-import schnetpack.md
-from schnetpack.utils import str2class, int2precision
-from schnetpack.utils.script import print_config
-from schnetpack.md.utils import get_npt_integrator, is_rpmd_integrator, MDConfigMerger
-
 from pytorch_lightning import seed_everything
 
-from ase.io import read
+import schnetpack.md
+from schnetpack.md.utils import MDConfigMerger, get_npt_integrator, is_rpmd_integrator
+from schnetpack.utils import int2precision, str2class
+from schnetpack.utils.script import print_config
 
 log = logging.getLogger(__name__)
 
@@ -32,16 +28,16 @@ class MDSetupError(Exception):
     pass
 
 
-@hydra.main(config_path="md_configs", config_name="config")
+@hydra.main(config_path="md_configs", config_name="config", version_base="1.2")
 def simulate(config: DictConfig):
     """
     General training routine for all models defined by the provided hydra configs.
 
     """
     print(
-        """
+        r"""
            _____      __    _   __     __  ____             __    __  __    ___
-          / ___/_____/ /_  / | / /__  / /_/ __ \____ ______/ /__ |  \/  |  |   \\
+          / ___/_____/ /_  / | / /__  / /_/ __ \____ ______/ /__ |  \/  |  |   \
           \__ \/ ___/ __ \/  |/ / _ \/ __/ /_/ / __ `/ ___/ //_/ | |\/| |  | |) |
          ___/ / /__/ / / / /|  /  __/ /_/ ____/ /_/ / /__/ ,<    |_|__|_|  |___/
         /____/\___/_/ /_/_/ |_/\___/\__/_/    \__,_/\___/_/|_|  _|""  ""|_|""  ""|

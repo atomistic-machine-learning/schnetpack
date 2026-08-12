@@ -1,8 +1,9 @@
 .. role:: hidden
     :class: hidden-section
 
+.. currentmodule:: {{ module }}
 
-{{ name | underline}}
+{{ name | underline }}
 
 .. autoclass:: {{ name }}
     :no-inherited-members:

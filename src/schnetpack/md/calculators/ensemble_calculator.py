@@ -1,9 +1,11 @@
 from __future__ import annotations
-import torch
 
 from abc import ABC
-from typing import TYPE_CHECKING, List, Dict, Optional
-from schnetpack.md.calculators import MDCalculator
+from typing import TYPE_CHECKING, Dict, List, Optional
+
+import torch
+
+from .base_calculator import MDCalculator
 
 if TYPE_CHECKING:
     from schnetpack.md import System
@@ -37,8 +39,8 @@ class EnsembleCalculator(ABC, MDCalculator):
 
     @staticmethod
     def _accumulate_results(
-        results: List[Dict[str, torch.tensor]],
-    ) -> Dict[str, torch.tensor]:
+        results: List[Dict[str, torch.Tensor]],
+    ) -> Dict[str, torch.Tensor]:
         """
         Accumulate results and compute average predictions and uncertainties.
 

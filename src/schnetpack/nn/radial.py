@@ -5,8 +5,6 @@ import torch.nn as nn
 
 __all__ = ["gaussian_rbf", "GaussianRBF", "GaussianRBFCentered", "BesselRBF"]
 
-from torch import nn as nn
-
 
 def gaussian_rbf(inputs: torch.Tensor, offsets: torch.Tensor, widths: torch.Tensor):
     coeff = -0.5 / torch.pow(widths, 2)
@@ -82,6 +80,8 @@ class GaussianRBFCentered(nn.Module):
 class BesselRBF(nn.Module):
     """
     Sine for radial basis functions with coulomb decay (0th order bessel).
+
+    Introduced in [#dimenet]_.
 
     References:
 

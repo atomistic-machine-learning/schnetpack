@@ -5,13 +5,14 @@ integrators (:obj:`schnetpack.md.integrators`) and various simulation hooks (:ob
 and performs the time integration.
 """
 
+from contextlib import nullcontext
+from typing import Optional
+
 import torch
 import torch.nn as nn
-from contextlib import nullcontext
-
 from tqdm import trange
 
-from schnetpack.md import System
+from .system import System
 
 __all__ = ["Simulator"]
 
@@ -24,12 +25,13 @@ class Simulator(nn.Module):
 
     In addition, hooks can be applied at five different stages of each
     simulation step:
-     - Start of the simulation (e.g. for initializing thermostat)
-     - Before first integrator half step (e.g. thermostat)
-     - After computation of the forces and before main integrator step (e.g.
+
+    - Start of the simulation (e.g. for initializing thermostat)
+    - Before first integrator half step (e.g. thermostat)
+    - After computation of the forces and before main integrator step (e.g.
       for accelerated MD)
-     - After second integrator half step (e.g. thermostat, output routines)
-     - At the end of the simulation (e.g. general wrap up of file writes, etc.)
+    - After second integrator half step (e.g. thermostat, output routines)
+    - At the end of the simulation (e.g. general wrap up of file writes, etc.)
 
     This routine has a state dict which can be used to restart a previous
     simulation.
@@ -61,12 +63,14 @@ class Simulator(nn.Module):
         system: System,
         integrator,
         calculator,
-        simulator_hooks: list = [],
+        simulator_hooks: Optional[list] = None,
         step: int = 0,
         restart: bool = False,
         gradients_required: bool = False,
         progress: bool = True,
     ):
+        if simulator_hooks is None:
+            simulator_hooks = []
         super(Simulator, self).__init__()
 
         self.system = system
@@ -122,7 +126,6 @@ class Simulator(nn.Module):
                 hook.on_simulation_start(self)
 
             for _ in iterator(n_steps):
-
                 # Call hook before first half step
                 for hook in self.simulator_hooks:
                     hook.on_step_begin(self)
@@ -165,12 +168,12 @@ class Simulator(nn.Module):
         """
         State dict used to restart the simulation. Generates a dictionary with
         the following entries:
+
             - step: current simulation step
             - systems: state dict of the system holding current positions,
-                       momenta, forces, etc...
+              momenta, forces, etc...
             - simulator_hooks: dict of state dicts of the various hooks used
-                               during simulation using their basic class
-                               name as keys.
+              during simulation using their basic class name as keys.
 
         Returns:
             dict: State dict containing the current step, the system

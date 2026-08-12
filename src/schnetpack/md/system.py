@@ -4,16 +4,14 @@ It includes functionality for loading molecules from files.
 All this functionality is encoded in the :obj:`schnetpack.md.System` class.
 """
 
+from typing import List, OrderedDict, Union
+
 import torch
 import torch.nn as nn
-
-from schnetpack.md.utils import NormalModeTransformer
 from ase import Atoms
 
-from typing import Union, List, OrderedDict
-
 from schnetpack import units as spk_units
-from schnetpack.md.utils import UninitializedMixin
+from schnetpack.md.utils import NormalModeTransformer, UninitializedMixin
 
 __all__ = ["System"]
 
@@ -33,7 +31,8 @@ class System(UninitializedMixin, nn.Module):
 
     In order to simulate multiple systems efficiently dynamics properties
     (positions, momenta, forces) are torch tensors with the following
-    dimensions:
+    dimensions::
+
         n_replicas x (n_molecules * n_atoms) x 3
 
     Here n_replicas is the number of copies for every molecule. In a normal
@@ -45,7 +44,8 @@ class System(UninitializedMixin, nn.Module):
     same system (once again for sampling) or completely different molecules.
     Atoms of multiple molecules are concatenated.
 
-    Static properties are stored in tensors of the shape:
+    Static properties are stored in tensors of the shape::
+
         n_atoms : n_molecules (the same for all replicas)
         masses : 1 x (n_molecules * n_atoms) x 1 (the same for all replicas)
         atom_types : (n_molecules * n_atoms)
@@ -371,7 +371,7 @@ class System(UninitializedMixin, nn.Module):
         return self.momenta / self.masses
 
     @property
-    def kinetic_energy(self) -> torch.tensor:
+    def kinetic_energy(self) -> torch.Tensor:
         """
         Convenience property for computing the kinetic energy associated with
         each replica and molecule.
@@ -432,7 +432,7 @@ class System(UninitializedMixin, nn.Module):
         return self.energy
 
     @potential_energy.setter
-    def potential_energy(self, energy: torch.tensor):
+    def potential_energy(self, energy: torch.Tensor):
         """
         Setter for the potential energy.
 

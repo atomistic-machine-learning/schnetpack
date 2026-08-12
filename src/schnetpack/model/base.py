@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from typing import Dict, Optional, List
-
-import schnetpack as spk
-from schnetpack.transform import Transform
-import schnetpack.properties as properties
-from schnetpack.utils import as_dtype
+from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
+
+import schnetpack as spk
+from schnetpack.transform import Transform
 
 __all__ = ["AtomisticModel", "NeuralNetworkPotential"]
 
@@ -27,8 +25,9 @@ class AtomisticModel(nn.Module):
     `input = self.postprocess(input)` at the end of its `forward`. The post processors
     will only be applied if `do_postprocessing=True`.
 
-    Example:
-         class SimpleModel(AtomisticModel):
+    Example::
+
+        class SimpleModel(AtomisticModel):
             def __init__(
                 self,
                 representation: nn.Module,
@@ -146,8 +145,8 @@ class NeuralNetworkPotential(AtomisticModel):
     def __init__(
         self,
         representation: nn.Module,
-        input_modules: List[nn.Module] = None,
-        output_modules: List[nn.Module] = None,
+        input_modules: Optional[List[nn.Module]] = None,
+        output_modules: Optional[List[nn.Module]] = None,
         postprocessors: Optional[List[Transform]] = None,
         input_dtype_str: str = "float32",
         do_postprocessing: bool = True,

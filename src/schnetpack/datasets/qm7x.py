@@ -10,11 +10,11 @@ from urllib import request as request
 
 import h5py
 import numpy as np
-import progressbar
 from ase import Atoms
+from tqdm import tqdm
 
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 
 __all__ = ["QM7X"]
 
@@ -27,14 +27,14 @@ def show_progress(block_num: int, block_size: int, total_size: int):
     """
     global pbar
     if pbar is None:
-        pbar = progressbar.ProgressBar(maxval=total_size)
-        pbar.start()
+        pbar = tqdm(total=total_size, unit="B", unit_scale=True, unit_divisor=1024)
 
     downloaded = block_num * block_size
     if downloaded < total_size:
-        pbar.update(downloaded)
+        # tqdm tracks a cumulative total, urlretrieve reports absolute progress
+        pbar.update(downloaded - pbar.n)
     else:
-        pbar.finish()
+        pbar.close()
         pbar = None
 
 
@@ -95,9 +95,11 @@ class QM7X(DownloadableASEAtomsData):
     structure of small organic molecules with up to seven non-hydrogen (C, N, O, S, Cl) atoms.
     This class adds convenient functions to download QM7-X and load the data into pytorch.
 
+    The raw data is provided by [#qm7x_1]_.
+
     References:
 
-        .. [#qm7x_1] https://zenodo.org/record/4288677
+    .. [#qm7x_1] https://zenodo.org/record/4288677
 
     """
 

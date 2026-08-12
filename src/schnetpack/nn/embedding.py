@@ -1,36 +1,38 @@
 import math
+from typing import Callable, Union
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 import schnetpack.properties as properties
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.nn.blocks import ResidualMLP
-from typing import Callable, Union
 
 __all__ = ["NuclearEmbedding", "ElectronicEmbedding"]
 
 
 """
 The usage of the electron configuration is to provide a shorthand descriptor. This descriptor encode
-information about the groundstate information of an atom, the nuclear charge and the number of electrons in the 
+information about the groundstate information of an atom, the nuclear charge and the number of electrons in the
 valence shell.
 The table is read as follows:
 The specific descriptor e.g for Oxygen would be: Z = 8, ground-state configuration [1s 2s 2p4] and valence shell vs = 2, vp = 4
 
 Background:
-Electrons are arranged around an atom's nucleus in energy levels (shells ranging from K,L,M ..., holding 2n^2 electrons)., 
+Electrons are arranged around an atom's nucleus in energy levels (shells ranging from K,L,M ..., holding 2n^2 electrons).,
 [K : 2, L : 8, M : 18, N : 32, O : 50, P: 72 ]
-and these shells contain subshells designated as 
-s: (sharp, orbital angular momentum 0), 
-p (principal, orbital angular momentum 1), 
-d: (diffuse,orbital angular momentum 2), 
+and these shells contain subshells designated as
+s: (sharp, orbital angular momentum 0),
+p (principal, orbital angular momentum 1),
+d: (diffuse,orbital angular momentum 2),
 f (fundamental, orbital angular momentum 3).
 
 The arrangement follows the Pauli Exclusion Principle and Hund's Rule ensuring the Aufbau Principle.
 This provides the basis for the periodic table's structure and the periodicity of the elements' chemical behavior.
 
-When invoking the complex nuclear embedding method a linear mapping 
+When invoking the complex nuclear embedding method a linear mapping
 from the electron configuration descriptor to a (num_features)-dimensional vector will be learned
 Applying the complex nuclear embedding encourages to capture similiarities between different elements based on the electron configuration
 This is justified by the fact that the chemistry of an element is mainly dominated by the valence shell.
@@ -41,9 +43,9 @@ E.g Bromine and Chlorine tend both to form -1 ions (uptake of one electron for f
 """
 
 # fmt: off
-# up until Z = 100; vs = valence s, vp = valence p, vd = valence d, vf = valence f. 
+# up until Z = 100; vs = valence s, vp = valence p, vd = valence d, vf = valence f.
 # electron configuration follows the Aufbauprinzip. Exceptions are in the Lanthanides and Actinides (5f and 6d subshells are energetically very close).
-electron_config = np.array([            
+electron_config = np.array([
   #  Z 1s 2s 2p 3s 3p 4s  3d 4p 5s  4d 5p 6s  4f  5d 6p 7s 5f 6d   vs vp  vd  vf
   [  0, 0, 0, 0, 0, 0, 0,  0, 0, 0,  0, 0, 0,  0,  0, 0, 0, 0, 0,  0, 0,  0,  0], # n
   [  1, 1, 0, 0, 0, 0, 0,  0, 0, 0,  0, 0, 0,  0,  0, 0, 0, 0, 0,  1, 0,  0,  0], # H
@@ -141,13 +143,13 @@ electron_config = np.array([
   [ 93, 2, 2, 6, 2, 6, 2, 10, 6, 2, 10, 6, 2, 14, 10, 6, 2, 4, 1,  2, 0,  1,  4], # Np
   [ 94, 2, 2, 6, 2, 6, 2, 10, 6, 2, 10, 6, 2, 14, 10, 6, 2, 6, 0,  2, 0,  0,  6], # Pu
   [ 95, 2, 2, 6, 2, 6, 2, 10, 6, 2, 10, 6, 2, 14, 10, 6, 2, 7, 0,  2, 0,  0,  7], # Am
-  [ 96, 2, 2, 6, 2, 6, 2, 10, 6, 2, 10, 6, 2, 14, 10, 6, 2, 7, 1,  2, 0,  1,  7], # Cm  
+  [ 96, 2, 2, 6, 2, 6, 2, 10, 6, 2, 10, 6, 2, 14, 10, 6, 2, 7, 1,  2, 0,  1,  7], # Cm
   [ 97, 2, 2, 6, 2, 6, 2, 10, 6, 2, 10, 6, 2, 14, 10, 6, 2, 9, 0,  2, 0,  0,  9], # Bk
   [ 98, 2, 2, 6, 2, 6, 2, 10, 6, 2, 10, 6, 2, 14, 10, 6, 2, 10,0,  2, 0,  0, 10], # Cf
   [ 99, 2, 2, 6, 2, 6, 2, 10, 6, 2, 10, 6, 2, 14, 10, 6, 2, 11,0,  2, 0,  0, 11], # Es
   [100, 2, 2, 6, 2, 6, 2, 10, 6, 2, 10, 6, 2, 14, 10, 6, 2, 12,0,  2, 0,  0, 12]  # Fm
-            
-], dtype=np.float32)            
+
+], dtype=np.float32)
 # fmt: on
 # normalize entries (between 0.0 and 1.0)
 # normalization just for numerical reasons
@@ -171,12 +173,12 @@ class NuclearEmbedding(nn.Module):
     def __init__(self, max_z: int, num_features: int, zero_init: bool = True):
         """
         Args:
-        num_features: Dimensions of feature space.
-        Zmax: Maximum nuclear charge of atoms. The default is 100, so all
-            elements up to Fermium (Fm) (Z=100) are supported.
-            Can be kept at the default value (has minimal memory impact).
-        zero_init: If True, initialize the embedding with zeros. Otherwise, use
-            uniform initialization.
+            num_features: Dimensions of feature space.
+            max_z: Maximum nuclear charge of atoms. The default is 100, so all
+                elements up to Fermium (Fm) (Z=100) are supported.
+                Can be kept at the default value (has minimal memory impact).
+            zero_init: If True, initialize the embedding with zeros. Otherwise, use
+                uniform initialization.
         """
         super(NuclearEmbedding, self).__init__()
         self.num_features = num_features

@@ -1,4 +1,5 @@
 import os
+
 import numpy as np
 import pytest
 import torch
@@ -128,7 +129,7 @@ def test_stats():
 
 
 def test_asedb_add(asedb, example_data):
-    l = len(asedb)
+    n = len(asedb)
 
     at, props = example_data[0]
     asedb.add_system(atoms=at, **props)
@@ -144,8 +145,8 @@ def test_asedb_add(asedb, example_data):
     )
     asedb.add_system(**props)
 
-    p1 = asedb[l]
-    p2 = asedb[l + 1]
+    p1 = asedb[n]
+    p2 = asedb[n + 1]
     for k, v in p1.items():
         if k != "_idx":
             assert isinstance(v, torch.Tensor), k

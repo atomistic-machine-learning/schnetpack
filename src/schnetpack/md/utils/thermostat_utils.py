@@ -1,8 +1,9 @@
-import torch
-import numpy as np
-import schnetpack.units as spk_units
-
 from typing import Optional
+
+import numpy as np
+import torch
+
+import schnetpack.units as spk_units
 
 __all__ = ["YSWeights", "load_gle_matrices", "StableSinhDiv"]
 
@@ -169,11 +170,11 @@ def load_gle_matrices(filename: str):
             for line in glefile:
                 a_matrix.read_line(line)
                 c_matrix.read_line(line)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         raise FileNotFoundError(
             "Could not open {:s} for reading. Please use GLE parameter files "
             "generated via http://gle4md.org/index.html?page=matrix".format(filename)
-        )
+        ) from e
 
     return a_matrix.matrix, c_matrix.matrix
 
@@ -191,7 +192,7 @@ class StableSinhDiv:
         self.e8 = self.e6 / 72.0
         self.eps = eps
 
-    def f(self, x: torch.tensor):
+    def f(self, x: torch.Tensor):
         x2 = x * x
         sinh_div = torch.where(
             x < self.eps,

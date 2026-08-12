@@ -11,8 +11,8 @@ import numpy as np
 from ase.db import connect
 from tqdm import tqdm
 
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 
 __all__ = ["ISO17"]
 
@@ -21,6 +21,8 @@ class ISO17(DownloadableASEAtomsData):
     """
     ISO17 benchmark dataset for molecular dynamics of C7O2H10 isomers
     containing molecular forces.
+
+    The raw data is provided by [#iso17]_.
 
     References:
 

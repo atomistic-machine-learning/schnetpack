@@ -1,6 +1,6 @@
 schnetpack.model
 ================
-.. currentmodule:: model
+.. currentmodule:: schnetpack.model
 
 .. autosummary::
     :toctree: generated
@@ -9,4 +9,3 @@ schnetpack.model
 
     AtomisticModel
     NeuralNetworkPotential
-

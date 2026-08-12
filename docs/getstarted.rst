@@ -38,16 +38,15 @@ You are ready to go!
 Visualization with Tensorboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 SchNetPack supports multiple logging backends over PyTorch Lightning.
-The default logger is Tensorboard, which can be installed via::
-
-   $ pip install tensorboard
+The default logger is Tensorboard, which is installed automatically
+alongside SchNetPack.
 
 
 Training your first models
 ==========================
 
-The best place to get started is training a SchNetPack model on a common benchmark dataset via the command line
-interface (CLI).
+The best place to get started is training a SchNetPack [#schnetpack2]_ [#schnetpack]_
+model on a common benchmark dataset via the command line interface (CLI).
 When installing SchNetPack, the training script ``spktrain`` is added to your PATH.
 The CLI is based on `Hydra <https://hydra.cc/>`_ and oriented on the PyTorch Lightning/Hydra template that can be found
 `here <https://github.com/ashleve/lightning-hydra-template>`_.
@@ -58,8 +57,8 @@ To fully take advantage of these features, it might be helpful to have a look at
 Example 1: QM9
 ^^^^^^^^^^^^^^
 
-In the following, we focus on using the CLI to train on the QM9 dataset, but the same
-procedure applies for the other benchmark datasets as well.
+In the following, we focus on using the CLI to train on the QM9 dataset (available from
+[#qm]_), but the same procedure applies for the other benchmark datasets as well.
 First, create a working directory, where all data and runs will be stored::
 
     $ mkdir spk_workdir
@@ -87,7 +86,8 @@ Nested parameters can be changed as follows::
 
 Hydra organizes parameters in config groups which allows hierarchical configurations consisting of multiple
 yaml files. This allows to easily change the whole dataset, model or representation.
-For instance, changing from the default SchNet representation to PaiNN, use::
+For instance, changing from the default SchNet [#schnet1]_ [#schnet2]_ [#schnet3]_
+representation to PaiNN [#painn1a]_, use::
 
    $ spktrain experiment=qm9_atomwise data_dir=<path> model/representation=painn
 

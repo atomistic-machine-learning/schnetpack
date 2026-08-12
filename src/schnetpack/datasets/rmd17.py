@@ -4,14 +4,14 @@ import shutil
 import tarfile
 import tempfile
 from typing import Dict, List, Optional
-from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import numpy as np
 from ase import Atoms
 
 import schnetpack.properties as structure
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.data.splitting import (
     RandomSplit,
     SplittingStrategy,
@@ -58,10 +58,13 @@ class rMD17(DownloadableASEAtomsData):
     Revised MD17 benchmark dataset for molecular dynamics of small molecules
     containing molecular forces.
 
+    The raw data is provided by [#md17_1]_, see also [#md17_2]_.
+
     References:
-        .. [#md17_1] https://figshare.com/articles/dataset/
-            Revised_MD17_dataset_rMD17_/12672038?file=24013628
-        .. [#md17_2] http://quantum-machine.org/gdml/#datasets
+
+    .. [#md17_1] `Revised MD17 dataset (rMD17) on figshare
+       <https://figshare.com/articles/dataset/Revised_MD17_dataset_rMD17_/12672038>`_
+    .. [#md17_2] http://quantum-machine.org/gdml/#datasets
     """
 
     energy = "energy"

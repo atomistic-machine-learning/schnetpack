@@ -1,12 +1,12 @@
 import logging
 import os
 import tarfile
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 import numpy as np
 from ase.io import read
 
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
 
 __all__ = ["OrganicMaterialsDatabase"]
@@ -18,11 +18,13 @@ class OrganicMaterialsDatabase(DownloadableASEAtomsData):
     Registration to the OMDB is free for academic users. This database contains DFT
     (PBE) band gap (OMDB-GAP1 database) for 12500 non-magnetic materials.
 
+    The dataset is described in [#omdb]_.
+
     References:
 
-        .. [#omdb] Bart Olsthoorn, R. Matthias Geilhufe, Stanislav S. Borysov, Alexander V. Balatsky.
-           Band gap prediction for large organic crystal structures with machine learning.
-           https://arxiv.org/abs/1810.12814
+    .. [#omdb] Bart Olsthoorn, R. Matthias Geilhufe, Stanislav S. Borysov, Alexander V. Balatsky.
+       Band gap prediction for large organic crystal structures with machine learning.
+       https://arxiv.org/abs/1810.12814
     """
 
     BandGap = "band_gap"

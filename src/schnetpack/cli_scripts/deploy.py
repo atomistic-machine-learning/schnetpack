@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-import torch
-import torch.nn as nn
-from schnetpack.transform import CastTo64, CastTo32, AddOffsets
 import argparse
 
+import torch
+import torch.nn as nn
+
+from schnetpack.transform import AddOffsets, CastTo32, CastTo64
 
 # This script is supposed to take a pytorch model and save a just in time compiled version of it.
 # This is needed to run the model with LAMMPS.
@@ -21,7 +22,7 @@ def get_jit_model(model):
         if type(postprocessor) in [CastTo64, CastTo32]:
             continue
         # ensure offset mean is float
-        if type(postprocessor) == AddOffsets:
+        if type(postprocessor) is AddOffsets:
             postprocessor.mean = postprocessor.mean.float()
 
         jit_postprocessors.append(postprocessor)
@@ -40,8 +41,7 @@ def save_jit_model(model, model_path):
     torch.jit.save(jit_model, model_path, _extra_files=metadata)
 
 
-if __name__ == "__main__":
-
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("model_path")
     parser.add_argument("deployed_model_path")
@@ -52,3 +52,7 @@ if __name__ == "__main__":
     save_jit_model(model, args.deployed_model_path)
 
     print(f"stored deployed model at {args.deployed_model_path}.")
+
+
+if __name__ == "__main__":
+    main()

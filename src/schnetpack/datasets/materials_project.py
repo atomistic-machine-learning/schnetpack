@@ -1,11 +1,11 @@
 import logging
 import os
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 import numpy as np
 from ase import Atoms
 
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
 
 __all__ = ["MaterialsProject"]
@@ -17,9 +17,11 @@ class MaterialsProject(DownloadableASEAtomsData):
     This class adds convenient functions to download Materials Project data into
     pytorch.
 
+    The raw data is provided by [#matproj]_.
+
     References:
 
-        .. [#matproj] https://materialsproject.org/
+    .. [#matproj] https://materialsproject.org/
     """
 
     # properties
@@ -120,8 +122,8 @@ class MaterialsProject(DownloadableASEAtomsData):
         atoms_metadata_list = []
 
         try:
-            from pymatgen.core import Structure
             from mp_api.client import MPRester
+            from pymatgen.core import Structure
         except Exception as e:
             raise ImportError(
                 "To download Materials Project data, install `mp-api` and `pymatgen`."

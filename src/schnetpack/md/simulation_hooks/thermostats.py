@@ -4,18 +4,19 @@ molecular dynamics simulations.
 """
 
 from __future__ import annotations
-import torch
+
+import logging
+from typing import TYPE_CHECKING, Optional, Tuple
+
 import numpy as np
 import scipy.linalg as linalg
-from typing import Optional, Tuple, TYPE_CHECKING
-import logging
+import torch
 
 if TYPE_CHECKING:
     from schnetpack.md.simulator import Simulator, System
 
 from schnetpack import units as spk_units
 from schnetpack.md.simulation_hooks.basic_hooks import SimulationHook
-
 from schnetpack.md.utils import YSWeights, load_gle_matrices
 
 log = logging.getLogger(__name__)
@@ -148,8 +149,10 @@ class ThermostatHook(SimulationHook):
 
 class BerendsenThermostat(ThermostatHook):
     """
-    Berendsen velocity rescaling thermostat, as described in [#berendsen1]_. Simple thermostat for e.g. equilibrating
-    the system, does not sample the canonical ensemble.
+    Berendsen velocity rescaling thermostat.
+
+    Simple thermostat for e.g. equilibrating the system, as described in [#berendsen1]_.
+    Does not sample the canonical ensemble.
 
     Args:
         temperature_bath (float): Temperature of the external heat bath in Kelvin.
@@ -191,7 +194,9 @@ class BerendsenThermostat(ThermostatHook):
 
 class LangevinThermostat(ThermostatHook):
     """
-    Basic stochastic Langevin thermostat, see e.g. [#langevin_thermostat1]_ for more details.
+    Basic stochastic Langevin thermostat.
+
+    See e.g. [#langevin_thermostat1]_ for more details.
 
     Args:
         temperature_bath (float): Temperature of the external heat bath in Kelvin.
@@ -263,8 +268,11 @@ class LangevinThermostat(ThermostatHook):
 
 class NHCThermostat(ThermostatHook):
     """
-    Nose-Hover chain thermostat, which links the system to a chain of deterministic Nose-Hoover thermostats first
-    introduced in [#nhc_thermostat1]_ and described in great detail in [#nhc_thermostat2]_. Advantage of the NHC
+    Nose-Hover chain thermostat, which links the system to a chain of deterministic
+    Nose-Hoover thermostats.
+
+    The scheme was first introduced in [#nhc_thermostat1]_ and is described in great
+    detail in [#nhc_thermostat2]_. Advantage of the NHC
     thermostat is, that it does not apply random perturbations to the system and is hence fully deterministic. However,
     this comes at an increased numerical cost compared to e.g. the stochastic thermostats described above.
 
@@ -395,7 +403,7 @@ class NHCThermostat(ThermostatHook):
         # Set masses of remaining thermostats
         self.masses[..., 1:] = self.kb_temperature / self.frequency**2
 
-    def _propagate_thermostat(self, kinetic_energy: torch.tensor) -> torch.tensor:
+    def _propagate_thermostat(self, kinetic_energy: torch.Tensor) -> torch.Tensor:
         """
         Propagation step of the NHC thermostat. Please refer to [#nhc_thermostat2]_ for more detail on the algorithm.
 
@@ -612,7 +620,7 @@ class GLEThermostat(ThermostatHook):
         return c1, c2
 
     def _init_single_gle_matrix(
-        self, a_matrix: np.array, c_matrix: np.array, simulator: Simulator
+        self, a_matrix: np.ndarray, c_matrix: np.ndarray, simulator: Simulator
     ):
         """
         Based on the matrices found in the GLE file, initialize the GLE matrices required for a simulation with the

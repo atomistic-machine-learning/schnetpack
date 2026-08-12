@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 from tqdm import tqdm
@@ -28,7 +28,7 @@ def _raw_view(dataset: ASEAtomsData, indices: Optional[List[int]]) -> ASEAtomsDa
 def calculate_stats(
     dataset: ASEAtomsData,
     divide_by_atoms: Dict[str, bool],
-    atomref: Dict[str, torch.Tensor] = None,
+    atomref: Optional[Dict[str, torch.Tensor]] = None,
     batch_size: int = 10000,
     # num_workers=0: spawning workers by default breaks on platforms with
     # spawn start method (the dataset holds a DB connection), and stats are a

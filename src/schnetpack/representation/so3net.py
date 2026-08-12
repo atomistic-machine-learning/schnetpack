@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Optional, Union, List
+from typing import Callable, Dict, List, Optional
 
 import torch
 import torch.nn as nn
@@ -7,7 +7,6 @@ import torch.nn.functional as F
 import schnetpack.nn as snn
 import schnetpack.nn.so3 as so3
 import schnetpack.properties as properties
-from schnetpack.nn import ElectronicEmbedding
 
 __all__ = ["SO3net"]
 

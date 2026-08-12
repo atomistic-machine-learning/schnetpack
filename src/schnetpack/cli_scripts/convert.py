@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 
-from ase.db import connect
 import numpy as np
+from ase.db import connect
 from tqdm import tqdm
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(
         description="Set units of an ASE dataset, e.g. to convert from SchNetPack 1.0 to the new format."
     )
@@ -26,10 +26,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--expand_property_dims",
         default=[],
-        nargs='+',
+        nargs="+",
         help="Expanding the first dimension of the given property "
-             "(required for example for old FieldSchNet datasets). "
-             "Add property names here in the form 'property1 property2 property3'",
+        "(required for example for old FieldSchNet datasets). "
+        "Add property names here in the form 'property1 property2 property3'",
     )
     args = parser.parse_args()
     with connect(args.data_path) as db:
@@ -70,7 +70,6 @@ if __name__ == "__main__":
         db.metadata = meta
 
     if args.expand_property_dims is not None and len(args.expand_property_dims) > 0:
-
         with connect(args.data_path) as db:
             for i in tqdm(range(len(db))):
                 atoms_row = db.get(i + 1)
@@ -81,3 +80,7 @@ if __name__ == "__main__":
                     else:
                         data[p] = v
                 db.update(i + 1, data=data)
+
+
+if __name__ == "__main__":
+    main()

@@ -6,7 +6,7 @@ Configuration and CLI
 SchNetPack models and tasks can be defined using hierarchical
 `Hydra <https://hydra.cc/>`_ config files in YAML format and modified using command
 line arguments. Here, we will introduce the structure and basic syntax of the
-configuration. Please refer to the `Hydra documentation <https://hydra.cc/>`_ for more
+configuration. Please refer to the `Hydra documentation <https://hydra.cc/>`__ for more
 extensive information.
 
 We will explain the structure of the config at the example of training PaiNN on QM9
@@ -230,7 +230,7 @@ The config groups ``data``, ``model``, ``task``, ``trainer``, ``callback`` and
 a class, while the remaining key-value pairs define the arguments passed to the
 ``__init__``.
 
-A short note on the interpolation syntax ``${group.variable}``: Besides allowing to 
+A short note on the interpolation syntax ``${group.variable}``: Besides allowing to
 reference variables of any group in the config, it can also be used with so-called
 ``resolvers``, which are functions that evaluate some provided arguments when the config
 is built. The syntax is ``${resolver:arguments}``. For example, we utilize the built-in
@@ -239,8 +239,8 @@ current working directory. Another example is the custom resolver ``uuid:1``. We
 designed it to provide a unique identifier that is cached using the provided argument,
 i.e. calling ``${uuid:1}`` twice in your config will result in the same identifier.
 Calling it with another argument such as ``${uuid:2}`` will provide a second identifier.
-More information on available resolvers can be found in the 
-`Hydra documentation <https://hydra.cc/docs/configure_hydra/intro/#resolvers-provided-by-hydra>`_.
+More information on available resolvers can be found in the
+`Hydra documentation <https://hydra.cc/docs/configure_hydra/intro/#resolvers-provided-by-hydra>`__.
 
 Defining experiments
 ====================
@@ -432,21 +432,20 @@ set your own implementations as ``_target_``, as long as they conform with the r
 interface, e.g. are subclasses of SchNetPack base classes. Unfortunately, this can not
 be checked statically at the time, but will lead to errors when calling ``spktrain``.
 This kind of flexibilty enables a convenient extension of SchNetPack with your own
-config and code. As an example, you can check out the package 
+config and code. As an example, you can check out the package
 `schnetpack-gschnet <https://github.com/atomistic-machine-learning/schnetpack-gschnet/>`_,
-which implements new classes and integrates them in a custom config to build generative 
+which implements new classes and integrates them in a custom config to build generative
 neural networks for molecules.
 
 Internal precision of float32 matrix multiplications
 ====================================================
 
-When utilizing GPUs, it can be advantageous to manage the precision of floating-point 
-and matrix multiplication. PyTorch Lightning offers the option to set floating-point 
+When utilizing GPUs, it can be advantageous to manage the precision of floating-point
+and matrix multiplication. PyTorch Lightning offers the option to set floating-point
 precision by defining the alias ``trainer.precision`` in the Hydra config file.
-In addition to the explicit floating point precision, you can adjust the internal 
-precision for matrix multiplication operations with float32 by defining ``matmul_precision`` 
+In addition to the explicit floating point precision, you can adjust the internal
+precision for matrix multiplication operations with float32 by defining ``matmul_precision``
 in the config file or the argument ``+matmul_precision`` when using the CLI.
 It's important to note that this PyTorch variable applies only to NVIDIA GPUs with specific
 capabilities, like A100, that allow the adjustment of internal precision for matrix multiplications.
 Further details can be found in the PyTorch documentation for ``torch.set_float32_matmul_precision``.
-

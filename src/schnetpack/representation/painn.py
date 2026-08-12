@@ -1,11 +1,11 @@
-from typing import Callable, Dict, Optional, Union, List
+from typing import Callable, Dict, List, Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import schnetpack.properties as properties
 import schnetpack.nn as snn
+import schnetpack.properties as properties
 
 __all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
 
@@ -117,7 +117,10 @@ class PaiNNMixing(nn.Module):
 
 
 class PaiNN(nn.Module):
-    """PaiNN - polarizable interaction neural network
+    """Equivariant message-passing network for the prediction of tensorial properties
+    and molecular spectra.
+
+    Introduced in [#painn1]_.
 
     References:
 

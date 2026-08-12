@@ -121,7 +121,7 @@ void PairSCHNETPACK::coeff(int narg, char **arg) {
 
   std::cout << "Loading model from " << arg[2] << "\n";
 
-  
+
   std::unordered_map<std::string, std::string> metadata = {
     {"cutoff", ""},
   };
@@ -137,7 +137,7 @@ void PairSCHNETPACK::coeff(int narg, char **arg) {
       type_mapper[counter] = std::stoi(arg[i]);
       counter++;
   }
-  
+
   if(debug_mode){
     std::cout << "cutoff" << cutoff << "\n";
     for (int i = 0; i <= ntypes+1; i++){
@@ -294,10 +294,10 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
       new_offsets[i][1] = ev[1];
       new_offsets[i][2] = ev[2];
   }
-  
+
   // define SchNetPack specific inputs
   torch::Tensor idx_m_tensor = torch::zeros({nlocal}, torch::TensorOptions().dtype(torch::kInt64));
-  
+
   // define SchNetPack n_atoms input
   torch::Tensor n_atoms_tensor = torch::zeros({1}, torch::TensorOptions().dtype(torch::kInt64));
   n_atoms_tensor[0] = nlocal;
@@ -324,9 +324,9 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
     std::cout << "_cell:\n" << cell_tensor << "\n";
     std::cout << "_atomic_numbers:\n" << atomic_numbers_tensor << "\n";
   }
-  
+
   auto output = model.forward(input_vector).toGenericDict();
-  
+
   torch::Tensor forces_tensor = output.at("forces").toTensor().cpu();
   auto forces = forces_tensor.accessor<float, 2>();
 
@@ -340,7 +340,7 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
     std::cout << "forces: " << forces_tensor << "\n";
     std::cout << "energy: " << total_energy_tensor << "\n";
   }
-  
+
   // Write forces and per-atom energies (0-based tags here)
   for(int itag = 0; itag < inum; itag++){
     int i = tag2i[itag];
@@ -348,5 +348,5 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
     f[i][1] = forces[itag][1];
     f[i][2] = forces[itag][2];
   }
-  
+
 }

@@ -1,8 +1,9 @@
 import os
-import pytest
-import numpy as np
 
-from schnetpack.datasets import QM9, MD17, rMD17
+import numpy as np
+import pytest
+
+from schnetpack.datasets import MD17, QM9, rMD17
 
 
 @pytest.fixture
@@ -11,10 +12,8 @@ def test_qm9_path():
     return path
 
 
-@pytest.mark.skip(
-    "Run only local, not in CI. Otherwise takes too long and requires downloading "
-    + "the data"
-)
+@pytest.mark.download
+@pytest.mark.slow
 def test_qm9(test_qm9_path):
     qm9 = QM9(
         test_qm9_path,
@@ -41,10 +40,8 @@ def test_md17_path():
     return path
 
 
-@pytest.mark.skip(
-    "Run only local, not in CI. Otherwise takes too long and requires downloading "
-    + "the data"
-)
+@pytest.mark.download
+@pytest.mark.slow
 def test_md17(test_md17_path):
     md17 = MD17(
         test_md17_path,
@@ -74,10 +71,8 @@ def test_rmd17_path():
     return path
 
 
-@pytest.mark.skip(
-    "Run only local, not in CI. Otherwise takes too long and requires downloading "
-    + "the data"
-)
+@pytest.mark.download
+@pytest.mark.slow
 def test_rmd17(test_rmd17_path):
     md17 = rMD17(
         test_rmd17_path,

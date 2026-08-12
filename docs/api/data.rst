@@ -1,6 +1,6 @@
 schnetpack.data
 ===============
-.. currentmodule:: data
+.. currentmodule:: schnetpack.data
 
 Atoms data
 ------------

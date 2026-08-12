@@ -15,7 +15,7 @@ import copy
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any, Iterable, Union
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 import fasteners
 import torch
@@ -239,7 +239,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
     def iter_properties(
         self,
-        indices: Union[int, Iterable[int]] = None,
+        indices: Optional[Union[int, Iterable[int]]] = None,
         load_properties: Optional[List[str]] = None,
         load_structure: Optional[bool] = None,
         load_metadata: bool = False,

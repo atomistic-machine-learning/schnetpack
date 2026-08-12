@@ -1,9 +1,9 @@
 import re
-from typing import Union, Dict
+from typing import Dict, Union
 
+import numpy as np
 from ase import units as aseunits
 from ase.units import Units
-import numpy as np
 
 __all__ = ["convert_units"]
 
@@ -144,7 +144,7 @@ def _conversion_factor_internal(unit: str):
 
 
 def _parse_unit(unit, conversion_factor=_conversion_factor_ase):
-    if type(unit) == str:
+    if type(unit) is str:
         # If a string is given, split into parts.
         parts = re.split(r"(\W)", unit)
 

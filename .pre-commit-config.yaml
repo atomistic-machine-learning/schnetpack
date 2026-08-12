@@ -1,5 +1,24 @@
+# This file is the single source of truth for linter/formatter versions.
+ci:
+  autoupdate_schedule: monthly
+  autofix_prs: true
+
 repos:
--   repo: https://github.com/python/black
-    rev: 24.4.2
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.0
     hooks:
-    - id: black
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+        # hydra configs use `???` for mandatory-missing values and `_self_` in
+        # defaults lists; keep the checker away from that tree.
+        exclude: ^src/schnetpack/(configs|md/md_configs)/
+      - id: check-added-large-files
+      - id: check-merge-conflict

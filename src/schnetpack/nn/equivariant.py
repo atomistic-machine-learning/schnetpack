@@ -1,9 +1,10 @@
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 import schnetpack.nn as snn
-from typing import Tuple
 
 __all__ = ["GatedEquivariantBlock"]
 
@@ -11,7 +12,8 @@ __all__ = ["GatedEquivariantBlock"]
 class GatedEquivariantBlock(nn.Module):
     """
     Gated equivariant block as used for the prediction of tensorial properties by PaiNN.
-    Transforms scalar and vector representation using gated nonlinearities.
+    Transforms scalar and vector representation using gated nonlinearities, as
+    introduced in [#painn1]_.
 
     References:
 

@@ -1,24 +1,22 @@
-from copy import deepcopy
 import os
 import pickle
 import time
+from copy import deepcopy
+from math import sqrt
+from os.path import isfile
+from typing import Dict, List, Optional, Tuple, Union
 
 import ase
 import numpy as np
-from math import sqrt
-from os.path import isfile
-
-from ase.optimize.optimize import Dynamics
-from ase.parallel import world, barrier
-from ase.io import write
-from ase import Atoms
-
-from typing import Dict, Optional, List, Tuple
-
 import torch
+from ase import Atoms
+from ase.io import write
+from ase.optimize.optimize import Dynamics
+from ase.parallel import barrier, world
 from torch import nn
-from schnetpack.units import convert_units
+
 from schnetpack.interfaces.ase_interface import AtomsConverter
+from schnetpack.units import convert_units
 
 __all__ = [
     "ASEBatchwiseLBFGS",
@@ -37,7 +35,7 @@ class NNEnsemble(nn.Module):
     def __init__(self, models: nn.ModuleList, properties: List[str]):
         super(NNEnsemble, self).__init__()
         self.models = models
-        if type(properties) == str:
+        if type(properties) is str:
             properties = [properties]
         self.properties = properties
 
@@ -78,9 +76,9 @@ class BatchwiseCalculator:
 
     def __init__(
         self,
-        model: nn.Module or str,
+        model: Union[nn.Module, str],
         atoms_converter: AtomsConverter,
-        device: str or torch.device = "cpu",
+        device: Union[str, torch.device] = "cpu",
         auxiliary_output_modules: Optional[List] = None,
         energy_key: str = "energy",
         force_key: str = "forces",
@@ -124,7 +122,7 @@ class BatchwiseCalculator:
         self.results = None
         self.atoms = None
 
-        if type(device) == str:
+        if type(device) is str:
             device = torch.device(device)
         self.device = device
         self.dtype = dtype
@@ -150,7 +148,7 @@ class BatchwiseCalculator:
             )
 
         # load model from path if needed
-        if type(model) == str:
+        if type(model) is str:
             model = self._load_model(model)
 
         self._initialize_model(model)
@@ -180,7 +178,7 @@ class BatchwiseCalculator:
 
     def get_forces(
         self, atoms: List[ase.Atoms], fixed_atoms_mask: Optional[List[int]] = None
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         atoms:
 
@@ -233,9 +231,9 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
     # TODO: inherit from SpkEnsembleCalculator
     def __init__(
         self,
-        model: str or nn.ModuleList,
+        model: Union[str, nn.ModuleList],
         atoms_converter: AtomsConverter,
-        device: str or torch.device = "cpu",
+        device: Union[str, torch.device] = "cpu",
         auxiliary_output_modules: Optional[List[nn.Module]] = None,
         energy_key: str = "energy",
         force_key: str = "forces",
@@ -424,7 +422,6 @@ class BatchwiseDynamics(Dynamics):
 
         # run the algorithm until converged or max_steps reached
         while not self.converged() and self.nsteps < self.max_steps:
-
             # compute the next step
             self.step()
             self.nsteps += 1
@@ -450,7 +447,10 @@ class BatchwiseDynamics(Dynamics):
         atoms are less than *fmax* or when the number of steps exceeds
         *steps*."""
 
-        for converged in BatchwiseDynamics.irun(self):
+        # Drain the generator and keep its last yielded value. `converged` is
+        # deliberately unused *inside* the body but is the return value, so it
+        # must not be renamed.
+        for converged in BatchwiseDynamics.irun(self):  # noqa: B007
             pass
         return converged
 
@@ -556,7 +556,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
             self.max_steps = steps
         return BatchwiseDynamics.run(self)
 
-    def converged(self, forces: Optional[np.array] = None) -> bool:
+    def converged(self, forces: Optional[np.ndarray] = None) -> bool:
         """Did the optimization converge?"""
         if forces is None:
             forces = self.calculator.get_forces(
@@ -565,7 +565,7 @@ class BatchwiseOptimizer(BatchwiseDynamics):
         # todo: maybe np.linalg.norm?
         return (forces**2).sum(axis=1).max() < self.fmax**2
 
-    def log(self, forces: Optional[np.array] = None) -> None:
+    def log(self, forces: Optional[np.ndarray] = None) -> None:
         if forces is None:
             forces = self.calculator.get_forces(
                 self.atoms, fixed_atoms_mask=self.fixed_atoms_mask
@@ -758,7 +758,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
         ) = self.load()
         self.load_restart = True
 
-    def step(self, f: np.array = None) -> None:
+    def step(self, f: np.ndarray = None) -> None:
         """Take a single step
 
         Use the given forces, update the history and calculate the next step --
@@ -861,7 +861,7 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
             )
         )
 
-    def determine_step(self, dr: np.array) -> np.array:
+    def determine_step(self, dr: np.ndarray) -> np.ndarray:
         """Determine step to take according to maxstep
 
         Normalize all steps as the largest step. This way
@@ -882,7 +882,9 @@ class ASEBatchwiseLBFGS(BatchwiseOptimizer):
                     dr[first_idx:last_idx] *= self.maxstep / longest_step
         return dr
 
-    def update(self, r: np.array, f: np.array, r0: np.array, f0: np.array) -> None:
+    def update(
+        self, r: np.ndarray, f: np.ndarray, r0: np.ndarray, f0: np.ndarray
+    ) -> None:
         """Update everything that is kept in memory
 
         This function is mostly here to allow for replay_trajectory.

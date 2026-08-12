@@ -1,4 +1,4 @@
-from typing import Union, Dict, Sequence
+from typing import Dict, Sequence, Union
 
 import pytorch_lightning as pl
 import rich
@@ -64,7 +64,7 @@ def print_config(
 
     style = "dim"
     tree = Tree(
-        f":gear: Running with the following config:", style=style, guide_style=style
+        ":gear: Running with the following config:", style=style, guide_style=style
     )
 
     for field in fields:

@@ -1,6 +1,6 @@
 schnetpack.task
 ===============
-.. currentmodule:: task
+.. currentmodule:: schnetpack.task
 
 .. autosummary::
     :toctree: generated
@@ -10,4 +10,3 @@ schnetpack.task
     AtomisticTask
     ModelOutput
     UnsupervisedModelOutput
-

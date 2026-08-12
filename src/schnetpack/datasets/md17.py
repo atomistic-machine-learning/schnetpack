@@ -2,15 +2,15 @@ import logging
 import os
 import shutil
 import tempfile
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 from urllib import request as request
 
 import numpy as np
 from ase import Atoms
 
 import schnetpack.properties as structure
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 
 __all__ = ["MD17"]
 
@@ -154,8 +154,11 @@ class MD17(GDMLDataset):
     MD17 benchmark data set for molecular dynamics of small molecules
     containing molecular forces.
 
+    The raw data is provided by [#md17_1]_.
+
     References:
-        .. [#md17_1] http://quantum-machine.org/gdml/#datasets
+
+    .. [#md17_1] http://quantum-machine.org/gdml/#datasets
     """
 
     def __init__(

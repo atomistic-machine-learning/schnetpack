@@ -5,13 +5,13 @@ import tarfile
 import tempfile
 from typing import Dict, List, Optional
 from urllib import request as request
-from ase.db import connect
 
 import h5py
 import numpy as np
 from ase import Atoms
+from ase.db import connect
 
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
 
 __all__ = ["ANI1"]
@@ -25,8 +25,11 @@ class ANI1(DownloadableASEAtomsData):
     This class adds convenience functions to download ANI1 from figshare and
     load the data into pytorch.
 
+    The dataset is described in [#ani1]_.
+
     References:
-        .. [#ani1] https://arxiv.org/abs/1708.04987
+
+    .. [#ani1] https://arxiv.org/abs/1708.04987
     """
 
     energy = "energy"

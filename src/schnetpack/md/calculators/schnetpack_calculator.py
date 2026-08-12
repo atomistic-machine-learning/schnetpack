@@ -1,16 +1,18 @@
 from __future__ import annotations
-from typing import Union, List, Dict, TYPE_CHECKING
+
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 import schnetpack.atomistic.response
 from schnetpack.utils import load_model
 
 if TYPE_CHECKING:
     from schnetpack.md import System
-    from schnetpack.model import AtomisticModel
     from schnetpack.md.neighborlist_md import NeighborListMD
+    from schnetpack.model import AtomisticModel
+
+import logging
 
 import torch
-import logging
 
 from schnetpack.md.calculators.base_calculator import MDCalculator
 from schnetpack.md.calculators.ensemble_calculator import EnsembleCalculator
@@ -51,12 +53,16 @@ class SchNetPackCalculator(MDCalculator):
         energy_unit: Union[str, float],
         position_unit: Union[str, float],
         neighbor_list: NeighborListMD,
-        energy_key: str = None,
-        stress_key: str = None,
-        required_properties: List = [],
-        property_conversion: Dict[str, Union[str, float]] = {},
+        energy_key: Optional[str] = None,
+        stress_key: Optional[str] = None,
+        required_properties: Optional[List] = None,
+        property_conversion: Optional[Dict[str, Union[str, float]]] = None,
         script_model: bool = False,
     ):
+        if property_conversion is None:
+            property_conversion = {}
+        if required_properties is None:
+            required_properties = []
         super(SchNetPackCalculator, self).__init__(
             required_properties=required_properties,
             force_key=force_key,
@@ -166,10 +172,10 @@ class SchNetPackEnsembleCalculator(EnsembleCalculator, SchNetPackCalculator):
         energy_unit: Union[str, float],
         position_unit: Union[str, float],
         neighbor_list: NeighborListMD,
-        energy_key: str = None,
-        stress_key: str = None,
-        required_properties: List = [],
-        property_conversion: Dict[str, Union[str, float]] = {},
+        energy_key: Optional[str] = None,
+        stress_key: Optional[str] = None,
+        required_properties: Optional[List] = None,
+        property_conversion: Optional[Dict[str, Union[str, float]]] = None,
         script_model: bool = True,
     ):
         """
@@ -191,6 +197,10 @@ class SchNetPackEnsembleCalculator(EnsembleCalculator, SchNetPackCalculator):
                                                the model. Only changes the units used for logging the various outputs.
             script_model (bool): convert loaded model to torchscript.
         """
+        if property_conversion is None:
+            property_conversion = {}
+        if required_properties is None:
+            required_properties = []
         super(SchNetPackEnsembleCalculator, self).__init__(
             model_file=model_files,
             required_properties=required_properties,

@@ -5,9 +5,10 @@ __pycache__/
 .idea
 *.DS_Store
 
-docs/tutorials/*.db
-docs/tutorials/*.xyz
-docs/tutorials/qm9tut
+# created by docs/conf.py at build time
+docs/tutorials/
+docs/howtos/
+docs/trained_models/
 
 # hydra stuff
 outputs
@@ -37,7 +38,9 @@ wheels/
 .installed.cfg
 *.egg
 .vscode
-.github
+
+# Local working notes and draft plans, not part of the project
+.plans/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -84,6 +87,9 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+# The tutorials are version-controlled as jupytext .py files; opening one in
+# Jupyter creates a paired .ipynb next to it (see examples/jupytext.toml).
+examples/**/*.ipynb
 
 # pyenv
 .python-version

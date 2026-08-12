@@ -4,21 +4,22 @@ ring polymer molecular dynamics simulations.
 """
 
 from __future__ import annotations
-import torch
 
-from typing import Optional, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
+
+import torch
 
 if TYPE_CHECKING:
     from schnetpack.md.simulator import Simulator, System
 
+from schnetpack import units as spk_units
 from schnetpack.md.simulation_hooks.thermostats import (
-    LangevinThermostat,
     GLEThermostat,
-    ThermostatError,
+    LangevinThermostat,
     NHCThermostat,
+    ThermostatError,
 )
 from schnetpack.md.utils import load_gle_matrices
-from schnetpack import units as spk_units
 
 __all__ = [
     "PILELocalThermostat",
@@ -32,8 +33,10 @@ __all__ = [
 
 class PILELocalThermostat(LangevinThermostat):
     """
-    Langevin thermostat for ring polymer molecular dynamics as introduced in [#stochastic_thermostats2]_.
-    Applies specially initialized Langevin thermostats to the beads of the ring polymer in normal mode representation.
+    Langevin thermostat for ring polymer molecular dynamics.
+
+    Introduced in [#stochastic_thermostats2]_. Applies specially initialized Langevin
+    thermostats to the beads of the ring polymer in normal mode representation.
 
     Args:
         temperature_bath (float): Temperature of the external heat bath in Kelvin.
@@ -121,9 +124,11 @@ class PILELocalThermostat(LangevinThermostat):
 
 class PILEGlobalThermostat(PILELocalThermostat):
     """
-    Global variant of the ring polymer Langevin thermostat as suggested in [#stochastic_thermostats3]_. This thermostat
-    applies a stochastic velocity rescaling thermostat [#stochastic_velocity_rescaling1]_ to the ring polymer centroid
-    in normal mode representation.
+    Global variant of the ring polymer Langevin thermostat.
+
+    Suggested in [#stochastic_thermostats3]_. This thermostat applies a stochastic
+    velocity rescaling thermostat [#stochastic_velocity_rescaling1]_ to the ring polymer
+    centroid in normal mode representation.
 
     Args:
         temperature_bath (float): Temperature of the external heat bath in Kelvin.
@@ -210,9 +215,10 @@ class PILEGlobalThermostat(PILELocalThermostat):
 
 class TRPMDThermostat(PILELocalThermostat):
     """
-    Thermostatted ring polymer molecular dynamics thermostat variant of the local PILE thermostat as introduced in
-    [#trpmd_thermostat1]_. Here, no thermostat is applied to the centroid and the dynamics of the system are damped via
-    a given damping factor.
+    Thermostatted ring polymer molecular dynamics variant of the local PILE thermostat.
+
+    Introduced in [#trpmd_thermostat1]_. Here, no thermostat is applied to the centroid
+    and the dynamics of the system are damped via a given damping factor.
 
     Args:
         temperature_bath (float): Temperature of the external heat bath in Kelvin.
@@ -297,10 +303,11 @@ class RPMDGLEThermostat(GLEThermostat):
 
 class PIGLETThermostat(RPMDGLEThermostat):
     """
-    Efficient generalized Langevin equation stochastic thermostat for ring polymer dynamics simulations, see
-    [#piglet_thermostat1]_ for a detailed description. In contrast to the standard GLE thermostat, every normal mode
-    of the ring polymer is
-    thermostated seperately.
+    Efficient generalized Langevin equation stochastic thermostat for ring polymer
+    dynamics simulations.
+
+    See [#piglet_thermostat1]_ for a detailed description. In contrast to the standard
+    GLE thermostat, every normal mode of the ring polymer is thermostatted separately.
 
 
     Args:
@@ -343,12 +350,13 @@ class PIGLETThermostat(RPMDGLEThermostat):
 
         if a_matrix is None:
             raise ThermostatError(
-                "Error reading GLE matrices " "from {:s}".format(self.gle_file)
+                "Error reading GLE matrices from {:s}".format(self.gle_file)
             )
         if a_matrix.shape[0] != simulator.system.n_replicas:
             raise ThermostatError(
-                "Expected {:d} beads but "
-                "found {:d}.".format(simulator.system.n_replicas, a_matrix.shape[0])
+                "Expected {:d} beads but found {:d}.".format(
+                    simulator.system.n_replicas, a_matrix.shape[0]
+                )
             )
 
         all_c1 = []
@@ -372,9 +380,11 @@ class PIGLETThermostat(RPMDGLEThermostat):
 
 class NHCRingPolymerThermostat(NHCThermostat):
     """
-    Nose-Hoover chain thermostat for ring polymer molecular dynamics simulations as e.g. described in
-    [#stochastic_thermostats4]_. This is based on the massive setting of the standard NHC thermostat but operates in
-    the normal mode representation and uses specially initialized thermostat masses.
+    Nose-Hoover chain thermostat for ring polymer molecular dynamics simulations.
+
+    The scheme is described e.g. in [#stochastic_thermostats4]_. This is based on the massive
+    setting of the standard NHC thermostat but operates in the normal mode representation and
+    uses specially initialized thermostat masses.
 
     Args:
         temperature_bath (float): Temperature of the external heat bath in Kelvin.

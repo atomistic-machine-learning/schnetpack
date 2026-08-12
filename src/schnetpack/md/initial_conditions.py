@@ -3,10 +3,13 @@ Module for setting up the initial conditions of the molecules in :obj:`schnetpac
 This entails sampling the momenta from random distributions corresponding to certain temperatures.
 """
 
+from typing import List, Union
+
 import torch
-from schnetpack.md import System
+
 from schnetpack import units as spk_units
-from typing import Union, List
+
+from .system import System
 
 __all__ = ["Initializer", "MaxwellBoltzmannInit", "UniformInit"]
 

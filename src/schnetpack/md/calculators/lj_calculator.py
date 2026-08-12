@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Union, Dict
+
+from typing import TYPE_CHECKING, Dict, Optional, Union
 
 if TYPE_CHECKING:
     from schnetpack.md.neighborlist_md import NeighborListMD
@@ -7,11 +8,11 @@ if TYPE_CHECKING:
 import torch
 import torch.nn as nn
 
-from schnetpack.md.calculators import SchNetPackCalculator
-
-from schnetpack import properties
 import schnetpack.nn as snn
+from schnetpack import properties
 from schnetpack.atomistic import Forces, PairwiseDistances, Strain
+
+from .schnetpack_calculator import SchNetPackCalculator
 
 __all__ = ["LJCalculator", "LJModel"]
 
@@ -47,11 +48,13 @@ class LJCalculator(SchNetPackCalculator):
         energy_unit: Union[str, float],
         position_unit: Union[str, float],
         neighbor_list: NeighborListMD,
-        energy_key: str = None,
-        stress_key: str = None,
-        property_conversion: Dict[str, Union[str, float]] = {},
+        energy_key: Optional[str] = None,
+        stress_key: Optional[str] = None,
+        property_conversion: Optional[Dict[str, Union[str, float]]] = None,
         healing_length: float = 3.0,
     ):
+        if property_conversion is None:
+            property_conversion = {}
         model = LJModel(
             r_equilibrium=r_equilibrium,
             well_depth=well_depth,

@@ -1,4 +1,4 @@
-from typing import Sequence, Union, Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Sequence, Union
 
 import torch
 import torch.nn as nn
@@ -91,7 +91,10 @@ class Atomwise(nn.Module):
 class DipoleMoment(nn.Module):
     """
     Predicts dipole moments from latent partial charges and (optionally) local, atomic dipoles.
-    The latter requires a representation supplying (equivariant) vector features.
+    The latter requires a representation supplying (equivariant) vector features
+    [#painn1]_. Dipole moments predicted this way can be used to compute infrared
+    spectra [#irspec]_; see [#dipole]_ for the underlying decomposition into atomic
+    partial charges and dipoles.
 
     References:
 
@@ -216,7 +219,8 @@ class DipoleMoment(nn.Module):
 class Polarizability(nn.Module):
     """
     Predicts polarizability tensor using tensor rank factorization.
-    This requires an equivariant representation, e.g. PaiNN, that provides both scalar and vectorial features.
+    This requires an equivariant representation, e.g. PaiNN [#painn1a]_, that provides
+    both scalar and vectorial features.
 
     References:
 

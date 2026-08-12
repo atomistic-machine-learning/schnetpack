@@ -1,7 +1,8 @@
 import inspect
-import torch
 import warnings
 from typing import Any, Type, Union
+
+import torch
 
 __all__ = [
     "load_model",
@@ -72,7 +73,8 @@ def load_model(
     if not hasattr(model, "spk_version"):
         # make warning that model has no version information
         warnings.warn(
-            "Model was saved without version information. Conversion to current version may fail."
+            "Model was saved without version information. Conversion to current version may fail.",
+            stacklevel=2,
         )
         model.spk_version = "2.0.4"
 

@@ -1,10 +1,11 @@
+from typing import Dict, List
+
 import torch
 import torch.nn as nn
 
-from schnetpack.transform import NeighborListTransform, CollectAtomTriples
-from schnetpack.data.loader import _atoms_collate_fn
-from typing import List, Dict
 from schnetpack import properties
+from schnetpack.data.loader import _atoms_collate_fn
+from schnetpack.transform import CollectAtomTriples, NeighborListTransform
 
 __all__ = ["NeighborListMD"]
 
@@ -54,9 +55,9 @@ class NeighborListMD:
 
     def _update_required(
         self,
-        positions: torch.tensor,
-        cells: torch.tensor,
-        idx_m: torch.tensor,
+        positions: torch.Tensor,
+        cells: torch.Tensor,
+        idx_m: torch.Tensor,
         n_molecules: int,
     ):
         """
@@ -196,7 +197,7 @@ class NeighborListMD:
         cells: torch.Tensor,
         pbc: torch.Tensor,
         n_molecules: int,
-    ) -> List[Dict[str, torch.tensor]]:
+    ) -> List[Dict[str, torch.Tensor]]:
         """
         Split the tensors containing molecular information into the different molecules for neighbor list computation.
         Args:

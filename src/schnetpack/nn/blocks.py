@@ -1,10 +1,10 @@
-from typing import Union, Sequence, Callable, Optional
+from typing import Callable, Optional, Sequence, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 import schnetpack.nn as snn
-from schnetpack.nn.activations import shifted_softplus
 
 __all__ = ["build_mlp", "build_gated_equivariant_mlp"]
 
@@ -38,7 +38,7 @@ def build_mlp(
     if n_hidden is None:
         c_neurons = n_in
         n_neurons = []
-        for i in range(n_layers):
+        for _i in range(n_layers):
             n_neurons.append(c_neurons)
             c_neurons = max(n_out, c_neurons // 2)
         n_neurons.append(n_out)
@@ -86,7 +86,8 @@ def build_gated_equivariant_mlp(
     sactivation: Callable = F.silu,
 ):
     """
-    Build neural network analog to MLP with `GatedEquivariantBlock`s instead of dense layers.
+    Build neural network analog to MLP with :class:`GatedEquivariantBlock` layers
+    instead of dense layers.
 
     Args:
         n_in: number of input nodes.
@@ -106,7 +107,7 @@ def build_gated_equivariant_mlp(
     if n_hidden is None:
         c_neurons = n_in
         n_neurons = []
-        for i in range(n_layers):
+        for _i in range(n_layers):
             n_neurons.append(c_neurons)
             c_neurons = max(n_out, c_neurons // 2)
         n_neurons.append(n_out)

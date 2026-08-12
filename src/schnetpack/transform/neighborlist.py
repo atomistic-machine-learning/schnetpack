@@ -1,15 +1,18 @@
+import logging
 import os
-import torch
 import shutil
+from typing import Dict, List, Optional
+
 import fasteners
+import numpy as np
+import torch
 from ase import Atoms
 from ase.neighborlist import neighbor_list as ase_neighbor_list
-from matscipy.neighbours import neighbour_list as msp_neighbor_list
-from .base import Transform
 from dirsync import sync
-import numpy as np
-from typing import Optional, Dict, List
+from matscipy.neighbours import neighbour_list as msp_neighbor_list
 from vesin import NeighborList as vesin_nl
+
+from .base import Transform
 
 __all__ = [
     "ASENeighborList",
@@ -27,6 +30,8 @@ __all__ = [
 
 import schnetpack as spk
 from schnetpack import properties
+
+log = logging.getLogger(__name__)
 
 
 class CacheException(Exception):
@@ -55,7 +60,7 @@ class CachedNeighborList(Transform):
         neighbor_list: Transform,
         nbh_transforms: Optional[List[torch.nn.Module]] = None,
         keep_cache: bool = False,
-        cache_workdir: str = None,
+        cache_workdir: Optional[str] = None,
     ):
         """
         Args:
@@ -133,27 +138,34 @@ class CachedNeighborList(Transform):
                     }
                     torch.save(data, cache_file)
                 except Exception as e:
-                    print(e)
+                    log.warning(
+                        "neighbor list cache write failed: %s", e, exc_info=True
+                    )
         return inputs
 
     def teardown(self):
+        # Cache cleanup is best-effort, but scope the suppression to filesystem
+        # errors: a bare `except` here also swallows KeyboardInterrupt and
+        # SystemExit, which makes a Ctrl-C during teardown look like a hang.
         if not self.keep_cache and not self.preexisting_cache:
             try:
                 shutil.rmtree(self.cache_path)
-            except:
-                pass
+            except OSError as e:
+                log.debug("could not remove cache dir %s: %s", self.cache_path, e)
 
         if self.cache_workdir is not None:
             if self.keep_cache:
                 try:
                     sync(self.cache_workdir, self.cache_path, "sync")
-                except:
-                    pass
+                except OSError as e:
+                    log.debug("could not sync cache workdir back: %s", e)
 
             try:
                 shutil.rmtree(self.cache_workdir)
-            except:
-                pass
+            except OSError as e:
+                log.debug(
+                    "could not remove cache workdir %s: %s", self.cache_workdir, e
+                )
 
 
 class NeighborListTransform(Transform):
@@ -202,12 +214,13 @@ class NeighborListTransform(Transform):
         raise NotImplementedError
 
     def _convert_inputs_to_numpy(self, Z, positions, cell, pbc):
+        Z_np = Z.detach().cpu().numpy()
         pos_np = positions.detach().cpu().numpy()
         cell_np = cell.detach().cpu().numpy()
         pbc_np_bool = pbc.detach().cpu().numpy()
         pbc_np_int = pbc_np_bool.astype(int)
 
-        return pos_np, cell_np, pbc_np_bool, pbc_np_int
+        return Z_np, pos_np, cell_np, pbc_np_bool, pbc_np_int
 
 
 class ASENeighborList(NeighborListTransform):
@@ -216,7 +229,10 @@ class ASENeighborList(NeighborListTransform):
     """
 
     def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
-        at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
+        Z_np, pos_np, cell_np, pbc_np_bool, _ = self._convert_inputs_to_numpy(
+            Z, positions, cell, pbc
+        )
+        at = Atoms(numbers=Z_np, positions=pos_np, cell=cell_np, pbc=pbc_np_bool)
 
         idx_i, idx_j, S = ase_neighbor_list("ijS", at, cutoff, self_interaction=False)
         idx_i = torch.from_numpy(idx_i)
@@ -232,7 +248,7 @@ class VesinNeighborList(NeighborListTransform):
     """
 
     def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
-        pos_np, cell_np, pbc_np_bool, pbc_np_int = self._convert_inputs_to_numpy(
+        _, pos_np, cell_np, pbc_np_bool, _ = self._convert_inputs_to_numpy(
             Z, positions, cell, pbc
         )
 
@@ -266,7 +282,10 @@ class MatScipyNeighborList(NeighborListTransform):
     def _build_neighbor_list(
         self, Z, positions, cell, pbc, cutoff, eps=1e-6, buffer=1.0
     ):
-        at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
+        Z_np, pos_np, cell_np, pbc_np_bool, _ = self._convert_inputs_to_numpy(
+            Z, positions, cell, pbc
+        )
+        at = Atoms(numbers=Z_np, positions=pos_np, cell=cell_np, pbc=pbc_np_bool)
 
         # Add cell if none is present (volume = 0)
         if at.cell.volume < eps:
@@ -334,7 +353,6 @@ class SkinNeighborList(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-
         update_required, inputs = self._update(inputs)
         inputs = self.distance_calculator(inputs)
         inputs = self._remove_neighbors_in_skin(inputs)
@@ -348,7 +366,6 @@ class SkinNeighborList(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-
         Rij = inputs[properties.Rij]
         idx_i = inputs[properties.idx_i]
         idx_j = inputs[properties.idx_j]
@@ -404,7 +421,6 @@ class SkinNeighborList(Transform):
         return True, inputs
 
     def _build(self, inputs):
-
         # apply all transforms to obtain new neighbor list
         inputs = self.neighbor_list(inputs)
         for nbh_transform in self.nbh_transforms:
@@ -572,7 +588,6 @@ class FilterNeighbors(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-
         n_neighbors = inputs[properties.idx_i].shape[0]
         slab_indices = inputs[self.selection_name].tolist()
         kept_nbh_indices = []
