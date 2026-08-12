@@ -116,11 +116,6 @@ known-first-party = ["schnetpack"]
 [tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = ["tests"]
-addopts = [
-    "-ra",
-    "--benchmark-skip",
-    "-m", "not slow and not download",
-]
 # Umbrella for strict_config + strict_markers + strict_xfail +
 # strict_parametrization_ids (pytest >= 9). Set as an ini option, NOT as
 # `--strict-markers` in addopts: those flags are OverrideIniAction, which only
