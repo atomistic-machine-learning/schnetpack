@@ -12,6 +12,7 @@ References
 """
 
 import os
+import ase
 import numpy as np
 from abc import ABC, abstractmethod
 import torch
@@ -40,12 +41,19 @@ from schnetpack.transform import CastTo32, CastTo64, Transform
 from schnetpack.units import convert_units
 from schnetpack.utils import load_model
 from schnetpack.md.utils import activate_model_stress
+import schnetpack.properties as structure
 
 from typing import Optional, List, Union, Dict
 
 log = logging.getLogger(__name__)
 
-__all__ = ["SpkCalculator", "AseInterface", "AtomsConverter", "SpkEnsembleCalculator"]
+__all__ = [
+    "SpkCalculator",
+    "AseInterface",
+    "AtomsConverter",
+    "SpkEnsembleCalculator",
+    "batch_to_atoms",
+]
 
 
 class AtomsConverterError(Exception):
@@ -83,10 +91,20 @@ class AtomsConverter:
                 stored to the input batch.
         """
 
-        self.neighbor_list = deepcopy(neighbor_list)
         self.device = device
         self.dtype = dtype
         self.additional_inputs = additional_inputs or {}
+
+        if hasattr(neighbor_list, "cutoff_skin"):
+            self.cutoff_skin = neighbor_list.cutoff_skin
+            self.previous_positions = None
+            self.previous_cell = None
+            self.previous_pbc = None
+            self.previous_idx_i = None
+            self.previous_idx_j = None
+            self.previous_offsets = None
+        else:
+            self.cutoff_skin = None
 
         # convert transforms and neighbor_list to list
         transforms = transforms or []
@@ -153,7 +171,145 @@ class AtomsConverter:
         # Move input batch to device
         inputs = {p: inputs[p].to(self.device) for p in inputs}
 
+        if self.cutoff_skin is not None:
+            previous_inputs = self.transforms[0].previous_inputs
+            self.previous_positions = torch.cat(
+                [d[properties.R] for d in previous_inputs.values()]
+            )
+            self.previous_positions = self.previous_positions.to(self.device).to(
+                self.dtype
+            )
+            self.previous_cell = inputs[properties.cell]
+            self.previous_pbc = inputs[properties.pbc]
+            self.previous_idx_i = inputs[properties.idx_i]
+            self.previous_idx_j = inputs[properties.idx_j]
+            self.previous_offsets = inputs[properties.offsets]
+
         return inputs
+
+    def _requires_new_nbh_list(self, inputs):
+        # check if structure change is sufficiently small to reuse previous neighbor list
+        if (
+            self.previous_positions is None
+            or self.previous_cell is None
+            or self.previous_pbc is None
+        ):
+            return True
+        if (
+            torch.equal(self.previous_pbc, inputs[properties.pbc])
+            and torch.allclose(self.previous_cell, inputs[properties.cell])
+            and torch.max(
+                torch.sum(
+                    torch.square(self.previous_positions - inputs[properties.position]),
+                    dim=-1,
+                )
+            ).item()
+            < 0.25 * self.cutoff_skin**2
+        ):
+            return False
+        return True
+
+    def _transform_inputs(self, inputs):
+        """Split a batch back into single structures, re-run the transforms, recollate.
+
+        The neighbor lists are built per structure on cpu, so everything is moved
+        there in one go rather than once per structure and property.
+        """
+        n_atoms = inputs[properties.n_atoms].cpu()
+        cpu = torch.device("cpu")
+
+        # a batch is contiguous in _idx_m, so a single split replaces one boolean
+        # mask per structure and property
+        atomic_numbers = torch.split(inputs[properties.Z].cpu(), n_atoms.tolist())
+        positions = torch.split(inputs[properties.R].cpu(), n_atoms.tolist())
+        cells = inputs[properties.cell].cpu()
+        pbc = inputs[properties.pbc].cpu()
+        idx = inputs[properties.idx].cpu()
+        additional_inputs = {k: v.to(cpu) for k, v in self.additional_inputs.items()}
+
+        inputs_tmp = []
+        for config_idx in range(n_atoms.shape[0]):
+            spl_input = {
+                properties.n_atoms: n_atoms[config_idx].unsqueeze(0),
+                properties.Z: atomic_numbers[config_idx],
+                properties.R: positions[config_idx],
+                properties.cell: cells[config_idx].unsqueeze(0),
+                properties.pbc: pbc[config_idx].unsqueeze(0),
+                properties.idx: idx[config_idx].unsqueeze(0),
+            }
+            spl_input.update(additional_inputs)
+
+            # Cast to double, the precision the neighbor list providers expect
+            spl_input = CastTo64()(spl_input)
+
+            for transform in self.transforms:
+                spl_input = transform(spl_input)
+            inputs_tmp.append(spl_input)
+
+        inputs = _atoms_collate_fn(inputs_tmp)
+
+        # Move input batch to device
+        inputs = {p: inputs[p].to(self.device) for p in inputs}
+
+        return inputs
+
+    def update_inputs(self, inputs):
+
+        if self.cutoff_skin is None:
+            inputs = self._transform_inputs(inputs)
+        elif self._requires_new_nbh_list(inputs):
+            inputs = self._transform_inputs(inputs)
+            previous_inputs = self.transforms[0].previous_inputs
+            self.previous_positions = torch.cat(
+                [d[properties.R] for d in previous_inputs.values()]
+            )
+            self.previous_positions = self.previous_positions.to(self.device).to(
+                self.dtype
+            )
+            self.previous_cell = inputs[properties.cell]
+            self.previous_pbc = inputs[properties.pbc]
+            self.previous_idx_i = inputs[properties.idx_i]
+            self.previous_idx_j = inputs[properties.idx_j]
+            self.previous_offsets = inputs[properties.offsets]
+        else:
+            inputs[properties.idx_i] = self.previous_idx_i
+            inputs[properties.idx_j] = self.previous_idx_j
+            inputs[properties.offsets] = self.previous_offsets
+
+        return inputs
+
+
+def batch_to_atoms(inputs: Dict[str, torch.Tensor]) -> List[Atoms]:
+    """Turn a schnetpack input batch back into ase structures.
+
+    The inverse of :meth:`AtomsConverter.__call__`, and the one place in schnetpack
+    that does this conversion -- code that works on batches of tensors (the batch-wise
+    optimizer, for instance) can stay free of ase and call this at its boundary.
+
+    Args:
+        inputs: input batch. Only positions, atomic numbers, cells, pbc and the atom
+            counts are read, so a batch straight out of an optimizer works.
+
+    Returns:
+        list(ase.Atoms): one structure per entry of the batch, in batch order.
+    """
+    n_atoms = inputs[properties.n_atoms].detach().cpu()
+    positions = inputs[properties.R].detach().cpu().numpy()
+    atomic_numbers = inputs[properties.Z].detach().cpu().numpy()
+    cells = inputs[properties.cell].detach().cpu().numpy().reshape(-1, 3, 3)
+    pbc = inputs[properties.pbc].detach().cpu().numpy().reshape(-1, 3)
+
+    # split rather than slice by a fixed width, so ragged batches work too
+    offsets = np.pad(np.cumsum(n_atoms.numpy()), (1, 0))
+    return [
+        Atoms(
+            positions=positions[offsets[idx] : offsets[idx + 1]],
+            numbers=atomic_numbers[offsets[idx] : offsets[idx + 1]],
+            cell=cells[idx],
+            pbc=pbc[idx],
+        )
+        for idx in range(len(n_atoms))
+    ]
 
 
 class SpkCalculatorError(Exception):
@@ -185,6 +341,7 @@ class SpkCalculator(Calculator):
         converter: callable = AtomsConverter,
         transforms: Union[Transform, List[Transform]] = None,
         additional_inputs: Dict[str, torch.Tensor] = None,
+        auxiliary_output_modules: Optional[List] = None,
         **kwargs,
     ):
         """

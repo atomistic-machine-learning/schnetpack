@@ -53,6 +53,13 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest", "pytest-datadir", "pytest-benchmark"]
 
+[tool.pytest.ini_options]
+markers = [
+    "benchmark_sweep: batch-size scaling benchmarks; run with -m benchmark_sweep",
+]
+# the sweep takes far too long for an ordinary test run, so it is opt-in
+addopts = "-m 'not benchmark_sweep'"
+
 [tool.setuptools]
 package-dir = { "" = "src" }
 script-files = [
