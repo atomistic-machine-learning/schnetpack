@@ -3,7 +3,7 @@
 Nothing here asserts on time, since wall clock thresholds are machine dependent.
 
 These are deselected by default. Run them with::
-    pytest tests/interfaces -m benchmark_sweep --benchmark-group-by=param --benchmark-time-unit=ms
+    pytest tests/relax -m benchmark_sweep --benchmark-group-by=param --benchmark-time-unit=ms
 """
 
 import pytest

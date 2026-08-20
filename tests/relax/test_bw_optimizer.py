@@ -96,10 +96,11 @@ def make_structures(n_structures: int = N_STRUCTURES) -> List[Atoms]:
     return structures
 
 
-def build_batchwise_optimizer(atoms_list: List[Atoms]) -> BatchwiseLBFGS:
+def build_batchwise_optimizer(atoms_list: List[Atoms], **kwargs) -> BatchwiseLBFGS:
     """Everything needed to relax a batch, short of actually running it.
 
     Kept separate from the run so the benchmark can time only the relaxation.
+    Remaining keyword arguments go to ``BatchwiseLBFGS``.
     """
     calculator = BatchwiseCalculator(
         model=MODEL_PATH,
@@ -110,13 +111,8 @@ def build_batchwise_optimizer(atoms_list: List[Atoms]) -> BatchwiseLBFGS:
     )
     inputs = atoms_to_batch(deepcopy(atoms_list), device=DEVICE)
 
-    n_atoms = len(atoms_list[0])
-    return BatchwiseLBFGS(
-        calculator=calculator,
-        inputs=inputs,
-        logfile=None,
-        fixed_atoms_mask=[False] * (n_atoms * len(atoms_list)),
-    )
+    kwargs.setdefault("logfile", None)
+    return BatchwiseLBFGS(calculator=calculator, inputs=inputs, **kwargs)
 
 
 def relax_batchwise(atoms_list: List[Atoms]) -> RelaxationResult:
@@ -240,9 +236,11 @@ def test_forces_are_computed_once_per_step(
     Writing a frame on every step must not cost a second call either, which is why
     ``trajectory_interval=1`` is covered here too.
     """
-    optimizer = build_batchwise_optimizer(initial_structures[:3])
-    optimizer.trajectory = str(tmp_path / "relax.hdf5")
-    optimizer.trajectory_interval = trajectory_interval
+    optimizer = build_batchwise_optimizer(
+        initial_structures[:3],
+        trajectory=str(tmp_path / "relax.hdf5"),
+        trajectory_interval=trajectory_interval,
+    )
     calculate = optimizer.calculator.calculate
     calls = []
 
