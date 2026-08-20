@@ -14,6 +14,7 @@ from schnetpack import objectives
 from schnetpack import generative
 from schnetpack import dynamics
 from schnetpack.units import *
+from schnetpack import uncertainty
 from schnetpack.task import *
 from schnetpack import md
 from schnetpack import relax

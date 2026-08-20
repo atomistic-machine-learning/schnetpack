@@ -13,6 +13,7 @@ the progress log, the HDF5 trajectory -- is handled by the observers in
 :func:`~schnetpack.interfaces.ase_interface.batch_to_atoms` on the way out.
 """
 
+import os
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
@@ -26,6 +27,7 @@ from schnetpack.relax.observers import (
     RelaxationObserver,
     TrajectoryRecorder,
 )
+from schnetpack.uncertainty import AbsoluteUncertainty, Uncertainty
 from schnetpack.units import convert_units
 from schnetpack.utils.compatibility import load_model
 
@@ -35,7 +37,9 @@ __all__ = [
     "BatchwiseLBFGS",
     "BatchwiseCalculator",
     "BatchwiseCalculatorError",
+    "BatchwiseEnsembleCalculator",
     "BatchwiseOptimizer",
+    "NNEnsemble",
 ]
 
 
@@ -157,22 +161,25 @@ class BatchwiseCalculator:
             self.calculate(inputs)
         return self.results[self.energy_key]
 
-    def calculate(self, inputs: Dict[str, torch.Tensor]) -> None:
-        structure_id = self._structure_id(inputs)
+    def _prepare_inputs(
+        self, inputs: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
+        """The batch as the model should see it, with fresh neighbor lists.
 
-        # Shallow copy: the update replaces entries (neighbor lists, casts) and must not
-        # write them back into the caller's batch, but the tensors themselves are only
-        # read, so there is no reason to copy them all -- deep copying the batch would
-        # mean copying the neighbor list on every single step.
-        # Positions are the exception: the model marks them as requiring grad to get the
-        # forces, and would otherwise turn the optimizer's live positions into a leaf
-        # variable that can no longer be updated in place.
+        Shallow copy: the update replaces entries (neighbor lists, casts) and must not
+        write them back into the caller's batch, but the tensors themselves are only
+        read, so there is no reason to copy them all -- deep copying the batch would
+        mean copying the neighbor list on every single step.
+        Positions are the exception: the model marks them as requiring grad to get the
+        forces, and would otherwise turn the optimizer's live positions into a leaf
+        variable that can no longer be updated in place.
+        """
         inputs = dict(inputs)
         inputs[properties.R] = inputs[properties.R].detach().clone()
-        inputs = self.neighbor_list.update(inputs)
+        return self.neighbor_list.update(inputs)
 
-        model_results = self.model(inputs)
-
+    def _convert(self, model_results: Dict[str, torch.Tensor]) -> torch.Tensor:
+        """Pick the requested properties out of a model's output, in ase units."""
         results = {}
         for prop, unit in self.property_units.items():
             if prop not in model_results:
@@ -181,9 +188,171 @@ class BatchwiseCalculator:
                     "Please check the model properties!"
                 )
             results[prop] = model_results[prop].detach() * unit
+        return results
+
+    def calculate(self, inputs: Dict[str, torch.Tensor]) -> None:
+        structure_id = self._structure_id(inputs)
+        self.results = self._convert(self.model(self._prepare_inputs(inputs)))
+        self._cached_structure = structure_id
+
+
+class NNEnsemble(nn.Module):
+    """Several models evaluated together, reported as one prediction per model.
+
+    An ensemble is itself a model: it takes a batch and returns a dictionary of
+    predictions. What is different is that every entry carries a leading model axis,
+    ``(n_models, ...)``, so the caller can take the mean, look at the spread, or both.
+    Reducing that axis is deliberately left to the caller --
+    :class:`BatchwiseEnsembleCalculator` averages it for the energies and forces that
+    drive a relaxation, and hands the unreduced stack to an
+    :class:`~schnetpack.uncertainty.Uncertainty`.
+
+    Args:
+        models: the ensemble members.
+        properties: names of the properties to collect from them.
+    """
+
+    def __init__(self, models: nn.ModuleList, properties: Union[str, List[str]]):
+        super().__init__()
+        self.models = models
+        if isinstance(properties, str):
+            properties = [properties]
+        self.properties = properties
+
+    def setup(self, stage: Optional[str] = None) -> None:
+        for model in self.models:
+            model.setup(stage)
+
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        collected: Dict[str, List[torch.Tensor]] = {p: [] for p in self.properties}
+
+        for model in self.models:
+            # a shallow copy per member, so that the entries one model adds to the batch
+            # -- pairwise distances, say -- are not seen by the next one. The tensors
+            # themselves are shared: copying them would mean copying the neighbor list
+            # once per model on every step
+            predictions = model(dict(inputs))
+            for prop in collected:
+                if prop in predictions:
+                    collected[prop].append(predictions[prop])
+
+        return {
+            prop: torch.stack(values) for prop, values in collected.items() if values
+        }
+
+
+class BatchwiseEnsembleCalculator(BatchwiseCalculator):
+    """Evaluates an ensemble on a whole batch, reporting how much it disagrees.
+
+    Energies and forces are the mean over the ensemble, so this drives a relaxation
+    exactly as :class:`BatchwiseCalculator` does. On top of that
+    :meth:`get_uncertainty` reports how far the members disagreed, one value per
+    structure of the batch -- which is the point of relaxing a batch under an ensemble:
+    it tells you *which* structures wandered somewhere the models have not been trained.
+
+    This is the batch-wise counterpart of
+    :class:`~schnetpack.interfaces.ase_interface.SpkEnsembleCalculator` and takes the
+    same ``uncertainty_fn``, so a criterion tuned against one applies to the other.
+
+    Args:
+        models: the ensemble members, as a list of paths, a list of modules, a
+            ``ModuleList``, or the path of a directory laid out as schnetpack training
+            leaves it, ``<dir>/<run>/best_model``.
+        neighbor_list: as :class:`BatchwiseCalculator`.
+        uncertainty_fn: one :class:`~schnetpack.uncertainty.Uncertainty` or a list of
+            them. A list reports a dictionary keyed by class name. Defaults to
+            :class:`~schnetpack.uncertainty.AbsoluteUncertainty`.
+
+    Remaining keyword arguments are those of :class:`BatchwiseCalculator`.
+    """
+
+    def __init__(
+        self,
+        models: Union[str, List[str], List[nn.Module], nn.ModuleList],
+        neighbor_list: BatchNeighborList,
+        uncertainty_fn: Optional[Union[Uncertainty, List[Uncertainty]]] = None,
+        energy_key: str = "energy",
+        force_key: str = "forces",
+        stress_key: Optional[str] = None,
+        **kwargs,
+    ):
+        members = nn.ModuleList(
+            [
+                member if isinstance(member, nn.Module) else self._load_member(member)
+                for member in self._resolve(models)
+            ]
+        )
+        collected = [energy_key, force_key]
+        if stress_key is not None:
+            collected.append(stress_key)
+
+        super().__init__(
+            model=NNEnsemble(models=members, properties=collected),
+            neighbor_list=neighbor_list,
+            energy_key=energy_key,
+            force_key=force_key,
+            stress_key=stress_key,
+            **kwargs,
+        )
+
+        if uncertainty_fn is None:
+            uncertainty_fn = AbsoluteUncertainty(
+                energy_key=energy_key, force_key=force_key, stress_key=stress_key or ""
+            )
+        if not isinstance(uncertainty_fn, list):
+            uncertainty_fn = [uncertainty_fn]
+        self.uncertainty_fn = uncertainty_fn
+
+    @staticmethod
+    def _resolve(models) -> List:
+        """A directory of trained models is expanded; anything else is already a list."""
+        if isinstance(models, str):
+            return [
+                os.path.join(models, run, "best_model")
+                for run in sorted(os.listdir(models))
+            ]
+        return list(models)
+
+    @staticmethod
+    def _load_member(path: str) -> nn.Module:
+        return load_model(path, device="cpu").to(torch.float64)
+
+    def calculate(self, inputs: Dict[str, torch.Tensor]) -> None:
+        structure_id = self._structure_id(inputs)
+
+        # the model axis is kept here, unlike in the base calculator: the mean drives the
+        # relaxation, and the spread across it is the uncertainty
+        predictions = self._convert(self.model(self._prepare_inputs(inputs)))
+
+        results = {prop: value.mean(dim=0) for prop, value in predictions.items()}
+        results["uncertainty"] = self._uncertainty(
+            predictions, inputs[properties.n_atoms]
+        )
 
         self.results = results
         self._cached_structure = structure_id
+
+    def _uncertainty(
+        self, predictions: Dict[str, torch.Tensor], n_atoms: torch.Tensor
+    ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
+        if len(self.uncertainty_fn) == 1:
+            return self.uncertainty_fn[0](predictions, n_atoms)
+        return {
+            type(fn).__name__: fn(predictions, n_atoms) for fn in self.uncertainty_fn
+        }
+
+    def get_uncertainty(
+        self, inputs: Dict[str, torch.Tensor]
+    ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
+        """How much the ensemble disagrees about each structure of the batch.
+
+        One value per structure, or a dictionary of those keyed by class name when the
+        calculator was given several uncertainty functions. Costs nothing beyond the
+        model call the forces already paid for, as long as the batch has not moved.
+        """
+        if self._requires_calculation(["uncertainty"], inputs):
+            self.calculate(inputs)
+        return self.results["uncertainty"]
 
 
 class BatchwiseOptimizer(ABC):

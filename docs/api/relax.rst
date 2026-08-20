@@ -15,6 +15,8 @@ Calculators
     :template: classtemplate.rst
 
     BatchwiseCalculator
+    BatchwiseEnsembleCalculator
+    NNEnsemble
 
 
 Optimizers
@@ -27,6 +29,24 @@ Optimizers
 
     BatchwiseOptimizer
     BatchwiseLBFGS
+
+
+Uncertainty
+-----------
+
+.. currentmodule:: uncertainty
+
+How far the members of an ensemble disagree, one value per structure. Shared with
+:class:`~schnetpack.interfaces.ase_interface.SpkEnsembleCalculator`.
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+    :template: classtemplate.rst
+
+    Uncertainty
+    AbsoluteUncertainty
+    RelativeUncertainty
 
 
 Observers
