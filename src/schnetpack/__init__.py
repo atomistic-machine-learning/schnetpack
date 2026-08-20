@@ -13,6 +13,7 @@ from schnetpack import nn
 from schnetpack import train
 from schnetpack import model
 from schnetpack.units import *
+from schnetpack import uncertainty
 from schnetpack.task import *
 from schnetpack import md
 from schnetpack import relax
