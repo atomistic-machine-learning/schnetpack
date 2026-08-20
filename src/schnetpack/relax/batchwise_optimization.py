@@ -11,19 +11,10 @@ the progress log, the HDF5 trajectory -- is handled by the observers in
 :mod:`schnetpack.relax.observers`. Callers convert at the boundary with
 :func:`~schnetpack.interfaces.ase_interface.atoms_to_batch` on the way in and
 :func:`~schnetpack.interfaces.ase_interface.batch_to_atoms` on the way out.
-
-Note:
-    ``BatchwiseEnsembleCalculator`` and ``NNEnsemble`` have not been migrated to the
-    tensor-based calculator contract. ``BatchwiseEnsembleCalculator.calculate`` still
-    expects a list of ``ase.Atoms`` and returns numpy arrays, so the inherited
-    ``get_forces(inputs)`` raises. They are kept for backwards compatibility, are not
-    exercised by any test, and are the only ase-shaped thing left in this module.
 """
 
-import os
 from abc import ABC, abstractmethod
-from copy import deepcopy
-from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
 from torch import nn
@@ -40,54 +31,16 @@ from schnetpack.utils.compatibility import load_model
 
 from schnetpack.transform import BatchNeighborList
 
-if TYPE_CHECKING:  # import only for type checking, so the runtime stays ase-free
-    from ase import Atoms
-
 __all__ = [
     "BatchwiseLBFGS",
     "BatchwiseCalculator",
     "BatchwiseCalculatorError",
-    "BatchwiseEnsembleCalculator",
     "BatchwiseOptimizer",
-    "NNEnsemble",
 ]
 
 
 class BatchwiseCalculatorError(Exception):
     pass
-
-
-class NNEnsemble(nn.Module):
-    # TODO: integrate this into EnsembleCalculator directly
-    def __init__(self, models: nn.ModuleList, properties: List[str]):
-        super(NNEnsemble, self).__init__()
-        self.models = models
-        if isinstance(properties, str):
-            properties = [properties]
-        self.properties = properties
-
-    def setup(self, stage: Optional[str] = None) -> None:
-        for model in self.models:
-            model.setup(stage)
-
-    def forward(self, x: Dict) -> Tuple:
-        results = {p: [] for p in self.properties}
-
-        inputs = deepcopy(x)
-        for model in self.models:
-            predictions = model(deepcopy(inputs))
-            for prop, values in predictions.items():
-                if prop in self.properties:
-                    results[prop].append(values)
-
-        means = {}
-        stds = {}
-        for prop, values in results.items():
-            stacked_values = torch.stack(values)
-            means[prop] = stacked_values.mean(dim=0)
-            stds[prop] = stacked_values.std(dim=0)
-
-        return means, stds
 
 
 class BatchwiseCalculator:
@@ -144,18 +97,11 @@ class BatchwiseCalculator:
             self.property_units[stress_key] = energy_conversion / position_conversion**3
 
         if isinstance(model, str):
-            model = self._load_model(model)
-        self._initialize_model(model)
+            model = load_model(model, device="cpu").to(torch.float64)
+        self.model = model.eval().to(device=self.device, dtype=self.dtype)
 
         # the structure self.results was computed for
         self._cached_structure = None
-
-    def _load_model(self, model: str) -> nn.Module:
-        return load_model(model, device="cpu").to(torch.float64)
-
-    def _initialize_model(self, model: nn.Module) -> None:
-        self.model = model.eval()
-        self.model.to(device=self.device, dtype=self.dtype)
 
     #: input entries that decide whether a cached result is still valid
     _structure_keys = (properties.R, properties.cell, properties.pbc)
@@ -238,56 +184,6 @@ class BatchwiseCalculator:
 
         self.results = results
         self._cached_structure = structure_id
-
-
-class BatchwiseEnsembleCalculator(BatchwiseCalculator):
-    """Calculator for an ensemble of models, reporting per-property uncertainties.
-
-    Warning:
-        Not migrated to the tensor-based calculator contract, see the module docstring.
-        ``calculate`` below still expects a list of ``ase.Atoms`` and returns numpy, so
-        the inherited ``get_forces(inputs)`` raises.
-
-    Args:
-        model: directory of trained models, or a module list of them. Remaining
-            arguments are those of :class:`BatchwiseCalculator`.
-    """
-
-    # TODO: inherit from SpkEnsembleCalculator
-    def _load_model(self, model: str) -> nn.ModuleList:
-        models = torch.nn.ModuleList()
-        for model_name in os.listdir(model):
-            models.append(
-                load_model(
-                    os.path.join(model, model_name, "best_model"), device="cpu"
-                ).to(torch.float64)
-            )
-        return models
-
-    def _initialize_model(self, model: nn.ModuleList) -> None:
-        ensemble = NNEnsemble(models=model, properties=list(self.property_units.keys()))
-        self.model = ensemble.eval().to(device=self.device, dtype=self.dtype)
-
-    def calculate(self, atoms: List["Atoms"]) -> None:
-        from schnetpack.interfaces.ase_interface import atoms_to_batch
-
-        inputs = self.neighbor_list.update(
-            atoms_to_batch(atoms, device=self.device, dtype=self.dtype)
-        )
-        model_results, stds = self.model(inputs)
-
-        results = {}
-        for prop, unit in self.property_units.items():
-            if prop not in model_results:
-                raise BatchwiseCalculatorError(
-                    f"'{prop}' is not a property of your model. "
-                    "Please check the model properties!"
-                )
-            results[prop] = model_results[prop].detach().cpu().numpy() * unit
-            results[f"{prop}_uncertainty"] = stds[prop].detach().cpu().numpy() * unit
-
-        self.results = results
-        self.atoms = atoms.copy()
 
 
 class BatchwiseOptimizer(ABC):
