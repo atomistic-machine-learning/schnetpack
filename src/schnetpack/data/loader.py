@@ -1,13 +1,13 @@
 import torch
 from torch.utils.data import DataLoader
 
-from typing import Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 from torch.utils.data import Dataset, Sampler
 from torch.utils.data.dataloader import _collate_fn_t, _T_co
 
 import schnetpack.properties as structure
 
-__all__ = ["AtomsLoader"]
+__all__ = ["AtomsLoader", "split_batch"]
 
 
 def _atoms_collate_fn(batch):
@@ -56,6 +56,73 @@ def _atoms_collate_fn(batch):
             coll_batch[key] = torch.cat(indices, 0)
 
     return coll_batch
+
+
+#: entries that describe the structures themselves, as opposed to their neighborhoods.
+#: These are what a neighbor list needs, and what :func:`split_batch` splits by default.
+_STRUCTURE_KEYS = (
+    structure.n_atoms,
+    structure.Z,
+    structure.R,
+    structure.cell,
+    structure.pbc,
+)
+
+
+def split_batch(
+    inputs: Dict[str, torch.Tensor], keys: Optional[Sequence[str]] = None
+) -> List[Dict[str, torch.Tensor]]:
+    """Split a collated batch back into one input dictionary per structure.
+
+    The inverse of :func:`_atoms_collate_fn` for the structure-defining entries: atom-wise
+    entries are cut along the atom axis at the ``n_atoms`` boundaries, structure-wise ones
+    are indexed. Every structure gets its position in the batch as ``properties.idx``, the
+    sample index a per-sample transform keys its caches by, so a batch that carries none --
+    one read back from a trajectory, say -- still splits into usable samples.
+
+    Neighbor lists are deliberately not split. They are the one thing that cannot be
+    recovered by cutting: the pair indices are shifted into batch-global numbering, and any
+    caller splitting a batch is about to rebuild them anyway.
+
+    Args:
+        inputs: collated input batch.
+        keys: entries to split in addition to ``n_atoms``, ``Z``, ``R``, ``cell`` and
+            ``pbc``. An entry whose first dimension matches the number of atoms in the
+            batch is treated as atom-wise, anything else as structure-wise. The two only
+            coincide when every structure holds a single atom, and there the two readings
+            cut at the same places anyway.
+
+    Returns:
+        list(dict(str, torch.Tensor)): one input dictionary per structure, in batch order.
+    """
+    n_atoms = inputs[structure.n_atoms]
+    n_structures = n_atoms.shape[0]
+    n_total_atoms = int(n_atoms.sum())
+
+    offsets = torch.cat(
+        [torch.zeros(1, dtype=n_atoms.dtype, device=n_atoms.device), n_atoms.cumsum(0)]
+    ).tolist()
+
+    split_keys = list(_STRUCTURE_KEYS) + [
+        key for key in (keys or ()) if key not in _STRUCTURE_KEYS
+    ]
+
+    samples = []
+    for idx in range(n_structures):
+        sample = {structure.idx: torch.tensor([idx])}
+        for key in split_keys:
+            if key not in inputs:
+                continue
+            value = inputs[key]
+            if key == structure.n_atoms:
+                sample[key] = value[idx : idx + 1]
+            elif value.shape[0] == n_total_atoms:
+                sample[key] = value[offsets[idx] : offsets[idx + 1]]
+            else:
+                sample[key] = value[idx : idx + 1]
+        samples.append(sample)
+
+    return samples
 
 
 class AtomsLoader(DataLoader):

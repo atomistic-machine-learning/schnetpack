@@ -45,7 +45,14 @@ from typing import Optional, List, Union, Dict
 
 log = logging.getLogger(__name__)
 
-__all__ = ["SpkCalculator", "AseInterface", "AtomsConverter", "SpkEnsembleCalculator"]
+__all__ = [
+    "SpkCalculator",
+    "AseInterface",
+    "AtomsConverter",
+    "SpkEnsembleCalculator",
+    "atoms_to_batch",
+    "batch_to_atoms",
+]
 
 
 class AtomsConverterError(Exception):
@@ -83,7 +90,6 @@ class AtomsConverter:
                 stored to the input batch.
         """
 
-        self.neighbor_list = deepcopy(neighbor_list)
         self.device = device
         self.dtype = dtype
         self.additional_inputs = additional_inputs or {}
@@ -129,17 +135,7 @@ class AtomsConverter:
 
         inputs_batch = []
         for at_idx, at in enumerate(atoms):
-
-            inputs = {
-                properties.n_atoms: torch.tensor([at.get_global_number_of_atoms()]),
-                properties.Z: torch.from_numpy(at.get_atomic_numbers()),
-                properties.R: torch.from_numpy(at.get_positions()),
-                properties.cell: torch.from_numpy(at.get_cell().array).view(-1, 3, 3),
-                properties.pbc: torch.from_numpy(at.get_pbc()).view(-1, 3),
-            }
-
-            # specify sample index
-            inputs.update({properties.idx: torch.tensor([at_idx])})
+            inputs = _atoms_to_inputs(at, at_idx)
 
             # add additional inputs (specified in AtomsConverter __init__)
             inputs.update(self.additional_inputs)
@@ -154,6 +150,86 @@ class AtomsConverter:
         inputs = {p: inputs[p].to(self.device) for p in inputs}
 
         return inputs
+
+
+def _atoms_to_inputs(atoms: Atoms, idx: int = 0) -> Dict[str, torch.Tensor]:
+    """The tensors describing a single ase structure, before any transform has run."""
+    return {
+        properties.n_atoms: torch.tensor([atoms.get_global_number_of_atoms()]),
+        properties.Z: torch.from_numpy(atoms.get_atomic_numbers()),
+        properties.R: torch.from_numpy(atoms.get_positions()),
+        properties.cell: torch.from_numpy(atoms.get_cell().array).view(-1, 3, 3),
+        properties.pbc: torch.from_numpy(atoms.get_pbc()).view(-1, 3),
+        properties.idx: torch.tensor([idx]),
+    }
+
+
+def atoms_to_batch(
+    atoms: Union[List[Atoms], Atoms],
+    device: Union[str, torch.device] = "cpu",
+    dtype: torch.dtype = torch.float32,
+) -> Dict[str, torch.Tensor]:
+    """Turn ase structures into a schnetpack input batch, neighbor lists aside.
+
+    The inverse of :func:`batch_to_atoms`, and what code working on batches of tensors
+    needs at its entry: the batch-wise optimizer takes it from here, and its calculator's
+    :class:`~schnetpack.transform.BatchNeighborList` fills in the neighborhoods on every
+    step. Use :class:`AtomsConverter` instead when the batch has to be complete right
+    away, e.g. to call a model on it directly.
+
+    Args:
+        atoms: a list of ase structures, or a single one.
+        device: device the batch is placed on.
+        dtype: float precision of the batch.
+
+    Returns:
+        dict[str, torch.Tensor]: input batch holding positions, atomic numbers, cells,
+        pbc and the atom counts.
+    """
+    if isinstance(atoms, Atoms):
+        atoms = [atoms]
+
+    cast = CastTo32() if dtype == torch.float32 else CastTo64()
+    if dtype not in (torch.float32, torch.float64):
+        raise AtomsConverterError(f"Unrecognized precision {dtype}")
+
+    inputs = _atoms_collate_fn(
+        [cast(_atoms_to_inputs(at, at_idx)) for at_idx, at in enumerate(atoms)]
+    )
+    return {key: value.to(device) for key, value in inputs.items()}
+
+
+def batch_to_atoms(inputs: Dict[str, torch.Tensor]) -> List[Atoms]:
+    """Turn a schnetpack input batch back into ase structures.
+
+    The inverse of :meth:`AtomsConverter.__call__`, and the one place in schnetpack
+    that does this conversion -- code that works on batches of tensors (the batch-wise
+    optimizer, for instance) can stay free of ase and call this at its boundary.
+
+    Args:
+        inputs: input batch. Only positions, atomic numbers, cells, pbc and the atom
+            counts are read, so a batch straight out of an optimizer works.
+
+    Returns:
+        list(ase.Atoms): one structure per entry of the batch, in batch order.
+    """
+    n_atoms = inputs[properties.n_atoms].detach().cpu()
+    positions = inputs[properties.R].detach().cpu().numpy()
+    atomic_numbers = inputs[properties.Z].detach().cpu().numpy()
+    cells = inputs[properties.cell].detach().cpu().numpy().reshape(-1, 3, 3)
+    pbc = inputs[properties.pbc].detach().cpu().numpy().reshape(-1, 3)
+
+    # split rather than slice by a fixed width, so ragged batches work too
+    offsets = np.pad(np.cumsum(n_atoms.numpy()), (1, 0))
+    return [
+        Atoms(
+            positions=positions[offsets[idx] : offsets[idx + 1]],
+            numbers=atomic_numbers[offsets[idx] : offsets[idx + 1]],
+            cell=cells[idx],
+            pbc=pbc[idx],
+        )
+        for idx in range(len(n_atoms))
+    ]
 
 
 class SpkCalculatorError(Exception):
