@@ -17,6 +17,7 @@ from schnetpack import properties
 from schnetpack.interfaces.ase_interface import atoms_to_batch, batch_to_atoms
 from schnetpack.relax.batchwise_optimization import BatchwiseLBFGS
 from schnetpack.relax.batchwise_trajectory import BatchwiseTrajectoryReader
+from schnetpack.relax.observers import FrameCollector, Interval
 
 
 class HarmonicCalculator:
@@ -160,10 +161,128 @@ def test_run_reports_failure_when_the_step_limit_is_hit():
     assert optimizer.nsteps == 2
 
 
-def test_logfile_none_disables_logging():
-    optimizer = make_optimizer(make_inputs([3]), logfile=None)
-    assert optimizer.logfile is None
+# ---------------------------------------------------------------- the observer seam
+
+
+def test_interval_zero_is_endpoints_only():
+    interval = Interval(0)
+    assert interval.due(0, final=False)
+    assert not any(interval.due(step, final=False) for step in range(1, 10))
+    assert interval.due(7, final=True)
+
+
+def test_interval_one_is_every_step():
+    interval = Interval(1)
+    assert all(interval.due(step, final=False) for step in range(10))
+
+
+def test_interval_n_takes_every_nth_plus_the_endpoints():
+    interval = Interval(3)
+    due = [step for step in range(10) if interval.due(step, final=False)]
+    assert due == [0, 3, 6, 9]
+    assert interval.due(
+        7, final=True
+    ), "the last frame is recorded whatever the interval"
+
+
+def test_observers_only_see_the_steps_they_asked_for():
+    every = FrameCollector(interval=1)
+    endpoints = FrameCollector(interval=0)
+    optimizer = make_optimizer(make_inputs([2]), observers=[every, endpoints])
+    optimizer.run(fmax=1e-6, steps=6)
+
+    assert every.steps == list(range(optimizer.nsteps + 1))
+    assert endpoints.steps == [0, optimizer.nsteps]
+
+
+def test_a_frame_describes_the_state_it_was_taken_from():
+    collector = FrameCollector(interval=1)
+    inputs = make_inputs([3, 3])
+    optimizer = make_optimizer(inputs, observers=[collector])
+    assert optimizer.run(fmax=1e-3, steps=60), "the batch has to reach the minimum"
+
+    first, last = collector.frames[0], collector.frames[-1]
+    assert first.step == 0 and not first.final
+    assert last.step == optimizer.nsteps and last.final
+    assert first.positions.shape == (6, 3)
+    assert first.cell.shape == (2, 3, 3)
+    assert first.energy.shape == (2,)
+    assert first.max_force_per_config.shape == (2,)
+
+    # the harmonic calculator pulls every atom towards the origin
+    torch.testing.assert_close(last.forces, -last.positions)
+    # a relaxation towards the origin shrinks the positions and the energy
+    assert last.positions.abs().max() < first.positions.abs().max()
+    assert last.energy.sum() < first.energy.sum()
+    # and every structure ends up flagged converged, none of them starts out that way
+    assert last.converged.all()
+    assert not first.converged.any()
+
+
+def test_collected_frames_are_snapshots_not_aliases():
+    """The optimizer hands out its live tensors, so a collector has to clone them."""
+    collector = FrameCollector(interval=1)
+    optimizer = make_optimizer(make_inputs([2]), observers=[collector])
+    optimizer.run(fmax=1e-6, steps=6)
+
+    positions = [frame.positions for frame in collector.frames]
+    assert not torch.equal(positions[0], positions[-1])
+
+
+def test_nothing_is_recorded_without_an_observer():
+    """No observer means no frame is ever built, so nothing is transferred or written."""
+    optimizer = make_optimizer(make_inputs([2]))
+    assert optimizer.observers == []
+
+    frames = []
+    optimizer._frame = lambda final: frames.append(final)
     optimizer.run(fmax=1e-3, steps=5)
+    assert frames == []
+
+
+# ---------------------------------------------------------------------- log writer
+
+
+def test_log_writer_writes_one_line_per_recorded_step(tmp_path):
+    path = tmp_path / "relax.log"
+    optimizer = make_optimizer(make_inputs([2]), logfile=str(path), log_interval=1)
+    optimizer.run(fmax=1e-6, steps=6)
+    optimizer.close()
+
+    lines = path.read_text().splitlines()
+    header, entries = lines[0], lines[1:]
+    assert header.split() == ["Step", "Time", "fmax"]
+    assert len(entries) == optimizer.nsteps + 1
+    assert all(line.startswith("BatchwiseLBFGS:") for line in entries)
+
+    # the logged fmax is the largest force in the batch, and it falls as it relaxes
+    logged = [float(line.split()[-1]) for line in entries]
+    assert logged[-1] < logged[0]
+
+
+def test_log_writer_honours_its_interval(tmp_path):
+    path = tmp_path / "relax.log"
+    optimizer = make_optimizer(make_inputs([2]), logfile=str(path), log_interval=3)
+    optimizer.run(fmax=1e-6, steps=10)
+    optimizer.close()
+
+    steps = [int(line.split()[1]) for line in path.read_text().splitlines()[1:]]
+    assert steps[0] == 0 and steps[-1] == optimizer.nsteps
+    assert set(steps) == {0, optimizer.nsteps} | {
+        step for step in range(optimizer.nsteps + 1) if step % 3 == 0
+    }
+
+
+def test_logfile_none_writes_nothing(tmp_path):
+    """``logfile=None`` adds no observer at all, so no file appears."""
+    optimizer = make_optimizer(make_inputs([3]), logfile=None)
+    assert optimizer.observers == []
+    optimizer.run(fmax=1e-3, steps=5)
+    optimizer.close()
+    assert list(tmp_path.iterdir()) == []
+
+
+# --------------------------------------------------------------- trajectory recorder
 
 
 def test_trajectory_holds_one_frame_per_step(tmp_path):
@@ -197,20 +316,6 @@ def test_trajectory_interval_zero_keeps_only_the_endpoints(tmp_path):
         assert list(traj.steps) == [0, optimizer.nsteps]
 
 
-def test_trajectory_interval_n_always_includes_first_and_last(tmp_path):
-    path = str(tmp_path / "relax.hdf5")
-    optimizer = make_optimizer(make_inputs([2]), trajectory=path, trajectory_interval=3)
-    optimizer.run(fmax=1e-6, steps=10)
-    optimizer.close()
-
-    with BatchwiseTrajectoryReader(path) as traj:
-        steps = list(traj.steps)
-    assert steps[0] == 0 and steps[-1] == optimizer.nsteps
-    assert set(steps) == {0, optimizer.nsteps} | {
-        s for s in range(optimizer.nsteps + 1) if s % 3 == 0
-    }
-
-
 def test_trajectory_can_store_forces_and_energies(tmp_path):
     path = str(tmp_path / "relax.hdf5")
     inputs = make_inputs([2])
@@ -235,7 +340,27 @@ def test_trajectory_can_store_forces_and_energies(tmp_path):
         assert not traj.converged[0].any()
 
 
+def test_trajectory_metadata_comes_from_the_optimizer(tmp_path):
+    """``on_start`` creates the file, so its metadata is settled before frame one."""
+    path = str(tmp_path / "relax.hdf5")
+    optimizer = make_optimizer(make_inputs([2]), trajectory=path, trajectory_interval=0)
+    optimizer.run(fmax=0.01, steps=5)
+    optimizer.close()
+
+    with BatchwiseTrajectoryReader(path) as traj:
+        assert traj.file.attrs["optimizer"] == "BatchwiseLBFGS"
+        assert traj.file.attrs["fmax"] == pytest.approx(0.01)
+
+
 def test_no_trajectory_is_written_without_a_path(tmp_path):
+    optimizer = make_optimizer(
+        make_inputs([2]), trajectory=str(tmp_path / "relax.hdf5")
+    )
+    optimizer.close()
+    assert (
+        list(tmp_path.iterdir()) == []
+    ), "the file is created by the run, not by close"
+
     optimizer = make_optimizer(make_inputs([2]), trajectory=None)
     optimizer.run(fmax=1e-3, steps=5)
     optimizer.close()
@@ -251,6 +376,15 @@ def test_optimizer_is_a_context_manager(tmp_path):
 
     with BatchwiseTrajectoryReader(path) as traj:
         assert traj.n_frames == optimizer.nsteps + 1
+
+
+def test_close_is_idempotent(tmp_path):
+    optimizer = make_optimizer(
+        make_inputs([2]), trajectory=str(tmp_path / "relax.hdf5"), log_interval=1
+    )
+    optimizer.run(fmax=1e-3, steps=5)
+    optimizer.close()
+    optimizer.close()
 
 
 def test_relaxation_finds_the_analytic_minimum():

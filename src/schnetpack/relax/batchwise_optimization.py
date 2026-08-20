@@ -6,11 +6,11 @@ Hessian approximation per structure so that batches of differing compositions ca
 optimized together.
 
 The batch is a SchNetPack input dictionary of torch tensors and stays that way for the
-entire run -- this module contains no ase code at all. Trajectories go to a single
-buffered HDF5 file (see :mod:`schnetpack.interfaces.batchwise_trajectory`), and callers
-convert at the boundary with :func:`~schnetpack.interfaces.ase_interface.atoms_to_batch`
-on the way in and :func:`~schnetpack.interfaces.ase_interface.batch_to_atoms` on the way
-out.
+entire run -- this module contains no ase code at all. What a run reports as it goes --
+the progress log, the HDF5 trajectory -- is handled by the observers in
+:mod:`schnetpack.relax.observers`. Callers convert at the boundary with
+:func:`~schnetpack.interfaces.ase_interface.atoms_to_batch` on the way in and
+:func:`~schnetpack.interfaces.ase_interface.batch_to_atoms` on the way out.
 
 Note:
     ``BatchwiseEnsembleCalculator`` and ``NNEnsemble`` have not been migrated to the
@@ -21,18 +21,20 @@ Note:
 """
 
 import os
-import sys
-import time
 from abc import ABC, abstractmethod
-from contextlib import ExitStack
 from copy import deepcopy
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
 from torch import nn
 
 from schnetpack import properties
-from schnetpack.relax.batchwise_trajectory import BatchwiseTrajectoryWriter
+from schnetpack.relax.observers import (
+    LogWriter,
+    RelaxationFrame,
+    RelaxationObserver,
+    TrajectoryRecorder,
+)
 from schnetpack.units import convert_units
 from schnetpack.utils.compatibility import load_model
 
@@ -291,8 +293,10 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
 class BatchwiseOptimizer(ABC):
     """Drives a batch of structures downhill until every one of them is relaxed.
 
-    Subclasses supply :meth:`step`; everything else -- the run loop, the convergence
-    criterion, the text log and the HDF5 trajectory -- lives here.
+    Subclasses supply :meth:`step`; the run loop and the convergence criterion live
+    here. What a run reports as it goes -- the text log, the HDF5 trajectory, anything
+    else -- is the business of its observers, see
+    :mod:`schnetpack.relax.observers`.
 
     Positions are updated in place, so ``inputs`` holds the relaxed structures once the
     run is over.
@@ -301,9 +305,12 @@ class BatchwiseOptimizer(ABC):
         calculator: provides the forces and energies driving the relaxation.
         inputs: schnetpack input batch holding the structures to relax. All structures
             must have the same number of atoms.
+        observers: :class:`~schnetpack.relax.RelaxationObserver` instances to report to.
         logfile: text progress log. A path, ``"-"`` for stdout, or ``None`` for no log.
+            Shorthand for adding a :class:`~schnetpack.relax.LogWriter`.
         log_interval: how often to write a log line. See below.
         trajectory: path of the HDF5 trajectory to write, or ``None`` for none.
+            Shorthand for adding a :class:`~schnetpack.relax.TrajectoryRecorder`.
         trajectory_interval: how often to write a trajectory frame. See below.
         store_forces: store the forces of every trajectory frame, not just the
             positions. Doubles the file size.
@@ -320,6 +327,7 @@ class BatchwiseOptimizer(ABC):
         self,
         calculator: BatchwiseCalculator,
         inputs: Dict[str, torch.Tensor],
+        observers: Sequence[RelaxationObserver] = (),
         logfile: Optional[str] = None,
         log_interval: int = 1,
         trajectory: Optional[str] = None,
@@ -365,21 +373,19 @@ class BatchwiseOptimizer(ABC):
                 )
             self.free_atoms = (~fixed).to(dtype=torch.float64, device=device)
 
-        self._closer = ExitStack()
-        self.log_interval = log_interval
-        if logfile is None:
-            self.logfile = None
-        elif logfile == "-":
-            self.logfile = sys.stdout
-        else:
-            self.logfile = self._closer.enter_context(
-                open(logfile, "a", encoding="utf-8")
+        # the logfile/trajectory arguments are shorthand for the two standard observers
+        self.observers: List[RelaxationObserver] = list(observers)
+        if logfile is not None:
+            self.observers.append(LogWriter(logfile, interval=log_interval))
+        if trajectory is not None:
+            self.observers.append(
+                TrajectoryRecorder(
+                    trajectory,
+                    interval=trajectory_interval,
+                    store_forces=store_forces,
+                )
             )
-
-        self.trajectory = trajectory
-        self.trajectory_interval = trajectory_interval
-        self.store_forces = store_forces
-        self._writer = None
+        self._started = False
 
     # ------------------------------------------------------------------ run loop
 
@@ -413,12 +419,19 @@ class BatchwiseOptimizer(ABC):
         if steps is not None:
             self.max_steps = steps
 
+        if not self._started:
+            # fmax is settled and the batch is untouched, so an observer that has a
+            # file to open now knows the shape and the metadata of what goes in it
+            for observer in self.observers:
+                observer.on_start(self)
+            self._started = True
+
         converged = False
         while True:
-            # one model call per iteration; the loggers and step() below reuse it
+            # one model call per iteration; the observers and step() below reuse it
             converged = self.converged()
             final = converged or self.nsteps >= self.max_steps
-            self._write_frame(final=final)
+            self._report(final=final)
             if final:
                 break
 
@@ -451,67 +464,44 @@ class BatchwiseOptimizer(ABC):
         self.calculator.get_forces(self.inputs)
         return self.inputs, self.calculator.results
 
-    # ------------------------------------------------------------------- logging
+    # ----------------------------------------------------------------- reporting
 
-    def _is_due(self, interval: int, final: bool) -> bool:
-        if final or self.nsteps == 0:
-            return True
-        return interval > 0 and self.nsteps % interval == 0
-
-    def _write_frame(self, final: bool = False) -> None:
-        """Write a log line and a trajectory frame, if this step calls for them."""
-        log_now = self.logfile is not None and self._is_due(self.log_interval, final)
-        trajectory_now = self.trajectory is not None and self._is_due(
-            self.trajectory_interval, final
-        )
-        if not (log_now or trajectory_now):
-            # nothing to write, so do not pay for the transfer off the device
+    def _report(self, final: bool = False) -> None:
+        """Hand this step to the observers that asked for it."""
+        listening = [
+            observer
+            for observer in self.observers
+            if observer.wants(self.nsteps, final)
+        ]
+        if not listening:
+            # nobody wants this step, so do not pay for the transfer off the device
             return
 
+        frame = self._frame(final=final)
+        for observer in listening:
+            observer.on_frame(frame)
+
+    def _frame(self, final: bool) -> RelaxationFrame:
+        """The current state of the batch, as observers see it."""
         forces = self.calculator.get_forces(self.inputs)
         if self._max_sq_force_per_config is None:
             self._max_sq_force_per_config = self.max_squared_force_per_config(forces)
 
-        if log_now:
-            self._write_log_line(self._max_sq_force_per_config.max().sqrt().item())
-        if trajectory_now:
-            self._write_trajectory_frame(forces)
-
-    def _write_log_line(self, fmax: float) -> None:
-        name = self.__class__.__name__
-        if self.nsteps == 0:
-            header = (" " * len(name), "Step", "Time", "fmax")
-            self.logfile.write("%s  %4s %8s %12s\n" % header)
-
-        clock = time.localtime()
-        line = (name, self.nsteps, clock[3], clock[4], clock[5], fmax)
-        self.logfile.write("%s:  %3d %02d:%02d:%02d %12.4f\n" % line)
-        self.logfile.flush()
-
-    def _write_trajectory_frame(self, forces: torch.Tensor) -> None:
-        if self._writer is None:
-            self._writer = self._closer.enter_context(
-                BatchwiseTrajectoryWriter(
-                    self.trajectory,
-                    atomic_numbers=self.inputs[properties.Z],
-                    pbc=self.inputs[properties.pbc],
-                    store_forces=self.store_forces,
-                    attrs={"optimizer": self.__class__.__name__, "fmax": self.fmax},
-                )
-            )
-        self._writer.write(
+        return RelaxationFrame(
             step=self.nsteps,
+            final=final,
             positions=self.inputs[properties.R],
             cell=self.inputs[properties.cell],
             energy=self.calculator.get_potential_energy(self.inputs),
-            forces=forces if self.store_forces else None,
-            converged=self._max_sq_force_per_config < self.fmax**2,
+            forces=forces,
+            max_force_per_config=self._max_sq_force_per_config.sqrt(),
+            fmax=self.fmax,
         )
 
     def close(self) -> None:
-        """Close the log file and the trajectory."""
-        self._closer.close()
-        self._writer = None
+        """Release whatever the observers opened."""
+        for observer in self.observers:
+            observer.on_end()
 
     def __enter__(self) -> "BatchwiseOptimizer":
         return self
