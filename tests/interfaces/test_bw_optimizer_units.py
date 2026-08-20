@@ -13,9 +13,8 @@ import pytest
 import torch
 from ase import Atoms
 
-import schnetpack as spk
 from schnetpack import properties
-from schnetpack.interfaces.ase_interface import AtomsConverter, batch_to_atoms
+from schnetpack.interfaces.ase_interface import atoms_to_batch, batch_to_atoms
 from schnetpack.interfaces.batchwise_optimization import BatchwiseLBFGS
 from schnetpack.interfaces.batchwise_trajectory import BatchwiseTrajectoryReader
 
@@ -265,7 +264,7 @@ def test_relaxation_finds_the_analytic_minimum():
 
 
 def test_batch_to_atoms_handles_ragged_batches():
-    """The helper is the inverse of AtomsConverter, so it must not assume equal sizes.
+    """The helper is the inverse of atoms_to_batch, so it must not assume equal sizes.
 
     The optimizer itself rejects ragged batches, but the helper is also used on batches
     that never went through it.
@@ -295,107 +294,25 @@ def test_batch_to_atoms_keeps_the_full_cell():
     np.testing.assert_allclose(batch_to_atoms(inputs)[0].cell[:], cell, atol=1e-5)
 
 
-CUTOFF = 3.0
-CUTOFF_SKIN = 0.5
-
-
-def make_skin_converter():
-    """A converter whose neighbor lists survive small moves, as a relaxation needs."""
-    neighbor_list = spk.transform.SkinNeighborList(
-        neighbor_list=spk.transform.MatScipyNeighborList(cutoff=CUTOFF),
-        cutoff_skin=CUTOFF_SKIN,
-    )
-    return AtomsConverter(neighbor_list=neighbor_list, dtype=torch.float64)
-
-
-def make_random_structures(pbc: bool, n_structures: int = 3, seed: int = 1):
-    rng = np.random.default_rng(seed)
-    cell = 8.0 * np.eye(3)
-    return [
+def test_atoms_to_batch_round_trips():
+    """The two boundary conversions are each other's inverse, ragged batches included."""
+    structures = [
         Atoms(
-            numbers=[6] * 12,
-            positions=rng.uniform(0.0, 8.0, size=(12, 3)),
-            cell=cell,
-            pbc=pbc,
-        )
-        for _ in range(n_structures)
+            numbers=[1, 6],
+            positions=np.arange(6).reshape(2, 3) * 0.5,
+            cell=np.eye(3) * 4,
+            pbc=True,
+        ),
+        Atoms(
+            numbers=[8, 1, 1], positions=np.arange(9).reshape(3, 3) * 0.25, pbc=False
+        ),
     ]
 
+    recovered = batch_to_atoms(atoms_to_batch(structures, dtype=torch.float64))
 
-def neighbor_pairs(inputs: Dict[str, torch.Tensor]) -> np.ndarray:
-    """The neighbor list of a batch, in an order-independent, comparable form."""
-    pairs = np.column_stack(
-        [
-            inputs[properties.idx_i].numpy(),
-            inputs[properties.idx_j].numpy(),
-            inputs[properties.offsets].numpy().round(6),
-        ]
-    )
-    return pairs[np.lexsort(pairs.T[::-1])]
-
-
-@pytest.mark.parametrize("pbc", [False, True], ids=["free", "periodic"])
-@pytest.mark.parametrize(
-    "displacement, path",
-    # half the skin is the threshold, so these pick the reuse and the rebuild branch
-    [(0.1 * CUTOFF_SKIN, "reuse"), (2.0 * CUTOFF_SKIN, "rebuild")],
-    ids=["reuse", "rebuild"],
-)
-def test_update_inputs_never_returns_pairs_beyond_the_cutoff(pbc, displacement, path):
-    """Reusing a list must not leak the skin into what the model sees.
-
-    The skin list is built out to ``cutoff + cutoff_skin`` so that it stays valid while
-    the atoms move; the pairs beyond the cutoff have to be dropped again before the
-    batch reaches the model, on the step that rebuilds the list and on every step that
-    reuses it. Checked against a plain neighbor list built for the same positions.
-    """
-    structures = make_random_structures(pbc)
-    converter = make_skin_converter()
-    inputs = converter(structures)
-
-    rng = np.random.default_rng(2)
-    moved = []
-    for structure in structures:
-        structure = structure.copy()
-        structure.positions += rng.normal(scale=displacement, size=(12, 3))
-        moved.append(structure)
-
-    inputs[properties.R] = torch.from_numpy(
-        np.concatenate([structure.positions for structure in moved])
-    )
-    updated = converter.update_inputs(inputs)
-
-    reference = AtomsConverter(
-        neighbor_list=spk.transform.MatScipyNeighborList(cutoff=CUTOFF),
-        dtype=torch.float64,
-    )(moved)
-
-    np.testing.assert_allclose(
-        neighbor_pairs(updated), neighbor_pairs(reference), atol=1e-6
-    )
-
-    # and the branch under test really is the one that ran
-    rebuilt = converter.skin_neighbor_list.previous_inputs[0][properties.R]
-    assert torch.allclose(rebuilt, torch.from_numpy(moved[0].positions)) == (
-        path == "rebuild"
-    )
-
-
-def test_update_inputs_accepts_a_batch_without_a_sample_index():
-    """A batch read back from a trajectory has no sample index; it must still update.
-
-    ``BatchwiseTrajectoryReader.frame`` stores no ``idx``, so a relaxation resumed from
-    a frame would otherwise fail on its very first step.
-    """
-    structures = make_random_structures(pbc=False)
-    converter = make_skin_converter()
-    inputs = converter(structures)
-    del inputs[properties.idx]
-
-    # far enough that the neighbor lists have to be rebuilt from the batch alone
-    inputs[properties.R] = inputs[properties.R] + 5.0 * CUTOFF_SKIN
-
-    updated = converter.update_inputs(inputs)
-
-    assert updated[properties.idx_i].shape == updated[properties.idx_j].shape
-    assert len(updated[properties.idx_i]) > 0
+    assert [len(s) for s in recovered] == [2, 3]
+    for original, structure in zip(structures, recovered):
+        assert list(original.numbers) == list(structure.numbers)
+        np.testing.assert_allclose(original.positions, structure.positions, atol=1e-6)
+        np.testing.assert_allclose(original.cell[:], structure.cell[:], atol=1e-6)
+        assert (original.pbc == structure.pbc).all()
