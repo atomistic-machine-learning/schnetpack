@@ -341,7 +341,6 @@ class SpkCalculator(Calculator):
         converter: callable = AtomsConverter,
         transforms: Union[Transform, List[Transform]] = None,
         additional_inputs: Dict[str, torch.Tensor] = None,
-        auxiliary_output_modules: Optional[List] = None,
         **kwargs,
     ):
         """

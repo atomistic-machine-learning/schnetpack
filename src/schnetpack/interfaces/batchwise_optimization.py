@@ -95,14 +95,14 @@ class BatchwiseCalculator:
     for forces several times per step.
 
     Args:
-        model: trained model, or a path to one.
+        model: trained model, or a path to one. The calculator evaluates it as it is
+            given -- to add a prior to the energy, compose it into the model's output
+            modules beforehand (see ``examples/howtos/howto_batchwise_relaxations.ipynb``).
         atoms_converter: converter whose ``update_inputs`` refreshes the neighbor lists
             of an existing batch. A ``SkinNeighborList`` is strongly recommended here:
             it lets most steps reuse the previous list, which is a large part of why
             relaxing a batch pays off.
         device: device the model runs on.
-        auxiliary_output_modules: modules appended to the model's output modules, e.g.
-            to add a prior to the energy or forces.
         energy_key, force_key, stress_key: names of these properties in the model.
             ``stress_key=None`` disables stress.
         energy_unit, position_unit: units the model works in. Results are converted to
@@ -115,7 +115,6 @@ class BatchwiseCalculator:
         model: Union[nn.Module, str],
         atoms_converter: "AtomsConverter",
         device: Union[str, torch.device] = "cpu",
-        auxiliary_output_modules: Optional[List[nn.Module]] = None,
         energy_key: str = "energy",
         force_key: str = "forces",
         stress_key: Optional[str] = None,
@@ -127,7 +126,6 @@ class BatchwiseCalculator:
         self.device = torch.device(device) if isinstance(device, str) else device
         self.dtype = dtype
         self.atoms_converter = atoms_converter
-        self.auxiliary_output_modules = auxiliary_output_modules or []
 
         self.energy_key = energy_key
         self.force_key = force_key
@@ -154,9 +152,6 @@ class BatchwiseCalculator:
         return load_model(model, device="cpu").to(torch.float64)
 
     def _initialize_model(self, model: nn.Module) -> None:
-        n_output_modules = len(model.output_modules)
-        for auxiliary_output_module in self.auxiliary_output_modules:
-            model.output_modules.insert(n_output_modules - 1, auxiliary_output_module)
         self.model = model.eval()
         self.model.to(device=self.device, dtype=self.dtype)
 
@@ -269,12 +264,6 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
         return models
 
     def _initialize_model(self, model: nn.ModuleList) -> None:
-        # NOTE: inserted at index 1 here, but at len(output_modules) - 1 in the base
-        # class. The discrepancy is unintentional and predates the tensor migration.
-        for m in model:
-            for auxiliary_output_module in self.auxiliary_output_modules:
-                m.output_modules.insert(1, auxiliary_output_module)
-
         ensemble = NNEnsemble(models=model, properties=list(self.property_units.keys()))
         self.model = ensemble.eval().to(device=self.device, dtype=self.dtype)
 
