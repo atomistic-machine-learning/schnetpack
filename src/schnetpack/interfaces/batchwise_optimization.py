@@ -8,8 +8,9 @@ optimized together.
 The batch is a SchNetPack input dictionary of torch tensors and stays that way for the
 entire run -- this module contains no ase code at all. Trajectories go to a single
 buffered HDF5 file (see :mod:`schnetpack.interfaces.batchwise_trajectory`), and callers
-who want ``ase.Atoms`` back convert at the boundary with
-:func:`schnetpack.interfaces.ase_interface.batch_to_atoms`.
+convert at the boundary with :func:`~schnetpack.interfaces.ase_interface.atoms_to_batch`
+on the way in and :func:`~schnetpack.interfaces.ase_interface.batch_to_atoms` on the way
+out.
 
 Note:
     ``BatchwiseEnsembleCalculator`` and ``NNEnsemble`` have not been migrated to the
@@ -35,10 +36,10 @@ from schnetpack.interfaces.batchwise_trajectory import BatchwiseTrajectoryWriter
 from schnetpack.units import convert_units
 from schnetpack.utils.compatibility import load_model
 
+from schnetpack.transform import BatchNeighborList
+
 if TYPE_CHECKING:  # import only for type checking, so the runtime stays ase-free
     from ase import Atoms
-
-    from schnetpack.interfaces.ase_interface import AtomsConverter
 
 __all__ = [
     "BatchwiseLBFGS",
@@ -98,10 +99,9 @@ class BatchwiseCalculator:
         model: trained model, or a path to one. The calculator evaluates it as it is
             given -- to add a prior to the energy, compose it into the model's output
             modules beforehand (see ``examples/howtos/howto_batchwise_relaxations.ipynb``).
-        atoms_converter: converter whose ``update_inputs`` refreshes the neighbor lists
-            of an existing batch. A ``SkinNeighborList`` is strongly recommended here:
-            it lets most steps reuse the previous list, which is a large part of why
-            relaxing a batch pays off.
+        neighbor_list: keeps the batch's neighbor lists valid as the structures move.
+            Most steps reuse the previous list rather than rebuilding it, which is a
+            large part of why relaxing a batch pays off.
         device: device the model runs on.
         energy_key, force_key, stress_key: names of these properties in the model.
             ``stress_key=None`` disables stress.
@@ -113,7 +113,7 @@ class BatchwiseCalculator:
     def __init__(
         self,
         model: Union[nn.Module, str],
-        atoms_converter: "AtomsConverter",
+        neighbor_list: BatchNeighborList,
         device: Union[str, torch.device] = "cpu",
         energy_key: str = "energy",
         force_key: str = "forces",
@@ -125,7 +125,7 @@ class BatchwiseCalculator:
         self.results = None
         self.device = torch.device(device) if isinstance(device, str) else device
         self.dtype = dtype
-        self.atoms_converter = atoms_converter
+        self.neighbor_list = neighbor_list
 
         self.energy_key = energy_key
         self.force_key = force_key
@@ -212,17 +212,16 @@ class BatchwiseCalculator:
     def calculate(self, inputs: Dict[str, torch.Tensor]) -> None:
         structure_id = self._structure_id(inputs)
 
-        # Shallow copy: update_inputs replaces entries (neighbor lists, casts) and must
-        # not write them back into the caller's batch, but the tensors themselves are
-        # only read, so there is no reason to copy them all -- deep copying the batch
-        # would mean copying the neighbor list on every single step.
-        # Positions are the exception: the model marks them as requiring grad to get
-        # the forces, and when the converter reuses a cached neighbor list it hands
-        # this very tensor through, which would turn the optimizer's live positions
-        # into a leaf variable that can no longer be updated in place.
+        # Shallow copy: the update replaces entries (neighbor lists, casts) and must not
+        # write them back into the caller's batch, but the tensors themselves are only
+        # read, so there is no reason to copy them all -- deep copying the batch would
+        # mean copying the neighbor list on every single step.
+        # Positions are the exception: the model marks them as requiring grad to get the
+        # forces, and would otherwise turn the optimizer's live positions into a leaf
+        # variable that can no longer be updated in place.
         inputs = dict(inputs)
         inputs[properties.R] = inputs[properties.R].detach().clone()
-        inputs = self.atoms_converter.update_inputs(inputs)
+        inputs = self.neighbor_list.update(inputs)
 
         model_results = self.model(inputs)
 
@@ -268,7 +267,11 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
         self.model = ensemble.eval().to(device=self.device, dtype=self.dtype)
 
     def calculate(self, atoms: List["Atoms"]) -> None:
-        inputs = self.atoms_converter(atoms)
+        from schnetpack.interfaces.ase_interface import atoms_to_batch
+
+        inputs = self.neighbor_list.update(
+            atoms_to_batch(atoms, device=self.device, dtype=self.dtype)
+        )
         model_results, stds = self.model(inputs)
 
         results = {}

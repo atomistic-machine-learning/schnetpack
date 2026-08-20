@@ -21,8 +21,8 @@ from ase.optimize import LBFGS
 import schnetpack as spk
 from schnetpack import properties
 from schnetpack.interfaces.ase_interface import (
-    AtomsConverter,
     SpkCalculator,
+    atoms_to_batch,
     batch_to_atoms,
 )
 from schnetpack.interfaces.batchwise_optimization import (
@@ -54,23 +54,22 @@ class RelaxationResult:
     steps: List[int]  # optimizer steps, per structure for the sequential run
 
 
-def _neighbor_list(cutoff_skin: float = 0.0):
-    """The neighbor list both optimizers get.
-
-    ``cutoff_skin > 0`` wraps it in a ``SkinNeighborList``, which lets a relaxation
-    reuse the previous list while no atom has moved more than half the skin. That is
-    what makes the batch-wise path worth using, so the batch-wise optimizer gets it
-    and the sequential ase reference does not (ase rebuilds per structure anyway).
-    """
+def _neighbor_list():
+    """The plain neighbor list, as the sequential ase reference uses it."""
     model = load_model(MODEL_PATH, device=DEVICE)
-    neighbor_list = spk.transform.MatScipyNeighborList(
-        cutoff=model.representation.cutoff.item()
+    return spk.transform.MatScipyNeighborList(cutoff=model.representation.cutoff.item())
+
+
+def _batch_neighbor_list(cutoff_skin: float = CUTOFF_SKIN):
+    """The neighbor list the batch-wise optimizer gets.
+
+    It reuses the previous list while no atom of a structure has moved more than half
+    the skin, which is what makes the batch-wise path worth using. The sequential ase
+    reference gets a plain list instead -- ase rebuilds per structure anyway.
+    """
+    return spk.transform.BatchNeighborList(
+        neighbor_list=_neighbor_list(), cutoff_skin=cutoff_skin
     )
-    if cutoff_skin > 0.0:
-        neighbor_list = spk.transform.SkinNeighborList(
-            neighbor_list=neighbor_list, cutoff_skin=cutoff_skin
-        )
-    return neighbor_list
 
 
 def spk_calculator():
@@ -102,17 +101,14 @@ def build_batchwise_optimizer(atoms_list: List[Atoms]) -> BatchwiseLBFGS:
 
     Kept separate from the run so the benchmark can time only the relaxation.
     """
-    converter = AtomsConverter(
-        neighbor_list=_neighbor_list(cutoff_skin=CUTOFF_SKIN), device=DEVICE
-    )
     calculator = BatchwiseCalculator(
         model=MODEL_PATH,
-        atoms_converter=converter,
+        neighbor_list=_batch_neighbor_list(),
         device=DEVICE,
         energy_unit=ENERGY_UNIT,
         position_unit=POSITION_UNIT,
     )
-    inputs = converter(deepcopy(atoms_list))
+    inputs = atoms_to_batch(deepcopy(atoms_list), device=DEVICE)
 
     n_atoms = len(atoms_list[0])
     return BatchwiseLBFGS(

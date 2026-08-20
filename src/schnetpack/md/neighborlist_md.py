@@ -1,5 +1,6 @@
+from typing import Dict
+
 import torch
-import torch.nn as nn
 
 from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
@@ -12,6 +13,9 @@ class NeighborListMD:
     """
     Wrapper for neighbor list transforms to make them suitable for molecular dynamics simulations. Introduces handling
     of multiple replicas and a cutoff shell (buffer region) to avoid recomputations of the neighbor list in every step.
+
+    The work is done by :class:`~schnetpack.transform.BatchNeighborList`, shared with batchwise structure relaxation
+    framework.
     """
 
     def __init__(
@@ -38,63 +42,11 @@ class NeighborListMD:
         self.requires_triples = requires_triples
         self._collate = collate_fn
 
-        # Build neighbor list transform
-        self.transform = [base_nbl(self.cutoff_full)]
-
-        if self.requires_triples:
-            self.transform.append(CollectAtomTriples())
-
-        self.transform = nn.Sequential(*self.transform)
-
-        # Previous cells and positions for determining update
-        self.previous_positions = None
-        self.previous_cells = None
-        self.molecular_indices = None
-
-    def _update_required(
-        self,
-        positions: torch.tensor,
-        cells: torch.tensor,
-        idx_m: torch.tensor,
-        n_molecules: int,
-    ):
-        """
-        Use displacement and cell changes to determine, whether an update of the neighbor list is necessary.
-
-        Args:
-            positions (torch.Tensor): Atom positions.
-            cells (torch.Tensor): Simulation cells.
-            idx_m (torch.Tensor): Molecular indices.
-            n_molecules (int): Number of molecules in simulation
-
-        Returns:
-            bool: Udate is required.
-        """
-
-        if self.previous_positions is None:
-            # Everything needs to be updated
-            update_required = torch.ones(n_molecules, device=idx_m.device).bool()
-        elif n_molecules != len(self.molecular_indices):
-            self.molecular_indices = None
-            update_required = torch.ones(n_molecules, device=idx_m.device).bool()
-        else:
-            # Check for changes is positions
-            update_positions = (
-                torch.norm(self.previous_positions - positions, dim=1)
-                > 0.5 * self.cutoff_shell
-            ).float()
-
-            # Map to individual molecules
-            update_required = torch.zeros(n_molecules, device=idx_m.device).float()
-            update_required = update_required.index_add(
-                0, idx_m, update_positions
-            ).bool()
-
-            # Check for cell changes (is no cells are required, this will always be zero)
-            update_cells = torch.any((self.previous_cells != cells).view(-1, 9), dim=1)
-            update_required = torch.logical_or(update_required, update_cells)
-
-        return update_required
+        self.neighbor_list = BatchNeighborList(
+            neighbor_list=base_nbl(cutoff),
+            cutoff_skin=cutoff_shell,
+            transforms=[CollectAtomTriples()] if requires_triples else None,
+        )
 
     def get_neighbors(self, inputs: dict[str, torch.Tensor]):
         """
@@ -104,8 +56,10 @@ class NeighborListMD:
             inputs (dict(str, torch.Tensor)): input batch.
 
         Returns:
-            torch.tensor: indices of neighbors.
+            dict(str, torch.Tensor): indices of neighbors, and nothing else -- the caller
+            merges them into the batch it already holds.
         """
+<<<<<<< HEAD
         # TODO: check consistent wrapping
         atom_types = inputs[properties.Z]
         positions = inputs[properties.R]
@@ -231,3 +185,6 @@ class NeighborListMD:
             input_batch.append(inputs)
 
         return input_batch
+=======
+        return self.neighbor_list.neighbors(inputs)
+>>>>>>> 09b3a3d3 (md and bw optimizer share nbh list, atomsconverter back to master, fixed skin bug in md nbh list, fixed triplets bug)
