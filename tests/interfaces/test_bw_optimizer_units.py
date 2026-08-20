@@ -15,8 +15,8 @@ from ase import Atoms
 
 from schnetpack import properties
 from schnetpack.interfaces.ase_interface import atoms_to_batch, batch_to_atoms
-from schnetpack.interfaces.batchwise_optimization import BatchwiseLBFGS
-from schnetpack.interfaces.batchwise_trajectory import BatchwiseTrajectoryReader
+from schnetpack.relax.batchwise_optimization import BatchwiseLBFGS
+from schnetpack.relax.batchwise_trajectory import BatchwiseTrajectoryReader
 
 
 class HarmonicCalculator:

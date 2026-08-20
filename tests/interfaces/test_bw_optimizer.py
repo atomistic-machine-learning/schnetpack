@@ -25,7 +25,7 @@ from schnetpack.interfaces.ase_interface import (
     atoms_to_batch,
     batch_to_atoms,
 )
-from schnetpack.interfaces.batchwise_optimization import (
+from schnetpack.relax.batchwise_optimization import (
     BatchwiseCalculator,
     BatchwiseLBFGS,
 )

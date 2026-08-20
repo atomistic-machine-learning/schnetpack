@@ -11,7 +11,7 @@ import torch
 
 from schnetpack import properties
 from schnetpack.interfaces.ase_interface import batch_to_atoms
-from schnetpack.interfaces.batchwise_trajectory import (
+from schnetpack.relax.batchwise_trajectory import (
     BatchwiseTrajectoryReader,
     BatchwiseTrajectoryWriter,
 )

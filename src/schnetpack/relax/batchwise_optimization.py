@@ -32,7 +32,7 @@ import torch
 from torch import nn
 
 from schnetpack import properties
-from schnetpack.interfaces.batchwise_trajectory import BatchwiseTrajectoryWriter
+from schnetpack.relax.batchwise_trajectory import BatchwiseTrajectoryWriter
 from schnetpack.units import convert_units
 from schnetpack.utils.compatibility import load_model
 
