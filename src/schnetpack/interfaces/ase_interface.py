@@ -12,7 +12,6 @@ References
 """
 
 import os
-import ase
 import numpy as np
 from abc import ABC, abstractmethod
 import torch
@@ -37,11 +36,10 @@ from ase.vibrations import Vibrations
 
 from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
-from schnetpack.transform import CastTo32, CastTo64, Transform
+from schnetpack.transform import CastTo32, CastTo64, SkinNeighborList, Transform
 from schnetpack.units import convert_units
 from schnetpack.utils import load_model
 from schnetpack.md.utils import activate_model_stress
-import schnetpack.properties as structure
 
 from typing import Optional, List, Union, Dict
 
@@ -95,7 +93,11 @@ class AtomsConverter:
         self.dtype = dtype
         self.additional_inputs = additional_inputs or {}
 
-        if hasattr(neighbor_list, "cutoff_skin"):
+        # A skin neighbor list lets update_inputs keep a batch on its device for as long
+        # as the structures barely move. Anything else has to be rebuilt every time.
+        if isinstance(neighbor_list, SkinNeighborList):
+            self.skin_neighbor_list = neighbor_list
+            self.cutoff = neighbor_list.cutoff  # the cutoff proper, skin excluded
             self.cutoff_skin = neighbor_list.cutoff_skin
             self.previous_positions = None
             self.previous_cell = None
@@ -104,6 +106,8 @@ class AtomsConverter:
             self.previous_idx_j = None
             self.previous_offsets = None
         else:
+            self.skin_neighbor_list = None
+            self.cutoff = None
             self.cutoff_skin = None
 
         # convert transforms and neighbor_list to list
@@ -171,112 +175,108 @@ class AtomsConverter:
         # Move input batch to device
         inputs = {p: inputs[p].to(self.device) for p in inputs}
 
-        if self.cutoff_skin is not None:
-            previous_inputs = self.transforms[0].previous_inputs
-            self.previous_positions = torch.cat(
-                [d[properties.R] for d in previous_inputs.values()]
-            )
-            self.previous_positions = self.previous_positions.to(self.device).to(
-                self.dtype
-            )
-            self.previous_cell = inputs[properties.cell]
-            self.previous_pbc = inputs[properties.pbc]
-            self.previous_idx_i = inputs[properties.idx_i]
-            self.previous_idx_j = inputs[properties.idx_j]
-            self.previous_offsets = inputs[properties.offsets]
+        if self.skin_neighbor_list is not None:
+            self._store_reference(inputs)
 
         return inputs
 
     def _requires_new_nbh_list(self, inputs):
-        # check if structure change is sufficiently small to reuse previous neighbor list
+        """Has anything moved far enough that the cached neighbor lists went stale?
+
+        Answered on the device the batch already lives on, so the common case -- a
+        relaxation or MD step that barely moves the atoms -- never has to ship the batch
+        to the cpu just to find out that nothing needs rebuilding.
+        """
         if (
             self.previous_positions is None
             or self.previous_cell is None
             or self.previous_pbc is None
         ):
             return True
-        if (
+        return not (
             torch.equal(self.previous_pbc, inputs[properties.pbc])
             and torch.allclose(self.previous_cell, inputs[properties.cell])
             and torch.max(
                 torch.sum(
-                    torch.square(self.previous_positions - inputs[properties.position]),
+                    torch.square(self.previous_positions - inputs[properties.R]),
                     dim=-1,
                 )
             ).item()
             < 0.25 * self.cutoff_skin**2
-        ):
-            return False
-        return True
+        )
 
-    def _transform_inputs(self, inputs):
-        """Split a batch back into single structures, re-run the transforms, recollate.
+    def _store_reference(self, inputs):
+        """Cache the reference structure and its unpruned neighbor lists, on device.
 
-        The neighbor lists are built per structure on cpu, so everything is moved
-        there in one go rather than once per structure and property.
+        Read off the neighbor list rather than off ``inputs``: the batch that comes back
+        is pruned to the cutoff, while reuse needs the full cutoff+skin list. For the
+        same reason the reference positions are the ones each list was built for, which
+        for a structure the neighbor list decided not to rebuild is older than the batch
+        -- and those are exactly the positions the drift check has to measure against.
         """
-        n_atoms = inputs[properties.n_atoms].cpu()
-        cpu = torch.device("cpu")
+        references = [
+            self.skin_neighbor_list.previous_inputs[idx]
+            for idx in range(len(inputs[properties.n_atoms]))
+        ]
 
-        # a batch is contiguous in _idx_m, so a single split replaces one boolean
-        # mask per structure and property
-        atomic_numbers = torch.split(inputs[properties.Z].cpu(), n_atoms.tolist())
-        positions = torch.split(inputs[properties.R].cpu(), n_atoms.tolist())
-        cells = inputs[properties.cell].cpu()
-        pbc = inputs[properties.pbc].cpu()
-        idx = inputs[properties.idx].cpu()
-        additional_inputs = {k: v.to(cpu) for k, v in self.additional_inputs.items()}
+        # the per structure lists index into their own structure, so shift them by the
+        # atom count of everything before it, the way _atoms_collate_fn does
+        offsets = torch.tensor(
+            [0] + [len(ref[properties.R]) for ref in references[:-1]]
+        ).cumsum(0)
 
-        inputs_tmp = []
-        for config_idx in range(n_atoms.shape[0]):
-            spl_input = {
-                properties.n_atoms: n_atoms[config_idx].unsqueeze(0),
-                properties.Z: atomic_numbers[config_idx],
-                properties.R: positions[config_idx],
-                properties.cell: cells[config_idx].unsqueeze(0),
-                properties.pbc: pbc[config_idx].unsqueeze(0),
-                properties.idx: idx[config_idx].unsqueeze(0),
-            }
-            spl_input.update(additional_inputs)
+        def cat(key, shifted=False):
+            values = [ref[key] for ref in references]
+            if shifted:
+                values = [value + off for value, off in zip(values, offsets)]
+            return torch.cat(values).to(self.device)
 
-            # Cast to double, the precision the neighbor list providers expect
-            spl_input = CastTo64()(spl_input)
+        self.previous_positions = cat(properties.R).to(self.dtype)
+        self.previous_idx_i = cat(properties.idx_i, shifted=True)
+        self.previous_idx_j = cat(properties.idx_j, shifted=True)
+        self.previous_offsets = cat(properties.offsets).to(self.dtype)
+        self.previous_cell = inputs[properties.cell]
+        self.previous_pbc = inputs[properties.pbc]
 
-            for transform in self.transforms:
-                spl_input = transform(spl_input)
-            inputs_tmp.append(spl_input)
+    def _prune_skin(self, inputs):
+        """Restrict the cached cutoff+skin lists to the pairs within the cutoff.
 
-        inputs = _atoms_collate_fn(inputs_tmp)
+        The whole batch at once, on its own device -- the counterpart of
+        :meth:`SkinNeighborList._remove_neighbors_in_skin`, which does the same thing one
+        structure at a time on the cpu.
+        """
+        idx_i, idx_j = self.previous_idx_i, self.previous_idx_j
+        offsets = self.previous_offsets
+        positions = inputs[properties.R]
 
-        # Move input batch to device
-        inputs = {p: inputs[p].to(self.device) for p in inputs}
+        Rij = positions[idx_j] - positions[idx_i] + offsets
+        cidx = Rij.pow(2).sum(-1) <= self.cutoff**2
+
+        inputs[properties.Rij] = Rij[cidx]
+        inputs[properties.idx_i] = idx_i[cidx]
+        inputs[properties.idx_j] = idx_j[cidx]
+        inputs[properties.offsets] = offsets[cidx]
 
         return inputs
 
     def update_inputs(self, inputs):
+        """Refresh the neighbor lists of an existing batch.
 
-        if self.cutoff_skin is None:
-            inputs = self._transform_inputs(inputs)
-        elif self._requires_new_nbh_list(inputs):
-            inputs = self._transform_inputs(inputs)
-            previous_inputs = self.transforms[0].previous_inputs
-            self.previous_positions = torch.cat(
-                [d[properties.R] for d in previous_inputs.values()]
-            )
-            self.previous_positions = self.previous_positions.to(self.device).to(
-                self.dtype
-            )
-            self.previous_cell = inputs[properties.cell]
-            self.previous_pbc = inputs[properties.pbc]
-            self.previous_idx_i = inputs[properties.idx_i]
-            self.previous_idx_j = inputs[properties.idx_j]
-            self.previous_offsets = inputs[properties.offsets]
-        else:
-            inputs[properties.idx_i] = self.previous_idx_i
-            inputs[properties.idx_j] = self.previous_idx_j
-            inputs[properties.offsets] = self.previous_offsets
+        The counterpart of :meth:`__call__` for code that already holds a batch, such as
+        the batch-wise optimizer: it takes the structures from ``inputs`` rather than
+        from ase objects, and returns a batch ready for the model.
 
-        return inputs
+        With a :class:`~schnetpack.transform.SkinNeighborList` the lists are only rebuilt
+        once some atom has drifted more than half the skin; until then the batch stays on
+        its device and only the pruning to the cutoff is redone. Any other neighbor list
+        has to be rebuilt on every call.
+        """
+        if self.skin_neighbor_list is None or self._requires_new_nbh_list(inputs):
+            # __call__ refreshes the cached lists on its way out, and what it returns is
+            # already pruned against the current positions by the neighbor list itself
+            return self(batch_to_atoms(inputs))
+
+        return self._prune_skin(inputs)
 
 
 def batch_to_atoms(inputs: Dict[str, torch.Tensor]) -> List[Atoms]:

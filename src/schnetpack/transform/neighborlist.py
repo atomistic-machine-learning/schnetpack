@@ -179,7 +179,6 @@ class NeighborListTransform(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-
         Z = inputs[properties.Z]
         R = inputs[properties.R]
         cell = inputs[properties.cell].view(3, 3)
@@ -189,7 +188,6 @@ class NeighborListTransform(Transform):
         inputs[properties.idx_i] = idx_i.detach()
         inputs[properties.idx_j] = idx_j.detach()
         inputs[properties.offsets] = offset
-
         return inputs
 
     def _build_neighbor_list(
@@ -338,11 +336,37 @@ class SkinNeighborList(Transform):
     ) -> Dict[str, torch.Tensor]:
 
         update_required, inputs = self._update(inputs)
+        inputs = self.distance_calculator(inputs)
+        inputs = self._remove_neighbors_in_skin(inputs)
 
         return inputs
 
     def reset(self):
         self.previous_inputs = {}
+
+    def _remove_neighbors_in_skin(
+        self,
+        inputs: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+        """Restrict the cutoff+skin list to the pairs within the actual cutoff.
+
+        Rebinds rather than mutating in place, so the unpruned list that ``_build``
+        handed to ``previous_inputs`` -- the one a later step reuses -- stays intact.
+        """
+
+        Rij = inputs[properties.Rij]
+        idx_i = inputs[properties.idx_i]
+        idx_j = inputs[properties.idx_j]
+        offsets = inputs[properties.offsets]
+
+        cidx = torch.nonzero(Rij.pow(2).sum(-1) <= self.cutoff**2).squeeze(-1)
+
+        inputs[properties.Rij] = Rij[cidx]
+        inputs[properties.idx_i] = idx_i[cidx]
+        inputs[properties.idx_j] = idx_j[cidx]
+        inputs[properties.offsets] = offsets[cidx]
+
+        return inputs
 
     def _update(self, inputs):
         """Make sure the list is up-to-date."""
@@ -392,7 +416,9 @@ class SkinNeighborList(Transform):
         for nbh_transform in self.nbh_transforms:
             inputs = nbh_transform(inputs)
 
-        # store new reference conformation and remove old one
+        # store new reference conformation and remove old one. This runs from _update,
+        # i.e. before forward prunes the skin away, so what is stored is the full
+        # cutoff+skin list -- the one a later step can reuse.
         sample_idx = inputs[properties.idx].item()
         stored_inputs = {
             properties.R: inputs[properties.R],
