@@ -1,4 +1,5 @@
 from typing import Optional, Union, Dict, Any, Type, Tuple
+import logging
 import os
 
 import fasteners
@@ -13,6 +14,8 @@ from schnetpack.data.splitting import SPLITTING_LOCK, RandomSplit, SplittingStra
 from schnetpack.data.loader import AtomsLoader
 
 __all__ = ["AtomsDataModule"]
+
+log = logging.getLogger(__name__)
 
 # Default for stats_file: derive the path from split_file. A sentinel (not
 # None) because None means "persistence off".
@@ -252,6 +255,7 @@ class AtomsDataModule(pl.LightningDataModule):
             self.num_test = num_test
 
             if self.split_file is not None and os.path.exists(self.split_file):
+                log.info(f"Loading existing split from {self.split_file}")
                 split_data = np.load(self.split_file)
                 self.train_idx = split_data["train_idx"].tolist()
                 self.val_idx = split_data["val_idx"].tolist()
@@ -288,6 +292,7 @@ class AtomsDataModule(pl.LightningDataModule):
             self.test_idx = test_idx
 
             if self.split_file is not None:
+                log.info(f"Writing new split to {self.split_file}")
                 np.savez(
                     self.split_file,
                     train_idx=train_idx,
