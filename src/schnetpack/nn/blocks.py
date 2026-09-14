@@ -165,7 +165,7 @@ class Residual(nn.Module):
     def __init__(
         self,
         num_features: int,
-        activation: Callable | nn.Module = None,
+        activation: Callable | nn.Module | None = None,
         bias: bool = True,
         zero_init: bool = True,
     ) -> None:
