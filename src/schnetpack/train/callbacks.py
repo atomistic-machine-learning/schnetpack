@@ -1,18 +1,15 @@
-from copy import copy
-from typing import Dict
+import os
+from collections import defaultdict
+from typing import Any
 
-from pytorch_lightning.callbacks import Callback
+import pytorch_lightning as pl
+import torch
+from pytorch_lightning.callbacks import BasePredictionWriter, Callback
 from pytorch_lightning.callbacks import ModelCheckpoint as BaseModelCheckpoint
-
 from torch_ema import ExponentialMovingAverage as EMA
 
-import torch
-import os
-from pytorch_lightning.callbacks import BasePredictionWriter
-from typing import List, Any
-from schnetpack.task import AtomisticTask
 from schnetpack import properties
-from collections import defaultdict
+from schnetpack.task import AtomisticTask
 
 __all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
 
@@ -45,7 +42,7 @@ class PredictionWriter(BasePredictionWriter):
         trainer,
         pl_module: AtomisticTask,
         prediction: Any,
-        batch_indices: List[int],
+        batch_indices: list[int],
         batch: Any,
         batch_idx: int,
         dataloader_idx: int,
@@ -58,8 +55,8 @@ class PredictionWriter(BasePredictionWriter):
         self,
         trainer,
         pl_module: AtomisticTask,
-        predictions: List[Any],
-        batch_indices: List[Any],
+        predictions: list[Any],
+        batch_indices: list[Any],
     ):
         # collect batches of predictions and restructure
         concatenated_predictions = defaultdict(list)
@@ -97,7 +94,7 @@ class ModelCheckpoint(BaseModelCheckpoint):
         super().on_validation_end(trainer, pl_module)
 
     def _update_best_and_save(
-        self, current: torch.Tensor, trainer, monitor_candidates: Dict[str, Any]
+        self, current: torch.Tensor, trainer, monitor_candidates: dict[str, Any]
     ):
         # save model checkpoint
         super()._update_best_and_save(current, trainer, monitor_candidates)

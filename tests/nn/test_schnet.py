@@ -1,11 +1,10 @@
+import numpy as np
 import pytest
 import torch
-
-import schnetpack.properties as structure
-import schnetpack as spk
-import numpy as np
 from ase.neighborlist import neighbor_list
 
+import schnetpack as spk
+import schnetpack.properties as structure
 from schnetpack.representation.schnet import SchNet
 
 # TODO:make proper timing and golden tests
@@ -81,7 +80,6 @@ def test_schnet_new_coo(indexed_data, benchmark):
 
 
 def test_schnet_new_script(indexed_data, benchmark):
-
     radial_basis = spk.nn.GaussianRBF(n_rbf=20, cutoff=5.0)
     cutoff_fn = spk.nn.CosineCutoff(5.0)
     schnet = SchNet(

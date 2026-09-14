@@ -20,7 +20,7 @@ PairStyle(schnetpack,PairSCHNETPACK)
 #include <memory>
 
 namespace LAMMPS_NS {
-    
+
 class PairSCHNETPACK : public Pair {
  public:
   PairSCHNETPACK(class LAMMPS *);

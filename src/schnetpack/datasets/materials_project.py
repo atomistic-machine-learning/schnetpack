@@ -1,11 +1,10 @@
 import logging
 import os
-from typing import List, Optional, Dict
 
 import numpy as np
 from ase import Atoms
 
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
 
 __all__ = ["MaterialsProject"]
@@ -33,15 +32,15 @@ class MaterialsProject(DownloadableASEAtomsData):
     def __init__(
         self,
         datapath: str,
-        load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[Transform]] = None,
-        train_transforms: Optional[List[Transform]] = None,
-        val_transforms: Optional[List[Transform]] = None,
-        test_transforms: Optional[List[Transform]] = None,
-        subset_idx: Optional[List[int]] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
-        apikey: Optional[str] = None,
+        load_properties: list[str] | None = None,
+        transforms: list[Transform] | None = None,
+        train_transforms: list[Transform] | None = None,
+        val_transforms: list[Transform] | None = None,
+        test_transforms: list[Transform] | None = None,
+        subset_idx: list[int] | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
+        apikey: str | None = None,
         **kwargs,
     ):
         """
@@ -81,7 +80,7 @@ class MaterialsProject(DownloadableASEAtomsData):
         )
 
     @staticmethod
-    def _validate_apikey(apikey: Optional[str]) -> None:
+    def _validate_apikey(apikey: str | None) -> None:
         if apikey is None:
             raise AtomsDataError(
                 "No API key provided. Visit https://next-gen.materialsproject.org/ "
@@ -103,7 +102,7 @@ class MaterialsProject(DownloadableASEAtomsData):
             )
 
     @staticmethod
-    def _native_property_units() -> Dict[str, str]:
+    def _native_property_units() -> dict[str, str]:
         return {
             MaterialsProject.EformationPerAtom: "eV",
             MaterialsProject.EPerAtom: "eV",
@@ -120,8 +119,8 @@ class MaterialsProject(DownloadableASEAtomsData):
         atoms_metadata_list = []
 
         try:
-            from pymatgen.core import Structure
             from mp_api.client import MPRester
+            from pymatgen.core import Structure
         except Exception as e:
             raise ImportError(
                 "To download Materials Project data, install `mp-api` and `pymatgen`."

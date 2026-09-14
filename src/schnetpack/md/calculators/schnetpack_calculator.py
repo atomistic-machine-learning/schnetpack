@@ -1,16 +1,18 @@
 from __future__ import annotations
-from typing import Union, List, Dict, TYPE_CHECKING
+
+from typing import TYPE_CHECKING
 
 import schnetpack.atomistic.response
 from schnetpack.utils import load_model
 
 if TYPE_CHECKING:
     from schnetpack.md import System
-    from schnetpack.model import AtomisticModel
     from schnetpack.md.neighborlist_md import NeighborListMD
+    from schnetpack.model import AtomisticModel
+
+import logging
 
 import torch
-import logging
 
 from schnetpack.md.calculators.base_calculator import MDCalculator
 from schnetpack.md.calculators.ensemble_calculator import EnsembleCalculator
@@ -48,16 +50,20 @@ class SchNetPackCalculator(MDCalculator):
         self,
         model_file: str,
         force_key: str,
-        energy_unit: Union[str, float],
-        position_unit: Union[str, float],
+        energy_unit: str | float,
+        position_unit: str | float,
         neighbor_list: NeighborListMD,
-        energy_key: str = None,
-        stress_key: str = None,
-        required_properties: List = [],
-        property_conversion: Dict[str, Union[str, float]] = {},
+        energy_key: str | None = None,
+        stress_key: str | None = None,
+        required_properties: list | None = None,
+        property_conversion: dict[str, str | float] | None = None,
         script_model: bool = False,
     ):
-        super(SchNetPackCalculator, self).__init__(
+        if property_conversion is None:
+            property_conversion = {}
+        if required_properties is None:
+            required_properties = []
+        super().__init__(
             required_properties=required_properties,
             force_key=force_key,
             energy_unit=energy_unit,
@@ -93,7 +99,7 @@ class SchNetPackCalculator(MDCalculator):
            AtomisticTask: loaded schnetpack model
         """
 
-        log.info("Loading model from {:s}".format(model_file))
+        log.info(f"Loading model from {model_file:s}")
         # load model and keep it on CPU, device can be changed afterwards
         model = load_model(model_file, device=torch.device("cpu")).to(torch.float64)
         model = model.eval()
@@ -118,9 +124,7 @@ class SchNetPackCalculator(MDCalculator):
                 if isinstance(pp, schnetpack.transform.AddOffsets):
                     log.info("Found `AddOffsets` postprocessing module...")
                     log.info(
-                        "Constant offset of {:20.11f} per atom  will be removed...".format(
-                            pp.mean.detach().cpu().numpy()
-                        )
+                        f"Constant offset of {pp.mean.detach().cpu().numpy():20.11f} per atom  will be removed..."
                     )
         model.do_postprocessing = False
         return model
@@ -137,7 +141,7 @@ class SchNetPackCalculator(MDCalculator):
         self.results = self.model(inputs)
         self._update_system(system)
 
-    def _generate_input(self, system: System) -> Dict[str, torch.Tensor]:
+    def _generate_input(self, system: System) -> dict[str, torch.Tensor]:
         """
         Function to extracts neighbor lists, atom_types, positions e.t.c. from the system and generate a properly
         formatted input for the schnetpack model.
@@ -161,15 +165,15 @@ class SchNetPackEnsembleCalculator(EnsembleCalculator, SchNetPackCalculator):
 
     def __init__(
         self,
-        model_files: List[str],
+        model_files: list[str],
         force_key: str,
-        energy_unit: Union[str, float],
-        position_unit: Union[str, float],
+        energy_unit: str | float,
+        position_unit: str | float,
         neighbor_list: NeighborListMD,
-        energy_key: str = None,
-        stress_key: str = None,
-        required_properties: List = [],
-        property_conversion: Dict[str, Union[str, float]] = {},
+        energy_key: str | None = None,
+        stress_key: str | None = None,
+        required_properties: list | None = None,
+        property_conversion: dict[str, str | float] | None = None,
         script_model: bool = True,
     ):
         """
@@ -191,7 +195,11 @@ class SchNetPackEnsembleCalculator(EnsembleCalculator, SchNetPackCalculator):
                                                the model. Only changes the units used for logging the various outputs.
             script_model (bool): convert loaded model to torchscript.
         """
-        super(SchNetPackEnsembleCalculator, self).__init__(
+        if property_conversion is None:
+            property_conversion = {}
+        if required_properties is None:
+            required_properties = []
+        super().__init__(
             model_file=model_files,
             required_properties=required_properties,
             force_key=force_key,
@@ -208,7 +216,7 @@ class SchNetPackEnsembleCalculator(EnsembleCalculator, SchNetPackCalculator):
         # Convert list of models to module list
         self.models = torch.nn.ModuleList(self.model)
 
-    def _prepare_model(self, model_files: List[str]) -> List[AtomisticModel]:
+    def _prepare_model(self, model_files: list[str]) -> list[AtomisticModel]:
         """
         Load multiple models.
 

@@ -1,7 +1,7 @@
-from typing import Iterator, List, Callable
+from collections.abc import Callable
 
 import numpy as np
-from torch.utils.data import Sampler, WeightedRandomSampler
+from torch.utils.data import WeightedRandomSampler
 
 from schnetpack import properties
 from schnetpack.data import ASEAtomsData
@@ -53,7 +53,7 @@ class StratifiedSampler(WeightedRandomSampler):
     def __init__(
         self,
         data_source: ASEAtomsData,
-        partition_criterion: Callable[[ASEAtomsData], List],
+        partition_criterion: Callable[[ASEAtomsData], list],
         num_samples: int,
         num_bins: int = 10,
         replacement: bool = True,

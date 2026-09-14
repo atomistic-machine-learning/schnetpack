@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 import zipfile
-from typing import Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
 
 import fasteners
 import numpy as np
@@ -17,7 +17,7 @@ from schnetpack.data.stats import calculate_stats, estimate_atomrefs
 __all__ = ["StatsAtomrefProvider", "train_partition_fingerprint"]
 
 
-def train_partition_fingerprint(dataset_length: int, train_idx: List[int]) -> str:
+def train_partition_fingerprint(dataset_length: int, train_idx: list[int]) -> str:
     """
     Short deterministic fingerprint of a train partition.
 
@@ -50,9 +50,9 @@ class StatsAtomrefProvider:
     def __init__(
         self,
         dataset: ASEAtomsData,
-        train_idx: List[int],
-        stats_file: Optional[str] = None,
-        fingerprint: Optional[str] = None,
+        train_idx: list[int],
+        stats_file: str | None = None,
+        fingerprint: str | None = None,
     ) -> None:
         self.dataset = dataset
         self.train_idx = list(train_idx)
@@ -67,14 +67,14 @@ class StatsAtomrefProvider:
             len(dataset), self.train_idx
         )
 
-        self._stats_cache: Dict[
-            Tuple[str, bool, bool], Tuple[torch.Tensor, torch.Tensor]
+        self._stats_cache: dict[
+            tuple[str, bool, bool], tuple[torch.Tensor, torch.Tensor]
         ] = {}
-        self._atomref_cache: Dict[Tuple[str, bool], torch.Tensor] = {}
+        self._atomref_cache: dict[tuple[str, bool], torch.Tensor] = {}
 
     # ---------- disk persistence ----------
 
-    def _load_valid_entries(self) -> Dict[str, np.ndarray]:
+    def _load_valid_entries(self) -> dict[str, np.ndarray]:
         """Stored entries, or {} if absent, unreadable, or another partition's."""
         if not os.path.exists(self.stats_file):
             return {}
@@ -115,7 +115,7 @@ class StatsAtomrefProvider:
 
     def get_stats(
         self, property: str, divide_by_atoms: bool, remove_atomref: bool
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         key = (property, divide_by_atoms, remove_atomref)
         if key in self._stats_cache:
             return self._stats_cache[key]
@@ -138,7 +138,7 @@ class StatsAtomrefProvider:
 
     def get_atomrefs(
         self, property: str, is_extensive: bool, estimate: bool = True
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         # 1) If dataset already has atomrefs for this property, use them directly
         if self.train_atomrefs is not None and property in self.train_atomrefs:
             return {property: self.train_atomrefs[property]}

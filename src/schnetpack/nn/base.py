@@ -1,11 +1,9 @@
-from typing import Callable, Union, Optional
+from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn.init import xavier_uniform_
-
-from torch.nn.init import zeros_
+from torch.nn.init import xavier_uniform_, zeros_
 
 __all__ = ["Dense"]
 
@@ -22,7 +20,7 @@ class Dense(nn.Linear):
         in_features: int,
         out_features: int,
         bias: bool = True,
-        activation: Union[Callable, nn.Module] = None,
+        activation: Callable | nn.Module | None = None,
         weight_init: Callable = xavier_uniform_,
         bias_init: Callable = zeros_,
     ):
@@ -37,7 +35,7 @@ class Dense(nn.Linear):
         """
         self.weight_init = weight_init
         self.bias_init = bias_init
-        super(Dense, self).__init__(in_features, out_features, bias)
+        super().__init__(in_features, out_features, bias)
 
         self.activation = activation
         if self.activation is None:

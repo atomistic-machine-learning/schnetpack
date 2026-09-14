@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-from typing import Dict, Optional, List
+import torch
+import torch.nn as nn
 
 import schnetpack as spk
 from schnetpack.transform import Transform
-import schnetpack.properties as properties
-from schnetpack.utils import as_dtype
-
-import torch
-import torch.nn as nn
 
 __all__ = ["AtomisticModel", "NeuralNetworkPotential"]
 
@@ -61,7 +57,7 @@ class AtomisticModel(nn.Module):
 
     def __init__(
         self,
-        postprocessors: Optional[List[Transform]] = None,
+        postprocessors: list[Transform] | None = None,
         input_dtype_str: str = "float32",
         do_postprocessing: bool = True,
     ):
@@ -78,11 +74,11 @@ class AtomisticModel(nn.Module):
         self.input_dtype_str = input_dtype_str
         self.do_postprocessing = do_postprocessing
         self.postprocessors = nn.ModuleList(postprocessors)
-        self.required_derivatives: Optional[List[str]] = None
-        self.model_outputs: Optional[List[str]] = None
+        self.required_derivatives: list[str] | None = None
+        self.model_outputs: list[str] | None = None
         self.spk_version = spk.__version__
 
-    def collect_derivatives(self) -> List[str]:
+    def collect_derivatives(self) -> list[str]:
         self.required_derivatives = None
         required_derivatives = set()
         for m in self.modules():
@@ -91,21 +87,21 @@ class AtomisticModel(nn.Module):
                 and m.required_derivatives is not None
             ):
                 required_derivatives.update(m.required_derivatives)
-        required_derivatives: List[str] = list(required_derivatives)
+        required_derivatives: list[str] = list(required_derivatives)
         self.required_derivatives = required_derivatives
 
-    def collect_outputs(self) -> List[str]:
+    def collect_outputs(self) -> list[str]:
         self.model_outputs = None
         model_outputs = set()
         for m in self.modules():
             if hasattr(m, "model_outputs") and m.model_outputs is not None:
                 model_outputs.update(m.model_outputs)
-        model_outputs: List[str] = list(model_outputs)
+        model_outputs: list[str] = list(model_outputs)
         self.model_outputs = model_outputs
 
     def initialize_derivatives(
-        self, inputs: Dict[str, torch.Tensor]
-    ) -> Dict[str, torch.Tensor]:
+        self, inputs: dict[str, torch.Tensor]
+    ) -> dict[str, torch.Tensor]:
         for p in self.required_derivatives:
             if p in inputs.keys():
                 inputs[p].requires_grad_()
@@ -120,7 +116,7 @@ class AtomisticModel(nn.Module):
             if isinstance(module, Transform):
                 module.initialize(datamodule)
 
-    def postprocess(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def postprocess(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         if self.do_postprocessing:
             # apply postprocessing
             for pp in self.postprocessors:
@@ -128,8 +124,8 @@ class AtomisticModel(nn.Module):
         return inputs
 
     def extract_outputs(
-        self, inputs: Dict[str, torch.Tensor]
-    ) -> Dict[str, torch.Tensor]:
+        self, inputs: dict[str, torch.Tensor]
+    ) -> dict[str, torch.Tensor]:
         results = {k: inputs[k] for k in self.model_outputs}
         return results
 
@@ -146,9 +142,9 @@ class NeuralNetworkPotential(AtomisticModel):
     def __init__(
         self,
         representation: nn.Module,
-        input_modules: List[nn.Module] = None,
-        output_modules: List[nn.Module] = None,
-        postprocessors: Optional[List[Transform]] = None,
+        input_modules: list[nn.Module] | None = None,
+        output_modules: list[nn.Module] | None = None,
+        postprocessors: list[Transform] | None = None,
         input_dtype_str: str = "float32",
         do_postprocessing: bool = True,
     ):
@@ -177,7 +173,7 @@ class NeuralNetworkPotential(AtomisticModel):
         self.collect_derivatives()
         self.collect_outputs()
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         # initialize derivatives for response properties
         inputs = self.initialize_derivatives(inputs)
 

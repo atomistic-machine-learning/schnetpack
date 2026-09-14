@@ -9,4 +9,3 @@ schnetpack.model
 
     AtomisticModel
     NeuralNetworkPotential
-

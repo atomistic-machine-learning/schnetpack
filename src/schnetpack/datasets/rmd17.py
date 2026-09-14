@@ -3,15 +3,14 @@ import os
 import shutil
 import tarfile
 import tempfile
-from typing import Dict, List, Optional
-from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import numpy as np
 from ase import Atoms
 
 import schnetpack.properties as structure
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.data.splitting import (
     RandomSplit,
     SplittingStrategy,
@@ -36,7 +35,7 @@ class rMD17Split(SplittingStrategy):
     # split" — are rMD17-specific, so they live here, next to the dataset
     # that writes the partitions. The generic SubsamplePartitions strategy
     # stays strict (an integer split_id is required there).
-    def __init__(self, split_id: Optional[int] = None):
+    def __init__(self, split_id: int | None = None):
         """
         Args:
             split_id: The id of the predefined rMD17 train/test splits (0-4).
@@ -103,14 +102,14 @@ class rMD17(DownloadableASEAtomsData):
         self,
         datapath: str,
         molecule: str,
-        load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[Transform]] = None,
-        train_transforms: Optional[List[Transform]] = None,
-        val_transforms: Optional[List[Transform]] = None,
-        test_transforms: Optional[List[Transform]] = None,
-        subset_idx: Optional[List[int]] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
+        load_properties: list[str] | None = None,
+        transforms: list[Transform] | None = None,
+        train_transforms: list[Transform] | None = None,
+        val_transforms: list[Transform] | None = None,
+        test_transforms: list[Transform] | None = None,
+        subset_idx: list[int] | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
         **kwargs,
     ):
         """
@@ -149,7 +148,7 @@ class rMD17(DownloadableASEAtomsData):
         )
 
     @staticmethod
-    def _native_property_units() -> Dict[str, str]:
+    def _native_property_units() -> dict[str, str]:
         return {
             rMD17.energy: "kcal/mol",
             rMD17.forces: "kcal/mol/Ang",

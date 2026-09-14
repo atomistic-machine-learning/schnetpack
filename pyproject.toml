@@ -75,6 +75,7 @@ ignore = [
     # legacy np.random.* is deliberate in test fixtures and tutorials, where a
     # seeded global RNG is the point. Not a correctness issue.
     "NPY002",
+    "E741", # harmonic degree (angular momentum), and kept as `l`
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -82,17 +83,15 @@ ignore = [
 # ARE the public API surface: schnetpack.SchNet et al. resolve through them, and
 # mypy honours them even under --no-implicit-reexport because each source module
 # declares __all__.
-"__init__.py" = ["F401", "F403", "F405", "E402"]
+"__init__.py" = ["F401", "F403", "F405", "E402", "I001"]
 # tests/data/test_transforms.py deliberately star-imports schnetpack.transform
 # to exercise the public surface the same way a user would.
 "tests/**" = ["F841", "F403", "F405"]
 # The tutorials are teaching material: `for step in tqdm(...)` reads better than
 # `for _step in ...` even when the variable is unused.
 "examples/**" = ["B007"]
-# E741 flags `l` as visually confusable with `1`. Here it is the spherical
-# harmonic degree (angular momentum), and kept as `l`
-"src/schnetpack/nn/so3.py" = ["E741"]
-"src/schnetpack/nn/ops/so3.py" = ["E741"]
+# ignore batchwise optimizer until refactor is done
+"src/schnetpack/interfaces/batchwise_optimization.py" = ["ALL"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["schnetpack"]

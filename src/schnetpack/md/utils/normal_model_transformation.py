@@ -27,7 +27,7 @@ class NormalModeTransformer(nn.Module):
     """
 
     def __init__(self, n_beads):
-        super(NormalModeTransformer, self).__init__()
+        super().__init__()
         self.n_beads = n_beads
 
         # Initialize the transformation matrix

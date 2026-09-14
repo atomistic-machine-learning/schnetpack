@@ -1,8 +1,7 @@
-import torch
-from torch.utils.data import DataLoader
+from collections.abc import Sequence
 
-from typing import Optional, Sequence
-from torch.utils.data import Dataset, Sampler
+import torch
+from torch.utils.data import DataLoader, Dataset, Sampler
 from torch.utils.data.dataloader import _collate_fn_t, _T_co
 
 import schnetpack.properties as structure
@@ -50,7 +49,7 @@ def _atoms_collate_fn(batch):
         if key in elem.keys():
             indices = []
             offset = 0
-            for idx, d in enumerate(batch):
+            for _idx, d in enumerate(batch):
                 indices.append(d[key] + offset)
                 offset += d[structure.idx_j].shape[0]
             coll_batch[key] = torch.cat(indices, 0)
@@ -64,16 +63,16 @@ class AtomsLoader(DataLoader):
     def __init__(
         self,
         dataset: Dataset[_T_co],
-        batch_size: Optional[int] = 1,
+        batch_size: int | None = 1,
         shuffle: bool = False,
-        sampler: Optional[Sampler[int]] = None,
-        batch_sampler: Optional[Sampler[Sequence[int]]] = None,
+        sampler: Sampler[int] | None = None,
+        batch_sampler: Sampler[Sequence[int]] | None = None,
         num_workers: int = 0,
         collate_fn: _collate_fn_t = _atoms_collate_fn,
         pin_memory: bool = False,
         **kwargs,
     ):
-        super(AtomsLoader, self).__init__(
+        super().__init__(
             dataset=dataset,
             batch_size=batch_size,
             shuffle=shuffle,
