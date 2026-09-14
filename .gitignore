@@ -37,7 +37,6 @@ wheels/
 .installed.cfg
 *.egg
 .vscode
-.github
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
