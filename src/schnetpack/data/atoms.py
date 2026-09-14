@@ -87,6 +87,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
         self._load_properties: Optional[List[str]] = None
         self.load_structure = load_structure
+        self._available_properties: Optional[List[str]] = None
 
         # units from metadata
         md = self.metadata
@@ -212,6 +213,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
     def _set_metadata(self, val: Dict[str, Any]):
         with connect(self.datapath, use_lock_file=False) as conn:
             conn.metadata = val
+        self._available_properties = None
 
     def update_metadata(self, **kwargs):
         if not all(k and k[0] != "_" for k in kwargs):
@@ -222,8 +224,10 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
     @property
     def available_properties(self) -> List[str]:
-        md = self.metadata
-        return list(md["_property_unit_dict"].keys())
+        if self._available_properties is None:
+            md = self.metadata
+            self._available_properties = list(md["_property_unit_dict"].keys())
+        return self._available_properties
 
     @property
     def units(self) -> Dict[str, str]:
