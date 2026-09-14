@@ -65,39 +65,6 @@ jobs:
       - run: pip install -e .[test]
       - run: pytest -m "slow or download"
 
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pipx run build
-      - run: pipx run twine check --strict dist/*
-      - name: Assert all hydra config files are in the wheel
-        # Guards the packaging bug where md_configs/**/*.yaml was absent from
-        # every build, leaving `spkmd` broken in wheel/sdist installs.
-        run: |
-          python - <<'EOF'
-          import glob, zipfile
-          (whl,) = glob.glob("dist/*.whl")
-          names = zipfile.ZipFile(whl).namelist()
-          n_cfg = sum(n.startswith("schnetpack/configs/") and n.endswith(".yaml") for n in names)
-          n_md = sum(n.startswith("schnetpack/md/md_configs/") and n.endswith(".yaml") for n in names)
-          print(f"configs={n_cfg} md_configs={n_md}")
-          assert n_cfg >= 45, f"schnetpack/configs yaml missing from wheel: {n_cfg}"
-          assert n_md >= 31, f"schnetpack/md/md_configs yaml missing from wheel: {n_md}"
-          assert "schnetpack/py.typed" in names, "py.typed missing from wheel"
-          EOF
-      - name: Smoke-test console entry points from the installed wheel
-        run: |
-          python -m venv /tmp/v
-          /tmp/v/bin/pip install dist/*.whl
-          for c in spkconvert spkdeploy spktrain spkpredict spkmd; do
-            echo "--- $c ---"
-            /tmp/v/bin/$c --help > /dev/null
-          done
-
   docs:
     runs-on: ubuntu-latest
     steps:

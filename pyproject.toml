@@ -41,6 +41,9 @@ dependencies = [
     "tqdm",
     "petname",
     "vesin",
+    "protobuf",
+    "progressbar",
+    "pytest",
 ]
 
 [project.optional-dependencies]
