@@ -348,14 +348,18 @@ class SkinNeighborList(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
+        """Restrict the cutoff+skin list to the pairs within the actual cutoff.
+
+        Rebinds rather than mutating in place, so the unpruned list that ``_build``
+        handed to ``previous_inputs`` -- the one a later step reuses -- stays intact.
+        """
 
         Rij = inputs[properties.Rij]
         idx_i = inputs[properties.idx_i]
         idx_j = inputs[properties.idx_j]
         offsets = inputs[properties.offsets]
 
-        rij = torch.norm(inputs[properties.Rij], dim=-1)
-        cidx = torch.nonzero(rij <= self.cutoff).squeeze(-1)
+        cidx = torch.nonzero(Rij.pow(2).sum(-1) <= self.cutoff**2).squeeze(-1)
 
         inputs[properties.Rij] = Rij[cidx]
         inputs[properties.idx_i] = idx_i[cidx]
@@ -370,33 +374,35 @@ class SkinNeighborList(Transform):
         # get sample index
         sample_idx = inputs[properties.idx].item()
 
-        # check if previous neighbor list exists and make sure that this is not the
-        # first update step
-        if sample_idx in self.previous_inputs.keys():
+        # check if previous neighbor list exists
+        if sample_idx in self.previous_inputs:
+
             # load previous inputs
             previous_inputs = self.previous_inputs[sample_idx]
+
             # extract previous structure
-            previous_positions = np.array(previous_inputs[properties.R], copy=True)
-            previous_cell = np.array(
-                previous_inputs[properties.cell].view(3, 3), copy=True
-            )
-            previous_pbc = np.array(previous_inputs[properties.pbc], copy=True)
+            previous_positions = previous_inputs[properties.R]
+            previous_cell = previous_inputs[properties.cell].view(3, 3)
+            previous_pbc = previous_inputs[properties.pbc]
+
             # extract current structure
             positions = inputs[properties.R]
             cell = inputs[properties.cell].view(3, 3)
             pbc = inputs[properties.pbc]
-            # check if structure change is sufficiently small to reuse previous neighbor
-            # list
+
+            # check if structure change is sufficiently small to reuse previous neighbor list
             if (
-                (previous_pbc == pbc.numpy()).any()
-                and (previous_cell == cell.numpy()).any()
-                and ((previous_positions - positions.numpy()) ** 2).sum(1).max()
+                torch.equal(previous_pbc, pbc)
+                and torch.allclose(previous_cell, cell)
+                and torch.max(
+                    torch.sum(torch.square(previous_positions - positions), dim=-1)
+                ).item()
                 < 0.25 * self.cutoff_skin**2
             ):
-                # reuse previous neighbor list
-                inputs[properties.idx_i] = previous_inputs[properties.idx_i].clone()
-                inputs[properties.idx_j] = previous_inputs[properties.idx_j].clone()
-                inputs[properties.offsets] = previous_inputs[properties.offsets].clone()
+                inputs[properties.idx_i] = previous_inputs[properties.idx_i]
+                inputs[properties.idx_j] = previous_inputs[properties.idx_j]
+                inputs[properties.offsets] = previous_inputs[properties.offsets]
+
                 return False, inputs
 
         # build new neighbor list
@@ -410,15 +416,17 @@ class SkinNeighborList(Transform):
         for nbh_transform in self.nbh_transforms:
             inputs = nbh_transform(inputs)
 
-        # store new reference conformation and remove old one
+        # store new reference conformation and remove old one. This runs from _update,
+        # i.e. before forward prunes the skin away, so what is stored is the full
+        # cutoff+skin list -- the one a later step can reuse.
         sample_idx = inputs[properties.idx].item()
         stored_inputs = {
-            properties.R: inputs[properties.R].detach().clone(),
-            properties.cell: inputs[properties.cell].detach().clone(),
-            properties.pbc: inputs[properties.pbc].detach().clone(),
-            properties.idx_i: inputs[properties.idx_i].detach().clone(),
-            properties.idx_j: inputs[properties.idx_j].detach().clone(),
-            properties.offsets: inputs[properties.offsets].detach().clone(),
+            properties.R: inputs[properties.R],
+            properties.cell: inputs[properties.cell],
+            properties.pbc: inputs[properties.pbc],
+            properties.idx_i: inputs[properties.idx_i],
+            properties.idx_j: inputs[properties.idx_j],
+            properties.offsets: inputs[properties.offsets],
         }
         self.previous_inputs.update({sample_idx: stored_inputs})
 
@@ -568,23 +576,22 @@ class FilterNeighbors(Transform):
         self.selection_name = selection_name
         super().__init__()
 
-    def forward(
-        self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        filtered_out_indices = inputs[self.selection_name]
 
-        n_neighbors = inputs[properties.idx_i].shape[0]
-        slab_indices = inputs[self.selection_name].tolist()
-        kept_nbh_indices = []
-        for nbh_idx in range(n_neighbors):
-            i = inputs[properties.idx_i][nbh_idx].item()
-            j = inputs[properties.idx_j][nbh_idx].item()
-            if i not in slab_indices or j not in slab_indices:
-                kept_nbh_indices.append(nbh_idx)
+        # filter out pairs where both atoms are contained in filtered_out_indices
+        at_i_is_not_filtered_out = torch.isin(
+            inputs[properties.idx_i], filtered_out_indices, invert=True
+        )
+        at_j_is_not_filtered_out = torch.isin(
+            inputs[properties.idx_j], filtered_out_indices, invert=True
+        )
 
-        inputs[properties.idx_i] = inputs[properties.idx_i][kept_nbh_indices]
-        inputs[properties.idx_j] = inputs[properties.idx_j][kept_nbh_indices]
-        inputs[properties.offsets] = inputs[properties.offsets][kept_nbh_indices]
+        mask = at_i_is_not_filtered_out | at_j_is_not_filtered_out
+
+        inputs[properties.idx_i] = inputs[properties.idx_i][mask]
+        inputs[properties.idx_j] = inputs[properties.idx_j][mask]
+        inputs[properties.offsets] = inputs[properties.offsets][mask]
 
         return inputs
 

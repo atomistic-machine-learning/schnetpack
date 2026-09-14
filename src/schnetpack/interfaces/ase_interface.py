@@ -38,6 +38,14 @@ from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.transform import CastTo32, CastTo64, Transform
 from schnetpack.units import convert_units
+
+# the uncertainty functions are shared with the batch-wise ensemble calculator, which
+# must stay free of ase -- they are re-exported here, where they used to live
+from schnetpack.uncertainty import (
+    AbsoluteUncertainty,
+    RelativeUncertainty,
+    Uncertainty,
+)
 from schnetpack.utils import load_model
 from schnetpack.md.utils import activate_model_stress
 
@@ -45,7 +53,17 @@ from typing import Optional, List, Union, Dict
 
 log = logging.getLogger(__name__)
 
-__all__ = ["SpkCalculator", "AseInterface", "AtomsConverter", "SpkEnsembleCalculator"]
+__all__ = [
+    "SpkCalculator",
+    "AseInterface",
+    "AtomsConverter",
+    "SpkEnsembleCalculator",
+    "Uncertainty",
+    "AbsoluteUncertainty",
+    "RelativeUncertainty",
+    "atoms_to_batch",
+    "batch_to_atoms",
+]
 
 
 class AtomsConverterError(Exception):
@@ -83,7 +101,6 @@ class AtomsConverter:
                 stored to the input batch.
         """
 
-        self.neighbor_list = deepcopy(neighbor_list)
         self.device = device
         self.dtype = dtype
         self.additional_inputs = additional_inputs or {}
@@ -129,17 +146,7 @@ class AtomsConverter:
 
         inputs_batch = []
         for at_idx, at in enumerate(atoms):
-
-            inputs = {
-                properties.n_atoms: torch.tensor([at.get_global_number_of_atoms()]),
-                properties.Z: torch.from_numpy(at.get_atomic_numbers()),
-                properties.R: torch.from_numpy(at.get_positions()),
-                properties.cell: torch.from_numpy(at.get_cell().array).view(-1, 3, 3),
-                properties.pbc: torch.from_numpy(at.get_pbc()).view(-1, 3),
-            }
-
-            # specify sample index
-            inputs.update({properties.idx: torch.tensor([at_idx])})
+            inputs = _atoms_to_inputs(at, at_idx)
 
             # add additional inputs (specified in AtomsConverter __init__)
             inputs.update(self.additional_inputs)
@@ -154,6 +161,86 @@ class AtomsConverter:
         inputs = {p: inputs[p].to(self.device) for p in inputs}
 
         return inputs
+
+
+def _atoms_to_inputs(atoms: Atoms, idx: int = 0) -> Dict[str, torch.Tensor]:
+    """The tensors describing a single ase structure, before any transform has run."""
+    return {
+        properties.n_atoms: torch.tensor([atoms.get_global_number_of_atoms()]),
+        properties.Z: torch.from_numpy(atoms.get_atomic_numbers()),
+        properties.R: torch.from_numpy(atoms.get_positions()),
+        properties.cell: torch.from_numpy(atoms.get_cell().array).view(-1, 3, 3),
+        properties.pbc: torch.from_numpy(atoms.get_pbc()).view(-1, 3),
+        properties.idx: torch.tensor([idx]),
+    }
+
+
+def atoms_to_batch(
+    atoms: Union[List[Atoms], Atoms],
+    device: Union[str, torch.device] = "cpu",
+    dtype: torch.dtype = torch.float32,
+) -> Dict[str, torch.Tensor]:
+    """Turn ase structures into a schnetpack input batch, neighbor lists aside.
+
+    The inverse of :func:`batch_to_atoms`, and what code working on batches of tensors
+    needs at its entry: the batch-wise optimizer takes it from here, and its calculator's
+    :class:`~schnetpack.transform.BatchNeighborList` fills in the neighborhoods on every
+    step. Use :class:`AtomsConverter` instead when the batch has to be complete right
+    away, e.g. to call a model on it directly.
+
+    Args:
+        atoms: a list of ase structures, or a single one.
+        device: device the batch is placed on.
+        dtype: float precision of the batch.
+
+    Returns:
+        dict[str, torch.Tensor]: input batch holding positions, atomic numbers, cells,
+        pbc and the atom counts.
+    """
+    if isinstance(atoms, Atoms):
+        atoms = [atoms]
+
+    cast = CastTo32() if dtype == torch.float32 else CastTo64()
+    if dtype not in (torch.float32, torch.float64):
+        raise AtomsConverterError(f"Unrecognized precision {dtype}")
+
+    inputs = _atoms_collate_fn(
+        [cast(_atoms_to_inputs(at, at_idx)) for at_idx, at in enumerate(atoms)]
+    )
+    return {key: value.to(device) for key, value in inputs.items()}
+
+
+def batch_to_atoms(inputs: Dict[str, torch.Tensor]) -> List[Atoms]:
+    """Turn a schnetpack input batch back into ase structures.
+
+    The inverse of :meth:`AtomsConverter.__call__`, and the one place in schnetpack
+    that does this conversion -- code that works on batches of tensors (the batch-wise
+    optimizer, for instance) can stay free of ase and call this at its boundary.
+
+    Args:
+        inputs: input batch. Only positions, atomic numbers, cells, pbc and the atom
+            counts are read, so a batch straight out of an optimizer works.
+
+    Returns:
+        list(ase.Atoms): one structure per entry of the batch, in batch order.
+    """
+    n_atoms = inputs[properties.n_atoms].detach().cpu()
+    positions = inputs[properties.R].detach().cpu().numpy()
+    atomic_numbers = inputs[properties.Z].detach().cpu().numpy()
+    cells = inputs[properties.cell].detach().cpu().numpy().reshape(-1, 3, 3)
+    pbc = inputs[properties.pbc].detach().cpu().numpy().reshape(-1, 3)
+
+    # split rather than slice by a fixed width, so ragged batches work too
+    offsets = np.pad(np.cumsum(n_atoms.numpy()), (1, 0))
+    return [
+        Atoms(
+            positions=positions[offsets[idx] : offsets[idx + 1]],
+            numbers=atomic_numbers[offsets[idx] : offsets[idx + 1]],
+            cell=cells[idx],
+            pbc=pbc[idx],
+        )
+        for idx in range(len(n_atoms))
+    ]
 
 
 class SpkCalculatorError(Exception):
@@ -337,99 +424,16 @@ class SpkCalculator(Calculator):
         self.results = results
 
 
-class Uncertainty(ABC):
-    def __init__(
-        self,
-        energy_key="energy",
-        force_key="forces",
-        stress_key="stress",
-        energy_weight=0.0,
-        force_weight=1.0,
-        stress_weight=0.0,
-    ):
-        self.energy_key = energy_key
-        self.force_key = force_key
-        self.stress_key = stress_key
+def _scalar(uncertainty):
+    """The single value of a one-structure uncertainty.
 
-        # normalize weights
-        total_weight = energy_weight + force_weight + stress_weight
-        if total_weight == 0:
-            raise ValueError("total_weight cannot be zero")
-
-        self.energy_weight = energy_weight / total_weight
-        self.force_weight = force_weight / total_weight
-        self.stress_weight = stress_weight / total_weight
-
-    @abstractmethod
-    def __call__(self, predictions: Dict[str, List[np.ndarray]]) -> float:
-        pass
-
-
-class AbsoluteUncertainty(Uncertainty):
-
-    def __call__(self, predictions: Dict[str, List[np.ndarray]]) -> float:
-        uncertainty = 0
-
-        if self.energy_weight > 0:
-            energy_unc = np.std(predictions[self.energy_key])
-            uncertainty += self.energy_weight * energy_unc
-
-        if self.force_weight > 0:
-            # get per atom uncertainty with L2 norm of stds
-            force_std = np.std(predictions[self.force_key], axis=0)
-            per_atom_uncertainty = np.linalg.norm(force_std, axis=1)
-            # aggregate to scalar uncertainty
-            force_unc = np.mean(per_atom_uncertainty)
-            uncertainty += self.force_weight * force_unc
-
-        if self.stress_weight > 0:
-            # get uncertainty per plane
-            stress_std = np.std(predictions[self.stress_key], axis=0)
-            per_plane_uncertainty = np.linalg.norm(stress_std, axis=1)
-            # aggregate to scalar uncertainty
-            stress_unc = np.mean(per_plane_uncertainty)
-            uncertainty += self.stress_weight * stress_unc
-
-        return uncertainty
-
-
-class RelativeUncertainty(Uncertainty):
-
-    def __call__(self, predictions: Dict[str, List[np.ndarray]]) -> float:
-        uncertainty = 0
-
-        if self.energy_weight > 0:
-            energy_preds = predictions[self.energy_key]
-            mean_energy = np.mean(energy_preds)
-            std_energy = np.std(energy_preds)
-            energy_unc = std_energy / (abs(mean_energy) + 1e-8)
-            uncertainty += self.energy_weight * energy_unc
-
-        if self.force_weight > 0:
-            force_preds = np.array(predictions[self.force_key])
-            mean_force = np.mean(force_preds, axis=0)
-            std_force = np.std(force_preds, axis=0)
-
-            mean_norms = np.linalg.norm(mean_force, axis=1)
-            std_norms = np.linalg.norm(std_force, axis=1)
-
-            # aggregate to scalar
-            force_unc = np.mean(std_norms / (mean_norms + 1e-8))
-            uncertainty += self.force_weight * force_unc
-
-        if self.stress_weight > 0:
-            stress_preds = np.array(predictions[self.stress_key])
-            mean_stress = np.mean(stress_preds, axis=0)
-            std_stress = np.std(stress_preds, axis=0)
-
-            mean_planes = np.linalg.norm(mean_stress, axis=1)
-            std_planes = np.linalg.norm(std_stress, axis=1)
-
-            # aggregate to scalar
-            stress_unc = np.mean(std_planes / (mean_planes + 1e-8))
-            uncertainty += self.stress_weight * stress_unc
-
-        return uncertainty
+    An :class:`~schnetpack.uncertainty.Uncertainty` reports one value per structure, and
+    an ase calculator only ever has one. Anything else -- a custom callable returning a
+    plain number, say -- is passed through untouched.
+    """
+    if isinstance(uncertainty, torch.Tensor):
+        return uncertainty.reshape(-1)[0].item()
+    return uncertainty
 
 
 class SpkEnsembleCalculator(SpkCalculator):
@@ -547,41 +551,50 @@ class SpkEnsembleCalculator(SpkCalculator):
         Calculator.calculate(self, atoms)
         model_inputs = self.converter(atoms)
 
-        # calculate properties
+        # Calculate properties. The predictions are accumulated as tensors carrying a
+        # structure axis, which is what the uncertainty functions expect -- they are
+        # shared with the batch-wise ensemble calculator, where that axis is not 1.
         accumulated_results = {prop: [] for prop in properties}
         for model in self.models:
             model_results = model({p: model_inputs[p].clone() for p in model_inputs})
             for prop in properties:
                 model_prop = self.property_map[prop]
-                if model_prop in model_results:
-                    # extract predictions in correct shape
-                    value = model_results[model_prop].cpu().data.numpy()
-                    if prop == self.energy:
-                        value = value.item()
-                    elif prop == self.stress:
-                        value = value.squeeze()
-                    # accumulate results
-                    accumulated_results[prop].append(value * self.property_units[prop])
-                else:
+                if model_prop not in model_results:
                     raise AtomsConverterError(
                         f"'{prop}' is not a property of your models. Please check the model properties!"
                     )
+                # converted before the ensemble is reduced, so the mean and the
+                # uncertainty both come out in ase units
+                value = model_results[model_prop].detach().cpu()
+                value = value * self.property_units[prop]
+                if prop == self.energy:
+                    value = value.reshape(1)
+                elif prop == self.stress:
+                    value = value.reshape(1, 3, 3)
+                accumulated_results[prop].append(value)
 
-        # Compute average values
         accumulated_results = {
-            prop: np.stack(value) for prop, value in accumulated_results.items()
+            prop: torch.stack(values) for prop, values in accumulated_results.items()
         }
-        self.results = {
-            prop: np.mean(accumulated_results[prop], axis=0) for prop in properties
-        }
+
+        # Compute average values, back in the shapes ase expects of a calculator
+        self.results = {}
+        for prop in properties:
+            mean = accumulated_results[prop].mean(dim=0).numpy()
+            if prop == self.energy:
+                mean = mean.item()
+            elif prop == self.stress:
+                mean = mean.squeeze()
+            self.results[prop] = mean
 
         # Compute uncertainty using assigned uncertainty function
-        # self.results["uncertainty"] = self.uncertainty_fn(accumulated_results)
         if len(self.uncertainty_fn) == 1:
-            self.results["uncertainty"] = self.uncertainty_fn[0](accumulated_results)
+            self.results["uncertainty"] = _scalar(
+                self.uncertainty_fn[0](accumulated_results)
+            )
         else:
             self.results["uncertainty"] = {
-                type(fn).__name__: float(fn(accumulated_results))
+                type(fn).__name__: float(_scalar(fn(accumulated_results)))
                 for fn in self.uncertainty_fn
             }
 
