@@ -1,12 +1,10 @@
+import numpy as np
 import torch
 import torch.nn as nn
 
-from typing import Union, Dict, Optional
-
-from schnetpack import units as spk_units
 import schnetpack.nn as snn
 from schnetpack import properties
-import numpy as np
+from schnetpack import units as spk_units
 
 __all__ = ["CoulombPotential", "DampedCoulombPotential", "EnergyCoulomb", "EnergyEwald"]
 
@@ -17,7 +15,7 @@ class CoulombPotential(nn.Module):
     """
 
     def __init__(self):
-        super(CoulombPotential, self).__init__()
+        super().__init__()
 
     def forward(self, d_ij: torch.Tensor) -> torch.Tensor:
         return 1.0 / d_ij
@@ -37,7 +35,7 @@ class DampedCoulombPotential(nn.Module):
     """
 
     def __init__(self, switch_fn: nn.Module):
-        super(DampedCoulombPotential, self).__init__()
+        super().__init__()
         self.switch_fn = switch_fn
 
     def forward(self, d_ij: torch.Tensor) -> torch.Tensor:
@@ -75,15 +73,15 @@ class EnergyCoulomb(nn.Module):
 
     def __init__(
         self,
-        energy_unit: Union[str, float],
-        position_unit: Union[str, float],
+        energy_unit: str | float,
+        position_unit: str | float,
         coulomb_potential: nn.Module,
         output_key: str,
         charges_key: str = properties.partial_charges,
         use_neighbors_lr: bool = True,
-        cutoff: Optional[float] = None,
+        cutoff: float | None = None,
     ):
-        super(EnergyCoulomb, self).__init__()
+        super().__init__()
 
         # Get the appropriate Coulomb constant
         ke = spk_units.convert_units("Ha", energy_unit) * spk_units.convert_units(
@@ -106,7 +104,7 @@ class EnergyCoulomb(nn.Module):
             self.cutoff = None
             self.shift = None
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """
         Compute the Coulomb energy.
 
@@ -176,14 +174,14 @@ class EnergyEwald(torch.nn.Module):
         self,
         alpha: float,
         k_max: int,
-        energy_unit: Union[str, float],
-        position_unit: Union[str, float],
+        energy_unit: str | float,
+        position_unit: str | float,
         output_key: str,
         charges_key: str = properties.partial_charges,
         use_neighbors_lr: bool = True,
-        screening_fn: Optional[nn.Module] = None,
+        screening_fn: nn.Module | None = None,
     ):
-        super(EnergyEwald, self).__init__()
+        super().__init__()
 
         # Get the appropriate Coulomb constant
         ke = spk_units.convert_units("Ha", energy_unit) * spk_units.convert_units(
@@ -223,7 +221,7 @@ class EnergyEwald(torch.nn.Module):
 
         return kvecs
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """
         Compute the Coulomb energy of the periodic system.
 

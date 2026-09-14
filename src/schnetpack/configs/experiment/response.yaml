@@ -163,5 +163,3 @@ task:
           _target_: schnetpack.train.metrics.TensorDiagonalMeanAbsoluteError
           diagonal: false
       loss_weight: 0.001
-
-

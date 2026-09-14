@@ -3,7 +3,7 @@ defaults:
   - custom
 
 dataset:
-  _target_: schnetpack.datasets.OrganicMaterialsDatabase 
+  _target_: schnetpack.datasets.OrganicMaterialsDatabase
   datapath: ${run.data_dir}/omdb.db # data_dir is specified in train.yaml
   raw_path: null
 

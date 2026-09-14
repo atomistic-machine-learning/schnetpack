@@ -2,15 +2,14 @@ import logging
 import os
 import shutil
 import tempfile
-from typing import List, Optional, Dict
 from urllib import request as request
 
 import numpy as np
 from ase import Atoms
 
 import schnetpack.properties as structure
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 
 __all__ = ["MD17"]
 
@@ -26,20 +25,20 @@ class GDMLDataset(DownloadableASEAtomsData):
 
     def __init__(
         self,
-        datasets_dict: Dict[str, str],
+        datasets_dict: dict[str, str],
         download_url: str,
         datapath: str,
         molecule: str,
         tmpdir: str = "gdml_tmp",
-        atomrefs: Optional[Dict[str, List[float]]] = None,
-        load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[Transform]] = None,
-        train_transforms: Optional[List[Transform]] = None,
-        val_transforms: Optional[List[Transform]] = None,
-        test_transforms: Optional[List[Transform]] = None,
-        subset_idx: Optional[List[int]] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
+        atomrefs: dict[str, list[float]] | None = None,
+        load_properties: list[str] | None = None,
+        transforms: list[Transform] | None = None,
+        train_transforms: list[Transform] | None = None,
+        val_transforms: list[Transform] | None = None,
+        test_transforms: list[Transform] | None = None,
+        subset_idx: list[int] | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
         **kwargs,
     ):
         """
@@ -86,7 +85,7 @@ class GDMLDataset(DownloadableASEAtomsData):
         )
 
     @staticmethod
-    def _native_property_units() -> Dict[str, str]:
+    def _native_property_units() -> dict[str, str]:
         return {
             GDMLDataset.energy: "kcal/mol",
             GDMLDataset.forces: "kcal/mol/Ang",
@@ -118,13 +117,13 @@ class GDMLDataset(DownloadableASEAtomsData):
         shutil.rmtree(tmpdir, ignore_errors=True)
 
     def _download_data(self, tmpdir) -> None:
-        logging.info("Downloading {} data".format(self.molecule))
+        logging.info(f"Downloading {self.molecule} data")
         rawpath = os.path.join(tmpdir, self.datasets_dict[self.molecule])
         url = self.download_url + self.datasets_dict[self.molecule]
 
         request.urlretrieve(url, rawpath)
 
-        logging.info("Parsing molecule {:s}".format(self.molecule))
+        logging.info(f"Parsing molecule {self.molecule:s}")
 
         data = np.load(rawpath)
 
@@ -162,14 +161,14 @@ class MD17(GDMLDataset):
         self,
         datapath: str,
         molecule: str,
-        load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[Transform]] = None,
-        train_transforms: Optional[List[Transform]] = None,
-        val_transforms: Optional[List[Transform]] = None,
-        test_transforms: Optional[List[Transform]] = None,
-        subset_idx: Optional[List[int]] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
+        load_properties: list[str] | None = None,
+        transforms: list[Transform] | None = None,
+        train_transforms: list[Transform] | None = None,
+        val_transforms: list[Transform] | None = None,
+        test_transforms: list[Transform] | None = None,
+        subset_idx: list[int] | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
         **kwargs,
     ):
         """

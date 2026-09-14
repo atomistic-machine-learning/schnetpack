@@ -3,15 +3,14 @@ import os
 import shutil
 import tarfile
 import tempfile
-from typing import Dict, List, Optional
 from urllib import request as request
-from ase.db import connect
 
 import h5py
 import numpy as np
 from ase import Atoms
+from ase.db import connect
 
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
 
 __all__ = ["ANI1"]
@@ -43,14 +42,14 @@ class ANI1(DownloadableASEAtomsData):
         datapath: str,
         num_heavy_atoms: int = 8,
         high_energies: bool = False,
-        load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[Transform]] = None,
-        train_transforms: Optional[List[Transform]] = None,
-        val_transforms: Optional[List[Transform]] = None,
-        test_transforms: Optional[List[Transform]] = None,
-        subset_idx: Optional[List[int]] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
+        load_properties: list[str] | None = None,
+        transforms: list[Transform] | None = None,
+        train_transforms: list[Transform] | None = None,
+        val_transforms: list[Transform] | None = None,
+        test_transforms: list[Transform] | None = None,
+        subset_idx: list[int] | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
         **kwargs,
     ):
         """
@@ -86,7 +85,7 @@ class ANI1(DownloadableASEAtomsData):
         )
 
     @staticmethod
-    def _native_property_units() -> Dict[str, str]:
+    def _native_property_units() -> dict[str, str]:
         return {
             ANI1.energy: "Hartree",
         }
@@ -205,7 +204,7 @@ class ANI1(DownloadableASEAtomsData):
 
         self.add_systems(atoms_list=atoms_list, property_list=properties_list)
 
-    def _create_atomrefs(self) -> Dict[str, List[float]]:
+    def _create_atomrefs(self) -> dict[str, list[float]]:
         atref = np.zeros((100,))
         atref[1] = self.self_energies["H"]
         atref[6] = self.self_energies["C"]

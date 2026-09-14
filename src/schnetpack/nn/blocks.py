@@ -1,10 +1,10 @@
-from typing import Union, Sequence, Callable, Optional
+from collections.abc import Callable, Sequence
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 import schnetpack.nn as snn
-from schnetpack.nn.activations import shifted_softplus
 
 __all__ = ["build_mlp", "build_gated_equivariant_mlp"]
 
@@ -12,7 +12,7 @@ __all__ = ["build_mlp", "build_gated_equivariant_mlp"]
 def build_mlp(
     n_in: int,
     n_out: int,
-    n_hidden: Optional[Union[int, Sequence[int]]] = None,
+    n_hidden: int | Sequence[int] | None = None,
     n_layers: int = 2,
     activation: Callable = F.silu,
     last_bias: bool = True,
@@ -38,7 +38,7 @@ def build_mlp(
     if n_hidden is None:
         c_neurons = n_in
         n_neurons = []
-        for i in range(n_layers):
+        for _i in range(n_layers):
             n_neurons.append(c_neurons)
             c_neurons = max(n_out, c_neurons // 2)
         n_neurons.append(n_out)
@@ -79,8 +79,8 @@ def build_mlp(
 def build_gated_equivariant_mlp(
     n_in: int,
     n_out: int,
-    n_hidden: Optional[Union[int, Sequence[int]]] = None,
-    n_gating_hidden: Optional[Union[int, Sequence[int]]] = None,
+    n_hidden: int | Sequence[int] | None = None,
+    n_gating_hidden: int | Sequence[int] | None = None,
     n_layers: int = 2,
     activation: Callable = F.silu,
     sactivation: Callable = F.silu,
@@ -106,7 +106,7 @@ def build_gated_equivariant_mlp(
     if n_hidden is None:
         c_neurons = n_in
         n_neurons = []
-        for i in range(n_layers):
+        for _i in range(n_layers):
             n_neurons.append(c_neurons)
             c_neurons = max(n_out, c_neurons // 2)
         n_neurons.append(n_out)
@@ -165,7 +165,7 @@ class Residual(nn.Module):
     def __init__(
         self,
         num_features: int,
-        activation: Union[Callable, nn.Module] = None,
+        activation: Callable | nn.Module | None = None,
         bias: bool = True,
         zero_init: bool = True,
     ) -> None:
@@ -174,7 +174,7 @@ class Residual(nn.Module):
             num_features: Dimensions of feature space.
             activation: activation function
         """
-        super(Residual, self).__init__()
+        super().__init__()
         # initialize attributes
 
         self.activation1 = activation  # (num_features)
@@ -222,7 +222,7 @@ class ResidualStack(nn.Module):
         self,
         num_features: int,
         num_residual: int,
-        activation: Union[Callable, nn.Module],
+        activation: Callable | nn.Module,
         bias: bool = True,
         zero_init: bool = True,
     ) -> None:
@@ -232,7 +232,7 @@ class ResidualStack(nn.Module):
             num_features: Dimensions of feature space.
             activation: activation function
         """
-        super(ResidualStack, self).__init__()
+        super().__init__()
         self.stack = nn.ModuleList(
             [
                 Residual(num_features, activation, bias, zero_init)
@@ -264,7 +264,7 @@ class ResidualMLP(nn.Module):
         self,
         num_features: int,
         num_residual: int,
-        activation: Union[Callable, nn.Module],
+        activation: Callable | nn.Module,
         bias: bool = True,
         zero_init: bool = False,
     ):
@@ -275,7 +275,7 @@ class ResidualMLP(nn.Module):
             activation: activation function
         """
 
-        super(ResidualMLP, self).__init__()
+        super().__init__()
         self.residual = ResidualStack(
             num_features, num_residual, activation=activation, bias=bias, zero_init=True
         )

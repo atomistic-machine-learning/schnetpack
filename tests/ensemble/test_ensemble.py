@@ -1,15 +1,16 @@
+import numbers
+
+import numpy as np
 import pytest
 import torch
-import numpy as np
 from ase import Atoms
+
 from schnetpack.interfaces.ase_interface import (
-    SpkEnsembleCalculator,
     AbsoluteUncertainty,
     RelativeUncertainty,
+    SpkEnsembleCalculator,
 )
 from schnetpack.transform import Transform
-from schnetpack.interfaces import AtomsConverter
-import numbers
 
 
 # === Dummy Components ===

@@ -1,6 +1,6 @@
 import math
-import torch
 
+import torch
 from torch.nn import functional
 
 __all__ = ["shifted_softplus", "softplus_inverse", "ShiftedSoftplus"]
@@ -60,7 +60,7 @@ class ShiftedSoftplus(torch.nn.Module):
             initial_beta: Initial "temperature" beta of the softplus function.
             trainable: If True, alpha and beta are trained during optimization.
         """
-        super(ShiftedSoftplus, self).__init__()
+        super().__init__()
         initial_alpha = torch.tensor(initial_alpha)
         initial_beta = torch.tensor(initial_beta)
 

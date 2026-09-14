@@ -424,7 +424,6 @@ class BatchwiseDynamics(Dynamics):
 
         # run the algorithm until converged or max_steps reached
         while not self.converged() and self.nsteps < self.max_steps:
-
             # compute the next step
             self.step()
             self.nsteps += 1

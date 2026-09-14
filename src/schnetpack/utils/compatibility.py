@@ -1,7 +1,8 @@
 import inspect
-import torch
 import warnings
-from typing import Any, Type, Union
+from typing import Any
+
+import torch
 
 __all__ = [
     "load_model",
@@ -25,7 +26,7 @@ def trainer_fit_kwargs_for_checkpoint(trainer) -> dict:
     return kwargs
 
 
-def load_task_from_checkpoint(task_cls: Type, ckpt_path: str, **kwargs: Any):
+def load_task_from_checkpoint(task_cls: type, ckpt_path: str, **kwargs: Any):
     """
     Load a task (LightningModule) from a Lightning checkpoint, handling
     `weights_only` compatibility across PyTorch Lightning versions.
@@ -50,7 +51,7 @@ def load_task_from_checkpoint(task_cls: Type, ckpt_path: str, **kwargs: Any):
 
 
 def load_model(
-    model_path: str, device: Union[torch.device, str] = "cpu", **kwargs: Any
+    model_path: str, device: torch.device | str = "cpu", **kwargs: Any
 ) -> torch.nn.Module:
     """
     Load a SchNetPack model from a Torch file, enabling compatibility with models trained using earlier versions of
@@ -72,7 +73,8 @@ def load_model(
     if not hasattr(model, "spk_version"):
         # make warning that model has no version information
         warnings.warn(
-            "Model was saved without version information. Conversion to current version may fail."
+            "Model was saved without version information. Conversion to current version may fail.",
+            stacklevel=2,
         )
         model.spk_version = "2.0.4"
 
