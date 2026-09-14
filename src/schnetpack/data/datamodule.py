@@ -24,6 +24,8 @@ from schnetpack.data import (
 
 __all__ = ["AtomsDataModule", "AtomsDataModuleError"]
 
+log = logging.getLogger(__name__)
+
 
 class AtomsDataModuleError(Exception):
     pass
@@ -271,6 +273,7 @@ class AtomsDataModule(pl.LightningDataModule):
 
             if self.split_file is not None and os.path.exists(self.split_file):
                 self._log_with_rank("Load split")
+                log.info(f"Loading existing split from {self.split_file}")
 
                 S = np.load(self.split_file)
                 self.train_idx = S["train_idx"].tolist()
@@ -308,6 +311,7 @@ class AtomsDataModule(pl.LightningDataModule):
 
                 if self.split_file is not None:
                     self._log_with_rank("Save split")
+                    log.info(f"Writing new split to {self.split_file}")
                     np.savez(
                         self.split_file,
                         train_idx=self.train_idx,
