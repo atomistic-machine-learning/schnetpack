@@ -31,8 +31,8 @@ hydra:
         dir: ${run.path}/${run.id}
 
     searchpath:
-      - file://${oc.env:PWD}
-      - file://${oc.env:PWD}/configs
+      - file://.
+      - file://./configs
 
     # disable hydra config storage, since handled manually
     output_subdir: null
