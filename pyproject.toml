@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=70.1.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -23,12 +23,12 @@ requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.0.0",
     "sympy>=1.13",
-    "ase>=3.21",
+    "ase>=3.23",
     "h5py",
     "pyyaml",
-    "hydra-core>=1.1.0",
+    "hydra-core>=1.3,<2",
     "torch>=2.5.0",
-    "pytorch_lightning>=2.0.0",
+    "pytorch_lightning>=2.2,<3",
     "torchmetrics",
     "hydra-colorlog>=1.1.0",
     "rich",
@@ -39,19 +39,63 @@ dependencies = [
     "tensorboard>=2.17.1",
     "tensorboardX>=2.6.2.2",
     "tqdm",
-    "pre-commit",
-    "black==24.4.2",
-    "black[jupyter]==24.4.2",
-    "protobuf",
-    "progressbar",
-    "pytest",
     "petname",
     "vesin",
-    "wandb==0.25.1",
 ]
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-datadir", "pytest-benchmark"]
+dev = ["pre-commit"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = ["docs/_build", "src/schnetpack.egg-info"]
+
+[tool.ruff.lint]
+select = [
+    "F",  # pyflakes
+    "E4", # pycodestyle: import placement
+    "E7", # pycodestyle: statement/comparison bugs
+    "E9", # pycodestyle: syntax and IO errors
+    "W",  # pycodestyle warnings, incl. W605 invalid escape sequence
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "RUF013", # implicit Optional
+    "NPY",    # numpy legacy/removed API
+    "UP", # update type hints
+]
+ignore = [
+    # ~876 hits, almost all docstrings and comments that the formatter will not
+    # reflow. Code width is enforced by `ruff format`, not by a lint rule.
+    "E501",
+    # zip() without strict=: noisy, and not a bug in this codebase's usage.
+    "B905",
+    # legacy np.random.* is deliberate in test fixtures and tutorials, where a
+    # seeded global RNG is the point. Not a correctness issue.
+    "NPY002",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Every star-import in the package is in an __init__.py, and those re-exports
+# ARE the public API surface: schnetpack.SchNet et al. resolve through them, and
+# mypy honours them even under --no-implicit-reexport because each source module
+# declares __all__.
+"__init__.py" = ["F401", "F403", "F405", "E402"]
+# tests/data/test_transforms.py deliberately star-imports schnetpack.transform
+# to exercise the public surface the same way a user would.
+"tests/**" = ["F841", "F403", "F405"]
+# The tutorials are teaching material: `for step in tqdm(...)` reads better than
+# `for _step in ...` even when the variable is unused.
+"examples/**" = ["B007"]
+# E741 flags `l` as visually confusable with `1`. Here it is the spherical
+# harmonic degree (angular momentum), and kept as `l`
+"src/schnetpack/nn/so3.py" = ["E741"]
+"src/schnetpack/nn/ops/so3.py" = ["E741"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["schnetpack"]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -70,4 +114,5 @@ version = {attr = "schnetpack.__version__"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-schnetpack = ["configs/**/*.yaml"]
+"schnetpack" = ["configs/**/*.yaml"]
+"schnetpack.md" = ["md_configs/**/*.yaml"]
