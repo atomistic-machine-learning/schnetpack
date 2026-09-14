@@ -1,9 +1,10 @@
 import os
 
-from schnetpack.data import AtomsDataModule
-from schnetpack.datasets import QM9, MD17, rMD17
 import numpy as np
 import pytest
+
+from schnetpack.data import AtomsDataModule
+from schnetpack.datasets import MD17, QM9, rMD17
 
 
 @pytest.fixture
