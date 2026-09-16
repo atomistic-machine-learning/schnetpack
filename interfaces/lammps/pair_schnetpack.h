@@ -17,7 +17,7 @@ PairStyle(schnetpack,PairSCHNETPACK)
 
 #include "pair.h"
 
-#include <torch/torch.h>
+#include <memory>
 
 namespace LAMMPS_NS {
     
@@ -33,8 +33,15 @@ class PairSCHNETPACK : public Pair {
   void allocate();
 
   double cutoff;
-  torch::jit::script::Module model;
-  torch::Device device = torch::kCPU;
+
+  // The libtorch state is held behind an opaque pointer so that this header
+  // does not include <torch/torch.h>. LAMMPS pulls every pair-style header
+  // into the generated style_pair.h, which force.cpp and lammps.cpp include
+  // after their own "using namespace LAMMPS_NS;" -- and there the unqualified
+  // "Device" that ATen uses matches both c10::Device and the LAMMPS_NS::Device
+  // enumerator of "enum ExecutionSpace" in src/pointers.h.
+  struct Impl;
+  std::unique_ptr<Impl> impl;
 
  protected:
   int * type_mapper;

@@ -18,7 +18,7 @@ batch_size: 10
 num_train: ???
 num_val: ???
 num_test: null
-split_file: ${run.data_dir}/split.npz
+split_file: ${run.path}/${run.id}/split.npz
 splitting: null
 num_workers: 8
 train_sampler_cls: null

@@ -124,6 +124,10 @@ class ExponentialMovingAverage(Callback):
         if self._to_load is not None:
             self.ema.load_state_dict(self._to_load)
             self._to_load = None
+            if self.ema.collected_params is not None:
+                # checkpoints hold the EMA average (saved during validation);
+                # restore the raw training weights before store()/copy_to()
+                self.ema.restore()
 
         # load average parameters, to have same starting point as after validation
         self.ema.store()
@@ -140,6 +144,10 @@ class ExponentialMovingAverage(Callback):
     def on_validation_epoch_start(
         self, trainer: "pl.Trainer", pl_module: AtomisticTask, *args, **kwargs
     ):
+        if trainer.sanity_checking:
+            # on_fit_start already stored the raw weights and copied the EMA
+            # average in; storing again would overwrite them with the average
+            return
         self.ema.store()
         self.ema.copy_to()
 

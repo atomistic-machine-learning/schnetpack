@@ -19,6 +19,9 @@ defaults:
 
 print_config: True
 
+# wandb project name, referenced by configs/logger/wandb.yaml
+project: default
+
 # hydra configuration
 hydra:
     job:
@@ -28,8 +31,8 @@ hydra:
         dir: ${run.path}/${run.id}
 
     searchpath:
-      - file://${oc.env:PWD}
-      - file://${oc.env:PWD}/configs
+      - file://.
+      - file://./configs
 
     # disable hydra config storage, since handled manually
     output_subdir: null
