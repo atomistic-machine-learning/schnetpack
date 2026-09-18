@@ -24,8 +24,8 @@ from ase.io import read
 
 log = logging.getLogger(__name__)
 
-OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()), use_cache=True)
-OmegaConf.register_new_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
+OmegaConf.register_resolver("uuid", lambda x: str(uuid.uuid1()), use_cache=True)
+OmegaConf.register_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
 
 
 class MDSetupError(Exception):
@@ -39,9 +39,9 @@ def simulate(config: DictConfig):
 
     """
     print(
-        """
+        r"""
            _____      __    _   __     __  ____             __    __  __    ___
-          / ___/_____/ /_  / | / /__  / /_/ __ \____ ______/ /__ |  \/  |  |   \\
+          / ___/_____/ /_  / | / /__  / /_/ __ \____ ______/ /__ |  \/  |  |   \
           \__ \/ ___/ __ \/  |/ / _ \/ __/ /_/ / __ `/ ___/ //_/ | |\/| |  | |) |
          ___/ / /__/ / / / /|  /  __/ /_/ ____/ /_/ / /__/ ,<    |_|__|_|  |___/
         /____/\___/_/ /_/_/ |_/\___/\__/_/    \__,_/\___/_/|_|  _|""  ""|_|""  ""|

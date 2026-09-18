@@ -29,11 +29,11 @@ from schnetpack.utils import (
 log = logging.getLogger(__name__)
 
 
-OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()), use_cache=True)
-OmegaConf.register_new_resolver("petname", lambda: petname.generate())
-OmegaConf.register_new_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
+OmegaConf.register_resolver("uuid", lambda x: str(uuid.uuid1()), use_cache=True)
+OmegaConf.register_resolver("petname", lambda: petname.generate())
+OmegaConf.register_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
 
-header = """
+header = r"""
    _____      __    _   __     __  ____             __
   / ___/_____/ /_  / | / /__  / /_/ __ \____ ______/ /__
   \__ \/ ___/ __ \/  |/ / _ \/ __/ /_/ / __ `/ ___/ //_/
@@ -42,7 +42,7 @@ header = """
 """
 
 
-@hydra.main(config_path="configs", config_name="train", version_base="1.2")
+@hydra.main(config_path="configs", config_name="train")
 def train(config: DictConfig):
     """
     General training routine for all models defined by the provided hydra configs.
@@ -209,7 +209,7 @@ def train(config: DictConfig):
     log.info(f"Best model stored at {os.path.abspath(config.globals.model_path)}")
 
 
-@hydra.main(config_path="configs", config_name="predict", version_base="1.2")
+@hydra.main(config_path="configs", config_name="predict")
 def predict(config: DictConfig):
     log.info(f"Load data from `{config.data.datapath}`")
     dataset: ASEAtomsData = hydra.utils.instantiate(config.data)
