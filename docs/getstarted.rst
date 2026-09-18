@@ -10,7 +10,7 @@ Requirements
 * `PyTorch <https://pytorch.org/docs/stable/index.html>`_ (>=2.5.0)
 * `PyTorchLightning <https://www.pytorchlightning.ai/>`_ (>=2.0.0)
 * `NumPy <https://www.numpy.org/>`_ (>=2.0.0)
-* `Hydra <https://hydra.cc/>`_ (>=1.1.0)
+* `Hydra <https://hydra.cc/>`_ (>=1.1.0; On Python>=3.14: hydra-core>=1.4)
 * `ASE <https://wiki.fysik.dtu.dk/ase/index.html>`_ (>=3.21)
 
 Installing using pip
