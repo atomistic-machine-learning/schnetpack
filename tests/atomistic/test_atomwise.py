@@ -9,9 +9,7 @@ from schnetpack.atomistic import Atomwise
 def dummy_inputs():
     """Two molecules with 3 and 5 atoms, with a constant representation."""
     n_atoms = torch.tensor([3, 5])
-    idx_m = torch.repeat_interleave(
-        torch.arange(len(n_atoms)), repeats=n_atoms, dim=0
-    )
+    idx_m = torch.repeat_interleave(torch.arange(len(n_atoms)), repeats=n_atoms, dim=0)
     return {
         structure.n_atoms: n_atoms,
         structure.idx_m: idx_m,
