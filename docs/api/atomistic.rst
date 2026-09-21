@@ -38,3 +38,4 @@ Output modules
     DampedCoulombPotential
     EnergyCoulomb
     EnergyEwald
+    HarmonicBond
