@@ -6,6 +6,7 @@ from schnetpack.dynamics import DirectDenoising
 from schnetpack.generative import (
     VE,
     VP,
+    DatasetPrior,
     GaussianPrior,
     MatchingLoss,
     PCVarianceCoupling,
@@ -46,6 +47,35 @@ def test_direct_denoising_is_time_free_and_passes_the_batch():
     assert len(seen) == 3
     assert all((b[properties.t] == 0.0).all() for b in seen)
     assert all(b["condition"] == 7 for b in seen)
+
+
+def test_direct_denoising_relaxes_structures_from_a_dataset_prior():
+    # The relaxation start: stored non-equilibrium structures, positions as
+    # they are, handed to the loop by sample().
+    dataset = [
+        {
+            properties.Z: torch.tensor([1, 8, 1]),
+            properties.R: torch.full((3, 3), 5.0),
+            properties.n_atoms: torch.tensor([3]),
+        }
+    ]
+    seen = []
+
+    def model(batch):
+        seen.append(batch[properties.R].clone())
+        return {"prediction": torch.zeros_like(batch[properties.R])}
+
+    sampler = DirectDenoising(
+        model,
+        VE(0.01, 3.0),
+        PseudoForceParametrization(),
+        prior=DatasetPrior(dataset),
+        stochastic_lambda=0.0,
+    )
+    out = sampler.sample(2, n_steps=1)
+
+    assert torch.equal(seen[0], torch.full((6, 3), 5.0))
+    assert torch.equal(out[properties.Z], torch.tensor([1, 8, 1, 1, 8, 1]))
 
 
 def test_direct_denoising_lambda_zero_is_deterministic():

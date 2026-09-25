@@ -5,6 +5,7 @@ from schnetpack import properties
 from schnetpack.dynamics import (
     AnnealedNoise,
     DirectDenoising,
+    Dynamics,
     EulerMaruyama,
     Sampler,
     Scaffold,
@@ -49,7 +50,9 @@ def test_sampler_hooks_see_grid_times_around_each_step():
         constraints=[recorder],
     )
     n_steps = 4
-    sampler.sample({properties.R: torch.empty(3, 1)}, n_steps)
+    sampler.denoise(
+        sampler.prior.sample_from_batch({properties.R: torch.empty(3, 1)}), n_steps
+    )
 
     ts = sampler.grid(vp.t_max, vp.t_min, n_steps)
     assert len(recorder.log) == 2 * n_steps
@@ -81,7 +84,9 @@ def test_direct_denoising_hooks_see_zero_time_and_reject_t_start():
     sampler = DirectDenoising(
         model, VE(0.01, 3.0), PseudoForceParametrization(), constraints=[recorder]
     )
-    sampler.sample({properties.R: torch.empty(2, 1)}, 3)
+    sampler.denoise(
+        sampler.prior.sample_from_batch({properties.R: torch.empty(2, 1)}), 3
+    )
     assert [(h, s) for h, s, _ in recorder.log] == [
         ("before", 0),
         ("after", 1),
@@ -140,7 +145,9 @@ def test_scaffold_direct_denoising_model_sees_clean_scaffold():
         stochastic_lambda=1.0,
         constraints=[Scaffold()],
     )
-    out = sampler.sample(scaffold_batch(mask, reference), 6)
+    out = sampler.denoise(
+        sampler.prior.sample_from_batch(scaffold_batch(mask, reference)), 6
+    )
     x = out[properties.R]
 
     # scaffold overwrites after the noise injection, so every input holds it
@@ -171,7 +178,9 @@ def test_scaffold_sampler_renoises_to_the_grid_time():
         EulerMaruyama(),
         constraints=[Scaffold()],
     )
-    out = sampler.sample(scaffold_batch(mask, reference), 5)
+    out = sampler.denoise(
+        sampler.prior.sample_from_batch(scaffold_batch(mask, reference)), 5
+    )
 
     # every model input carries the scaffold at the noise level of its t
     for z in standardized:
@@ -181,6 +190,44 @@ def test_scaffold_sampler_renoises_to_the_grid_time():
     assert torch.equal(out[properties.R][mask], reference[mask])
 
 
+class Descent(Dynamics):
+    """Minimal non-generative driver: x <- x + 0.5 * force."""
+
+    def denoise(self, batch, n_steps):
+        batch = self.calculator.prepare(batch)
+        for i in range(n_steps):
+            batch = self.before_step(batch, i, n_steps)
+            force = self.calculator(batch)["forces"]
+            batch = {**batch, self.key: batch[self.key] + 0.5 * force}
+            batch = self.after_step(batch, i + 1, n_steps)
+        return batch
+
+
+def test_scaffold_non_generative_dynamics_overwrites():
+    mask = torch.tensor([True, False, True])
+    reference = torch.tensor([[1.0, 2.0], [0.0, 0.0], [-3.0, 0.5]])
+    seen = []
+
+    def model(batch):
+        x = batch[properties.R]
+        seen.append(x[mask].clone())
+        return {"forces": -x}
+
+    batch = scaffold_batch(mask, reference)
+    batch[properties.R] = torch.ones(3, 2)
+    out = Descent(model, constraints=[Scaffold()]).denoise(batch, 4)
+    x = out[properties.R]
+
+    assert all(torch.equal(s, reference[mask]) for s in seen)
+    assert torch.equal(x[mask], reference[mask])
+    assert torch.allclose(x[~mask], torch.full((1, 2), 0.5**4))
+
+
+def test_sample_without_prior_raises():
+    with pytest.raises(ValueError, match="no prior"):
+        Descent(lambda batch: {}).sample(2, 1)
+
+
 def test_scaffold_validates_its_keys():
     model = batch_model(lambda x, t: x)
     sampler = DirectDenoising(
@@ -188,10 +235,10 @@ def test_scaffold_validates_its_keys():
     )
     bad_mask = scaffold_batch(torch.tensor([True, False]), torch.zeros(3, 1))
     with pytest.raises(ValueError, match="one flag per row"):
-        sampler.sample(bad_mask, 2)
+        sampler.denoise(sampler.prior.sample_from_batch(bad_mask), 2)
     bad_reference = scaffold_batch(
         torch.tensor([True, False, False]), torch.zeros(3, 1)
     )
     bad_reference[properties.R_reference] = torch.zeros(2, 1)
     with pytest.raises(ValueError, match="shaped like"):
-        sampler.sample(bad_reference, 2)
+        sampler.denoise(sampler.prior.sample_from_batch(bad_reference), 2)

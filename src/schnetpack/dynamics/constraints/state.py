@@ -5,7 +5,7 @@ State-level constraints: edits of the iterate between the steps of a
 A constraint hooks in before a step (it changes what the model sees) or after
 it (it changes what the step produced), or both. Constraints act on the
 *state*; changing the *field* the step follows (restraint forces, guidance)
-is a different seam and does not live here.
+is a different seam: :mod:`~schnetpack.dynamics.constraints.field`.
 
 On a time-aware sampler the iterate at time t must stay on the noise
 manifold at t: an edit that moves it off (projecting a bond length on a noisy
@@ -26,7 +26,8 @@ class StateConstraint:
 
     Hooks receive the current batch, the step counter, the number of steps
     and the running :class:`~schnetpack.dynamics.base.Dynamics` (for its
-    moved key, time key, process, prior and ``time_free`` flag), and return
+    moved key; on a generative driver also its time key, process, prior and
+    ``time_free`` flag), and return
     the — possibly new — batch. ``step`` counts completed steps: a
     before-step hook sees the index of the step about to run, an after-step
     hook the count including it (``step == n_steps`` after the last one).
@@ -81,8 +82,9 @@ class Scaffold(StateConstraint):
     the scaffold belongs at the iterate's noise level, so the model always
     sees the scaffold, and the others are generated around it:
 
-    - time-free dynamics (``dynamics.time_free``, GPFF's direct denoising):
-      overwritten with the reference positions.
+    - time-free dynamics (``dynamics.time_free``, GPFF's direct denoising)
+      and non-generative ones (a force-field optimizer): overwritten with the
+      reference positions.
     - time-aware dynamics (the sampler): re-noised to the current time
       through the process, ``a(t) x_ref + b(t) x1`` with x1 a fresh prior
       draw — the RePaint-style inpainting step, which keeps x_t on the noise
@@ -136,13 +138,13 @@ class Scaffold(StateConstraint):
     def before_step(self, batch, step, n_steps, dynamics):
         x = batch[dynamics.key]
         mask, reference = self._mask_and_reference(batch, x)
-        if dynamics.time_free:
+        # Drivers without a time_free flag (force-field optimizers) have no
+        # noise level to re-noise to.
+        if getattr(dynamics, "time_free", True):
             return self._overwrite(batch, dynamics, mask, reference)
         # A full-size prior draw lets the prior see the layout it expects in
         # the batch; only the scaffold rows of the noised reference are kept.
-        x1 = dynamics.prior.sample(
-            x.shape, dtype=x.dtype, device=x.device, context=batch
-        )
+        x1 = dynamics.prior.sample_positions({**batch, properties.R: x})
         t = batch[dynamics.time_key]
         return self._overwrite(
             batch, dynamics, mask, dynamics.process.interpolate(reference, x1, t)

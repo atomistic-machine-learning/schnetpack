@@ -157,7 +157,7 @@ their churn knob; flow matching at churn 0 never evaluates it.
 `Process.perturb` composes the three axes, one owner per line:
 
 ```python
-x1 = prior.sample_like(x0, context)   # what x1 is        (the prior)
+x1 = prior.sample_positions(batch)    # what x1 is        (the prior)
 x0, x1 = coupling.pair(x0, x1)        # how paired        (the coupling)
 x_t = self.interpolate(x0, x1, t)     # when it takes over (the schedule)
 ```

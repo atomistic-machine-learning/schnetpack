@@ -13,7 +13,7 @@ derived — never implemented per schedule), **how** each step is computed
 composition that binds them (the sampler).
 
 ```
-prior.sample() ──> x at t_max ──[ integrator steps on the reverse process ]──> x at t_min
+prior.sample(n) ──> x at t_max ──[ integrator steps on the reverse process ]──> x at t_min
                                      │ grid: which times      │
                                      │ churn: how stochastic  │
 ```
@@ -185,8 +185,14 @@ sampler = Sampler(
     output_key="eps_pred",    # model output holding the raw head
 )
 
-# template: Z, n_atoms, idx_m and any conditioning keys; positions are drawn
-out = sampler.sample(template, n_steps=50)
+# 64 structures from the prior's structures (e.g.
+# GaussianPrior(structures=StatisticsStructures.from_dataset(train)), given
+# to the process or the sampler), positions drawn
+out = sampler.sample(64, n_steps=50)
+
+# or redraw the positions of a batch of your own (a test-set batch, a template
+# with Z, n_atoms, idx_m and any conditioning keys)
+out = sampler.denoise(sampler.prior.sample_from_batch(batch), n_steps=50)
 positions = out[properties.R]
 ```
 
@@ -269,16 +275,17 @@ noisiness, its home turf.
 DDPM, exactly, from parts — then two one-line pivots:
 
 ```python
-process = VP()                             # beta-linear, unit Gaussian endpoint
+stats   = StatisticsStructures.from_dataset(train)            # compositions to generate
+process = VP(prior=GaussianPrior(structures=stats))          # unit Gaussian endpoint
 param   = EpsParametrization()
 calc    = Calculator(model)                # the trained checkpoint
 
 sampler = Sampler(calc, process, param, Ancestral())          # textbook DDPM
-samples = sampler.sample(template, n_steps=1000)
+samples = sampler.sample(64, n_steps=1000)
 
 # pivot 1: deterministic few-step sampling of the SAME model
 sampler = Sampler(calc, process, param, Heun(), churn=0.0)    # PF-ODE
-samples = sampler.sample(template, n_steps=30)
+samples = sampler.sample(64, n_steps=30)
 
 # pivot 2: interpolate stochasticity
 sampler = Sampler(calc, process, param, EulerMaruyama(), churn=0.3)
@@ -293,10 +300,16 @@ instead of implementing it per method.
 
 ## 7. The loop, the batch, the calculator and state constraints
 
-`Sampler` and `DirectDenoising` are both `Dynamics`. The structure they move
-is the batch dict — the one datasets, transforms and models use — and
+`Sampler` and `DirectDenoising` are both `Dynamics`. `Dynamics` holds only
+the calculator, an optional prior, the moved key and the constraint hooks,
+so non-generative drivers (L-BFGS and friends) subclass it without a
+process, parametrization or time key. The two generative drivers hold the
+`(process, parametrization)` pair, `output_key` and `time_key` themselves,
+and default the prior to the process's sampling prior. The structure they
+move is the batch dict — the one datasets, transforms and models use — and
 nothing else. Each driver holds its model as `self.calculator` and writes
-its loop out in `denoise(batch, n_steps, t_start=None)`,
+its loop out in `denoise(batch, n_steps)` (the sampler adds
+`t_start=None`),
 
 ```
 batch = self.calculator.prepare(batch)       # to the run's device/dtype, once
@@ -308,11 +321,15 @@ for i in range(n_steps):
 return batch
 ```
 
-and `sample(template, n_steps)` draws the moved key from the
-prior first. Per-run data (the sampler's time grid) are locals of that loop.
+and `sample(n_samples, n_steps)`, shared by every driver, draws
+`n_samples` starting structures from the prior first
+(`prior.sample(n_samples)`). To start from a batch of your own, redraw its
+positions with `prior.sample_from_batch(batch)` and call `denoise`; a
+relaxation from stored structures passes `prior=DatasetPrior(dataset)`. Per-run data (the sampler's time grid) are locals of that loop.
 
 The first constructor argument of every driver is its calculator; the
-batch contract is the keywords of `Dynamics`:
+batch contract is the keywords of `Dynamics` (`key`) and of the generative
+drivers (`output_key`, `time_key`):
 
 | keyword | default | meaning |
 |---|---|---|
@@ -360,7 +377,7 @@ template[properties.R_reference] = reference       # (n_atoms, 3); masked rows r
 gpff = DirectDenoising(Calculator(model), process, PseudoForceParametrization(),
                        stochastic_lambda=1.0, constraints=[Scaffold()],
                        output_key="pseudo_force_pred")
-out = gpff.sample(template, n_steps=100)
+out = gpff.denoise(gpff.prior.sample_from_batch(template), n_steps=100)
 ```
 
 On a time-aware sampler an edit that moves $x_t$ off the noise manifold at

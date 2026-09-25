@@ -1,6 +1,7 @@
 import pytest
 import torch
 
+from schnetpack import properties
 from schnetpack.generative import (
     VE,
     VP,
@@ -73,7 +74,7 @@ def test_priors_declare_their_endpoint_law():
 
 def test_gaussian_prior_draws_at_the_declared_scale():
     torch.manual_seed(0)
-    x1 = GaussianPrior(std=50.0).sample_like(torch.randn(4096, 3))
+    x1 = GaussianPrior(std=50.0).sample_positions({properties.R: torch.randn(4096, 3)})
     assert x1.shape == (4096, 3)
     assert x1.std().item() == pytest.approx(50.0, rel=0.05)
 

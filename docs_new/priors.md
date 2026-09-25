@@ -1,19 +1,21 @@
 # Axis 2 — Priors: the endpoint
 
-*Module: `schnetpack.generative.priors` · classes `Prior`, `GaussianPrior`.*
+*Module: `schnetpack.generative.priors` · classes `Prior`, `GaussianPrior`,
+`DatasetPrior`, `DatasetStructures`, `StatisticsStructures`.*
 
 A prior answers one question — **what $x_1$ is** — and it is asked twice:
 
 - **Training.** The forward process needs an endpoint for every data sample:
-  `Prior.sample_like(x0, context)` draws $x_1$ shaped like $x_0$, and the
-  [coupling](couplings.md) then decides how the two batches are paired.
-  Under the default `IdentityCoupling` this is the familiar "fresh noise per
-  sample".
+  `Prior.sample_positions(batch)` draws $x_1$ positions for the batch being
+  diffused, and the [coupling](couplings.md) then decides how the two are
+  paired. Under the default `IdentityCoupling` this is the familiar "fresh
+  noise per sample". Training only ever draws positions.
 - **Sampling.** With $b(t_{\max}) = 1$, the state the reverse process starts
   from *is* the $x_1$ endpoint, so the correct start distribution is $x_1$'s
   marginal. When the coupling only re-pairs, that marginal is this prior
   itself, and `Process.sampling_prior()` hands the **very same object** to
-  the `Sampler`.
+  the `Sampler`. Sampling starts from a full batch, as the dataloader would
+  give it — see [§4](#4-sampling-full-batches).
 
 One object serving both sides is the point: train-time and sample-time $x_1$
 cannot drift apart, because there is nothing to restate. This is the
@@ -64,14 +66,15 @@ Passing both `scale` and `prior` is a `TypeError` — the scale would then be
 declared twice, which is exactly the mismatch the design exists to prevent.
 
 
-## 2. What `context` is — and is not
+## 2. What a draw may read from the batch — and what not
 
-`sample` and `sample_like` accept a `context`: generation-time conditioning
-the endpoint may legitimately depend on — composition, atom count, scaffold
-indices, the batch layout a draw must respect. The boundary is principled:
+`sample_positions(batch)` receives the batch it draws for: atom types, atom
+count, scaffold indices, the layout (`idx_m`) a draw must respect. Its
+positions, when present, give the draw its shape, dtype and device; their
+values are never read. The boundary is principled:
 
 > **Structure is not values.** A prior may read *structure* out of the
-> context (which rows form a molecule, how many atoms). A distribution
+> batch (which rows form a molecule, how many atoms). A distribution
 > shaped by the **data values** themselves is not a prior but a
 > [coupling](couplings.md) — see `PCVarianceCoupling`, which reshapes drawn
 > noise against the actual $x_0$.
@@ -103,10 +106,10 @@ Two facts make this safe and one makes it load-bearing:
   normal onto a subspace gives a standard normal *on that subspace* with the
   same per-direction variance, so `gaussian` stays `True` and the
   score/noise parametrizations stay exact. Only the space changes.
-- Which rows share a mean comes from the `context` (a batch dict holding
-  `idx_m`, a raw segment-id tensor, or `None` for one group), so centering
-  is per molecule, not per batch. `Diffuse` and `Sampler.sample` both pass
-  the layout through on their own.
+- Which rows share a mean is read from the batch's `idx_m` (a batch
+  without it is one group), so centering is per molecule, not per batch.
+  `Diffuse` and the sampling entries all hand the prior the batch with its
+  layout.
 - **$x_0$ must be centered too** — compose `SubtractCenterOfGeometry`
   before [`Diffuse`](training.md). Centered noise on uncentered data leaves
   $x_t$'s mean drifting with $a(t)$, and the kernel is no longer the one the
@@ -117,7 +120,47 @@ or when the leading axis is independent samples rather than the atoms of one
 structure — centering couples the rows it spans.
 
 
-## 4. Writing a custom prior
+## 4. Sampling full batches
+
+A sampling start is a full batch — atom types, positions, `n_atoms`,
+`idx_m`, as the dataloader would give it. Three entries, one per use:
+
+| Entry | Returns | Used by |
+|---|---|---|
+| `sample_positions(batch)` | positions tensor | training (`Process.perturb`), `Scaffold` re-noising |
+| `sample_from_batch(batch)` | the batch with its positions redrawn | sampling from a test set |
+| `sample(n_samples)` | `n_samples` structures from `prior.structures`, positions redrawn | `Dynamics.sample` |
+
+`structures` is the prior's optional source of structures, any object with
+`sample(n_samples) -> batch`:
+
+- `DatasetStructures(dataset, shuffle=True)` — structures from a dataset,
+  collated as the dataloader would. Successive calls walk the dataset without
+  repeating a structure until a pass is complete, reshuffled per pass.
+- `StatisticsStructures(n_atoms, atom_types)` — compositions from scratch:
+  each structure draws its atom count from the `n_atoms` histogram (entry
+  $k$ weighs $k$ atoms), each atom its type from the `atom_types` weights
+  (entry $z$ weighs atomic number $z$). `StatisticsStructures.from_dataset`
+  counts both over a dataset. Atom types are drawn independently, so a
+  composition need not occur in the dataset.
+
+```python
+stats = StatisticsStructures.from_dataset(train)
+process = VP(prior=GaussianPrior(structures=stats))   # training ignores structures
+samples = Sampler(calc, process, param, Heun()).sample(64, n_steps=50)
+
+for batch in test_loader:                              # or: from a test set
+    out = sampler.denoise(sampler.prior.sample_from_batch(batch), n_steps=50)
+```
+
+**`DatasetPrior(dataset, shuffle=True)`** returns stored structures
+unchanged — non-equilibrium structures to relax, say — so it is a sampling
+start only: `DirectDenoising(calc, process, param, prior=DatasetPrior(noneq))
+.sample(n, n_steps)`. It has no positions law, and `sample_positions` raises
+rather than silently training on $x_1 = x_0$.
+
+
+## 5. Writing a custom prior
 
 ```python
 class ConformerPrior(Prior):
@@ -129,16 +172,16 @@ class ConformerPrior(Prior):
     def __init__(self, ensemble):
         self.ensemble = ensemble
 
-    def sample(self, shape, dtype=None, device=None, context=None):
-        return self.ensemble.draw(shape, dtype=dtype, device=device)
+    def sample_positions(self, batch):
+        return self.ensemble.draw(batch[properties.R].shape)
 ```
 
 Guidelines:
 
-- Define the law **once**, in `sample`; `sample_like` defaults to calling it
-  with $x_0$'s shape/dtype/device. Override `sample_like` only when the
-  training draw needs more than the shape (e.g. a scaffold prior copying
-  fixed atoms out of the context).
+- Define the law **once**, in `sample_positions`; training,
+  `sample_from_batch` and `sample(n_samples)` all go through it.
+- A prior that draws whole structures rather than positions overrides
+  `sample` / `sample_from_batch` instead, as `DatasetPrior` does.
 - Declare `gaussian` and `std` **honestly**. The declarations are trusted:
   a false `gaussian = True` makes score/eps training silently meaningless;
   a false `std` corrupts every $\sigma$-consuming conversion. When in doubt,
@@ -151,7 +194,7 @@ Guidelines:
   see [sampling.md](sampling.md).
 
 
-## 5. Why this design
+## 6. Why this design
 
 **Why a prior class at all, rather than `torch.randn` in the process?**
 Because the endpoint is asked for twice — training and sampling — and the

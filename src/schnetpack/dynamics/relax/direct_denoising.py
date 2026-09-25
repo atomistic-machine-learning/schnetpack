@@ -18,8 +18,9 @@ from collections.abc import Sequence
 
 import torch
 
+from schnetpack import properties
 from schnetpack.dynamics.base import Dynamics
-from schnetpack.dynamics.constraints import AnnealedNoise
+from schnetpack.dynamics.constraints.state import AnnealedNoise
 from schnetpack.generative.parametrizations import Parametrization
 from schnetpack.generative.priors import Prior
 from schnetpack.generative.processes import Process
@@ -42,9 +43,9 @@ class DirectDenoising(Dynamics):
     :class:`~schnetpack.dynamics.sampling.Sampler`: the
     only ingredients are ``parametrization.to_x0`` and the injection above.
     The step is the bare jump; the injection is an
-    :class:`~schnetpack.dynamics.constraints.AnnealedNoise` constraint that
+    :class:`~schnetpack.dynamics.constraints.state.AnnealedNoise` constraint that
     ``stochastic_lambda`` puts first in the constraint list, so user
-    constraints (a :class:`~schnetpack.dynamics.constraints.Scaffold`) act on
+    constraints (a :class:`~schnetpack.dynamics.constraints.state.Scaffold`) act on
     the noised state. ``stochastic_lambda = 0`` disables the injection
     entirely (GPFF's plain direct denoising); positive values give the
     stochastic variant, whose injected noise is what buys sample diversity.
@@ -60,6 +61,10 @@ class DirectDenoising(Dynamics):
     """
 
     time_free = True
+    """The model is run at t = 0 throughout, so constraints such as
+    :class:`~schnetpack.dynamics.constraints.state.Scaffold` overwrite
+    rather than re-noise.
+    """
 
     def __init__(
         self,
@@ -69,7 +74,9 @@ class DirectDenoising(Dynamics):
         prior: Prior | None = None,
         stochastic_lambda: float = 1.0,
         constraints: Sequence = (),
-        **kwargs,
+        key: str = properties.R,
+        output_key: str = "prediction",
+        time_key: str = properties.t,
     ):
         """
         Args:
@@ -87,20 +94,26 @@ class DirectDenoising(Dynamics):
                 0 disables the injection
             constraints: state-level constraints, applied after the noise
                 injection
-            **kwargs: batch contract (``key``, ``output_key``, ``time_key``),
-                see :class:`~schnetpack.dynamics.base.Dynamics`
+            key: batch key this driver moves
+            output_key: model output holding the raw head, in the
+                parametrization
+            time_key: batch key the zero time is written to, for models
+                that take a time input
         """
+        parametrization.validate(process)
         injection = (
             [AnnealedNoise(stochastic_lambda)] if stochastic_lambda > 0.0 else []
         )
         super().__init__(
             calculator,
-            process,
-            parametrization,
-            prior=prior,
+            prior=prior if prior is not None else process.sampling_prior(),
             constraints=injection + list(constraints),
-            **kwargs,
+            key=key,
         )
+        self.process = process
+        self.parametrization = parametrization
+        self.output_key = output_key
+        self.time_key = time_key
         self.stochastic_lambda = stochastic_lambda
 
     def denoise(self, batch, n_steps: int, t_start=None):

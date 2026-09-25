@@ -5,9 +5,10 @@ sampler.
 
 from collections.abc import Sequence
 
+from schnetpack import properties
 from schnetpack.dynamics.base import Dynamics
+from schnetpack.dynamics.integrators.base import Integrator
 from schnetpack.dynamics.sampling.grids import TimeGrid, UniformGrid
-from schnetpack.dynamics.sampling.integrators.base import Integrator
 from schnetpack.generative.differential_equations import ReverseODE, ReverseSDE
 from schnetpack.generative.parametrizations import Parametrization
 from schnetpack.generative.priors import Prior
@@ -33,8 +34,10 @@ class Sampler(Dynamics):
 
     The model is reached through a
     :class:`~schnetpack.dynamics.calculator.Calculator`, with the raw head in
-    ``outputs[output_key]`` and the time read from ``batch[time_key]``; see
-    :class:`~schnetpack.dynamics.base.Dynamics` for the batch contract.
+    ``outputs[output_key]`` and the time read from ``batch[time_key]``;
+    conditioning keys are simply left in the batch. See
+    :class:`~schnetpack.dynamics.base.Dynamics` for the rest of the batch
+    contract.
     The process, parametrization and integrator stay pure tensor math on the
     moved key, whose leading axis (atoms, for positions) is the sample axis.
 
@@ -46,6 +49,12 @@ class Sampler(Dynamics):
     yourself subclassing this, the logic probably belongs in a process,
     parametrization, integrator, grid or constraint — that is what the axes
     are for.
+    """
+
+    time_free = False
+    """The iterate sits at a known noise level: ``batch[time_key]`` is the
+    grid time, so constraints such as
+    :class:`~schnetpack.dynamics.constraints.state.Scaffold` re-noise to it.
     """
 
     def __init__(
@@ -60,7 +69,9 @@ class Sampler(Dynamics):
         t_min: float | None = None,
         t_max: float | None = None,
         constraints: Sequence = (),
-        **kwargs,
+        key: str = properties.R,
+        output_key: str = "prediction",
+        time_key: str = properties.t,
     ):
         """
         Args:
@@ -82,17 +93,25 @@ class Sampler(Dynamics):
             t_max: time to start integration from (default: ``process.t_max``)
             constraints: state-level constraints applied around every step,
                 in order
-            **kwargs: batch contract (``key``, ``output_key``, ``time_key``),
-                see :class:`~schnetpack.dynamics.base.Dynamics`
+            key: batch key this driver moves
+            output_key: model output holding the raw head, in the
+                parametrization
+            time_key: batch key the path time is written to, one value per
+                row of the moved key — the key
+                :class:`~schnetpack.generative.transforms.Diffuse` wrote in
+                training
         """
+        parametrization.validate(process)
         super().__init__(
             calculator,
-            process,
-            parametrization,
-            prior=prior,
+            prior=prior if prior is not None else process.sampling_prior(),
             constraints=constraints,
-            **kwargs,
+            key=key,
         )
+        self.process = process
+        self.parametrization = parametrization
+        self.output_key = output_key
+        self.time_key = time_key
         # Validity settles here, not mid-run: if anything in this assembly
         # will cross the (f, g) chart — stochastic sampling, a non-velocity
         # head's conversion, an ancestral integrator — acquire the chart

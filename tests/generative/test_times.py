@@ -3,6 +3,7 @@ import math
 import pytest
 import torch
 
+from schnetpack import properties
 from schnetpack.generative import (
     VE,
     VP,
@@ -146,8 +147,8 @@ def test_lognormal_rejects_a_scaleless_prior():
         std = None
         gaussian = False
 
-        def sample(self, shape, dtype=None, device=None, context=None):
-            return torch.zeros(*shape, dtype=dtype, device=device)
+        def sample_positions(self, batch):
+            return torch.zeros_like(batch[properties.R])
 
     with pytest.raises(ValueError, match="no scalar endpoint scale"):
         LogNormalSigmaTimes(VE(b_min=1e-3, prior=Scaleless()))

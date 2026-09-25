@@ -24,6 +24,7 @@ from schnetpack.generative import (
     PseudoForceParametrization,
     ReverseSDE,
     ScoreParametrization,
+    StatisticsStructures,
     VelocityParametrization,
     X0Parametrization,
     expand_t,
@@ -42,7 +43,9 @@ IDLE = batch_model(lambda x, t: torch.zeros_like(x))
 def draw(dynamics, shape, n_steps):
     """Sample from the prior; return the positions."""
     template = {properties.R: torch.empty(shape)}
-    return dynamics.sample(template, n_steps)[properties.R]
+    return dynamics.denoise(dynamics.prior.sample_from_batch(template), n_steps)[
+        properties.R
+    ]
 
 
 @pytest.fixture
@@ -92,7 +95,9 @@ def test_grids_respect_dtype():
 
 def test_gaussian_prior_has_the_declared_std():
     torch.manual_seed(0)
-    samples = GaussianPrior(std=3.0).sample((10000, 1))
+    samples = GaussianPrior(std=3.0).sample_positions(
+        {properties.R: torch.empty(10000, 1)}
+    )
     assert samples.std().item() == pytest.approx(3.0, rel=0.05)
 
 
@@ -224,8 +229,8 @@ class ShapedPrior(Prior):
     gaussian = False
     std = 2.0
 
-    def sample(self, shape, dtype=None, device=None, context=None):
-        u = torch.rand(*shape, dtype=dtype, device=device)
+    def sample_positions(self, batch):
+        u = torch.rand_like(batch[properties.R])
         return self.std * (2.0 * u - 1.0)
 
 
@@ -521,10 +526,9 @@ def test_sampler_moves_any_declared_key(vp):
         return {"prediction": -batch["x"]}
 
     sampler = Sampler(model, vp, ScoreParametrization(), EulerMaruyama(), key="x")
-    out = sampler.sample({"x": torch.empty(8, 2)}, 5)
+    start = {"x": sampler.prior.sample_positions({properties.R: torch.empty(8, 2)})}
+    out = sampler.denoise(start, 5)
     assert out["x"].shape == (8, 2)
-    with pytest.raises(KeyError, match="shape"):
-        sampler.sample({}, 5)
 
 
 def test_sampler_derives_position_shape_from_atom_types(vp):
@@ -532,8 +536,38 @@ def test_sampler_derives_position_shape_from_atom_types(vp):
         batch_model(lambda x, t: -x), vp, ScoreParametrization(), EulerMaruyama()
     )
     batch = {properties.Z: torch.tensor([1, 6, 8])}
-    out = sampler.sample(batch, 2)
+    out = sampler.denoise(sampler.prior.sample_from_batch(batch), 2)
     assert out[properties.R].shape == (3, 3)
+
+
+def test_sampler_samples_n_structures_from_statistics(vp):
+    structures = StatisticsStructures(
+        n_atoms=torch.tensor([0, 0, 1, 1]),
+        atom_types=torch.tensor([0, 2, 0, 0, 0, 0, 1, 0, 1]),
+    )
+    sampler = Sampler(
+        batch_model(lambda x, t: -x),
+        vp,
+        ScoreParametrization(),
+        EulerMaruyama(),
+        prior=GaussianPrior(structures=structures),
+    )
+    out = sampler.sample(5, n_steps=2)
+    n_atoms = out[properties.n_atoms]
+    assert n_atoms.shape == (5,)
+    assert set(n_atoms.tolist()) <= {2, 3}
+    assert out[properties.Z].shape == (int(n_atoms.sum()),)
+    assert set(out[properties.Z].tolist()) <= {1, 6, 8}
+    assert out[properties.R].shape == (int(n_atoms.sum()), 3)
+    assert torch.equal(
+        out[properties.idx_m], torch.repeat_interleave(torch.arange(5), n_atoms)
+    )
+
+
+def test_sample_without_structures_raises(vp):
+    sampler = Sampler(IDLE, vp, ScoreParametrization(), EulerMaruyama())
+    with pytest.raises(ValueError, match="no structures"):
+        sampler.sample(4, n_steps=2)
 
 
 def test_sampler_accepts_given_starting_states(vp):

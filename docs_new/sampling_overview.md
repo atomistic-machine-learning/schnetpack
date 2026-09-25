@@ -14,14 +14,15 @@ the field-binding refactor (2026-08-01). Detailed treatment:
 | `ReverseSDE` | `differential_equations.py` | Anderson family on the chart: `drift = f x − ½(1+churn) g² s`, `diffusion`, `score`, `g2` | how the score was produced |
 | `ReverseODE` | `differential_equations.py` | transport `drift = v`, `diffusion = 0` | everything else — chart-free by design |
 | `Parametrization` | `parametrizations.py` | head contract: training `target`, conversions `to_score` / `to_velocity` / `to_x0` | integrators, samplers |
-| `Integrator` (Euler, Heun) | `dynamics/sampling/integrators/` | one numerical step on `dynamics.drift` / `dynamics.diffusion` | what the dynamics is made of |
-| `Ancestral`, `AncestralDDPM` | `dynamics/sampling/integrators/` | exact-posterior / DDPM steps through the chart's closed forms (`requires_sde = True`) | parametrizations (they see only `score` and the chart) |
+| `Integrator` (Euler, Heun) | `dynamics/integrators/` | one numerical step on `dynamics.drift` / `dynamics.diffusion` | what the dynamics is made of |
+| `Ancestral`, `AncestralDDPM` | `dynamics/integrators/` | exact-posterior / DDPM steps through the chart's closed forms (`requires_sde = True`) | parametrizations (they see only `score` and the chart) |
 | `TimeGrid` | `dynamics/sampling/grids.py` | where the steps land | everything else |
 | `Prior` | `priors.py` | the x1 endpoint law; the start state | everything else |
-| `Dynamics` | `dynamics/base.py` | prior draw in `sample`; the constraint hooks every driver's own `for` loop calls around each step; validates the pair; the batch contract (`key`, `output_key`, `time_key`) | what one step is |
+| `Dynamics` | `dynamics/base.py` | the calculator, the optional prior and its draw in `sample`, the moved `key`, the constraint hooks every driver's own `for` loop (abstract `denoise`) calls around each step | generative models, what one step is |
 | `Calculator` | `dynamics/calculator.py` | inference: device/dtype (`prepare`, once per run), neighbor list (every call, on a copy), grad policy, the model call | processes, steps |
-| `StateConstraint` (`AnnealedNoise`, `Scaffold`) | `dynamics/constraints.py` | edits of the batch before and/or after a step | models, integrators |
-| `Sampler` | `dynamics/sampling/sampler.py` | **the assembly** (a `Dynamics`): decides `needs_chart`, binds the field, picks the reverse class; one step = one integrator step on the grid | numerics (delegated), field math (delegated) |
+| `StateConstraint` (`AnnealedNoise`, `Scaffold`) | `dynamics/constraints/state.py` | edits of the batch before and/or after a step | models, integrators |
+| `FieldConstraint` | `dynamics/constraints/field.py` | changes to the field a step follows (restraints, guidance); base class only for now | the state between steps |
+| `Sampler` | `dynamics/sampling/sampler.py` | **the assembly** (a `Dynamics`): decides; holds the pair, `output_key`, `time_key`; defaults the prior to the process's `needs_chart`, binds the field, picks the reverse class; one step = one integrator step on the grid | numerics (delegated), field math (delegated) |
 | `DirectDenoising` | `dynamics/relax/direct_denoising.py` | GPFF's jump-to-`to_x0` step (a time-free `Dynamics`); its noise injection is an `AnnealedNoise` constraint | the entire reverse machinery — deliberately outside it |
 
 ## The chart of the connections

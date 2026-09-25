@@ -32,7 +32,7 @@ One class carries three roles, still factored internally:
 
 :meth:`Process.perturb` composes the three, one owner per line::
 
-    x1 = prior.sample_like(x0, context)   # what x1 is       (the prior)
+    x1 = prior.sample_positions(batch)    # what x1 is       (the prior)
     x0, x1 = coupling.pair(x0, x1)        # how paired       (the coupling)
     x_t = self.interpolate(x0, x1, t)     # when it takes over (the schedule)
 
@@ -87,6 +87,8 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import torch
+
+from schnetpack import properties
 
 if TYPE_CHECKING:
     from schnetpack.generative.differential_equations import SDE
@@ -536,7 +538,9 @@ class Process(abc.ABC):  # noqa: B024 - schedule enforced in __init_subclass__
                 still passed through the coupling
             t: path times, per-sample or scalar; drawn from
                 :meth:`sample_t` if not given
-            context: generation-time conditioning handed to the prior
+            context: the batch x0 was taken from, handed to the prior with
+                x0 as its positions — the prior reads the layout (``idx_m``)
+                out of it
             groups: labels restricting which rows the coupling may exchange
                 endpoints between — for a collated batch of molecules,
                 ``(idx_m, Z)``, so the re-pairing stays inside one molecule and
@@ -550,7 +554,8 @@ class Process(abc.ABC):  # noqa: B024 - schedule enforced in __init_subclass__
             gamma = 0 schedules).
         """
         if x1 is None:
-            x1 = self.prior.sample_like(x0, context)
+            batch = {} if context is None else context
+            x1 = self.prior.sample_positions({**batch, properties.R: x0})
         # only passed when asked for, so couplings written against the
         # two-argument `pair` keep working
         if groups is None:

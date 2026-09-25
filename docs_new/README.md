@@ -78,7 +78,9 @@ for x0 in loader:
 
 batch_model = lambda b: {"prediction": model(b[properties.R], b[properties.t])}
 sampler = Sampler(batch_model, process, param, Heun(), churn=0.0)  # the SAME two objects
-out = sampler.sample({properties.R: torch.empty(64, 3)}, n_steps=50)
+out = sampler.denoise(
+    sampler.prior.sample_from_batch({properties.R: torch.empty(64, 3)}), n_steps=50
+)
 samples = out[properties.R]
 ```
 

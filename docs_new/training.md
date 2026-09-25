@@ -192,7 +192,8 @@ for x0 in data:
 
 batch_model = lambda b: {"prediction": model(b[properties.R], b[properties.t])}
 sampler = Sampler(batch_model, process, param, Ancestral())    # same objects
-samples = sampler.sample({properties.R: torch.empty_like(x0)}, n_steps=200)
+start = sampler.prior.sample_from_batch({properties.R: torch.empty_like(x0)})
+samples = sampler.denoise(start, n_steps=200)
 ```
 
 And the pipeline variant of the training half:
