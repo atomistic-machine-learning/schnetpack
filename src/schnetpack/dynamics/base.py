@@ -18,9 +18,8 @@ so the keys it computes never land in the driver's batch.
 """
 
 import abc
-from typing import Any, Dict, Mapping, Optional, Sequence
-
-import torch
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from schnetpack import properties
 from schnetpack.dynamics.calculator import as_calculator
@@ -78,7 +77,7 @@ class Dynamics(abc.ABC):
         calculator,
         process: Process,
         parametrization: Parametrization,
-        prior: Optional[Prior] = None,
+        prior: Prior | None = None,
         constraints: Sequence = (),
         key: str = properties.R,
         output_key: str = "prediction",
@@ -115,13 +114,13 @@ class Dynamics(abc.ABC):
         self.output_key = output_key
         self.time_key = time_key
 
-    def before_step(self, batch: Dict, step: int, n_steps: int) -> Dict:
+    def before_step(self, batch: dict, step: int, n_steps: int) -> dict:
         """Run the constraints' before-step hooks, in order."""
         for constraint in self.constraints:
             batch = constraint.before_step(batch, step, n_steps, self)
         return batch
 
-    def after_step(self, batch: Dict, step: int, n_steps: int) -> Dict:
+    def after_step(self, batch: dict, step: int, n_steps: int) -> dict:
         """Run the constraints' after-step hooks, in order."""
         for constraint in self.constraints:
             batch = constraint.after_step(batch, step, n_steps, self)
@@ -131,7 +130,7 @@ class Dynamics(abc.ABC):
         self,
         batch: Mapping[str, Any],
         n_steps: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Draw the moved key from the prior and denoise.
 
@@ -168,8 +167,8 @@ class Dynamics(abc.ABC):
         self,
         batch: Mapping[str, Any],
         n_steps: int,
-        t_start: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        t_start: float | None = None,
+    ) -> dict[str, Any]:
         """
         Denoise the structures in ``batch`` — the partial-denoising entry point.
 

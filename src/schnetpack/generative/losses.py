@@ -21,7 +21,7 @@ contract, and the :class:`~schnetpack.objectives.UnsupervisedModelOutput` that
 carries the result into the Lightning task, arrive with the atomistic port.
 """
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import torch
 
@@ -43,8 +43,8 @@ class MatchingLoss:
         self,
         process: Process,
         parametrization: Parametrization,
-        weight: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
-        t_sampler: Optional[Callable[[int, torch.device], torch.Tensor]] = None,
+        weight: Callable[[torch.Tensor], torch.Tensor] | None = None,
+        t_sampler: Callable[[int, torch.device], torch.Tensor] | None = None,
     ):
         """
         Args:
@@ -72,7 +72,7 @@ class MatchingLoss:
         self,
         model: Callable,
         x0: torch.Tensor,
-        x1: Optional[torch.Tensor] = None,
+        x1: torch.Tensor | None = None,
         cond=None,
         context=None,
     ) -> torch.Tensor:

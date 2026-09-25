@@ -9,7 +9,6 @@ the integrator.
 """
 
 import abc
-from typing import Optional
 
 import torch
 
@@ -25,8 +24,8 @@ class TimeGrid(abc.ABC):
         t_start: float,
         t_end: float,
         n_steps: int,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
     ) -> torch.Tensor:
         """
         Args:

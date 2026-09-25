@@ -3,6 +3,8 @@ import torch
 
 from schnetpack import properties
 from schnetpack.generative import (
+    VE,
+    VP,
     Diffuse,
     EpsParametrization,
     FlowMatching,
@@ -10,9 +12,7 @@ from schnetpack.generative import (
     PCVarianceCoupling,
     PermutationCoupling,
     ScoreParametrization,
-    VE,
     VelocityParametrization,
-    VP,
     X0Parametrization,
     expand_t,
 )

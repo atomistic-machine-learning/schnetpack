@@ -3,15 +3,15 @@ Composition of process, parametrization, integrator, grid and prior into a
 sampler.
 """
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 from schnetpack.dynamics.base import Dynamics
 from schnetpack.dynamics.sampling.grids import TimeGrid, UniformGrid
 from schnetpack.dynamics.sampling.integrators.base import Integrator
+from schnetpack.generative.differential_equations import ReverseODE, ReverseSDE
 from schnetpack.generative.parametrizations import Parametrization
 from schnetpack.generative.priors import Prior
 from schnetpack.generative.processes import Process
-from schnetpack.generative.differential_equations import ReverseODE, ReverseSDE
 
 __all__ = ["Sampler"]
 
@@ -54,11 +54,11 @@ class Sampler(Dynamics):
         process: Process,
         parametrization: Parametrization,
         integrator: Integrator,
-        grid: Optional[TimeGrid] = None,
-        prior: Optional[Prior] = None,
+        grid: TimeGrid | None = None,
+        prior: Prior | None = None,
         churn: float = 1.0,
-        t_min: Optional[float] = None,
-        t_max: Optional[float] = None,
+        t_min: float | None = None,
+        t_max: float | None = None,
         constraints: Sequence = (),
         **kwargs,
     ):
@@ -116,7 +116,7 @@ class Sampler(Dynamics):
         self,
         batch,
         n_steps: int,
-        t_start: Optional[float] = None,
+        t_start: float | None = None,
     ):
         """
         Denoise the structures in ``batch`` from t_start down to t_min.

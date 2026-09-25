@@ -2,15 +2,14 @@ import pytest
 import torch
 
 from schnetpack.generative import (
+    VE,
+    VP,
     FlowMatching,
     GaussianPrior,
     IdentityCoupling,
     PCVarianceCoupling,
     PermutationCoupling,
-    VE,
-    VP,
 )
-
 
 # --- the forward move: prior -> coupling -> schedule ----------------------- #
 
@@ -63,9 +62,7 @@ def test_perturb_accepts_given_endpoints_but_still_pairs_them():
     x1 = torch.randn(16, 3)
     _, _, paired, _, _ = process.perturb(x0, x1=x1)
     # same multiset, possibly reordered
-    assert torch.allclose(
-        x1[x1[:, 0].argsort()], paired[paired[:, 0].argsort()]
-    )
+    assert torch.allclose(x1[x1[:, 0].argsort()], paired[paired[:, 0].argsort()])
 
 
 def test_perturb_accepts_given_times():

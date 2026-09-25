@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Optional
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -23,7 +23,7 @@ class TimeConditioning(nn.Module):
         self,
         n_atom_basis: int,
         condition_key: str = "t",
-        n_hidden: Optional[int] = None,
+        n_hidden: int | None = None,
         n_layers: int = 2,
         activation: Callable = F.silu,
     ):
@@ -46,9 +46,9 @@ class TimeConditioning(nn.Module):
             activation=activation,
         )
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         condition = inputs[self.condition_key].reshape(-1, 1)
-        inputs["scalar_representation"] = inputs["scalar_representation"] + self.embedding(
-            condition
-        )
+        inputs["scalar_representation"] = inputs[
+            "scalar_representation"
+        ] + self.embedding(condition)
         return inputs

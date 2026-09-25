@@ -25,7 +25,7 @@ Unlike the rest of the subpackage this module reaches into
 definition a statement about batch dicts. Nothing here imports Lightning.
 """
 
-from typing import Callable, Optional, Sequence
+from collections.abc import Callable, Sequence
 
 import torch
 
@@ -100,13 +100,13 @@ class Diffuse(Transform):
         self,
         process: Process,
         parametrization: Parametrization,
-        t_sampler: Optional[Callable[[int, torch.device], torch.Tensor]] = None,
+        t_sampler: Callable[[int, torch.device], torch.Tensor] | None = None,
         diffuse_property: str = properties.R,
         label_key: str = "label",
         time_key: str = properties.t,
-        structure_time_key: Optional[str] = "t_structure",
-        original_key: Optional[str] = None,
-        group_keys: Optional[Sequence[str]] = (properties.idx_m, properties.Z),
+        structure_time_key: str | None = "t_structure",
+        original_key: str | None = None,
+        group_keys: Sequence[str] | None = (properties.idx_m, properties.Z),
     ):
         """
         Args:
@@ -143,7 +143,7 @@ class Diffuse(Transform):
         self.original_key = original_key
         self.group_keys = tuple(group_keys or ())
 
-    def _groups(self, inputs, n: int) -> Optional[torch.Tensor]:
+    def _groups(self, inputs, n: int) -> torch.Tensor | None:
         """Stack the available group labels into one (n, k) tensor, or None."""
         columns = [
             inputs[key]
@@ -158,7 +158,9 @@ class Diffuse(Transform):
         x0 = inputs[self.diffuse_property]
 
         # one time per structure, broadcast along the property's leading axis
-        sample_t = self.t_sampler if self.t_sampler is not None else self.process.sample_t
+        sample_t = (
+            self.t_sampler if self.t_sampler is not None else self.process.sample_t
+        )
         t = sample_t(1, x0.device).to(x0.dtype)
         t_elements = t.repeat(x0.shape[0])
 

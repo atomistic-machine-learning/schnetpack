@@ -7,12 +7,12 @@ import pytest
 import torch
 
 from schnetpack.generative import (
-    FlowMatching,
-    Process,
     VE,
-    VELinear,
     VP,
     VPISSNR,
+    FlowMatching,
+    Process,
+    VELinear,
     expand_t,
 )
 
@@ -384,9 +384,7 @@ def test_bridge_schedule_gets_the_three_term_interpolant():
     t = torch.full((6,), 0.5)
 
     expected = (
-        expand_t(bridge.a(t), x0) * x0
-        + expand_t(bridge.b(t), x1) * x1
-        + 0.5 * eps
+        expand_t(bridge.a(t), x0) * x0 + expand_t(bridge.b(t), x1) * x1 + 0.5 * eps
     )
     assert torch.allclose(bridge.interpolate(x0, x1, t, eps=eps), expected)
 

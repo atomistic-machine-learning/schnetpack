@@ -11,13 +11,12 @@ from schnetpack.dynamics import (
     StateConstraint,
 )
 from schnetpack.generative import (
-    PseudoForceParametrization,
-    ScoreParametrization,
     VE,
     VP,
+    PseudoForceParametrization,
+    ScoreParametrization,
     expand_t,
 )
-
 from tests.dynamics.test_sampling import batch_model
 
 

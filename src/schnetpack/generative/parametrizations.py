@@ -66,7 +66,6 @@ Nothing here wraps it.
 """
 
 import abc
-from typing import Optional
 
 import torch
 
@@ -116,7 +115,7 @@ class Parametrization(abc.ABC):
     churn = 0, the one reverse route valid for any endpoint law.
     """
 
-    def validate(self, process: Process) -> None:
+    def validate(self, process: Process) -> None:  # noqa: B027 - optional hook
         """
         Raise unless this parametrization's target is meaningful for
         ``process``. Called by every consumer constructor.
@@ -131,7 +130,7 @@ class Parametrization(abc.ABC):
         x0: torch.Tensor,
         x1: torch.Tensor,
         t: torch.Tensor,
-        eps: Optional[torch.Tensor] = None,
+        eps: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Training target the head regresses.

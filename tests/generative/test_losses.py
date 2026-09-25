@@ -3,15 +3,15 @@ import torch
 from torch import nn
 
 from schnetpack.generative import (
+    VE,
+    VP,
     EpsParametrization,
     FlowMatching,
     MatchingLoss,
     PCVarianceCoupling,
     PermutationCoupling,
     ScoreParametrization,
-    VE,
     VelocityParametrization,
-    VP,
     X0Parametrization,
 )
 
@@ -150,9 +150,7 @@ def test_process_supplies_the_endpoints():
 def test_cond_reaches_the_model():
     net = RecordingNet()
     marker = object()
-    MatchingLoss(VP(), ScoreParametrization())(
-        net, torch.randn(4, 3), cond=marker
-    )
+    MatchingLoss(VP(), ScoreParametrization())(net, torch.randn(4, 3), cond=marker)
     assert net.conds[0] is marker
 
 

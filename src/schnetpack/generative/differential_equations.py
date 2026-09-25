@@ -45,7 +45,7 @@ or by hand for a ready field. Both reverse classes expose the
 runs backwards in time, so integrators pass dt < 0.
 """
 
-from typing import Callable, Tuple
+from collections.abc import Callable
 
 import torch
 
@@ -113,9 +113,9 @@ class SDE:
         knob.
         """
         process = self.process
-        return -process.sigma(t) ** 2 * process.log_snr_dot(t)
+        return -(process.sigma(t) ** 2) * process.log_snr_dot(t)
 
-    def kernel(self, t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def kernel(self, t: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Mean coefficient and std of the perturbation kernel p(x_t | x0),
         i.e. (a(t), sigma(t)) with p(x_t | x0) = N(a x0, sigma^2 I).
@@ -128,7 +128,7 @@ class SDE:
         x0: torch.Tensor,
         t: torch.Tensor,
         s: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Mean and std of the exact Gaussian posterior p(x_s | x_t, x0), s < t.
 
@@ -297,5 +297,3 @@ class ReverseODE:
     def diffusion(self, t: torch.Tensor) -> torch.Tensor:
         """Zero — this is the ODE."""
         return torch.zeros_like(t)
-
-

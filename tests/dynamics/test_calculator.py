@@ -3,9 +3,9 @@ import torch
 from schnetpack import properties
 from schnetpack.dynamics import Calculator, DirectDenoising, Heun, Sampler
 from schnetpack.generative import (
-    PseudoForceParametrization,
     VE,
     VP,
+    PseudoForceParametrization,
     VelocityParametrization,
 )
 

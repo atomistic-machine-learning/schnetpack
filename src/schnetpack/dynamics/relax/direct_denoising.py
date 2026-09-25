@@ -14,7 +14,7 @@ The model contract is the batch dict (``batch -> outputs``, see
 becomes one step rule among theirs.
 """
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import torch
 
@@ -66,7 +66,7 @@ class DirectDenoising(Dynamics):
         calculator,
         process: Process,
         parametrization: Parametrization,
-        prior: Optional[Prior] = None,
+        prior: Prior | None = None,
         stochastic_lambda: float = 1.0,
         constraints: Sequence = (),
         **kwargs,

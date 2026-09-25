@@ -49,7 +49,7 @@ pairs with :meth:`~schnetpack.dynamics.sampling.sampler.Sampler.denoise`.
 """
 
 import abc
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import torch
 
@@ -69,7 +69,7 @@ class Prior(abc.ABC):
     explicitly.
     """
 
-    std: Optional[float] = None
+    std: float | None = None
     """Scale of the endpoint, or None when it is not a single number.
 
     The process reads its noise level sigma(t) = b(t) * std from this; None
@@ -81,8 +81,8 @@ class Prior(abc.ABC):
     def sample(
         self,
         shape: Sequence[int],
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
         context=None,
     ) -> torch.Tensor:
         """
@@ -185,7 +185,7 @@ class GaussianPrior(Prior):
             return x
         return self.center(x, self.segments(context))
 
-    def segments(self, context) -> Optional[torch.Tensor]:
+    def segments(self, context) -> torch.Tensor | None:
         """Resolve ``context`` to per-row segment ids, or None for one group."""
         if context is None or torch.is_tensor(context):
             return context
@@ -198,7 +198,7 @@ class GaussianPrior(Prior):
         )
 
     @staticmethod
-    def center(x: torch.Tensor, segments: Optional[torch.Tensor]) -> torch.Tensor:
+    def center(x: torch.Tensor, segments: torch.Tensor | None) -> torch.Tensor:
         """
         Subtract each segment's mean along the leading axis.
 

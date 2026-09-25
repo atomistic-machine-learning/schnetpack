@@ -2,6 +2,8 @@ import pytest
 import torch
 
 from schnetpack.generative import (
+    VE,
+    VP,
     Coupling,
     EpsParametrization,
     FlowMatching,
@@ -13,9 +15,7 @@ from schnetpack.generative import (
     PermutationCoupling,
     PseudoForceParametrization,
     ScoreParametrization,
-    VE,
     VelocityParametrization,
-    VP,
     X0Parametrization,
     expand_t,
 )

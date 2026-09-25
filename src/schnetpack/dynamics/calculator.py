@@ -13,7 +13,8 @@ driver's batch. That is what keeps a moving structure free of stale derived
 keys: they only ever exist on the copy built for one call.
 """
 
-from typing import Any, Callable, Dict, Mapping, Optional
+from collections.abc import Callable, Mapping
+from typing import Any
 
 import torch
 from torch import nn
@@ -33,10 +34,10 @@ class Calculator:
 
     def __init__(
         self,
-        model: Callable[[Dict[str, torch.Tensor]], Dict[str, torch.Tensor]],
-        neighbor_list: Optional[Callable[[Dict], Dict]] = None,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
+        model: Callable[[dict[str, torch.Tensor]], dict[str, torch.Tensor]],
+        neighbor_list: Callable[[dict], dict] | None = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
         enable_grad: bool = False,
     ):
         """
@@ -64,7 +65,7 @@ class Calculator:
         self.dtype = dtype
         self.enable_grad = enable_grad
 
-    def prepare(self, batch: Mapping[str, Any]) -> Dict[str, Any]:
+    def prepare(self, batch: Mapping[str, Any]) -> dict[str, Any]:
         """
         Move a batch to the calculator's device and dtype, once per run.
 
@@ -90,7 +91,7 @@ class Calculator:
         if reset is not None:
             reset()
 
-    def __call__(self, batch: Mapping[str, Any]) -> Dict[str, torch.Tensor]:
+    def __call__(self, batch: Mapping[str, Any]) -> dict[str, torch.Tensor]:
         inputs = dict(batch)
         if self.neighbor_list is not None:
             inputs = self.neighbor_list(inputs)

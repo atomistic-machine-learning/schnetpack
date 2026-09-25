@@ -63,7 +63,9 @@ def test_compute_loss_when_model_overwrites_target_key():
 
     assert loss.item() > 0.0
     loss.backward()
-    assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters())
+    assert any(
+        p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters()
+    )
 
 
 def test_plain_torch_training_loop_reduces_loss():

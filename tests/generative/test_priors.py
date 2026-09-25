@@ -2,13 +2,12 @@ import pytest
 import torch
 
 from schnetpack import properties
+from schnetpack.dynamics import EulerMaruyama, Sampler
 from schnetpack.generative import (
     VE,
     EpsParametrization,
     GaussianPrior,
 )
-from schnetpack.dynamics import EulerMaruyama, Sampler
-
 
 # --- what the plain prior does, and why it is a problem -------------------- #
 

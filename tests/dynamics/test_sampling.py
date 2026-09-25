@@ -1,6 +1,7 @@
 import pytest
 import torch
 
+from schnetpack import properties
 from schnetpack.dynamics import (
     Ancestral,
     AncestralDDPM,
@@ -11,8 +12,9 @@ from schnetpack.dynamics import (
     UniformGrid,
     generate,
 )
-from schnetpack import properties
 from schnetpack.generative import (
+    VE,
+    VP,
     EpsParametrization,
     FlowMatching,
     GaussianPrior,
@@ -22,9 +24,7 @@ from schnetpack.generative import (
     PseudoForceParametrization,
     ReverseSDE,
     ScoreParametrization,
-    VE,
     VelocityParametrization,
-    VP,
     X0Parametrization,
     expand_t,
 )
@@ -397,7 +397,10 @@ def test_ancestral_x0_via_score_round_trips_an_x0_head(vp):
     # x0-predicting head the two Tweedie directions cancel algebraically;
     # the round trip must reproduce the head's output.
     par = X0Parametrization()
-    x0_model = lambda x, t: torch.full_like(x, 1.5)
+
+    def x0_model(x, t):
+        return torch.full_like(x, 1.5)
+
     rev = ReverseSDE(vp.sde(), lambda x, t: par.to_score(vp, x0_model(x, t), x, t))
 
     x = torch.randn(16, 2, dtype=torch.float64)
@@ -514,7 +517,9 @@ def test_batch_keys_reach_the_model_and_the_input_batch_is_untouched(vp):
 
 def test_sampler_moves_any_declared_key(vp):
     # Toy data need not pretend to be positions: the driver moves its keys.
-    model = lambda batch: {"prediction": -batch["x"]}
+    def model(batch):
+        return {"prediction": -batch["x"]}
+
     sampler = Sampler(model, vp, ScoreParametrization(), EulerMaruyama(), key="x")
     out = sampler.sample({"x": torch.empty(8, 2)}, 5)
     assert out["x"].shape == (8, 2)

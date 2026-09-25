@@ -58,7 +58,6 @@ prior or a conditional-expectation target.
 """
 
 import abc
-from typing import List, Optional, Tuple
 
 import torch
 
@@ -71,9 +70,7 @@ __all__ = [
 ]
 
 
-def row_blocks(
-    groups: Optional[torch.Tensor], n: int, device=None
-) -> List[torch.Tensor]:
+def row_blocks(groups: torch.Tensor | None, n: int, device=None) -> list[torch.Tensor]:
     """
     Row indices grouped into blocks whose members may exchange endpoints.
 
@@ -134,8 +131,8 @@ class Coupling(abc.ABC):
         self,
         x0: torch.Tensor,
         x1: torch.Tensor,
-        groups: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        groups: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Re-pair a data batch with a batch of prior draws.
 

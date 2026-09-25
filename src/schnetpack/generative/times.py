@@ -24,7 +24,6 @@ honest about the process it is tied to.
 
 import abc
 import math
-from typing import Optional
 
 import torch
 
@@ -37,7 +36,7 @@ class TimeSampler(abc.ABC):
     """Draws training times."""
 
     @abc.abstractmethod
-    def __call__(self, n: int, device: Optional[torch.device] = None) -> torch.Tensor:
+    def __call__(self, n: int, device: torch.device | None = None) -> torch.Tensor:
         """
         Args:
             n: number of times to draw. Note the two callers differ:
@@ -68,8 +67,8 @@ class UniformTimes(TimeSampler):
     def __init__(
         self,
         process: Process,
-        t_min: Optional[float] = None,
-        t_max: Optional[float] = None,
+        t_min: float | None = None,
+        t_max: float | None = None,
     ):
         """
         Args:
@@ -124,8 +123,8 @@ class LogNormalSigmaTimes(TimeSampler):
         process: Process,
         mean: float = -0.7,
         std: float = 1.2,
-        sigma_min: Optional[float] = None,
-        sigma_max: Optional[float] = None,
+        sigma_min: float | None = None,
+        sigma_max: float | None = None,
         truncate: bool = False,
     ):
         """
@@ -143,7 +142,7 @@ class LogNormalSigmaTimes(TimeSampler):
         """
         if std <= 0.0:
             raise ValueError(f"std must be positive, got {std}")
-        process.std  # raises with the useful message if the prior has no scale
+        _ = process.std  # raises with the useful message if the prior has no scale
         self.process = process
         self.mean = mean
         self.std = std

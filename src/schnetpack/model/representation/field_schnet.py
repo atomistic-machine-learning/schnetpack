@@ -7,9 +7,9 @@ from torch.nn.init import zeros_
 import schnetpack.nn as snn
 import schnetpack.properties as structure
 from schnetpack import properties
+from schnetpack.model.representation.schnet import SchNetInteraction
 from schnetpack.nn import Dense, scatter_add
 from schnetpack.nn.activations import shifted_softplus
-from schnetpack.model.representation.schnet import SchNetInteraction
 from schnetpack.utils import required_fields_from_properties
 
 __all__ = ["FieldSchNet", "NuclearMagneticMomentEmbedding"]

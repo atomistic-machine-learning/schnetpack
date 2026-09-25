@@ -5,12 +5,12 @@ import torch
 
 from schnetpack.generative import (
     VE,
-    VELinear,
     VP,
     Diffuse,
     LogNormalSigmaTimes,
     PseudoForceParametrization,
     UniformTimes,
+    VELinear,
 )
 
 
@@ -124,7 +124,10 @@ def test_truncate_rejects_instead_of_clamping(ve):
 
     assert clamped.max() <= t_cap + 1e-5
     assert truncated.max() <= t_cap + 1e-5
-    at_cap = lambda t: ((t - t_cap).abs() < 1e-5).float().mean()
+
+    def at_cap(t):
+        return ((t - t_cap).abs() < 1e-5).float().mean()
+
     assert at_cap(clamped) > 0.01  # the rejected tail lands exactly on it
     assert at_cap(truncated) == 0.0  # redrawn into the interior instead
 

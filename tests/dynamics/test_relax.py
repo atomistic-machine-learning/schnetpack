@@ -4,17 +4,15 @@ import torch
 from schnetpack import properties
 from schnetpack.dynamics import DirectDenoising
 from schnetpack.generative import (
+    VE,
+    VP,
     GaussianPrior,
     MatchingLoss,
     PCVarianceCoupling,
     PseudoForceParametrization,
     ScoreParametrization,
-    VE,
-    VP,
 )
-
 from tests.dynamics.test_sampling import IDLE, batch_model, draw, train_toy
-
 
 # --- direct denoising ------------------------------------------------------ #
 

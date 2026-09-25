@@ -83,7 +83,8 @@ rely on.
 import abc
 import inspect
 import math
-from typing import TYPE_CHECKING, Callable, Optional, Tuple
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import torch
 
@@ -117,7 +118,7 @@ def expand_t(t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
     return t.reshape(t.shape[0], *([1] * (x.dim() - 1)))
 
 
-class Process(abc.ABC):
+class Process(abc.ABC):  # noqa: B024 - schedule enforced in __init_subclass__
     """
     Forward process x_t = a(t) x0 + b(t) x1 + gamma(t) eps on [t_min, t_max],
     with x1 ~ prior and (x0, x1) matched by the coupling.
@@ -164,9 +165,9 @@ class Process(abc.ABC):
         self,
         t_min: float,
         t_max: float,
-        prior: Optional[Prior] = None,
-        coupling: Optional[Coupling] = None,
-        scale: Optional[float] = None,
+        prior: Prior | None = None,
+        coupling: Coupling | None = None,
+        scale: float | None = None,
     ):
         """
         Args:
@@ -377,7 +378,7 @@ class Process(abc.ABC):
             (grad,) = torch.autograd.grad(y.sum(), t_, allow_unused=True)
         return torch.zeros_like(t) if grad is None else grad
 
-    def gamma(self, t: torch.Tensor) -> Optional[torch.Tensor]:
+    def gamma(self, t: torch.Tensor) -> torch.Tensor | None:
         """
         Bridge noise coefficient, or None when it vanishes identically.
 
@@ -394,7 +395,7 @@ class Process(abc.ABC):
         """
         return None
 
-    def a_b(self, t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def a_b(self, t: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Both marginal coefficients at once, each shaped like t."""
         return self.a(t), self.b(t)
 
@@ -484,7 +485,7 @@ class Process(abc.ABC):
         x0: torch.Tensor,
         x1: torch.Tensor,
         t: torch.Tensor,
-        eps: Optional[torch.Tensor] = None,
+        eps: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Place a sample on the path: x_t = a x0 + b x1 (+ gamma eps).
@@ -510,16 +511,16 @@ class Process(abc.ABC):
     def perturb(
         self,
         x0: torch.Tensor,
-        x1: Optional[torch.Tensor] = None,
-        t: Optional[torch.Tensor] = None,
+        x1: torch.Tensor | None = None,
+        t: torch.Tensor | None = None,
         context=None,
-        groups: Optional[torch.Tensor] = None,
-    ) -> Tuple[
+        groups: torch.Tensor | None = None,
+    ) -> tuple[
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
-        Optional[torch.Tensor],
+        torch.Tensor | None,
     ]:
         """
         Draw endpoints, pair them, place them on the path.
@@ -562,7 +563,7 @@ class Process(abc.ABC):
         x_t = self.interpolate(x0, x1, t, eps=eps)
         return x_t, x0, x1, t, eps
 
-    def sample_t(self, n: int, device: Optional[torch.device] = None) -> torch.Tensor:
+    def sample_t(self, n: int, device: torch.device | None = None) -> torch.Tensor:
         """
         Training-time distribution p(t): uniform on [t_min, t_max].
 
@@ -600,7 +601,7 @@ class Process(abc.ABC):
 
     # -- the Gaussian kernel: a property of the configuration -------------- #
 
-    def gaussian_kernel_obstruction(self) -> Optional[str]:
+    def gaussian_kernel_obstruction(self) -> str | None:
         """
         Why the one-sided Gaussian kernel does not hold — or None if it does.
 
@@ -695,9 +696,9 @@ class VP(Process):
         beta_max: float = 20.0,
         t_min: float = 1e-3,
         t_max: float = 1.0,
-        prior: Optional[Prior] = None,
-        coupling: Optional[Coupling] = None,
-        scale: Optional[float] = None,
+        prior: Prior | None = None,
+        coupling: Coupling | None = None,
+        scale: float | None = None,
     ):
         """
         Args:
@@ -787,14 +788,14 @@ class VE(Process):
 
     def __init__(
         self,
-        sigma_min: Optional[float] = None,
-        sigma_max: Optional[float] = None,
-        b_min: Optional[float] = None,
+        sigma_min: float | None = None,
+        sigma_max: float | None = None,
+        b_min: float | None = None,
         t_min: float = 0.0,
         t_max: float = 1.0,
-        prior: Optional[Prior] = None,
-        coupling: Optional[Coupling] = None,
-        scale: Optional[float] = None,
+        prior: Prior | None = None,
+        coupling: Coupling | None = None,
+        scale: float | None = None,
     ):
         """
         Args:
@@ -878,9 +879,9 @@ class VELinear(Process):
         self,
         t_min: float = 1e-3,
         t_max: float = 1.0,
-        prior: Optional[Prior] = None,
-        coupling: Optional[Coupling] = None,
-        scale: Optional[float] = None,
+        prior: Prior | None = None,
+        coupling: Coupling | None = None,
+        scale: float | None = None,
     ):
         """
         Args:
@@ -931,9 +932,9 @@ class FlowMatching(Process):
         self,
         t_min: float = 1e-3,
         t_max: float = 1.0 - 1e-3,
-        prior: Optional[Prior] = None,
-        coupling: Optional[Coupling] = None,
-        scale: Optional[float] = None,
+        prior: Prior | None = None,
+        coupling: Coupling | None = None,
+        scale: float | None = None,
     ):
         """
         Args:
@@ -1009,9 +1010,9 @@ class VPISSNR(Process):
         kappa: float = 0.0,
         t_min: float = 1e-3,
         t_max: float = 1.0 - 1e-3,
-        prior: Optional[Prior] = None,
-        coupling: Optional[Coupling] = None,
-        scale: Optional[float] = None,
+        prior: Prior | None = None,
+        coupling: Coupling | None = None,
+        scale: float | None = None,
     ):
         """
         Args:

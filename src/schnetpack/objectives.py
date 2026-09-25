@@ -11,7 +11,6 @@ so a model can be trained in a hand-written PyTorch loop:
 :class:`schnetpack.AtomisticTask` uses these same functions for training with
 the PyTorch Lightning Trainer.
 """
-from typing import Optional, Dict, List
 
 import torch
 from torch import nn as nn
@@ -37,11 +36,11 @@ class ModelOutput(nn.Module):
     def __init__(
         self,
         name: str,
-        loss_fn: Optional[nn.Module] = None,
+        loss_fn: nn.Module | None = None,
         loss_weight: float = 1.0,
-        metrics: Optional[Dict[str, Metric]] = None,
-        constraints: Optional[List[torch.nn.Module]] = None,
-        target_property: Optional[str] = None,
+        metrics: dict[str, Metric] | None = None,
+        constraints: list[torch.nn.Module] | None = None,
+        target_property: str | None = None,
     ):
         r"""
         Args:
@@ -144,8 +143,8 @@ class ConsiderOnlySelectedAtoms(nn.Module):
 
 
 def extract_targets(
-    outputs: List[ModelOutput], batch: Dict[str, torch.Tensor]
-) -> Dict[str, torch.Tensor]:
+    outputs: list[ModelOutput], batch: dict[str, torch.Tensor]
+) -> dict[str, torch.Tensor]:
     """Collect the target properties of all supervised outputs from a batch."""
     targets = {
         output.target_property: batch[output.target_property]
@@ -158,9 +157,9 @@ def extract_targets(
 
 
 def apply_constraints(
-    outputs: List[ModelOutput],
-    pred: Dict[str, torch.Tensor],
-    targets: Dict[str, torch.Tensor],
+    outputs: list[ModelOutput],
+    pred: dict[str, torch.Tensor],
+    targets: dict[str, torch.Tensor],
 ):
     for output in outputs:
         for constraint in output.constraints:
@@ -169,9 +168,9 @@ def apply_constraints(
 
 
 def calculate_loss(
-    outputs: List[ModelOutput],
-    pred: Dict[str, torch.Tensor],
-    targets: Dict[str, torch.Tensor],
+    outputs: list[ModelOutput],
+    pred: dict[str, torch.Tensor],
+    targets: dict[str, torch.Tensor],
 ) -> torch.Tensor:
     """Weighted composite loss over all outputs."""
     loss = 0.0
@@ -181,9 +180,9 @@ def calculate_loss(
 
 
 def compute_loss(
-    outputs: List[ModelOutput],
+    outputs: list[ModelOutput],
     model: nn.Module,
-    batch: Dict[str, torch.Tensor],
+    batch: dict[str, torch.Tensor],
 ) -> torch.Tensor:
     """
     One-call loss for hand-written training loops: extract targets, run the
