@@ -1,5 +1,3 @@
-from typing import Dict, Optional
-
 import torch
 import torch.nn as nn
 
@@ -13,7 +11,7 @@ class PairwiseDistances(nn.Module):
     Compute pair-wise distances from indices provided by a neighbor list transform.
     """
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         R = inputs[properties.R]
         offsets = inputs[properties.offsets]
         idx_i = inputs[properties.idx_i]
@@ -41,7 +39,7 @@ class FilterShortRange(nn.Module):
         super().__init__()
         self.short_range_cutoff = short_range_cutoff
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         idx_i = inputs[properties.idx_i]
         idx_j = inputs[properties.idx_j]
         Rij = inputs[properties.Rij]

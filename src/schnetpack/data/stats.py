@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Any
 
 import torch
 from tqdm import tqdm
@@ -10,7 +10,7 @@ from schnetpack.data.loader import AtomsLoader
 __all__ = ["calculate_stats", "estimate_atomrefs"]
 
 
-def _raw_view(dataset: ASEAtomsData, indices: Optional[List[int]]) -> ASEAtomsData:
+def _raw_view(dataset: ASEAtomsData, indices: list[int] | None) -> ASEAtomsData:
     """
     Statistics must always be computed on raw data. Build an index-restricted
     view of the dataset with no transforms and no split label, so that
@@ -27,16 +27,16 @@ def _raw_view(dataset: ASEAtomsData, indices: Optional[List[int]]) -> ASEAtomsDa
 
 def calculate_stats(
     dataset: ASEAtomsData,
-    divide_by_atoms: Dict[str, bool],
-    atomref: Dict[str, torch.Tensor] = None,
+    divide_by_atoms: dict[str, bool],
+    atomref: dict[str, torch.Tensor] | None = None,
     batch_size: int = 10000,
     # num_workers=0: spawning workers by default breaks on platforms with
     # spawn start method (the dataset holds a DB connection), and stats are a
     # one-off pass anyway.
     num_workers: int = 0,
-    loader_kwargs: Optional[Dict[str, Any]] = None,
-    indices: Optional[List[int]] = None,
-) -> Dict[str, Tuple[torch.Tensor, torch.Tensor]]:
+    loader_kwargs: dict[str, Any] | None = None,
+    indices: list[int] | None = None,
+) -> dict[str, tuple[torch.Tensor, torch.Tensor]]:
     """
     Use the incremental Welford algorithm described in [h1]_ to accumulate
     the mean and standard deviation over a set of samples.
@@ -121,14 +121,14 @@ def calculate_stats(
 
 def estimate_atomrefs(
     dataset: ASEAtomsData,
-    is_extensive: Dict[str, bool],
+    is_extensive: dict[str, bool],
     z_max: int = 100,
     batch_size: int = 10000,
     # num_workers=0: see calculate_stats — safe, deterministic defaults.
     num_workers: int = 0,
-    loader_kwargs: Optional[Dict[str, Any]] = None,
-    indices: Optional[List[int]] = None,
-) -> Dict[str, torch.Tensor]:
+    loader_kwargs: dict[str, Any] | None = None,
+    indices: list[int] | None = None,
+) -> dict[str, torch.Tensor]:
     """
     Uses linear regression to estimate the elementwise biases (atomrefs).
 

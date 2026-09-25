@@ -5,7 +5,6 @@ import os
 import re
 import shutil
 import tempfile
-from typing import Dict, List, Optional
 from urllib import request as request
 
 import h5py
@@ -13,8 +12,8 @@ import numpy as np
 import progressbar
 from ase import Atoms
 
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 
 __all__ = ["QM7X"]
 
@@ -140,18 +139,18 @@ class QM7X(DownloadableASEAtomsData):
     def __init__(
         self,
         datapath: str,
-        raw_data_path: Optional[str] = None,
+        raw_data_path: str | None = None,
         remove_duplicates: bool = True,
         only_equilibrium: bool = False,
         only_non_equilibrium: bool = False,
-        load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[Transform]] = None,
-        train_transforms: Optional[List[Transform]] = None,
-        val_transforms: Optional[List[Transform]] = None,
-        test_transforms: Optional[List[Transform]] = None,
-        subset_idx: Optional[List[int]] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
+        load_properties: list[str] | None = None,
+        transforms: list[Transform] | None = None,
+        train_transforms: list[Transform] | None = None,
+        val_transforms: list[Transform] | None = None,
+        test_transforms: list[Transform] | None = None,
+        subset_idx: list[int] | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
         **kwargs,
     ):
         """
@@ -202,7 +201,7 @@ class QM7X(DownloadableASEAtomsData):
         self._apply_structure_filter(original_subset_idx=subset_idx)
 
     @staticmethod
-    def _native_property_units() -> Dict[str, str]:
+    def _native_property_units() -> dict[str, str]:
         return {
             QM7X.forces: "eV/Ang",
             QM7X.energy: "eV",
@@ -214,7 +213,7 @@ class QM7X(DownloadableASEAtomsData):
             QM7X.RMSD: "Ang",
         }
 
-    def _apply_structure_filter(self, original_subset_idx: Optional[List[int]]) -> None:
+    def _apply_structure_filter(self, original_subset_idx: list[int] | None) -> None:
         effective_subset = original_subset_idx
 
         if self.only_equilibrium or self.only_non_equilibrium:
@@ -276,13 +275,13 @@ class QM7X(DownloadableASEAtomsData):
 
         # fetch duplicates ids
         dup_mols = []
-        with open(target_path, "r") as f:
+        with open(target_path) as f:
             for line in f:
                 dup_mols.append(line.rstrip("\n")[:-4])
 
         self.duplicates_ids = dup_mols
 
-    def _download_data(self, tar_dir: str, ignore_extracted: bool = True) -> List[str]:
+    def _download_data(self, tar_dir: str, ignore_extracted: bool = True) -> list[str]:
         """
         download data and extract them
         """
@@ -325,7 +324,7 @@ class QM7X(DownloadableASEAtomsData):
 
         return extracted
 
-    def _parse_data(self, files: List[str]):
+    def _parse_data(self, files: list[str]):
         """
         Parse the downloaded data files and add them to the dataset.
         """

@@ -1,12 +1,11 @@
 import logging
 import os
 import tarfile
-from typing import List, Optional, Dict
 
 import numpy as np
 from ase.io import read
 
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
 
 __all__ = ["OrganicMaterialsDatabase"]
@@ -30,15 +29,15 @@ class OrganicMaterialsDatabase(DownloadableASEAtomsData):
     def __init__(
         self,
         datapath: str,
-        load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[Transform]] = None,
-        train_transforms: Optional[List[Transform]] = None,
-        val_transforms: Optional[List[Transform]] = None,
-        test_transforms: Optional[List[Transform]] = None,
-        subset_idx: Optional[List[int]] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
-        raw_path: Optional[str] = None,
+        load_properties: list[str] | None = None,
+        transforms: list[Transform] | None = None,
+        train_transforms: list[Transform] | None = None,
+        val_transforms: list[Transform] | None = None,
+        test_transforms: list[Transform] | None = None,
+        subset_idx: list[int] | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
+        raw_path: str | None = None,
         **kwargs,
     ):
         """
@@ -73,7 +72,7 @@ class OrganicMaterialsDatabase(DownloadableASEAtomsData):
         )
 
     @staticmethod
-    def _native_property_units() -> Dict[str, str]:
+    def _native_property_units() -> dict[str, str]:
         return {OrganicMaterialsDatabase.BandGap: "eV"}
 
     def download(self) -> None:

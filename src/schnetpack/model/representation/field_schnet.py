@@ -1,17 +1,16 @@
-from typing import Callable, Dict, List, Optional
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
 from torch.nn.init import zeros_
 
+import schnetpack.nn as snn
 import schnetpack.properties as structure
+from schnetpack import properties
 from schnetpack.nn import Dense, scatter_add
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.model.representation.schnet import SchNetInteraction
 from schnetpack.utils import required_fields_from_properties
-
-from schnetpack import properties
-import schnetpack.nn as snn
 
 __all__ = ["FieldSchNet", "NuclearMagneticMomentEmbedding"]
 
@@ -34,11 +33,11 @@ class FieldSchNetFieldInteraction(nn.Module):
 
     def __init__(
         self,
-        external_fields: List[str],
+        external_fields: list[str],
         n_atom_basis: int,
         activation: Callable = shifted_softplus,
     ):
-        super(FieldSchNetFieldInteraction, self).__init__()
+        super().__init__()
         self.f2out = nn.ModuleDict(
             {
                 field: Dense(n_atom_basis, n_atom_basis, activation=activation)
@@ -48,7 +47,7 @@ class FieldSchNetFieldInteraction(nn.Module):
         self.external_fields = external_fields
 
     def forward(
-        self, mu: Dict[str, torch.Tensor], external_fields: Dict[str, torch.Tensor]
+        self, mu: dict[str, torch.Tensor], external_fields: dict[str, torch.Tensor]
     ) -> torch.Tensor:
         """
         Compute the update based on the fields.
@@ -79,8 +78,8 @@ class DipoleUpdate(nn.Module):
         n_atom_basis (int): Number of atomic features.
     """
 
-    def __init__(self, external_fields: List[str], n_atom_basis: int):
-        super(DipoleUpdate, self).__init__()
+    def __init__(self, external_fields: list[str], n_atom_basis: int):
+        super().__init__()
         self.external_fields = external_fields
 
         # zero init is important here, otherwise updates grow uncontrollably
@@ -99,12 +98,12 @@ class DipoleUpdate(nn.Module):
     def forward(
         self,
         q: torch.Tensor,
-        mu: Dict[str, torch.Tensor],
+        mu: dict[str, torch.Tensor],
         v_ij: torch.Tensor,
         idx_i: torch.Tensor,
         idx_j: torch.Tensor,
         rcut_ij: torch.Tensor,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """
         Perform dipole feature update.
 
@@ -131,7 +130,7 @@ class DipoleUpdate(nn.Module):
 class DipoleInteraction(nn.Module):
     def __init__(
         self,
-        external_fields: List[str],
+        external_fields: list[str],
         n_atom_basis: int,
         n_rbf: int,
         activation: Callable = shifted_softplus,
@@ -152,7 +151,7 @@ class DipoleInteraction(nn.Module):
            Machine learning of solvent effects on molecular spectra and reactions.
            Chemical Science, 12(34), 11473-11483. 2021.
         """
-        super(DipoleInteraction, self).__init__()
+        super().__init__()
         self.external_fields = external_fields
 
         self.transform = nn.ModuleDict(
@@ -176,7 +175,7 @@ class DipoleInteraction(nn.Module):
     def forward(
         self,
         q: torch.Tensor,
-        mu: Dict[str, torch.Tensor],
+        mu: dict[str, torch.Tensor],
         f_ij: torch.Tensor,
         d_ij: torch.Tensor,
         v_ij: torch.Tensor,
@@ -232,7 +231,7 @@ class NuclearMagneticMomentEmbedding(nn.Module):
     """
 
     def __init__(self, n_atom_basis: int, max_z: int):
-        super(NuclearMagneticMomentEmbedding, self).__init__()
+        super().__init__()
         self.gyromagnetic_ratio = nn.Embedding(max_z, 1, padding_idx=0)
         self.vector_mapping = snn.Dense(1, n_atom_basis, activation=None, bias=False)
 
@@ -261,14 +260,14 @@ class FieldSchNet(nn.Module):
         n_atom_basis: int,
         n_interactions: int,
         radial_basis: nn.Module,
-        external_fields: List[str] = [],
-        response_properties: Optional[List[str]] = None,
-        cutoff_fn: Optional[Callable] = None,
-        activation: Optional[Callable] = shifted_softplus,
-        n_filters: int = None,
+        external_fields: list[str] | None = None,
+        response_properties: list[str] | None = None,
+        cutoff_fn: Callable | None = None,
+        activation: Callable | None = shifted_softplus,
+        n_filters: int | None = None,
         shared_interactions: bool = False,
         max_z: int = 100,
-        electric_field_modifier: Optional[nn.Module] = None,
+        electric_field_modifier: nn.Module | None = None,
     ):
         """
         Args:
@@ -289,6 +288,8 @@ class FieldSchNet(nn.Module):
             electric_field_modifier (torch.nn.Module): If provided, use this module to modify the electric field. E.g.
                                                        for solvent models or fields from point charges in QM/MM.
         """
+        if external_fields is None:
+            external_fields = []
         super().__init__()
         self.n_atom_basis = n_atom_basis
         self.size = (self.n_atom_basis,)
@@ -358,7 +359,7 @@ class FieldSchNet(nn.Module):
             shared_interactions,
         )
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """
         Compute atomic representations/embeddings.
 
@@ -410,7 +411,7 @@ class FieldSchNet(nn.Module):
             )
 
         for (
-            i,
+            _i,
             (interaction, field_interaction, dipole_interaction, dipole_update),
         ) in enumerate(
             zip(

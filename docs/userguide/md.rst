@@ -267,4 +267,3 @@ The ``simulation_dir`` option is still required, due to how hydra resolves confi
 Any ``simulation_dir`` entries in the provided config file will be ignored.
 
 Since the ``hydra`` parser operates on classes from python modules, they can also be easily adapted to integrate external modules, e.g. custom calculators for simulations.
-

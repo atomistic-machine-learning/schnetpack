@@ -1,6 +1,6 @@
-from typing import Optional, Union, Dict, Any, Type, Tuple
 import logging
 import os
+from typing import Any
 
 import fasteners
 import numpy as np
@@ -9,9 +9,9 @@ import torch
 from torch.utils.data import BatchSampler
 
 from schnetpack.data.atoms import ASEAtomsData
+from schnetpack.data.loader import AtomsLoader
 from schnetpack.data.provider import StatsAtomrefProvider, train_partition_fingerprint
 from schnetpack.data.splitting import SPLITTING_LOCK, RandomSplit, SplittingStrategy
-from schnetpack.data.loader import AtomsLoader
 
 __all__ = ["AtomsDataModule"]
 
@@ -56,19 +56,19 @@ class AtomsDataModule(pl.LightningDataModule):
         self,
         dataset: ASEAtomsData,
         batch_size: int,
-        num_train: Union[int, float],
-        num_val: Union[int, float],
-        num_test: Optional[Union[int, float]] = None,
-        split_file: Optional[str] = "split.npz",
-        stats_file: Optional[str] = _DERIVE_STATS_FILE,
-        splitting: Optional[SplittingStrategy] = None,
+        num_train: int | float,
+        num_val: int | float,
+        num_test: int | float | None = None,
+        split_file: str | None = "split.npz",
+        stats_file: str | None = _DERIVE_STATS_FILE,
+        splitting: SplittingStrategy | None = None,
         num_workers: int = 0,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
-        train_sampler_cls: Optional[Type] = None,
-        train_sampler_args: Optional[Dict[str, Any]] = None,
+        val_batch_size: int | None = None,
+        test_batch_size: int | None = None,
+        train_sampler_cls: type | None = None,
+        train_sampler_args: dict[str, Any] | None = None,
         pin_memory: bool = False,
-        provider: Optional[Type] = None,
+        provider: type | None = None,
         **kwargs,
     ):
         """
@@ -136,7 +136,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self.train_idx = None
         self.val_idx = None
         self.test_idx = None
-        self.train_fingerprint: Optional[str] = None
+        self.train_fingerprint: str | None = None
 
         self._train_dataset = None
         self._val_dataset = None
@@ -147,7 +147,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self._test_dataloader = None
 
         self._provider_cls = provider or StatsAtomrefProvider
-        self.provider: Optional[StatsAtomrefProvider] = None
+        self.provider: StatsAtomrefProvider | None = None
 
         self.train_sampler_cls = train_sampler_cls
         self.train_sampler_args = train_sampler_args or {}
@@ -170,7 +170,7 @@ class AtomsDataModule(pl.LightningDataModule):
             raise RuntimeError("Call setup() before accessing test_dataset.")
         return self._test_dataset
 
-    def setup(self, stage: Optional[str] = None) -> None:
+    def setup(self, stage: str | None = None) -> None:
         # Lightning calls setup() once per stage; recreating the subsets and
         # the stats provider would drop the statistics cache between stages.
         if self._train_dataset is not None:
@@ -202,7 +202,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self._val_dataset.initialize_transforms(self.provider)
         self._test_dataset.initialize_transforms(self.provider)
 
-    def teardown(self, stage: Optional[str] = None) -> None:
+    def teardown(self, stage: str | None = None) -> None:
         # Transforms with external resources (e.g. cached neighbor lists)
         # rely on teardown() being called.
         for ds in (self._train_dataset, self._val_dataset, self._test_dataset):
@@ -218,14 +218,14 @@ class AtomsDataModule(pl.LightningDataModule):
     # statistics on already-transformed data and end up with wrong offsets.
     def get_stats(
         self, property: str, divide_by_atoms: bool, remove_atomref: bool
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if self.provider is None:
             raise RuntimeError("Call setup() before accessing statistics.")
         return self.provider.get_stats(property, divide_by_atoms, remove_atomref)
 
     def get_atomrefs(
         self, property: str, is_extensive: bool, estimate: bool = True
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         if self.provider is None:
             raise RuntimeError("Call setup() before accessing atomrefs.")
         return self.provider.get_atomrefs(property, is_extensive, estimate)
@@ -239,7 +239,7 @@ class AtomsDataModule(pl.LightningDataModule):
         with lock:
             total_size = len(self.dataset)
 
-            def _to_abs(x: Optional[Union[int, float]]) -> Optional[int]:
+            def _to_abs(x: int | float | None) -> int | None:
                 if x is None:
                     return None
                 if isinstance(x, float) and x <= 1.0:

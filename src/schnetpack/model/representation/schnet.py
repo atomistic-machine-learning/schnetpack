@@ -1,11 +1,12 @@
-from typing import Callable, Dict, Union, Optional, List
+from collections.abc import Callable
+
 import torch
 from torch import nn
+
+import schnetpack.nn as snn
 import schnetpack.properties as properties
 from schnetpack.nn import Dense, scatter_add
 from schnetpack.nn.activations import shifted_softplus
-
-import schnetpack.nn as snn
 
 __all__ = ["SchNet", "SchNetInteraction"]
 
@@ -27,7 +28,7 @@ class SchNetInteraction(nn.Module):
             n_filters: number of filters used in continuous-filter convolution.
             activation: if None, no activation function is used.
         """
-        super(SchNetInteraction, self).__init__()
+        super().__init__()
         self.in2f = Dense(n_atom_basis, n_filters, bias=False, activation=None)
         self.f2out = nn.Sequential(
             Dense(n_filters, n_atom_basis, activation=activation),
@@ -93,11 +94,11 @@ class SchNet(nn.Module):
         n_interactions: int,
         radial_basis: nn.Module,
         cutoff_fn: Callable,
-        n_filters: int = None,
+        n_filters: int | None = None,
         shared_interactions: bool = False,
-        activation: Union[Callable, nn.Module] = shifted_softplus,
-        nuclear_embedding: Optional[nn.Module] = None,
-        electronic_embeddings: Optional[List] = None,
+        activation: Callable | nn.Module = shifted_softplus,
+        nuclear_embedding: nn.Module | None = None,
+        electronic_embeddings: list | None = None,
     ):
         """
         Args:
@@ -143,8 +144,7 @@ class SchNet(nn.Module):
             shared_interactions,
         )
 
-    def forward(self, inputs: Dict[str, torch.Tensor]):
-
+    def forward(self, inputs: dict[str, torch.Tensor]):
         # get tensors from input dictionary
         atomic_numbers = inputs[properties.Z]
         r_ij = inputs[properties.Rij]

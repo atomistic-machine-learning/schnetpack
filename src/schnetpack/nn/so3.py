@@ -1,10 +1,13 @@
 import math
+
 import torch
 import torch.nn as nn
+
 import schnetpack.nn as snn
-from .ops.so3 import generate_clebsch_gordan_rsh, sparsify_clebsch_gordon, sh_indices
-from .ops.math import binom
 from schnetpack.utils import as_dtype
+
+from .ops.math import binom
+from .ops.so3 import generate_clebsch_gordan_rsh, sh_indices, sparsify_clebsch_gordon
 
 __all__ = [
     "RealSphericalHarmonics",

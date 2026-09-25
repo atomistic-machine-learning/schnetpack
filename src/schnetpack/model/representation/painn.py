@@ -1,11 +1,11 @@
-from typing import Callable, Dict, Optional, Union, List
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import schnetpack.properties as properties
 import schnetpack.nn as snn
+import schnetpack.properties as properties
 
 __all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
 
@@ -19,7 +19,7 @@ class PaiNNInteraction(nn.Module):
             n_atom_basis: number of features to describe atomic environments.
             activation: if None, no activation function is used.
         """
-        super(PaiNNInteraction, self).__init__()
+        super().__init__()
         self.n_atom_basis = n_atom_basis
 
         self.interatomic_context_net = nn.Sequential(
@@ -76,7 +76,7 @@ class PaiNNMixing(nn.Module):
             activation: if None, no activation function is used.
             epsilon: stability constant added in norm to prevent numerical instabilities
         """
-        super(PaiNNMixing, self).__init__()
+        super().__init__()
         self.n_atom_basis = n_atom_basis
 
         self.intraatomic_context_net = nn.Sequential(
@@ -132,14 +132,14 @@ class PaiNN(nn.Module):
         n_atom_basis: int,
         n_interactions: int,
         radial_basis: nn.Module,
-        cutoff_fn: Optional[Callable] = None,
-        activation: Optional[Callable] = F.silu,
+        cutoff_fn: Callable | None = None,
+        activation: Callable | None = F.silu,
         shared_interactions: bool = False,
         shared_filters: bool = False,
         epsilon: float = 1e-8,
         norm_epsilon: float = 0.0,
-        nuclear_embedding: Optional[nn.Module] = None,
-        electronic_embeddings: Optional[List] = None,
+        nuclear_embedding: nn.Module | None = None,
+        electronic_embeddings: list | None = None,
     ):
         """
         Args:
@@ -163,7 +163,7 @@ class PaiNN(nn.Module):
             electronic_embeddings: list of electronic embeddings. E.g. for spin and
                 charge (see spk.nn.embeddings.ElectronicEmbedding)
         """
-        super(PaiNN, self).__init__()
+        super().__init__()
 
         self.n_atom_basis = n_atom_basis
         self.n_interactions = n_interactions
@@ -210,7 +210,7 @@ class PaiNN(nn.Module):
             shared_interactions,
         )
 
-    def forward(self, inputs: Dict[str, torch.Tensor]):
+    def forward(self, inputs: dict[str, torch.Tensor]):
         """
         Compute atomic representations/embeddings.
 

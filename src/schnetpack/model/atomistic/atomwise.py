@@ -1,4 +1,4 @@
-from typing import Sequence, Union, Callable, Dict, Optional
+from collections.abc import Callable, Sequence
 
 import torch
 import torch.nn as nn
@@ -22,12 +22,12 @@ class Atomwise(nn.Module):
         self,
         n_in: int,
         n_out: int = 1,
-        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_hidden: int | Sequence[int] | None = None,
         n_layers: int = 2,
         activation: Callable = F.silu,
         aggregation_mode: str = "sum",
         output_key: str = "y",
-        per_atom_output_key: Optional[str] = None,
+        per_atom_output_key: str | None = None,
     ):
         """
         Args:
@@ -43,7 +43,7 @@ class Atomwise(nn.Module):
             output_key: the key under which the result will be stored
             per_atom_output_key: If not None, the key under which the per-atom result will be stored
         """
-        super(Atomwise, self).__init__()
+        super().__init__()
         self.output_key = output_key
         self.model_outputs = [output_key]
         self.per_atom_output_key = per_atom_output_key
@@ -66,7 +66,7 @@ class Atomwise(nn.Module):
         )
         self.aggregation_mode = aggregation_mode
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         # predict atomwise contributions
         y = self.outnet(inputs["scalar_representation"])
 
@@ -79,10 +79,10 @@ class Atomwise(nn.Module):
             idx_m = inputs[properties.idx_m]
             maxm = int(idx_m[-1]) + 1
             y = snn.scatter_add(y, idx_m, dim_size=maxm)
-            y = torch.squeeze(y, -1)
-
             if self.aggregation_mode == "avg":
-                y = y / inputs[properties.n_atoms]
+                y = y / inputs[properties.n_atoms].unsqueeze(-1)
+
+            y = torch.squeeze(y, -1)
 
         inputs[self.output_key] = y
         return inputs
@@ -108,7 +108,7 @@ class AtomwiseVector(nn.Module):
         self,
         n_in: int,
         n_layers: int = 2,
-        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_hidden: int | Sequence[int] | None = None,
         activation: Callable = F.silu,
         output_key: str = "vector",
     ):
@@ -137,7 +137,7 @@ class AtomwiseVector(nn.Module):
             sactivation=activation,
         )
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         scalars = inputs["scalar_representation"]
         vectors = inputs["vector_representation"]
         _, vectors = self.outnet((scalars, vectors))
@@ -167,7 +167,7 @@ class DipoleMoment(nn.Module):
     def __init__(
         self,
         n_in: int,
-        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_hidden: int | Sequence[int] | None = None,
         n_layers: int = 2,
         activation: Callable = F.silu,
         predict_magnitude: bool = False,
@@ -286,7 +286,7 @@ class Polarizability(nn.Module):
     def __init__(
         self,
         n_in: int,
-        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_hidden: int | Sequence[int] | None = None,
         n_layers: int = 2,
         activation: Callable = F.silu,
         polarizability_key: str = properties.polarizability,
@@ -303,7 +303,7 @@ class Polarizability(nn.Module):
             activation: activation function
             polarizability_key: the key under which the predicted polarizability will be stored
         """
-        super(Polarizability, self).__init__()
+        super().__init__()
         self.n_in = n_in
         self.n_layers = n_layers
         self.n_hidden = n_hidden
