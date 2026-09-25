@@ -11,12 +11,11 @@ import torch
 from ase.io import read
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf, open_dict
-from pytorch_lightning import seed_everything
 
 import schnetpack.md
 from schnetpack.md.utils import MDConfigMerger, get_npt_integrator, is_rpmd_integrator
 from schnetpack.utils import int2precision, str2class
-from schnetpack.utils.script import print_config
+from schnetpack.utils.script import print_config, seed_everything
 
 log = logging.getLogger(__name__)
 

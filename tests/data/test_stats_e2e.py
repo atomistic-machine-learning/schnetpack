@@ -14,7 +14,8 @@ import os
 import torch
 
 import schnetpack.properties as structure
-from schnetpack.data import ASEAtomsData, AtomsDataModule, estimate_atomrefs
+from schnetpack.data import ASEAtomsData, estimate_atomrefs
+from schnetpack.lightning import AtomsDataModule
 from schnetpack.model import AtomisticModel
 from schnetpack.transform import AddOffsets, RemoveOffsets
 

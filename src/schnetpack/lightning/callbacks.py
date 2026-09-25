@@ -9,7 +9,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint as BaseModelCheckpoint
 from torch_ema import ExponentialMovingAverage as EMA
 
 from schnetpack import properties
-from schnetpack.task import AtomisticTask
+from schnetpack.lightning.task import AtomisticTask
 
 __all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
 

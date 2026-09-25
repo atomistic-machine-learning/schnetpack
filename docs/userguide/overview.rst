@@ -29,13 +29,13 @@ dataloaders.
 Important preprocessing :class:`Transform`s include removing of offsets from target properties
 and calculation of neighbor lists.
 
-Furthermore, we support PyTorch Lightning datamodules through :class:`AtomsDataModule`,
+Furthermore, we support PyTorch Lightning datamodules through :class:`lightning.AtomsDataModule`,
 which combines :class:`ASEAtomsData` with code for preparation, setup and partitioning
 into train/validation/test splits. The datamodule also owns the training statistics
 (per-property mean/std and atom references): it exposes them via ``get_stats`` and
 ``get_atomrefs``, initializes all transforms that require them, and persists computed
 values next to the split file so reruns read instead of recompute. We provide specific
-implementations of :class:`AtomsDataModule` for several benchmark datasets.
+implementations of :class:`lightning.AtomsDataModule` for several benchmark datasets.
 
 
 Model
@@ -88,12 +88,12 @@ Task
 ====
 .. currentmodule:: task
 
-The :class:`AtomisticTask` ties the model, outputs, loss and optimizers together and defines
+The :class:`lightning.AtomisticTask` ties the model, outputs, loss and optimizers together and defines
 how the neural network will be trained. While the model is a vanilla PyTorch module,
 the task is a :class:`LightningModule` that can be directly passed to the
 PyTorch Lightning :class:`Trainer`.
 
-To define an :class:`AtomisticTask`, you need to provide:
+To define an :class:`lightning.AtomisticTask`, you need to provide:
 
 * a model as described above
 

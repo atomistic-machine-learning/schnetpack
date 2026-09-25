@@ -15,16 +15,6 @@ Atoms data
     AtomsLoader
     StratifiedSampler
 
-Data modules
-------------
-
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
-    :template: classtemplate.rst
-
-    AtomsDataModule
-
 Statistics
 ----------
 

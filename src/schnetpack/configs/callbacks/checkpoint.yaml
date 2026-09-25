@@ -1,5 +1,5 @@
 model_checkpoint:
-    _target_: schnetpack.train.ModelCheckpoint
+    _target_: schnetpack.lightning.ModelCheckpoint
     monitor: "val_loss"      # name of the logged metric which determines when model is improving
     save_top_k: 1           # save k best models (determined by above metric)
     save_last: True         # additionaly always save model from last epoch

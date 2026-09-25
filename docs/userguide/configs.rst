@@ -107,9 +107,9 @@ the command::
     │         cooldown: 10
     │         min_lr: 0.0
     │         smoothing_factor: 0.0
-    │       _target_: schnetpack.AtomisticTask
+    │       _target_: schnetpack.lightning.AtomisticTask
     │       outputs:
-    │       - _target_: schnetpack.task.ModelOutput
+    │       - _target_: schnetpack.ModelOutput
     │         name: ${globals.property}
     │         loss_fn:
     │           _target_: torch.nn.MSELoss
@@ -151,7 +151,7 @@ the command::
     │
     ├── callbacks
     │   └── model_checkpoint:
-    │         _target_: schnetpack.train.ModelCheckpoint
+    │         _target_: schnetpack.lightning.ModelCheckpoint
     │         monitor: val_loss
     │         save_top_k: 1
     │         save_last: true
@@ -210,9 +210,9 @@ Here is a description of the purpose of the different config groups:
 
 * **run**: defines run-specific variables, such as the run ``id``, or working and data directories
 * **globals**: defines custom variables that can be reused across the whole config by making use of the interpolation syntax ``${globals.variable}``
-* **data**: defines the :class:`data.AtomsDataModule` to be used
+* **data**: defines the :class:`lightning.AtomsDataModule` to be used
 * **model**: defines the :class:`model.AtomisticModel` to be used
-* **task**: defines the :class:`task.AtomisticTask`
+* **task**: defines the :class:`lightning.AtomisticTask`
 * **trainer**: configure the PyTorchLightning ``Trainer``
 * **callbacks**: a list of callbacks for the PyTorchLightning ``Trainer``
 * **logger**: a dictionary of training logger that is passed to the trainer
@@ -258,7 +258,7 @@ of the hierarchy, i.e. it directly overrides `train.yaml``.
 Then, the defaults for the model and data config groups are overridden.
 
 The configs for the :class:`model.NeuralNetworkPotential` (``nnp``) and the
-:class:`dataset.AtomsDataModule` (``qm9``) are predefined in the respective directories
+:class:`lightning.AtomsDataModule` (``qm9``) are predefined in the respective directories
 of their config groups. E.g., the data config loads the predefined
 ``AtomsDataModule`` for QM9 that automatically downloads the dataset and sets the
 units that the property should be converted to::
@@ -338,7 +338,7 @@ The missing part is to define the task that should be solved during the training
 
     task:
       outputs:
-        - _target_: schnetpack.task.ModelOutput
+        - _target_: schnetpack.ModelOutput
           name: ${globals.property}
           loss_fn:
             _target_: torch.nn.MSELoss
@@ -349,7 +349,7 @@ The missing part is to define the task that should be solved during the training
               _target_: torchmetrics.regression.MeanSquaredError
           loss_weight: 1.
 
-This last section modifies the config of :class:`task.AtomisticTask` by setting a custom
+This last section modifies the config of :class:`lightning.AtomisticTask` by setting a custom
 list of model outputs. In this case, we use the mean squared error as a loss on
 the predicted property. When the ``target_name`` is nor explicitly set, it is assumed to
 be identical with the ``name`` of the prediction.

@@ -141,7 +141,7 @@ The losses are defined as part of output definitions in the ``task`` config grou
 
     task:
       outputs:
-        - _target_: schnetpack.task.ModelOutput
+        - _target_: schnetpack.ModelOutput
           name: ${globals.energy_key}
           loss_fn:
             _target_: torch.nn.MSELoss
@@ -151,7 +151,7 @@ The losses are defined as part of output definitions in the ``task`` config grou
             mse:
               _target_: torchmetrics.regression.MeanSquaredError
           loss_weight: 0.005
-        - _target_: schnetpack.task.ModelOutput
+        - _target_: schnetpack.ModelOutput
           name: ${globals.forces_key}
           loss_fn:
             _target_: torch.nn.MSELoss

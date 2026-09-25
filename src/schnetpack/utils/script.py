@@ -1,40 +1,50 @@
+import functools
+import os
+import random
 from collections.abc import Sequence
 
-import pytorch_lightning as pl
+import numpy as np
 import rich
+import torch
 import yaml
 from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning.utilities import rank_zero_only
 from rich.syntax import Syntax
 from rich.tree import Tree
 
-__all__ = ["log_hyperparameters", "print_config"]
+__all__ = ["print_config", "seed_everything"]
 
 
-def empty(*args, **kwargs):
-    pass
+def _global_rank() -> int:
+    """Global process rank as set by the launcher (torchrun, SLURM, ...)."""
+    for key in ("RANK", "LOCAL_RANK", "SLURM_PROCID", "JSM_NAMESPACE_RANK"):
+        rank = os.environ.get(key)
+        if rank is not None:
+            return int(rank)
+    return 0
+
+
+def rank_zero_only(fn):
+    """Call ``fn`` only on the process with global rank 0."""
+
+    @functools.wraps(fn)
+    def wrapped(*args, **kwargs):
+        if _global_rank() == 0:
+            return fn(*args, **kwargs)
+        return None
+
+    return wrapped
+
+
+def seed_everything(seed: int) -> None:
+    """Seed the random number generators of python, numpy and torch."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 
 def todict(config: DictConfig | dict):
     config_dict = yaml.safe_load(OmegaConf.to_yaml(config, resolve=True))
     return config_dict
-
-
-@rank_zero_only
-def log_hyperparameters(
-    config: DictConfig,
-    model: pl.LightningModule,
-    trainer: pl.Trainer,
-) -> None:
-    """
-    This saves Hydra config using Lightning loggers.
-    """
-
-    # send hparams to all loggers
-    trainer.logger.log_hyperparams(config)
-
-    # disable logging any more hyperparameters for all loggers
-    trainer.logger.log_hyperparams = empty
 
 
 @rank_zero_only

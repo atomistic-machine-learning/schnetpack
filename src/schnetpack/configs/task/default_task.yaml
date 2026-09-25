@@ -3,6 +3,6 @@ defaults:
   - optimizer: adam
   - scheduler: reduce_on_plateau
 
-_target_: schnetpack.AtomisticTask
+_target_: schnetpack.lightning.AtomisticTask
 outputs: ???
 warmup_steps: 0

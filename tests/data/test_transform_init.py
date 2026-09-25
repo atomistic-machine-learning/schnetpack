@@ -8,8 +8,9 @@ import pytest
 import torch
 
 import schnetpack.properties as structure
-from schnetpack.data import ASEAtomsData, AtomsDataModule
+from schnetpack.data import ASEAtomsData
 from schnetpack.data.provider import StatsAtomrefProvider
+from schnetpack.lightning import AtomsDataModule
 from schnetpack.transform import AddOffsets, RemoveOffsets, ScaleProperty
 
 from .conftest import ENERGY, H_ATOMREF, O_ATOMREF

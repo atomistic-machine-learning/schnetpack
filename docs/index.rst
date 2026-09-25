@@ -58,7 +58,8 @@ Contents
    api/schnetpack
    api/data
    api/datasets
-   api/task
+   api/objectives
+   api/lightning
    api/model
    api/nn
    api/train

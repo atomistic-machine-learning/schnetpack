@@ -18,17 +18,16 @@ from pytorch_lightning import (
 )
 from pytorch_lightning.loggers.logger import Logger
 
-import schnetpack as spk
 from schnetpack import properties
 from schnetpack.data import ASEAtomsData, AtomsLoader
-from schnetpack.train import PredictionWriter
-from schnetpack.utils import (
-    load_model,
+from schnetpack.lightning import AtomisticTask, PredictionWriter
+from schnetpack.lightning.utils import (
     load_task_from_checkpoint,
-    str2class,
+    log_hyperparameters,
     trainer_fit_kwargs_for_checkpoint,
 )
-from schnetpack.utils.script import log_hyperparameters, print_config
+from schnetpack.utils import load_model, str2class
+from schnetpack.utils.script import print_config
 
 log = logging.getLogger(__name__)
 
@@ -140,7 +139,7 @@ def train(config: DictConfig):
         str2class(config.task.scheduler_cls) if config.task.scheduler_cls else None
     )
 
-    task: spk.AtomisticTask = hydra.utils.instantiate(
+    task: AtomisticTask = hydra.utils.instantiate(
         config.task,
         model=model,
         optimizer_cls=str2class(config.task.optimizer_cls),

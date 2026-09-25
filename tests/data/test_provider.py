@@ -76,7 +76,7 @@ def test_get_atomrefs_strict_raises_without_dataset_values(stats_dbpath):
 def test_datamodule_get_atomrefs_passes_estimate_through(
     stats_dbpath, tmp_path, monkeypatch
 ):
-    from schnetpack.data import AtomsDataModule
+    from schnetpack.lightning import AtomsDataModule
 
     monkeypatch.chdir(tmp_path)
     dm = AtomsDataModule(

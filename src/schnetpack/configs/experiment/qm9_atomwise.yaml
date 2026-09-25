@@ -40,7 +40,7 @@ model:
 
 task:
   outputs:
-    - _target_: schnetpack.task.ModelOutput
+    - _target_: schnetpack.ModelOutput
       name: ${globals.property}
       loss_fn:
         _target_: torch.nn.MSELoss

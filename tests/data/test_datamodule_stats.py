@@ -10,11 +10,11 @@ import torch
 import schnetpack.data.provider
 from schnetpack.data import (
     ASEAtomsData,
-    AtomsDataModule,
     calculate_stats,
     estimate_atomrefs,
 )
 from schnetpack.data.provider import StatsAtomrefProvider
+from schnetpack.lightning import AtomsDataModule
 
 from .conftest import ENERGY, H_ATOMREF
 

@@ -8,7 +8,7 @@ so a model can be trained in a hand-written PyTorch loop:
     loss = compute_loss(outputs, model, batch)
     loss.backward()
 
-:class:`schnetpack.AtomisticTask` uses these same functions for training with
+:class:`schnetpack.lightning.AtomisticTask` uses these same functions for training with
 the PyTorch Lightning Trainer.
 """
 

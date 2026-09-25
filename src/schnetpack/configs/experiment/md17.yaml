@@ -45,7 +45,7 @@ model:
 
 task:
   outputs:
-    - _target_: schnetpack.task.ModelOutput
+    - _target_: schnetpack.ModelOutput
       name: ${globals.energy_key}
       loss_fn:
         _target_: torch.nn.MSELoss
@@ -56,7 +56,7 @@ task:
           _target_: torchmetrics.regression.MeanSquaredError
           squared: False
       loss_weight: 0.01
-    - _target_: schnetpack.task.ModelOutput
+    - _target_: schnetpack.ModelOutput
       name: ${globals.forces_key}
       loss_fn:
         _target_: torch.nn.MSELoss

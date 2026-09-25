@@ -4,9 +4,9 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from torchmetrics import MeanAbsoluteError
 
+from schnetpack.lightning import AtomisticTask
 from schnetpack.model.base import AtomisticModel
 from schnetpack.objectives import ModelOutput, compute_loss
-from schnetpack.task import AtomisticTask
 
 
 class LinearModel(AtomisticModel):
