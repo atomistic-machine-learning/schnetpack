@@ -15,7 +15,8 @@ import copy
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any, Iterable, Union
+from collections.abc import Iterable
+from typing import Any
 
 import fasteners
 import torch
@@ -44,15 +45,15 @@ class ASEAtomsData(torch.utils.data.Dataset):
     def __init__(
         self,
         datapath: str,
-        load_properties: Optional[List[str]] = None,
+        load_properties: list[str] | None = None,
         load_structure: bool = True,
-        transforms: Optional[List[Transform]] = None,
-        train_transforms: Optional[List[Transform]] = None,
-        val_transforms: Optional[List[Transform]] = None,
-        test_transforms: Optional[List[Transform]] = None,
-        subset_idx: Optional[List[int]] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
+        transforms: list[Transform] | None = None,
+        train_transforms: list[Transform] | None = None,
+        val_transforms: list[Transform] | None = None,
+        test_transforms: list[Transform] | None = None,
+        subset_idx: list[int] | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
     ):
         """
         Args:
@@ -85,7 +86,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
         self.test_transforms = list(test_transforms) if test_transforms else None
         self.split = None
 
-        self._load_properties: Optional[List[str]] = None
+        self._load_properties: list[str] | None = None
         self.load_structure = load_structure
 
         # units from metadata
@@ -115,7 +116,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
     # ---------- merged ASEAtomsData bits ----------
 
-    def subset(self, subset_idx: List[int], split: Optional[str] = None):
+    def subset(self, subset_idx: list[int], split: str | None = None):
         if subset_idx is None:
             raise ValueError("subset_idx must be provided.")
         ds = copy.copy(self)
@@ -127,13 +128,13 @@ class ASEAtomsData(torch.utils.data.Dataset):
         return ds
 
     @property
-    def load_properties(self) -> List[str]:
+    def load_properties(self) -> list[str]:
         if self._load_properties is None:
             return self.available_properties
         return self._load_properties
 
     @load_properties.setter
-    def load_properties(self, val: Optional[List[str]]):
+    def load_properties(self, val: list[str] | None):
         if val is not None:
             props = self.available_properties
             missing = [p for p in val if p not in props]
@@ -148,7 +149,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
             return len(self.subset_idx)
         return self.conn.count()
 
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         if self.subset_idx is not None:
             idx = self.subset_idx[idx]
         props = self._get_properties(
@@ -156,7 +157,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
         )
         return self._apply_transforms(props)
 
-    def get_split_transforms(self) -> List[Transform]:
+    def get_split_transforms(self) -> list[Transform]:
         if self.split == "train" and self.train_transforms is not None:
             return self.train_transforms
         if self.split == "val" and self.val_transforms is not None:
@@ -171,8 +172,8 @@ class ASEAtomsData(torch.utils.data.Dataset):
                 tf.initialize(stats)
 
     def _apply_transforms(
-        self, props: Dict[str, torch.Tensor]
-    ) -> Dict[str, torch.Tensor]:
+        self, props: dict[str, torch.Tensor]
+    ) -> dict[str, torch.Tensor]:
         for tf in self.get_split_transforms():
             props = tf(props)
         return props
@@ -205,11 +206,11 @@ class ASEAtomsData(torch.utils.data.Dataset):
     # ---------- metadata / units -----------
 
     @property
-    def metadata(self) -> Dict[str, Any]:
+    def metadata(self) -> dict[str, Any]:
         with connect(self.datapath, use_lock_file=False) as conn:
             return conn.metadata
 
-    def _set_metadata(self, val: Dict[str, Any]):
+    def _set_metadata(self, val: dict[str, Any]):
         with connect(self.datapath, use_lock_file=False) as conn:
             conn.metadata = val
 
@@ -221,16 +222,16 @@ class ASEAtomsData(torch.utils.data.Dataset):
         self._set_metadata(md)
 
     @property
-    def available_properties(self) -> List[str]:
+    def available_properties(self) -> list[str]:
         md = self.metadata
         return list(md["_property_unit_dict"].keys())
 
     @property
-    def units(self) -> Dict[str, str]:
+    def units(self) -> dict[str, str]:
         return self._units
 
     @property
-    def atomrefs(self) -> Dict[str, torch.Tensor]:
+    def atomrefs(self) -> dict[str, torch.Tensor]:
         md = self.metadata
         arefs = md.get("atomrefs", {})
         return {k: self.conversions[k] * torch.tensor(v) for k, v in arefs.items()}
@@ -239,9 +240,9 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
     def iter_properties(
         self,
-        indices: Union[int, Iterable[int]] = None,
-        load_properties: Optional[List[str]] = None,
-        load_structure: Optional[bool] = None,
+        indices: int | Iterable[int] | None = None,
+        load_properties: list[str] | None = None,
+        load_structure: bool | None = None,
         load_metadata: bool = False,
     ):
         """
@@ -288,7 +289,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
         self,
         conn,
         idx: int,
-        load_properties: List[str],
+        load_properties: list[str],
         load_structure: bool,
         load_metadata: bool = False,
     ):
@@ -307,7 +308,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
         """
         row = conn.get(idx + 1)
         # TODO: can the copies be avoided?
-        properties: Dict[str, torch.Tensor] = {}
+        properties: dict[str, torch.Tensor] = {}
         properties[structure.idx] = torch.tensor([idx])
 
         for pname in load_properties:
@@ -340,8 +341,8 @@ class ASEAtomsData(torch.utils.data.Dataset):
         cls,
         datapath: str,
         distance_unit: str,
-        property_unit_dict: Dict[str, str],
-        atomrefs: Optional[Dict[str, List[float]]] = None,
+        property_unit_dict: dict[str, str],
+        atomrefs: dict[str, list[float]] | None = None,
         **kwargs,
     ) -> "ASEAtomsData":
         """
@@ -370,8 +371,8 @@ class ASEAtomsData(torch.utils.data.Dataset):
     def _write_empty_db(
         datapath: str,
         distance_unit: str,
-        property_unit_dict: Dict[str, str],
-        atomrefs: Optional[Dict[str, List[float]]] = None,
+        property_unit_dict: dict[str, str],
+        atomrefs: dict[str, list[float]] | None = None,
     ) -> None:
         if not datapath.endswith(".db"):
             raise AtomsDataError("Invalid datapath! Add '.db' extension.")
@@ -393,8 +394,8 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
     def add_system(
         self,
-        atoms: Optional[Atoms] = None,
-        atoms_metadata: Optional[Dict[str, Any]] = None,
+        atoms: Atoms | None = None,
+        atoms_metadata: dict[str, Any] | None = None,
         **properties,
     ):
         """
@@ -415,9 +416,9 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
     def add_systems(
         self,
-        property_list: List[Dict[str, Any]],
-        atoms_list: Optional[List[Atoms]] = None,
-        atoms_metadata_list: Optional[List[Dict[str, Any]]] = None,
+        property_list: list[dict[str, Any]],
+        atoms_list: list[Atoms] | None = None,
+        atoms_metadata_list: list[dict[str, Any]] | None = None,
     ):
         """
         Add atoms data to the dataset.
@@ -447,8 +448,8 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
     def _add_system(
         self,
-        atoms: Optional[Atoms] = None,
-        atoms_metadata: Optional[Dict[str, Any]] = None,
+        atoms: Atoms | None = None,
+        atoms_metadata: dict[str, Any] | None = None,
         **properties,
     ):
         """

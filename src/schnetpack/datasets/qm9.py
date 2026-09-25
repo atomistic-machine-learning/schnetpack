@@ -5,18 +5,16 @@ import re
 import shutil
 import tarfile
 import tempfile
-from typing import Dict, List, Optional
 from urllib import request as request
 
 import numpy as np
 from ase import Atoms
-from ase.io.extxyz import read_xyz
 from ase.db import connect
-
+from ase.io.extxyz import read_xyz
 from tqdm import tqdm
 
 import schnetpack.properties as structure
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
 
 __all__ = ["QM9"]
@@ -57,14 +55,14 @@ class QM9(DownloadableASEAtomsData):
         self,
         datapath: str,
         remove_uncharacterized: bool = False,
-        load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[Transform]] = None,
-        train_transforms: Optional[List[Transform]] = None,
-        val_transforms: Optional[List[Transform]] = None,
-        test_transforms: Optional[List[Transform]] = None,
-        subset_idx: Optional[List[int]] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
+        load_properties: list[str] | None = None,
+        transforms: list[Transform] | None = None,
+        train_transforms: list[Transform] | None = None,
+        val_transforms: list[Transform] | None = None,
+        test_transforms: list[Transform] | None = None,
+        subset_idx: list[int] | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
         **kwargs,
     ):
         """
@@ -98,7 +96,7 @@ class QM9(DownloadableASEAtomsData):
         )
 
     @staticmethod
-    def _native_property_units() -> Dict[str, str]:
+    def _native_property_units() -> dict[str, str]:
         return {
             QM9.A: "GHz",
             QM9.B: "GHz",
@@ -170,7 +168,7 @@ class QM9(DownloadableASEAtomsData):
             f"Could not download file with id {file_id} from any source."
         )
 
-    def _download_uncharacterized(self, tmpdir: str) -> List[int]:
+    def _download_uncharacterized(self, tmpdir: str) -> list[int]:
         logging.info("Downloading list of uncharacterized molecules...")
         tmp_path = os.path.join(tmpdir, "uncharacterized.txt")
         self._download_file(self.file_ids["uncharacterized"], tmp_path)
@@ -183,7 +181,7 @@ class QM9(DownloadableASEAtomsData):
                 uncharacterized.append(int(line.split()[0]))
         return uncharacterized
 
-    def _download_atomrefs(self, tmpdir: str) -> Dict[str, List[float]]:
+    def _download_atomrefs(self, tmpdir: str) -> dict[str, list[float]]:
         logging.info("Downloading GDB-9 atom references...")
         tmp_path = os.path.join(tmpdir, "atomrefs.txt")
         self._download_file(self.file_ids["atomrefs"], tmp_path)
@@ -203,9 +201,8 @@ class QM9(DownloadableASEAtomsData):
     def _download_data(
         self,
         tmpdir: str,
-        uncharacterized: Optional[List[int]],
+        uncharacterized: list[int] | None,
     ) -> None:
-
         logging.info("Downloading GDB-9 data...")
         tar_path = os.path.join(tmpdir, "gdb9.tar.gz")
         raw_path = os.path.join(tmpdir, "gdb9_xyz")
@@ -233,7 +230,7 @@ class QM9(DownloadableASEAtomsData):
             properties = {}
 
             tmp = io.StringIO()
-            with open(xyzfile, "r") as f:
+            with open(xyzfile) as f:
                 lines = f.readlines()
                 values = lines[1].split()[2:]
 

@@ -3,7 +3,6 @@ import os
 import shutil
 import tarfile
 import tempfile
-from typing import Dict, List, Optional
 from urllib import request as request
 from urllib.error import HTTPError, URLError
 
@@ -11,8 +10,8 @@ import numpy as np
 from ase.db import connect
 from tqdm import tqdm
 
+from schnetpack.data.atoms import AtomsDataError, DownloadableASEAtomsData
 from schnetpack.transform.base import Transform
-from schnetpack.data.atoms import DownloadableASEAtomsData, AtomsDataError
 
 __all__ = ["ISO17"]
 
@@ -42,14 +41,14 @@ class ISO17(DownloadableASEAtomsData):
         self,
         datapath: str,
         fold: str,
-        load_properties: Optional[List[str]] = None,
-        transforms: Optional[List[Transform]] = None,
-        train_transforms: Optional[List[Transform]] = None,
-        val_transforms: Optional[List[Transform]] = None,
-        test_transforms: Optional[List[Transform]] = None,
-        subset_idx: Optional[List[int]] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
+        load_properties: list[str] | None = None,
+        transforms: list[Transform] | None = None,
+        train_transforms: list[Transform] | None = None,
+        val_transforms: list[Transform] | None = None,
+        test_transforms: list[Transform] | None = None,
+        subset_idx: list[int] | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
         **kwargs,
     ):
         """
@@ -89,7 +88,7 @@ class ISO17(DownloadableASEAtomsData):
         )
 
     @staticmethod
-    def _native_property_units() -> Dict[str, str]:
+    def _native_property_units() -> dict[str, str]:
         return {
             ISO17.energy: "eV",
             ISO17.forces: "eV/Ang",

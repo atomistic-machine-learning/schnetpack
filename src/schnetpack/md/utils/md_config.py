@@ -1,9 +1,9 @@
 import copy
 import logging
-from omegaconf import DictConfig, open_dict, OmegaConf
-from schnetpack.utils import str2class
 
-from typing import List, Tuple
+from omegaconf import DictConfig, OmegaConf, open_dict
+
+from schnetpack.utils import str2class
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class MDConfigMerger:
         self,
         base_config: DictConfig,
         overwrite_config: DictConfig,
-        overrides: List[str],
+        overrides: list[str],
     ) -> DictConfig:
         """
         Combine two configs and re-apply overrides.
@@ -59,7 +59,7 @@ class MDConfigMerger:
 
     @staticmethod
     def _override_config_entries(
-        merge_config: DictConfig, base_config: DictConfig, overrides: List[List[str]]
+        merge_config: DictConfig, base_config: DictConfig, overrides: list[list[str]]
     ) -> DictConfig:
         """
         Re-apply overrides from base configs to config updated with the loaded config file. Traverses the list of lists
@@ -100,7 +100,7 @@ class MDConfigMerger:
 
     @staticmethod
     def _delete_config_entries(
-        merge_config: DictConfig, overrides: List[List[str]]
+        merge_config: DictConfig, overrides: list[list[str]]
     ) -> DictConfig:
         """
         Delete config entries given in the  overrides. Traverses the list of lists created from the overrides and
@@ -140,8 +140,8 @@ class MDConfigMerger:
         return merge_config
 
     def _parse_overrides(
-        self, overrides: List[str]
-    ) -> Tuple[List[List[str]], List[List[str]]]:
+        self, overrides: list[str]
+    ) -> tuple[list[list[str]], list[list[str]]]:
         """
         Parse hydra override entries, split them into modification and deletion events and then convert them into lists
         of lists of config keys which can be used for traversing the configs.
@@ -169,7 +169,7 @@ class MDConfigMerger:
         return overrides_modify, overrides_delete
 
     @staticmethod
-    def _convert_overrides(overrides: List[str]) -> List[List[str]]:
+    def _convert_overrides(overrides: list[str]) -> list[list[str]]:
         """
         Convert raw overrides into list of lists, removing override characters and using `/` and '.' to determine
         their structure.
@@ -228,22 +228,18 @@ def get_npt_integrator(integrator_type: str):
             # Look for constant pressure equivalent
             if integrator_type in integrator_to_npt:
                 log.info(
-                    "Switching integrator from {:s} to {:s} for constant pressure simulation...".format(
-                        integrator_type, integrator_to_npt[integrator_type]
-                    )
+                    f"Switching integrator from {integrator_type:s} to {integrator_to_npt[integrator_type]:s} for constant pressure simulation..."
                 )
                 return integrator_to_npt[integrator_type]
                 # If NPT suitability can not be determined automatically, good luck
             else:
                 log.warning(
-                    "No constant pressure equivalent for integrator {:s} could be found.".format(
-                        integrator_type
-                    )
+                    f"No constant pressure equivalent for integrator {integrator_type:s} could be found."
                 )
             return integrator_type
     else:
         log.warning(
-            "Please check whether integrator {:s} is suitable for constant pressure"
-            " simulations (`pressure control` attribute).".format(integrator_type)
+            f"Please check whether integrator {integrator_type:s} is suitable for constant pressure"
+            " simulations (`pressure control` attribute)."
         )
         return integrator_type

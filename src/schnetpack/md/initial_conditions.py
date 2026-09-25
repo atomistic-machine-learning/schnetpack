@@ -4,9 +4,9 @@ This entails sampling the momenta from random distributions corresponding to cer
 """
 
 import torch
-from schnetpack.md import System
+
 from schnetpack import units as spk_units
-from typing import Union, List
+from schnetpack.md import System
 
 __all__ = ["Initializer", "MaxwellBoltzmannInit", "UniformInit"]
 
@@ -32,7 +32,7 @@ class Initializer:
 
     def __init__(
         self,
-        temperature: Union[float, List[float]],
+        temperature: float | list[float],
         remove_center_of_mass: bool = True,
         remove_translation: bool = True,
         remove_rotation: bool = False,
@@ -102,13 +102,13 @@ class UniformInit(Initializer):
 
     def __init__(
         self,
-        temperature: Union[float, List[float]],
+        temperature: float | list[float],
         remove_center_of_mass: bool = True,
         remove_translation: bool = True,
         remove_rotation: bool = False,
         wrap_positions: bool = False,
     ):
-        super(UniformInit, self).__init__(
+        super().__init__(
             temperature,
             remove_center_of_mass=remove_center_of_mass,
             remove_translation=remove_translation,
@@ -152,13 +152,13 @@ class MaxwellBoltzmannInit(Initializer):
 
     def __init__(
         self,
-        temperature: Union[float, List[float]],
+        temperature: float | list[float],
         remove_center_of_mass: bool = True,
         remove_translation: bool = True,
         remove_rotation: bool = False,
         wrap_positions: bool = False,
     ):
-        super(MaxwellBoltzmannInit, self).__init__(
+        super().__init__(
             temperature,
             remove_center_of_mass=remove_center_of_mass,
             remove_translation=remove_translation,

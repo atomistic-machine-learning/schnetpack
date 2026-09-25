@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Optional, Union, List
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -7,7 +7,6 @@ import torch.nn.functional as F
 import schnetpack.nn as snn
 import schnetpack.nn.so3 as so3
 import schnetpack.properties as properties
-from schnetpack.nn import ElectronicEmbedding
 
 __all__ = ["SO3net"]
 
@@ -25,12 +24,12 @@ class SO3net(nn.Module):
         n_interactions: int,
         lmax: int,
         radial_basis: nn.Module,
-        cutoff_fn: Optional[Callable] = None,
+        cutoff_fn: Callable | None = None,
         shared_interactions: bool = False,
         return_vector_representation: bool = False,
-        activation: Optional[Callable] = F.silu,
-        nuclear_embedding: Optional[nn.Module] = None,
-        electronic_embeddings: Optional[List] = None,
+        activation: Callable | None = F.silu,
+        nuclear_embedding: nn.Module | None = None,
+        electronic_embeddings: list | None = None,
     ):
         """
         Args:
@@ -47,7 +46,7 @@ class SO3net(nn.Module):
             electronic_embeddings: list of electronic embeddings. E.g. for spin and
                 charge (see spk.nn.embeddings.ElectronicEmbedding)
         """
-        super(SO3net, self).__init__()
+        super().__init__()
 
         self.n_atom_basis = n_atom_basis
         self.n_interactions = n_interactions
@@ -100,7 +99,7 @@ class SO3net(nn.Module):
         )
         self.so3product = so3.SO3TensorProduct(lmax)
 
-    def forward(self, inputs: Dict[str, torch.Tensor]):
+    def forward(self, inputs: dict[str, torch.Tensor]):
         """
         Compute atomic representations/embeddings.
 

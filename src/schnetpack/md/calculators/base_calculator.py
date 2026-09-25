@@ -1,20 +1,20 @@
 from __future__ import annotations
-from typing import List, Union, Dict, Optional, Tuple
 
-from typing import TYPE_CHECKING
 from contextlib import nullcontext
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 if TYPE_CHECKING:
     from schnetpack.md import System
 
+import os
+
 import torch
 import torch.nn as nn
-from schnetpack import units as spk_units
-from schnetpack import properties
 
-import os
+from schnetpack import properties
+from schnetpack import units as spk_units
 
 __all__ = ["MDCalculator", "MDCalculatorError", "QMCalculator", "QMCalculatorError"]
 
@@ -49,16 +49,18 @@ class MDCalculator(nn.Module):
 
     def __init__(
         self,
-        required_properties: List,
+        required_properties: list,
         force_key: str,
-        energy_unit: Union[str, float],
-        position_unit: Union[str, float],
-        energy_key: Optional[str] = None,
-        stress_key: Optional[str] = None,
-        property_conversion: Dict[str, Union[str, float]] = {},
+        energy_unit: str | float,
+        position_unit: str | float,
+        energy_key: str | None = None,
+        stress_key: str | None = None,
+        property_conversion: dict[str, str | float] | None = None,
         gradients_required: bool = False,
     ):
-        super(MDCalculator, self).__init__()
+        if property_conversion is None:
+            property_conversion = {}
+        super().__init__()
         # Get required properties and filter non-unique entries
         self.required_properties = list(set(required_properties))
 
@@ -129,9 +131,7 @@ class MDCalculator(nn.Module):
             # Collect all requested properties (including forces)
             for p in self.required_properties:
                 if p not in self.results:
-                    raise MDCalculatorError(
-                        "Requested property {:s} not in " "results".format(p)
-                    )
+                    raise MDCalculatorError(f"Requested property {p:s} not in results")
                 else:
                     dim = self.results[p].shape
                     # Bring to general structure of MD code. Second dimension can be n_mol or n_mol x n_atoms.
@@ -268,19 +268,21 @@ class QMCalculator(MDCalculator):
 
     def __init__(
         self,
-        required_properties: List,
+        required_properties: list,
         force_key: str,
         compdir: str,
         qm_executable: str,
-        energy_unit: Union[str, float],
-        position_unit: Union[str, float],
-        energy_key: Optional[str] = None,
-        stress_key: Optional[str] = None,
-        property_conversion: Dict[str, Union[str, float]] = {},
+        energy_unit: str | float,
+        position_unit: str | float,
+        energy_key: str | None = None,
+        stress_key: str | None = None,
+        property_conversion: dict[str, str | float] | None = None,
         overwrite: bool = True,
         adaptive: bool = False,
     ):
-        super(QMCalculator, self).__init__(
+        if property_conversion is None:
+            property_conversion = {}
+        super().__init__(
             required_properties=required_properties,
             force_key=force_key,
             energy_unit=energy_unit,
@@ -289,8 +291,6 @@ class QMCalculator(MDCalculator):
             stress_key=stress_key,
             property_conversion=property_conversion,
         )
-
-        from os import path
 
         self.qm_executable = os.path.abspath(qm_executable)
 
@@ -304,7 +304,7 @@ class QMCalculator(MDCalculator):
         self.overwrite = overwrite
         self.adaptive = adaptive
 
-    def calculate(self, system: System, samples: Optional[np.array] = None):
+    def calculate(self, system: System, samples: np.array | None = None):
         """
         Perform the calculation with a quantum chemistry code.
         If samples is given, only a subset of molecules is selected.
@@ -335,9 +335,7 @@ class QMCalculator(MDCalculator):
         if self.overwrite:
             current_compdir = os.path.join(self.compdir)
         else:
-            current_compdir = os.path.join(
-                self.compdir, "step_{:06d}".format(self.step)
-            )
+            current_compdir = os.path.join(self.compdir, f"step_{self.step:06d}")
 
         if not os.path.exists(current_compdir):
             os.makedirs(current_compdir)
@@ -361,7 +359,7 @@ class QMCalculator(MDCalculator):
             atom_buffer, property_buffer = self._format_ase(molecules, outputs)
             return atom_buffer, property_buffer
 
-    def _extract_molecules(self, system: System, samples: Optional[np.array] = None):
+    def _extract_molecules(self, system: System, samples: np.array | None = None):
         """
         Extract atom types and molecular structures from the system. and convert to
         appropriate units.
@@ -398,7 +396,7 @@ class QMCalculator(MDCalculator):
         return molecules
 
     def _run_computation(
-        self, molecules: List[Tuple[np.array, np.array]], current_compdir: str
+        self, molecules: list[tuple[np.array, np.array]], current_compdir: str
     ):
         """
         Placeholder performing the computation.
@@ -410,7 +408,7 @@ class QMCalculator(MDCalculator):
         """
         raise NotImplementedError
 
-    def _format_calc(self, outputs: List[str], system: System):
+    def _format_calc(self, outputs: list[str], system: System):
         """
         Placeholder to format the computation output if no adaptive sampling is used.
 
@@ -421,7 +419,7 @@ class QMCalculator(MDCalculator):
         raise NotImplementedError
 
     def _format_ase(
-        self, molecules: List[Tuple[np.array, np.array]], outputs: List[str]
+        self, molecules: list[tuple[np.array, np.array]], outputs: list[str]
     ):
         """
         Placeholder to format the ouput for storage in an ASE database (for adaptive sampling).

@@ -1,7 +1,6 @@
 from .compatibility import *
 import importlib
 import torch
-from typing import Type, Union, List
 
 from schnetpack import properties as spk_properties
 
@@ -38,7 +37,7 @@ def as_dtype(dtype_str: str) -> torch.dtype:
     return TORCH_DTYPES[dtype_str]
 
 
-def int2precision(precision: Union[int, torch.dtype]):
+def int2precision(precision: int | torch.dtype):
     """
     Get torch floating point precision from integer.
     If an instance of torch.dtype is passed, it is returned automatically.
@@ -55,10 +54,10 @@ def int2precision(precision: Union[int, torch.dtype]):
         try:
             return getattr(torch, f"float{precision}")
         except AttributeError:
-            raise AttributeError(f"Unknown float precision {precision}")
+            raise AttributeError(f"Unknown float precision {precision}") from None
 
 
-def str2class(class_path: str) -> Type:
+def str2class(class_path: str) -> type:
     """
     Obtain a class type from a string
 
@@ -75,7 +74,7 @@ def str2class(class_path: str) -> Type:
     return cls
 
 
-def required_fields_from_properties(properties: List[str]) -> List[str]:
+def required_fields_from_properties(properties: list[str]) -> list[str]:
     """
     Determine required external fields based on the response properties to be computed.
 

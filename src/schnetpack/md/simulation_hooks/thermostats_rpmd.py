@@ -4,21 +4,22 @@ ring polymer molecular dynamics simulations.
 """
 
 from __future__ import annotations
-import torch
 
-from typing import Optional, List, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
+import torch
 
 if TYPE_CHECKING:
     from schnetpack.md.simulator import Simulator, System
 
+from schnetpack import units as spk_units
 from schnetpack.md.simulation_hooks.thermostats import (
-    LangevinThermostat,
     GLEThermostat,
-    ThermostatError,
+    LangevinThermostat,
     NHCThermostat,
+    ThermostatError,
 )
 from schnetpack.md.utils import load_gle_matrices
-from schnetpack import units as spk_units
 
 __all__ = [
     "PILELocalThermostat",
@@ -56,12 +57,10 @@ class PILELocalThermostat(LangevinThermostat):
         self,
         temperature_bath: float,
         time_constant: float,
-        thermostat_centroid: Optional[bool] = True,
-        damping_factor: Optional[float] = 1.0,
+        thermostat_centroid: bool | None = True,
+        damping_factor: float | None = 1.0,
     ):
-        super(PILELocalThermostat, self).__init__(
-            temperature_bath=temperature_bath, time_constant=time_constant
-        )
+        super().__init__(temperature_bath=temperature_bath, time_constant=time_constant)
         self.register_buffer("thermostat_centroid", torch.tensor(thermostat_centroid))
         self.register_buffer("damping_factor", torch.tensor(damping_factor))
 
@@ -140,9 +139,7 @@ class PILEGlobalThermostat(PILELocalThermostat):
     """
 
     def __init__(self, temperature_bath: float, time_constant: float):
-        super(PILEGlobalThermostat, self).__init__(
-            temperature_bath=temperature_bath, time_constant=time_constant
-        )
+        super().__init__(temperature_bath=temperature_bath, time_constant=time_constant)
 
     def _apply_thermostat(self, simulator: Simulator):
         """
@@ -226,7 +223,7 @@ class TRPMDThermostat(PILELocalThermostat):
     """
 
     def __init__(self, temperature_bath: float, damping_factor: float):
-        super(TRPMDThermostat, self).__init__(
+        super().__init__(
             temperature_bath=temperature_bath,
             time_constant=1.0,
             thermostat_centroid=False,
@@ -260,9 +257,9 @@ class RPMDGLEThermostat(GLEThermostat):
         self,
         temperature_bath: float,
         gle_file: str,
-        free_particle_limit: Optional[bool] = True,
+        free_particle_limit: bool | None = True,
     ):
-        super(RPMDGLEThermostat, self).__init__(
+        super().__init__(
             temperature_bath=temperature_bath,
             gle_file=gle_file,
             free_particle_limit=free_particle_limit,
@@ -317,7 +314,7 @@ class PIGLETThermostat(RPMDGLEThermostat):
     """
 
     def __init__(self, temperature_bath: float, gle_file: str):
-        super(PIGLETThermostat, self).__init__(
+        super().__init__(
             temperature_bath=temperature_bath,
             gle_file=gle_file,
             free_particle_limit=True,
@@ -342,13 +339,11 @@ class PIGLETThermostat(RPMDGLEThermostat):
         a_matrix, c_matrix = load_gle_matrices(self.gle_file)
 
         if a_matrix is None:
-            raise ThermostatError(
-                "Error reading GLE matrices " "from {:s}".format(self.gle_file)
-            )
+            raise ThermostatError(f"Error reading GLE matrices from {self.gle_file:s}")
         if a_matrix.shape[0] != simulator.system.n_replicas:
             raise ThermostatError(
-                "Expected {:d} beads but "
-                "found {:d}.".format(simulator.system.n_replicas, a_matrix.shape[0])
+                f"Expected {simulator.system.n_replicas:d} beads but "
+                f"found {a_matrix.shape[0]:d}."
             )
 
         all_c1 = []
@@ -399,12 +394,12 @@ class NHCRingPolymerThermostat(NHCThermostat):
         self,
         temperature_bath: float,
         time_constant: float,
-        local: Optional[bool] = True,
-        chain_length: Optional[int] = 3,
-        multi_step: Optional[int] = 2,
-        integration_order: Optional[int] = 3,
+        local: bool | None = True,
+        chain_length: int | None = 3,
+        multi_step: int | None = 2,
+        integration_order: int | None = 3,
     ):
-        super(NHCRingPolymerThermostat, self).__init__(
+        super().__init__(
             temperature_bath=temperature_bath,
             time_constant=time_constant,
             chain_length=chain_length,
@@ -414,7 +409,7 @@ class NHCRingPolymerThermostat(NHCThermostat):
         )
         self.register_buffer("local", torch.tensor(local))
 
-    def _init_masses(self, state_dimension: List[int], simulator: Simulator):
+    def _init_masses(self, state_dimension: list[int], simulator: Simulator):
         """
         Initialize masses according to the normal mode frequencies of the ring polymer system.
 

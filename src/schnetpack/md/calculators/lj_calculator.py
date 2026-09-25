@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Union, Dict
+
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from schnetpack.md.neighborlist_md import NeighborListMD
@@ -7,11 +8,10 @@ if TYPE_CHECKING:
 import torch
 import torch.nn as nn
 
-from schnetpack.md.calculators import SchNetPackCalculator
-
-from schnetpack import properties
 import schnetpack.nn as snn
+from schnetpack import properties
 from schnetpack.atomistic import Forces, PairwiseDistances, Strain
+from schnetpack.md.calculators import SchNetPackCalculator
 
 __all__ = ["LJCalculator", "LJModel"]
 
@@ -44,14 +44,16 @@ class LJCalculator(SchNetPackCalculator):
         r_equilibrium: float,
         well_depth: float,
         force_key: str,
-        energy_unit: Union[str, float],
-        position_unit: Union[str, float],
+        energy_unit: str | float,
+        position_unit: str | float,
         neighbor_list: NeighborListMD,
-        energy_key: str = None,
-        stress_key: str = None,
-        property_conversion: Dict[str, Union[str, float]] = {},
+        energy_key: str | None = None,
+        stress_key: str | None = None,
+        property_conversion: dict[str, str | float] | None = None,
         healing_length: float = 3.0,
     ):
+        if property_conversion is None:
+            property_conversion = {}
         model = LJModel(
             r_equilibrium=r_equilibrium,
             well_depth=well_depth,
@@ -64,7 +66,7 @@ class LJCalculator(SchNetPackCalculator):
             stress_key=stress_key,
         )
 
-        super(LJCalculator, self).__init__(
+        super().__init__(
             model,
             force_key=force_key,
             energy_unit=energy_unit,
@@ -118,7 +120,7 @@ class LJModel(nn.Module):
         force_key: str = properties.forces,
         stress_key: str = properties.stress,
     ):
-        super(LJModel, self).__init__()
+        super().__init__()
 
         self.r_equilibrium = r_equilibrium
         self.well_depth = well_depth
@@ -144,7 +146,7 @@ class LJModel(nn.Module):
             stress_key=stress_key,
         )
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """
         Compute the Lennard-Jones energy and forces if requested.
 
@@ -214,7 +216,7 @@ class CustomCutoff(nn.Module):
             cutoff_radius (float): cutoff radius.
             healing_length (float): healing length.
         """
-        super(CustomCutoff, self).__init__()
+        super().__init__()
         self.register_buffer("cutoff_radius", torch.Tensor([cutoff_radius]))
         self.register_buffer("healing_length", torch.Tensor([healing_length]))
 
