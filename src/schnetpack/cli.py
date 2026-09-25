@@ -189,6 +189,20 @@ def train(config: DictConfig):
         **fit_kwargs,
     )
 
+    # Lightning's EarlyStopping stops training silently on non-finite metrics
+    # (check_finite=True), so fail explicitly instead of testing the model
+    for early_stopping in trainer.early_stopping_callbacks:
+        if not early_stopping.check_finite:
+            continue
+        value = trainer.callback_metrics.get(early_stopping.monitor)
+        if value is not None and not torch.isfinite(value).all():
+            raise RuntimeError(
+                f"Training stopped at epoch {early_stopping.stopped_epoch} because the "
+                f"monitored metric became non-finite "
+                f"({early_stopping.monitor} = {value.item()}). "
+                "Skipping testing and model export."
+            )
+
     # Load the best checkpoint through the compatibility helper (it handles
     # `weights_only` across PL versions) and test that task directly, instead
     # of having Lightning re-load the checkpoint internally via
