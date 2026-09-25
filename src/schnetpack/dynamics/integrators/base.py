@@ -1,9 +1,9 @@
 """
 Numerical solvers for (reverse-time) diffusion processes.
 
-An integrator consumes only ``dynamics.drift`` and ``dynamics.diffusion`` — it
-is agnostic to what it integrates: a reverse SDE, a probability-flow ODE (g = 0)
-or a forward process. Denoising runs backwards in time, so ``dt < 0``.
+An integrator consumes ``dynamics.drift`` and ``dynamics.diffusion`` and is
+agnostic to what it integrates. Denoising runs backwards in time, so
+``dt < 0``. Catalog: ``docs_new/sampling.md`` §2.
 """
 
 import abc
@@ -19,13 +19,10 @@ class Integrator(abc.ABC):
     requires_sde: bool = False
     """Whether this integrator steps through the (f, g) chart's closed forms.
 
-    False for the generic solvers, which consume only ``drift`` and
-    ``diffusion`` and work on any reverse process. True for the ones that
-    discretize through the chart itself — the ancestral steps, which read
-    the exact posterior or the raw score — so the
-    :class:`~schnetpack.dynamics.sampling.sampler.Sampler` can demand a
-    :class:`~schnetpack.generative.differential_equations.ReverseSDE` at assembly instead of
-    failing mid-run.
+    True for the ancestral steps, which read the exact posterior or the raw
+    score; the :class:`~schnetpack.dynamics.sampling.sampler.Sampler` then
+    demands a :class:`~schnetpack.generative.differential_equations.ReverseSDE`
+    at assembly.
     """
 
     @abc.abstractmethod

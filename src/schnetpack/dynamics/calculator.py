@@ -1,16 +1,10 @@
 """
 Inference on spk batches: the one place a driver's model call goes through.
 
-A :class:`Calculator` owns everything between "here is a batch" and "here are
-the model outputs": moving the batch to the model's device and dtype, the
-neighbor list, the gradient policy and the model call itself. Drivers own
-none of it; they hand the calculator a batch and read the outputs.
-
-The calculator never writes into the batch it is given. The neighbor list
-and the model both write into their inputs, so they get a shallow copy, and
-the keys they add (neighbor lists, distance vectors, outputs) never reach the
-driver's batch. That is what keeps a moving structure free of stale derived
-keys: they only ever exist on the copy built for one call.
+A :class:`Calculator` owns the device and dtype, the neighbor list, the
+gradient policy and the model call. It never writes into the batch it is
+given: the neighbor list and the model get a shallow copy, so the keys they
+add never reach the driver's batch.
 """
 
 from collections.abc import Callable, Mapping
@@ -26,10 +20,8 @@ class Calculator:
     """
     Run a model on spk batches: ``calculator(batch) -> outputs``.
 
-    Stateless between calls apart from whatever the neighbor list caches
-    (a skin-based list keeps the lists it built); :meth:`reset` clears that
-    between runs. No output caching: an integrator such as Heun evaluates
-    different structures within one step, so a cache would never hit.
+    Stateless between calls apart from what the neighbor list caches;
+    :meth:`reset` clears that between runs.
     """
 
     def __init__(
@@ -46,16 +38,14 @@ class Calculator:
                 :class:`~schnetpack.model.NeuralNetworkPotential`
             neighbor_list: batch -> batch, run on every call to rebuild the
                 neighbor list of the current structures. Without one, the
-                batch's own neighbor keys are used as they are — right for a
-                static (e.g. fully connected) list, stale for a cutoff list
-                once the structures move.
+                batch's own neighbor keys are used as they are, which is
+                stale for a cutoff list once the structures move.
             device: device to run on; the model and every batch are moved
                 there (default: leave both where they are)
             dtype: floating dtype to run in; the model and the floating
                 tensors of every batch are cast to it (default: unchanged)
-            enable_grad: run the model with autograd enabled. Needed for
-                models that differentiate their outputs (forces from an
-                energy); generative heads run faster without it.
+            enable_grad: run the model with autograd enabled, for models that
+                differentiate their outputs (forces from an energy)
         """
         if isinstance(model, nn.Module) and (device is not None or dtype is not None):
             model = model.to(device=device, dtype=dtype)
@@ -69,9 +59,7 @@ class Calculator:
         """
         Move a batch to the calculator's device and dtype, once per run.
 
-        Drivers call this at loop entry, so the loop's batch already lives
-        where the model runs and no call pays a transfer. Returns a new
-        dict; non-tensor values pass through.
+        Returns a new dict; non-tensor values pass through.
         """
         out = {}
         for key, value in batch.items():

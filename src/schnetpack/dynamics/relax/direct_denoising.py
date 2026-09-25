@@ -1,17 +1,10 @@
 """
-GPFF's direct denoising — a relaxation, not a time-stepped sampler.
+GPFF's direct denoising: a relaxation, not a time-stepped sampler.
 
-The loop repeats "inject noise, jump to the model's x0-estimate". There is
-no time grid, no reverse SDE/ODE and no noise schedule: the only ingredients
-are ``parametrization.to_x0`` and the injection. That makes it a *relaxer* —
-the jump x <- x + F/2 is the exact Newton step on the quadratic pseudo-energy
-||x - x0||^2 the pseudo-force is the gradient of — which is why it lives here
-and not with the grid-walking :class:`~schnetpack.dynamics.sampling.Sampler`.
-
-The model contract is the batch dict (``batch -> outputs``, see
-:class:`~schnetpack.dynamics.base.Dynamics`); the batch-dict relaxers
-(L-BFGS and friends) arrive with the batch-wise optimizer port, and this loop
-becomes one step rule among theirs.
+The loop repeats "inject noise, jump to the model's x0-estimate"; there is no
+time grid, no reverse SDE and no noise schedule. The jump x <- x + F/2 is the
+Newton step on the pseudo-energy ||x - x0||^2. Details:
+``docs_new/sampling.md`` §5.
 """
 
 from collections.abc import Sequence
@@ -30,41 +23,19 @@ __all__ = ["DirectDenoising"]
 
 class DirectDenoising(Dynamics):
     """
-    GPFF's direct denoising: repeat "inject noise, jump to the model's
-    x0-estimate".
+    GPFF's direct denoising: repeat "inject noise, jump to the x0-estimate".
 
-    Each of the ``n_steps`` iterations does
-
-        x <- x + lambda (1 - k/N) z,  z ~ N(0, I)   (decaying noise injection)
-        x <- x0_hat(x)                              (jump to the x0-estimate)
-
-    There is no time grid, no reverse SDE/ODE and no noise schedule, which is
-    why this is a relaxer rather than an integrator of
-    :class:`~schnetpack.dynamics.sampling.Sampler`: the
-    only ingredients are ``parametrization.to_x0`` and the injection above.
-    The step is the bare jump; the injection is an
-    :class:`~schnetpack.dynamics.constraints.state.AnnealedNoise` constraint that
-    ``stochastic_lambda`` puts first in the constraint list, so user
-    constraints (a :class:`~schnetpack.dynamics.constraints.state.Scaffold`) act on
-    the noised state. ``stochastic_lambda = 0`` disables the injection
-    entirely (GPFF's plain direct denoising); positive values give the
-    stochastic variant, whose injected noise is what buys sample diversity.
-    lambda is in data units (Angstrom, for positions).
-
-    The model is evaluated at t = 0 throughout — the sampler never knows the
-    noise level of its iterate, so it presumes the *time-free* contract that
-    makes GPFF's method possible in the first place: a model that ignores its
-    t input, under a parametrization whose ``to_x0`` never reads t either
-    (the pseudo-force and x0 heads; a score-type head divides by sigma(t) and
-    would read the lie). Time-conditioned models belong in
+    Each of the ``n_steps`` iterations does x <- x + lambda (1 - k/N) z (an
+    :class:`~schnetpack.dynamics.constraints.state.AnnealedNoise` constraint
+    placed first, absent when ``stochastic_lambda = 0``) and then
+    x <- ``parametrization.to_x0(x)``. The model runs at t = 0 throughout, so
+    it must ignore its time input and the parametrization's ``to_x0`` must
+    not read t (pseudo-force and x0 heads). Time-conditioned models belong in
     :class:`~schnetpack.dynamics.sampling.Sampler`.
     """
 
     time_free = True
-    """The model is run at t = 0 throughout, so constraints such as
-    :class:`~schnetpack.dynamics.constraints.state.Scaffold` overwrite
-    rather than re-noise.
-    """
+    """The model runs at t = 0 throughout; constraints overwrite rather than re-noise."""
 
     def __init__(
         self,
@@ -95,10 +66,8 @@ class DirectDenoising(Dynamics):
             constraints: state-level constraints, applied after the noise
                 injection
             key: batch key this driver moves
-            output_key: model output holding the raw head, in the
-                parametrization
-            time_key: batch key the zero time is written to, for models
-                that take a time input
+            output_key: model output holding the raw head
+            time_key: batch key the zero time is written to
         """
         parametrization.validate(process)
         injection = (
@@ -120,14 +89,10 @@ class DirectDenoising(Dynamics):
         """
         Relax the structures in ``batch`` by ``n_steps`` jumps.
 
-        No ``t_start`` to declare, unlike
-        :meth:`~schnetpack.dynamics.sampling.Sampler.denoise`: the loop never
-        uses the noise level, which is exactly what makes relaxing structures
-        of unknown noisiness this relaxer's home turf.
-
         Args:
             batch: structures to relax
             n_steps: number of jumps
+            t_start: not accepted; the loop never uses a noise level
 
         Returns:
             The final batch.

@@ -1,55 +1,14 @@
 """
-Priors — the distribution of the x1 endpoint.
+Priors: the distribution of the x1 endpoint.
 
-A prior answers one question — what x1 *is* — and it is asked twice:
-
-- **Training.** The forward process needs an endpoint for every data sample:
-  :meth:`Prior.sample_positions` draws x1 positions for the batch being
-  diffused, and the coupling then decides how the two are paired. Under the
-  default :class:`~schnetpack.generative.couplings.IdentityCoupling` this is
-  the familiar "fresh noise per sample". Training only ever draws positions.
-- **Sampling.** With b(t_max) = 1 the state the reverse process starts from
-  *is* the x1 endpoint, so the correct start distribution is x1's marginal.
-  When the coupling only re-pairs (any marginal-preserving coupling), that
-  marginal is this prior itself, and
-  :meth:`~schnetpack.generative.processes.Process.sampling_prior`
-  hands the very same object to the
-  :class:`~schnetpack.dynamics.sampling.sampler.Sampler`.
-
-  Sampling starts from a full batch, as the dataloader would give it:
-  :meth:`Prior.sample_from_batch` redraws the positions of a given batch (a
-  test-set batch, say), and :meth:`Prior.sample` draws ``n_samples``
-  structures from :attr:`Prior.structures` — a dataset
-  (:class:`DatasetStructures`) or composition statistics
-  (:class:`StatisticsStructures`) — and redraws their positions.
-
-One object serving both sides is the point: train-time and sample-time x1
-cannot drift apart, because there is nothing to restate.
-
-A prior also declares what its draws *are*:
-
-- :attr:`Prior.gaussian` says whether they are independent isotropic
-  Gaussian. It gates the score/noise parametrizations and the process's
-  Gaussian-only closed forms — via
-  :meth:`~schnetpack.generative.processes.Process.gaussian_kernel_obstruction`
-  — and defaults to False, because a wrong True trains to garbage silently
-  while a wrong False merely raises.
-- :attr:`Prior.std` is the endpoint's scale, or None when it has no single
-  scalar value (a shape prior with per-molecule covariance). The process's
-  noise level is sigma(t) = b(t) * std, so everything that needs sigma —
-  score conversions, the SDE diffusion, churn > 0 sampling — needs a
-  declared std. For a VE process std is sigma_max, the knob that must match
-  the data scale (see :class:`~schnetpack.generative.processes.VE`).
-
-The batch a draw receives is what an endpoint may legitimately depend on —
-atom types, atom count, the layout (``idx_m``), scaffold indices — never the
-data positions themselves. A distribution shaped by the *data values* is a
-coupling, not a prior (see
-:class:`~schnetpack.generative.couplings.PCVarianceCoupling`).
-
-:class:`DatasetPrior` is the one prior without a positions law: it returns
-stored structures (non-equilibrium ones, to relax) unchanged, so it serves
-as a sampling start only.
+One object serves both sides of a generative model: training draws x1
+positions per data sample (:meth:`Prior.sample_positions`), and sampling
+starts from the same distribution (:meth:`Prior.sample_from_batch`,
+:meth:`Prior.sample`). A prior declares whether its draws are isotropic
+Gaussian (:attr:`Prior.gaussian`) and their scale (:attr:`Prior.std`), which
+gate the score/noise targets and the SDE chart. A draw may read the batch's
+layout and atom types, never the data positions. Design:
+``docs_new/priors.md``.
 """
 
 import abc
@@ -76,8 +35,8 @@ class DatasetStructures:
     Structures from a dataset, collated as the dataloader would.
 
     Successive :meth:`sample` calls walk through the dataset without
-    repeating a structure until all of them were drawn, then start the next
-    pass — like the epochs of a dataloader.
+    repeating a structure until all were drawn, then start the next pass.
+    Note that ``dataset[i]`` applies the dataset's transforms.
     """
 
     def __init__(self, dataset: Dataset, shuffle: bool = True):
@@ -118,9 +77,8 @@ class StatisticsStructures:
     Structures built from composition statistics: atom counts and atom types.
 
     Each structure draws its atom count from the ``n_atoms`` histogram, then
-    each atom its type independently from the ``atom_types`` probabilities.
-    The compositions follow the dataset's statistics, not its molecules — a
-    draw may be a composition the dataset does not contain.
+    each atom its type independently from ``atom_types``; a draw may be a
+    composition the dataset does not contain.
     """
 
     def __init__(self, n_atoms: torch.Tensor, atom_types: torch.Tensor):
@@ -172,22 +130,20 @@ class StatisticsStructures:
 
 
 class Prior(abc.ABC):
-    """Distribution of the x1 endpoint — training draws and sampling starts."""
+    """Distribution of the x1 endpoint: training draws and sampling starts."""
 
     gaussian: bool = False
     """Whether draws are independent isotropic Gaussian of scale :attr:`std`.
 
-    Gates the score/noise parametrizations, whose training targets *are*
-    statements about a Gaussian endpoint. A custom prior must opt in
-    explicitly.
+    Gates the score/noise parametrizations. Defaults to False: a wrong True
+    trains to garbage silently, a wrong False merely raises.
     """
 
     std: float | None = None
     """Scale of the endpoint, or None when it is not a single number.
 
-    The process reads its noise level sigma(t) = b(t) * std from this; None
-    means conversions and samplers that need sigma raise and ask for it
-    explicitly.
+    The process's noise level is sigma(t) = b(t) * std; None means every
+    consumer that needs sigma raises.
     """
 
     def __init__(
@@ -204,14 +160,13 @@ class Prior(abc.ABC):
     @abc.abstractmethod
     def sample_positions(self, batch: Mapping[str, Any]) -> torch.Tensor:
         """
-        Draw x1 positions for a batch — the tensor-level law, and the only
-        draw training makes.
+        Draw x1 positions for a batch: the only draw training makes.
 
         Args:
             batch: the structures to draw for. Positions, when present, give
                 shape, dtype and device (their values are never read);
                 otherwise the shape is ``(len(Z), 3)``. The layout
-                (``idx_m``) and atom types are there to be read.
+                (``idx_m``) and atom types may be read.
 
         Returns:
             The positions, shaped like the batch's.
@@ -223,10 +178,7 @@ class Prior(abc.ABC):
         return {**batch, properties.R: self.sample_positions(batch)}
 
     def sample(self, n_samples: int) -> dict[str, Any]:
-        """
-        Draw ``n_samples`` starting structures from :attr:`structures`, with
-        positions drawn from the prior.
-        """
+        """Draw ``n_samples`` structures from :attr:`structures` with positions from the prior."""
         if self.structures is None:
             raise ValueError(
                 f"{type(self).__name__} has no structures to sample from; pass "
@@ -254,41 +206,15 @@ class GaussianPrior(Prior):
     """
     Isotropic zero-mean Gaussian N(0, std^2 I), centered per molecule.
 
-    The endpoint of every plain diffusion and flow-matching process: std = 1
-    for the variance-preserving family, sigma_max for VE — where it must
-    match the data scale (largest pairwise distance rule; see
-    :class:`~schnetpack.generative.processes.VE`). Exact as a sampling start
-    when a(t_max) = 0 (flow matching); for the diffusion paths it is the
-    usual approximation that the residual a(t_max) x0 term is negligible.
-
-    :attr:`centered` (default True) subtracts each molecule's mean from its
-    draw, putting x1 in the same zero-COM subspace that
-    :class:`~schnetpack.transform.SubtractCenterOfGeometry` puts x0 in. That
-    is what molecules need: a translation-invariant network can never predict
-    a displacement of a whole structure, so an off-subspace endpoint is
-    unlearnable noise in every training target and an offset nothing removes
-    in every sampling start. Uncentered, a draw carries a center of geometry
-    of scale ``std * sqrt(d / n)`` per molecule (n atoms in d dimensions) —
-    4.6 A for a 12-atom molecule at ``std = 10``, larger than the molecule.
-
-    **Centering does not cost the Gaussian kernel.** Projecting a standard
-    normal onto a subspace gives a standard normal *on that subspace*, with
-    the same per-direction variance, so :attr:`gaussian` stays True and the
-    score/noise parametrizations stay exact. Only the space changes — which
-    makes the precondition load-bearing: **x0 must be centered too** (compose
-    ``SubtractCenterOfGeometry`` before
-    :class:`~schnetpack.generative.transforms.Diffuse`). Centered noise on
-    uncentered data leaves x_t's mean drifting with a(t), and the kernel is no
-    longer the one the targets assume.
-
-    Which rows share a mean is read from the batch's ``segment_key``
-    (``idx_m``), so centering is per molecule rather than per batch. A batch
-    without it is one group — correct for a transform running per structure
-    inside the dataloader, where the batch *is* one molecule.
-
-    Set ``centered=False`` for data with no translation symmetry to quotient
-    out, or when the leading axis is independent samples rather than the atoms
-    of one structure — centering couples the rows it spans.
+    The endpoint of plain diffusion and flow matching: std = 1 for the
+    variance-preserving family, sigma_max for VE. With ``centered=True``
+    (default) each segment's mean is subtracted, so x1 lives in the same
+    zero-center-of-geometry subspace as data preprocessed with
+    :class:`~schnetpack.transform.SubtractCenterOfGeometry`; a
+    translation-invariant network cannot learn anything else. Centering
+    keeps the draw Gaussian on that subspace, so :attr:`gaussian` stays True,
+    but x0 must be centered too. Segments come from ``batch[segment_key]``;
+    without it the batch is one group.
     """
 
     gaussian = True
@@ -303,9 +229,11 @@ class GaussianPrior(Prior):
         """
         Args:
             std: standard deviation of the endpoint, before centering
-            centered: draw in the zero-mean subspace of each segment
-            segment_key: batch key holding the segment ids; defaults to
-                SchNetPack's molecule index
+            centered: draw in the zero-mean subspace of each segment; set
+                False for data without translation symmetry, or when the
+                leading axis is independent samples rather than atoms
+            segment_key: batch key holding the segment ids (default: the
+                molecule index)
             structures: source of the structures :meth:`sample` draws
         """
         super().__init__(structures)
@@ -351,12 +279,10 @@ class GaussianPrior(Prior):
 
 class DatasetPrior(Prior):
     """
-    Stored structures, returned unchanged — the start of a relaxation.
+    Stored structures returned unchanged, positions included: the start of a
+    relaxation (e.g. :class:`~schnetpack.dynamics.relax.DirectDenoising`).
 
-    Draws the dataset's own structures (non-equilibrium ones, to relax) as
-    they are, positions included. It has no positions law, so it cannot
-    serve as a training endpoint; it is a sampling start only, e.g. for
-    :class:`~schnetpack.dynamics.relax.DirectDenoising`.
+    Has no positions law, so it cannot serve as a training endpoint.
     """
 
     def __init__(self, dataset: Dataset, shuffle: bool = True):

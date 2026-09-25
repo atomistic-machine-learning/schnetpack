@@ -9,12 +9,7 @@ __all__ = ["EulerMaruyama"]
 
 
 class EulerMaruyama(Integrator):
-    """
-    First-order solver: x <- x + f dt + g sqrt(|dt|) z.
-
-    For g = 0 (probability-flow ODE) the noise term vanishes and this is the
-    plain Euler method.
-    """
+    """First-order solver: x <- x + f dt + g sqrt(|dt|) z; plain Euler when g = 0."""
 
     def step(self, dynamics, x, t, dt):
         x = x + dynamics.drift(x, t) * dt

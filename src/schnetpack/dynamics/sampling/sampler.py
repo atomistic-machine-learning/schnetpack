@@ -1,6 +1,6 @@
 """
 Composition of process, parametrization, integrator, grid and prior into a
-sampler.
+sampler. Details: ``docs_new/sampling.md`` §4.
 """
 
 from collections.abc import Sequence
@@ -19,43 +19,22 @@ __all__ = ["Sampler"]
 
 class Sampler(Dynamics):
     """
-    Thin composition wrapper: prior -> reverse process -> integrator.
+    Thin composition: prior -> reverse process -> integrator along a grid.
 
-    Takes the ``(process, parametrization)`` pair — the same pair the model
-    was trained under; keeping the two sides consistent is the caller's job,
-    so share the objects with the training code rather than rebuilding them.
-    The pairing is checked at construction via
-    :meth:`~schnetpack.generative.parametrizations.Parametrization.validate`.
-    The starting distribution is not asked for by default — it *is* the
-    process's sampling prior (the training prior itself, since b(t_max) = 1
-    and the coupling preserves the marginal), so deriving it beats restating
-    it. An explicit ``prior`` overrides that, and is required when the
-    process cannot state its own start (a marginal-changing coupling).
-
-    The model is reached through a
+    Takes the same (process, parametrization) pair the model was trained
+    under, validated at construction. The starting distribution defaults to
+    the process's sampling prior. The model is reached through a
     :class:`~schnetpack.dynamics.calculator.Calculator`, with the raw head in
-    ``outputs[output_key]`` and the time read from ``batch[time_key]``;
-    conditioning keys are simply left in the batch. See
-    :class:`~schnetpack.dynamics.base.Dynamics` for the rest of the batch
-    contract.
-    The process, parametrization and integrator stay pure tensor math on the
-    moved key, whose leading axis (atoms, for positions) is the sample axis.
+    ``outputs[output_key]`` and the time read from ``batch[time_key]``. One
+    step of the loop is one integrator step; state constraints run between
+    steps with ``batch[time_key]`` the grid time of the iterate they see.
 
-    One step of the :class:`~schnetpack.dynamics.base.Dynamics` loop is one
-    integrator step along the time grid; state-level constraints run between
-    them, with ``batch[time_key]`` the grid time of the iterate they see.
-
-    Method-specific behavior belongs in the composed parts. If you find
-    yourself subclassing this, the logic probably belongs in a process,
-    parametrization, integrator, grid or constraint — that is what the axes
-    are for.
+    Method-specific behavior belongs in the composed parts (process,
+    parametrization, integrator, grid, constraint), not in a subclass.
     """
 
     time_free = False
-    """The iterate sits at a known noise level: ``batch[time_key]`` is the
-    grid time, so constraints such as
-    :class:`~schnetpack.dynamics.constraints.state.Scaffold` re-noise to it.
-    """
+    """The iterate sits at a known noise level, ``batch[time_key]``."""
 
     def __init__(
         self,
@@ -78,28 +57,25 @@ class Sampler(Dynamics):
             calculator: runs the model: a
                 :class:`~schnetpack.dynamics.calculator.Calculator`, or a bare
                 callable batch -> outputs
-            process: forward process the model was trained on; supplies the
-                schedule and the training prior
+            process: forward process the model was trained on
             parametrization: contract the model was trained under
             integrator: numerical solver for the reverse process
             grid: where to place the steps (default: uniform)
             prior: explicit starting distribution; overrides the process's
                 own. Required when the process's coupling changes x1's
-                marginal, where there is no data-free start to derive.
+                marginal.
             churn: stochasticity of the reverse process; 1 = reverse SDE,
-                0 = probability-flow ODE. Equals eta^2 of the Anderson family.
-            t_min: time to stop integration at (default: ``process.t_min``);
-                the score diverges as b -> 0
+                0 = probability-flow ODE
+            t_min: time to stop integration at (default: ``process.t_min``)
             t_max: time to start integration from (default: ``process.t_max``)
             constraints: state-level constraints applied around every step,
                 in order
             key: batch key this driver moves
-            output_key: model output holding the raw head, in the
-                parametrization
+            output_key: model output holding the raw head
             time_key: batch key the path time is written to, one value per
-                row of the moved key — the key
+                row of the moved key (the key
                 :class:`~schnetpack.generative.transforms.Diffuse` wrote in
-                training
+                training)
         """
         parametrization.validate(process)
         super().__init__(
@@ -138,17 +114,13 @@ class Sampler(Dynamics):
         t_start: float | None = None,
     ):
         """
-        Denoise the structures in ``batch`` from t_start down to t_min.
-
-        This is the partial-denoising entry point: relaxation of given
-        structures, scaffolded generation and structured priors that start
-        below t_max all enter here.
+        Denoise the structures in ``batch`` from ``t_start`` down to ``t_min``.
 
         Args:
             batch: structures to denoise
             n_steps: number of integrator steps
             t_start: path time the structures are assumed to sit at
-                (default: ``t_max``)
+                (default: ``t_max``); the partial-denoising entry
 
         Returns:
             The final batch.
@@ -176,11 +148,10 @@ class Sampler(Dynamics):
 
     def reverse(self, batch):
         """
-        The reverse process of the model at ``batch``: a ReverseSDE through the
-        chart when this assembly needs it, the chart-free ReverseODE otherwise.
-        The integrator evaluates it at its own (x, t) — Heun's predictor is
-        not the batch's iterate — so each evaluation hands the calculator
-        ``batch`` with those two keys replaced.
+        The reverse process of the model at ``batch``: a ReverseSDE through
+        the chart when this assembly needs it, the chart-free ReverseODE
+        otherwise. Each field evaluation hands the calculator ``batch`` with
+        the moved key and the time replaced by the integrator's own (x, t).
         """
         if self.needs_chart:
 

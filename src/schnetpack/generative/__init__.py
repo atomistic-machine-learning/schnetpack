@@ -1,94 +1,25 @@
 """
-Generative modeling for atomistic systems — pure PyTorch, no Lightning imports.
+Generative modeling for atomistic systems: diffusion and flow matching as
+composable building blocks. Pure PyTorch, no Lightning.
 
-The subpackage factors generative models along orthogonal axes. VE, VP,
-flow matching and GPFF are *configurations* of those axes, not special
-cases with bespoke logic:
+A model is a configuration of four independent axes plus its training:
 
-- :mod:`~schnetpack.generative.processes` — the forward noising process:
-  the interpolant x_t = a(t) x0 + b(t) x1 composed with a prior and a
-  coupling. The schedule is the subclass (:class:`VP`, :class:`VE`,
-  :class:`FlowMatching`, ... — each defines a(t), b(t) or the TV/SNR pair
-  and nothing else, in the literature's vocabulary), while the endpoint and
-  the pairing stay swappable constructor arguments. The process owns the
-  whole forward side: the noise level sigma(t) = b(t) * std, the endpoint
-  draw (:meth:`~processes.Process.perturb`) and the sampling start. Whether
-  the one-sided Gaussian kernel holds — what the score/noise targets and
-  the closed-form posterior assume — is judged from the actual
-  configuration (:attr:`~processes.Process.has_gaussian_kernel`), not from
-  the class: the same schedule is a Gaussian diffusion under a Gaussian
-  prior and a general stochastic interpolant under a structured one.
-- :mod:`~schnetpack.generative.differential_equations` — the process's
-  continuous-time dynamics. The (f, g) chart (``SDE``): the linear SDE
-  sharing the interpolant's marginals, with the drift f, the diffusion g^2
-  and the Gaussian closed forms (perturbation kernel, exact posterior),
-  acquired via :meth:`~processes.Process.sde`, whose construction *is* the
-  Gaussian-kernel check — configurations without the kernel cannot obtain
-  the chart, and the consumers that need it fail at assembly with the
-  obstruction named. And its reversal: a single churn knob spanning the
-  probability-flow ODE (churn = 0) and the reverse-time SDE (churn = 1),
-  never implemented per schedule but split by capability — the
-  :class:`~schnetpack.dynamics.sampling.sampler.Sampler` assembles the chart-free ``ReverseODE`` when
-  nothing needs the chart and the ``ReverseSDE`` otherwise, each taking a
-  bound score/velocity field.
-- :mod:`~schnetpack.generative.priors` — what the x1 endpoint *is*: the
-  distribution drawn at both training time (per data sample) and sampling
-  time (the start state). Isotropic Gaussian for VE/VP/FM; structured
-  (per-molecule covariance, scaffold, second dataset) for GPFF and bridges.
-  The endpoint's scale lives here (``GaussianPrior(std=sigma_max)`` is
-  where a VE process's noise magnitude sits — not in the schedule),
-  declared once.
-- :mod:`~schnetpack.generative.couplings` — how (x0, x1) batches are *paired*
-  once drawn. Identity for VE/VP/FM; a re-ordering for permutation/OT
-  alignment; a data-dependent reshaping for covariance matching. Never draws
-  the endpoint — that is the prior's job.
-- :mod:`~schnetpack.generative.parametrizations` — what the network predicts
-  (score, noise, denoiser, velocity, pseudo-force), and everything that
-  follows from that choice: the training targets, the conversions between
-  fields and the reverse process. Stateless field math: every method takes
-  the process it is applied to, and reads everything from it.
-- :mod:`~schnetpack.generative.times` — the mirror of that choice on the
-  training side: which times the forward pass draws, uniform or stated as a
-  density over sigma (EDM/GPFF).
+- :mod:`~schnetpack.generative.processes`: the forward noising process
+  x_t = a(t) x0 + b(t) x1 (the schedule), holding the prior and coupling.
+- :mod:`~schnetpack.generative.priors`: what the x1 endpoint is.
+- :mod:`~schnetpack.generative.couplings`: how (x0, x1) batches are paired.
+- :mod:`~schnetpack.generative.parametrizations`: what the network predicts,
+  with the training target and the conversions between fields.
+- :mod:`~schnetpack.generative.differential_equations`: the (f, g) SDE chart
+  of a process and its reversal.
+- :mod:`~schnetpack.generative.times`: which times training draws.
+- :mod:`~schnetpack.generative.losses` and
+  :mod:`~schnetpack.generative.transforms`: the training step, at tensor
+  level and as a data-pipeline transform.
 
-The axes stay separate in both directions: adding a parametrization never
-touches ``processes.py``, and adding a schedule never touches
-``parametrizations.py``. Neither holds the other: a parametrization is
-stateless field math, and the consumers that need both — ``Diffuse``,
-``MatchingLoss``, ``Sampler``, the reverse processes — take the
-``(process, parametrization)`` pair explicitly. Validity is a construction
-invariant, checked where the pair meets: each consumer calls
-``parametrization.validate(process)`` in its constructor, and the
-score/noise parametrizations demand the Gaussian kernel, which the process
-judges from its prior, coupling and bridge noise
-(:meth:`~processes.Process.gaussian_kernel_obstruction` names what is in
-the way). The one obligation this leaves the caller: training and sampling
-must name the *same* pair — share the objects, don't rebuild them.
-
-Around them:
-
-- :mod:`~schnetpack.generative.losses` — score, flow and bridge matching as one
-  training step.
-- :mod:`~schnetpack.generative.transforms` — the same training step as a
-  preprocessing transform, for training through the SchNetPack data pipeline
-  and an ordinary supervised loss instead.
-
-Running a trained model — the sampler that composes the above with an
-integrator and a time grid, and the high-level generation entry — lives in
-:mod:`schnetpack.dynamics.sampling`, next to the other loops that move
-structures. This package defines the model and its training; that one runs it.
-
-The model contract is deliberately minimal::
-
-    model(x, t, cond=None) -> raw output in some parametrization
-
-with x of shape (n_samples, ...) and per-sample t. Nothing here wraps a network
-or knows more about it than that, which is what lets the same machinery drive a
-toy tensor net and a SchNetPack
-:class:`~schnetpack.model.NeuralNetworkPotential` behind an adapter (where the
-sample axis is atoms). That adapter, the Schrödinger-bridge orchestrator,
-consistency models and optimal-transport couplings are accommodated by the
-design but not yet implemented.
+Running a trained model lives in :mod:`schnetpack.dynamics`. Training and
+sampling must share the same (process, parametrization) objects. Theory and
+design: ``docs_new/README.md``.
 """
 
 from schnetpack.generative.couplings import *

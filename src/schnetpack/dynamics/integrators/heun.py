@@ -10,13 +10,8 @@ __all__ = ["Heun"]
 
 class Heun(Integrator):
     """
-    Second-order Heun step on the drift; the diffusion contribution is added
-    as an Euler–Maruyama increment.
-
-    On the probability-flow ODE (eta = 0) this is the deterministic
-    second-order sampler popularized by EDM (Karras et al. 2022), which reaches
-    comparable sample quality with far fewer function evaluations than
-    first-order solvers.
+    Second-order Heun step on the drift, plus an Euler–Maruyama diffusion
+    increment. At churn = 0 this is the EDM (Karras et al. 2022) sampler.
     """
 
     def step(self, dynamics, x, t, dt):

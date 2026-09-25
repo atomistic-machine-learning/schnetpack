@@ -10,28 +10,14 @@ __all__ = ["Ancestral", "AncestralDDPM"]
 
 class Ancestral(Integrator):
     """
-    Generic ancestral update — the exact posterior step
-
-        x0_hat ~ model,   x_s ~ p(x_s | x_t, x0_hat),
-
-    i.e. estimate x0 from the model, then draw from the closed-form Gaussian
-    posterior of the chart
-    (:meth:`~schnetpack.generative.differential_equations.SDE.posterior`). Schedule
-    logic lives entirely in that closed form, so one class covers every
-    process with a Gaussian kernel: on VP it is the textbook DDPM ancestral
-    step with the exact (beta-tilde) posterior variance, on VE it reduces to
-    the familiar score-form update x + score (sigma_t^2 - sigma_s^2) plus
-    matched noise — the GPFF/NCSN ancestral sampler.
-
-    Like :class:`AncestralDDPM` it discretizes the reverse process through
-    something other than drift/diffusion — the reverse process's ``score``,
-    converted to an x0-estimate through the chart
+    Exact-posterior ancestral step: estimate x0 from the model's score
     (:meth:`~schnetpack.generative.differential_equations.SDE.x0_from_score`),
-    then stepped through the chart's posterior — and, being intrinsically
-    stochastic, it ignores the reverse process's ``churn``. ``requires_sde``
-    is how it says so: the Sampler then assembles a ReverseSDE even at
-    churn = 0, and a configuration without the Gaussian kernel is refused
-    at assembly.
+    then draw x_s ~ p(x_s | x_t, x0_hat)
+    (:meth:`~schnetpack.generative.differential_equations.SDE.posterior`).
+
+    One class for every process with a Gaussian kernel: the textbook DDPM
+    step on VP, the NCSN/GPFF ancestral sampler on VE. Intrinsically
+    stochastic, so it ignores the reverse process's ``churn``.
     """
 
     requires_sde = True
@@ -44,23 +30,13 @@ class Ancestral(Integrator):
 
 class AncestralDDPM(Integrator):
     """
-    DDPM ancestral update — the exact discrete-time posterior step
+    DDPM ancestral step in score form, with beta_k = g(t)^2 |dt|:
 
-        x_{k-1} = (x_k + beta_k * score) / sqrt(1 - beta_k) + sqrt(beta_k) z,
-        beta_k  = g(t)^2 |dt|,
+        x_{k-1} = (x_k + beta_k * score) / sqrt(1 - beta_k) + sqrt(beta_k) z.
 
-    i.e. a particular discretization of the reverse VP process. Unlike the
-    generic solvers it is written in terms of the raw score rather than the
-    drift, so it needs a
-    :class:`~schnetpack.generative.differential_equations.ReverseSDE` (for its ``g2``
-    and ``score``) built on a VP-type path — hence ``requires_sde``. That is
-    a deliberate exception to the rule that integrators see only drift and
-    diffusion: the step *is* a statement about the score, and rewriting it
-    through the drift would only obscure it.
-
-    Uses the DDPM ``sigma_t^2 = beta_t`` variance choice. Being intrinsically
-    stochastic, it ignores the reverse process's ``churn``: a Sampler
-    configured with ``churn=0`` and this integrator still samples the SDE.
+    A discretization of the reverse VP process using the DDPM
+    ``sigma_t^2 = beta_t`` variance; needs a VP-type process. Intrinsically
+    stochastic, so it ignores the reverse process's ``churn``.
     """
 
     requires_sde = True

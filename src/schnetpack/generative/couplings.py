@@ -1,60 +1,14 @@
 """
-Couplings — how already-drawn endpoint batches are paired.
+Couplings: how already-drawn endpoint batches are paired.
 
-The prior decides what x1 *is*; the path decides *when* it takes over. The
-coupling sits between them and fixes the joint law of (x0, x1): given a data
-batch and a batch of prior draws, which x1 goes with which x0. The default
-leaves the pairing alone — diffusion and vanilla flow matching pair every
-sample with the fresh draw it was handed, which is why the axis usually goes
-unnoticed. It becomes the whole story for minibatch-OT flow matching and for
-alignment tricks that shorten and de-cross the transport paths a model has
-to learn.
-
-A coupling never draws x1 — that is the prior's job (see
-:mod:`schnetpack.generative.priors`). What it must declare is what its
-pairing does to x1's *marginal*:
-
-Re-pairing is also *restricted*: an endpoint may only move to a row it is
-interchangeable with. :meth:`Coupling.pair` takes an optional ``groups`` — one
-integer label per row, or a row of several labels — and the permutation it
-returns is block-diagonal in those labels. Two constraints that matter for
-molecules are the same mechanism:
-
-- **within a molecule.** A collated batch is one long axis of atoms; without a
-  label the assignment is a single global point cloud and atoms are happily
-  paired with another molecule's noise.
-- **within an atom type.** Elements are not interchangeable. Handing a carbon
-  the endpoint drawn for a hydrogen changes what the pairing means as soon as
-  the endpoint carries any per-element structure — and it renders as a
-  different noise cloud even when the point set is identical.
-
-Label rows by ``(idx_m, Z)`` and both hold at once. The core stays unaware of
-atoms: ``groups`` is just labels, and the atomistic edge
-(:class:`~schnetpack.generative.transforms.Diffuse`) is what turns a batch into
-them.
-
-Two declarations, two different facts — a coupling states both:
-
-- :attr:`Coupling.preserves_marginal` is a *marginal* statement: True for
-  anything that at most re-orders x1 across the batch (identity,
-  permutation, OT), where re-pairing leaves the marginal law untouched.
-  This is the property that lets the training prior double as the sampling
-  start (:meth:`~schnetpack.generative.processes.Process.sampling_prior`).
-  It is False for anything that reshapes x1 from the data's values, where
-  no data-free start distribution exists and the sampler demands an
-  explicit :class:`~schnetpack.generative.priors.Prior`.
-- :attr:`Coupling.independent_pairs` is the stronger, *conditional*
-  statement: the pairing never looks at the values, so p(x1 | x0) is still
-  the prior's marginal. This — not marginal preservation — is what the
-  one-sided Gaussian kernel and the score/noise targets need (judged by
-  :meth:`~schnetpack.generative.processes.Process.gaussian_kernel_obstruction`):
-  an optimal assignment permutes exchangeable draws, so the marginal
-  survives, but it hands each x0 the *closest* draw, and conditionally on
-  x0 that selection is not Gaussian.
-
-Both default to False: a wrong True fails silently (sampling from the wrong
-start; training a biased score), a wrong False merely demands an explicit
-prior or a conditional-expectation target.
+A coupling fixes the joint law of (x0, x1) by re-pairing a data batch with a
+batch of prior draws; it never draws x1 itself. Re-pairing can be restricted
+to interchangeable rows via ``groups`` (for molecules: ``(idx_m, Z)``). A
+coupling declares whether it preserves x1's marginal
+(:attr:`Coupling.preserves_marginal`, needed to reuse the training prior as
+the sampling start) and whether it pairs independently of the values
+(:attr:`Coupling.independent_pairs`, needed for the Gaussian kernel).
+Design and catalog: ``docs_new/couplings.md``.
 """
 
 import abc
@@ -75,10 +29,9 @@ def row_blocks(groups: torch.Tensor | None, n: int, device=None) -> list[torch.T
     Row indices grouped into blocks whose members may exchange endpoints.
 
     Args:
-        groups: one label per row, shape (n,) — or several label columns,
+        groups: one label per row, shape (n,), or several label columns,
             shape (n, k), in which case rows must agree on every column to
-            share a block. ``None`` puts every row in one block, which is the
-            unrestricted assignment.
+            share a block. None puts every row in one block.
         n: number of rows the labels must cover
         device: device for the returned index tensors
 
@@ -108,22 +61,16 @@ class Coupling(abc.ABC):
     preserves_marginal: bool = False
     """Whether :meth:`pair` leaves x1's marginal law untouched.
 
-    True for pure re-orderings; False for anything that reshapes the values.
-    Defaults to False — a custom coupling must opt in explicitly, because a
-    wrong True samples from the wrong start silently while a wrong False
-    merely demands an explicit prior.
+    True for pure re-orderings, False for anything that reshapes the values.
+    Defaults to False: a wrong True samples from the wrong start silently.
     """
 
     independent_pairs: bool = False
     """Whether :meth:`pair` assigns endpoints without looking at the values.
 
-    The conditional statement the one-sided Gaussian kernel needs: with a
-    value-independent pairing, p(x1 | x0) is still the prior's marginal.
-    Implies :attr:`preserves_marginal`, but not conversely — an optimal
-    assignment preserves the marginal while biasing each x0's partner
-    toward it. Defaults to False for the same reason as above: a wrong True
-    trains a biased score/noise head silently, a wrong False merely refuses
-    those targets and asks for a conditional-expectation one.
+    Implies :attr:`preserves_marginal`, but not conversely: an optimal
+    assignment keeps the marginal while biasing each x0's partner toward it.
+    Defaults to False: a wrong True trains a biased score/noise head silently.
     """
 
     @abc.abstractmethod
@@ -139,11 +86,9 @@ class Coupling(abc.ABC):
         Args:
             x0: data batch, shape (n_samples, ...)
             x1: prior endpoints, shaped like x0
-            groups: labels restricting which rows may exchange endpoints —
+            groups: labels restricting which rows may exchange endpoints,
                 shape (n_samples,) or (n_samples, k); see :func:`row_blocks`.
-                ``None`` leaves the assignment unrestricted. For molecules,
-                label by ``(idx_m, Z)`` to keep the re-pairing inside one
-                molecule and one element.
+                None leaves the assignment unrestricted.
 
         Returns:
             (x0, x1), both shaped like the inputs.
@@ -153,12 +98,8 @@ class Coupling(abc.ABC):
 
 class IdentityCoupling(Coupling):
     """
-    Leave the pairing exactly as drawn: the product coupling pi = p0 x p1.
-
-    Every sample keeps the fresh endpoint the prior handed it — what VE, VP
-    and plain flow matching use, and the reason their score and noise
-    training targets are valid: x1 stays the independent noise realization
-    the kernel math assumes.
+    Leave the pairing as drawn: the product coupling used by VE, VP and plain
+    flow matching.
     """
 
     preserves_marginal = True
@@ -174,30 +115,11 @@ class PermutationCoupling(Coupling):
     """
     Reorder the prior endpoints by their optimal assignment against the data.
 
-    A single-batch special case of :class:`OTCoupling`: the transport plan
-    between the two point sets is constrained to a *permutation*, so every x0
-    row keeps exactly one x1 partner. Solving the linear assignment problem
-    under a squared-distance cost gives the permutation of x1 that minimizes
-    the total straight-line transport, which shortens and de-crosses the
-    paths the model has to learn.
-
-    The leading axis is treated as the sample axis of one point cloud and the
-    rest is flattened into the cost's feature vector — for positions that is
-    atoms in 3D, so the assignment pairs each atom with the nearest noise
-    point. Because re-ordering exchangeable draws leaves the marginal
-    untouched, ``preserves_marginal`` holds; but the assignment *looks at
-    the values*, so ``independent_pairs`` does not: conditionally on x0 the
-    chosen partner is the closest draw, not a Gaussian one. The one-sided
-    kernel is gone with it — train a velocity, x0 or pseudo-force head on
-    this coupling, not a score/noise one.
-
-    Pass ``groups`` to keep the assignment inside sets of interchangeable rows:
-    one solve per block instead of one global solve. For a collated batch of
-    molecules that is ``(idx_m, Z)`` — an atom then trades endpoints only with
-    atoms of its own element in its own molecule. Without it the whole batch is
-    one cloud, which pairs across molecules and across elements.
-
-    Needs SciPy for the exact solve (``scipy.optimize.linear_sum_assignment``).
+    Solves the linear assignment problem under a distance cost, per block of
+    ``groups``, so each x0 row keeps exactly one x1 partner; the leading axis
+    is the sample axis and the rest is flattened. Preserves the marginal but
+    looks at the values, so the Gaussian kernel is lost: train a velocity,
+    x0 or pseudo-force head on it. Needs SciPy.
     """
 
     preserves_marginal = True
@@ -206,8 +128,7 @@ class PermutationCoupling(Coupling):
         """
         Args:
             cost_power: exponent on the pairwise Euclidean distance used as
-                the assignment cost. 2.0 is the squared-distance (OT) cost;
-                1.0 is plain distance.
+                the assignment cost; 2.0 is the squared-distance (OT) cost
         """
         self.cost_power = cost_power
 
@@ -238,33 +159,20 @@ class PermutationCoupling(Coupling):
 
 class PCVarianceCoupling(Coupling):
     """
-    Reshape the prior's variance ellipsoid to match the data's.
+    Rescale the prior draw's principal components so its variance ellipsoid
+    matches the data's (both sorted descending); the orientation stays random.
 
-    Diffusion's isotropic Gaussian prior is a round cloud; a molecule is not.
-    This coupling computes the principal axes of x1, then rescales each
-    principal component so the variance of x1 along its k-th axis equals the
-    variance of x0 along x0's k-th axis (both sorted descending). The prior
-    keeps its own random orientation but takes on the data's *shape* — a long
-    molecule is met by an elongated noise cloud — so the transport is closer
-    to a rotation than a stretch.
-
-    Unlike :class:`PermutationCoupling` this changes x1's marginal law from
-    the data's values (``preserves_marginal`` is False), with two enforced
-    consequences: the process loses its Gaussian kernel (use a velocity, x0
-    or pseudo-force parametrization — the score/noise ones refuse), and
-    sampling needs an explicit
-    :class:`~schnetpack.generative.priors.Prior` whose covariance matches the
-    statistics trained under. The leading axis is the sample axis and the
-    rest is flattened, so for positions the principal axes are the point
-    cloud's 3D geometric axes.
+    Changes x1's marginal from the data's values, so the Gaussian kernel is
+    lost and sampling needs an explicit
+    :class:`~schnetpack.generative.priors.Prior` matching the trained
+    statistics. Works on one point cloud at a time (no ``groups``).
     """
 
     def __init__(self, eps: float = 1e-8):
         """
         Args:
-            eps: floor added to both variances before the ratio, guarding the
-                rescale against a degenerate (near-zero-variance) principal
-                axis.
+            eps: floor added to both variances before the ratio, guarding
+                against a degenerate principal axis
         """
         self.eps = eps
 
@@ -303,17 +211,8 @@ class PCVarianceCoupling(Coupling):
 
 class OTCoupling(Coupling):
     """
-    Minibatch optimal-transport pairing (OT flow matching / rectified flow).
-
-    Solves the OT problem between the data and prior batches and permutes x1
-    to match x0, which straightens the learned velocity field and cuts the
-    number of sampling steps. Lands with the OT milestone; the plan is a
-    POT-based ``emd`` solve over the squared-distance cost, falling back to a
-    torch-only Sinkhorn when POT is absent. Like the permutation special
-    case, re-pairing leaves x1's marginal untouched — and like there, the
-    assignment is value-dependent, so the one-sided kernel does not survive
-    (``independent_pairs`` stays False): pair with conditional-expectation
-    targets (velocity, x0, pseudo-force).
+    Minibatch optimal-transport pairing (OT flow matching). Not implemented;
+    use :class:`PermutationCoupling` for the single-batch special case.
     """
 
     preserves_marginal = True

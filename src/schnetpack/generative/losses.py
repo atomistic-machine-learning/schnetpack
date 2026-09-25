@@ -1,24 +1,13 @@
 """
-Matching losses — score, flow and bridge matching are one training step.
+Matching losses: score, flow and pseudo-force matching as one training step.
 
-Every objective in this subpackage is the same three moves: draw an endpoint
-pair, place it on the path at a random time, and regress the
-parametrization's target. What distinguishes score matching from flow
-matching from bridge matching is which process and parametrization you hand
-it — not which loss you call. The three moves themselves belong to the
-process (:meth:`~schnetpack.generative.processes.Process.perturb`);
-this class adds the model call, the weighting and the MSE.
-
-The ``(process, parametrization)`` pair is validated at construction: the
-score/noise parametrizations demand the Gaussian kernel, which the process
-judges from its own configuration
-(:meth:`~schnetpack.generative.processes.Process.gaussian_kernel_obstruction`).
-By the time a MatchingLoss exists, the assembly is coherent.
-
-Pure PyTorch, tensor level. These take a model and a batch of samples, not a
-SchNetPack batch dict; the adapter that maps atomistic batches onto this
-contract, and the :class:`~schnetpack.objectives.UnsupervisedModelOutput` that
-carries the result into the Lightning task, arrive with the atomistic port.
+Every objective is the same three moves (draw an endpoint pair, place it on
+the path at a random time, regress the parametrization's target); which
+process and parametrization are handed over decides the method. Tensor
+level: :class:`MatchingLoss` takes a callable ``model(x, t, cond)`` and a
+batch of samples, not a SchNetPack batch dict. For the data-pipeline route
+see :class:`~schnetpack.generative.transforms.Diffuse`. Details:
+``docs_new/training.md``.
 """
 
 from collections.abc import Callable
@@ -33,10 +22,10 @@ __all__ = ["MatchingLoss"]
 
 class MatchingLoss:
     """
-    Weighted regression of a parametrization's target along an interpolant path.
+    Weighted regression of a parametrization's target along a process:
+    ``mean(w(t) (model(x_t, t) - target)^2)``.
 
-    Computes ``mean(w(t) (model(x_t, t) - target)^2)`` for x_t drawn from the
-    process at times from ``t_sampler``.
+    The (process, parametrization) pair is validated at construction.
     """
 
     def __init__(
@@ -49,18 +38,13 @@ class MatchingLoss:
         """
         Args:
             process: forward process that draws and places the endpoints
-            parametrization: what the model predicts, and hence what to
-                regress
+            parametrization: what the model predicts, hence what to regress
             weight: per-sample loss weight w(t), mapping (n_samples,) ->
                 (n_samples,) (default: uniform)
             t_sampler: draws training times, mapping (n_samples, device) ->
-                (n_samples,). Defaults to the process's own
-                :meth:`~schnetpack.generative.processes.Process.sample_t`
-                — uniform on [t_min, t_max], stopping short of t = 0 because
-                the score target diverges there. The noise and denoiser
-                targets are well behaved at 0, so for those on a VP path you
-                may widen the range back to [0, t_max]; the EDM/GPFF
-                log-normal-sigma density enters through the same hook.
+                (n_samples,) (default: the process's own
+                :meth:`~schnetpack.generative.processes.Process.sample_t`);
+                see :mod:`schnetpack.generative.times`
         """
         parametrization.validate(process)
         self.process = process
@@ -83,7 +67,7 @@ class MatchingLoss:
             x1: endpoints to use instead of drawing from the process's prior;
                 still passed through its coupling
             cond: conditioning passed through to the model
-            context: generation-time conditioning handed to the prior
+            context: batch handed to the prior when drawing x1
 
         Returns:
             Scalar loss.

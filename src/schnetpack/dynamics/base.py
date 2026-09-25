@@ -2,29 +2,11 @@
 What every driver shares: the calculator, the starting distribution, the
 moved key, the constraint hooks and the batch contract.
 
-Sampling a generative model and relaxing a structure differ in what one step
-does and when to stop. Each driver writes its own loop — a plain ``for``
-over the steps — and calls :meth:`~Dynamics.before_step` /
-:meth:`~Dynamics.after_step` around every step, so the constraint order is
-the same in every driver.
-
-:class:`Dynamics` knows nothing about generative models, so a force-field
-optimizer (L-BFGS and friends) needs no process, parametrization or time
-key. The drivers that run a generative model —
-:class:`~schnetpack.dynamics.sampling.Sampler`,
-:class:`~schnetpack.dynamics.relax.DirectDenoising` — hold those
-themselves. Every driver has the same two entries: :meth:`Dynamics.sample`
-draws starting structures from a prior (a generative model's noise
-distribution, or noisy structures from a dataset) and hands them to
-:meth:`Dynamics.denoise`, the loop, which also takes given structures.
-
-The structure is the batch dict — the same one datasets, transforms and
-models use — and nothing else. A driver moves one key (:attr:`Dynamics.key`),
-reads it out of the batch for its pure-tensor math and writes the result
-back into a new dict. Inference — device, neighbor list, gradient policy,
-the model call — goes through a
-:class:`~schnetpack.dynamics.calculator.Calculator`, which works on a copy,
-so the keys it computes never land in the driver's batch.
+The structure is the batch dict used by datasets, transforms and models. A
+driver moves one key and carries everything else along; inference goes
+through a :class:`~schnetpack.dynamics.calculator.Calculator`, which works on
+a copy, so derived keys never land in the driver's batch. Details:
+``docs_new/sampling.md`` §7.
 """
 
 import abc
@@ -42,29 +24,16 @@ class Dynamics(abc.ABC):
     """
     Base class of the loops that move structures with a model.
 
-    Holds the calculator that runs the model, the starting distribution, the
-    constraints and the batch-dict contract:
-
-    - the model is reached through ``self.calculator``, a
-      :class:`~schnetpack.dynamics.calculator.Calculator` (a bare
-      ``batch -> outputs`` callable is wrapped in one), called with a batch
-      and nothing else.
-    - ``key`` is the batch key the driver moves; everything else in the
-      batch is carried along untouched.
-
-    :meth:`sample` draws starting structures from the prior and hands them to
-    :meth:`denoise`, the loop, which every driver writes out as
+    Every driver writes its loop as
 
         for i in range(n_steps):
-            batch = self.before_step(batch, i, n_steps)       # constraints, in order
+            batch = self.before_step(batch, i, n_steps)
             batch = <one step>
-            batch = self.after_step(batch, i + 1, n_steps)    # constraints, in order
+            batch = self.after_step(batch, i + 1, n_steps)
 
-    Constraints (:class:`~schnetpack.dynamics.constraints.state.StateConstraint`)
-    act between full steps only — never between the stages of a multi-stage
-    integrator such as Heun. Their order is the list order, and it matters:
-    a constraint that overwrites atoms should run after one that perturbs
-    them.
+    so state constraints run in the same order everywhere, between full steps
+    only. :meth:`sample` draws starting structures from the prior and hands
+    them to :meth:`denoise`, which also takes given structures.
     """
 
     def __init__(
@@ -123,9 +92,7 @@ class Dynamics(abc.ABC):
     @abc.abstractmethod
     def denoise(self, batch: Mapping[str, Any], n_steps: int) -> dict[str, Any]:
         """
-        Run the loop on the structures in ``batch``: the entry point for
-        given structures — relaxation, scaffolded generation, partial
-        denoising. Drivers may add keywords (the sampler's ``t_start``).
+        Run the loop on the structures in ``batch``. Drivers may add keywords.
 
         Args:
             batch: structures to denoise

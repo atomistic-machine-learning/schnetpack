@@ -1,7 +1,5 @@
 """
-Numerical steppers shared by the dynamics drivers: sampling a reverse process
-(:mod:`~schnetpack.dynamics.sampling`) and relaxation
-(:mod:`~schnetpack.dynamics.relax`).
+Numerical steppers shared by the dynamics drivers.
 """
 
 from schnetpack.dynamics.integrators.base import *

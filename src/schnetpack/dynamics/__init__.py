@@ -1,15 +1,14 @@
 """
 Loops that move structures with a model.
 
-Everything here *runs* a model: sampling a generative model down its reverse
-process (:mod:`~schnetpack.dynamics.sampling`) and relaxing structures on a
-force-like field (:mod:`~schnetpack.dynamics.relax`) — each driver a
+Sampling a generative model down its reverse process
+(:mod:`~schnetpack.dynamics.sampling`) and relaxing structures on a
+force-like field (:mod:`~schnetpack.dynamics.relax`) are both a
 :class:`~schnetpack.dynamics.base.Dynamics` with its own step loop, stepping
-with the shared :mod:`~schnetpack.dynamics.integrators`, the constraints of
-:mod:`~schnetpack.dynamics.constraints` hooked in around every step, and the
-model reached through a :class:`~schnetpack.dynamics.calculator.Calculator`. What the model *is*
-(schedule, prior, coupling, parametrization, training) stays in
-:mod:`schnetpack.generative`; this package only consumes it.
+with the shared :mod:`~schnetpack.dynamics.integrators`, with the
+:mod:`~schnetpack.dynamics.constraints` hooked in around every step and the
+model reached through a :class:`~schnetpack.dynamics.calculator.Calculator`.
+What the model *is* stays in :mod:`schnetpack.generative`.
 """
 
 from schnetpack.dynamics import calculator, constraints, integrators, relax, sampling
