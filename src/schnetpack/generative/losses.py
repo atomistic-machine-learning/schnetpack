@@ -56,18 +56,15 @@ class MatchingLoss:
         self,
         model: Callable,
         x0: torch.Tensor,
-        x1: torch.Tensor | None = None,
         cond=None,
-        context=None,
+        batch=None,
     ) -> torch.Tensor:
         """
         Args:
             model: callable (x, t, cond) -> raw output in ``parametrization``
             x0: clean samples, shape (n_samples, ...)
-            x1: endpoints to use instead of drawing from the process's prior;
-                still passed through its coupling
             cond: conditioning passed through to the model
-            context: batch handed to the prior when drawing x1
+            batch: batch handed to the prior when drawing x1
 
         Returns:
             Scalar loss.
@@ -75,9 +72,9 @@ class MatchingLoss:
         t = None
         if self.t_sampler is not None:
             t = self.t_sampler(x0.shape[0], x0.device).to(x0.dtype)
-        x_t, x0, x1, t, eps = self.process.perturb(x0, x1, t=t, context=context)
+        x_t, x0, x1, t = self.process.perturb(x0, t=t, batch=batch)
 
         prediction = model(x_t, t, cond)
-        target = self.parametrization.target(self.process, x0, x1, t, eps)
+        target = self.parametrization.target(self.process, x0, x1, t)
         w = expand_t(self.weight(t), x_t)
         return (w * (prediction - target) ** 2).mean()

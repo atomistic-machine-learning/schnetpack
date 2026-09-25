@@ -8,6 +8,7 @@ from schnetpack.generative import (
     VE,
     VP,
     Diffuse,
+    FlowMatching,
     LogNormalSigmaTimes,
     PseudoForceParametrization,
     UniformTimes,
@@ -96,7 +97,10 @@ def test_lognormal_recovers_the_sigma_density():
 def test_lognormal_induces_a_normal_over_t_on_ve(ve):
     """t affine in log sigma => the times themselves are normal."""
     sampler = LogNormalSigmaTimes(ve, mean=-0.7, std=1.2)
-    mean, std = sampler.induced_normal()
+    # t = t_max (1 + (log sigma - log sigma_max) / L), L = -log b_min
+    log_range = -math.log(ve.b_min)
+    mean = ve.t_max * (1.0 + (-0.7 - math.log(ve.std)) / log_range)
+    std = ve.t_max * 1.2 / log_range
     assert mean == pytest.approx(0.3589, abs=1e-3)
     assert std == pytest.approx(0.1876, abs=1e-3)
 
@@ -151,7 +155,7 @@ def test_lognormal_rejects_a_scaleless_prior():
             return torch.zeros_like(batch[properties.R])
 
     with pytest.raises(ValueError, match="no scalar endpoint scale"):
-        LogNormalSigmaTimes(VE(b_min=1e-3, prior=Scaleless()))
+        LogNormalSigmaTimes(FlowMatching(prior=Scaleless()))
 
 
 def test_bad_std_is_rejected(ve):

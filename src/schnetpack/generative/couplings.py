@@ -217,6 +217,9 @@ class OTCoupling(Coupling):
 
     preserves_marginal = True
 
+    # TODO: implement minibatch OT: an exact solve over the squared-distance
+    # cost (POT's `emd`) with a torch-only Sinkhorn fallback, respecting
+    # `groups` like PermutationCoupling. Keep `independent_pairs` False.
     def pair(self, x0, x1, groups=None):
         raise NotImplementedError(
             "OTCoupling lands with the optimal-transport milestone. "

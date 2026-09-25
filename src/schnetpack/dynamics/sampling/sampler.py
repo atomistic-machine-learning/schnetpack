@@ -45,8 +45,6 @@ class Sampler(Dynamics):
         grid: TimeGrid | None = None,
         prior: Prior | None = None,
         churn: float = 1.0,
-        t_min: float | None = None,
-        t_max: float | None = None,
         constraints: Sequence = (),
         key: str = properties.R,
         output_key: str = "prediction",
@@ -66,8 +64,6 @@ class Sampler(Dynamics):
                 marginal.
             churn: stochasticity of the reverse process; 1 = reverse SDE,
                 0 = probability-flow ODE
-            t_min: time to stop integration at (default: ``process.t_min``)
-            t_max: time to start integration from (default: ``process.t_max``)
             constraints: state-level constraints applied around every step,
                 in order
             key: batch key this driver moves
@@ -104,8 +100,6 @@ class Sampler(Dynamics):
         self.integrator = integrator
         self.grid = grid if grid is not None else UniformGrid()
         self.churn = churn
-        self.t_min = t_min if t_min is not None else process.t_min
-        self.t_max = t_max if t_max is not None else process.t_max
 
     def denoise(
         self,
@@ -114,13 +108,15 @@ class Sampler(Dynamics):
         t_start: float | None = None,
     ):
         """
-        Denoise the structures in ``batch`` from ``t_start`` down to ``t_min``.
+        Denoise the structures in ``batch`` from ``t_start`` down to the
+        process's ``t_min``.
 
         Args:
             batch: structures to denoise
             n_steps: number of integrator steps
             t_start: path time the structures are assumed to sit at
-                (default: ``t_max``); the partial-denoising entry
+                (default: the process's ``t_max``); the partial-denoising
+                entry
 
         Returns:
             The final batch.
@@ -128,8 +124,10 @@ class Sampler(Dynamics):
         self.calculator.reset()
         batch = self.calculator.prepare(batch)
         x = batch[self.key]
-        t_start = self.t_max if t_start is None else t_start
-        ts = self.grid(t_start, self.t_min, n_steps, dtype=x.dtype, device=x.device)
+        t_start = self.process.t_max if t_start is None else t_start
+        ts = self.grid(
+            t_start, self.process.t_min, n_steps, dtype=x.dtype, device=x.device
+        )
         n_steps = ts.shape[0] - 1
         n_rows = x.shape[0]
 

@@ -104,20 +104,20 @@ class Diffuse(Transform):
         t = sample_t(1, x0.device).to(x0.dtype)
         t_elements = t.repeat(x0.shape[0])
 
-        # the batch goes to the prior as context: a prior that must respect the
+        # the batch goes to the prior: a prior that must respect the
         # layout (centering per molecule) reads idx_m out of it, and one that
         # does not ignores it. Running per structure there is no idx_m, and the
         # whole leading axis is the one molecule anyway.
-        x_t, x0, x1, t_elements, eps = self.process.perturb(
+        x_t, x0, x1, t_elements = self.process.perturb(
             x0,
             t=t_elements,
-            context=inputs,
+            batch=inputs,
             groups=self._groups(inputs, x0.shape[0]),
         )
 
         inputs[self.diffuse_property] = x_t
         inputs[self.label_key] = self.parametrization.target(
-            self.process, x0, x1, t_elements, eps
+            self.process, x0, x1, t_elements
         )
         inputs[self.time_key] = t_elements
         if self.structure_time_key is not None:

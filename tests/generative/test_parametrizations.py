@@ -47,7 +47,7 @@ def process_cls(request):
 
 @pytest.fixture
 def process(process_cls):
-    return process_cls()
+    return VE(2e-4, 1.0) if process_cls is VE else process_cls()
 
 
 def endpoints(process, n=64):
@@ -220,7 +220,7 @@ def test_the_configuration_is_judged_not_the_class():
 
 
 def test_conditional_expectation_parametrizations_accept_any_process():
-    plain = VE(prior=GaussianPrior(30.0), coupling=PCVarianceCoupling())
+    plain = VE(6e-3, 30.0, coupling=PCVarianceCoupling())
     for cls in ANY_PROCESS:
         cls().validate(plain)  # must not raise
 
@@ -231,7 +231,7 @@ def test_gpff_pseudo_force_runs_on_any_configuration():
     # GPFF is the same parametrization on the same class, reconfigured.
     PseudoForceParametrization().validate(VE(0.3, 30.0))
     PseudoForceParametrization().validate(
-        VE(prior=GaussianPrior(30.0), coupling=PermutationCoupling())
+        VE(6e-3, 30.0, coupling=PermutationCoupling())
     )
 
 
@@ -306,7 +306,12 @@ def test_scaled_endpoint_keeps_all_fields_consistent(process_cls):
     # same process, and its score must be the true conditional score
     # -(x_t - a x0) / sigma^2 with sigma = b * s.
     s = 7.5
-    process = process_cls(scale=s)
+    if process_cls is VP:
+        pytest.skip("VP's endpoint is a fixed unit Gaussian")
+    if process_cls is VE:
+        process = VE(2e-4 * s, s)
+    else:
+        process = process_cls(prior=GaussianPrior(s))
     torch.manual_seed(0)
     x0 = torch.randn(64, 3, dtype=torch.float64)
     x1 = s * torch.randn(64, 3, dtype=torch.float64)
@@ -368,7 +373,7 @@ def test_pseudo_force_magnitude_carries_b_on_a_ve_schedule():
     # The claim the parametrization exists for: on VE a = 1, so the target
     # collapses to -2 b x1 and the spread of F/2 estimates b. This is what
     # lets a GPFF head do without a time input.
-    process = VE()
+    process = VE(2e-4, 1.0)
     p = PseudoForceParametrization()
     torch.manual_seed(0)
     x0 = torch.randn(4096, 3, dtype=torch.float64)
@@ -387,7 +392,7 @@ def test_pseudo_force_magnitude_carries_b_on_a_ve_schedule():
 def test_pseudo_force_recovers_x0_where_a_b_division_would_not():
     # x0 = x_t + F/2 never divides, so unlike the score route it is exact as
     # b -> 0 rather than 0/0.
-    process = VE()
+    process = VE(2e-4, 1.0)
     p = PseudoForceParametrization()
     torch.manual_seed(0)
     x_t = torch.randn(8, 3, dtype=torch.float64)
@@ -434,12 +439,3 @@ def test_fields_broadcast_over_per_sample_times(process, parametrization):
     assert parametrization.to_score(process, target, x_t, t).shape == x0.shape
     assert parametrization.to_velocity(process, target, x_t, t).shape == x0.shape
     assert parametrization.to_x0(process, target, x_t, t).shape == x0.shape
-
-
-def test_target_accepts_but_ignores_bridge_noise(process, parametrization):
-    # The eps slot exists for gamma != 0 schedules; while gamma is zero it
-    # must make no difference.
-    x0, x1, t = endpoints(process)
-    without = parametrization.target(process, x0, x1, t)
-    with_eps = parametrization.target(process, x0, x1, t, eps=torch.randn_like(x0))
-    assert torch.equal(without, with_eps)

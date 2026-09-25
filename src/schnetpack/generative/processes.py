@@ -50,7 +50,7 @@ def expand_t(t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
 
 class Process(abc.ABC):  # noqa: B024 - schedule enforced in __init_subclass__
     """
-    Forward process x_t = a(t) x0 + b(t) x1 (+ gamma(t) eps) on [t_min, t_max].
+    Forward process x_t = a(t) x0 + b(t) x1 on [t_min, t_max].
 
     b is a dimensionless blending weight in [0, 1] with b(t_max) = 1; the
     endpoint's scale lives on the prior, and the noise level is
@@ -65,34 +65,22 @@ class Process(abc.ABC):  # noqa: B024 - schedule enforced in __init_subclass__
         t_max: float,
         prior: Prior | None = None,
         coupling: Coupling | None = None,
-        scale: float | None = None,
     ):
         """
         Args:
             t_min: smallest usable path time
             t_max: largest usable path time, where the prior is drawn
-            prior: distribution of the x1 endpoint (default: unit Gaussian);
-                mutually exclusive with ``scale``
+            prior: distribution of the x1 endpoint (default: unit Gaussian)
             coupling: how endpoint batches are paired (default: identity)
-            scale: shorthand for ``prior=GaussianPrior(std=scale)``
         """
         if type(self) is Process:
             raise TypeError(
                 "Process is abstract. Subclass it and define either (a, b) "
                 "or (tv, log_snr)."
             )
-        if prior is not None and scale is not None:
-            raise TypeError(
-                "Pass either scale or prior, not both — scale is shorthand "
-                "for prior=GaussianPrior(std=scale)."
-            )
         self.t_min = t_min
         self.t_max = t_max
-        self.prior = (
-            prior
-            if prior is not None
-            else GaussianPrior(std=1.0 if scale is None else scale)
-        )
+        self.prior = prior if prior is not None else GaussianPrior(std=1.0)
         self.coupling = coupling if coupling is not None else IdentityCoupling()
 
     def __init_subclass__(cls, **kwargs):
@@ -131,10 +119,6 @@ class Process(abc.ABC):  # noqa: B024 - schedule enforced in __init_subclass__
         """Log signal-to-noise ratio log(a^2 / b^2). Derived from (a, b) unless overridden."""
         return 2.0 * (torch.log(self.a(t)) - torch.log(self.b(t)))
 
-    def snr(self, t: torch.Tensor) -> torch.Tensor:
-        """Signal-to-noise ratio a^2 / b^2."""
-        return self.a(t) ** 2 / self.b(t) ** 2
-
     # -- derivatives ------------------------------------------------------ #
 
     def a_dot(self, t: torch.Tensor) -> torch.Tensor:
@@ -154,15 +138,11 @@ class Process(abc.ABC):  # noqa: B024 - schedule enforced in __init_subclass__
         """
         return self._log_derivative(self.a, t)
 
-    def log_b_dot(self, t: torch.Tensor) -> torch.Tensor:
-        """d/dt log b(t) = b_dot / b; see :meth:`log_a_dot`."""
-        return self._log_derivative(self.b, t)
-
     def log_snr_dot(self, t: torch.Tensor) -> torch.Tensor:
         """
         d/dt log SNR(t), shaped like t; non-positive for any sensible schedule.
 
-        Differentiated directly rather than as log_a_dot - log_b_dot, so a
+        Differentiated directly rather than as d/dt log a - d/dt log b, so a
         schedule defined via (tv, log_snr) never forms a or b on the way.
         """
         return self._time_derivative(self.log_snr, t)
@@ -194,20 +174,6 @@ class Process(abc.ABC):  # noqa: B024 - schedule enforced in __init_subclass__
                 return torch.zeros_like(t)
             (grad,) = torch.autograd.grad(y.sum(), t_, allow_unused=True)
         return torch.zeros_like(t) if grad is None else grad
-
-    def gamma(self, t: torch.Tensor) -> torch.Tensor | None:
-        """
-        Bridge noise coefficient, or None when it vanishes identically.
-
-        None lets :meth:`interpolate` skip the term. Bridge processes
-        override this; nothing else needs to. (Not the gamma of the TV/SNR
-        literature, which is :meth:`snr` here.)
-        """
-        return None
-
-    def a_b(self, t: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Both marginal coefficients at once, each shaped like t."""
-        return self.a(t), self.b(t)
 
     # -- scale: the prior's declaration, exposed once ---------------------- #
 
@@ -268,83 +234,50 @@ class Process(abc.ABC):  # noqa: B024 - schedule enforced in __init_subclass__
     # -- interpolant ------------------------------------------------------ #
 
     def interpolate(
-        self,
-        x0: torch.Tensor,
-        x1: torch.Tensor,
-        t: torch.Tensor,
-        eps: torch.Tensor | None = None,
+        self, x0: torch.Tensor, x1: torch.Tensor, t: torch.Tensor
     ) -> torch.Tensor:
         """
-        Place a sample on the path: x_t = a x0 + b x1 (+ gamma eps).
+        Place a sample on the path: x_t = a x0 + b x1.
 
         Args:
             x0: data endpoint, shape (n_samples, ...)
             x1: prior endpoint, shaped like x0
             t: path time, per-sample or scalar
-            eps: bridge noise; drawn if needed and not given, ignored when
-                :meth:`gamma` returns None
         """
-        x_t = expand_t(self.a(t), x0) * x0 + expand_t(self.b(t), x1) * x1
-        gamma = self.gamma(t)
-        if gamma is None:
-            return x_t
-        if eps is None:
-            eps = torch.randn_like(x0)
-        return x_t + expand_t(gamma, eps) * eps
+        return expand_t(self.a(t), x0) * x0 + expand_t(self.b(t), x1) * x1
 
     # -- the forward move --------------------------------------------------#
 
     def perturb(
         self,
         x0: torch.Tensor,
-        x1: torch.Tensor | None = None,
         t: torch.Tensor | None = None,
-        context=None,
+        batch=None,
         groups: torch.Tensor | None = None,
-    ) -> tuple[
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor | None,
-    ]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Draw endpoints, pair them and place them on the path.
 
-        Owns every random draw of the forward side, so the training target
-        can be built from exactly the draws that made x_t.
-
         Args:
             x0: data batch, shape (n_samples, ...)
-            x1: endpoint batch to use instead of drawing from the prior;
-                still passed through the coupling
             t: path times, per-sample or scalar; drawn from
                 :meth:`sample_t` if not given
-            context: the batch x0 was taken from, handed to the prior (with
+            batch: the batch x0 was taken from, handed to the prior (with
                 x0 as its positions) so it can read the layout
             groups: per-row labels restricting which rows the coupling may
                 exchange endpoints between; see
                 :meth:`~schnetpack.generative.couplings.Coupling.pair`
 
         Returns:
-            (x_t, x0, x1, t, eps): the perturbed batch, the (possibly
-            re-paired) endpoints, the times and the bridge noise (None when
-            gamma is zero).
+            (x_t, x0, x1, t): the perturbed batch, the (possibly re-paired)
+            endpoints and the times.
         """
-        if x1 is None:
-            batch = {} if context is None else context
-            x1 = self.prior.sample_positions({**batch, properties.R: x0})
-        # only passed when asked for, so couplings written against the
-        # two-argument `pair` keep working
-        if groups is None:
-            x0, x1 = self.coupling.pair(x0, x1)
-        else:
-            x0, x1 = self.coupling.pair(x0, x1, groups)
+        batch = {} if batch is None else batch
+        x1 = self.prior.sample_positions({**batch, properties.R: x0})
+        x0, x1 = self.coupling.pair(x0, x1, groups)
         if t is None:
             t = self.sample_t(x0.shape[0], x0.device).to(x0.dtype)
-        eps = None if self.gamma(t) is None else torch.randn_like(x0)
-        x_t = self.interpolate(x0, x1, t, eps=eps)
-        return x_t, x0, x1, t, eps
+        return self.interpolate(x0, x1, t), x0, x1, t
 
     def sample_t(self, n: int, device: torch.device | None = None) -> torch.Tensor:
         """
@@ -384,8 +317,8 @@ class Process(abc.ABC):  # noqa: B024 - schedule enforced in __init_subclass__
         Why p(x_t | x0) = N(a x0, sigma^2 I) does not hold, or None if it does.
 
         The kernel holds iff the prior is isotropic Gaussian with a declared
-        scale, the coupling pairs endpoints independently of the values and
-        the schedule carries no bridge noise. Returns the first failed
+        scale and the coupling pairs endpoints independently of the values.
+        Returns the first failed
         condition as a sentence for error messages.
         """
         if not self.prior.gaussian:
@@ -404,16 +337,6 @@ class Process(abc.ABC):  # noqa: B024 - schedule enforced in __init_subclass__
                 "on the values, so conditionally on x0 the endpoint is no "
                 "longer the declared isotropic Gaussian (the marginal may "
                 "survive; the one-sided kernel does not)"
-            )
-        # Probe gamma on interior times: None means no bridge noise by the
-        # gamma contract, and a returned tensor still has to actually
-        # vanish — a subclass returning zeros carries no latent.
-        t = torch.linspace(self.t_min, self.t_max, 9, dtype=torch.float64)[1:-1]
-        gamma = self.gamma(t)
-        if gamma is not None and bool((gamma != 0).any()):
-            return (
-                f"{type(self).__name__} carries bridge noise (gamma != 0), "
-                "so the one-sided kernel is not this process's kernel"
             )
         return None
 
@@ -440,9 +363,8 @@ class VP(Process):
     """
     Variance-preserving process (continuous-time DDPM) with linear beta.
 
-    a = exp(-1/2 int_0^t beta), b = sqrt(1 - a^2); f = -beta/2, g^2 = beta at
-    unit scale. The default unit Gaussian endpoint suits unit-variance data;
-    pass ``scale`` (the data std) otherwise.
+    a = exp(-1/2 int_0^t beta), b = sqrt(1 - a^2); f = -beta/2, g^2 = beta.
+    The endpoint is a unit Gaussian, which suits unit-variance data.
     """
 
     def __init__(
@@ -451,9 +373,7 @@ class VP(Process):
         beta_max: float = 20.0,
         t_min: float = 1e-3,
         t_max: float = 1.0,
-        prior: Prior | None = None,
         coupling: Coupling | None = None,
-        scale: float | None = None,
     ):
         """
         Args:
@@ -461,12 +381,12 @@ class VP(Process):
             beta_max: beta(t_max)
             t_min: smallest usable time; the score diverges as t -> 0
             t_max: largest usable time
-            prior: endpoint distribution (default: unit Gaussian)
             coupling: pairing rule (default: identity)
-            scale: Gaussian endpoint std, shorthand for ``prior``
         """
+        # TODO: consider an endpoint whose variance matches the data's
+        # (e.g. GaussianPrior(std=data_std)) instead of normalizing the data.
         super().__init__(
-            t_min=t_min, t_max=t_max, prior=prior, coupling=coupling, scale=scale
+            t_min=t_min, t_max=t_max, prior=GaussianPrior(std=1.0), coupling=coupling
         )
         self.beta_min = beta_min
         self.beta_max = beta_max
@@ -506,11 +426,9 @@ class VE(Process):
     """
     Variance-exploding process with geometric noise (score matching / SMLD).
 
-    a = 1 and b(t) = b_min^(1 - t/t_max), so sigma(t) = b(t) * prior.std runs
-    geometrically up to the prior's scale. ``VE(sigma_min, sigma_max)`` is
-    the classic schedule: b_min = sigma_min / sigma_max and a Gaussian prior
-    of std sigma_max, giving sigma(t) = sigma_min^(1-t) sigma_max^t. For a
-    prior that owns its own scale, pass ``b_min`` and ``prior`` instead.
+    sigma(t) = sigma_min^(1 - t/t_max) sigma_max^(t/t_max), with a Gaussian
+    endpoint of std sigma_max built in the constructor. Internally a = 1,
+    b(t) = b_min^(1 - t/t_max) with b_min = sigma_min / sigma_max.
 
     sigma_max must match the data scale (rule of thumb: the largest pairwise
     distance in the dataset); a mismatch degrades samples without raising.
@@ -520,51 +438,27 @@ class VE(Process):
 
     def __init__(
         self,
-        sigma_min: float | None = None,
-        sigma_max: float | None = None,
-        b_min: float | None = None,
+        sigma_min: float,
+        sigma_max: float,
         t_min: float = 0.0,
         t_max: float = 1.0,
-        prior: Prior | None = None,
         coupling: Coupling | None = None,
-        scale: float | None = None,
     ):
         """
         Args:
-            sigma_min: smallest noise level of the classic schedule; give
-                together with ``sigma_max``, exclusive with ``b_min``/``prior``
-            sigma_max: largest noise level and the endpoint scale
-            b_min: blending weight at t = 0, in (0, 1), for priors that own
-                their own scale (default: 2e-4)
-            t_min: smallest usable time (b(0) > 0, so 0 is fine)
-            t_max: largest usable time, where b reaches 1
-            prior: endpoint distribution for the ``b_min`` route (default:
-                unit Gaussian)
+            sigma_min: noise level at t = 0
+            sigma_max: noise level at t_max, and the endpoint's std
+            t_min: smallest usable time (sigma(0) > 0, so 0 is fine)
+            t_max: largest usable time
             coupling: pairing rule (default: identity)
-            scale: Gaussian endpoint std for the ``b_min`` route, shorthand
-                for ``prior``
         """
-        if (sigma_min is None) != (sigma_max is None):
-            raise TypeError(
-                "Give sigma_min and sigma_max together — the schedule needs "
-                "their ratio and the prior needs sigma_max."
-            )
-        if sigma_min is not None:
-            if b_min is not None or prior is not None or scale is not None:
-                raise TypeError(
-                    "(sigma_min, sigma_max) already fixes b_min = "
-                    "sigma_min/sigma_max and prior = GaussianPrior(sigma_max)"
-                    " — pass either that pair or (b_min, prior/scale), not "
-                    "both."
-                )
-            b_min = sigma_min / sigma_max
-            prior = GaussianPrior(std=sigma_max)
-        elif b_min is None:
-            b_min = 2e-4
         super().__init__(
-            t_min=t_min, t_max=t_max, prior=prior, coupling=coupling, scale=scale
+            t_min=t_min,
+            t_max=t_max,
+            prior=GaussianPrior(std=sigma_max),
+            coupling=coupling,
         )
-        self.b_min = b_min
+        self.b_min = sigma_min / sigma_max
 
     def a(self, t):
         return torch.ones_like(t)
@@ -595,7 +489,8 @@ class VELinear(Process):
     Variance-exploding process with linear b: a = 1, b(t) = t / t_max.
 
     The Karras et al. (2022) geometry; the noise scale (their sigma_max) is
-    the prior's std. See :class:`VE` for the geometric ramp.
+    the prior's std, e.g. ``prior=GaussianPrior(std=sigma_max)``. See
+    :class:`VE` for the geometric ramp.
     """
 
     def __init__(
@@ -604,7 +499,6 @@ class VELinear(Process):
         t_max: float = 1.0,
         prior: Prior | None = None,
         coupling: Coupling | None = None,
-        scale: float | None = None,
     ):
         """
         Args:
@@ -612,11 +506,8 @@ class VELinear(Process):
             t_max: largest usable time, where b reaches 1
             prior: endpoint distribution (default: unit Gaussian)
             coupling: pairing rule (default: identity)
-            scale: Gaussian endpoint std, which must match the data scale
         """
-        super().__init__(
-            t_min=t_min, t_max=t_max, prior=prior, coupling=coupling, scale=scale
-        )
+        super().__init__(t_min=t_min, t_max=t_max, prior=prior, coupling=coupling)
 
     def a(self, t):
         return torch.ones_like(t)
@@ -649,7 +540,6 @@ class FlowMatching(Process):
         t_max: float = 1.0 - 1e-3,
         prior: Prior | None = None,
         coupling: Coupling | None = None,
-        scale: float | None = None,
     ):
         """
         Args:
@@ -657,11 +547,8 @@ class FlowMatching(Process):
             t_max: largest usable time; keep < 1 for stochastic sampling
             prior: endpoint distribution (default: unit Gaussian)
             coupling: pairing rule (default: identity)
-            scale: Gaussian endpoint std, shorthand for ``prior``
         """
-        super().__init__(
-            t_min=t_min, t_max=t_max, prior=prior, coupling=coupling, scale=scale
-        )
+        super().__init__(t_min=t_min, t_max=t_max, prior=prior, coupling=coupling)
 
     def a(self, t):
         return 1.0 - t
@@ -698,7 +585,6 @@ class VPISSNR(Process):
         t_max: float = 1.0 - 1e-3,
         prior: Prior | None = None,
         coupling: Coupling | None = None,
-        scale: float | None = None,
     ):
         """
         Args:
@@ -711,11 +597,8 @@ class VPISSNR(Process):
             t_max: largest usable time; the log-SNR diverges at t = 1
             prior: endpoint distribution (default: unit Gaussian)
             coupling: pairing rule (default: identity)
-            scale: Gaussian endpoint std, shorthand for ``prior``
         """
-        super().__init__(
-            t_min=t_min, t_max=t_max, prior=prior, coupling=coupling, scale=scale
-        )
+        super().__init__(t_min=t_min, t_max=t_max, prior=prior, coupling=coupling)
         self.eta = eta
         self.kappa = kappa
 

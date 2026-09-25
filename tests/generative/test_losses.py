@@ -56,7 +56,8 @@ class RecordingNet(nn.Module):
 def test_loss_is_a_scalar_with_gradients(process_cls, param_cls):
     torch.manual_seed(0)
     net = LinearNet()
-    loss_fn = MatchingLoss(process_cls(), param_cls())
+    process = VE(2e-4, 1.0) if process_cls is VE else process_cls()
+    loss_fn = MatchingLoss(process, param_cls())
 
     loss = loss_fn(net, torch.randn(32, 3))
 
@@ -181,7 +182,7 @@ def test_the_process_carries_the_coupling():
 def test_endpoint_scale_flows_from_the_prior():
     # The prior owns sigma_max; the parametrization reads it through the
     # process. A VE assembly at scale 50 trains without a separate declaration.
-    process = VE(scale=50.0)
+    process = VE(0.01, 50.0)
     loss_fn = MatchingLoss(process, ScoreParametrization())
     loss = loss_fn(LinearNet(), torch.randn(32, 3))
     assert torch.isfinite(loss)
@@ -193,7 +194,7 @@ def test_ve_score_target_spans_orders_of_magnitude():
     # grows like 1/b, so an unweighted L2 is dominated by the low-noise end
     # and the model never learns the rest. Documented on VE.
     torch.manual_seed(0)
-    process = VE()
+    process = VE(2e-4, 1.0)
     x1 = torch.randn(4096, 1)
 
     score_param = ScoreParametrization()

@@ -112,7 +112,7 @@ def test_label_matches_the_parametrizations_target(process_cls, param_cls):
     # The whole point of "arbitrary label": swapping the parametrization must
     # swap the target with no other change.
     torch.manual_seed(0)
-    process = process_cls()
+    process = VE(2e-4, 1.0) if process_cls is VE else process_cls()
     parametrization = param_cls()
     inputs = structure(6)
     x0 = inputs[properties.R].clone()
@@ -155,7 +155,7 @@ def test_x0_label_is_the_clean_structure(vp):
 
 
 @pytest.mark.parametrize(
-    "process", [VP(), VE(), FlowMatching()], ids=lambda p: type(p).__name__
+    "process", [VP(), VE(2e-4, 1.0), FlowMatching()], ids=lambda p: type(p).__name__
 )
 def test_any_schedule_works(process):
     torch.manual_seed(0)
@@ -174,18 +174,19 @@ def test_prior_decides_the_noise():
             return z - z.mean(0, keepdim=True)
 
     torch.manual_seed(0)
-    process = VE(prior=MeanFreePrior())
-    out = Diffuse(process, VelocityParametrization())(structure(8))
+    process = FlowMatching(prior=MeanFreePrior())
+    out = Diffuse(process, VelocityParametrization(), original_key="x0")(structure(8))
 
-    # velocity target on VE is b_dot * x1, mean-free because x1 is
-    assert out["label"].mean(0).abs().max() < 1e-6
+    # flow-matching velocity target is x1 - x0, and x1 is mean-free
+    x1 = out["label"] + out["x0"]
+    assert x1.mean(0).abs().max() < 1e-6
 
 
 def test_reconfigured_process_flows_through_the_transform():
     # A re-paired assembly diffuses just as the plain one does, as long as its
     # parametrization is valid — the transform validates the pair but never
     # inspects the process beyond that.
-    process = VE(coupling=PermutationCoupling())
+    process = VE(2e-4, 1.0, coupling=PermutationCoupling())
     out = Diffuse(process, VelocityParametrization())(structure(8))
     assert torch.isfinite(out["label"]).all()
 

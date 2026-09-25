@@ -9,7 +9,6 @@ plain ``(n, device) -> (n,)`` hook, so any callable works. Details:
 """
 
 import abc
-import math
 
 import torch
 
@@ -138,23 +137,3 @@ class LogNormalSigmaTimes(TimeSampler):
         else:
             sigma = sigma.clamp(self.sigma_min, self.sigma_max)
         return self.process.t_of_sigma(sigma.to(torch.get_default_dtype()))
-
-    def induced_normal(self) -> tuple:
-        """
-        The (mean, std) of t this density induces on a geometric
-        :class:`~schnetpack.generative.processes.VE`, where t is affine in
-        log sigma. Raises TypeError for other schedules.
-        """
-        from schnetpack.generative.processes import VE
-
-        if not isinstance(self.process, VE):
-            raise TypeError(
-                f"t is affine in log sigma only on a geometric VE schedule, "
-                f"not {type(self.process).__name__} — the induced density over "
-                "t has no closed form there; draw and measure instead."
-            )
-        log_range = -math.log(self.process.b_min)
-        t_mean = self.process.t_max * (
-            1.0 + (self.mean - math.log(self.process.std)) / log_range
-        )
-        return t_mean, self.process.t_max * self.std / log_range

@@ -18,7 +18,7 @@ from schnetpack.generative import (
 
 
 def all_schedules():
-    return [VP(), VE(), VELinear(), FlowMatching(), VPISSNR()]
+    return [VP(), VE(2e-4, 1.0), VELinear(), FlowMatching(), VPISSNR()]
 
 
 def schedule_ids():
@@ -37,7 +37,7 @@ def vp():
 
 @pytest.fixture
 def ve():
-    return VE()
+    return VE(2e-4, 1.0)
 
 
 def interior_times(process, n=5):
@@ -107,11 +107,12 @@ def test_fm_diffusion_is_finite_on_usable_range():
 
 def test_vp_marginals_variance_preserving(vp):
     t = torch.rand(1000) * vp.t_max
-    a, b = vp.a_b(t)
+    a, b = vp.a(t), vp.b(t)
     assert torch.allclose(a**2 + b**2, torch.ones_like(t), atol=1e-5)
 
-    a0, s0 = vp.a_b(torch.tensor([0.0]))
-    aT, sT = vp.a_b(torch.tensor([vp.t_max]))
+    t0, tT = torch.tensor([0.0]), torch.tensor([vp.t_max])
+    a0, s0 = vp.a(t0), vp.b(t0)
+    aT, sT = vp.a(tT), vp.b(tT)
     assert a0.item() == pytest.approx(1.0)
     assert s0.item() == pytest.approx(0.0, abs=1e-4)
     assert aT.item() < 1e-2
@@ -120,7 +121,7 @@ def test_vp_marginals_variance_preserving(vp):
 
 def test_ve_marginals(ve):
     t = torch.tensor([0.0, ve.t_max])
-    a, b = ve.a_b(t)
+    a, b = ve.a(t), ve.b(t)
     assert torch.allclose(a, torch.ones_like(t))
     assert b[0].item() == pytest.approx(ve.b_min)
     assert b[1].item() == pytest.approx(1.0, rel=1e-6)
@@ -138,12 +139,6 @@ def test_b_is_normalized_to_one_at_t_max(process):
     assert (process.b(t) <= 1.0 + 1e-9).all()
 
 
-def test_snr_and_log_snr_agree(process):
-    t = interior_times(process)
-    assert torch.allclose(process.snr(t), process.a(t) ** 2 / process.b(t) ** 2)
-    assert torch.allclose(process.log_snr(t), torch.log(process.snr(t)), rtol=1e-5)
-
-
 def test_interpolate_matches_marginal_stats(vp):
     # One-shot noising is interpolate on a drawn pair; for Gaussian x1 the
     # result must carry the closed-form marginal variance a^2 + b^2.
@@ -152,7 +147,7 @@ def test_interpolate_matches_marginal_stats(vp):
     x1 = torch.randn_like(x0)
     t = torch.full((20000,), 0.5)
     x_t = vp.interpolate(x0, x1, t)
-    a, b = vp.a_b(t[:1])
+    a, b = vp.a(t[:1]), vp.b(t[:1])
     expected_std = math.sqrt(a.item() ** 2 + b.item() ** 2)
     assert x_t.std().item() == pytest.approx(expected_std, abs=0.02)
 
@@ -173,7 +168,7 @@ def test_per_sample_times_broadcast(vp):
 def test_tv_and_snr_agree_with_a_b(process):
     # The TV/SNR pair, whichever way round the schedule defined itself.
     t = interior_times(process)
-    a, b = process.a_b(t)
+    a, b = process.a(t), process.b(t)
     assert torch.allclose(process.tv(t), a**2 + b**2, rtol=1e-6)
     assert torch.allclose(process.log_snr(t), torch.log(a**2 / b**2), rtol=1e-6)
 
@@ -241,11 +236,8 @@ def test_log_derivatives_equal_the_quotients_they_replace(process):
         process.log_a_dot(t), process.a_dot(t) / process.a(t), rtol=1e-6
     )
     assert torch.allclose(
-        process.log_b_dot(t), process.b_dot(t) / process.b(t), rtol=1e-6
-    )
-    assert torch.allclose(
         process.log_snr_dot(t),
-        2.0 * (process.log_a_dot(t) - process.log_b_dot(t)),
+        2.0 * (process.log_a_dot(t) - process.b_dot(t) / process.b(t)),
         rtol=1e-6,
     )
 
@@ -337,7 +329,7 @@ def test_autograd_derivatives_survive_no_grad(process):
 def test_autograd_derivative_of_a_constant_schedule_is_zero():
     # a = ones_like(t) has no grad_fn at all: autograd calls it unused, not
     # zero. VE-type schedules would crash on their own a without the fallback.
-    ve = VE()
+    ve = VE(2e-4, 1.0)
     t = interior_times(ve)
     assert torch.allclose(Process.a_dot(ve, t), torch.zeros_like(t))
 
@@ -352,12 +344,10 @@ def test_autograd_derivatives_return_a_plain_tensor(process):
         assert dot.grad_fn is None
 
 
-# --- the gamma hook ------------------------------------------------------- #
+# --- the interpolant ------------------------------------------------------ #
 
 
-def test_gamma_defaults_to_none_and_interpolate_is_exactly_two_term(process):
-    assert process.gamma(torch.tensor([0.5])) is None
-
+def test_interpolate_is_exactly_two_term(process):
     x0, x1 = torch.randn(6, 3), torch.randn(6, 3)
     t = torch.full((6,), 0.5 * (process.t_min + process.t_max))
 
@@ -372,37 +362,6 @@ def test_two_term_interpolate_consumes_no_rng(process):
     state = torch.random.get_rng_state()
     process.interpolate(x0, x1, t)
     assert torch.equal(torch.random.get_rng_state(), state)
-
-
-def test_bridge_schedule_gets_the_three_term_interpolant():
-    class BridgeVP(VP):
-        def gamma(self, t):
-            return 0.5 * torch.ones_like(t)
-
-    bridge = BridgeVP()
-    x0, x1, eps = torch.randn(6, 3), torch.randn(6, 3), torch.randn(6, 3)
-    t = torch.full((6,), 0.5)
-
-    expected = (
-        expand_t(bridge.a(t), x0) * x0 + expand_t(bridge.b(t), x1) * x1 + 0.5 * eps
-    )
-    assert torch.allclose(bridge.interpolate(x0, x1, t, eps=eps), expected)
-
-
-def test_bridge_schedule_draws_its_own_noise_when_not_given():
-    class BridgeVP(VP):
-        def gamma(self, t):
-            return 0.5 * torch.ones_like(t)
-
-    bridge = BridgeVP()
-    x0, x1 = torch.randn(6, 3), torch.randn(6, 3)
-    t = torch.full((6,), 0.5)
-
-    torch.manual_seed(0)
-    a = bridge.interpolate(x0, x1, t)
-    torch.manual_seed(1)
-    b = bridge.interpolate(x0, x1, t)
-    assert not torch.allclose(a, b)
 
 
 # --- structure ------------------------------------------------------------ #

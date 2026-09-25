@@ -6,6 +6,10 @@ forces, guidance), entering through the integrator rather than around it.
 __all__ = ["FieldConstraint"]
 
 
+# TODO: nothing calls `modify_field` yet. Wire it into the drivers (the
+# Sampler's reverse field and DirectDenoising's jump) so restraint forces and
+# guidance can act through the integrator, and reconcile with the energy-term
+# restraints (HarmonicBond) on the jl/optimizer_performance_v2 branch.
 class FieldConstraint:
     """Base class of field-level constraints; the hook defaults to identity."""
 

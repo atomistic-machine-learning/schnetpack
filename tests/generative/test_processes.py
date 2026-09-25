@@ -21,54 +21,25 @@ def test_perturb_routes_prior_then_coupling_then_schedule():
     seen = {}
 
     class RecordingCoupling(IdentityCoupling):
-        def pair(self, x0, x1):
+        def pair(self, x0, x1, groups=None):
             seen["x1"] = x1
             return x0, x1
 
     torch.manual_seed(0)
-    process = VE(prior=GaussianPrior(30.0), coupling=RecordingCoupling())
+    process = VE(6e-3, 30.0, coupling=RecordingCoupling())
     x0 = torch.randn(64, 3)
-    x_t, out0, x1, t, eps = process.perturb(x0)
+    x_t, out0, x1, t = process.perturb(x0)
 
     assert torch.equal(out0, x0)
     assert seen["x1"].std().item() == pytest.approx(30.0, rel=0.1)  # the prior's scale
-    assert eps is None  # no bridge noise on a VE schedule
     # x_t is a x0 + b x1 with a = 1 on VE
     assert torch.allclose(x_t, x0 + process.b(t).reshape(-1, 1) * x1)
-
-
-def test_perturb_returns_the_bridge_noise_it_drew():
-    # The reason the process owns the draw: a bridge target needs the exact
-    # eps that entered the interpolant, so perturb must hand it back.
-    class BridgeVE(VE):
-        def gamma(self, t):
-            return 0.1 * torch.ones_like(t)
-
-    torch.manual_seed(0)
-    process = BridgeVE()
-    x0 = torch.randn(32, 3)
-    x_t, _, x1, t, eps = process.perturb(x0)
-
-    assert eps is not None and eps.shape == x0.shape
-    # x_t must be reproducible from exactly that eps
-    rebuilt = process.interpolate(x0, x1, t, eps=eps)
-    assert torch.allclose(x_t, rebuilt)
-
-
-def test_perturb_accepts_given_endpoints_but_still_pairs_them():
-    torch.manual_seed(0)
-    process = VE(coupling=PermutationCoupling())
-    x0 = torch.randn(16, 3)
-    x1 = torch.randn(16, 3)
-    _, _, paired, _, _ = process.perturb(x0, x1=x1)
-    # same multiset, possibly reordered
-    assert torch.allclose(x1[x1[:, 0].argsort()], paired[paired[:, 0].argsort()])
 
 
 def test_perturb_accepts_given_times():
     process = VP()
     t = torch.full((8,), 0.3)
-    _, _, _, t_out, _ = process.perturb(torch.randn(8, 3), t=t)
+    _, _, _, t_out = process.perturb(torch.randn(8, 3), t=t)
     assert torch.equal(t_out, t)
 
 
@@ -85,7 +56,7 @@ def test_sample_t_stays_inside_the_usable_range():
 
 
 def test_sigma_is_b_times_the_prior_std():
-    process = VE(scale=30.0)
+    process = VE(6e-3, 30.0)
     t = torch.linspace(0.1, 0.9, 5)
     assert torch.allclose(process.sigma(t), process.b(t) * 30.0)
 
@@ -101,8 +72,8 @@ def test_ve_sigma_route_reproduces_the_classic_schedule():
 
 
 def test_g2_scales_with_std_squared():
-    unit = VE()
-    scaled = VE(scale=7.0)
+    unit = VE(2e-4, 1.0)
+    scaled = VE(7.0 * 2e-4, 7.0)
     t = torch.linspace(0.1, 0.9, 5)
     assert torch.allclose(scaled.sde().g2(t), 49.0 * unit.sde().g2(t), rtol=1e-6)
 
@@ -116,7 +87,7 @@ def test_sigma_and_the_chart_raise_without_a_declared_scale():
             self.std = None
             self.gaussian = True
 
-    process = VE(prior=NoScalePrior())
+    process = FlowMatching(prior=NoScalePrior())
     t = torch.linspace(0.1, 0.9, 5)
     with pytest.raises(ValueError, match="no scalar endpoint scale"):
         process.sigma(t)
@@ -124,18 +95,17 @@ def test_sigma_and_the_chart_raise_without_a_declared_scale():
         process.sde()
 
 
-def test_scale_and_prior_together_are_refused():
-    with pytest.raises(TypeError, match="not both"):
-        VP(scale=2.0, prior=GaussianPrior(2.0))
+def test_ve_builds_its_gaussian_endpoint_from_sigma_max():
+    process = VE(0.3, 30.0)
+    assert isinstance(process.prior, GaussianPrior)
+    assert process.prior.std == 30.0
+    assert process.b_min == pytest.approx(0.01)
 
 
-def test_ve_sigma_pair_excludes_the_dimensionless_route():
-    with pytest.raises(TypeError, match="not both"):
-        VE(0.3, 30.0, b_min=1e-2)
-    with pytest.raises(TypeError, match="not both"):
-        VE(0.3, 30.0, prior=GaussianPrior(30.0))
-    with pytest.raises(TypeError, match="together"):
-        VE(sigma_min=0.3)
+def test_vp_has_a_unit_gaussian_endpoint():
+    process = VP()
+    assert isinstance(process.prior, GaussianPrior)
+    assert process.prior.std == 1.0
 
 
 # --- the sampling start derives from the process -------------------------- #
@@ -143,12 +113,12 @@ def test_ve_sigma_pair_excludes_the_dimensionless_route():
 
 def test_sampling_prior_is_the_training_prior_when_the_coupling_preserves_it():
     prior = GaussianPrior(50.0)
-    process = VE(prior=prior, coupling=PermutationCoupling())
+    process = FlowMatching(prior=prior, coupling=PermutationCoupling())
     assert process.sampling_prior() is prior
 
 
 def test_sampling_prior_refuses_a_marginal_changing_coupling():
-    process = VE(coupling=PCVarianceCoupling())
+    process = VE(2e-4, 1.0, coupling=PCVarianceCoupling())
     with pytest.raises(ValueError, match="marginal"):
         process.sampling_prior()
 
@@ -179,7 +149,7 @@ def test_a_non_gaussian_prior_obstructs_the_kernel():
     class NonGaussian(GaussianPrior):
         gaussian = False
 
-    process = VE(prior=NonGaussian(1.0))
+    process = FlowMatching(prior=NonGaussian(1.0))
     assert not process.has_gaussian_kernel
     assert "isotropic Gaussian" in process.gaussian_kernel_obstruction()
 
@@ -189,53 +159,25 @@ def test_a_prior_without_a_scale_obstructs_the_kernel():
         def __init__(self):
             self.std = None
 
-    process = VE(prior=NoScale())
+    process = FlowMatching(prior=NoScale())
     assert not process.has_gaussian_kernel
     assert "scalar endpoint scale" in process.gaussian_kernel_obstruction()
 
 
 def test_a_marginal_changing_coupling_obstructs_the_kernel():
-    process = VE(scale=30.0, coupling=PCVarianceCoupling())
+    process = VE(6e-3, 30.0, coupling=PCVarianceCoupling())
     assert not process.has_gaussian_kernel
     assert "depending on the values" in process.gaussian_kernel_obstruction()
 
 
-def test_bridge_noise_obstructs_the_kernel():
-    class BridgeVP(VP):
-        def gamma(self, t):
-            return 0.1 * torch.ones_like(t)
-
-    process = BridgeVP()
-    assert not process.has_gaussian_kernel
-    assert "bridge noise" in process.gaussian_kernel_obstruction()
-
-
-def test_zero_bridge_noise_does_not_obstruct():
-    # A gamma that returns zeros carries no latent — the probe must check the
-    # values, not just non-None.
-    class ZeroBridgeVP(VP):
-        def gamma(self, t):
-            return torch.zeros_like(t)
-
-    assert ZeroBridgeVP().has_gaussian_kernel
-
-
 # --- Gaussian-only closed forms, on the chart ------------------------------ #
-
-
-def test_kernel_matches_the_perturbation_kernel():
-    process = VE(0.3, 30.0)
-    t = torch.linspace(0.1, 0.9, 5, dtype=torch.float64)
-    a, sigma = process.sde().kernel(t)
-    assert torch.allclose(a, process.a(t))
-    assert torch.allclose(sigma, process.sigma(t))
 
 
 def test_the_chart_refuses_without_the_gaussian_kernel():
     # The closed forms live on the chart, and a configuration without the
     # kernel cannot construct it — one refusal, at acquisition, instead of a
     # check per closed form.
-    process = VE(scale=30.0, coupling=PCVarianceCoupling())
+    process = VE(6e-3, 30.0, coupling=PCVarianceCoupling())
     with pytest.raises(ValueError, match="chart"):
         process.sde()
 

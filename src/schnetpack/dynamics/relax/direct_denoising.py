@@ -85,23 +85,17 @@ class DirectDenoising(Dynamics):
         self.time_key = time_key
         self.stochastic_lambda = stochastic_lambda
 
-    def denoise(self, batch, n_steps: int, t_start=None):
+    def denoise(self, batch, n_steps: int):
         """
         Relax the structures in ``batch`` by ``n_steps`` jumps.
 
         Args:
             batch: structures to relax
             n_steps: number of jumps
-            t_start: not accepted; the loop never uses a noise level
 
         Returns:
             The final batch.
         """
-        if t_start is not None:
-            raise ValueError(
-                "DirectDenoising is time-free and takes no t_start; "
-                "use Sampler.denoise to start from a known noise level."
-            )
         self.calculator.reset()
         batch = self.calculator.prepare(batch)
         x = batch[self.key]

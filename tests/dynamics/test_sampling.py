@@ -10,7 +10,6 @@ from schnetpack.dynamics import (
     Heun,
     Sampler,
     UniformGrid,
-    generate,
 )
 from schnetpack.generative import (
     VE,
@@ -106,14 +105,12 @@ def test_sampler_defaults_to_the_processs_sampling_prior(vp):
     sampler = Sampler(IDLE, vp, ScoreParametrization(), EulerMaruyama())
     assert isinstance(sampler.prior, GaussianPrior)
     assert sampler.prior.std == pytest.approx(1.0)
-    assert sampler.t_min == vp.t_min
-    assert sampler.t_max == vp.t_max
 
 
 def test_sampler_derives_the_scale_from_the_process():
     # The train/sample tie: the process carries the prior its x1 endpoint was
     # drawn from, and the sampler starts from exactly that — the same object.
-    process = VE(scale=50.0)
+    process = VE(0.01, 50.0)
     sampler = Sampler(IDLE, process, ScoreParametrization(), EulerMaruyama())
     assert isinstance(sampler.prior, GaussianPrior)
     assert sampler.prior.std == pytest.approx(50.0)
@@ -238,7 +235,7 @@ def test_chart_free_velocity_sampling_runs_without_the_kernel():
     # churn = 0 with a velocity head must assemble the chart-free ReverseODE:
     # on a configuration with no chart, sampling still runs end to end. A
     # wrong dispatch to ReverseSDE would raise at the chart acquisition.
-    process = VE(b_min=1e-2, prior=ShapedPrior())
+    process = FlowMatching(prior=ShapedPrior())
     sampler = Sampler(
         batch_model(lambda x, t, cond=None: torch.zeros_like(x)),
         process,
@@ -252,7 +249,7 @@ def test_chart_free_velocity_sampling_runs_without_the_kernel():
 
 def test_sde_refuses_without_the_gaussian_kernel():
     with pytest.raises(ValueError, match="chart"):
-        VE(b_min=1e-2, prior=ShapedPrior()).sde()
+        FlowMatching(prior=ShapedPrior()).sde()
 
 
 def test_shape_prior_with_declared_scale_fails_at_assembly_not_silently():
@@ -262,7 +259,7 @@ def test_shape_prior_with_declared_scale_fails_at_assembly_not_silently():
     # statements. The Sampler must refuse at construction, naming the
     # obstruction — before this, f/g2 and Tweedie returned wrong numbers
     # without a raise.
-    process = VE(b_min=1e-2, prior=ShapedPrior())
+    process = FlowMatching(prior=ShapedPrior())
     with pytest.raises(ValueError, match="chart"):
         Sampler(IDLE, process, X0Parametrization(), EulerMaruyama(), churn=1.0)
     with pytest.raises(ValueError, match="chart"):
@@ -322,7 +319,7 @@ def test_scaled_ve_recovers_data_stats():
     # derives its start from the process — the full scaled-VE assembly.
     torch.manual_seed(0)
     scale = 10.0
-    process = VE(scale=scale)
+    process = VE(2e-4 * scale, scale)
     mu0, s0 = 0.5, 1.0
     sampler = Sampler(
         batch_model(analytic_score(process, mu0, s0, x1_std=scale)),
@@ -417,7 +414,7 @@ def test_ancestral_x0_via_score_round_trips_an_x0_head(vp):
 def test_ancestral_on_scaled_ve_recovers_data_stats():
     torch.manual_seed(0)
     scale = 10.0
-    process = VE(scale=scale)
+    process = VE(2e-4 * scale, scale)
     mu0, s0 = 0.5, 1.0
     sampler = Sampler(
         batch_model(analytic_score(process, mu0, s0, x1_std=scale)),
@@ -580,11 +577,6 @@ def test_sampler_accepts_given_starting_states(vp):
     x_init = torch.full((8, 1), 3.0)
     out = sampler.denoise({properties.R: x_init}, 5)
     assert out[properties.R].shape == x_init.shape
-
-
-def test_generate_is_stub():
-    with pytest.raises(NotImplementedError):
-        generate()
 
 
 # --- trained end to end --------------------------------------------------- #

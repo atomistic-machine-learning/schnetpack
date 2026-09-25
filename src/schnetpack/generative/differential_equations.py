@@ -67,10 +67,6 @@ class SDE:
         process = self.process
         return -(process.sigma(t) ** 2) * process.log_snr_dot(t)
 
-    def kernel(self, t: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """(a(t), sigma(t)) of the perturbation kernel p(x_t | x0) = N(a x0, sigma^2 I)."""
-        return self.process.a(t), self.process.sigma(t)
-
     def posterior(
         self,
         x_t: torch.Tensor,
@@ -95,8 +91,8 @@ class SDE:
         Returns:
             (mean, std): mean shaped like x_t, std shaped like t.
         """
-        a_t, sig_t = self.kernel(t)
-        a_s, sig_s = self.kernel(s)
+        a_t, sig_t = self.process.a(t), self.process.sigma(t)
+        a_s, sig_s = self.process.a(s), self.process.sigma(s)
         r = a_t / a_s
         var_ts = sig_t**2 - r**2 * sig_s**2
         mean = (
@@ -114,7 +110,7 @@ class SDE:
 
         Singular where a -> 0 (flow matching at t = 1, VP at large t).
         """
-        a, sigma = self.kernel(t)
+        a, sigma = self.process.a(t), self.process.sigma(t)
         return (x_t + expand_t(sigma**2, x_t) * score) / expand_t(a, x_t)
 
 

@@ -70,7 +70,6 @@ class Parametrization(abc.ABC):
         x0: torch.Tensor,
         x1: torch.Tensor,
         t: torch.Tensor,
-        eps: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Training target the head regresses, from the endpoint pair.
@@ -80,9 +79,6 @@ class Parametrization(abc.ABC):
             x0: data endpoint
             x1: prior endpoint
             t: path time, per-sample or scalar
-            eps: bridge noise drawn by
-                :meth:`~schnetpack.generative.processes.Process.perturb`;
-                unused while gamma is zero
         """
         raise NotImplementedError
 
@@ -138,7 +134,7 @@ class ScoreParametrization(Parametrization):
     def validate(self, process):
         _require_gaussian(process, type(self))
 
-    def target(self, process, x0, x1, t, eps=None):
+    def target(self, process, x0, x1, t):
         # score of p(x_t | x0): -(x_t - a x0) / sigma^2 = -x1 / (b std^2)
         return -x1 / expand_t(process.b(t) * process.std**2, x1)
 
@@ -155,7 +151,7 @@ class EpsParametrization(Parametrization):
     def validate(self, process):
         _require_gaussian(process, type(self))
 
-    def target(self, process, x0, x1, t, eps=None):
+    def target(self, process, x0, x1, t):
         return x1 / process.std
 
     def to_score(self, process, output, x_t, t):
@@ -166,7 +162,7 @@ class EpsParametrization(Parametrization):
 class X0Parametrization(Parametrization):
     """The head predicts the clean sample x0 (denoiser convention). Any process."""
 
-    def target(self, process, x0, x1, t, eps=None):
+    def target(self, process, x0, x1, t):
         return x0
 
     def to_score(self, process, output, x_t, t):
@@ -191,7 +187,7 @@ class VelocityParametrization(Parametrization):
 
     velocity_needs_chart = False  # the head *is* the velocity
 
-    def target(self, process, x0, x1, t, eps=None):
+    def target(self, process, x0, x1, t):
         a_dot = expand_t(process.a_dot(t), x0)
         b_dot = expand_t(process.b_dot(t), x1)
         return a_dot * x0 + b_dot * x1
@@ -219,7 +215,7 @@ class PseudoForceParametrization(Parametrization):
     ``weight=lambda t: (1 / process.b(t)**2).clamp(max=1.0)`` to the loss.
     """
 
-    def target(self, process, x0, x1, t, eps=None):
+    def target(self, process, x0, x1, t):
         a = expand_t(process.a(t), x0)
         b = expand_t(process.b(t), x1)
         return 2.0 * ((1.0 - a) * x0 - b * x1)

@@ -78,7 +78,7 @@ def test_sampler_denoise_starts_at_t_start():
     assert torch.allclose(recorder.log[0][2], torch.full((2,), 0.5))
 
 
-def test_direct_denoising_hooks_see_zero_time_and_reject_t_start():
+def test_direct_denoising_hooks_see_zero_time():
     recorder = Recorder()
     model = batch_model(lambda x, t: torch.zeros_like(x))
     sampler = DirectDenoising(
@@ -96,9 +96,6 @@ def test_direct_denoising_hooks_see_zero_time_and_reject_t_start():
         ("after", 3),
     ]
     assert all((t == 0.0).all() for _, _, t in recorder.log)
-
-    with pytest.raises(ValueError, match="time-free"):
-        sampler.denoise({properties.R: torch.zeros(2, 1)}, 3, t_start=0.5)
 
 
 def test_stochastic_lambda_is_an_annealed_noise_constraint():
