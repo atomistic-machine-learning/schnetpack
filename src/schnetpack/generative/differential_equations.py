@@ -30,7 +30,7 @@ consumers that need it do so at their own construction, so an invalid
 assembly fails there — not mid-run, and never silently. The routes that
 never need the chart (velocity sampling at churn = 0, direct
 x0/pseudo-force recovery via
-:class:`~schnetpack.generative.sampler.DirectDenoisingSampler`) never call
+:class:`~schnetpack.dynamics.relax.DirectDenoising`) never call
 it.
 
 Reverse processes are never implemented per schedule; they split by
@@ -39,7 +39,7 @@ callable (x, t) — rather than a (model, parametrization, cond) triple.
 Composing that triple into the field, and picking the class from the
 assembly (the ``(parametrization, churn)`` pair plus any integrator
 demand), is the assembler's job —
-:meth:`~schnetpack.generative.sampler.Sampler.denoise` for the head route,
+:meth:`~schnetpack.dynamics.sampling.sampler.Sampler.denoise` for the head route,
 or by hand for a ready field. Both reverse classes expose the
 ``drift``/``diffusion`` interface every integrator consumes; integration
 runs backwards in time, so integrators pass dt < 0.
@@ -74,7 +74,7 @@ class SDE:
                 f"No (f, g) SDE chart for this configuration: {obstruction}. "
                 "The chart-free routes remain available: velocity sampling "
                 "at churn = 0 and the direct x0/pseudo-force recovery "
-                "(DirectDenoisingSampler)."
+                "(DirectDenoising)."
             )
         self.process = process
 
@@ -198,7 +198,7 @@ class ReverseSDE:
     Pure chart math: the constructor takes the :class:`SDE` and a *bound
     score field* ``score_fn(x, t) -> score`` — no model, no parametrization,
     no cond. How a raw head output becomes the score is the assembler's
-    business — :class:`~schnetpack.generative.sampler.Sampler` binds
+    business — :class:`~schnetpack.dynamics.sampling.sampler.Sampler` binds
     ``parametrization.to_score`` and the model into that callable; a ready
     score field passes straight in. Taking the :class:`SDE` states the chart
     dependency where it cannot be missed: no chart, no ReverseSDE. The one
@@ -277,7 +277,7 @@ class ReverseODE:
     with model, parametrization and conditioning already composed inside.
     Guarding that the composition never crosses the chart
     (``velocity_needs_chart`` is False — a velocity head) is the assembler's
-    job — :class:`~schnetpack.generative.sampler.Sampler` sends a score,
+    job — :class:`~schnetpack.dynamics.sampling.sampler.Sampler` sends a score,
     noise or x0 head, which reaches the velocity through f and g^2, to
     :class:`ReverseSDE` even at churn = 0.
     """

@@ -6,7 +6,7 @@ __all__ = ["generate"]
 def generate(*args, **kwargs):
     """
     Generate structures from a trained model: sample compositions and starting
-    states from a prior, run a :class:`~schnetpack.generative.sampler.Sampler`
+    states from a prior, run a :class:`~schnetpack.dynamics.sampling.sampler.Sampler`
     batch-wise until the requested number of structures is produced, and
     convert the result to ASE Atoms.
 
@@ -14,5 +14,5 @@ def generate(*args, **kwargs):
     entry point.
     """
     raise NotImplementedError(
-        "schnetpack.generative.generate() lands with M1.3 (CLI + notebooks)."
+        "schnetpack.dynamics.sampling.generate() lands with M1.3 (CLI + notebooks)."
     )

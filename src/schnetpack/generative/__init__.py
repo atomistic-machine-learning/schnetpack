@@ -28,7 +28,7 @@ cases with bespoke logic:
   obstruction named. And its reversal: a single churn knob spanning the
   probability-flow ODE (churn = 0) and the reverse-time SDE (churn = 1),
   never implemented per schedule but split by capability — the
-  :class:`~sampler.Sampler` assembles the chart-free ``ReverseODE`` when
+  :class:`~schnetpack.dynamics.sampling.sampler.Sampler` assembles the chart-free ``ReverseODE`` when
   nothing needs the chart and the ``ReverseSDE`` otherwise, each taking a
   bound score/velocity field.
 - :mod:`~schnetpack.generative.priors` — what the x1 endpoint *is*: the
@@ -47,8 +47,6 @@ cases with bespoke logic:
   follows from that choice: the training targets, the conversions between
   fields and the reverse process. Stateless field math: every method takes
   the process it is applied to, and reads everything from it.
-- :mod:`~schnetpack.generative.integrators` — how a reverse process is
-  solved, with :mod:`~schnetpack.generative.grids` choosing where the steps go.
 - :mod:`~schnetpack.generative.times` — the mirror of that choice on the
   training side: which times the forward pass draws, uniform or stated as a
   density over sigma (EDM/GPFF).
@@ -74,8 +72,11 @@ Around them:
 - :mod:`~schnetpack.generative.transforms` — the same training step as a
   preprocessing transform, for training through the SchNetPack data pipeline
   and an ordinary supervised loss instead.
-- :mod:`~schnetpack.generative.sampler` — composition of the above.
-- :mod:`~schnetpack.generative.generate` — high-level generation entry.
+
+Running a trained model — the sampler that composes the above with an
+integrator and a time grid, and the high-level generation entry — lives in
+:mod:`schnetpack.dynamics.sampling`, next to the other loops that move
+structures. This package defines the model and its training; that one runs it.
 
 The model contract is deliberately minimal::
 
@@ -90,16 +91,11 @@ consistency models and optimal-transport couplings are accommodated by the
 design but not yet implemented.
 """
 
-from schnetpack.generative import integrators
 from schnetpack.generative.couplings import *
-from schnetpack.generative.generate import *
-from schnetpack.generative.grids import *
-from schnetpack.generative.integrators import *
 from schnetpack.generative.losses import *
 from schnetpack.generative.parametrizations import *
 from schnetpack.generative.priors import *
 from schnetpack.generative.processes import *
 from schnetpack.generative.differential_equations import *
-from schnetpack.generative.sampler import *
 from schnetpack.generative.times import *
 from schnetpack.generative.transforms import *

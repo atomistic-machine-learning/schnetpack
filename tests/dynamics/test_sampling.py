@@ -1,30 +1,48 @@
 import pytest
 import torch
 
-from schnetpack.generative import (
+from schnetpack.dynamics import (
     Ancestral,
     AncestralDDPM,
-    DirectDenoisingSampler,
-    PseudoForceParametrization,
+    DirectDenoising,
     EulerMaruyama,
+    Heun,
+    Sampler,
+    UniformGrid,
+    generate,
+)
+from schnetpack import properties
+from schnetpack.generative import (
+    EpsParametrization,
     FlowMatching,
     GaussianPrior,
-    Heun,
+    MatchingLoss,
     PCVarianceCoupling,
     Prior,
+    PseudoForceParametrization,
     ReverseSDE,
-    Sampler,
     ScoreParametrization,
-    UniformGrid,
     VE,
     VelocityParametrization,
     VP,
     X0Parametrization,
-    EpsParametrization,
     expand_t,
-    generate,
 )
-from schnetpack.generative import MatchingLoss
+
+
+def batch_model(fn):
+    """Wrap a tensor field fn(x, t) into the batch contract batch -> outputs."""
+    return lambda batch: {"prediction": fn(batch[properties.R], batch[properties.t])}
+
+
+#: placeholder calculator for drivers that are only assembled, never run
+IDLE = batch_model(lambda x, t: torch.zeros_like(x))
+
+
+def draw(dynamics, shape, n_steps):
+    """Sample from the prior; return the positions."""
+    template = {properties.R: torch.empty(shape)}
+    return dynamics.sample(template, n_steps)[properties.R]
 
 
 @pytest.fixture
@@ -80,7 +98,7 @@ def test_gaussian_prior_has_the_declared_std():
 
 def test_sampler_defaults_to_the_processs_sampling_prior(vp):
     # b(t_max) = 1, so the default unit Gaussian diffusion starts at N(0, I).
-    sampler = Sampler(vp, ScoreParametrization(), EulerMaruyama())
+    sampler = Sampler(IDLE, vp, ScoreParametrization(), EulerMaruyama())
     assert isinstance(sampler.prior, GaussianPrior)
     assert sampler.prior.std == pytest.approx(1.0)
     assert sampler.t_min == vp.t_min
@@ -91,7 +109,7 @@ def test_sampler_derives_the_scale_from_the_process():
     # The train/sample tie: the process carries the prior its x1 endpoint was
     # drawn from, and the sampler starts from exactly that — the same object.
     process = VE(scale=50.0)
-    sampler = Sampler(process, ScoreParametrization(), EulerMaruyama())
+    sampler = Sampler(IDLE, process, ScoreParametrization(), EulerMaruyama())
     assert isinstance(sampler.prior, GaussianPrior)
     assert sampler.prior.std == pytest.approx(50.0)
     assert sampler.prior is process.prior
@@ -103,7 +121,11 @@ def test_sampler_validates_the_pair():
     reshaped = VP(coupling=PCVarianceCoupling())
     with pytest.raises(TypeError, match="Gaussian kernel"):
         Sampler(
-            reshaped, ScoreParametrization(), EulerMaruyama(), prior=GaussianPrior()
+            IDLE,
+            reshaped,
+            ScoreParametrization(),
+            EulerMaruyama(),
+            prior=GaussianPrior(),
         )
 
 
@@ -114,12 +136,17 @@ def test_sampler_refuses_when_the_process_cannot_state_its_start():
     # churn > 0 on this configuration is refused earlier, for the chart.)
     process = VP(coupling=PCVarianceCoupling())
     with pytest.raises(ValueError, match="marginal"):
-        Sampler(process, VelocityParametrization(), EulerMaruyama(), churn=0.0)
+        Sampler(IDLE, process, VelocityParametrization(), EulerMaruyama(), churn=0.0)
 
     # An explicit prior always wins.
     explicit = GaussianPrior()
     sampler = Sampler(
-        process, VelocityParametrization(), EulerMaruyama(), prior=explicit, churn=0.0
+        IDLE,
+        process,
+        VelocityParametrization(),
+        EulerMaruyama(),
+        prior=explicit,
+        churn=0.0,
     )
     assert sampler.prior is explicit
 
@@ -207,8 +234,14 @@ def test_chart_free_velocity_sampling_runs_without_the_kernel():
     # on a configuration with no chart, sampling still runs end to end. A
     # wrong dispatch to ReverseSDE would raise at the chart acquisition.
     process = VE(b_min=1e-2, prior=ShapedPrior())
-    sampler = Sampler(process, VelocityParametrization(), Heun(), churn=0.0)
-    out = sampler.sample(lambda x, t, cond=None: torch.zeros_like(x), (8, 2), 5)
+    sampler = Sampler(
+        batch_model(lambda x, t, cond=None: torch.zeros_like(x)),
+        process,
+        VelocityParametrization(),
+        Heun(),
+        churn=0.0,
+    )
+    out = draw(sampler, (8, 2), 5)
     assert out.shape == (8, 2)
 
 
@@ -226,17 +259,18 @@ def test_shape_prior_with_declared_scale_fails_at_assembly_not_silently():
     # without a raise.
     process = VE(b_min=1e-2, prior=ShapedPrior())
     with pytest.raises(ValueError, match="chart"):
-        Sampler(process, X0Parametrization(), EulerMaruyama(), churn=1.0)
+        Sampler(IDLE, process, X0Parametrization(), EulerMaruyama(), churn=1.0)
     with pytest.raises(ValueError, match="chart"):
-        Sampler(process, X0Parametrization(), Heun(), churn=0.0)  # PF-ODE converts too
+        # the probability-flow ODE converts too
+        Sampler(IDLE, process, X0Parametrization(), Heun(), churn=0.0)
     with pytest.raises(ValueError, match="chart"):
-        Sampler(process, VelocityParametrization(), Ancestral(), churn=0.0)
+        Sampler(IDLE, process, VelocityParametrization(), Ancestral(), churn=0.0)
     with pytest.raises(ValueError, match="chart"):  # churn > 0 crosses it too
-        Sampler(process, VelocityParametrization(), EulerMaruyama(), churn=1.0)
+        Sampler(IDLE, process, VelocityParametrization(), EulerMaruyama(), churn=1.0)
 
     # The chart-free assemblies stay open on the same configuration.
-    Sampler(process, VelocityParametrization(), Heun(), churn=0.0)
-    DirectDenoisingSampler(process, PseudoForceParametrization())
+    Sampler(IDLE, process, VelocityParametrization(), Heun(), churn=0.0)
+    DirectDenoising(IDLE, process, PseudoForceParametrization())
 
 
 # --- end-to-end recovery of the data distribution ------------------------- #
@@ -252,8 +286,14 @@ def test_shape_prior_with_declared_scale_fails_at_assembly_not_silently():
 def test_reverse_process_recovers_data_stats(vp, integrator, n_steps, churn):
     torch.manual_seed(0)
     mu0, s0 = 1.5, 0.5
-    sampler = Sampler(vp, ScoreParametrization(), integrator, churn=churn)
-    samples = sampler.sample(analytic_score(vp, mu0, s0), (4096, 1), n_steps)
+    sampler = Sampler(
+        batch_model(analytic_score(vp, mu0, s0)),
+        vp,
+        ScoreParametrization(),
+        integrator,
+        churn=churn,
+    )
+    samples = draw(sampler, (4096, 1), n_steps)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
     assert samples.std().item() == pytest.approx(s0, abs=0.1)
 
@@ -261,8 +301,13 @@ def test_reverse_process_recovers_data_stats(vp, integrator, n_steps, churn):
 def test_ancestral_ddpm_recovers_data_stats(vp):
     torch.manual_seed(0)
     mu0, s0 = -0.5, 0.8
-    sampler = Sampler(vp, ScoreParametrization(), AncestralDDPM())
-    samples = sampler.sample(analytic_score(vp, mu0, s0), (4096, 1), 1000)
+    sampler = Sampler(
+        batch_model(analytic_score(vp, mu0, s0)),
+        vp,
+        ScoreParametrization(),
+        AncestralDDPM(),
+    )
+    samples = draw(sampler, (4096, 1), 1000)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
     assert samples.std().item() == pytest.approx(s0, abs=0.15)
 
@@ -274,20 +319,33 @@ def test_scaled_ve_recovers_data_stats():
     scale = 10.0
     process = VE(scale=scale)
     mu0, s0 = 0.5, 1.0
-    sampler = Sampler(process, ScoreParametrization(), EulerMaruyama(), churn=1.0)
-    samples = sampler.sample(
-        analytic_score(process, mu0, s0, x1_std=scale), (4096, 1), 500
+    sampler = Sampler(
+        batch_model(analytic_score(process, mu0, s0, x1_std=scale)),
+        process,
+        ScoreParametrization(),
+        EulerMaruyama(),
+        churn=1.0,
     )
+    samples = draw(sampler, (4096, 1), 500)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.15)
     assert samples.std().item() == pytest.approx(s0, abs=0.15)
 
 
 def test_denoise_partial(vp):
     torch.manual_seed(0)
-    sampler = Sampler(vp, ScoreParametrization(), EulerMaruyama())
+    sampler = Sampler(
+        batch_model(analytic_score(vp, 0.0, 1.0)),
+        vp,
+        ScoreParametrization(),
+        EulerMaruyama(),
+    )
     x_t = torch.randn(8, 5, 3)
-    out = sampler.denoise(analytic_score(vp, 0.0, 1.0), x_t, t_start=0.5, n_steps=10)
-    assert out.shape == x_t.shape
+    out = sampler.denoise(
+        {properties.R: x_t},
+        n_steps=10,
+        t_start=0.5,
+    )
+    assert out[properties.R].shape == x_t.shape
 
 
 # --- generic ancestral sampling ------------------------------------------- #
@@ -296,8 +354,13 @@ def test_denoise_partial(vp):
 def test_ancestral_recovers_data_stats(vp):
     torch.manual_seed(0)
     mu0, s0 = -0.5, 0.8
-    sampler = Sampler(vp, ScoreParametrization(), Ancestral())
-    samples = sampler.sample(analytic_score(vp, mu0, s0), (4096, 1), 1000)
+    sampler = Sampler(
+        batch_model(analytic_score(vp, mu0, s0)),
+        vp,
+        ScoreParametrization(),
+        Ancestral(),
+    )
+    samples = draw(sampler, (4096, 1), 1000)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
     assert samples.std().item() == pytest.approx(s0, abs=0.15)
 
@@ -348,117 +411,15 @@ def test_ancestral_on_scaled_ve_recovers_data_stats():
     scale = 10.0
     process = VE(scale=scale)
     mu0, s0 = 0.5, 1.0
-    sampler = Sampler(process, ScoreParametrization(), Ancestral())
-    samples = sampler.sample(
-        analytic_score(process, mu0, s0, x1_std=scale), (4096, 1), 500
+    sampler = Sampler(
+        batch_model(analytic_score(process, mu0, s0, x1_std=scale)),
+        process,
+        ScoreParametrization(),
+        Ancestral(),
     )
+    samples = draw(sampler, (4096, 1), 500)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.15)
     assert samples.std().item() == pytest.approx(s0, abs=0.15)
-
-
-# --- direct denoising ------------------------------------------------------ #
-
-
-def test_direct_denoising_ends_on_the_x0_estimate():
-    # The last iteration injects nothing (noise ratio 0) and then jumps, so a
-    # model whose x0-estimate is a fixed point lands there exactly.
-    mu0 = 1.5
-    process = VE(0.01, 3.0)
-    sampler = DirectDenoisingSampler(process, PseudoForceParametrization())
-
-    def model(x, t, cond=None):
-        return 2.0 * (mu0 - x)  # pseudo force straight to mu0
-
-    out = sampler.sample(model, (16, 3), 5)
-    assert torch.allclose(out, torch.full_like(out, mu0))
-
-
-def test_direct_denoising_is_time_free_and_threads_cond():
-    marker = object()
-    seen_t, seen_cond = [], []
-
-    def model(x, t, cond=None):
-        seen_t.append(t)
-        seen_cond.append(cond)
-        return torch.zeros_like(x)
-
-    process = VE(0.01, 3.0)
-    sampler = DirectDenoisingSampler(process, PseudoForceParametrization())
-    sampler.sample(model, (4, 1), 3, cond=marker)
-
-    assert len(seen_t) == 3
-    assert all((t == 0.0).all() for t in seen_t)
-    assert all(c is marker for c in seen_cond)
-
-
-def test_direct_denoising_lambda_zero_is_deterministic():
-    process = VE(0.01, 3.0)
-    sampler = DirectDenoisingSampler(
-        process, PseudoForceParametrization(), stochastic_lambda=0.0
-    )
-
-    def model(x, t, cond=None):
-        return -x  # some deterministic field
-
-    x_init = torch.randn(8, 2)
-    out1 = sampler.sample(model, (8, 2), 10, x_init=x_init.clone())
-    out2 = sampler.sample(model, (8, 2), 10, x_init=x_init.clone())
-    assert torch.equal(out1, out2)
-
-
-def test_direct_denoising_validates_pair_and_prior():
-    # Same construction contract as Sampler: the pair is validated, and a
-    # marginal-changing coupling has no data-free start to derive.
-    reshaped = VP(coupling=PCVarianceCoupling())
-    with pytest.raises(TypeError, match="Gaussian kernel"):
-        DirectDenoisingSampler(reshaped, ScoreParametrization(), prior=GaussianPrior())
-    with pytest.raises(ValueError, match="marginal"):
-        DirectDenoisingSampler(reshaped, PseudoForceParametrization())
-
-    explicit = GaussianPrior()
-    sampler = DirectDenoisingSampler(
-        reshaped, PseudoForceParametrization(), prior=explicit
-    )
-    assert sampler.prior is explicit
-
-
-class TimeFreeToyNet(torch.nn.Module):
-    """An MLP on x alone — the time-free contract direct denoising presumes."""
-
-    def __init__(self):
-        super().__init__()
-        self.layers = torch.nn.Sequential(
-            torch.nn.Linear(1, 64),
-            torch.nn.SiLU(),
-            torch.nn.Linear(64, 64),
-            torch.nn.SiLU(),
-            torch.nn.Linear(64, 1),
-        )
-
-    def forward(self, x, t, cond=None):
-        return self.layers(x)
-
-
-def test_direct_denoising_trained_gpff_assembly():
-    # The full GPFF recipe end to end: scaled VE + pseudo-force head with the
-    # clipped 1/b^2 weight, a time-free net, and the stochastic
-    # direct-denoising loop.
-    torch.manual_seed(0)
-    mu, sd = 1.0, 0.5
-    process = VE(0.01, 3.0)
-    parametrization = PseudoForceParametrization()
-    loss = MatchingLoss(
-        process,
-        parametrization,
-        weight=lambda t: (1.0 / process.b(t) ** 2).clamp(max=1.0),
-    )
-    model = train_toy(loss, TimeFreeToyNet(), mu, sd)
-
-    sampler = DirectDenoisingSampler(process, parametrization, stochastic_lambda=1.0)
-    samples = sampler.sample(model, (4096, 1), 50)
-
-    assert torch.isfinite(samples).all()
-    assert samples.mean().item() == pytest.approx(mu, abs=0.2)
 
 
 # --- flow matching -------------------------------------------------------- #
@@ -468,8 +429,14 @@ def test_fm_velocity_ode_recovers_data_stats():
     torch.manual_seed(0)
     fm = FlowMatching()
     mu0, s0 = 1.0, 0.5
-    sampler = Sampler(fm, VelocityParametrization(), Heun(), churn=0.0)
-    samples = sampler.sample(analytic_velocity(fm, mu0, s0), (4096, 1), 100)
+    sampler = Sampler(
+        batch_model(analytic_velocity(fm, mu0, s0)),
+        fm,
+        VelocityParametrization(),
+        Heun(),
+        churn=0.0,
+    )
+    samples = draw(sampler, (4096, 1), 100)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
     assert samples.std().item() == pytest.approx(s0, abs=0.1)
 
@@ -484,8 +451,14 @@ def test_fm_ode_never_converts_velocity_to_score(monkeypatch):
 
     monkeypatch.setattr(VelocityParametrization, "to_score", explode)
 
-    sampler = Sampler(fm, VelocityParametrization(), Heun(), churn=0.0)
-    samples = sampler.sample(analytic_velocity(fm, 0.0, 1.0), (16, 1), 10)
+    sampler = Sampler(
+        batch_model(analytic_velocity(fm, 0.0, 1.0)),
+        fm,
+        VelocityParametrization(),
+        Heun(),
+        churn=0.0,
+    )
+    samples = draw(sampler, (16, 1), 10)
     assert torch.isfinite(samples).all()
 
 
@@ -494,33 +467,80 @@ def test_fm_stochastic_sampling_stays_finite():
     # t_max of exactly 1 would produce NaNs the moment churn > 0.
     torch.manual_seed(0)
     fm = FlowMatching()
-    sampler = Sampler(fm, VelocityParametrization(), EulerMaruyama(), churn=1.0)
-    samples = sampler.sample(analytic_velocity(fm, 0.0, 1.0), (64, 1), 100)
+    sampler = Sampler(
+        batch_model(analytic_velocity(fm, 0.0, 1.0)),
+        fm,
+        VelocityParametrization(),
+        EulerMaruyama(),
+        churn=1.0,
+    )
+    samples = draw(sampler, (64, 1), 100)
     assert torch.isfinite(samples).all()
 
 
 # --- plumbing ------------------------------------------------------------- #
 
 
-def test_cond_is_threaded_through_sampling(vp):
-    marker = object()
+def test_batch_keys_reach_the_model_and_the_input_batch_is_untouched(vp):
+    # Conditioning is just another batch key: the model sees it at every
+    # call, next to the moved key and the time. The caller's batch is never
+    # modified, and keys the driver does not move are carried along as given
+    # (a static neighbor list stays valid; a cutoff list is the calculator's
+    # neighbor_list to rebuild).
     seen = []
 
-    def model(x, t, cond=None):
-        seen.append(cond)
-        return torch.zeros_like(x)
+    def model(batch):
+        seen.append(batch)
+        return {"prediction": torch.zeros_like(batch[properties.R])}
 
-    Sampler(vp, ScoreParametrization(), EulerMaruyama()).sample(
-        model, (4, 1), 3, cond=marker
+    x = torch.randn(4, 1)
+    batch = {
+        properties.R: x,
+        "condition": torch.ones(4),
+        properties.Rij: torch.zeros(2, 1),
+    }
+    out = Sampler(model, vp, ScoreParametrization(), EulerMaruyama()).denoise(batch, 3)
+    assert len(seen) == 3
+    assert all(torch.equal(b["condition"], torch.ones(4)) for b in seen)
+    assert all(b[properties.t].shape == (4,) for b in seen)
+    assert all(torch.equal(b[properties.Rij], torch.zeros(2, 1)) for b in seen)
+    assert batch[properties.R] is x and set(batch) == {
+        properties.R,
+        "condition",
+        properties.Rij,
+    }
+    assert torch.equal(out["condition"], torch.ones(4))
+
+
+def test_sampler_moves_any_declared_key(vp):
+    # Toy data need not pretend to be positions: the driver moves its keys.
+    model = lambda batch: {"prediction": -batch["x"]}
+    sampler = Sampler(model, vp, ScoreParametrization(), EulerMaruyama(), key="x")
+    out = sampler.sample({"x": torch.empty(8, 2)}, 5)
+    assert out["x"].shape == (8, 2)
+    with pytest.raises(KeyError, match="shape"):
+        sampler.sample({}, 5)
+
+
+def test_sampler_derives_position_shape_from_atom_types(vp):
+    sampler = Sampler(
+        batch_model(lambda x, t: -x), vp, ScoreParametrization(), EulerMaruyama()
     )
-    assert seen and all(c is marker for c in seen)
+    batch = {properties.Z: torch.tensor([1, 6, 8])}
+    out = sampler.sample(batch, 2)
+    assert out[properties.R].shape == (3, 3)
 
 
 def test_sampler_accepts_given_starting_states(vp):
-    sampler = Sampler(vp, ScoreParametrization(), EulerMaruyama())
+    sampler = Sampler(
+        batch_model(analytic_score(vp, 0.0, 1.0)),
+        vp,
+        ScoreParametrization(),
+        EulerMaruyama(),
+    )
     x_init = torch.full((8, 1), 3.0)
-    out = sampler.sample(analytic_score(vp, 0.0, 1.0), (8, 1), 5, x_init=x_init)
-    assert out.shape == x_init.shape
+    out = sampler.denoise({properties.R: x_init}, 5)
+    assert out[properties.R].shape == x_init.shape
 
 
 def test_generate_is_stub():
@@ -585,8 +605,10 @@ def test_trained_model_recovers_data_stats(
 
     parametrization = param_cls()
     model = train_toy(MatchingLoss(process, parametrization), ToyNet(), mu, sd)
-    samples = Sampler(process, parametrization, integrator, churn=churn).sample(
-        model, (4096, 1), n_steps
+    samples = draw(
+        Sampler(batch_model(model), process, parametrization, integrator, churn=churn),
+        (4096, 1),
+        n_steps,
     )
 
     assert samples.mean().item() == pytest.approx(mu, abs=0.15)

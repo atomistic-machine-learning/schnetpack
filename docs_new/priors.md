@@ -147,7 +147,7 @@ Guidelines:
   sampling all remain open; see
   [flow_matching_sde.md §8](flow_matching_sde.md)).
 - A structured prior usually pairs with `Sampler.denoise` (starting below
-  $t_{\max}$ from a structured state) or with `DirectDenoisingSampler` —
+  $t_{\max}$ from a structured state) or with `DirectDenoising` —
   see [sampling.md](sampling.md).
 
 

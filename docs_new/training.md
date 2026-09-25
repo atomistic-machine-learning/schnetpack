@@ -190,8 +190,9 @@ for x0 in data:
     loss_fn(model, x0).backward()
     optimizer.step()
 
-sampler = Sampler(process, param, Ancestral())    # same objects
-samples = sampler.sample(model, shape=x0.shape, n_steps=200)
+batch_model = lambda b: {"prediction": model(b[properties.R], b[properties.t])}
+sampler = Sampler(batch_model, process, param, Ancestral())    # same objects
+samples = sampler.sample({properties.R: torch.empty_like(x0)}, n_steps=200)
 ```
 
 And the pipeline variant of the training half:

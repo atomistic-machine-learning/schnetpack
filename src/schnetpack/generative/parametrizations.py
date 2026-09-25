@@ -6,7 +6,7 @@ method takes the
 :class:`~schnetpack.generative.processes.Process` it is applied
 to, and the consumers that need both — :class:`~schnetpack.generative.transforms.Diffuse`,
 :class:`~schnetpack.generative.losses.MatchingLoss`,
-:class:`~schnetpack.generative.sampler.Sampler`, the reverse processes
+:class:`~schnetpack.dynamics.sampling.sampler.Sampler`, the reverse processes
 (:class:`~schnetpack.generative.differential_equations.ReverseSDE`,
 :class:`~schnetpack.generative.differential_equations.ReverseODE`) — take the pair
 ``(process, parametrization)`` explicitly. It owns both directions of the
@@ -111,7 +111,7 @@ class Parametrization(abc.ABC):
     score and the probability-flow identity v = f x - 1/2 g^2 s, both chart
     statements. A parametrization whose head *is* the velocity overrides
     this to False — its conversion returns the output untouched — which is
-    what lets the :class:`~schnetpack.generative.sampler.Sampler` assemble a
+    what lets the :class:`~schnetpack.dynamics.sampling.sampler.Sampler` assemble a
     chart-free :class:`~schnetpack.generative.differential_equations.ReverseODE` for it at
     churn = 0, the one reverse route valid for any endpoint law.
     """

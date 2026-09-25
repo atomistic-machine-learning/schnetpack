@@ -445,7 +445,7 @@ diffusion under its default prior and a general stochastic interpolant
 under a structured one, with the closed forms gated by the configuration
 rather than the class. Under a non-Gaussian endpoint the supported surface
 is: velocity / $x_0$ / pseudo-force training, the churn $= 0$ velocity
-`Sampler` (a `ReverseODE`), and `DirectDenoisingSampler`; the score/noise
+`Sampler` (a `ReverseODE`), and `DirectDenoising`; the score/noise
 parametrizations refuse at `validate`, and the chart refuses to exist —
 every consumer that would need it fails at its own construction, with the
 obstruction named.

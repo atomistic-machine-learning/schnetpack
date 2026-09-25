@@ -6,9 +6,8 @@ from schnetpack.generative import (
     VE,
     EpsParametrization,
     GaussianPrior,
-    Sampler,
 )
-from schnetpack.generative.integrators import EulerMaruyama
+from schnetpack.dynamics import EulerMaruyama, Sampler
 
 
 # --- what the plain prior does, and why it is a problem -------------------- #
@@ -136,39 +135,46 @@ def test_perturb_stays_on_the_subspace_for_centered_data():
 
 
 def test_the_sampler_starts_a_batch_on_the_subspace():
-    # The generation side: the sampler passes context to the prior, so the
+    # The generation side: the sampler hands the batch to the prior, so the
     # start of a multi-molecule batch is centered per molecule.
     torch.manual_seed(0)
     idx_m = torch.arange(8).repeat_interleave(12)
     process = VE(b_min=0.05 / 10.0, prior=GaussianPrior(10.0))
-    sampler = Sampler(process, EpsParametrization(), EulerMaruyama())
 
     seen = {}
 
-    def model(x, t, cond):
+    def model(batch):
+        x = batch[properties.R]
         seen.setdefault("x_init", x.clone())
-        return torch.zeros_like(x)
+        return {"prediction": torch.zeros_like(x)}
 
-    sampler.sample(model, shape=(96, 3), n_steps=2, context={properties.idx_m: idx_m})
+    sampler = Sampler(model, process, EpsParametrization(), EulerMaruyama())
+
+    template = {properties.idx_m: idx_m, properties.R: torch.empty(96, 3)}
+    sampler.sample(template, n_steps=2)
     for m in range(8):
         assert seen["x_init"][idx_m == m].mean(0).norm().item() == pytest.approx(
             0.0, abs=1e-4
         )
 
 
-def test_an_explicit_x_init_ignores_the_context():
+def test_given_positions_are_denoised_as_they_are():
     torch.manual_seed(0)
     process = VE(b_min=0.05 / 10.0, prior=GaussianPrior(10.0))
-    sampler = Sampler(process, EpsParametrization(), EulerMaruyama())
     x_init = torch.full((6, 3), 7.0)
 
     seen = {}
 
-    def model(x, t, cond):
+    def model(batch):
+        x = batch[properties.R]
         seen.setdefault("x_init", x.clone())
-        return torch.zeros_like(x)
+        return {"prediction": torch.zeros_like(x)}
 
-    sampler.sample(model, shape=(6, 3), n_steps=1, x_init=x_init)
+    sampler = Sampler(model, process, EpsParametrization(), EulerMaruyama())
+
+    # the prior is not consulted, so the layout does not re-center them
+    batch = {properties.R: x_init, properties.idx_m: torch.zeros(6, dtype=torch.long)}
+    sampler.denoise(batch, n_steps=1)
     assert torch.allclose(seen["x_init"], x_init)
 
 
@@ -228,7 +234,9 @@ def test_diffuse_centers_each_molecule_of_a_collated_batch():
         }
     )
     for m in range(4):
-        assert out["eps"][idx_m == m].mean(0).norm().item() == pytest.approx(0.0, abs=1e-4)
+        assert out["eps"][idx_m == m].mean(0).norm().item() == pytest.approx(
+            0.0, abs=1e-4
+        )
         assert out[properties.R][idx_m == m].mean(0).norm().item() == pytest.approx(
             0.0, abs=1e-4
         )
@@ -244,6 +252,8 @@ def test_diffuse_per_structure_centers_the_one_molecule():
     transform = Diffuse(process, EpsParametrization(), label_key="eps", time_key="t")
 
     x0 = torch.randn(9, 3)
-    out = transform({properties.R: x0 - x0.mean(0), properties.Z: torch.ones(9, dtype=torch.long)})
+    out = transform(
+        {properties.R: x0 - x0.mean(0), properties.Z: torch.ones(9, dtype=torch.long)}
+    )
     assert out["eps"].mean(0).norm().item() == pytest.approx(0.0, abs=1e-5)
     assert out[properties.R].mean(0).norm().item() == pytest.approx(0.0, abs=1e-4)

@@ -1,7 +1,7 @@
 """
 Time samplers — where along the path training spends its samples.
 
-The counterpart of :mod:`~schnetpack.generative.grids`: a grid decides where a
+The counterpart of :mod:`~schnetpack.dynamics.sampling.grids`: a grid decides where a
 *sampler* puts its steps on the way back, a time sampler decides where
 *training* draws its times on the way out. Both distribute attention over the
 same axis, and both are swappable without touching anything else, because the

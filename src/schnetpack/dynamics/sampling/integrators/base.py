@@ -23,7 +23,7 @@ class Integrator(abc.ABC):
     ``diffusion`` and work on any reverse process. True for the ones that
     discretize through the chart itself — the ancestral steps, which read
     the exact posterior or the raw score — so the
-    :class:`~schnetpack.generative.sampler.Sampler` can demand a
+    :class:`~schnetpack.dynamics.sampling.sampler.Sampler` can demand a
     :class:`~schnetpack.generative.differential_equations.ReverseSDE` at assembly instead of
     failing mid-run.
     """
@@ -42,19 +42,3 @@ class Integrator(abc.ABC):
             dt: time increment (0-dim tensor; negative when denoising)
         """
         raise NotImplementedError
-
-    def integrate(self, dynamics, x: torch.Tensor, ts: torch.Tensor) -> torch.Tensor:
-        """
-        Run steps along a monotone time grid.
-
-        Args:
-            dynamics: object exposing drift(x, t) and diffusion(t)
-            x: initial state, shape (batch, ...)
-            ts: time grid of shape (n_steps + 1,), decreasing for denoising,
-                e.g. ``torch.linspace(T, t_min, n_steps + 1)``
-        """
-        for i in range(ts.shape[0] - 1):
-            t = ts[i].expand(x.shape[0])
-            dt = ts[i + 1] - ts[i]
-            x = self.step(dynamics, x, t, dt)
-        return x

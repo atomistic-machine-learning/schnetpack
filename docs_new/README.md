@@ -14,7 +14,7 @@ sampling machinery, one for training:
 | [priors.md](priors.md) | **Axis 2 — the endpoint.** What $x_1$ is, who owns the noise scale, the `gaussian`/`std` declarations, per-molecule centering, structured priors. |
 | [couplings.md](couplings.md) | **Axis 3 — the pairing.** The joint law of $(x_0, x_1)$ as a re-pairing of batches, marginal preservation, the `groups` mechanism, OT-style couplings. |
 | [parametrizations.md](parametrizations.md) | **Axis 4 — the prediction.** Score, noise, denoiser, velocity and pseudo-force heads: training targets, conversions, validity, loss weighting. |
-| [sampling.md](sampling.md) | The reverse process and its churn knob, integrators (Euler–Maruyama, Heun, ancestral), time grids, `Sampler` and `DirectDenoisingSampler`. |
+| [sampling.md](sampling.md) | The reverse process and its churn knob, integrators (Euler–Maruyama, Heun, ancestral), time grids, `Sampler` and `DirectDenoising`. |
 | [training.md](training.md) | The two training routes: `MatchingLoss` (tensor level) and `Diffuse` (data-pipeline transform), time samplers and loss weights. |
 | [flow_matching_sde.md](flow_matching_sde.md) | Deep dive: how flow matching is represented in the $(f, g)$ SDE framework, and what changes under a non-Gaussian endpoint. |
 
@@ -49,7 +49,7 @@ special cases with bespoke logic:
 | Score matching (NCSN/SMLD) | `VE(sigma_min, sigma_max)` | Gaussian, `std=sigma_max` (built internally) | identity | `ScoreParametrization` + $b^2$ weight | ancestral / SDE |
 | EDM-style denoiser | `VELinear(scale=sigma_max)` | Gaussian | identity | `X0Parametrization` | `Heun`, churn 0 |
 | Flow matching / rectified flow | `FlowMatching()` | unit Gaussian | identity (OT later) | `VelocityParametrization` | ODE, churn 0 |
-| GPFF | `VE(b_min=..., prior=...)` | shape prior | identity / structured | `PseudoForceParametrization` + clamped $1/b^2$ weight | `DirectDenoisingSampler` |
+| GPFF | `VE(b_min=..., prior=...)` | shape prior | identity / structured | `PseudoForceParametrization` + clamped $1/b^2$ weight | `DirectDenoising` |
 | TV/SNR ISSNR | `VPISSNR(eta, kappa)` | unit Gaussian | identity | any | any |
 
 Every row shares the same machinery. There is one `perturb`, one training
@@ -63,9 +63,9 @@ Tensor level, toy data, flow matching:
 
 ```python
 import torch
-from schnetpack.generative import (
-    FlowMatching, VelocityParametrization, MatchingLoss, Sampler, Heun,
-)
+from schnetpack.generative import FlowMatching, VelocityParametrization, MatchingLoss
+from schnetpack import properties
+from schnetpack.dynamics import Sampler, Heun
 
 process = FlowMatching()                     # a = 1 - t, b = t, unit Gaussian endpoint
 param   = VelocityParametrization()          # the model predicts d/dt x_t
@@ -76,20 +76,26 @@ for x0 in loader:
     loss = loss_fn(model, x0)                # perturb + target + weighted MSE
     loss.backward(); ...
 
-sampler = Sampler(process, param, Heun(), churn=0.0)   # the SAME two objects
-samples = sampler.sample(model, shape=(64, 3), n_steps=50)
+batch_model = lambda b: {"prediction": model(b[properties.R], b[properties.t])}
+sampler = Sampler(batch_model, process, param, Heun(), churn=0.0)  # the SAME two objects
+out = sampler.sample({properties.R: torch.empty(64, 3)}, n_steps=50)
+samples = out[properties.R]
 ```
 
 Swapping `FlowMatching()` for `VP()` and `VelocityParametrization()` for
 `EpsParametrization()` turns this into DDPM, with no other line changing.
 That is the design working as intended.
 
-The model contract is deliberately minimal: any callable
-`model(x, t, cond) -> raw output` with `x` of shape `(n_samples, ...)` and
-per-sample `t`. Nothing in the subpackage wraps a network or knows more about
-it than that — which is what lets the same machinery drive a toy MLP and a
-SchNetPack `NeuralNetworkPotential` behind an adapter (where the sample axis
-is atoms).
+Two model contracts meet here. The tensor-level `MatchingLoss` takes any
+callable `model(x, t, cond) -> raw output` with `x` of shape
+`(n_samples, ...)` and per-sample `t` — enough for a toy MLP. The drivers in
+`schnetpack.dynamics` take the batch dict, `model(batch) -> outputs`, like a
+SchNetPack `NeuralNetworkPotential` trained through the `Diffuse` transform:
+the time arrives under `properties.t`, the raw head is read from
+`outputs[output_key]`, and the sample axis is the leading axis of the moved
+key (atoms, for positions). A tensor-level model enters the drivers through
+a one-line wrapper, as above; see
+[sampling.md §7](sampling.md#7-the-shared-loop-the-batch-and-state-constraints).
 
 
 ## The design argument
@@ -122,7 +128,7 @@ What the judgment gates is still a nameable type — the `SDE` chart returned
 by `process.sde()`, whose *construction* is the check — so the consumers
 that need the machinery (`ReverseSDE`, the ancestral integrators) demand
 the chart in their signatures instead of probing a boolean, while the
-chart-free routes (`ReverseODE`, `DirectDenoisingSampler`) visibly never
+chart-free routes (`ReverseODE`, `DirectDenoising`) visibly never
 acquire one.
 
 The decisive observation: Gaussianity is not aligned with the schedule axis.

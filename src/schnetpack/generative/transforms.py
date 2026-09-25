@@ -18,7 +18,7 @@ driving raw tensors and want the whole objective in one call.
 Every axis stays swappable: the parametrization decides the label, and the
 process decides the path, the endpoint distribution and the pairing. The
 pair is validated at construction — use the same two objects here and in the
-:class:`~schnetpack.generative.sampler.Sampler`.
+:class:`~schnetpack.dynamics.sampling.sampler.Sampler`.
 
 Unlike the rest of the subpackage this module reaches into
 ``schnetpack.transform`` and ``schnetpack.properties``, since a transform is by
@@ -103,7 +103,7 @@ class Diffuse(Transform):
         t_sampler: Optional[Callable[[int, torch.device], torch.Tensor]] = None,
         diffuse_property: str = properties.R,
         label_key: str = "label",
-        time_key: str = "t",
+        time_key: str = properties.t,
         structure_time_key: Optional[str] = "t_structure",
         original_key: Optional[str] = None,
         group_keys: Optional[Sequence[str]] = (properties.idx_m, properties.Z),

@@ -2,7 +2,7 @@
 
 import torch
 
-from schnetpack.generative.integrators.base import Integrator
+from schnetpack.dynamics.sampling.integrators.base import Integrator
 from schnetpack.generative.processes import expand_t
 
 __all__ = ["EulerMaruyama"]

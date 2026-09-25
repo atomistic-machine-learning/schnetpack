@@ -14,12 +14,15 @@ the field-binding refactor (2026-08-01). Detailed treatment:
 | `ReverseSDE` | `differential_equations.py` | Anderson family on the chart: `drift = f x − ½(1+churn) g² s`, `diffusion`, `score`, `g2` | how the score was produced |
 | `ReverseODE` | `differential_equations.py` | transport `drift = v`, `diffusion = 0` | everything else — chart-free by design |
 | `Parametrization` | `parametrizations.py` | head contract: training `target`, conversions `to_score` / `to_velocity` / `to_x0` | integrators, samplers |
-| `Integrator` (Euler, Heun) | `integrators/` | one numerical step on `dynamics.drift` / `dynamics.diffusion` | what the dynamics is made of |
-| `Ancestral`, `AncestralDDPM` | `integrators/` | exact-posterior / DDPM steps through the chart's closed forms (`requires_sde = True`) | parametrizations (they see only `score` and the chart) |
-| `TimeGrid` | `grids.py` | where the steps land | everything else |
+| `Integrator` (Euler, Heun) | `dynamics/sampling/integrators/` | one numerical step on `dynamics.drift` / `dynamics.diffusion` | what the dynamics is made of |
+| `Ancestral`, `AncestralDDPM` | `dynamics/sampling/integrators/` | exact-posterior / DDPM steps through the chart's closed forms (`requires_sde = True`) | parametrizations (they see only `score` and the chart) |
+| `TimeGrid` | `dynamics/sampling/grids.py` | where the steps land | everything else |
 | `Prior` | `priors.py` | the x1 endpoint law; the start state | everything else |
-| `Sampler` | `sampler.py` | **the assembly**: validates the pair, decides `needs_chart`, binds the field, picks the reverse class, runs the integrator | numerics (delegated), field math (delegated) |
-| `DirectDenoisingSampler` | `sampler.py` | GPFF's inject-noise / jump-to-`to_x0` loop | the entire reverse machinery — deliberately outside it |
+| `Dynamics` | `dynamics/base.py` | prior draw in `sample`; the constraint hooks every driver's own `for` loop calls around each step; validates the pair; the batch contract (`key`, `output_key`, `time_key`) | what one step is |
+| `Calculator` | `dynamics/calculator.py` | inference: device/dtype (`prepare`, once per run), neighbor list (every call, on a copy), grad policy, the model call | processes, steps |
+| `StateConstraint` (`AnnealedNoise`, `Scaffold`) | `dynamics/constraints.py` | edits of the batch before and/or after a step | models, integrators |
+| `Sampler` | `dynamics/sampling/sampler.py` | **the assembly** (a `Dynamics`): decides `needs_chart`, binds the field, picks the reverse class; one step = one integrator step on the grid | numerics (delegated), field math (delegated) |
+| `DirectDenoising` | `dynamics/relax/direct_denoising.py` | GPFF's jump-to-`to_x0` step (a time-free `Dynamics`); its noise injection is an `AnnealedNoise` constraint | the entire reverse machinery — deliberately outside it |
 
 ## The chart of the connections
 
@@ -34,11 +37,11 @@ CONFIGURATION (held by Sampler, checked at construction)
   SDE chart (f, g², kernel, posterior, x0_from_score)
 
 
-ASSEMBLY (Sampler.denoise, once per call — model arrives here)
+ASSEMBLY (Sampler.reverse, once per step — calculator and batch arrive here)
 
-  model(x,t,cond) ─┐
-  parametrization ─┤  bound into ONE field callable
-  cond ────────────┘
+  calculator ──────┐  calculator({**batch, R: x, t: t}) → neighbor list → model
+  parametrization ─┤  bound into ONE field callable (x, t) → raw
+  output_key ──────┘
         │
         ├─ needs_chart?  churn > 0  OR  velocity_needs_chart  OR  integrator.requires_sde
         │
@@ -49,12 +52,14 @@ ASSEMBLY (Sampler.denoise, once per call — model arrives here)
                  dynamics = ReverseODE(velocity_fn)          ← never touches the chart
 
 
-INTEGRATION (integrator.integrate(dynamics, x, ts))
+INTEGRATION (Sampler.denoise: a for loop, one integrator step per iteration)
 
   prior.sample ──> x(t_max)          grid ──> ts (t_max → t_min)
         │                                        │
         ▼                                        ▼
-  loop:  x = integrator.step(dynamics, x, t, dt)         dt < 0
+  for i:  batch = before_step(batch, i, n)              batch[t] = ts[i]
+         x = integrator.step(dynamics, x, t, dt)         dt < 0
+         batch = after_step(batch, i + 1, n)             batch[t] = ts[i+1]
              │
              ├─ Euler/Heun:      dynamics.drift, dynamics.diffusion
              ├─ Ancestral:       s = dynamics.score
@@ -66,16 +71,18 @@ INTEGRATION (integrator.integrate(dynamics, x, ts))
 The chart-free lane, entirely apart:
 
 ```
-  DirectDenoisingSampler:  loop { inject noise; x = to_x0(process, model(x,0), x, 0) }
-  — no grid, no reverse object, no chart; the GPFF path.
+  DirectDenoising:  loop { AnnealedNoise (before-step constraint);
+                           x = to_x0(process, model(x,0), x, 0) }
+  — no grid, no reverse object, no chart; the GPFF path. Same Dynamics
+    constraint hooks, so the same constraints (Scaffold) apply.
 ```
 
 ## The three load-bearing rules
 
-1. **Reverse objects take bound fields, not (model, parametrization, cond).**
+1. **Reverse objects take bound fields, not (model, parametrization, batch).**
    `ReverseSDE` is pure chart math over a `score_fn(x, t)`; `ReverseODE` is
    pure transport over a `velocity_fn(x, t)`. The composition of head +
-   conversion + conditioning happens once, in `Sampler.denoise` — or by
+   conversion + batch happens once per step, in `Sampler.reverse` — or by
    hand, if you hold a ready field:
    `ReverseSDE(process.sde(), score_fn, churn=1.0)`.
 
@@ -83,7 +90,7 @@ The chart-free lane, entirely apart:
    check.** One condition — `churn > 0 or velocity_needs_chart or
    integrator.requires_sde` — decides both the eager check in
    `Sampler.__init__` (fail at assembly, obstruction named) and the class
-   picked in `denoise()`. Configurations without the kernel (shape prior,
+   picked in `reverse()`. Configurations without the kernel (shape prior,
    value-dependent coupling) keep the chart-free lanes: velocity head at
    churn = 0, and direct denoising.
 

@@ -14,7 +14,7 @@ A prior answers one question — what x1 *is* — and it is asked twice:
   marginal is this prior itself, and
   :meth:`~schnetpack.generative.processes.Process.sampling_prior`
   hands the very same object to the
-  :class:`~schnetpack.generative.sampler.Sampler`.
+  :class:`~schnetpack.dynamics.sampling.sampler.Sampler`.
 
 One object serving both sides is the point: train-time and sample-time x1
 cannot drift apart, because there is nothing to restate.
@@ -45,7 +45,7 @@ and says nothing about where the atoms go.
 
 Structured priors (per-molecule covariance, scaffolds, second datasets) plug
 in through this same interface; starting below t_max from a structured state
-pairs with :meth:`~schnetpack.generative.sampler.Sampler.denoise`.
+pairs with :meth:`~schnetpack.dynamics.sampling.sampler.Sampler.denoise`.
 """
 
 import abc
@@ -146,7 +146,7 @@ class GaussianPrior(Prior):
     - a mapping (a SchNetPack batch dict): ``segment_key`` is read out of it.
       :class:`~schnetpack.generative.transforms.Diffuse` passes the batch it
       is diffusing, and
-      :meth:`~schnetpack.generative.sampler.Sampler.sample` forwards whatever
+      :meth:`~schnetpack.dynamics.sampling.sampler.Sampler.sample` forwards whatever
       it is given, so both sides supply ``idx_m`` on their own.
     - a 1-D integer tensor: segment ids directly, one per row.
     - ``None``, or a mapping without ``segment_key``: the whole leading axis

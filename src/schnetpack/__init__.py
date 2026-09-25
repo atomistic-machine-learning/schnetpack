@@ -12,6 +12,7 @@ from schnetpack import train
 from schnetpack import model
 from schnetpack import objectives
 from schnetpack import generative
+from schnetpack import dynamics
 from schnetpack.units import *
 from schnetpack.task import *
 from schnetpack import md
