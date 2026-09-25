@@ -79,10 +79,10 @@ class Atomwise(nn.Module):
             idx_m = inputs[properties.idx_m]
             maxm = int(idx_m[-1]) + 1
             y = snn.scatter_add(y, idx_m, dim_size=maxm)
-            y = torch.squeeze(y, -1)
-
             if self.aggregation_mode == "avg":
-                y = y / inputs[properties.n_atoms]
+                y = y / inputs[properties.n_atoms].unsqueeze(-1)
+
+            y = torch.squeeze(y, -1)
 
         inputs[self.output_key] = y
         return inputs
