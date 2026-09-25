@@ -1,10 +1,12 @@
+import os
+
+import numpy as np
 import pytest
 import torch
-import numpy as np
-from schnetpack.data import *
-import os
+
 import schnetpack.properties as structure
-from schnetpack.data import calculate_stats, AtomsLoader
+from schnetpack.data import *
+from schnetpack.data import AtomsLoader, calculate_stats
 
 
 @pytest.fixture
@@ -14,7 +16,6 @@ def asedbpath(tmpdir):
 
 @pytest.fixture(scope="function")
 def asedb(asedbpath, example_data, property_units):
-
     asedb = ASEAtomsData.create(
         datapath=asedbpath, distance_unit="A", property_unit_dict=property_units
     )
@@ -138,5 +139,5 @@ def test_asedb_add(asedb, example_data):
     p2 = asedb[l + 1]
     for k, v in p1.items():
         if k != "_idx":
-            assert type(v) == torch.Tensor, k
+            assert isinstance(v, torch.Tensor), k
             assert (p2[k] == v).all(), v

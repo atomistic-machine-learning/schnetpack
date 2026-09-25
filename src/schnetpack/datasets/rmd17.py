@@ -1,18 +1,26 @@
 import logging
 import os
 import shutil
-import tempfile
 import tarfile
-from typing import List, Optional, Dict
+import tempfile
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-from urllib.error import URLError, HTTPError
+
 import numpy as np
+import torch
 from ase import Atoms
 
-import torch
 import schnetpack.properties as structure
-
-from schnetpack.data import *
+from schnetpack.data import (
+    AtomsDataFormat,
+    AtomsDataModule,
+    AtomsDataModuleError,
+    BaseAtomsData,
+    RandomSplit,
+    SubsamplePartitions,
+    create_dataset,
+    load_dataset,
+)
 
 __all__ = ["rMD17"]
 
@@ -65,25 +73,25 @@ class rMD17(AtomsDataModule):
         datapath: str,
         molecule: str,
         batch_size: int,
-        num_train: Optional[int] = None,
-        num_val: Optional[int] = None,
-        num_test: Optional[int] = None,
-        split_file: Optional[str] = "split.npz",
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
-        load_properties: Optional[List[str]] = None,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
-        train_transforms: Optional[List[torch.nn.Module]] = None,
-        val_transforms: Optional[List[torch.nn.Module]] = None,
-        test_transforms: Optional[List[torch.nn.Module]] = None,
+        num_train: int | None = None,
+        num_val: int | None = None,
+        num_test: int | None = None,
+        split_file: str | None = "split.npz",
+        format: AtomsDataFormat | None = AtomsDataFormat.ASE,
+        load_properties: list[str] | None = None,
+        val_batch_size: int | None = None,
+        test_batch_size: int | None = None,
+        transforms: list[torch.nn.Module] | None = None,
+        train_transforms: list[torch.nn.Module] | None = None,
+        val_transforms: list[torch.nn.Module] | None = None,
+        test_transforms: list[torch.nn.Module] | None = None,
         num_workers: int = 2,
-        num_val_workers: Optional[int] = None,
-        num_test_workers: Optional[int] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
-        data_workdir: Optional[str] = None,
-        split_id: Optional[int] = None,
+        num_val_workers: int | None = None,
+        num_test_workers: int | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
+        data_workdir: str | None = None,
+        split_id: int | None = None,
         **kwargs,
     ):
         """
@@ -149,7 +157,7 @@ class rMD17(AtomsDataModule):
         )
 
         if molecule not in rMD17.datasets_dict.keys():
-            raise AtomsDataModuleError("Molecule {} is not supported!".format(molecule))
+            raise AtomsDataModuleError(f"Molecule {molecule} is not supported!")
 
         self.molecule = molecule
 
@@ -183,7 +191,7 @@ class rMD17(AtomsDataModule):
                 )
             if md["molecule"] != self.molecule:
                 raise AtomsDataModuleError(
-                    f"The dataset at the given location does not contain the specified "
+                    "The dataset at the given location does not contain the specified "
                     + f"molecule: `{md['molecule']}` instead of `{self.molecule}`"
                 )
 
@@ -192,7 +200,7 @@ class rMD17(AtomsDataModule):
         tmpdir,
         dataset: BaseAtomsData,
     ):
-        logging.info("Downloading {} data".format(self.molecule))
+        logging.info(f"Downloading {self.molecule} data")
         raw_path = os.path.join(tmpdir, "rmd17")
         tar_path = os.path.join(tmpdir, "rmd17.tar")
         urls = [
@@ -217,7 +225,7 @@ class rMD17(AtomsDataModule):
                     raise RuntimeError(
                         f"Blocked or invalid download (size={size}, Content-Type={ctype})"
                     )
-                logging.info(f"Download successful rMD17.")
+                logging.info("Download successful rMD17.")
                 downloaded = True
                 break
 
@@ -227,7 +235,7 @@ class rMD17(AtomsDataModule):
 
         if not downloaded:
             raise RuntimeError(
-                "rMD17 download failed from both sources. " f"Error: {last_error}"
+                f"rMD17 download failed from both sources. Error: {last_error}"
             )
         logging.info("Done.")
 
@@ -237,7 +245,7 @@ class rMD17(AtomsDataModule):
             path=raw_path, member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}"
         )
 
-        logging.info("Parsing molecule {:s}".format(self.molecule))
+        logging.info(f"Parsing molecule {self.molecule:s}")
 
         data = np.load(
             os.path.join(

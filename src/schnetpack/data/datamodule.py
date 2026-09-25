@@ -2,25 +2,25 @@ import logging
 import os
 import shutil
 from copy import copy
-from typing import Optional, List, Dict, Tuple, Union, Any, Type
-import numpy as np
+from typing import Any
+
 import fasteners
+import numpy as np
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import BatchSampler
 
 from schnetpack.data import (
     AtomsDataFormat,
-    resolve_format,
-    load_dataset,
-    BaseAtomsData,
     AtomsLoader,
+    BaseAtomsData,
+    RandomSplit,
+    SplittingStrategy,
     calculate_stats,
     estimate_atomrefs,
-    SplittingStrategy,
-    RandomSplit,
+    load_dataset,
+    resolve_format,
 )
-
 
 __all__ = ["AtomsDataModule", "AtomsDataModuleError"]
 
@@ -41,29 +41,29 @@ class AtomsDataModule(pl.LightningDataModule):
         self,
         datapath: str,
         batch_size: int,
-        num_train: Union[int, float] = None,
-        num_val: Union[int, float] = None,
-        num_test: Optional[Union[int, float]] = None,
-        split_file: Optional[str] = "split.npz",
-        format: Optional[AtomsDataFormat] = None,
-        load_properties: Optional[List[str]] = None,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
-        train_transforms: Optional[List[torch.nn.Module]] = None,
-        val_transforms: Optional[List[torch.nn.Module]] = None,
-        test_transforms: Optional[List[torch.nn.Module]] = None,
-        train_sampler_cls: Optional[Type] = None,
-        train_sampler_args: Optional[Dict[str, Any]] = None,
+        num_train: int | float | None = None,
+        num_val: int | float | None = None,
+        num_test: int | float | None = None,
+        split_file: str | None = "split.npz",
+        format: AtomsDataFormat | None = None,
+        load_properties: list[str] | None = None,
+        val_batch_size: int | None = None,
+        test_batch_size: int | None = None,
+        transforms: list[torch.nn.Module] | None = None,
+        train_transforms: list[torch.nn.Module] | None = None,
+        val_transforms: list[torch.nn.Module] | None = None,
+        test_transforms: list[torch.nn.Module] | None = None,
+        train_sampler_cls: type | None = None,
+        train_sampler_args: dict[str, Any] | None = None,
         num_workers: int = 8,
-        num_val_workers: Optional[int] = None,
-        num_test_workers: Optional[int] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
-        data_workdir: Optional[str] = None,
-        cleanup_workdir_stage: Optional[str] = "test",
-        splitting: Optional[SplittingStrategy] = None,
-        pin_memory: Optional[bool] = False,
+        num_val_workers: int | None = None,
+        num_test_workers: int | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
+        data_workdir: str | None = None,
+        cleanup_workdir_stage: str | None = "test",
+        splitting: SplittingStrategy | None = None,
+        pin_memory: bool | None = False,
     ):
         """
         Args:
@@ -174,7 +174,7 @@ class AtomsDataModule(pl.LightningDataModule):
         """
         return self._test_transforms
 
-    def setup(self, stage: Optional[str] = None):
+    def setup(self, stage: str | None = None):
         # check whether data needs to be copied
         if self.data_workdir is None:
             datapath = self.datapath
@@ -237,12 +237,12 @@ class AtomsDataModule(pl.LightningDataModule):
         self._log_with_rank("Exited lock")
         return datapath
 
-    def teardown(self, stage: Optional[str] = None):
+    def teardown(self, stage: str | None = None):
         if self.cleanup_workdir_stage and stage == self.cleanup_workdir_stage:
             if self.data_workdir is not None:
                 try:
                     shutil.rmtree(self.data_workdir)
-                except:
+                except Exception:
                     pass
                 self._has_setup_fit = False
                 self._has_setup_val = False
@@ -362,7 +362,7 @@ class AtomsDataModule(pl.LightningDataModule):
 
     def get_stats(
         self, property: str, divide_by_atoms: bool, remove_atomref: bool
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         key = (property, divide_by_atoms, remove_atomref)
         if key in self._stats:
             return self._stats[key]
@@ -377,7 +377,7 @@ class AtomsDataModule(pl.LightningDataModule):
 
     def get_atomrefs(
         self, property: str, is_extensive: bool
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         key = (property, is_extensive)
         if key in self._atomrefs:
             return {property: self._atomrefs[key]}
@@ -403,7 +403,6 @@ class AtomsDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> AtomsLoader:
         if self._train_dataloader is None:
-
             train_batch_sampler = self._setup_sampler(
                 sampler_cls=self.train_sampler_cls,
                 sampler_args=self.train_sampler_args,

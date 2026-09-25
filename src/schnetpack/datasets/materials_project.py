@@ -1,15 +1,18 @@
 import logging
 import os
-from typing import List, Optional, Dict
-import warnings
 
+import numpy as np
+import torch
 from ase import Atoms
 
-import torch
-import numpy as np
-from schnetpack.data import *
-from schnetpack.data import AtomsDataModuleError, AtomsDataModule
-
+from schnetpack.data import (
+    AtomsDataFormat,
+    AtomsDataModule,
+    AtomsDataModuleError,
+    BaseAtomsData,
+    create_dataset,
+    load_dataset,
+)
 
 __all__ = ["MaterialsProject"]
 
@@ -38,24 +41,24 @@ class MaterialsProject(AtomsDataModule):
         self,
         datapath: str,
         batch_size: int,
-        num_train: Optional[int] = None,
-        num_val: Optional[int] = None,
-        num_test: Optional[int] = None,
-        split_file: Optional[str] = "split.npz",
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
-        load_properties: Optional[List[str]] = None,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
-        train_transforms: Optional[List[torch.nn.Module]] = None,
-        val_transforms: Optional[List[torch.nn.Module]] = None,
-        test_transforms: Optional[List[torch.nn.Module]] = None,
+        num_train: int | None = None,
+        num_val: int | None = None,
+        num_test: int | None = None,
+        split_file: str | None = "split.npz",
+        format: AtomsDataFormat | None = AtomsDataFormat.ASE,
+        load_properties: list[str] | None = None,
+        val_batch_size: int | None = None,
+        test_batch_size: int | None = None,
+        transforms: list[torch.nn.Module] | None = None,
+        train_transforms: list[torch.nn.Module] | None = None,
+        val_transforms: list[torch.nn.Module] | None = None,
+        test_transforms: list[torch.nn.Module] | None = None,
         num_workers: int = 2,
-        num_val_workers: Optional[int] = None,
-        num_test_workers: Optional[int] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
-        apikey: Optional[str] = None,
+        num_val_workers: int | None = None,
+        num_test_workers: int | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
+        apikey: str | None = None,
         **kwargs,
     ):
         """
@@ -156,15 +159,14 @@ class MaterialsProject(AtomsDataModule):
         properties_list = []
         atoms_metadata_list = []
         try:
-            from pymatgen.core import Structure
-            import pymatgen as pmg
             from mp_api.client import MPRester
+            from pymatgen.core import Structure
 
-        except:
+        except Exception as e:
             raise ImportError(
                 "In order to download Materials Project data, you have to install "
                 "mp-api and pymatgen packages"
-            )
+            ) from e
 
         with MPRester(self.apikey) as m:
             query = m.materials.summary.search(

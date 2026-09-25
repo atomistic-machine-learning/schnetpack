@@ -2,16 +2,21 @@ import logging
 import os
 import shutil
 import tempfile
-from typing import List, Optional, Dict
 from urllib import request as request
 
 import numpy as np
+import torch
 from ase import Atoms
 
-import torch
 import schnetpack.properties as structure
-
-from schnetpack.data import *
+from schnetpack.data import (
+    AtomsDataFormat,
+    AtomsDataModule,
+    AtomsDataModuleError,
+    BaseAtomsData,
+    create_dataset,
+    load_dataset,
+)
 
 __all__ = ["MD17"]
 
@@ -28,31 +33,31 @@ class GDMLDataModule(AtomsDataModule):
     # properties
     def __init__(
         self,
-        datasets_dict: Dict[str, str],
+        datasets_dict: dict[str, str],
         download_url: str,
         datapath: str,
         molecule: str,
         batch_size: int,
-        num_train: Optional[int] = None,
-        num_val: Optional[int] = None,
-        num_test: Optional[int] = None,
-        split_file: Optional[str] = "split.npz",
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
-        load_properties: Optional[List[str]] = None,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
-        train_transforms: Optional[List[torch.nn.Module]] = None,
-        val_transforms: Optional[List[torch.nn.Module]] = None,
-        test_transforms: Optional[List[torch.nn.Module]] = None,
+        num_train: int | None = None,
+        num_val: int | None = None,
+        num_test: int | None = None,
+        split_file: str | None = "split.npz",
+        format: AtomsDataFormat | None = AtomsDataFormat.ASE,
+        load_properties: list[str] | None = None,
+        val_batch_size: int | None = None,
+        test_batch_size: int | None = None,
+        transforms: list[torch.nn.Module] | None = None,
+        train_transforms: list[torch.nn.Module] | None = None,
+        val_transforms: list[torch.nn.Module] | None = None,
+        test_transforms: list[torch.nn.Module] | None = None,
         num_workers: int = 2,
-        num_val_workers: Optional[int] = None,
-        num_test_workers: Optional[int] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
-        data_workdir: Optional[str] = None,
+        num_val_workers: int | None = None,
+        num_test_workers: int | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
+        data_workdir: str | None = None,
         tmpdir: str = "gdml_tmp",
-        atomrefs: Optional[Dict[str, List[float]]] = None,
+        atomrefs: dict[str, list[float]] | None = None,
         **kwargs,
     ):
         """
@@ -111,7 +116,7 @@ class GDMLDataModule(AtomsDataModule):
         self.tmpdir = tmpdir
 
         if molecule not in self.datasets_dict.keys():
-            raise AtomsDataModuleError("Molecule {} is not supported!".format(molecule))
+            raise AtomsDataModuleError(f"Molecule {molecule} is not supported!")
 
         self.molecule = molecule
 
@@ -144,7 +149,7 @@ class GDMLDataModule(AtomsDataModule):
                 )
             if md["molecule"] != self.molecule:
                 raise AtomsDataModuleError(
-                    f"The dataset at the given location does not contain the specified molecule: "
+                    "The dataset at the given location does not contain the specified molecule: "
                     + f"`{md['molecule']}` instead of `{self.molecule}`"
                 )
 
@@ -153,13 +158,13 @@ class GDMLDataModule(AtomsDataModule):
         tmpdir,
         dataset: BaseAtomsData,
     ):
-        logging.info("Downloading {} data".format(self.molecule))
+        logging.info(f"Downloading {self.molecule} data")
         rawpath = os.path.join(tmpdir, self.datasets_dict[self.molecule])
         url = self.download_url + self.datasets_dict[self.molecule]
 
         request.urlretrieve(url, rawpath)
 
-        logging.info("Parsing molecule {:s}".format(self.molecule))
+        logging.info(f"Parsing molecule {self.molecule:s}")
 
         data = np.load(rawpath)
 
@@ -199,24 +204,24 @@ class MD17(GDMLDataModule):
         datapath: str,
         molecule: str,
         batch_size: int,
-        num_train: Optional[int] = None,
-        num_val: Optional[int] = None,
-        num_test: Optional[int] = None,
-        split_file: Optional[str] = "split.npz",
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
-        load_properties: Optional[List[str]] = None,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
-        train_transforms: Optional[List[torch.nn.Module]] = None,
-        val_transforms: Optional[List[torch.nn.Module]] = None,
-        test_transforms: Optional[List[torch.nn.Module]] = None,
+        num_train: int | None = None,
+        num_val: int | None = None,
+        num_test: int | None = None,
+        split_file: str | None = "split.npz",
+        format: AtomsDataFormat | None = AtomsDataFormat.ASE,
+        load_properties: list[str] | None = None,
+        val_batch_size: int | None = None,
+        test_batch_size: int | None = None,
+        transforms: list[torch.nn.Module] | None = None,
+        train_transforms: list[torch.nn.Module] | None = None,
+        val_transforms: list[torch.nn.Module] | None = None,
+        test_transforms: list[torch.nn.Module] | None = None,
         num_workers: int = 2,
-        num_val_workers: Optional[int] = None,
-        num_test_workers: Optional[int] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
-        data_workdir: Optional[str] = None,
+        num_val_workers: int | None = None,
+        num_test_workers: int | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
+        data_workdir: str | None = None,
         **kwargs,
     ):
         """
@@ -272,7 +277,7 @@ class MD17(GDMLDataModule):
             uracil="md17_uracil.npz",
         )
 
-        super(MD17, self).__init__(
+        super().__init__(
             datasets_dict=datasets_dict,
             download_url="http://www.quantum-machine.org/gdml/data/npz/",
             tmpdir="md17",

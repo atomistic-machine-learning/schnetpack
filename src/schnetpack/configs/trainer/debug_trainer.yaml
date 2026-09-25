@@ -8,4 +8,3 @@ max_epochs: 3
 # prints
 detect_anomaly: True
 profiler: simple
-

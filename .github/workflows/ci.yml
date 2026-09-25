@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  # Only the default branch on push: without this, every PR from a same-repo
+  # branch runs the whole workflow twice (once for push, once for pull_request).
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    # Monday 04:00 UTC - exercises the `slow`/`download` tests. They run by
+    # default for a plain local `pytest`, but the `test` job below excludes
+    # them, so this schedule (and the `slow` job) is what covers them in CI.
+    - cron: "0 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # .pre-commit-config.yaml is the single source of truth for tool versions.
+      - uses: pre-commit/action@v3.0.1
+
+  test:
+    strategy:
+      # Report every interpreter: a 3.13-only break should not hide the 3.12 result.
+      fail-fast: false
+      matrix:
+        # 3.12 is the floor declared by requires-python. 3.14 is left out because
+        # matscipy ships no cp314 wheel and would have to build from sdist.
+        python: ["3.12", "3.13"]
+    name: test (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e .[test] pytest-cov
+      - run: pip list
+      - run: pytest --cov=schnetpack --cov-report=term-missing -m "not slow and not download"
+
+  slow:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e .[test]
+      - run: pytest -m "slow or download"

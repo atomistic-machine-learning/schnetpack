@@ -1,15 +1,16 @@
 import os
-import torch
 import shutil
+
 import fasteners
+import numpy as np
+import torch
 from ase import Atoms
 from ase.neighborlist import neighbor_list as ase_neighbor_list
-from matscipy.neighbours import neighbour_list as msp_neighbor_list
-from .base import Transform
 from dirsync import sync
-import numpy as np
-from typing import Optional, Dict, List
+from matscipy.neighbours import neighbour_list as msp_neighbor_list
 from vesin import NeighborList as vesin_nl
+
+from .base import Transform
 
 __all__ = [
     "ASENeighborList",
@@ -53,9 +54,9 @@ class CachedNeighborList(Transform):
         self,
         cache_path: str,
         neighbor_list: Transform,
-        nbh_transforms: Optional[List[torch.nn.Module]] = None,
+        nbh_transforms: list[torch.nn.Module] | None = None,
         keep_cache: bool = False,
-        cache_workdir: str = None,
+        cache_workdir: str | None = None,
     ):
         """
         Args:
@@ -99,8 +100,8 @@ class CachedNeighborList(Transform):
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         cache_file = os.path.join(
             self.cache_location, f"cache_{inputs[properties.idx][0]}.pt"
         )
@@ -109,7 +110,7 @@ class CachedNeighborList(Transform):
         try:
             data = torch.load(cache_file, weights_only=True)
             inputs.update(data)
-        except IOError:
+        except OSError:
             # acquire lock for caching
             lock = fasteners.InterProcessLock(
                 os.path.join(
@@ -121,7 +122,7 @@ class CachedNeighborList(Transform):
                 try:
                     data = torch.load(cache_file, weights_only=True)
                     inputs.update(data)
-                except IOError:
+                except OSError:
                     # now it is save to calculate and cache
                     inputs = self.neighbor_list(inputs)
                     for nbh_transform in self.nbh_transforms:
@@ -140,19 +141,19 @@ class CachedNeighborList(Transform):
         if not self.keep_cache and not self.preexisting_cache:
             try:
                 shutil.rmtree(self.cache_path)
-            except:
+            except Exception:
                 pass
 
         if self.cache_workdir is not None:
             if self.keep_cache:
                 try:
                     sync(self.cache_workdir, self.cache_path, "sync")
-                except:
+                except Exception:
                     pass
 
             try:
                 shutil.rmtree(self.cache_workdir)
-            except:
+            except Exception:
                 pass
 
 
@@ -177,8 +178,8 @@ class NeighborListTransform(Transform):
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         Z = inputs[properties.Z]
         R = inputs[properties.R]
         cell = inputs[properties.cell].view(3, 3)
@@ -305,7 +306,7 @@ class SkinNeighborList(Transform):
     def __init__(
         self,
         neighbor_list: Transform,
-        nbh_transforms: Optional[List[torch.nn.Module]] = None,
+        nbh_transforms: list[torch.nn.Module] | None = None,
         cutoff_skin: float = 0.3,
     ):
         """
@@ -332,9 +333,8 @@ class SkinNeighborList(Transform):
     # @timeit
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
-
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         update_required, inputs = self._update(inputs)
         inputs = self.distance_calculator(inputs)
         inputs = self._remove_neighbors_in_skin(inputs)
@@ -346,9 +346,8 @@ class SkinNeighborList(Transform):
 
     def _remove_neighbors_in_skin(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
-
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         Rij = inputs[properties.Rij]
         idx_i = inputs[properties.idx_i]
         idx_j = inputs[properties.idx_j]
@@ -404,7 +403,6 @@ class SkinNeighborList(Transform):
         return True, inputs
 
     def _build(self, inputs):
-
         # apply all transforms to obtain new neighbor list
         inputs = self.neighbor_list(inputs)
         for nbh_transform in self.nbh_transforms:
@@ -570,9 +568,8 @@ class FilterNeighbors(Transform):
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
-
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         n_neighbors = inputs[properties.idx_i].shape[0]
         slab_indices = inputs[self.selection_name].tolist()
         kept_nbh_indices = []
@@ -599,8 +596,8 @@ class CollectAtomTriples(Transform):
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         """
         Using the neighbors contained within the cutoff shell, generate all unique pairs
         of neighbors and convert them to index arrays. Applied to the neighbor arrays,
@@ -655,13 +652,13 @@ class CountNeighbors(Transform):
             sorted: Set to false if chosen neighbor list yields unsorted center indices
                 (idx_i).
         """
-        super(CountNeighbors, self).__init__()
+        super().__init__()
         self.sorted = sorted
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         idx_i = inputs[properties.idx_i]
 
         if self.sorted:
@@ -692,8 +689,8 @@ class WrapPositions(Transform):
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         R = inputs[properties.R]
         cell = inputs[properties.cell].view(3, 3)
         pbc = inputs[properties.pbc]

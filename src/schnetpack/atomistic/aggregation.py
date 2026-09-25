@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 
-from typing import Dict, List
-
 __all__ = ["Aggregation"]
 
 
@@ -15,14 +13,14 @@ class Aggregation(nn.Module):
         output_key (str): Name of new property in output.
     """
 
-    def __init__(self, keys: List[str], output_key: str = "y"):
-        super(Aggregation, self).__init__()
+    def __init__(self, keys: list[str], output_key: str = "y"):
+        super().__init__()
 
-        self.keys: List[str] = list(keys)
+        self.keys: list[str] = list(keys)
         self.output_key = output_key
         self.model_outputs = [output_key]
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         energy = torch.stack([inputs[key] for key in self.keys]).sum(0)
         inputs[self.output_key] = energy
         return inputs

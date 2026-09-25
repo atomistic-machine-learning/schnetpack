@@ -1,5 +1,3 @@
-from typing import Dict, Optional, List
-
 import torch
 import torch.nn as nn
 
@@ -23,17 +21,19 @@ class StaticExternalFields(nn.Module):
 
     def __init__(
         self,
-        external_fields: List[str] = [],
-        response_properties: Optional[List[str]] = None,
+        external_fields: list[str] | None = None,
+        response_properties: list[str] | None = None,
     ):
-        super(StaticExternalFields, self).__init__()
+        if external_fields is None:
+            external_fields = []
+        super().__init__()
 
         if response_properties is not None:
             external_fields = required_fields_from_properties(response_properties)
 
-        self.external_fields: List[str] = list(set(external_fields))
+        self.external_fields: list[str] = list(set(external_fields))
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         n_atoms = inputs[properties.n_atoms]
         n_molecules = n_atoms.shape[0]
 
