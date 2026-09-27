@@ -1,0 +1,82 @@
+# @package _global_
+
+defaults:
+  - override /model: nnp
+  - override /data: qm7x
+
+run:
+  experiment: mlff_qm7x
+
+seed: 42
+
+globals:
+  cutoff: 5.
+  lr: 1e-3
+  energy_key: energy
+  forces_key: forces
+
+data:
+  dataset:
+    load_properties: [energy, forces]
+    distance_unit: Ang
+    property_units: null
+    transforms:
+      - _target_: schnetpack.transform.SubtractCenterOfMass
+      - _target_: schnetpack.transform.RemoveOffsets
+        property: energy
+        remove_mean: False
+        remove_atomrefs: True
+        estimate_atomref: True
+      - _target_: schnetpack.transform.MatScipyNeighborList
+        cutoff: ${globals.cutoff}
+      - _target_: schnetpack.transform.CastTo32
+
+model:
+  output_modules:
+    - _target_: schnetpack.atomistic.Atomwise
+      output_key: ${globals.energy_key}
+      n_in: ${model.representation.n_atom_basis}
+      aggregation_mode: sum
+    - _target_: schnetpack.atomistic.Forces
+      energy_key: ${globals.energy_key}
+      force_key: ${globals.forces_key}
+  postprocessors:
+    - _target_: schnetpack.transform.CastTo64
+    - _target_: schnetpack.transform.AddOffsets
+      property: energy
+      add_mean: False
+      add_atomrefs: True
+      estimate_atomref: True
+
+task:
+  warmup_steps: 500
+  outputs:
+    - _target_: schnetpack.task.ModelOutput
+      name: ${globals.energy_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 0.01
+    - _target_: schnetpack.task.ModelOutput
+      name: ${globals.forces_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 0.99
+
+trainer:
+  gradient_clip_val: 1.0
+
+callbacks:
+  early_stopping:
+    verbose: True
