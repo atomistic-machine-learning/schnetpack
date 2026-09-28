@@ -394,8 +394,8 @@ class SkinNeighborList(Transform):
 
     def _remove_neighbors_in_skin(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         """Restrict the cutoff+skin list to the pairs within the actual cutoff.
 
         Rebinds rather than mutating in place, so the unpruned list that ``_build``
@@ -424,7 +424,6 @@ class SkinNeighborList(Transform):
 
         # check if previous neighbor list exists
         if sample_idx in self.previous_inputs:
-
             # load previous inputs
             previous_inputs = self.previous_inputs[sample_idx]
 
@@ -623,7 +622,7 @@ class FilterNeighbors(Transform):
         self.selection_name = selection_name
         super().__init__()
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         filtered_out_indices = inputs[self.selection_name]
 
         # filter out pairs where both atoms are contained in filtered_out_indices

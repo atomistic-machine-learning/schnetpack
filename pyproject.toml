@@ -4,9 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "schnetpack"
-# Declaring that the version will be read dynamically.
-# This helps us not having to specify the version twice.
-# We have to specify the version only in schnetpack.__version__
+# Version is specified in schnetpack.__version__
 # see [tool.setuptools.dynamic] below
 dynamic = ["version"]
 authors = [

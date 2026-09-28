@@ -14,7 +14,7 @@ time while a batch is being assembled. Unlike the transforms it is not a
 rather than on a single sample.
 """
 
-from typing import Dict, List, Optional, Sequence, Union
+from collections.abc import Sequence
 
 import torch
 
@@ -76,10 +76,10 @@ class BatchNeighborList:
         self,
         neighbor_list: Transform,
         cutoff_skin: float = 0.3,
-        transforms: Optional[Union[Transform, List[Transform]]] = None,
-        device: Optional[Union[str, torch.device]] = None,
-        dtype: Optional[torch.dtype] = None,
-        additional_inputs: Optional[Dict[str, torch.Tensor]] = None,
+        transforms: Transform | list[Transform] | None = None,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+        additional_inputs: dict[str, torch.Tensor] | None = None,
     ):
         self._device = torch.device(device) if isinstance(device, str) else device
         self._dtype = dtype
@@ -98,7 +98,7 @@ class BatchNeighborList:
         if dtype not in (None, torch.float32, torch.float64):
             raise ValueError(f"Unrecognized precision {dtype}")
 
-        self.transforms: List[Transform] = [neighbor_list] + transforms
+        self.transforms: list[Transform] = [neighbor_list] + transforms
 
         # resolved per call, from the batch, unless they were pinned in the constructor
         self.device = self._device or torch.device("cpu")
@@ -109,13 +109,13 @@ class BatchNeighborList:
     def reset(self) -> None:
         """Forget every cached list, so that the next call rebuilds from scratch."""
         #: the cutoff+skin list of each structure, with the structure it was built for
-        self._references: Dict[int, Dict[str, torch.Tensor]] = {}
+        self._references: dict[int, dict[str, torch.Tensor]] = {}
         #: those lists concatenated into batch numbering, on device, ready to be pruned
-        self._cache: Optional[Dict[str, torch.Tensor]] = None
+        self._cache: dict[str, torch.Tensor] | None = None
 
     # -------------------------------------------------------------- public interface
 
-    def update(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def update(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """The batch with its neighbor lists refreshed for the current positions.
 
         Entries the caller put in the batch are carried over untouched; only the
@@ -124,8 +124,8 @@ class BatchNeighborList:
         return {**inputs, **self.neighbors(inputs, with_distances=True)}
 
     def neighbors(
-        self, inputs: Dict[str, torch.Tensor], with_distances: bool = False
-    ) -> Dict[str, torch.Tensor]:
+        self, inputs: dict[str, torch.Tensor], with_distances: bool = False
+    ) -> dict[str, torch.Tensor]:
         """Just the neighborhood entries for the structures in ``inputs``.
 
         Deliberately free of positions, atomic numbers, cells and atom counts, so that a
@@ -149,7 +149,7 @@ class BatchNeighborList:
 
     # -------------------------------------------------------------- rebuild or reuse
 
-    def _stale_structures(self, inputs: Dict[str, torch.Tensor]) -> List[int]:
+    def _stale_structures(self, inputs: dict[str, torch.Tensor]) -> list[int]:
         """Which structures have moved far enough to need a new list.
 
         Answered per structure and on the device the batch already lives on, against the
@@ -196,7 +196,7 @@ class BatchNeighborList:
 
         return torch.nonzero(stale).view(-1).tolist()
 
-    def _rebuild(self, inputs: Dict[str, torch.Tensor], stale: Sequence[int]) -> None:
+    def _rebuild(self, inputs: dict[str, torch.Tensor], stale: Sequence[int]) -> None:
         """Build fresh cutoff+skin lists for the given structures, and cache them.
 
         Straight off the batch: the structures are cut out of it as tensors and handed to
@@ -221,7 +221,7 @@ class BatchNeighborList:
 
         self._cache = self._collate_references(len(samples))
 
-    def _collate_references(self, n_structures: int) -> Dict[str, torch.Tensor]:
+    def _collate_references(self, n_structures: int) -> dict[str, torch.Tensor]:
         """Concatenate the per structure lists into batch numbering, once per rebuild.
 
         The pair indices of a structure count from its own first atom, so they have to be
@@ -241,8 +241,8 @@ class BatchNeighborList:
         return collated
 
     def _prune(
-        self, inputs: Dict[str, torch.Tensor], with_distances: bool = False
-    ) -> Dict[str, torch.Tensor]:
+        self, inputs: dict[str, torch.Tensor], with_distances: bool = False
+    ) -> dict[str, torch.Tensor]:
         """Restrict the cached cutoff+skin lists to the pairs within the cutoff.
 
         The whole batch at once and on its own device -- the counterpart of
@@ -270,8 +270,8 @@ class BatchNeighborList:
 
     @staticmethod
     def _prune_triples(
-        cache: Dict[str, torch.Tensor], within_cutoff: torch.Tensor
-    ) -> Dict[str, torch.Tensor]:
+        cache: dict[str, torch.Tensor], within_cutoff: torch.Tensor
+    ) -> dict[str, torch.Tensor]:
         """Renumber the triples onto the pairs that survived the pruning.
 
         ``idx_j_triples`` and ``idx_k_triples`` index into the pair arrays, so dropping

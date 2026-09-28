@@ -69,8 +69,8 @@ _STRUCTURE_KEYS = (
 
 
 def split_batch(
-    inputs: Dict[str, torch.Tensor], keys: Optional[Sequence[str]] = None
-) -> List[Dict[str, torch.Tensor]]:
+    inputs: dict[str, torch.Tensor], keys: Sequence[str] | None = None
+) -> list[dict[str, torch.Tensor]]:
     """Split a collated batch back into one input dictionary per structure.
 
     The inverse of :func:`_atoms_collate_fn` for the structure-defining entries: atom-wise

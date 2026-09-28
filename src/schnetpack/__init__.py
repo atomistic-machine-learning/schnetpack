@@ -19,4 +19,4 @@ from schnetpack.task import *
 from schnetpack import md
 from schnetpack import relax
 
-__version__ = "2.2.0"
+__version__ = "3.0.0"

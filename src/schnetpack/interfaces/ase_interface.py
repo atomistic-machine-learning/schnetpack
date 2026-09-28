@@ -13,7 +13,6 @@ References
 
 import logging
 import os
-from abc import ABC, abstractmethod
 from collections.abc import Callable
 from copy import deepcopy
 
@@ -37,8 +36,7 @@ from ase.vibrations import Vibrations
 from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.md.utils import activate_model_stress
-from schnetpack.transform import CastTo32, CastTo64, Transform, SkinNeighborList
-from schnetpack.units import convert_units
+from schnetpack.transform import CastTo32, CastTo64, Transform
 
 # the uncertainty functions are shared with the batch-wise ensemble calculator, which
 # must stay free of ase -- they are re-exported here, where they used to live
@@ -47,6 +45,7 @@ from schnetpack.uncertainty import (
     RelativeUncertainty,
     Uncertainty,
 )
+from schnetpack.units import convert_units
 from schnetpack.utils import load_model
 
 log = logging.getLogger(__name__)
@@ -159,7 +158,7 @@ class AtomsConverter:
         return inputs
 
 
-def _atoms_to_inputs(atoms: Atoms, idx: int = 0) -> Dict[str, torch.Tensor]:
+def _atoms_to_inputs(atoms: Atoms, idx: int = 0) -> dict[str, torch.Tensor]:
     """The tensors describing a single ase structure, before any transform has run."""
     return {
         properties.n_atoms: torch.tensor([atoms.get_global_number_of_atoms()]),
@@ -172,10 +171,10 @@ def _atoms_to_inputs(atoms: Atoms, idx: int = 0) -> Dict[str, torch.Tensor]:
 
 
 def atoms_to_batch(
-    atoms: Union[List[Atoms], Atoms],
-    device: Union[str, torch.device] = "cpu",
+    atoms: list[Atoms] | Atoms,
+    device: str | torch.device = "cpu",
     dtype: torch.dtype = torch.float32,
-) -> Dict[str, torch.Tensor]:
+) -> dict[str, torch.Tensor]:
     """Turn ase structures into a schnetpack input batch, neighbor lists aside.
 
     The inverse of :func:`batch_to_atoms`, and what code working on batches of tensors
@@ -206,7 +205,7 @@ def atoms_to_batch(
     return {key: value.to(device) for key, value in inputs.items()}
 
 
-def batch_to_atoms(inputs: Dict[str, torch.Tensor]) -> List[Atoms]:
+def batch_to_atoms(inputs: dict[str, torch.Tensor]) -> list[Atoms]:
     """Turn a schnetpack input batch back into ase structures.
 
     The inverse of :meth:`AtomsConverter.__call__`, and the one place in schnetpack
@@ -266,7 +265,7 @@ class SpkCalculator(Calculator):
         device: str | torch.device = "cpu",
         dtype: torch.dtype = torch.float32,
         converter: Callable = AtomsConverter,
-        transforms: Transform | list[Transform] = None,
+        transforms: Transform | list[Transform] | None = None,
         additional_inputs: dict[str, torch.Tensor] | None = None,
         **kwargs,
     ):
@@ -357,7 +356,7 @@ class SpkCalculator(Calculator):
 
     def calculate(
         self,
-        atoms: Atoms = None,
+        atoms: Atoms | None = None,
         # properties is just a placeholder and will be ignored
         properties: list[str] | None = None,
         system_changes: list[str] = all_changes,
@@ -425,83 +424,13 @@ class SpkCalculator(Calculator):
 def _scalar(uncertainty):
     """The single value of a one-structure uncertainty.
 
-        # normalize weights
-        total_weight = energy_weight + force_weight + stress_weight
-        if total_weight == 0:
-            raise ValueError("total_weight cannot be zero")
-
-        self.energy_weight = energy_weight / total_weight
-        self.force_weight = force_weight / total_weight
-        self.stress_weight = stress_weight / total_weight
-
-    @abstractmethod
-    def __call__(self, predictions: dict[str, list[np.ndarray]]) -> float:
-        pass
-
-
-class AbsoluteUncertainty(Uncertainty):
-    def __call__(self, predictions: dict[str, list[np.ndarray]]) -> float:
-        uncertainty = 0
-
-        if self.energy_weight > 0:
-            energy_unc = np.std(predictions[self.energy_key])
-            uncertainty += self.energy_weight * energy_unc
-
-        if self.force_weight > 0:
-            # get per atom uncertainty with L2 norm of stds
-            force_std = np.std(predictions[self.force_key], axis=0)
-            per_atom_uncertainty = np.linalg.norm(force_std, axis=1)
-            # aggregate to scalar uncertainty
-            force_unc = np.mean(per_atom_uncertainty)
-            uncertainty += self.force_weight * force_unc
-
-        if self.stress_weight > 0:
-            # get uncertainty per plane
-            stress_std = np.std(predictions[self.stress_key], axis=0)
-            per_plane_uncertainty = np.linalg.norm(stress_std, axis=1)
-            # aggregate to scalar uncertainty
-            stress_unc = np.mean(per_plane_uncertainty)
-            uncertainty += self.stress_weight * stress_unc
-
-        return uncertainty
-
-
-class RelativeUncertainty(Uncertainty):
-    def __call__(self, predictions: dict[str, list[np.ndarray]]) -> float:
-        uncertainty = 0
-
-        if self.energy_weight > 0:
-            energy_preds = predictions[self.energy_key]
-            mean_energy = np.mean(energy_preds)
-            std_energy = np.std(energy_preds)
-            energy_unc = std_energy / (abs(mean_energy) + 1e-8)
-            uncertainty += self.energy_weight * energy_unc
-
-        if self.force_weight > 0:
-            force_preds = np.array(predictions[self.force_key])
-            mean_force = np.mean(force_preds, axis=0)
-            std_force = np.std(force_preds, axis=0)
-
-            mean_norms = np.linalg.norm(mean_force, axis=1)
-            std_norms = np.linalg.norm(std_force, axis=1)
-
-            # aggregate to scalar
-            force_unc = np.mean(std_norms / (mean_norms + 1e-8))
-            uncertainty += self.force_weight * force_unc
-
-        if self.stress_weight > 0:
-            stress_preds = np.array(predictions[self.stress_key])
-            mean_stress = np.mean(stress_preds, axis=0)
-            std_stress = np.std(stress_preds, axis=0)
-
-            mean_planes = np.linalg.norm(mean_stress, axis=1)
-            std_planes = np.linalg.norm(std_stress, axis=1)
-
-            # aggregate to scalar
-            stress_unc = np.mean(std_planes / (mean_planes + 1e-8))
-            uncertainty += self.stress_weight * stress_unc
-
-        return uncertainty
+    An :class:`~schnetpack.uncertainty.Uncertainty` reports one value per structure, and
+    an ase calculator only ever has one. Anything else -- a custom callable returning a
+    plain number, say -- is passed through untouched.
+    """
+    if isinstance(uncertainty, torch.Tensor):
+        return uncertainty.reshape(-1)[0].item()
+    return uncertainty
 
 
 class SpkEnsembleCalculator(SpkCalculator):
@@ -697,7 +626,7 @@ class AseInterface:
         converter: AtomsConverter = AtomsConverter,
         optimizer_class: type = QuasiNewton,
         fixed_atoms: list[int] | None = None,
-        transforms: Transform | list[Transform] = None,
+        transforms: Transform | list[Transform] | None = None,
         additional_inputs: dict[str, torch.Tensor] | None = None,
     ):
         """
