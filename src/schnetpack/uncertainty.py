@@ -16,12 +16,6 @@ and the result is one value per structure. Pass ``n_atoms`` whenever the batch h
 than one structure, so the per-atom terms can be reduced within each structure rather than
 across the whole batch.
 
-These live here rather than next to a calculator because both
-:class:`~schnetpack.interfaces.ase_interface.SpkEnsembleCalculator`, which works on one
-``ase.Atoms`` at a time, and
-:class:`~schnetpack.relax.BatchwiseEnsembleCalculator`, which works on a whole batch of
-tensors and must stay free of ase, use the same ones.
-
 Note:
     The spread is a standard deviation over the models, taken with ``correction=0`` --
     the population convention ``numpy.std`` uses, so that an ensemble reports the same
@@ -29,7 +23,6 @@ Note:
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
 
 import torch
 
@@ -51,7 +44,7 @@ def _ensemble_std(values: torch.Tensor) -> torch.Tensor:
 
 
 def _per_structure_mean(
-    per_atom: torch.Tensor, n_atoms: Optional[torch.Tensor]
+    per_atom: torch.Tensor, n_atoms: torch.Tensor | None
 ) -> torch.Tensor:
     """Mean of a per-atom quantity within each structure.
 
@@ -110,8 +103,8 @@ class Uncertainty(ABC):
     @abstractmethod
     def __call__(
         self,
-        predictions: Dict[str, torch.Tensor],
-        n_atoms: Optional[torch.Tensor] = None,
+        predictions: dict[str, torch.Tensor],
+        n_atoms: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """The uncertainty of every structure the predictions describe.
 
@@ -135,8 +128,8 @@ class AbsoluteUncertainty(Uncertainty):
 
     def __call__(
         self,
-        predictions: Dict[str, torch.Tensor],
-        n_atoms: Optional[torch.Tensor] = None,
+        predictions: dict[str, torch.Tensor],
+        n_atoms: torch.Tensor | None = None,
     ) -> torch.Tensor:
         uncertainty = None
 
@@ -172,8 +165,8 @@ class RelativeUncertainty(Uncertainty):
 
     def __call__(
         self,
-        predictions: Dict[str, torch.Tensor],
-        n_atoms: Optional[torch.Tensor] = None,
+        predictions: dict[str, torch.Tensor],
+        n_atoms: torch.Tensor | None = None,
     ) -> torch.Tensor:
         uncertainty = None
 

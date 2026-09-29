@@ -37,9 +37,6 @@ from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.md.utils import activate_model_stress
 from schnetpack.transform import CastTo32, CastTo64, Transform
-
-# the uncertainty functions are shared with the batch-wise ensemble calculator, which
-# must stay free of ase -- they are re-exported here, where they used to live
 from schnetpack.uncertainty import (
     AbsoluteUncertainty,
     RelativeUncertainty,
@@ -76,7 +73,7 @@ class AtomsConverter:
     def __init__(
         self,
         neighbor_list: Transform | None,
-        transforms: Transform | list[Transform] = None,
+        transforms: Transform | list[Transform] | None = None,
         device: str | torch.device = "cpu",
         dtype: torch.dtype = torch.float32,
         additional_inputs: dict[str, torch.Tensor] | None = None,

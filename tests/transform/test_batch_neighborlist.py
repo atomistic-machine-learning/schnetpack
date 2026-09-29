@@ -5,8 +5,6 @@ positions: whatever the module decides to reuse, what reaches the model has to b
 same set of pairs it would have got from a fresh build.
 """
 
-from typing import Dict, List
-
 import numpy as np
 import pytest
 import torch
@@ -24,7 +22,7 @@ N_ATOMS = 12
 
 def make_structures(
     pbc: bool, n_structures: int = 3, seed: int = 1, cell: bool = True
-) -> List[Atoms]:
+) -> list[Atoms]:
     """Structures of ``N_ATOMS`` carbons scattered through an 8 Angstrom box.
 
     ``cell=False`` leaves them without one, for the tests that move a structure far from
@@ -53,12 +51,12 @@ def make_batch_neighbor_list(**kwargs) -> spk.transform.BatchNeighborList:
     )
 
 
-def batch_of(structures: List[Atoms]) -> Dict[str, torch.Tensor]:
+def batch_of(structures: list[Atoms]) -> dict[str, torch.Tensor]:
     """The structures as a batch, neighbor lists left to the module under test."""
     return atoms_to_batch(structures, dtype=torch.float64)
 
 
-def freshly_built(structures: List[Atoms], **kwargs) -> Dict[str, torch.Tensor]:
+def freshly_built(structures: list[Atoms], **kwargs) -> dict[str, torch.Tensor]:
     """The same structures through a plain neighbor list, built from scratch."""
     return AtomsConverter(
         neighbor_list=spk.transform.MatScipyNeighborList(cutoff=CUTOFF),
@@ -67,7 +65,7 @@ def freshly_built(structures: List[Atoms], **kwargs) -> Dict[str, torch.Tensor]:
     )(structures)
 
 
-def neighbor_pairs(inputs: Dict[str, torch.Tensor]) -> np.ndarray:
+def neighbor_pairs(inputs: dict[str, torch.Tensor]) -> np.ndarray:
     """The neighbor list of a batch, in an order-independent, comparable form."""
     pairs = np.column_stack(
         [
@@ -79,7 +77,7 @@ def neighbor_pairs(inputs: Dict[str, torch.Tensor]) -> np.ndarray:
     return pairs[np.lexsort(pairs.T[::-1])]
 
 
-def displaced(structures: List[Atoms], scale: float, seed: int = 2) -> List[Atoms]:
+def displaced(structures: list[Atoms], scale: float, seed: int = 2) -> list[Atoms]:
     rng = np.random.default_rng(seed)
     moved = []
     for structure in structures:
@@ -126,7 +124,7 @@ def test_update_never_returns_pairs_beyond_the_cutoff(pbc, displacement, path):
 def test_update_accepts_a_batch_without_a_sample_index():
     """A batch read back from a trajectory has no sample index; it must still update.
 
-    ``BatchwiseTrajectoryReader.frame`` stores no ``idx``, so a relaxation resumed from
+    ``TrajectoryReader.frame`` stores no ``idx``, so a relaxation resumed from
     a frame would otherwise fail on its very first step.
     """
     structures = make_structures(pbc=False)

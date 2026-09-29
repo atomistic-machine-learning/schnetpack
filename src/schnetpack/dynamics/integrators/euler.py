@@ -16,7 +16,7 @@ class EulerMaruyama(Integrator):
     plain Euler method.
     """
 
-    def step(self, dynamics, x, t, dt):
+    def step(self, dynamics, x, t, dt, state=None):
         x = x + dynamics.drift(x, t) * dt
         g = expand_t(dynamics.diffusion(t), x)
-        return x + g * dt.abs().sqrt() * torch.randn_like(x)
+        return x + g * dt.abs().sqrt() * torch.randn_like(x), state

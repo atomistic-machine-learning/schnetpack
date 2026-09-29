@@ -25,10 +25,14 @@ back into a new dict. Inference — device, neighbor list, gradient policy,
 the model call — goes through a
 :class:`~schnetpack.dynamics.calculator.Calculator`, which works on a copy,
 so the keys it computes never land in the driver's batch.
+
+What a run reports as it goes — the recorded path, a progress log — goes to
+its :class:`~schnetpack.dynamics.observers.Observer` s, the same seam for
+every driver.
 """
 
 import abc
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from schnetpack import properties
@@ -59,12 +63,19 @@ class Dynamics(abc.ABC):
             batch = self.before_step(batch, i, n_steps)       # constraints, in order
             batch = <one step>
             batch = self.after_step(batch, i + 1, n_steps)    # constraints, in order
+            self.report(i + 1, final, <frame>)                 # observers
 
     Constraints (:class:`~schnetpack.dynamics.constraints.state.StateConstraint`)
     act between full steps only — never between the stages of a multi-stage
     integrator such as Heun. Their order is the list order, and it matters:
     a constraint that overwrites atoms should run after one that perturbs
     them.
+
+    Observers (:class:`~schnetpack.dynamics.observers.Observer`) watch the
+    run: the driver calls :meth:`start_observers` at loop entry,
+    :meth:`report` for the starting state and after every step's
+    constraints, and :meth:`end_observers` when the loop is left, however
+    it is left.
     """
 
     def __init__(
@@ -73,6 +84,7 @@ class Dynamics(abc.ABC):
         prior: Prior | None = None,
         constraints: Sequence = (),
         key: str = properties.R,
+        observers: Sequence = (),
     ):
         """
         Args:
@@ -84,11 +96,39 @@ class Dynamics(abc.ABC):
             constraints: state-level constraints applied around every step,
                 in order
             key: batch key this driver moves
+            observers: :class:`~schnetpack.dynamics.observers.Observer` s
+                the run reports to
         """
         self.calculator = as_calculator(calculator)
         self.prior = prior
         self.constraints = list(constraints)
         self.key = key
+        self.observers = list(observers)
+
+    def start_observers(self, batch: Mapping[str, Any]) -> None:
+        """Tell every observer a run starts from ``batch``."""
+        for observer in self.observers:
+            observer.on_start(self, batch)
+
+    def report(self, step: int, final: bool, frame: Callable[[], Any]) -> None:
+        """
+        Hand the state after ``step`` steps to the observers that want it.
+
+        ``frame`` builds the :class:`~schnetpack.dynamics.observers.Frame`;
+        it is only called when some observer asked for this step, so a run
+        nobody records never pays for the transfer off the device.
+        """
+        listening = [o for o in self.observers if o.wants(step, final)]
+        if not listening:
+            return
+        built = frame()
+        for observer in listening:
+            observer.on_frame(built)
+
+    def end_observers(self) -> None:
+        """Let every observer release what it opened."""
+        for observer in self.observers:
+            observer.on_end()
 
     def before_step(self, batch: dict, step: int, n_steps: int) -> dict:
         """Run the constraints' before-step hooks, in order."""

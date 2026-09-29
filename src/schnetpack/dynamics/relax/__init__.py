@@ -1,10 +1,13 @@
 """
 Relaxation: drive structures downhill on a force-like field until they stop.
 
-For a force field that field is the forces; for GPFF it is the pseudo-force,
-whose relaxer is :class:`DirectDenoising`. The batch-wise optimizers
-(L-BFGS and friends) join this package when the batch-wise optimizer port
-lands.
+For a force field that field is the forces, and the driver is
+:class:`Relaxer`, stepping with a step rule from
+:mod:`~schnetpack.dynamics.integrators` (L-BFGS by default, Euler for
+steepest descent). For GPFF it is the pseudo-force, whose relaxer is
+:class:`DirectDenoising`.
 """
 
 from schnetpack.dynamics.relax.direct_denoising import *
+from schnetpack.dynamics.relax.observers import *
+from schnetpack.dynamics.relax.relaxer import *

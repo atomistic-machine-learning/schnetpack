@@ -17,6 +17,5 @@ from schnetpack.units import *
 from schnetpack import uncertainty
 from schnetpack.task import *
 from schnetpack import md
-from schnetpack import relax
 
 __version__ = "3.0.0"

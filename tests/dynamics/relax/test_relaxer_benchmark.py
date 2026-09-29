@@ -1,17 +1,20 @@
-"""Wall clock scaling of ``BatchwiseLBFGS`` against sequential ase ``LBFGS``.
+"""Wall clock scaling of the ``Relaxer`` against sequential ase ``LBFGS``.
 
 Nothing here asserts on time, since wall clock thresholds are machine dependent.
 
 These are deselected by default. Run them with::
-    pytest tests/relax -m benchmark_sweep --benchmark-group-by=param --benchmark-time-unit=ms
+    pytest tests/dynamics/relax -m benchmark_sweep --benchmark-group-by=param --benchmark-time-unit=ms
 """
 
 import pytest
 
-from .test_bw_optimizer import (
+from schnetpack.interfaces.ase_interface import atoms_to_batch
+
+from .test_relaxer_vs_ase import (
+    DEVICE,
     FMAX,
     MAX_STEPS,
-    build_batchwise_optimizer,
+    build_relaxer,
     make_structures,
     relax_sequential,
     spk_calculator,
@@ -29,21 +32,18 @@ def test_batchwise_relaxation(benchmark, n_structures):
     built = []
 
     def setup():
-        # Ensure fresh optimizer for each for every round.
-        # Re-run before every round and left out of the timing.
-        optimizer = build_batchwise_optimizer(structures)
-        built.append(optimizer)
-        return (optimizer,), {}
+        # a fresh relaxer and batch for every round, left out of the timing
+        relaxer = build_relaxer()
+        inputs = relaxer.calculator.prepare(atoms_to_batch(structures, device=DEVICE))
+        return (relaxer, inputs), {}
 
-    benchmark.pedantic(
-        lambda optimizer: optimizer.run(fmax=FMAX, steps=MAX_STEPS),
-        setup=setup,
-        rounds=ROUNDS,
-        iterations=1,
-    )
+    def run(relaxer, inputs):
+        built.append(relaxer.relax(inputs, MAX_STEPS, fmax=FMAX))
+
+    benchmark.pedantic(run, setup=setup, rounds=ROUNDS, iterations=1)
 
     # a run that is fast because it never converged is not a faster run
-    assert built[-1].nsteps < MAX_STEPS
+    assert built[-1].n_steps < MAX_STEPS
 
 
 @pytest.mark.benchmark_sweep

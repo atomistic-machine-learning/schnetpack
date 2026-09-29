@@ -1,15 +1,14 @@
-"""Compare ``BatchwiseLBFGS`` against a sequential loop over ase ``LBFGS``.
+"""Compare the ``Relaxer`` (with ``LBFGS``) against a sequential loop over ase ``LBFGS``.
 
 The comparison is on the outcome of the relaxation only: both optimizers must land in
 the same minima, and a structure must relax the same way alone as inside a batch. Wall
-clock timing lives in ``test_bw_vs_sequ_benchmark.py``, which measures it with
+clock timing lives in ``test_relaxer_benchmark.py``, which measures it with
 pytest-benchmark.
 """
 
 import os
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import List
 
 import numpy as np
 import pytest
@@ -20,18 +19,15 @@ from ase.optimize import LBFGS
 
 import schnetpack as spk
 from schnetpack import properties
+from schnetpack.dynamics import Calculator, Relaxer
 from schnetpack.interfaces.ase_interface import (
     SpkCalculator,
     atoms_to_batch,
     batch_to_atoms,
 )
-from schnetpack.relax.batchwise_optimization import (
-    BatchwiseCalculator,
-    BatchwiseLBFGS,
-)
 from schnetpack.utils.compatibility import load_model
 
-TESTDATA = os.path.join(os.path.dirname(__file__), "..", "testdata")
+TESTDATA = os.path.join(os.path.dirname(__file__), "..", "..", "testdata")
 MODEL_PATH = os.path.join(TESTDATA, "md_ethanol.model")
 STRUCTURE_PATH = os.path.join(TESTDATA, "ethanol_conformers.xyz")
 
@@ -50,8 +46,8 @@ POSITION_UNIT = "Ang"
 class RelaxationResult:
     """Outcome of relaxing a batch of structures, however it was relaxed."""
 
-    atoms: List[Atoms]
-    steps: List[int]  # optimizer steps, per structure for the sequential run
+    atoms: list[Atoms]
+    steps: list[int]  # optimizer steps, per structure for the sequential run
 
 
 def _neighbor_list():
@@ -61,7 +57,7 @@ def _neighbor_list():
 
 
 def _batch_neighbor_list(cutoff_skin: float = CUTOFF_SKIN):
-    """The neighbor list the batch-wise optimizer gets.
+    """The neighbor list the relaxer gets.
 
     It reuses the previous list while no atom of a structure has moved more than half
     the skin, which is what makes the batch-wise path worth using. The sequential ase
@@ -82,7 +78,7 @@ def spk_calculator():
     )
 
 
-def make_structures(n_structures: int = N_STRUCTURES) -> List[Atoms]:
+def make_structures(n_structures: int = N_STRUCTURES) -> list[Atoms]:
     """A batch seeded by cycling the ethanol conformers,
     and adding noise to atomic positions.
     """
@@ -96,36 +92,34 @@ def make_structures(n_structures: int = N_STRUCTURES) -> List[Atoms]:
     return structures
 
 
-def build_batchwise_optimizer(atoms_list: List[Atoms], **kwargs) -> BatchwiseLBFGS:
+def build_relaxer(**kwargs) -> Relaxer:
     """Everything needed to relax a batch, short of actually running it.
 
     Kept separate from the run so the benchmark can time only the relaxation.
-    Remaining keyword arguments go to ``BatchwiseLBFGS``.
+    Keyword arguments go to ``Relaxer``.
     """
-    calculator = BatchwiseCalculator(
-        model=MODEL_PATH,
+    calculator = Calculator(
+        MODEL_PATH,
         neighbor_list=_batch_neighbor_list(),
         device=DEVICE,
-        energy_unit=ENERGY_UNIT,
-        position_unit=POSITION_UNIT,
+        dtype=torch.float32,
+        enable_grad=True,
     )
+    return Relaxer(
+        calculator, energy_unit=ENERGY_UNIT, position_unit=POSITION_UNIT, **kwargs
+    )
+
+
+def relax_batchwise(atoms_list: list[Atoms]) -> RelaxationResult:
+    """Relax a batch of structures in parallel with the ``Relaxer``."""
     inputs = atoms_to_batch(deepcopy(atoms_list), device=DEVICE)
+    result = build_relaxer().relax(inputs, MAX_STEPS, fmax=FMAX)
 
-    kwargs.setdefault("logfile", None)
-    return BatchwiseLBFGS(calculator=calculator, inputs=inputs, **kwargs)
-
-
-def relax_batchwise(atoms_list: List[Atoms]) -> RelaxationResult:
-    """Relax a batch of structures in parallel with ``BatchwiseLBFGS``."""
-    optimizer = build_batchwise_optimizer(atoms_list)
-    optimizer.run(fmax=FMAX, steps=MAX_STEPS)
-
-    # the optimizer hands back tensors; ase structures are a boundary conversion
-    relaxed, _ = optimizer.get_relaxation_results()
-    return RelaxationResult(atoms=batch_to_atoms(relaxed), steps=[optimizer.nsteps])
+    # the relaxer hands back tensors; ase structures are a boundary conversion
+    return RelaxationResult(atoms=batch_to_atoms(result.batch), steps=[result.n_steps])
 
 
-def relax_sequential(atoms_list: List[Atoms], calculator) -> RelaxationResult:
+def relax_sequential(atoms_list: list[Atoms], calculator) -> RelaxationResult:
     """Relax the structures one at a time, the way ase would normally be used."""
     atoms, steps = [], []
     # LBFGS relaxes in place, so the caller's structures must not be handed over
@@ -167,7 +161,7 @@ def single_structure_atoms(initial_structures):
     return [relax_batchwise([structure]).atoms[0] for structure in initial_structures]
 
 
-def evaluate(atoms_list: List[Atoms], calculator):
+def evaluate(atoms_list: list[Atoms], calculator):
     """Energies and max force norms, all from the same calculator."""
     energies, fmax = [], []
     for structure in atoms_list:
@@ -230,39 +224,40 @@ def test_forces_are_computed_once_per_step(
 ):
     """The convergence check, the frame written from it, and the step share one call.
 
-    The calculator caches its results and decides whether they are still valid from
-    the identity and mutation counter of the position tensor. If that check ever goes
-    wrong in the conservative direction, relaxations silently cost twice as much.
+    The calculator caches its last outputs and decides whether they are still valid
+    from the identity and mutation counter of the batch tensors. If that check ever
+    goes wrong in the conservative direction, relaxations silently cost twice as much.
     Writing a frame on every step must not cost a second call either, which is why
     ``trajectory_interval=1`` is covered here too.
     """
-    optimizer = build_batchwise_optimizer(
-        initial_structures[:3],
+    relaxer = build_relaxer(
         trajectory=str(tmp_path / "relax.hdf5"),
         trajectory_interval=trajectory_interval,
     )
-    calculate = optimizer.calculator.calculate
+    evaluate = relaxer.calculator._evaluate
     calls = []
 
-    def counting_calculate(inputs):
+    def counting_evaluate(batch):
         calls.append(None)
-        return calculate(inputs)
+        return evaluate(batch)
 
-    optimizer.calculator.calculate = counting_calculate
-    optimizer.run(fmax=FMAX, steps=MAX_STEPS)
-    optimizer.close()
+    relaxer.calculator._evaluate = counting_evaluate
+    inputs = atoms_to_batch(deepcopy(initial_structures[:3]), device=DEVICE)
+    result = relaxer.relax(inputs, MAX_STEPS, fmax=FMAX)
 
     # one for the initial forces, one per step taken
-    assert len(calls) == optimizer.nsteps + 1
+    assert len(calls) == result.n_steps + 1
 
 
 def test_cached_forces_are_dropped_when_the_positions_move(initial_structures):
     """The other direction: a structure that changed must not return stale forces."""
-    optimizer = build_batchwise_optimizer(initial_structures[:2])
-    calculator, inputs = optimizer.calculator, optimizer.inputs
+    relaxer = build_relaxer()
+    inputs = relaxer.calculator.prepare(
+        atoms_to_batch(deepcopy(initial_structures[:2]), device=DEVICE)
+    )
 
-    before = calculator.get_forces(inputs).clone()
-    assert torch.equal(calculator.get_forces(inputs), before), "cache should have hit"
+    before = relaxer.evaluate(inputs)["forces"].clone()
+    assert torch.equal(relaxer.evaluate(inputs)["forces"], before), "should hit"
 
     inputs[properties.R] += 0.1
-    assert not torch.equal(calculator.get_forces(inputs), before)
+    assert not torch.equal(relaxer.evaluate(inputs)["forces"], before)

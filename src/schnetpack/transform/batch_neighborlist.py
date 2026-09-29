@@ -123,6 +123,12 @@ class BatchNeighborList:
         """
         return {**inputs, **self.neighbors(inputs, with_distances=True)}
 
+    def __call__(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        """Same as :meth:`update`, so the list plugs into a
+        :class:`~schnetpack.dynamics.calculator.Calculator` like any
+        batch -> batch transform."""
+        return self.update(inputs)
+
     def neighbors(
         self, inputs: dict[str, torch.Tensor], with_distances: bool = False
     ) -> dict[str, torch.Tensor]:

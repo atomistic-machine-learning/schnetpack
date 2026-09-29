@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from schnetpack import properties
 from schnetpack.dynamics.base import Dynamics
 from schnetpack.dynamics.integrators.base import Integrator
+from schnetpack.dynamics.observers import SamplingFrame
 from schnetpack.dynamics.sampling.grids import TimeGrid, UniformGrid
 from schnetpack.generative.differential_equations import ReverseODE, ReverseSDE
 from schnetpack.generative.parametrizations import Parametrization
@@ -72,6 +73,7 @@ class Sampler(Dynamics):
         key: str = properties.R,
         output_key: str = "prediction",
         time_key: str = properties.t,
+        observers: Sequence = (),
     ):
         """
         Args:
@@ -100,13 +102,24 @@ class Sampler(Dynamics):
                 row of the moved key — the key
                 :class:`~schnetpack.generative.transforms.Diffuse` wrote in
                 training
+            observers: :class:`~schnetpack.dynamics.observers.Observer` s
+                the run reports to, e.g. a
+                :class:`~schnetpack.dynamics.observers.TrajectoryRecorder`
+                for the reverse-diffusion path
         """
         parametrization.validate(process)
+        if integrator.requires_structure:
+            raise ValueError(
+                f"{type(integrator).__name__} steps per structure on a force "
+                "field and cannot integrate a reverse process; run it with "
+                "schnetpack.dynamics.relax.Relaxer"
+            )
         super().__init__(
             calculator,
             prior=prior if prior is not None else process.sampling_prior(),
             constraints=constraints,
             key=key,
+            observers=observers,
         )
         self.process = process
         self.parametrization = parametrization
@@ -162,17 +175,36 @@ class Sampler(Dynamics):
         n_rows = x.shape[0]
 
         batch = {**batch, self.time_key: ts[0].expand(n_rows)}
-        for i in range(n_steps):
-            batch = self.before_step(batch, i, n_steps)
-            x = self.integrator.step(
-                self.reverse(batch),
-                batch[self.key],
-                batch[self.time_key],
-                ts[i + 1] - ts[i],
-            )
-            batch = {**batch, self.key: x, self.time_key: ts[i + 1].expand(n_rows)}
-            batch = self.after_step(batch, i + 1, n_steps)
+        state = self.integrator.init_state(self.reverse(batch), x)
+        self.start_observers(batch)
+        try:
+            self.report(0, n_steps == 0, self._frame(batch, 0, ts[0], n_steps == 0))
+            for i in range(n_steps):
+                batch = self.before_step(batch, i, n_steps)
+                x, state = self.integrator.step(
+                    self.reverse(batch),
+                    batch[self.key],
+                    batch[self.time_key],
+                    ts[i + 1] - ts[i],
+                    state,
+                )
+                batch = {
+                    **batch,
+                    self.key: x,
+                    self.time_key: ts[i + 1].expand(n_rows),
+                }
+                batch = self.after_step(batch, i + 1, n_steps)
+                final = i + 1 == n_steps
+                self.report(i + 1, final, self._frame(batch, i + 1, ts[i + 1], final))
+        finally:
+            self.end_observers()
         return batch
+
+    def _frame(self, batch, step, t, final):
+        """Builder of the frame of ``batch``, called only if someone listens."""
+        return lambda: SamplingFrame(
+            step=step, final=final, positions=batch[self.key], batch=batch, t=t
+        )
 
     def reverse(self, batch):
         """

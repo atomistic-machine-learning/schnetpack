@@ -64,4 +64,4 @@ Contents
    api/train
    api/transform
    api/md
-   api/relax
+   api/dynamics

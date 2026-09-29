@@ -9,9 +9,10 @@ the jump x <- x + F/2 is the exact Newton step on the quadratic pseudo-energy
 and not with the grid-walking :class:`~schnetpack.dynamics.sampling.Sampler`.
 
 The model contract is the batch dict (``batch -> outputs``, see
-:class:`~schnetpack.dynamics.base.Dynamics`); the batch-dict relaxers
-(L-BFGS and friends) arrive with the batch-wise optimizer port, and this loop
-becomes one step rule among theirs.
+:class:`~schnetpack.dynamics.base.Dynamics`). It stays a driver of its own
+next to the force-field :class:`~schnetpack.dynamics.relax.Relaxer`: its
+jump follows no force, has no ``fmax`` to stop on and runs at t = 0 (see
+``docs/adr/0001-relaxation-in-dynamics.md``).
 """
 
 from collections.abc import Sequence
@@ -21,6 +22,7 @@ import torch
 from schnetpack import properties
 from schnetpack.dynamics.base import Dynamics
 from schnetpack.dynamics.constraints.state import AnnealedNoise
+from schnetpack.dynamics.observers import Frame
 from schnetpack.generative.parametrizations import Parametrization
 from schnetpack.generative.priors import Prior
 from schnetpack.generative.processes import Process
@@ -77,6 +79,7 @@ class DirectDenoising(Dynamics):
         key: str = properties.R,
         output_key: str = "prediction",
         time_key: str = properties.t,
+        observers: Sequence = (),
     ):
         """
         Args:
@@ -99,6 +102,8 @@ class DirectDenoising(Dynamics):
                 parametrization
             time_key: batch key the zero time is written to, for models
                 that take a time input
+            observers: :class:`~schnetpack.dynamics.observers.Observer` s
+                the run reports to
         """
         parametrization.validate(process)
         injection = (
@@ -109,6 +114,7 @@ class DirectDenoising(Dynamics):
             prior=prior if prior is not None else process.sampling_prior(),
             constraints=injection + list(constraints),
             key=key,
+            observers=observers,
         )
         self.process = process
         self.parametrization = parametrization
@@ -143,10 +149,23 @@ class DirectDenoising(Dynamics):
         t = torch.zeros(x.shape[0], dtype=x.dtype, device=x.device)
 
         batch = {**batch, self.time_key: t}
-        for i in range(n_steps):
-            batch = self.before_step(batch, i, n_steps)
-            raw = self.calculator(batch)[self.output_key]
-            x = self.parametrization.to_x0(self.process, raw, batch[self.key], t)
-            batch = {**batch, self.key: x}
-            batch = self.after_step(batch, i + 1, n_steps)
+        self.start_observers(batch)
+        try:
+            self.report(0, n_steps == 0, self._frame(batch, 0, n_steps == 0))
+            for i in range(n_steps):
+                batch = self.before_step(batch, i, n_steps)
+                raw = self.calculator(batch)[self.output_key]
+                x = self.parametrization.to_x0(self.process, raw, batch[self.key], t)
+                batch = {**batch, self.key: x}
+                batch = self.after_step(batch, i + 1, n_steps)
+                final = i + 1 == n_steps
+                self.report(i + 1, final, self._frame(batch, i + 1, final))
+        finally:
+            self.end_observers()
         return batch
+
+    def _frame(self, batch, step, final):
+        """Builder of the frame of ``batch``, called only if someone listens."""
+        return lambda: Frame(
+            step=step, final=final, positions=batch[self.key], batch=batch
+        )
