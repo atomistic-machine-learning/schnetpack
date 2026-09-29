@@ -1,5 +1,5 @@
 """
-Relaxation on a force field: drive structures downhill until every one of
+Relaxation on a force field: drive structures downhill until each of
 them is relaxed.
 """
 
@@ -66,9 +66,22 @@ class _ForceField:
         self._x = x
 
     def forces(self, batch: Mapping[str, Any]) -> tuple[torch.Tensor, dict]:
-        """Forces on the free atoms in eV/Angstrom, and all outputs converted."""
-        outputs = self.relaxer.evaluate(batch)
-        forces = outputs[self.relaxer.force_key]
+        """
+        Forces on the free atoms in eV/Angstrom, and all outputs converted.
+
+        The field constraints' terms are part of the surface: added to the
+        energy and forces the outputs report, before the fixed atoms' forces
+        are zeroed.
+        """
+        relaxer = self.relaxer
+        outputs = relaxer.evaluate(batch)
+        terms = relaxer.field_terms(batch, relaxer._to_angstrom(batch[relaxer.key]))
+        if terms is not None:
+            energy = outputs[relaxer.energy_key]
+            forces = outputs[relaxer.force_key]
+            outputs[relaxer.energy_key] = energy + terms.energy.to(energy)
+            outputs[relaxer.force_key] = forces + terms.forces.to(forces)
+        forces = outputs[relaxer.force_key]
         if self.free is not None:
             forces = forces * self.free.to(forces.dtype)
         return forces, outputs
@@ -136,7 +149,10 @@ class Relaxer(Dynamics):
     :class:`~schnetpack.dynamics.base.Dynamics`, with one difference: a run
     that converges early stops before ``n_steps``, so a constraint's final
     ``after_step(step == n_steps)`` only fires when the step limit is
-    reached.
+    reached. Field constraints — restraints such as
+    :class:`~schnetpack.dynamics.constraints.field.HarmonicRestraint` — are
+    part of the energy surface: their forces drive the step and count
+    towards ``fmax``, and their energy is included in the reported energy.
     """
 
     def __init__(
@@ -166,7 +182,8 @@ class Relaxer(Dynamics):
             integrator: step rule (default:
                 :class:`~schnetpack.dynamics.integrators.LBFGS`)
             prior: starting distribution :meth:`sample` draws from
-            constraints: state-level constraints applied around every step
+            constraints: state-level constraints applied around every step,
+                and field-level constraints added to the energy surface
             observers: :class:`~schnetpack.dynamics.observers.Observer` s the
                 run reports to
             key: batch key this driver moves

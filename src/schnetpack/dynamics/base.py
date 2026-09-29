@@ -37,6 +37,8 @@ from typing import Any
 
 from schnetpack import properties
 from schnetpack.dynamics.calculator import as_calculator
+from schnetpack.dynamics.constraints.field import FieldConstraint, FieldTerms
+from schnetpack.dynamics.constraints.state import StateConstraint
 from schnetpack.generative.priors import Prior
 
 __all__ = ["Dynamics"]
@@ -65,11 +67,15 @@ class Dynamics(abc.ABC):
             batch = self.after_step(batch, i + 1, n_steps)    # constraints, in order
             self.report(i + 1, final, <frame>)                 # observers
 
-    Constraints (:class:`~schnetpack.dynamics.constraints.state.StateConstraint`)
-    act between full steps only — never between the stages of a multi-stage
+    State constraints
+    (:class:`~schnetpack.dynamics.constraints.state.StateConstraint`) act
+    between full steps only — never between the stages of a multi-stage
     integrator such as Heun. Their order is the list order, and it matters:
     a constraint that overwrites atoms should run after one that perturbs
-    them.
+    them. Field constraints
+    (:class:`~schnetpack.dynamics.constraints.field.FieldConstraint`) share
+    the list but act inside the field, at every evaluation; the driver folds
+    :meth:`field_terms` into whatever its field is.
 
     Observers (:class:`~schnetpack.dynamics.observers.Observer`) watch the
     run: the driver calls :meth:`start_observers` at loop entry,
@@ -94,7 +100,7 @@ class Dynamics(abc.ABC):
             prior: starting distribution :meth:`sample` draws from; without
                 one, only :meth:`denoise` on given structures is available
             constraints: state-level constraints applied around every step,
-                in order
+                in order, and field-level constraints added to the field
             key: batch key this driver moves
             observers: :class:`~schnetpack.dynamics.observers.Observer` s
                 the run reports to
@@ -102,8 +108,24 @@ class Dynamics(abc.ABC):
         self.calculator = as_calculator(calculator)
         self.prior = prior
         self.constraints = list(constraints)
+        for constraint in self.constraints:
+            if not isinstance(constraint, (StateConstraint, FieldConstraint)):
+                raise TypeError(
+                    f"{type(constraint).__name__} is neither a StateConstraint "
+                    "nor a FieldConstraint"
+                )
         self.key = key
         self.observers = list(observers)
+
+    @property
+    def state_constraints(self) -> list[StateConstraint]:
+        """The state constraints of :attr:`constraints`, in order."""
+        return [c for c in self.constraints if isinstance(c, StateConstraint)]
+
+    @property
+    def field_constraints(self) -> list[FieldConstraint]:
+        """The field constraints of :attr:`constraints`."""
+        return [c for c in self.constraints if isinstance(c, FieldConstraint)]
 
     def start_observers(self, batch: Mapping[str, Any]) -> None:
         """Tell every observer a run starts from ``batch``."""
@@ -131,16 +153,42 @@ class Dynamics(abc.ABC):
             observer.on_end()
 
     def before_step(self, batch: dict, step: int, n_steps: int) -> dict:
-        """Run the constraints' before-step hooks, in order."""
-        for constraint in self.constraints:
+        """Run the state constraints' before-step hooks, in order."""
+        for constraint in self.state_constraints:
             batch = constraint.before_step(batch, step, n_steps, self)
         return batch
 
     def after_step(self, batch: dict, step: int, n_steps: int) -> dict:
-        """Run the constraints' after-step hooks, in order."""
-        for constraint in self.constraints:
+        """Run the state constraints' after-step hooks, in order."""
+        for constraint in self.state_constraints:
             batch = constraint.after_step(batch, step, n_steps, self)
         return batch
+
+    def field_terms(self, batch: Mapping[str, Any], positions) -> FieldTerms | None:
+        """
+        The summed energy and forces of the field constraints at ``positions``.
+
+        Every constraint is called on a copy of ``batch`` with ``positions``
+        under ``properties.R``, and the terms it returns are added up.
+
+        Args:
+            batch: current batch
+            positions: positions in Angstrom to evaluate at
+
+        Returns:
+            Energy per structure in eV and forces in eV/Angstrom, or None
+            without field constraints.
+        """
+        constraints = self.field_constraints
+        if not constraints:
+            return None
+        inputs = {**batch, properties.R: positions}
+        energy, forces = 0.0, 0.0
+        for constraint in constraints:
+            terms = constraint(inputs)
+            energy = energy + terms.energy
+            forces = forces + terms.forces
+        return FieldTerms(energy, forces)
 
     def sample(self, n_samples: int, n_steps: int) -> dict[str, Any]:
         """

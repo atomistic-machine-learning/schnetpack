@@ -68,7 +68,8 @@ Constraints
     AnnealedNoise
     Scaffold
     FieldConstraint
-    HarmonicBond
+    FieldTerms
+    HarmonicRestraint
 
 
 Uncertainty

@@ -21,6 +21,7 @@ import torch
 
 from schnetpack import properties
 from schnetpack.dynamics.base import Dynamics
+from schnetpack.dynamics.constraints.field import FieldConstraint
 from schnetpack.dynamics.constraints.state import AnnealedNoise
 from schnetpack.dynamics.observers import Frame
 from schnetpack.generative.parametrizations import Parametrization
@@ -96,7 +97,8 @@ class DirectDenoising(Dynamics):
             stochastic_lambda: scale of the injected noise, in data units;
                 0 disables the injection
             constraints: state-level constraints, applied after the noise
-                injection
+                injection. The jump follows no field, so field constraints
+                are refused.
             key: batch key this driver moves
             output_key: model output holding the raw head, in the
                 parametrization
@@ -106,6 +108,13 @@ class DirectDenoising(Dynamics):
                 the run reports to
         """
         parametrization.validate(process)
+        for constraint in constraints:
+            if isinstance(constraint, FieldConstraint):
+                raise ValueError(
+                    f"{type(constraint).__name__} is a field constraint, and "
+                    "direct denoising jumps to the x0-estimate without following "
+                    "a field; use a StateConstraint, or the Sampler or Relaxer"
+                )
         injection = (
             [AnnealedNoise(stochastic_lambda)] if stochastic_lambda > 0.0 else []
         )

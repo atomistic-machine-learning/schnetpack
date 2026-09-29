@@ -13,7 +13,8 @@ from schnetpack.dynamics.sampling.grids import TimeGrid, UniformGrid
 from schnetpack.generative.differential_equations import ReverseODE, ReverseSDE
 from schnetpack.generative.parametrizations import Parametrization
 from schnetpack.generative.priors import Prior
-from schnetpack.generative.processes import Process
+from schnetpack.generative.processes import Process, expand_t
+from schnetpack.units import convert_units
 
 __all__ = ["Sampler"]
 
@@ -46,6 +47,17 @@ class Sampler(Dynamics):
     integrator step along the time grid; state-level constraints run between
     them, with ``batch[time_key]`` the grid time of the iterate they see.
 
+    Field constraints — restraints such as
+    :class:`~schnetpack.dynamics.constraints.field.HarmonicRestraint` —
+    guide the score: their forces F, scaled by ``guidance_weight`` w (1/kT),
+    are added to it, score + w F, which tilts the sampled density by
+    exp(-w E). The term enters the bound score field itself, so the drift and
+    the ancestral steps that read the score directly both see it. A velocity
+    head reaches it through the chart, v - 1/2 g^2 w F, so field constraints
+    require the process's (f, g) chart even there. The restraint is evaluated
+    at the noisy iterate x_t, not at a clean estimate: an approximation that
+    is exact only as t -> t_min.
+
     Method-specific behavior belongs in the composed parts. If you find
     yourself subclassing this, the logic probably belongs in a process,
     parametrization, integrator, grid or constraint — that is what the axes
@@ -74,6 +86,8 @@ class Sampler(Dynamics):
         output_key: str = "prediction",
         time_key: str = properties.t,
         observers: Sequence = (),
+        guidance_weight: float = 1.0,
+        position_unit: str | float = "Ang",
     ):
         """
         Args:
@@ -106,6 +120,10 @@ class Sampler(Dynamics):
                 the run reports to, e.g. a
                 :class:`~schnetpack.dynamics.observers.TrajectoryRecorder`
                 for the reverse-diffusion path
+            guidance_weight: weight w of the field constraints' forces in
+                the score, in 1/eV (1/kT)
+            position_unit: length unit of the moved key; field constraints
+                are evaluated in Angstrom
         """
         parametrization.validate(process)
         if integrator.requires_structure:
@@ -125,6 +143,8 @@ class Sampler(Dynamics):
         self.parametrization = parametrization
         self.output_key = output_key
         self.time_key = time_key
+        self.guidance_weight = guidance_weight
+        self.length = convert_units(position_unit, "Angstrom")
         # Validity settles here, not mid-run: if anything in this assembly
         # will cross the (f, g) chart — stochastic sampling, a non-velocity
         # head's conversion, an ancestral integrator — acquire the chart
@@ -136,7 +156,8 @@ class Sampler(Dynamics):
             or parametrization.velocity_needs_chart
             or integrator.requires_sde
         )
-        if self.needs_chart:
+        if self.needs_chart or self.field_constraints:
+            # a velocity head folds field constraints in through g^2
             process.sde()
         self.integrator = integrator
         self.grid = grid if grid is not None else UniformGrid()
@@ -219,13 +240,30 @@ class Sampler(Dynamics):
             def score_fn(x, t):
                 inputs = {**batch, self.key: x, self.time_key: t}
                 raw = self.calculator(inputs)[self.output_key]
-                return self.parametrization.to_score(self.process, raw, x, t)
+                score = self.parametrization.to_score(self.process, raw, x, t)
+                guidance = self.guidance(inputs, x)
+                return score if guidance is None else score + guidance
 
             return ReverseSDE(self.process.sde(), score_fn, churn=self.churn)
 
         def velocity_fn(x, t):
             inputs = {**batch, self.key: x, self.time_key: t}
             raw = self.calculator(inputs)[self.output_key]
-            return self.parametrization.to_velocity(self.process, raw, x, t)
+            velocity = self.parametrization.to_velocity(self.process, raw, x, t)
+            guidance = self.guidance(inputs, x)
+            if guidance is None:
+                return velocity
+            g2 = expand_t(self.process.sde().g2(t), x)
+            return velocity - 0.5 * g2 * guidance
 
         return ReverseODE(velocity_fn)
+
+    def guidance(self, batch, x):
+        """
+        The field constraints' score term w F at ``x``, in the moved key's
+        units, or None without field constraints.
+        """
+        terms = self.field_terms(batch, x * self.length)
+        if terms is None:
+            return None
+        return (self.guidance_weight * self.length) * terms.forces.to(x)
