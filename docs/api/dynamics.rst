@@ -19,6 +19,7 @@ Drivers
     Sampler
     Relaxer
     RelaxationResult
+    ForceField
     DirectDenoising
 
 
@@ -31,6 +32,7 @@ Calculators
     :template: classtemplate.rst
 
     Calculator
+    ForceFieldCalculator
     EnsembleCalculator
     NNEnsemble
 

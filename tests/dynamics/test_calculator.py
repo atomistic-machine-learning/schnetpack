@@ -1,7 +1,14 @@
+import pytest
 import torch
 
 from schnetpack import properties
-from schnetpack.dynamics import Calculator, DirectDenoising, Heun, Sampler
+from schnetpack.dynamics import (
+    Calculator,
+    DirectDenoising,
+    ForceFieldCalculator,
+    Heun,
+    Sampler,
+)
 from schnetpack.generative import (
     VE,
     VP,
@@ -176,6 +183,139 @@ def test_a_batch_neighbor_list_plugs_in_as_a_transform():
 
     assert callable(BatchNeighborList.__call__)
     assert BatchNeighborList.__call__ is not object.__call__
+
+
+# ------------------------------------------------------------- force-field units
+
+KCAL = 1 / 23.0605480121  # eV per kcal/mol
+
+
+class RecordingForceField:
+    """Unit-sized outputs of every kind, and a record of the inputs it was handed."""
+
+    def __init__(self):
+        self.inputs = None
+        self.grad_enabled = None
+
+    def __call__(self, batch):
+        self.inputs = dict(batch)
+        self.grad_enabled = torch.is_grad_enabled()
+        n_structures = batch[properties.n_atoms].shape[0]
+        return {
+            "energy": torch.ones(n_structures),
+            "forces": torch.ones_like(batch[properties.R]),
+            "stress": torch.ones(n_structures, 3, 3),
+            "dipole_moment": torch.ones(n_structures, 3),
+        }
+
+
+def angstrom_batch():
+    return {
+        properties.n_atoms: torch.tensor([2, 1]),
+        properties.R: torch.randn(3, 3),
+        properties.cell: torch.randn(2, 3, 3),
+    }
+
+
+def test_the_model_and_the_neighbor_list_see_the_models_units():
+    seen = {}
+
+    def neighbor_list(inputs):
+        seen["positions"] = inputs[properties.R].clone()
+        return inputs
+
+    model = RecordingForceField()
+    batch = angstrom_batch()
+    before = {key: value.clone() for key, value in batch.items()}
+    ForceFieldCalculator(model, neighbor_list=neighbor_list, position_unit="nm")(batch)
+
+    torch.testing.assert_close(seen["positions"], batch[properties.R] / 10.0)
+    torch.testing.assert_close(model.inputs[properties.R], batch[properties.R] / 10.0)
+    torch.testing.assert_close(
+        model.inputs[properties.cell], batch[properties.cell] / 10.0
+    )
+    for key, value in before.items():
+        assert torch.equal(batch[key], value), key
+
+
+def test_energy_forces_and_stress_come_back_in_ev_and_angstrom():
+    calculator = ForceFieldCalculator(
+        RecordingForceField(),
+        energy_unit="kcal/mol",
+        position_unit="nm",
+        stress_key="stress",
+    )
+    out = calculator(angstrom_batch())
+
+    torch.testing.assert_close(out["energy"], torch.full((2,), KCAL))
+    torch.testing.assert_close(out["forces"], torch.full((3, 3), KCAL / 10.0))
+    torch.testing.assert_close(out["stress"], torch.full((2, 3, 3), KCAL / 1000.0))
+    # what is not a force-field quantity passes through as the model reported it
+    torch.testing.assert_close(out["dipole_moment"], torch.ones(2, 3))
+
+
+def test_stress_is_left_alone_without_a_stress_key():
+    calculator = ForceFieldCalculator(RecordingForceField(), position_unit="nm")
+    torch.testing.assert_close(
+        calculator(angstrom_batch())["stress"], torch.ones(2, 3, 3)
+    )
+
+
+def test_a_model_in_ev_and_angstrom_gets_the_positions_as_they_are():
+    model = RecordingForceField()
+    batch = angstrom_batch()
+    ForceFieldCalculator(model, enable_grad=False)(batch)
+    assert model.inputs[properties.R] is batch[properties.R]
+    assert model.inputs[properties.cell] is batch[properties.cell]
+
+
+@pytest.mark.parametrize("missing", ["energy", "forces"])
+def test_a_force_field_must_return_energy_and_forces(missing):
+    def model(batch):
+        outputs = RecordingForceField()(batch)
+        del outputs[missing]
+        return outputs
+
+    with pytest.raises(KeyError, match=missing):
+        ForceFieldCalculator(model)(angstrom_batch())
+
+
+def test_a_force_field_runs_with_grad_by_default():
+    model = RecordingForceField()
+    ForceFieldCalculator(model)(angstrom_batch())
+    assert model.grad_enabled
+
+
+def test_the_cache_answers_an_unchanged_angstrom_batch():
+    calls = []
+
+    def model(batch):
+        calls.append(1)
+        return {
+            "energy": torch.zeros(2),
+            "forces": torch.zeros_like(batch[properties.R]),
+        }
+
+    calculator = ForceFieldCalculator(model, position_unit="nm", cache_last=True)
+    batch = angstrom_batch()
+    first = calculator(batch)
+    second = calculator(batch)
+    assert len(calls) == 1
+    torch.testing.assert_close(first["forces"], second["forces"])
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda calc: Sampler(calc, VP(), VelocityParametrization(), Heun(), churn=0.0),
+        lambda calc: DirectDenoising(calc, VE(0.01, 3.0), PseudoForceParametrization()),
+    ],
+    ids=["Sampler", "DirectDenoising"],
+)
+def test_generative_drivers_refuse_a_force_field_calculator(build):
+    # it would convert the positions going in, but not the raw head coming out
+    with pytest.raises(TypeError, match="ForceFieldCalculator"):
+        build(ForceFieldCalculator(zero_model))
 
 
 # ------------------------------------------------------------- integrator history

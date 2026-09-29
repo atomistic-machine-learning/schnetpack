@@ -48,10 +48,10 @@ class LBFGS(Integrator):
     A step rule for a :class:`~schnetpack.dynamics.relax.Relaxer`: it follows
     the field's drift as forces (eV/Angstrom on positions in Angstrom) and
     ignores ``t`` and ``dt`` — the step length is set by ``maxstep`` and
-    ``damping``. It reads the structure layout and the per-structure
-    ``active`` mask off the field (``requires_structure``); structures that
-    are not active do not move. All structures of a batch must have the same
-    number of atoms.
+    ``damping``. It reads the structure layout off the field
+    (``requires_structure``); holding converged structures still is the
+    relaxer's job. All structures of a batch must have the same number of
+    atoms.
 
     The history lives in an :class:`LBFGSState`, one per run. A constraint
     that moves atoms between steps (e.g. noise injection) makes the history
@@ -110,7 +110,6 @@ class LBFGS(Integrator):
         n_structures, n_atoms = state.n_structures, state.n_atoms
         f = dynamics.drift(x, t).to(device=self.device, dtype=torch.float64)
         r = x.to(device=self.device, dtype=torch.float64)
-        active = dynamics.active.to(self.device)
 
         state = self._update(state, r, f)
         loopmax = min(self.memory, state.iteration)
@@ -129,8 +128,6 @@ class LBFGS(Integrator):
             z += state.s[i] * (a[i] - b)
 
         p = -z.view(n_structures, n_atoms, 3)
-        # broadcast rather than materialize a full-size mask
-        p = p * active.view(-1, 1, 1)
         dr = self._determine_step(p) * self.damping
 
         state.iteration += 1

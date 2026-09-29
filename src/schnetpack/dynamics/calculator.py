@@ -12,9 +12,17 @@ the keys they add (neighbor lists, distance vectors, outputs) never reach the
 driver's batch. That is what keeps a moving structure free of stale derived
 keys: they only ever exist on the copy built for one call.
 
-:class:`EnsembleCalculator` is the same seam for an ensemble of models: it
-reports the members' mean, which drives any driver exactly as a single
-model's outputs would, and how far the members disagree.
+The plain :class:`Calculator` never touches units: the batch reaches the
+model as the driver holds it. That is what a generative model needs — its
+raw head has no single unit (x0 is a length, the noise has none, the score
+is an inverse length) and its process lives in the training data's units,
+so a sampler steps in the model's units. :class:`ForceFieldCalculator` is the
+unit boundary of a force field: the driver works in eV and Angstrom, the
+model in its own units.
+
+:class:`EnsembleCalculator` is the same seam for an ensemble of force
+fields: it reports the members' mean, which drives any driver exactly as a
+single model's outputs would, and how far the members disagree.
 """
 
 import os
@@ -28,7 +36,13 @@ from schnetpack import properties
 from schnetpack.uncertainty import AbsoluteUncertainty, Uncertainty
 from schnetpack.units import convert_units
 
-__all__ = ["Calculator", "EnsembleCalculator", "NNEnsemble", "as_calculator"]
+__all__ = [
+    "Calculator",
+    "ForceFieldCalculator",
+    "EnsembleCalculator",
+    "NNEnsemble",
+    "as_calculator",
+]
 
 
 class Calculator:
@@ -160,6 +174,85 @@ class Calculator:
             return self.model(inputs)
 
 
+class ForceFieldCalculator(Calculator):
+    """
+    Run a force field on spk batches held in eV and Angstrom.
+
+    The driver's batch is in Angstrom and the outputs come back in eV,
+    eV/Angstrom and eV/Angstrom^3, whatever units the model works in. The
+    positions and the cell are converted to the model's units on the copy the
+    model is handed — before the neighbor list, whose cutoff is in the
+    model's units — and the energy, forces and stress back from them. Any
+    other output is returned as the model reported it. A model that does not
+    return energy and forces is reported rather than run on.
+
+    This is the calculator a :class:`~schnetpack.dynamics.relax.Relaxer`
+    runs on. It runs with autograd enabled by default, for models that
+    differentiate their energy. A generative driver refuses it: its raw head
+    is not a force-field quantity, and would come back unconverted.
+    """
+
+    def __init__(
+        self,
+        model: str | Callable[[dict[str, torch.Tensor]], dict[str, torch.Tensor]],
+        energy_unit: str | float = "eV",
+        position_unit: str | float = "Ang",
+        energy_key: str = properties.energy,
+        force_key: str = properties.forces,
+        stress_key: str | None = None,
+        enable_grad: bool = True,
+        **kwargs,
+    ):
+        """
+        Args:
+            model: batch -> outputs, or the path to a model saved on disk
+            energy_unit: energy unit the model works in
+            position_unit: length unit the model works in
+            energy_key: model output holding the energy per structure
+            force_key: model output holding the forces
+            stress_key: model output holding the stress; None if the model
+                predicts none
+            enable_grad: run the model with autograd enabled
+
+        Remaining keyword arguments are those of :class:`Calculator`.
+        """
+        super().__init__(model, enable_grad=enable_grad, **kwargs)
+        self.energy_key = energy_key
+        self.force_key = force_key
+        self.stress_key = stress_key
+        self.energy_conversion = convert_units(energy_unit, "eV")
+        self.position_conversion = convert_units(position_unit, "Angstrom")
+        self.output_units = {
+            energy_key: self.energy_conversion,
+            force_key: self.energy_conversion / self.position_conversion,
+        }
+        if stress_key is not None:
+            self.output_units[stress_key] = (
+                self.energy_conversion / self.position_conversion**3
+            )
+
+    def _evaluate(self, batch: Mapping[str, Any]) -> dict[str, torch.Tensor]:
+        if self.position_conversion != 1.0:
+            batch = {
+                **batch,
+                **{
+                    key: batch[key] / self.position_conversion
+                    for key in (properties.R, properties.cell)
+                    if key in batch
+                },
+            }
+        outputs = super()._evaluate(batch)
+        if self.energy_key not in outputs or self.force_key not in outputs:
+            raise KeyError(
+                f"a force field must return {self.energy_key!r} and "
+                f"{self.force_key!r}; got {sorted(outputs)}"
+            )
+        return {
+            key: value * self.output_units[key] if key in self.output_units else value
+            for key, value in outputs.items()
+        }
+
+
 class NNEnsemble(nn.Module):
     """
     Several models evaluated together, reported as one prediction per model.
@@ -204,19 +297,21 @@ class NNEnsemble(nn.Module):
         }
 
 
-class EnsembleCalculator(Calculator):
+class EnsembleCalculator(ForceFieldCalculator):
     """
-    Run an ensemble on spk batches, reporting how much it disagrees.
+    Run an ensemble of force fields on spk batches, reporting how much it
+    disagrees.
 
     The outputs are the members' mean for every collected property, so any
     driver runs on them exactly as on a single model's. On top of that
     ``outputs[uncertainty_key]`` holds how far the members disagreed, one
-    value per structure — which, after a relaxation or a sampling run, tells
-    *which* structures went somewhere the models were not trained. Several
+    value per structure — which, after a relaxation, tells *which*
+    structures went somewhere the models were not trained. Several
     uncertainty functions give a dictionary keyed by class name.
 
-    The means stay in the model's units, like any calculator's outputs. The
-    uncertainty is reported in eV and Angstrom, the units
+    Like any :class:`ForceFieldCalculator` it takes batches in Angstrom and
+    reports energy, forces and stress in eV and Angstrom; the uncertainty is
+    computed on the converted members, in the units
     :class:`~schnetpack.interfaces.ase_interface.SpkEnsembleCalculator`
     reports it in, so a criterion tuned against one applies to the other.
     """
@@ -245,13 +340,12 @@ class EnsembleCalculator(Calculator):
                 :class:`~schnetpack.uncertainty.AbsoluteUncertainty`)
             energy_unit: energy unit the models work in
             position_unit: length unit the models work in
-            energy_key: energy output, converted for the uncertainty
-            force_key: force output, converted for the uncertainty
-            stress_key: stress output, converted for the uncertainty; None
-                if the models predict none
+            energy_key: energy output
+            force_key: force output
+            stress_key: stress output; None if the models predict none
             uncertainty_key: output key the uncertainty is reported under
 
-        Remaining keyword arguments are those of :class:`Calculator`.
+        Remaining keyword arguments are those of :class:`ForceFieldCalculator`.
         """
         members = nn.ModuleList(
             [
@@ -259,13 +353,15 @@ class EnsembleCalculator(Calculator):
                 for member in self._resolve(models)
             ]
         )
-        super().__init__(NNEnsemble(members, list(properties)), **kwargs)
-
-        energy = convert_units(energy_unit, "eV")
-        length = convert_units(position_unit, "Angstrom")
-        self.uncertainty_units = {energy_key: energy, force_key: energy / length}
-        if stress_key is not None:
-            self.uncertainty_units[stress_key] = energy / length**3
+        super().__init__(
+            NNEnsemble(members, list(properties)),
+            energy_unit=energy_unit,
+            position_unit=position_unit,
+            energy_key=energy_key,
+            force_key=force_key,
+            stress_key=stress_key,
+            **kwargs,
+        )
 
         if uncertainty_fn is None:
             uncertainty_fn = AbsoluteUncertainty(
@@ -293,21 +389,19 @@ class EnsembleCalculator(Calculator):
         return load_model(path, device="cpu").to(torch.float64)
 
     def _evaluate(self, batch: Mapping[str, Any]) -> dict[str, torch.Tensor]:
-        # the model axis is kept by the ensemble: the mean drives the loop, and
-        # the spread across it is the uncertainty
+        # the model axis is kept by the ensemble, and the unit factors
+        # broadcast over it: the mean drives the loop, and the spread across
+        # it is the uncertainty
         stacked = super()._evaluate(batch)
         outputs = {prop: value.mean(dim=0) for prop, value in stacked.items()}
 
-        converted = {
-            prop: value.detach() * self.uncertainty_units.get(prop, 1.0)
-            for prop, value in stacked.items()
-        }
+        members = {prop: value.detach() for prop, value in stacked.items()}
         n_atoms = batch.get(properties.n_atoms)
         if len(self.uncertainty_fn) == 1:
-            outputs[self.uncertainty_key] = self.uncertainty_fn[0](converted, n_atoms)
+            outputs[self.uncertainty_key] = self.uncertainty_fn[0](members, n_atoms)
         else:
             outputs[self.uncertainty_key] = {
-                type(fn).__name__: fn(converted, n_atoms) for fn in self.uncertainty_fn
+                type(fn).__name__: fn(members, n_atoms) for fn in self.uncertainty_fn
             }
         return outputs
 

@@ -6,6 +6,7 @@ from schnetpack.dynamics import (
     DirectDenoising,
     EulerMaruyama,
     FieldTerms,
+    ForceFieldCalculator,
     HarmonicRestraint,
     Heun,
     Relaxer,
@@ -153,15 +154,15 @@ def test_relaxer_holds_fixed_atoms_against_the_restraint():
     assert torch.norm(positions[2] - positions[0]) == pytest.approx(1.3, abs=1e-4)
 
 
-def test_relaxer_evaluates_the_restraint_in_angstrom():
-    # the batch in nm: the restraint's 1.3 Angstrom is 0.13 nm
+def test_relaxer_evaluates_the_restraint_in_angstrom_whatever_the_models_units():
+    # the model works in nm; the batch and the restraint's 1.3 Angstrom do not
     batch = restrained_batch([2], [[(0, 1)]], [1.3], [5.0])
-    batch[properties.R] = batch[properties.R] * 0.1
     result = Relaxer(
-        ZeroModel(), constraints=[HarmonicRestraint()], position_unit="nm"
+        ForceFieldCalculator(ZeroModel(), position_unit="nm"),
+        constraints=[HarmonicRestraint()],
     ).relax(batch, 200, fmax=1e-4)
     positions = result.batch[properties.R]
-    assert torch.norm(positions[1] - positions[0]) == pytest.approx(0.13, abs=1e-5)
+    assert torch.norm(positions[1] - positions[0]) == pytest.approx(1.3, abs=1e-4)
 
 
 def test_relaxer_sums_the_field_constraints():

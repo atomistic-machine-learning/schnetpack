@@ -16,6 +16,7 @@ from schnetpack.dynamics import (
     LBFGS,
     Calculator,
     EulerMaruyama,
+    ForceFieldCalculator,
     FrameCollector,
     Interval,
     Relaxer,
@@ -74,6 +75,18 @@ def make_inputs(n_atoms_per_config, cell=None, seed=0, fixed=None):
 
 def make_relaxer(model=None, **kwargs) -> Relaxer:
     return Relaxer(model if model is not None else HarmonicModel(), **kwargs)
+
+
+KCAL = 1 / 23.0605480121  # eV per kcal/mol
+
+
+def harmonic_in_kcal_and_nm() -> ForceFieldCalculator:
+    """The default spring of 1 eV/Ang^2, as a model in kcal/mol and nm would give it."""
+    return ForceFieldCalculator(
+        HarmonicModel(spring_constant=100.0 / KCAL),
+        energy_unit="kcal/mol",
+        position_unit="nm",
+    )
 
 
 def test_full_cell_survives_the_round_trip():
@@ -168,6 +181,37 @@ def test_converged_structures_do_not_move():
     assert torch.equal(relaxed[properties.R][:3], torch.zeros(3, 3))
 
 
+@pytest.mark.parametrize("integrator", [LBFGS(), EulerMaruyama()])
+def test_converged_structures_do_not_move_whatever_the_step_rule(integrator):
+    inputs = make_inputs([3, 3])
+    # structure 0 starts below fmax, but off the minimum: its force is not zero
+    inputs[properties.R][:3] = 1e-4
+
+    relaxed = make_relaxer(integrator=integrator, step_size=0.5).relax(
+        inputs, 5, fmax=1e-3
+    )
+
+    assert torch.equal(relaxed.batch[properties.R][:3], inputs[properties.R][:3])
+    assert not torch.equal(relaxed.batch[properties.R][3:], inputs[properties.R][3:])
+
+
+def test_the_force_field_is_the_relaxers_forces_without_diffusion():
+    relaxer = make_relaxer()
+    inputs = make_inputs([3, 3], fixed=[True, False, False] * 2)
+    x = inputs[properties.R]
+
+    field = relaxer.force_field(inputs, x)
+    t = torch.zeros(x.shape[0])
+
+    torch.testing.assert_close(field.drift(x, t), relaxer._forces(inputs)[0])
+    torch.testing.assert_close(
+        field.drift(2 * x, t), relaxer._forces({**inputs, properties.R: 2 * x})[0]
+    )
+    assert torch.equal(field.diffusion(t), torch.zeros_like(t))
+    assert torch.equal(field.n_atoms, inputs[properties.n_atoms])
+    assert torch.equal(field.idx_m, inputs[properties.idx_m])
+
+
 def test_relaxation_finds_the_analytic_minimum():
     result = make_relaxer().relax(make_inputs([6, 6]), 100, fmax=1e-4)
 
@@ -180,22 +224,16 @@ def test_relaxation_finds_the_analytic_minimum():
     )
 
 
-def test_units_are_converted_for_the_criterion_and_the_step():
-    """A model in kcal/mol and nm relaxes to the same minimum, stepping in Angstrom."""
-    kcal = 1 / 23.0605480121
+def test_a_model_in_other_units_relaxes_the_same_angstrom_batch():
+    """A model in kcal/mol and nm takes the same steps on the same batch in Angstrom."""
     inputs = make_inputs([3])
-    inputs_nm = {**inputs, properties.R: inputs[properties.R] / 10.0}
 
     ev = make_relaxer().relax(inputs, 3, fmax=1e-12)
-    # a spring of 1 eV/Ang^2 in kcal/mol/nm^2
-    other = make_relaxer(
-        HarmonicModel(spring_constant=100.0 / kcal),
-        energy_unit="kcal/mol",
-        position_unit="nm",
-    ).relax(inputs_nm, 3, fmax=1e-12)
+    other = make_relaxer(harmonic_in_kcal_and_nm()).relax(inputs, 3, fmax=1e-12)
 
-    torch.testing.assert_close(other.batch[properties.R] * 10.0, ev.batch[properties.R])
+    torch.testing.assert_close(other.batch[properties.R], ev.batch[properties.R])
     torch.testing.assert_close(other.outputs["forces"], ev.outputs["forces"])
+    torch.testing.assert_close(other.outputs["energy"], ev.outputs["energy"])
 
 
 def test_the_input_batch_is_left_alone_and_nothing_leaks_into_the_output():
@@ -228,9 +266,21 @@ def test_one_model_call_per_step():
 
 
 def test_a_given_calculator_gets_its_cache_turned_on():
-    calculator = Calculator(HarmonicModel())
+    calculator = ForceFieldCalculator(HarmonicModel())
     make_relaxer(calculator)
     assert calculator.cache_last
+
+
+def test_a_bare_model_is_taken_as_a_force_field_in_ev_and_angstrom():
+    calculator = make_relaxer().calculator
+    assert isinstance(calculator, ForceFieldCalculator)
+    assert calculator.enable_grad
+    assert calculator.energy_conversion == calculator.position_conversion == 1.0
+
+
+def test_a_calculator_without_units_is_refused():
+    with pytest.raises(TypeError, match="ForceFieldCalculator"):
+        make_relaxer(Calculator(HarmonicModel()))
 
 
 def test_a_model_without_forces_is_reported():
@@ -364,7 +414,19 @@ def test_nothing_is_built_without_an_observer():
     relaxer._frame = lambda *args: built.append(args) or (lambda: None)
     relaxer.relax(make_inputs([2]), 5, fmax=1e-3)
     # the builders are made, but none is ever called
-    assert all(len(args) == 6 for args in built)
+    assert all(len(args) == 7 for args in built)
+
+
+def test_negative_step_limit_is_rejected():
+    with pytest.raises(ValueError, match="n_steps"):
+        make_relaxer().relax(make_inputs([2]), -1)
+
+
+def test_zero_step_limit_evaluates_the_start():
+    batch = make_inputs([2])
+    result = make_relaxer().relax(batch, 0, fmax=1e-6)
+    assert result.n_steps == 0
+    assert torch.equal(result.batch[properties.position], batch[properties.position])
 
 
 # ---------------------------------------------------------------------- log writer
@@ -465,6 +527,24 @@ def test_trajectory_metadata_comes_from_the_relaxer(tmp_path):
         assert traj.file.attrs["driver"] == "Relaxer"
         assert traj.file.attrs["integrator"] == "LBFGS"
         assert traj.file.attrs["fmax"] == pytest.approx(0.01)
+
+
+def test_the_trajectory_is_in_angstrom_whatever_the_models_units(tmp_path):
+    path = str(tmp_path / "relax.hdf5")
+    inputs = make_inputs([3])
+    make_relaxer(
+        harmonic_in_kcal_and_nm(),
+        trajectory=path,
+        trajectory_interval=1,
+        store_forces=True,
+    ).relax(inputs, 3, fmax=1e-12)
+
+    with TrajectoryReader(path) as traj:
+        np.testing.assert_allclose(traj.positions[0], inputs[properties.R].numpy())
+        # a spring of 1 eV/Ang^2: the forces in eV/Ang are minus the positions in Ang
+        np.testing.assert_allclose(
+            traj.forces[:], -traj.positions[:], rtol=1e-5, atol=1e-6
+        )
 
 
 def test_no_trajectory_is_written_before_a_run(tmp_path):

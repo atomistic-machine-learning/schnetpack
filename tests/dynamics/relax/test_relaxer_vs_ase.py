@@ -19,7 +19,7 @@ from ase.optimize import LBFGS
 
 import schnetpack as spk
 from schnetpack import properties
-from schnetpack.dynamics import Calculator, Relaxer
+from schnetpack.dynamics import ForceFieldCalculator, Relaxer
 from schnetpack.interfaces.ase_interface import (
     SpkCalculator,
     atoms_to_batch,
@@ -98,16 +98,15 @@ def build_relaxer(**kwargs) -> Relaxer:
     Kept separate from the run so the benchmark can time only the relaxation.
     Keyword arguments go to ``Relaxer``.
     """
-    calculator = Calculator(
+    calculator = ForceFieldCalculator(
         MODEL_PATH,
         neighbor_list=_batch_neighbor_list(),
         device=DEVICE,
         dtype=torch.float32,
-        enable_grad=True,
+        energy_unit=ENERGY_UNIT,
+        position_unit=POSITION_UNIT,
     )
-    return Relaxer(
-        calculator, energy_unit=ENERGY_UNIT, position_unit=POSITION_UNIT, **kwargs
-    )
+    return Relaxer(calculator, **kwargs)
 
 
 def relax_batchwise(atoms_list: list[Atoms]) -> RelaxationResult:
@@ -256,8 +255,8 @@ def test_cached_forces_are_dropped_when_the_positions_move(initial_structures):
         atoms_to_batch(deepcopy(initial_structures[:2]), device=DEVICE)
     )
 
-    before = relaxer.evaluate(inputs)["forces"].clone()
-    assert torch.equal(relaxer.evaluate(inputs)["forces"], before), "should hit"
+    before = relaxer.calculator(inputs)["forces"].clone()
+    assert torch.equal(relaxer.calculator(inputs)["forces"], before), "should hit"
 
     inputs[properties.R] += 0.1
-    assert not torch.equal(relaxer.evaluate(inputs)["forces"], before)
+    assert not torch.equal(relaxer.calculator(inputs)["forces"], before)

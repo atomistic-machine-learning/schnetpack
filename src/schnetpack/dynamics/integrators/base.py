@@ -45,8 +45,7 @@ class Integrator(abc.ABC):
     False for the solvers whose update acts on every row of x on its own.
     True for the step rules that reduce over each structure of the batch —
     L-BFGS's dot products and per-structure step length — and so read the
-    structure layout (``idx_m``, ``n_atoms``) and the per-structure ``active``
-    mask off the field they are handed. Only a
+    structure layout (``idx_m``, ``n_atoms``) off the field they are handed. Only a
     :class:`~schnetpack.dynamics.relax.Relaxer` provides that field; the
     :class:`~schnetpack.dynamics.sampling.sampler.Sampler` refuses such an
     integrator at assembly instead of failing mid-run.

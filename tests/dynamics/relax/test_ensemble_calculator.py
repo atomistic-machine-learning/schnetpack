@@ -277,15 +277,18 @@ def test_an_ensemble_relaxes_a_batch():
     assert result.outputs["uncertainty"].max() < 1e-4
 
 
-def test_uncertainty_is_reported_in_ev_and_angstrom():
-    """Means stay in model units; the uncertainty is converted, as the ase one is."""
+def test_means_and_uncertainty_are_reported_in_ev_and_angstrom():
+    """An ensemble in kcal/mol and nm reports what the same springs in eV and Ang do."""
     inputs = make_inputs([3])
     in_ev = make_calculator([1.0, 2.0], uncertainty_fn=AbsoluteUncertainty())(inputs)
+    # k eV/Ang^2 is k * 23.06 * 100 kcal/mol/nm^2
     in_kcal = EnsembleCalculator(
-        models=[HarmonicModel(k * 23.0605480121) for k in (1.0, 2.0)],
+        models=[HarmonicModel(k * 23.0605480121 * 100.0) for k in (1.0, 2.0)],
         uncertainty_fn=AbsoluteUncertainty(),
         energy_unit="kcal/mol",
+        position_unit="nm",
     )(inputs)
 
     torch.testing.assert_close(in_kcal["uncertainty"], in_ev["uncertainty"])
-    torch.testing.assert_close(in_kcal["forces"], in_ev["forces"] * 23.0605480121)
+    torch.testing.assert_close(in_kcal["forces"], in_ev["forces"])
+    torch.testing.assert_close(in_kcal["energy"], in_ev["energy"])

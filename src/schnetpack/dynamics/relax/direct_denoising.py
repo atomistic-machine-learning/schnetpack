@@ -21,6 +21,7 @@ import torch
 
 from schnetpack import properties
 from schnetpack.dynamics.base import Dynamics
+from schnetpack.dynamics.calculator import ForceFieldCalculator
 from schnetpack.dynamics.constraints.field import FieldConstraint
 from schnetpack.dynamics.constraints.state import AnnealedNoise
 from schnetpack.dynamics.observers import Frame
@@ -52,7 +53,9 @@ class DirectDenoising(Dynamics):
     the noised state. ``stochastic_lambda = 0`` disables the injection
     entirely (GPFF's plain direct denoising); positive values give the
     stochastic variant, whose injected noise is what buys sample diversity.
-    lambda is in data units (Angstrom, for positions).
+    lambda is in the model's units, like the batch: the process's space is
+    the training data's, so the calculator is a plain one that converts
+    nothing.
 
     The model is evaluated at t = 0 throughout — the sampler never knows the
     noise level of its iterate, so it presumes the *time-free* contract that
@@ -86,7 +89,9 @@ class DirectDenoising(Dynamics):
         Args:
             calculator: runs the model: a
                 :class:`~schnetpack.dynamics.calculator.Calculator`, or a bare
-                callable batch -> outputs
+                callable batch -> outputs. A
+                :class:`~schnetpack.dynamics.calculator.ForceFieldCalculator`
+                is refused.
             process: forward process the model was trained on; supplies the
                 sampling prior
             parametrization: contract the model was trained under; its
@@ -94,8 +99,8 @@ class DirectDenoising(Dynamics):
             prior: explicit starting distribution; overrides the process's
                 own. Required when the process's coupling changes x1's
                 marginal.
-            stochastic_lambda: scale of the injected noise, in data units;
-                0 disables the injection
+            stochastic_lambda: scale of the injected noise, in the model's
+                units; 0 disables the injection
             constraints: state-level constraints, applied after the noise
                 injection. The jump follows no field, so field constraints
                 are refused.
@@ -125,6 +130,13 @@ class DirectDenoising(Dynamics):
             key=key,
             observers=observers,
         )
+        if isinstance(self.calculator, ForceFieldCalculator):
+            raise TypeError(
+                "a ForceFieldCalculator converts the positions to the model's "
+                "units but not the raw head coming back, which is no force-field "
+                f"quantity; run {type(self).__name__} on a plain Calculator, in "
+                "the model's units"
+            )
         self.process = process
         self.parametrization = parametrization
         self.output_key = output_key

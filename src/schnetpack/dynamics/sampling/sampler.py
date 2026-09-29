@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 from schnetpack import properties
 from schnetpack.dynamics.base import Dynamics
+from schnetpack.dynamics.calculator import ForceFieldCalculator
 from schnetpack.dynamics.integrators.base import Integrator
 from schnetpack.dynamics.observers import SamplingFrame
 from schnetpack.dynamics.sampling.grids import TimeGrid, UniformGrid
@@ -42,6 +43,15 @@ class Sampler(Dynamics):
     contract.
     The process, parametrization and integrator stay pure tensor math on the
     moved key, whose leading axis (atoms, for positions) is the sample axis.
+
+    The batch is in the model's units: the process's prior and schedule are
+    fixed in the training data's units, and the raw head has no single unit
+    of its own, so the calculator is a plain one that converts nothing (a
+    :class:`~schnetpack.dynamics.calculator.ForceFieldCalculator` is
+    refused). ``position_unit`` names that length unit for the field
+    constraints alone. A sample handed on to a
+    :class:`~schnetpack.dynamics.relax.Relaxer`, which works in Angstrom, has
+    to be converted first.
 
     One step of the :class:`~schnetpack.dynamics.base.Dynamics` loop is one
     integrator step along the time grid; state-level constraints run between
@@ -122,8 +132,9 @@ class Sampler(Dynamics):
                 for the reverse-diffusion path
             guidance_weight: weight w of the field constraints' forces in
                 the score, in 1/eV (1/kT)
-            position_unit: length unit of the moved key; field constraints
-                are evaluated in Angstrom
+            position_unit: length unit of the moved key — the process's
+                space, i.e. the training data's. Used only to evaluate the
+                field constraints in Angstrom.
         """
         parametrization.validate(process)
         if integrator.requires_structure:
@@ -139,6 +150,13 @@ class Sampler(Dynamics):
             key=key,
             observers=observers,
         )
+        if isinstance(self.calculator, ForceFieldCalculator):
+            raise TypeError(
+                "a ForceFieldCalculator converts the positions to the model's "
+                "units but not the raw head coming back, which is no force-field "
+                f"quantity; run {type(self).__name__} on a plain Calculator, in "
+                "the model's units"
+            )
         self.process = process
         self.parametrization = parametrization
         self.output_key = output_key
