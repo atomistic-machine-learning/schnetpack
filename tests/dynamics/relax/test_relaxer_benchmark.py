@@ -10,6 +10,7 @@ import pytest
 
 from schnetpack.interfaces.ase_interface import atoms_to_batch
 
+from .test_relaxer_units import relax_counting
 from .test_relaxer_vs_ase import (
     DEVICE,
     FMAX,
@@ -29,7 +30,7 @@ ROUNDS = 3
 @pytest.mark.parametrize("n_structures", N_VALUES)
 def test_batchwise_relaxation(benchmark, n_structures):
     structures = make_structures(n_structures)
-    built = []
+    steps = []
 
     def setup():
         # a fresh relaxer and batch for every round, left out of the timing
@@ -38,12 +39,12 @@ def test_batchwise_relaxation(benchmark, n_structures):
         return (relaxer, inputs), {}
 
     def run(relaxer, inputs):
-        built.append(relaxer.relax(inputs, MAX_STEPS, fmax=FMAX))
+        steps.append(relax_counting(relaxer, inputs, MAX_STEPS, fmax=FMAX)[1])
 
     benchmark.pedantic(run, setup=setup, rounds=ROUNDS, iterations=1)
 
     # a run that is fast because it never converged is not a faster run
-    assert built[-1].n_steps < MAX_STEPS
+    assert steps[-1] < MAX_STEPS
 
 
 @pytest.mark.benchmark_sweep

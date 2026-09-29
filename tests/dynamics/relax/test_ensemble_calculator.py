@@ -223,7 +223,7 @@ def test_batch_of_one_matches_the_ase_ensemble_calculator():
 def test_a_missing_property_is_reported():
     calculator = EnsembleCalculator(models=[NoForcesModel(), NoForcesModel()])
     with pytest.raises(KeyError, match="forces"):
-        Relaxer(calculator).relax(make_inputs([3]), 3)
+        Relaxer(calculator).denoise(make_inputs([3]), 3)
 
 
 def test_the_ensemble_is_evaluated_once_per_step():
@@ -266,15 +266,15 @@ def test_models_are_loaded_from_a_directory(tmp_path):
 def test_an_ensemble_relaxes_a_batch():
     """End to end: the mean drives the relaxation, and the batch reaches the minimum."""
     calculator = make_calculator([1.0, 2.0])
-    result = Relaxer(calculator).relax(make_inputs([4, 4]), 60, fmax=1e-4)
+    relaxed = Relaxer(calculator).denoise(make_inputs([4, 4]), 60, fmax=1e-4)
 
-    assert result.converged.all()
     # every spring pulls towards the origin, and a relaxed batch sits there
-    assert result.batch[properties.R].abs().max() < 1e-4
+    assert relaxed[properties.R].abs().max() < 1e-4
     # a converged batch is one the ensemble agrees about, since the members only
     # disagree about the magnitude of a force that has gone to zero
-    assert result.outputs["uncertainty"].shape == (2,)
-    assert result.outputs["uncertainty"].max() < 1e-4
+    uncertainty = calculator(relaxed)["uncertainty"]
+    assert uncertainty.shape == (2,)
+    assert uncertainty.max() < 1e-4
 
 
 def test_means_and_uncertainty_are_reported_in_ev_and_angstrom():

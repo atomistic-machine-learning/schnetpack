@@ -4,7 +4,7 @@ schnetpack.dynamics
 
 Loops that move structures with a model: sampling a generative model down its reverse
 process and relaxing structures on a force field. Every driver shares the calculator,
-the integrators, the constraints and the observers below. The vocabulary is collected in
+the integrators and the constraints below. The vocabulary is collected in
 ``CONTEXT.md``, the design of relaxation in ``docs/adr/0001-relaxation-in-dynamics.md``.
 
 Drivers
@@ -18,7 +18,6 @@ Drivers
     Dynamics
     Sampler
     Relaxer
-    RelaxationResult
     ForceField
     DirectDenoising
 
@@ -90,37 +89,3 @@ How far the members of an ensemble disagree, one value per structure. Shared wit
     Uncertainty
     AbsoluteUncertainty
     RelativeUncertainty
-
-
-Observers
----------
-
-.. currentmodule:: dynamics
-
-What a run reports while it runs. See :mod:`schnetpack.dynamics.observers`.
-
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
-    :template: classtemplate.rst
-
-    Observer
-    Frame
-    SamplingFrame
-    RelaxationFrame
-    Interval
-    FrameCollector
-    TrajectoryRecorder
-    LogWriter
-
-
-Trajectories
-------------
-
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
-    :template: classtemplate.rst
-
-    TrajectoryWriter
-    TrajectoryReader

@@ -3,7 +3,6 @@ Relaxation on a force field: drive structures downhill until each of
 them is relaxed.
 """
 
-import dataclasses
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -14,31 +13,9 @@ from schnetpack.dynamics.base import Dynamics
 from schnetpack.dynamics.calculator import Calculator, ForceFieldCalculator
 from schnetpack.dynamics.integrators.base import Integrator
 from schnetpack.dynamics.integrators.lbfgs import LBFGS
-from schnetpack.dynamics.observers import TrajectoryRecorder
-from schnetpack.dynamics.relax.observers import LogWriter, RelaxationFrame
 from schnetpack.generative.priors import Prior
 
-__all__ = ["Relaxer", "RelaxationResult", "ForceField"]
-
-
-@dataclasses.dataclass
-class RelaxationResult:
-    """
-    What a relaxation run produced.
-
-    Attributes:
-        batch: the relaxed structures, positions in Angstrom
-        outputs: the calculator's outputs for them: energy in eV and forces
-            in eV/Angstrom, restraints included, anything else (an ensemble's
-            uncertainty) as the calculator reported it
-        converged: ``(n_structures,)``, which structures met ``fmax``
-        n_steps: steps taken
-    """
-
-    batch: dict[str, Any]
-    outputs: dict[str, Any]
-    converged: torch.Tensor
-    n_steps: int
+__all__ = ["Relaxer", "ForceField"]
 
 
 class ForceField:
@@ -73,15 +50,6 @@ class ForceField:
         return torch.zeros_like(t)
 
 
-def _idx_m(batch: Mapping[str, Any]) -> torch.Tensor:
-    if properties.idx_m in batch:
-        return batch[properties.idx_m]
-    n_atoms = batch[properties.n_atoms]
-    return torch.repeat_interleave(
-        torch.arange(n_atoms.shape[0], device=n_atoms.device), n_atoms
-    )
-
-
 def _free_atoms(batch: Mapping[str, Any]) -> torch.Tensor | None:
     """``(n_total_atoms, 1)`` float mask of the atoms that may move, or None."""
     fixed = batch.get(properties.fixed_atoms)
@@ -104,6 +72,7 @@ class Relaxer(Dynamics):
     ``n_steps`` steps; structures that already meet the criterion are not
     moved further, whatever the step rule. The force field the step rule
     follows is a :class:`ForceField`, built anew for every step.
+    :meth:`denoise` returns the relaxed batch.
 
     The batch is in Angstrom, and everything the loop decides on is in eV
     and Angstrom — ``fmax``, the step rule's ``maxstep`` and ``step_size`` —
@@ -132,7 +101,7 @@ class Relaxer(Dynamics):
     reached. Field constraints — restraints such as
     :class:`~schnetpack.dynamics.constraints.field.HarmonicRestraint` — are
     part of the energy surface: their forces drive the step and count
-    towards ``fmax``, and their energy is included in the reported energy.
+    towards ``fmax``.
     """
 
     def __init__(
@@ -141,14 +110,8 @@ class Relaxer(Dynamics):
         integrator: Integrator | None = None,
         prior: Prior | None = None,
         constraints: Sequence = (),
-        observers: Sequence = (),
         key: str = properties.R,
         step_size: float = 1.0,
-        logfile=None,
-        log_interval: int = 1,
-        trajectory: str | None = None,
-        trajectory_interval: int = 0,
-        store_forces: bool = False,
     ):
         """
         Args:
@@ -160,21 +123,10 @@ class Relaxer(Dynamics):
             prior: starting distribution :meth:`sample` draws from
             constraints: state-level constraints applied around every step,
                 and field-level constraints added to the energy surface
-            observers: :class:`~schnetpack.dynamics.observers.Observer` s the
-                run reports to
             key: batch key this driver moves
             step_size: ``dt`` handed to the step rule, in Angstrom^2/eV —
                 the steepest-descent step of an Euler step rule; LBFGS
                 ignores it
-            logfile: text progress log: a path, ``"-"`` for stdout, or None.
-                Shorthand for adding a
-                :class:`~schnetpack.dynamics.relax.observers.LogWriter`.
-            log_interval: how often to write a log line
-            trajectory: path of the HDF5 trajectory to write, or None.
-                Shorthand for adding a
-                :class:`~schnetpack.dynamics.observers.TrajectoryRecorder`.
-            trajectory_interval: how often to write a trajectory frame
-            store_forces: store the forces of every trajectory frame
         """
         if not isinstance(calculator, Calculator):
             calculator = ForceFieldCalculator(calculator)
@@ -185,50 +137,28 @@ class Relaxer(Dynamics):
                 f"{type(calculator).__name__}"
             )
         calculator.cache_last = True
-        observers = list(observers)
-        if logfile is not None:
-            observers.append(LogWriter(logfile, interval=log_interval))
-        if trajectory is not None:
-            observers.append(
-                TrajectoryRecorder(
-                    trajectory, interval=trajectory_interval, store_forces=store_forces
-                )
-            )
-        super().__init__(
-            calculator,
-            prior=prior,
-            constraints=constraints,
-            key=key,
-            observers=observers,
-        )
+        super().__init__(calculator, prior=prior, constraints=constraints, key=key)
         self.integrator = integrator if integrator is not None else LBFGS()
-        self.energy_key = calculator.energy_key
         self.force_key = calculator.force_key
         self.step_size = step_size
-        self.fmax = None
 
-    def _forces(self, batch: Mapping[str, Any]) -> tuple[torch.Tensor, dict]:
+    def _forces(self, batch: Mapping[str, Any]) -> torch.Tensor:
         """
-        Forces on the free atoms in eV/Angstrom, and all outputs.
+        Forces on the free atoms in eV/Angstrom.
 
-        The field constraints' terms are part of the surface: added to the
-        energy and forces the outputs report, before the fixed atoms' forces
-        are zeroed.
+        The field constraints' forces are part of the surface: added to the
+        model's before the fixed atoms' forces are zeroed.
         """
-        # a fresh dict from the cache, detached: adding the terms below
-        # neither reaches the cache nor keeps the model's graph alive
-        outputs = self.calculator(batch)
+        # detached outputs from the cache: adding the terms below neither
+        # reaches the cache nor keeps the model's graph alive
+        forces = self.calculator(batch)[self.force_key]
         terms = self.field_terms(batch, batch[self.key])
         if terms is not None:
-            energy = outputs[self.energy_key]
-            forces = outputs[self.force_key]
-            outputs[self.energy_key] = energy + terms.energy.to(energy)
-            outputs[self.force_key] = forces + terms.forces.to(forces)
-        forces = outputs[self.force_key]
+            forces = forces + terms.forces.to(forces)
         free = _free_atoms(batch)
         if free is not None:
             forces = forces * free.to(forces.dtype)
-        return forces, outputs
+        return forces
 
     def force_field(self, batch: Mapping[str, Any], x: torch.Tensor) -> ForceField:
         """
@@ -246,13 +176,13 @@ class Relaxer(Dynamics):
                 inputs = batch
             else:
                 inputs = {**batch, self.key: x_eval}
-            return self._forces(inputs)[0].to(x_eval.dtype)
+            return self._forces(inputs).to(x_eval.dtype)
 
-        return ForceField(forces_fn, batch[properties.n_atoms], _idx_m(batch))
+        return ForceField(forces_fn, batch[properties.n_atoms], batch[properties.idx_m])
 
-    def relax(
+    def denoise(
         self, batch: Mapping[str, Any], n_steps: int, fmax: float = 0.05
-    ) -> RelaxationResult:
+    ) -> dict[str, Any]:
         """
         Relax the structures in ``batch``.
 
@@ -262,15 +192,13 @@ class Relaxer(Dynamics):
             fmax: force criterion, in eV/Angstrom
 
         Returns:
-            The relaxed batch, the model outputs for it and which structures
-            converged.
+            The relaxed batch.
         """
         if n_steps < 0:
             raise ValueError(f"n_steps must be non-negative, got {n_steps}")
-        self.fmax = fmax
         self.calculator.reset()
         batch = self.calculator.prepare(batch)
-        idx_m = _idx_m(batch)
+        idx_m = batch[properties.idx_m]
         free = _free_atoms(batch)
         n_structures = batch[properties.n_atoms].shape[0]
         x = batch[self.key]
@@ -278,70 +206,26 @@ class Relaxer(Dynamics):
         t = torch.zeros(x.shape[0], dtype=x.dtype, device=x.device)
         dt = torch.tensor(self.step_size, dtype=x.dtype, device=x.device)
 
-        self.start_observers(batch)
-        i = 0
-        try:
-            while True:
-                forces, outputs = self._forces(batch)
-                squared = forces.pow(2).sum(-1)
-                max_sq = torch.zeros(
-                    n_structures, dtype=squared.dtype, device=squared.device
-                ).scatter_reduce(0, idx_m, squared, "amax", include_self=True)
-                converged = max_sq < fmax**2
-                final = bool(converged.all()) or i == n_steps
-                self.report(
-                    i,
-                    final,
-                    self._frame(batch, outputs, forces, max_sq, fmax, i, final),
-                )
-                if final:
-                    break
+        for i in range(n_steps + 1):
+            squared = self._forces(batch).pow(2).sum(-1)
+            max_sq = torch.zeros(
+                n_structures, dtype=squared.dtype, device=squared.device
+            ).scatter_reduce(0, idx_m, squared, "amax", include_self=True)
+            converged = max_sq < fmax**2
+            if bool(converged.all()) or i == n_steps:
+                break
 
-                batch = self.before_step(batch, i, n_steps)
-                x = batch[self.key]
-                x_new, state = self.integrator.step(
-                    self.force_field(batch, x), x, t, dt, state
-                )
-                # converged structures and fixed atoms stay where they are,
-                # whatever the step rule
-                moves = (~converged)[idx_m].view(-1, 1)
-                if free is not None:
-                    moves = moves & free
-                x_new = torch.where(moves.to(x.device), x_new, x)
-                batch = {**batch, self.key: x_new}
-                batch = self.after_step(batch, i + 1, n_steps)
-                i += 1
-        finally:
-            self.end_observers()
-        return RelaxationResult(
-            batch=batch, outputs=outputs, converged=converged, n_steps=i
-        )
-
-    def denoise(
-        self, batch: Mapping[str, Any], n_steps: int, fmax: float = 0.05
-    ) -> dict[str, Any]:
-        """
-        Relax the structures in ``batch``; see :meth:`relax` for the outputs.
-
-        Args:
-            batch: structures to relax
-            n_steps: step limit
-            fmax: force criterion, in eV/Angstrom
-
-        Returns:
-            The relaxed batch.
-        """
-        return self.relax(batch, n_steps, fmax=fmax).batch
-
-    def _frame(self, batch, outputs, forces, max_sq, fmax, step, final):
-        """Builder of the frame of ``batch``, called only if someone listens."""
-        return lambda: RelaxationFrame(
-            step=step,
-            final=final,
-            positions=batch[self.key],
-            batch=batch,
-            energy=outputs[self.energy_key],
-            forces=forces,
-            max_force_per_config=max_sq.sqrt(),
-            fmax=fmax,
-        )
+            batch = self.before_step(batch, i, n_steps)
+            x = batch[self.key]
+            x_new, state = self.integrator.step(
+                self.force_field(batch, x), x, t, dt, state
+            )
+            # converged structures and fixed atoms stay where they are,
+            # whatever the step rule
+            moves = (~converged)[idx_m].view(-1, 1)
+            if free is not None:
+                moves = moves & free
+            x_new = torch.where(moves.to(x.device), x_new, x)
+            batch = {**batch, self.key: x_new}
+            batch = self.after_step(batch, i + 1, n_steps)
+        return batch

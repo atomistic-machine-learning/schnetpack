@@ -30,6 +30,9 @@ def restrained_batch(n_atoms, pairs, lengths, constants, seed=0):
     flat = [pair for structure in pairs for pair in structure]
     return {
         properties.n_atoms: torch.tensor(n_atoms),
+        properties.idx_m: torch.repeat_interleave(
+            torch.arange(len(n_atoms)), torch.tensor(n_atoms)
+        ),
         properties.R: torch.randn(
             sum(n_atoms), 3, dtype=torch.float64, generator=generator
         ),
@@ -123,33 +126,21 @@ class ZeroModel:
 
 def test_relaxer_relaxes_onto_the_restraint():
     batch = restrained_batch([3, 3], [[(0, 2)], [(0, 1)]], [1.3, 0.9], [5.0, 5.0])
-    result = Relaxer(ZeroModel(), constraints=[HarmonicRestraint()]).relax(
+    positions = Relaxer(ZeroModel(), constraints=[HarmonicRestraint()]).denoise(
         batch, 200, fmax=1e-4
-    )
-    assert bool(result.converged.all())
-    positions = result.batch[properties.R]
+    )[properties.R]
     assert torch.norm(positions[2] - positions[0]) == pytest.approx(1.3, abs=1e-4)
     assert torch.norm(positions[4] - positions[3]) == pytest.approx(0.9, abs=1e-4)
     # the unrestrained atom feels nothing and stays put
     assert torch.equal(positions[1], batch[properties.R][1])
 
 
-def test_relaxer_reports_the_restraint_energy():
-    batch = restrained_batch([3], [[(0, 2)]], [1.3], [5.0])
-    expected, _ = terms(batch, batch[properties.R])
-    result = Relaxer(ZeroModel(), constraints=[HarmonicRestraint()]).relax(
-        batch, 0, fmax=1e-4
-    )
-    assert torch.allclose(result.outputs["energy"], expected)
-
-
 def test_relaxer_holds_fixed_atoms_against_the_restraint():
     batch = restrained_batch([3], [[(0, 2)]], [1.3], [5.0])
     batch[properties.fixed_atoms] = torch.tensor([True, False, False])
-    result = Relaxer(ZeroModel(), constraints=[HarmonicRestraint()]).relax(
+    positions = Relaxer(ZeroModel(), constraints=[HarmonicRestraint()]).denoise(
         batch, 200, fmax=1e-4
-    )
-    positions = result.batch[properties.R]
+    )[properties.R]
     assert torch.equal(positions[0], batch[properties.R][0])
     assert torch.norm(positions[2] - positions[0]) == pytest.approx(1.3, abs=1e-4)
 
@@ -157,21 +148,20 @@ def test_relaxer_holds_fixed_atoms_against_the_restraint():
 def test_relaxer_evaluates_the_restraint_in_angstrom_whatever_the_models_units():
     # the model works in nm; the batch and the restraint's 1.3 Angstrom do not
     batch = restrained_batch([2], [[(0, 1)]], [1.3], [5.0])
-    result = Relaxer(
+    positions = Relaxer(
         ForceFieldCalculator(ZeroModel(), position_unit="nm"),
         constraints=[HarmonicRestraint()],
-    ).relax(batch, 200, fmax=1e-4)
-    positions = result.batch[properties.R]
+    ).denoise(batch, 200, fmax=1e-4)[properties.R]
     assert torch.norm(positions[1] - positions[0]) == pytest.approx(1.3, abs=1e-4)
 
 
 def test_relaxer_sums_the_field_constraints():
     batch = restrained_batch([3], [[(0, 2)]], [1.3], [5.0])
-    expected, _ = terms(batch, batch[properties.R])
-    result = Relaxer(
+    _, expected = terms(batch, batch[properties.R])
+    relaxer = Relaxer(
         ZeroModel(), constraints=[HarmonicRestraint(), HarmonicRestraint()]
-    ).relax(batch, 0, fmax=1e-4)
-    assert torch.allclose(result.outputs["energy"], 2 * expected)
+    )
+    assert torch.allclose(relaxer._forces(batch), 2 * expected)
 
 
 # --- sampling: the restraint guides the score ------------------------------ #

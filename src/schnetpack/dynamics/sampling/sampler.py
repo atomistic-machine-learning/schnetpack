@@ -9,7 +9,6 @@ from schnetpack import properties
 from schnetpack.dynamics.base import Dynamics
 from schnetpack.dynamics.calculator import ForceFieldCalculator
 from schnetpack.dynamics.integrators.base import Integrator
-from schnetpack.dynamics.observers import SamplingFrame
 from schnetpack.dynamics.sampling.grids import TimeGrid, UniformGrid
 from schnetpack.generative.differential_equations import ReverseODE, ReverseSDE
 from schnetpack.generative.parametrizations import Parametrization
@@ -95,7 +94,6 @@ class Sampler(Dynamics):
         key: str = properties.R,
         output_key: str = "prediction",
         time_key: str = properties.t,
-        observers: Sequence = (),
         guidance_weight: float = 1.0,
         position_unit: str | float = "Ang",
     ):
@@ -126,10 +124,6 @@ class Sampler(Dynamics):
                 row of the moved key — the key
                 :class:`~schnetpack.generative.transforms.Diffuse` wrote in
                 training
-            observers: :class:`~schnetpack.dynamics.observers.Observer` s
-                the run reports to, e.g. a
-                :class:`~schnetpack.dynamics.observers.TrajectoryRecorder`
-                for the reverse-diffusion path
             guidance_weight: weight w of the field constraints' forces in
                 the score, in 1/eV (1/kT)
             position_unit: length unit of the moved key — the process's
@@ -148,7 +142,6 @@ class Sampler(Dynamics):
             prior=prior if prior is not None else process.sampling_prior(),
             constraints=constraints,
             key=key,
-            observers=observers,
         )
         if isinstance(self.calculator, ForceFieldCalculator):
             raise TypeError(
@@ -162,7 +155,7 @@ class Sampler(Dynamics):
         self.output_key = output_key
         self.time_key = time_key
         self.guidance_weight = guidance_weight
-        self.length = convert_units(position_unit, "Angstrom")
+        self.position_conversion = convert_units(position_unit, "Angstrom")
         # Validity settles here, not mid-run: if anything in this assembly
         # will cross the (f, g) chart — stochastic sampling, a non-velocity
         # head's conversion, an ancestral integrator — acquire the chart
@@ -215,35 +208,18 @@ class Sampler(Dynamics):
 
         batch = {**batch, self.time_key: ts[0].expand(n_rows)}
         state = self.integrator.init_state(self.reverse(batch), x)
-        self.start_observers(batch)
-        try:
-            self.report(0, n_steps == 0, self._frame(batch, 0, ts[0], n_steps == 0))
-            for i in range(n_steps):
-                batch = self.before_step(batch, i, n_steps)
-                x, state = self.integrator.step(
-                    self.reverse(batch),
-                    batch[self.key],
-                    batch[self.time_key],
-                    ts[i + 1] - ts[i],
-                    state,
-                )
-                batch = {
-                    **batch,
-                    self.key: x,
-                    self.time_key: ts[i + 1].expand(n_rows),
-                }
-                batch = self.after_step(batch, i + 1, n_steps)
-                final = i + 1 == n_steps
-                self.report(i + 1, final, self._frame(batch, i + 1, ts[i + 1], final))
-        finally:
-            self.end_observers()
+        for i in range(n_steps):
+            batch = self.before_step(batch, i, n_steps)
+            x, state = self.integrator.step(
+                self.reverse(batch),
+                batch[self.key],
+                batch[self.time_key],
+                ts[i + 1] - ts[i],
+                state,
+            )
+            batch = {**batch, self.key: x, self.time_key: ts[i + 1].expand(n_rows)}
+            batch = self.after_step(batch, i + 1, n_steps)
         return batch
-
-    def _frame(self, batch, step, t, final):
-        """Builder of the frame of ``batch``, called only if someone listens."""
-        return lambda: SamplingFrame(
-            step=step, final=final, positions=batch[self.key], batch=batch, t=t
-        )
 
     def reverse(self, batch):
         """
@@ -281,7 +257,7 @@ class Sampler(Dynamics):
         The field constraints' score term w F at ``x``, in the moved key's
         units, or None without field constraints.
         """
-        terms = self.field_terms(batch, x * self.length)
+        terms = self.field_terms(batch, x * self.position_conversion)
         if terms is None:
             return None
-        return (self.guidance_weight * self.length) * terms.forces.to(x)
+        return (self.guidance_weight * self.position_conversion) * terms.forces.to(x)

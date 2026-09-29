@@ -9,5 +9,4 @@ steepest descent). For GPFF it is the pseudo-force, whose relaxer is
 """
 
 from schnetpack.dynamics.relax.direct_denoising import *
-from schnetpack.dynamics.relax.observers import *
 from schnetpack.dynamics.relax.relaxer import *

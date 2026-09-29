@@ -122,10 +122,10 @@ def test_update_never_returns_pairs_beyond_the_cutoff(pbc, displacement, path):
 
 
 def test_update_accepts_a_batch_without_a_sample_index():
-    """A batch read back from a trajectory has no sample index; it must still update.
+    """A batch built by hand may have no sample index; it must still update.
 
-    ``TrajectoryReader.frame`` stores no ``idx``, so a relaxation resumed from
-    a frame would otherwise fail on its very first step.
+    A relaxation started from such a batch would otherwise fail on its very first
+    step.
     """
     structures = make_structures(pbc=False)
     inputs = batch_of(structures)

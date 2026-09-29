@@ -27,6 +27,8 @@ from schnetpack.interfaces.ase_interface import (
 )
 from schnetpack.utils.compatibility import load_model
 
+from .test_relaxer_units import relax_counting
+
 TESTDATA = os.path.join(os.path.dirname(__file__), "..", "..", "testdata")
 MODEL_PATH = os.path.join(TESTDATA, "md_ethanol.model")
 STRUCTURE_PATH = os.path.join(TESTDATA, "ethanol_conformers.xyz")
@@ -43,7 +45,7 @@ POSITION_UNIT = "Ang"
 
 
 @dataclass
-class RelaxationResult:
+class Relaxed:
     """Outcome of relaxing a batch of structures, however it was relaxed."""
 
     atoms: list[Atoms]
@@ -109,16 +111,16 @@ def build_relaxer(**kwargs) -> Relaxer:
     return Relaxer(calculator, **kwargs)
 
 
-def relax_batchwise(atoms_list: list[Atoms]) -> RelaxationResult:
+def relax_batchwise(atoms_list: list[Atoms]) -> Relaxed:
     """Relax a batch of structures in parallel with the ``Relaxer``."""
     inputs = atoms_to_batch(deepcopy(atoms_list), device=DEVICE)
-    result = build_relaxer().relax(inputs, MAX_STEPS, fmax=FMAX)
+    relaxed, steps = relax_counting(build_relaxer(), inputs, MAX_STEPS, fmax=FMAX)
 
     # the relaxer hands back tensors; ase structures are a boundary conversion
-    return RelaxationResult(atoms=batch_to_atoms(result.batch), steps=[result.n_steps])
+    return Relaxed(atoms=batch_to_atoms(relaxed), steps=[steps])
 
 
-def relax_sequential(atoms_list: list[Atoms], calculator) -> RelaxationResult:
+def relax_sequential(atoms_list: list[Atoms], calculator) -> Relaxed:
     """Relax the structures one at a time, the way ase would normally be used."""
     atoms, steps = [], []
     # LBFGS relaxes in place, so the caller's structures must not be handed over
@@ -130,7 +132,7 @@ def relax_sequential(atoms_list: list[Atoms], calculator) -> RelaxationResult:
         atoms.append(structure)
         steps.append(optimizer.nsteps)
 
-    return RelaxationResult(atoms=atoms, steps=steps)
+    return Relaxed(atoms=atoms, steps=steps)
 
 
 @pytest.fixture(scope="module")
@@ -217,22 +219,14 @@ def test_batch_size_invariance(batchwise_result, single_structure_atoms):
         )
 
 
-@pytest.mark.parametrize("trajectory_interval", [0, 1])
-def test_forces_are_computed_once_per_step(
-    initial_structures, tmp_path, trajectory_interval
-):
-    """The convergence check, the frame written from it, and the step share one call.
+def test_forces_are_computed_once_per_step(initial_structures):
+    """The convergence check and the step share one call.
 
     The calculator caches its last outputs and decides whether they are still valid
     from the identity and mutation counter of the batch tensors. If that check ever
     goes wrong in the conservative direction, relaxations silently cost twice as much.
-    Writing a frame on every step must not cost a second call either, which is why
-    ``trajectory_interval=1`` is covered here too.
     """
-    relaxer = build_relaxer(
-        trajectory=str(tmp_path / "relax.hdf5"),
-        trajectory_interval=trajectory_interval,
-    )
+    relaxer = build_relaxer()
     evaluate = relaxer.calculator._evaluate
     calls = []
 
@@ -242,10 +236,10 @@ def test_forces_are_computed_once_per_step(
 
     relaxer.calculator._evaluate = counting_evaluate
     inputs = atoms_to_batch(deepcopy(initial_structures[:3]), device=DEVICE)
-    result = relaxer.relax(inputs, MAX_STEPS, fmax=FMAX)
+    _, steps = relax_counting(relaxer, inputs, MAX_STEPS, fmax=FMAX)
 
     # one for the initial forces, one per step taken
-    assert len(calls) == result.n_steps + 1
+    assert len(calls) == steps + 1
 
 
 def test_cached_forces_are_dropped_when_the_positions_move(initial_structures):

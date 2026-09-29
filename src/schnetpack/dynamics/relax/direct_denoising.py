@@ -24,7 +24,6 @@ from schnetpack.dynamics.base import Dynamics
 from schnetpack.dynamics.calculator import ForceFieldCalculator
 from schnetpack.dynamics.constraints.field import FieldConstraint
 from schnetpack.dynamics.constraints.state import AnnealedNoise
-from schnetpack.dynamics.observers import Frame
 from schnetpack.generative.parametrizations import Parametrization
 from schnetpack.generative.priors import Prior
 from schnetpack.generative.processes import Process
@@ -83,7 +82,6 @@ class DirectDenoising(Dynamics):
         key: str = properties.R,
         output_key: str = "prediction",
         time_key: str = properties.t,
-        observers: Sequence = (),
     ):
         """
         Args:
@@ -109,8 +107,6 @@ class DirectDenoising(Dynamics):
                 parametrization
             time_key: batch key the zero time is written to, for models
                 that take a time input
-            observers: :class:`~schnetpack.dynamics.observers.Observer` s
-                the run reports to
         """
         parametrization.validate(process)
         for constraint in constraints:
@@ -128,7 +124,6 @@ class DirectDenoising(Dynamics):
             prior=prior if prior is not None else process.sampling_prior(),
             constraints=injection + list(constraints),
             key=key,
-            observers=observers,
         )
         if isinstance(self.calculator, ForceFieldCalculator):
             raise TypeError(
@@ -170,23 +165,10 @@ class DirectDenoising(Dynamics):
         t = torch.zeros(x.shape[0], dtype=x.dtype, device=x.device)
 
         batch = {**batch, self.time_key: t}
-        self.start_observers(batch)
-        try:
-            self.report(0, n_steps == 0, self._frame(batch, 0, n_steps == 0))
-            for i in range(n_steps):
-                batch = self.before_step(batch, i, n_steps)
-                raw = self.calculator(batch)[self.output_key]
-                x = self.parametrization.to_x0(self.process, raw, batch[self.key], t)
-                batch = {**batch, self.key: x}
-                batch = self.after_step(batch, i + 1, n_steps)
-                final = i + 1 == n_steps
-                self.report(i + 1, final, self._frame(batch, i + 1, final))
-        finally:
-            self.end_observers()
+        for i in range(n_steps):
+            batch = self.before_step(batch, i, n_steps)
+            raw = self.calculator(batch)[self.output_key]
+            x = self.parametrization.to_x0(self.process, raw, batch[self.key], t)
+            batch = {**batch, self.key: x}
+            batch = self.after_step(batch, i + 1, n_steps)
         return batch
-
-    def _frame(self, batch, step, final):
-        """Builder of the frame of ``batch``, called only if someone listens."""
-        return lambda: Frame(
-            step=step, final=final, positions=batch[self.key], batch=batch
-        )
