@@ -70,7 +70,7 @@ class Integrator(abc.ABC):
         x: torch.Tensor,
         t: torch.Tensor,
         dt: torch.Tensor,
-        state: Any = None,
+        state: Any,
     ) -> tuple[torch.Tensor, Any]:
         """
         Advance x from t to t + dt.

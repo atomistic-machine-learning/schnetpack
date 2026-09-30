@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 import torch
 from torch.utils.data import DataLoader, Dataset, Sampler
@@ -133,7 +133,7 @@ class AtomsLoader(DataLoader):
         batch_size: int | None = 1,
         shuffle: bool = False,
         sampler: Sampler[int] | None = None,
-        batch_sampler: Sampler[Sequence[int]] | None = None,
+        batch_sampler: Sampler[list[int]] | Iterable[list[int]] | None = None,
         num_workers: int = 0,
         collate_fn: _collate_fn_t = _atoms_collate_fn,
         pin_memory: bool = False,

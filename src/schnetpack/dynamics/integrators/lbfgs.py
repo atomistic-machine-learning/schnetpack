@@ -93,8 +93,7 @@ class LBFGS(Integrator):
         self.maxstep = maxstep
         self.memory = memory
         self.damping = damping
-        # initial inverse Hessian, 1/70 to emulate BFGS; never changed
-        self.H0 = 1.0 / alpha
+        self.H0 = 1.0 / alpha  # initial inverse Hessian
         self.device = torch.device(device)
 
     def init_state(self, dynamics, x) -> LBFGSState:
