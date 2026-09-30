@@ -22,10 +22,10 @@ class Ancestral(Integrator):
 
     requires_sde = True
 
-    def step(self, dynamics, x, t, dt):
+    def step(self, dynamics, x, t, dt, state=None):
         x0_hat = dynamics.sde.x0_from_score(x, dynamics.score(x, t), t)
         mean, std = dynamics.sde.posterior(x, x0_hat, t, t + dt)
-        return mean + expand_t(std, x) * torch.randn_like(x)
+        return mean + expand_t(std, x) * torch.randn_like(x), state
 
 
 class AncestralDDPM(Integrator):
@@ -41,7 +41,7 @@ class AncestralDDPM(Integrator):
 
     requires_sde = True
 
-    def step(self, dynamics, x, t, dt):
+    def step(self, dynamics, x, t, dt, state=None):
         beta = expand_t(dynamics.g2(t), x) * dt.abs()
         mean = (x + beta * dynamics.score(x, t)) / torch.sqrt(1.0 - beta)
-        return mean + beta.sqrt() * torch.randn_like(x)
+        return mean + beta.sqrt() * torch.randn_like(x), state

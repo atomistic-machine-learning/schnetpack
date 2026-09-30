@@ -15,6 +15,7 @@ from schnetpack import objectives
 from schnetpack import generative
 from schnetpack import dynamics
 from schnetpack.units import *
+from schnetpack import uncertainty
 from schnetpack.objectives import (
     ConsiderOnlySelectedAtoms,
     ModelOutput,
@@ -22,7 +23,7 @@ from schnetpack.objectives import (
 )
 from schnetpack import md
 
-__version__ = "2.2.0"
+__version__ = "3.0.0"
 
 
 def __getattr__(name):

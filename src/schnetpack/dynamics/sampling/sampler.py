@@ -7,12 +7,14 @@ from collections.abc import Sequence
 
 from schnetpack import properties
 from schnetpack.dynamics.base import Dynamics
+from schnetpack.dynamics.calculator import ForceFieldCalculator
 from schnetpack.dynamics.integrators.base import Integrator
 from schnetpack.dynamics.sampling.grids import TimeGrid, UniformGrid
 from schnetpack.generative.differential_equations import ReverseODE, ReverseSDE
 from schnetpack.generative.parametrizations import Parametrization
 from schnetpack.generative.priors import Prior
-from schnetpack.generative.processes import Process
+from schnetpack.generative.processes import Process, expand_t
+from schnetpack.units import convert_units
 
 __all__ = ["Sampler"]
 
@@ -28,6 +30,29 @@ class Sampler(Dynamics):
     ``outputs[output_key]`` and the time read from ``batch[time_key]``. One
     step of the loop is one integrator step; state constraints run between
     steps with ``batch[time_key]`` the grid time of the iterate they see.
+
+    The batch is in the model's units: the process's prior and schedule are
+    fixed in the training data's units, and the raw head has no single unit
+    of its own, so the calculator is a plain one that converts nothing (a
+    :class:`~schnetpack.dynamics.calculator.ForceFieldCalculator` is
+    refused). ``position_unit`` names that length unit for the field
+    constraints alone. A sample handed on to a
+    :class:`~schnetpack.dynamics.relax.Relaxer`, which works in Angstrom, has
+    to be converted first.
+
+    Field constraints — restraints such as
+    :class:`~schnetpack.dynamics.constraints.field.HarmonicRestraint`, or
+    guidance terms kT ∇ log p — guide the score: the sum of their weighted
+    terms F = sum_i w_i F_i is added to it, score + F. A constraint's
+    ``weight`` w_i is its 1/kT, in 1/eV, so a restraint of weight w tilts the
+    sampled density by exp(-w E). They see the batch with the path time under
+    ``time_key``, so a term may depend on t. The term enters the bound score
+    field itself, so the drift and the ancestral steps that read the score
+    directly both see it. A velocity head reaches it through the chart,
+    v - 1/2 g^2 F, so field constraints require the process's (f, g) chart
+    even there. The restraint is evaluated
+    at the noisy iterate x_t, not at a clean estimate: an approximation that
+    is exact only as t -> t_min.
 
     Method-specific behavior belongs in the composed parts (process,
     parametrization, integrator, grid, constraint), not in a subclass.
@@ -49,6 +74,7 @@ class Sampler(Dynamics):
         key: str = properties.R,
         output_key: str = "prediction",
         time_key: str = properties.t,
+        position_unit: str | float = "Ang",
     ):
         """
         Args:
@@ -72,18 +98,35 @@ class Sampler(Dynamics):
                 row of the moved key (the key
                 :class:`~schnetpack.generative.transforms.Diffuse` wrote in
                 training)
+            position_unit: length unit of the moved key — the process's
+                space, i.e. the training data's. Used only to evaluate the
+                field constraints in Angstrom.
         """
         parametrization.validate(process)
+        if integrator.requires_structure:
+            raise ValueError(
+                f"{type(integrator).__name__} steps per structure on a force "
+                "field and cannot integrate a reverse process; run it with "
+                "schnetpack.dynamics.relax.Relaxer"
+            )
         super().__init__(
             calculator,
             prior=prior if prior is not None else process.sampling_prior(),
             constraints=constraints,
             key=key,
         )
+        if isinstance(self.calculator, ForceFieldCalculator):
+            raise TypeError(
+                "a ForceFieldCalculator converts the positions to the model's "
+                "units but not the raw head coming back, which is no force-field "
+                f"quantity; run {type(self).__name__} on a plain Calculator, in "
+                "the model's units"
+            )
         self.process = process
         self.parametrization = parametrization
         self.output_key = output_key
         self.time_key = time_key
+        self.position_conversion = convert_units(position_unit, "Angstrom")
         # Validity settles here, not mid-run: if anything in this assembly
         # will cross the (f, g) chart — stochastic sampling, a non-velocity
         # head's conversion, an ancestral integrator — acquire the chart
@@ -95,7 +138,8 @@ class Sampler(Dynamics):
             or parametrization.velocity_needs_chart
             or integrator.requires_sde
         )
-        if self.needs_chart:
+        if self.needs_chart or self.field_constraints:
+            # a velocity head folds field constraints in through g^2
             process.sde()
         self.integrator = integrator
         self.grid = grid if grid is not None else UniformGrid()
@@ -132,13 +176,15 @@ class Sampler(Dynamics):
         n_rows = x.shape[0]
 
         batch = {**batch, self.time_key: ts[0].expand(n_rows)}
+        state = self.integrator.init_state(self.reverse(batch), x)
         for i in range(n_steps):
             batch = self.before_step(batch, i, n_steps)
-            x = self.integrator.step(
+            x, state = self.integrator.step(
                 self.reverse(batch),
                 batch[self.key],
                 batch[self.time_key],
                 ts[i + 1] - ts[i],
+                state,
             )
             batch = {**batch, self.key: x, self.time_key: ts[i + 1].expand(n_rows)}
             batch = self.after_step(batch, i + 1, n_steps)
@@ -156,13 +202,32 @@ class Sampler(Dynamics):
             def score_fn(x, t):
                 inputs = {**batch, self.key: x, self.time_key: t}
                 raw = self.calculator(inputs)[self.output_key]
-                return self.parametrization.to_score(self.process, raw, x, t)
+                score = self.parametrization.to_score(self.process, raw, x, t)
+                guidance = self.guidance(inputs, x)
+                return score if guidance is None else score + guidance
 
             return ReverseSDE(self.process.sde(), score_fn, churn=self.churn)
 
         def velocity_fn(x, t):
             inputs = {**batch, self.key: x, self.time_key: t}
             raw = self.calculator(inputs)[self.output_key]
-            return self.parametrization.to_velocity(self.process, raw, x, t)
+            velocity = self.parametrization.to_velocity(self.process, raw, x, t)
+            guidance = self.guidance(inputs, x)
+            if guidance is None:
+                return velocity
+            g2 = expand_t(self.process.sde().g2(t), x)
+            return velocity - 0.5 * g2 * guidance
 
         return ReverseODE(velocity_fn)
+
+    def guidance(self, batch, x):
+        """
+        The field constraints' score term F at ``x``, in the moved key's
+        units, or None without field constraints. F is the sum of their
+        weighted terms — each weight a 1/kT — evaluated on ``batch``, which
+        holds the path time under ``time_key`` for guidance that depends on t.
+        """
+        field = self.constraint_field(batch, x * self.position_conversion)
+        if field is None:
+            return None
+        return self.position_conversion * field.to(x)

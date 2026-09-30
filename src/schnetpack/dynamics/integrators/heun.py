@@ -14,10 +14,10 @@ class Heun(Integrator):
     increment. At churn = 0 this is the EDM (Karras et al. 2022) sampler.
     """
 
-    def step(self, dynamics, x, t, dt):
+    def step(self, dynamics, x, t, dt, state=None):
         f1 = dynamics.drift(x, t)
         x_pred = x + f1 * dt
         f2 = dynamics.drift(x_pred, t + dt)
         x = x + 0.5 * (f1 + f2) * dt
         g = expand_t(dynamics.diffusion(t), x)
-        return x + g * dt.abs().sqrt() * torch.randn_like(x)
+        return x + g * dt.abs().sqrt() * torch.randn_like(x), state

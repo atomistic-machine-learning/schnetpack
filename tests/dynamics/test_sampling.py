@@ -380,7 +380,7 @@ def test_ancestral_on_ve_matches_the_score_form_update():
     dt = torch.tensor(-0.1, dtype=torch.float64)
 
     torch.manual_seed(1)
-    stepped = Ancestral().step(rev, x, t, dt)
+    stepped, _ = Ancestral().step(rev, x, t, dt)
 
     sig_t = expand_t(process.sigma(t), x)
     sig_s = expand_t(process.sigma(t + dt), x)

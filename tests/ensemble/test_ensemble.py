@@ -5,12 +5,9 @@ import pytest
 import torch
 from ase import Atoms
 
-from schnetpack.interfaces.ase_interface import (
-    AbsoluteUncertainty,
-    RelativeUncertainty,
-    SpkEnsembleCalculator,
-)
+from schnetpack.interfaces.ase_interface import SpkEnsembleCalculator
 from schnetpack.transform import Transform
+from schnetpack.uncertainty import AbsoluteUncertainty, RelativeUncertainty
 
 
 # === Dummy Components ===

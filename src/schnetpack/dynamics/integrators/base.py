@@ -1,12 +1,23 @@
 """
-Numerical solvers for (reverse-time) diffusion processes.
+Numerical steppers shared by the drivers: solvers for (reverse-time)
+diffusion processes and step rules for relaxation.
 
 An integrator consumes ``dynamics.drift`` and ``dynamics.diffusion`` and is
-agnostic to what it integrates. Denoising runs backwards in time, so
-``dt < 0``. Catalog: ``docs_new/sampling.md`` §2.
+agnostic to what it integrates: a reverse process, or the force field of a
+relaxation (drift = forces, diffusion = 0, where Euler is steepest descent).
+Denoising runs backwards in time, so ``dt < 0``. Catalog:
+``docs_new/sampling.md`` §2.
+
+Instances are stateless. An integrator that needs a history across steps — a
+quasi-Newton step rule such as :class:`~schnetpack.dynamics.integrators.LBFGS`,
+or a multistep solver — keeps it in a per-run ``state``: the driver asks
+:meth:`Integrator.init_state` for it at loop entry and threads it through
+every :meth:`Integrator.step`, which returns the next one. The one-step
+solvers carry ``None``.
 """
 
 import abc
+from typing import Any
 
 import torch
 
@@ -25,10 +36,39 @@ class Integrator(abc.ABC):
     at assembly.
     """
 
+    requires_structure: bool = False
+    """Whether this integrator works per structure rather than per row.
+
+    False for the solvers whose update acts on every row of x on its own.
+    True for the step rules that reduce over each structure of the batch —
+    L-BFGS's dot products and per-structure step length — and so read the
+    structure layout (``idx_m``, ``n_atoms``) off the field they are handed. Only a
+    :class:`~schnetpack.dynamics.relax.Relaxer` provides that field; the
+    :class:`~schnetpack.dynamics.sampling.sampler.Sampler` refuses such an
+    integrator at assembly instead of failing mid-run.
+    """
+
+    def init_state(self, dynamics, x: torch.Tensor) -> Any:
+        """
+        The history this integrator carries across the steps of one run.
+
+        Called once at loop entry; the default is no history.
+
+        Args:
+            dynamics: the field the run integrates (see :meth:`step`)
+            x: starting state
+        """
+        return None
+
     @abc.abstractmethod
     def step(
-        self, dynamics, x: torch.Tensor, t: torch.Tensor, dt: torch.Tensor
-    ) -> torch.Tensor:
+        self,
+        dynamics,
+        x: torch.Tensor,
+        t: torch.Tensor,
+        dt: torch.Tensor,
+        state: Any,
+    ) -> tuple[torch.Tensor, Any]:
         """
         Advance x from t to t + dt.
 
@@ -37,5 +77,10 @@ class Integrator(abc.ABC):
             x: current state, shape (batch, ...)
             t: current time, shape (batch,)
             dt: time increment (0-dim tensor; negative when denoising)
+            state: the history returned by the previous step, or by
+                :meth:`init_state` for the first one
+
+        Returns:
+            The advanced state and the history for the next step.
         """
         raise NotImplementedError

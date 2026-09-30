@@ -11,7 +11,7 @@ __all__ = ["EulerMaruyama"]
 class EulerMaruyama(Integrator):
     """First-order solver: x <- x + f dt + g sqrt(|dt|) z; plain Euler when g = 0."""
 
-    def step(self, dynamics, x, t, dt):
+    def step(self, dynamics, x, t, dt, state=None):
         x = x + dynamics.drift(x, t) * dt
         g = expand_t(dynamics.diffusion(t), x)
-        return x + g * dt.abs().sqrt() * torch.randn_like(x)
+        return x + g * dt.abs().sqrt() * torch.randn_like(x), state

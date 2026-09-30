@@ -65,3 +65,4 @@ Contents
    api/train
    api/transform
    api/md
+   api/dynamics
