@@ -186,15 +186,14 @@ def sampler_and_batch(parametrization, integrator, churn, weight, model):
         parametrization,
         integrator,
         churn=churn,
-        constraints=[HarmonicRestraint()],
-        guidance_weight=weight,
+        constraints=[HarmonicRestraint(weight=weight)],
     )
     plain = Sampler(model, VP(), parametrization, integrator, churn=churn)
     t = torch.full((5,), 0.4, dtype=torch.float64)
     return sampler, plain, {**batch, properties.t: t}, t
 
 
-def test_score_guidance_shifts_score_and_drift_by_w_times_the_forces():
+def test_score_guidance_shifts_score_and_drift_by_the_weighted_forces():
     model = batch_model(analytic_score(VP(), 0.5, 1.0))
     sampler, plain, batch, t = sampler_and_batch(
         ScoreParametrization(), EulerMaruyama(), 1.0, 2.5, model
@@ -226,11 +225,11 @@ def test_score_guidance_scales_each_field_constraint_by_its_weight():
     sampler, plain, batch, t = sampler_and_batch(
         ScoreParametrization(), EulerMaruyama(), 1.0, 2.5, model
     )
-    sampler.constraints = [HarmonicRestraint(weight=3.0)]
+    sampler.constraints = [HarmonicRestraint(weight=3.0), HarmonicRestraint(weight=0.5)]
     x = batch[properties.R]
     _, forces = terms(batch, x)
     shift = sampler.reverse(batch).score(x, t) - plain.reverse(batch).score(x, t)
-    assert torch.allclose(shift, 2.5 * 3.0 * forces)
+    assert torch.allclose(shift, 3.5 * forces)
 
 
 class TimeGuidance(FieldConstraint):
@@ -258,7 +257,7 @@ def test_field_constraints_see_the_time_they_are_evaluated_at():
     t = torch.full((5,), 0.7, dtype=torch.float64)
     shift = sampler.reverse(batch).score(x, t) - plain.reverse(batch).score(x, t)
     assert torch.equal(guidance.seen[-1], t)
-    assert torch.allclose(shift, 2.5 * t.unsqueeze(-1).expand_as(x))
+    assert torch.allclose(shift, t.unsqueeze(-1).expand_as(x))
 
 
 def test_velocity_guidance_needs_the_chart_at_assembly():

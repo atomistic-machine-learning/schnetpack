@@ -16,12 +16,8 @@ from torch import nn
 
 from schnetpack import properties
 from schnetpack.dynamics import EnsembleCalculator, NNEnsemble, Relaxer
-from schnetpack.interfaces.ase_interface import (
-    AbsoluteUncertainty,
-    RelativeUncertainty,
-    SpkEnsembleCalculator,
-    atoms_to_batch,
-)
+from schnetpack.interfaces.ase_interface import SpkEnsembleCalculator, atoms_to_batch
+from schnetpack.uncertainty import AbsoluteUncertainty, RelativeUncertainty
 
 from .test_relaxer_units import make_inputs
 

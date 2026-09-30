@@ -19,9 +19,10 @@ weighted terms into the field is the driver's job, since only the driver knows
 what its field is:
 
 - :class:`~schnetpack.dynamics.relax.Relaxer` — the term is part of the
-  force field: it is added to the model's forces.
-- :class:`~schnetpack.dynamics.sampling.Sampler` — guidance: the term, scaled
-  by ``guidance_weight`` (1/kT, in 1/eV), is added to the score. The batch the
+  force field: it is added to the model's forces, and the weight is a plain
+  factor.
+- :class:`~schnetpack.dynamics.sampling.Sampler` — guidance: the weighted term
+  is added to the score, so the weight is 1/kT, in 1/eV. The batch the
   constraint sees then also holds the path time under the sampler's
   ``time_key``, for guidance that depends on t.
 """
@@ -46,7 +47,8 @@ class FieldConstraint(nn.Module):
     def __init__(self, weight: float = 1.0):
         """
         Args:
-            weight: factor the driver scales this constraint's term by
+            weight: factor the driver scales this constraint's term by: a
+                plain factor in a relaxer, 1/kT in 1/eV in a sampler
         """
         super().__init__()
         self.weight = weight
@@ -113,7 +115,8 @@ class HarmonicRestraint(FieldConstraint):
             count_key: batch key of the number of pairs per structure
             lengths_key: batch key of the target distances, in Angstrom
             constants_key: batch key of the force constants, in eV/Angstrom^2
-            weight: factor the driver scales the forces by
+            weight: factor the driver scales the forces by: a plain factor
+                in a relaxer, 1/kT in 1/eV in a sampler
         """
         super().__init__(weight=weight)
         self.pairs_key = pairs_key

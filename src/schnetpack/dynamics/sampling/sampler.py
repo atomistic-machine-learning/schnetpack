@@ -59,13 +59,14 @@ class Sampler(Dynamics):
     Field constraints — restraints such as
     :class:`~schnetpack.dynamics.constraints.field.HarmonicRestraint`, or
     guidance terms kT ∇ log p — guide the score: the sum of their weighted
-    terms F, scaled by ``guidance_weight`` w (1/kT), is added to it,
-    score + w F, which for a restraint tilts the sampled density by
-    exp(-w E). They see the batch with the path time under ``time_key``, so a
-    term may depend on t. The term enters the bound score field itself, so the drift and
-    the ancestral steps that read the score directly both see it. A velocity
-    head reaches it through the chart, v - 1/2 g^2 w F, so field constraints
-    require the process's (f, g) chart even there. The restraint is evaluated
+    terms F = sum_i w_i F_i is added to it, score + F. A constraint's
+    ``weight`` w_i is its 1/kT, in 1/eV, so a restraint of weight w tilts the
+    sampled density by exp(-w E). They see the batch with the path time under
+    ``time_key``, so a term may depend on t. The term enters the bound score
+    field itself, so the drift and the ancestral steps that read the score
+    directly both see it. A velocity head reaches it through the chart,
+    v - 1/2 g^2 F, so field constraints require the process's (f, g) chart
+    even there. The restraint is evaluated
     at the noisy iterate x_t, not at a clean estimate: an approximation that
     is exact only as t -> t_min.
 
@@ -96,7 +97,6 @@ class Sampler(Dynamics):
         key: str = properties.R,
         output_key: str = "prediction",
         time_key: str = properties.t,
-        guidance_weight: float = 1.0,
         position_unit: str | float = "Ang",
     ):
         """
@@ -126,8 +126,6 @@ class Sampler(Dynamics):
                 row of the moved key — the key
                 :class:`~schnetpack.generative.transforms.Diffuse` wrote in
                 training
-            guidance_weight: weight w of the field constraints' forces in
-                the score, in 1/eV (1/kT)
             position_unit: length unit of the moved key — the process's
                 space, i.e. the training data's. Used only to evaluate the
                 field constraints in Angstrom.
@@ -156,7 +154,6 @@ class Sampler(Dynamics):
         self.parametrization = parametrization
         self.output_key = output_key
         self.time_key = time_key
-        self.guidance_weight = guidance_weight
         self.position_conversion = convert_units(position_unit, "Angstrom")
         # Validity settles here, not mid-run: if anything in this assembly
         # will cross the (f, g) chart — stochastic sampling, a non-velocity
@@ -256,12 +253,12 @@ class Sampler(Dynamics):
 
     def guidance(self, batch, x):
         """
-        The field constraints' score term w F at ``x``, in the moved key's
+        The field constraints' score term F at ``x``, in the moved key's
         units, or None without field constraints. F is the sum of their
-        weighted terms, evaluated on ``batch``, which holds the path time
-        under ``time_key`` for guidance that depends on t.
+        weighted terms — each weight a 1/kT — evaluated on ``batch``, which
+        holds the path time under ``time_key`` for guidance that depends on t.
         """
         field = self.constraint_field(batch, x * self.position_conversion)
         if field is None:
             return None
-        return (self.guidance_weight * self.position_conversion) * field.to(x)
+        return self.position_conversion * field.to(x)

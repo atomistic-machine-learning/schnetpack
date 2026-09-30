@@ -39,8 +39,6 @@ from schnetpack.md.utils import activate_model_stress
 from schnetpack.transform import CastTo32, CastTo64, Transform
 from schnetpack.uncertainty import (
     AbsoluteUncertainty,
-    RelativeUncertainty,
-    Uncertainty,
 )
 from schnetpack.units import convert_units
 from schnetpack.utils import load_model
@@ -52,9 +50,6 @@ __all__ = [
     "AseInterface",
     "AtomsConverter",
     "SpkEnsembleCalculator",
-    "Uncertainty",
-    "AbsoluteUncertainty",
-    "RelativeUncertainty",
     "atoms_to_batch",
     "batch_to_atoms",
 ]

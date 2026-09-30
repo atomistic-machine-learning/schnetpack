@@ -112,9 +112,8 @@ class DirectDenoising(Dynamics):
         for constraint in constraints:
             if isinstance(constraint, FieldConstraint):
                 raise ValueError(
-                    f"{type(constraint).__name__} is a field constraint, and "
-                    "direct denoising jumps to the x0-estimate without following "
-                    "a field; use a StateConstraint, or the Sampler or Relaxer"
+                    f"{type(self).__name__} does not support field constraints "
+                    f"yet (got {type(constraint).__name__})"
                 )
         injection = (
             [AnnealedNoise(stochastic_lambda)] if stochastic_lambda > 0.0 else []
