@@ -1,9 +1,10 @@
 """Compare the ``Relaxer`` (with ``LBFGS``) against a sequential loop over ase ``LBFGS``.
 
 The comparison is on the outcome of the relaxation only: both optimizers must land in
-the same minima, and a structure must relax the same way alone as inside a batch. Wall
-clock timing lives in ``test_relaxer_benchmark.py``, which measures it with
-pytest-benchmark.
+the same minima, and a structure must relax the same way alone as inside a batch. The
+ethanol model only knows structures of nine atoms, so a batch of structures of
+different sizes is compared on ase's EMT instead. Wall clock timing lives in
+``test_relaxer_benchmark.py``, which measures it with pytest-benchmark.
 """
 
 import os
@@ -14,6 +15,8 @@ import numpy as np
 import pytest
 import torch
 from ase import Atoms
+from ase.calculators.emt import EMT
+from ase.cluster import Icosahedron
 from ase.io import read
 from ase.optimize import LBFGS
 
@@ -254,3 +257,65 @@ def test_cached_forces_are_dropped_when_the_positions_move(initial_structures):
 
     inputs[properties.R] += 0.1
     assert not torch.equal(relaxer.calculator(inputs)["forces"], before)
+
+
+# ---------------------------------------------------------------- a ragged batch on EMT
+
+
+class EMTModel:
+    """ase's EMT as a bare model on a batch: energies in eV, forces in eV/Ang."""
+
+    def __call__(self, inputs):
+        sizes = inputs[properties.n_atoms].tolist()
+        positions = inputs[properties.R]
+        energies, forces = [], []
+        for numbers, structure_positions in zip(
+            inputs[properties.Z].split(sizes), positions.split(sizes)
+        ):
+            structure = Atoms(
+                numbers=numbers.tolist(),
+                positions=structure_positions.detach().cpu().numpy(),
+            )
+            structure.calc = EMT()
+            energies.append(structure.get_potential_energy())
+            forces.append(structure.get_forces())
+        like = {"dtype": positions.dtype, "device": positions.device}
+        return {
+            "energy": torch.tensor(energies, **like),
+            "forces": torch.tensor(np.concatenate(forces), **like),
+        }
+
+
+def make_clusters(sizes=(5, 7, 13)) -> list[Atoms]:
+    """Cu clusters of different sizes, cut from one icosahedron and rattled.
+
+    None of them meets negative curvature on its way down. Where one does, ``LBFGS``
+    drops that curvature pair (``rho = 0``) while ase keeps it, and the paths part:
+    the rattled Cu4 does so on its 23rd step.
+    """
+    icosahedron = Icosahedron("Cu", 2)
+    clusters = []
+    for seed, size in enumerate(sizes):
+        cluster = icosahedron[:size]
+        cluster.rattle(stdev=0.05, seed=seed)
+        clusters.append(cluster)
+    return clusters
+
+
+def test_a_ragged_batch_relaxes_as_ase_relaxes_each_structure():
+    """Structures of different sizes relax together as ase relaxes each one alone."""
+    clusters = make_clusters()
+    sequential = relax_sequential(clusters, EMT())
+
+    inputs = atoms_to_batch(deepcopy(clusters), dtype=torch.float64)
+    relaxed, steps = relax_counting(Relaxer(EMTModel()), inputs, MAX_STEPS, fmax=FMAX)
+    batchwise = batch_to_atoms(relaxed)
+
+    assert max(sequential.steps) < MAX_STEPS
+    # the batch runs until its slowest structure is relaxed
+    assert steps == max(sequential.steps)
+    _, fmax_batch = evaluate(batchwise, EMT())
+    assert fmax_batch.max() <= FMAX
+    # same algorithm, same start, same float64 arithmetic: the same path
+    for alone, in_batch in zip(sequential.atoms, batchwise):
+        np.testing.assert_allclose(in_batch.positions, alone.positions, atol=1e-8)

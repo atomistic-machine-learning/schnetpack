@@ -158,13 +158,47 @@ def test_fixed_atoms_are_left_out_of_the_convergence_check():
     assert relaxed[properties.R][1].norm() < 0.05
 
 
-def test_ragged_batches_are_rejected_by_lbfgs():
-    with pytest.raises(ValueError, match="same number of atoms"):
-        make_relaxer().denoise(make_inputs([3, 4]), 5)
+def test_ragged_batches_relax_under_lbfgs():
+    relaxed = make_relaxer().denoise(make_inputs([3, 4, 1]), 100, fmax=1e-4)
+
+    torch.testing.assert_close(
+        relaxed[properties.R], torch.zeros(8, 3), atol=1e-4, rtol=0
+    )
+
+
+def test_a_ragged_batch_relaxes_each_structure_as_it_would_alone():
+    """The per-structure reductions of LBFGS must not mix up the structures."""
+    sizes = [2, 5, 3]
+    inputs = make_inputs(sizes)
+
+    relaxed = make_relaxer().denoise(inputs, 4, fmax=1e-12)
+
+    for positions, alone in zip(
+        inputs[properties.R].split(sizes), relaxed[properties.R].split(sizes)
+    ):
+        single = make_inputs([len(positions)])
+        single[properties.R] = positions
+        expected = make_relaxer().denoise(single, 4, fmax=1e-12)[properties.R]
+        torch.testing.assert_close(alone, expected)
+
+
+def test_lbfgs_limits_the_step_per_structure_in_a_ragged_batch():
+    """A structure far from the minimum must not shrink its neighbour's step."""
+    inputs = make_inputs([3, 2])
+    inputs[properties.R][:3] *= 100.0  # its first step H0 * F is far above maxstep
+    inputs[properties.R][3:] *= 0.1  # its first step is far below
+    integrator = LBFGS(maxstep=0.2)
+
+    relaxed = make_relaxer(integrator=integrator).denoise(inputs, 1, fmax=1e-12)
+
+    step = relaxed[properties.R] - inputs[properties.R]
+    assert step[:3].norm(dim=-1).max() == pytest.approx(0.2, rel=1e-5)
+    # the harmonic force is -x, so the unscaled first step is -H0 x
+    torch.testing.assert_close(step[3:], -integrator.H0 * inputs[properties.R][3:])
 
 
 def test_ragged_batches_relax_under_steepest_descent():
-    """The relaxer itself is per-structure throughout; only LBFGS needs equal sizes."""
+    """The relaxer itself is per-structure throughout."""
     relaxed = make_relaxer(integrator=EulerMaruyama(), step_size=0.5).denoise(
         make_inputs([3, 4]), 100, fmax=1e-4
     )
