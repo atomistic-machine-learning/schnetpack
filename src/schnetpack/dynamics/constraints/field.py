@@ -8,34 +8,30 @@ by — restraint forces, guidance — so its effect enters through the integrato
 rather than around it, at every point the integrator evaluates the field
 (Heun's predictor, an L-BFGS step alike).
 
-A field constraint states physics only. It is a :class:`~torch.nn.Module`
-whose ``forward`` reads the positions in ``batch[properties.R]``, in
-Angstrom, and returns its :class:`FieldTerms`: the energy per structure and
-the forces it exerts, in eV and eV/Angstrom. Folding those into the field is
-the driver's job, since only the driver knows what its field is:
+A field constraint returns one force-like term. It is a
+:class:`~torch.nn.Module` whose ``forward`` reads the positions in
+``batch[properties.R]``, in Angstrom, and returns a tensor ``(n_atoms, 3)`` in
+eV/Angstrom: the force of a restraint, or kT times the gradient of a
+log-density for guidance that is no energy (a classifier's
+kT ∇ log p(y|x)). No energy is returned, so a term need not be conservative.
+Its ``weight`` scales it, and the driver applies that weight. Folding the
+weighted terms into the field is the driver's job, since only the driver knows
+what its field is:
 
-- :class:`~schnetpack.dynamics.relax.Relaxer` — the restraint is part of the
-  energy surface: its forces are added to the model's, its energy to the
-  reported energy.
-- :class:`~schnetpack.dynamics.sampling.Sampler` — guidance: the forces,
-  scaled by ``guidance_weight`` (1/kT, in 1/eV), are added to the score.
+- :class:`~schnetpack.dynamics.relax.Relaxer` — the term is part of the
+  force field: it is added to the model's forces.
+- :class:`~schnetpack.dynamics.sampling.Sampler` — guidance: the term, scaled
+  by ``guidance_weight`` (1/kT, in 1/eV), is added to the score. The batch the
+  constraint sees then also holds the path time under the sampler's
+  ``time_key``, for guidance that depends on t.
 """
-
-from typing import NamedTuple
 
 import torch
 from torch import nn
 
 from schnetpack import properties
 
-__all__ = ["FieldTerms", "FieldConstraint", "HarmonicRestraint"]
-
-
-class FieldTerms(NamedTuple):
-    """The terms a field constraint contributes, which a driver folds into its field."""
-
-    energy: torch.Tensor  #: energy per structure ``(n_structures,)``, in eV
-    forces: torch.Tensor  #: forces ``(n_atoms, 3)``, in eV/Angstrom
+__all__ = ["FieldConstraint", "HarmonicRestraint"]
 
 
 class FieldConstraint(nn.Module):
@@ -44,23 +40,33 @@ class FieldConstraint(nn.Module):
 
     Subclasses implement :meth:`forward`. Unlike state constraints their
     order does not matter: every one is evaluated on the same batch, and the
-    terms of all field constraints add up.
+    weighted terms of all field constraints add up.
     """
 
-    def forward(self, batch: dict[str, torch.Tensor]) -> FieldTerms:
+    def __init__(self, weight: float = 1.0):
+        """
+        Args:
+            weight: factor the driver scales this constraint's term by
+        """
+        super().__init__()
+        self.weight = weight
+
+    def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
         """
         Evaluate the constraint at ``batch[properties.R]``.
 
         The positions are in Angstrom and are the integrator's evaluation
-        point, not necessarily the driver's iterate.
+        point, not necessarily the driver's iterate. During sampling the batch
+        also holds the path time under the sampler's ``time_key``; a
+        constraint that needs it should raise if it is missing.
 
         Args:
             batch: batch to evaluate on, for the positions, the structure
                 layout and the constraint's own inputs
 
         Returns:
-            The energy per structure ``(n_structures,)`` in eV and the forces
-            ``(n_atoms, 3)`` in eV/Angstrom. ``batch`` is left unchanged.
+            The force-like term ``(n_atoms, 3)`` in eV/Angstrom, unweighted —
+            the driver applies :attr:`weight`. ``batch`` is left unchanged.
         """
         raise NotImplementedError
 
@@ -84,6 +90,8 @@ class HarmonicRestraint(FieldConstraint):
       distances d0 in Angstrom
     - ``batch[HarmonicRestraint.restraint_constants]`` — ``(n_pairs,)`` force
       constants k in eV/Angstrom^2
+
+    :meth:`forward` returns the forces -dE/dR; :meth:`energy` gives E itself.
     """
 
     restraint_pairs = "_restraint_pairs"  #: default key of the restrained pairs
@@ -97,6 +105,7 @@ class HarmonicRestraint(FieldConstraint):
         count_key: str = n_restraints,
         lengths_key: str = restraint_lengths,
         constants_key: str = restraint_constants,
+        weight: float = 1.0,
     ):
         """
         Args:
@@ -104,14 +113,24 @@ class HarmonicRestraint(FieldConstraint):
             count_key: batch key of the number of pairs per structure
             lengths_key: batch key of the target distances, in Angstrom
             constants_key: batch key of the force constants, in eV/Angstrom^2
+            weight: factor the driver scales the forces by
         """
-        super().__init__()
+        super().__init__(weight=weight)
         self.pairs_key = pairs_key
         self.count_key = count_key
         self.lengths_key = lengths_key
         self.constants_key = constants_key
 
-    def forward(self, batch):
+    def _stretches(self, batch):
+        """
+        The restrained pairs of ``batch`` and how far each is stretched.
+
+        Returns:
+            ``idx`` ``(n_pairs, 2)`` batch indices of the pairs, ``idx_pair_m``
+            ``(n_pairs,)`` their structures, ``r_ij`` ``(n_pairs, 3)``,
+            ``d`` and ``stretch = d - d0`` ``(n_pairs,)`` and the force
+            constants ``(n_pairs,)``.
+        """
         positions = batch[properties.R]
         n_atoms = batch[properties.n_atoms].to(positions.device)
         count = batch[self.count_key].to(device=positions.device, dtype=torch.long)
@@ -145,15 +164,26 @@ class HarmonicRestraint(FieldConstraint):
 
         r_ij = positions[idx[:, 1]] - positions[idx[:, 0]]
         d = torch.norm(r_ij, dim=-1)
-        stretch = d - lengths
+        return idx, idx_pair_m, r_ij, d, d - lengths, constants
 
-        energy = torch.zeros(
-            n_atoms.shape[0], dtype=positions.dtype, device=positions.device
+    def energy(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
+        """
+        The restraint energy per structure ``(n_structures,)`` in eV, at
+        ``batch[properties.R]``, unweighted.
+        """
+        _, idx_pair_m, _, _, stretch, constants = self._stretches(batch)
+        positions = batch[properties.R]
+        return torch.zeros(
+            batch[properties.n_atoms].shape[0],
+            dtype=positions.dtype,
+            device=positions.device,
         ).index_add_(0, idx_pair_m, 0.5 * constants * stretch**2)
 
+    def forward(self, batch):
+        idx, _, r_ij, d, stretch, constants = self._stretches(batch)
         # F_j = -k (d - d0) r_ij / d, F_i = -F_j
         f_j = -(constants * stretch / d).unsqueeze(-1) * r_ij
-        forces = torch.zeros_like(positions)
+        forces = torch.zeros_like(batch[properties.R])
         forces.index_add_(0, idx[:, 1], f_j)
         forces.index_add_(0, idx[:, 0], -f_j)
-        return FieldTerms(energy, forces)
+        return forces

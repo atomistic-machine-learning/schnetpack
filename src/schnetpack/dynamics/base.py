@@ -31,9 +31,11 @@ import abc
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import torch
+
 from schnetpack import properties
 from schnetpack.dynamics.calculator import as_calculator
-from schnetpack.dynamics.constraints.field import FieldConstraint, FieldTerms
+from schnetpack.dynamics.constraints.field import FieldConstraint
 from schnetpack.dynamics.constraints.state import StateConstraint
 from schnetpack.generative.priors import Prior
 
@@ -70,7 +72,7 @@ class Dynamics(abc.ABC):
     them. Field constraints
     (:class:`~schnetpack.dynamics.constraints.field.FieldConstraint`) share
     the list but act inside the field, at every evaluation; the driver folds
-    :meth:`field_terms` into whatever its field is.
+    :meth:`constraint_field` into whatever its field is.
     """
 
     def __init__(
@@ -124,31 +126,32 @@ class Dynamics(abc.ABC):
             batch = constraint.after_step(batch, step, n_steps, self)
         return batch
 
-    def field_terms(self, batch: Mapping[str, Any], positions) -> FieldTerms | None:
+    def constraint_field(
+        self, batch: Mapping[str, Any], positions
+    ) -> torch.Tensor | None:
         """
-        The summed energy and forces of the field constraints at ``positions``.
+        The field the field constraints add at ``positions``: the sum of
+        their terms, each scaled by its ``weight``.
 
         Every constraint is called on a copy of ``batch`` with ``positions``
-        under ``properties.R``, and the terms it returns are added up.
+        under ``properties.R``.
 
         Args:
             batch: current batch
             positions: positions in Angstrom to evaluate at
 
         Returns:
-            Energy per structure in eV and forces in eV/Angstrom, or None
-            without field constraints.
+            The field ``(n_atoms, 3)`` in eV/Angstrom, or None without field
+            constraints.
         """
         constraints = self.field_constraints
         if not constraints:
             return None
         inputs = {**batch, properties.R: positions}
-        energy, forces = 0.0, 0.0
+        field = torch.zeros_like(positions)
         for constraint in constraints:
-            terms = constraint(inputs)
-            energy = energy + terms.energy
-            forces = forces + terms.forces
-        return FieldTerms(energy, forces)
+            field = field + constraint.weight * constraint(inputs)
+        return field
 
     def sample(self, n_samples: int, n_steps: int) -> dict[str, Any]:
         """

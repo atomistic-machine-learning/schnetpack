@@ -69,7 +69,6 @@ Constraints
     AnnealedNoise
     Scaffold
     FieldConstraint
-    FieldTerms
     HarmonicRestraint
 
 

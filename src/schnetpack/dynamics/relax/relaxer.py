@@ -144,9 +144,9 @@ class Relaxer(Dynamics):
         # detached outputs from the cache: adding the terms below neither
         # reaches the cache nor keeps the model's graph alive
         forces = self.calculator(batch)[self.force_key]
-        terms = self.field_terms(batch, batch[self.key])
-        if terms is not None:
-            forces = forces + terms.forces.to(forces)
+        field = self.constraint_field(batch, batch[self.key])
+        if field is not None:
+            forces = forces + field.to(forces)
         fixed = batch.get(properties.fixed_atoms)
         if fixed is not None:
             forces = forces.masked_fill(fixed.unsqueeze(-1), 0.0)

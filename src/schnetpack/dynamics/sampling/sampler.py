@@ -57,10 +57,12 @@ class Sampler(Dynamics):
     them, with ``batch[time_key]`` the grid time of the iterate they see.
 
     Field constraints — restraints such as
-    :class:`~schnetpack.dynamics.constraints.field.HarmonicRestraint` —
-    guide the score: their forces F, scaled by ``guidance_weight`` w (1/kT),
-    are added to it, score + w F, which tilts the sampled density by
-    exp(-w E). The term enters the bound score field itself, so the drift and
+    :class:`~schnetpack.dynamics.constraints.field.HarmonicRestraint`, or
+    guidance terms kT ∇ log p — guide the score: the sum of their weighted
+    terms F, scaled by ``guidance_weight`` w (1/kT), is added to it,
+    score + w F, which for a restraint tilts the sampled density by
+    exp(-w E). They see the batch with the path time under ``time_key``, so a
+    term may depend on t. The term enters the bound score field itself, so the drift and
     the ancestral steps that read the score directly both see it. A velocity
     head reaches it through the chart, v - 1/2 g^2 w F, so field constraints
     require the process's (f, g) chart even there. The restraint is evaluated
@@ -255,9 +257,11 @@ class Sampler(Dynamics):
     def guidance(self, batch, x):
         """
         The field constraints' score term w F at ``x``, in the moved key's
-        units, or None without field constraints.
+        units, or None without field constraints. F is the sum of their
+        weighted terms, evaluated on ``batch``, which holds the path time
+        under ``time_key`` for guidance that depends on t.
         """
-        terms = self.field_terms(batch, x * self.position_conversion)
-        if terms is None:
+        field = self.constraint_field(batch, x * self.position_conversion)
+        if field is None:
             return None
-        return (self.guidance_weight * self.position_conversion) * terms.forces.to(x)
+        return (self.guidance_weight * self.position_conversion) * field.to(x)

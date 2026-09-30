@@ -5,7 +5,7 @@ from schnetpack import properties
 from schnetpack.dynamics import (
     DirectDenoising,
     EulerMaruyama,
-    FieldTerms,
+    FieldConstraint,
     ForceFieldCalculator,
     HarmonicRestraint,
     Heun,
@@ -49,7 +49,9 @@ def restrained_batch(n_atoms, pairs, lengths, constants, seed=0):
 
 def terms(batch, positions):
     """The restraint's energy and forces at ``positions``."""
-    return HarmonicRestraint()({**batch, properties.R: positions})
+    restraint = HarmonicRestraint()
+    inputs = {**batch, properties.R: positions}
+    return restraint.energy(inputs), restraint(inputs)
 
 
 @pytest.fixture
@@ -98,12 +100,11 @@ def test_harmonic_restraint_checks_the_key_shapes(mixed_batch):
         terms(batch, batch[properties.R])
 
 
-def test_harmonic_restraint_returns_its_terms_and_leaves_the_batch(mixed_batch):
+def test_harmonic_restraint_returns_its_forces_and_leaves_the_batch(mixed_batch):
     before = dict(mixed_batch)
     out = HarmonicRestraint()(mixed_batch)
-    assert isinstance(out, FieldTerms)
-    assert out.energy.shape == mixed_batch[properties.n_atoms].shape
-    assert out.forces.shape == mixed_batch[properties.R].shape
+    assert isinstance(out, torch.Tensor)
+    assert out.shape == mixed_batch[properties.R].shape
     assert mixed_batch.keys() == before.keys()
     for key, value in before.items():
         assert mixed_batch[key] is value
@@ -164,6 +165,16 @@ def test_relaxer_sums_the_field_constraints():
     assert torch.allclose(relaxer._forces(batch), 2 * expected)
 
 
+def test_relaxer_scales_each_field_constraint_by_its_weight():
+    batch = restrained_batch([3], [[(0, 2)]], [1.3], [5.0])
+    _, expected = terms(batch, batch[properties.R])
+    relaxer = Relaxer(
+        ZeroModel(),
+        constraints=[HarmonicRestraint(weight=2.0), HarmonicRestraint(weight=0.5)],
+    )
+    assert torch.allclose(relaxer._forces(batch), 2.5 * expected)
+
+
 # --- sampling: the restraint guides the score ------------------------------ #
 
 
@@ -208,6 +219,46 @@ def test_velocity_guidance_goes_through_g2():
     g2 = expand_t(VP().sde().g2(t), x)
     shift = sampler.reverse(batch).drift(x, t) - plain.reverse(batch).drift(x, t)
     assert torch.allclose(shift, -0.5 * g2 * 2.5 * forces)
+
+
+def test_score_guidance_scales_each_field_constraint_by_its_weight():
+    model = batch_model(analytic_score(VP(), 0.5, 1.0))
+    sampler, plain, batch, t = sampler_and_batch(
+        ScoreParametrization(), EulerMaruyama(), 1.0, 2.5, model
+    )
+    sampler.constraints = [HarmonicRestraint(weight=3.0)]
+    x = batch[properties.R]
+    _, forces = terms(batch, x)
+    shift = sampler.reverse(batch).score(x, t) - plain.reverse(batch).score(x, t)
+    assert torch.allclose(shift, 2.5 * 3.0 * forces)
+
+
+class TimeGuidance(FieldConstraint):
+    """A guidance term that depends on the path time: t on every component."""
+
+    def __init__(self):
+        super().__init__()
+        self.seen = []
+
+    def forward(self, batch):
+        t = batch[properties.t]
+        self.seen.append(t)
+        return t.unsqueeze(-1).expand_as(batch[properties.R]).clone()
+
+
+def test_field_constraints_see_the_time_they_are_evaluated_at():
+    model = batch_model(analytic_score(VP(), 0.5, 1.0))
+    sampler, plain, batch, _ = sampler_and_batch(
+        ScoreParametrization(), EulerMaruyama(), 1.0, 2.5, model
+    )
+    guidance = TimeGuidance()
+    sampler.constraints = [guidance]
+    x = batch[properties.R]
+    # not the batch's own time: an integrator's evaluation point
+    t = torch.full((5,), 0.7, dtype=torch.float64)
+    shift = sampler.reverse(batch).score(x, t) - plain.reverse(batch).score(x, t)
+    assert torch.equal(guidance.seen[-1], t)
+    assert torch.allclose(shift, 2.5 * t.unsqueeze(-1).expand_as(x))
 
 
 def test_velocity_guidance_needs_the_chart_at_assembly():
