@@ -114,7 +114,7 @@ class Scaffold(StateConstraint):
         self.reference_key = reference_key
 
     def _mask_and_reference(self, batch, x):
-        mask = batch[self.mask_key].to(dtype=torch.bool, device=x.device)
+        mask = batch[self.mask_key]
         if mask.shape != x.shape[:1]:
             raise ValueError(
                 f"{self.mask_key!r} must hold one flag per row: shape "

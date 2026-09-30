@@ -55,7 +55,7 @@ idx_k_triples: Final[str] = "_idx_k_triples"
 
 ## generative models and dynamics
 t: Final[str] = "t"  #: path time of a noised structure, one value per atom
-fixed_atoms: Final[str] = "_fixed_atoms"  #: per-atom mask of atoms held in place
+fixed_atoms: Final[str] = "_fixed_atoms"  #: per-atom bool mask of atoms held in place
 R_reference: Final[str] = position + "_reference"  #: positions fixed atoms are held at
 
 ## chemical properties

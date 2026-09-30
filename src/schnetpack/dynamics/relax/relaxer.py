@@ -50,14 +50,6 @@ class ForceField:
         return torch.zeros_like(t)
 
 
-def _free_atoms(batch: Mapping[str, Any]) -> torch.Tensor | None:
-    """``(n_total_atoms, 1)`` float mask of the atoms that may move, or None."""
-    fixed = batch.get(properties.fixed_atoms)
-    if fixed is None:
-        return None
-    return (~fixed.to(torch.bool)).view(-1, 1)
-
-
 class Relaxer(Dynamics):
     """
     Relax structures on a force field until every one of them is relaxed.
@@ -155,9 +147,9 @@ class Relaxer(Dynamics):
         terms = self.field_terms(batch, batch[self.key])
         if terms is not None:
             forces = forces + terms.forces.to(forces)
-        free = _free_atoms(batch)
-        if free is not None:
-            forces = forces * free.to(forces.dtype)
+        fixed = batch.get(properties.fixed_atoms)
+        if fixed is not None:
+            forces = forces.masked_fill(fixed.unsqueeze(-1), 0.0)
         return forces
 
     def force_field(self, batch: Mapping[str, Any], x: torch.Tensor) -> ForceField:
@@ -199,7 +191,7 @@ class Relaxer(Dynamics):
         self.calculator.reset()
         batch = self.calculator.prepare(batch)
         idx_m = batch[properties.idx_m]
-        free = _free_atoms(batch)
+        fixed = batch.get(properties.fixed_atoms)
         n_structures = batch[properties.n_atoms].shape[0]
         x = batch[self.key]
         state = self.integrator.init_state(self.force_field(batch, x), x)
@@ -222,10 +214,10 @@ class Relaxer(Dynamics):
             )
             # converged structures and fixed atoms stay where they are,
             # whatever the step rule
-            moves = (~converged)[idx_m].view(-1, 1)
-            if free is not None:
-                moves = moves & free
-            x_new = torch.where(moves.to(x.device), x_new, x)
+            moves = (~converged)[idx_m]
+            if fixed is not None:
+                moves = moves & ~fixed
+            x_new = torch.where(moves.unsqueeze(-1), x_new, x)
             batch = {**batch, self.key: x_new}
             batch = self.after_step(batch, i + 1, n_steps)
         return batch
