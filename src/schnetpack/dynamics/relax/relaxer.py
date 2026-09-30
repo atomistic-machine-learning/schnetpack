@@ -152,15 +152,66 @@ class Relaxer(Dynamics):
             forces = forces.masked_fill(fixed.unsqueeze(-1), 0.0)
         return forces
 
+    def _converged(self, batch: Mapping[str, Any], fmax: float) -> torch.Tensor:
+        """
+        Which structures in ``batch`` are relaxed: the largest force on any of
+        their free atoms is below ``fmax``, in eV/Angstrom.
+
+        Returns:
+            ``(n_structures,)`` boolean mask.
+        """
+        squared = self._forces(batch).pow(2).sum(-1)
+        n_structures = batch[properties.n_atoms].shape[0]
+        max_sq = torch.zeros(
+            n_structures, dtype=squared.dtype, device=squared.device
+        ).scatter_reduce(0, batch[properties.idx_m], squared, "amax", include_self=True)
+        return max_sq < fmax**2
+
+    def _hold(
+        self,
+        batch: Mapping[str, Any],
+        x: torch.Tensor,
+        x_new: torch.Tensor,
+        converged: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        ``x_new`` with converged structures and fixed atoms put back at ``x``,
+        whatever the step rule proposed.
+
+        Args:
+            batch: the batch the step was taken from
+            x: the positions before the step
+            x_new: the positions the step rule proposed
+            converged: ``(n_structures,)`` mask from :meth:`_converged`
+        """
+        moves = (~converged)[batch[properties.idx_m]]
+        fixed = batch.get(properties.fixed_atoms)
+        if fixed is not None:
+            moves = moves & ~fixed
+        return torch.where(moves.unsqueeze(-1), x_new, x)
+
     def force_field(self, batch: Mapping[str, Any], x: torch.Tensor) -> ForceField:
         """
-        The force field at ``batch``, whose iterate is ``x``.
+        The force field the step rule follows from ``batch``.
 
-        The step rule evaluates it at its own points — L-BFGS's are not the
-        batch's iterate — so each evaluation hands the calculator ``batch``
-        with the moved key replaced. At ``x`` itself it hands over ``batch``
-        unchanged, the very batch the convergence check ran on, so the
-        calculator's cache answers.
+        Its ``forces_fn(x_eval)`` returns the forces of :meth:`_forces` (the
+        model's plus the field constraints', zero on fixed atoms, in
+        eV/Angstrom) for ``batch`` with the moved key set to ``x_eval``, cast
+        to ``x_eval``'s dtype. A step rule can evaluate it away from the
+        iterate, as Heun does at its predictor point, and each such
+        evaluation costs one model call.
+
+        An evaluation at ``x`` itself is free. If ``x_eval`` is the same
+        tensor object as ``x`` (an identity check, not a value comparison),
+        the calculator gets ``batch`` unchanged. That is the batch the
+        convergence check just ran on, so the calculator's cache answers.
+
+        Args:
+            batch: the current batch, already prepared by the calculator
+            x: the iterate, which must be ``batch[self.key]`` itself
+
+        Returns:
+            A :class:`ForceField` carrying ``batch``'s structure layout.
         """
 
         def forces_fn(x_eval):
@@ -190,20 +241,13 @@ class Relaxer(Dynamics):
             raise ValueError(f"n_steps must be non-negative, got {n_steps}")
         self.calculator.reset()
         batch = self.calculator.prepare(batch)
-        idx_m = batch[properties.idx_m]
-        fixed = batch.get(properties.fixed_atoms)
-        n_structures = batch[properties.n_atoms].shape[0]
         x = batch[self.key]
         state = self.integrator.init_state(self.force_field(batch, x), x)
         t = torch.zeros(x.shape[0], dtype=x.dtype, device=x.device)
         dt = torch.tensor(self.step_size, dtype=x.dtype, device=x.device)
 
         for i in range(n_steps + 1):
-            squared = self._forces(batch).pow(2).sum(-1)
-            max_sq = torch.zeros(
-                n_structures, dtype=squared.dtype, device=squared.device
-            ).scatter_reduce(0, idx_m, squared, "amax", include_self=True)
-            converged = max_sq < fmax**2
+            converged = self._converged(batch, fmax)
             if bool(converged.all()) or i == n_steps:
                 break
 
@@ -212,12 +256,7 @@ class Relaxer(Dynamics):
             x_new, state = self.integrator.step(
                 self.force_field(batch, x), x, t, dt, state
             )
-            # converged structures and fixed atoms stay where they are,
-            # whatever the step rule
-            moves = (~converged)[idx_m]
-            if fixed is not None:
-                moves = moves & ~fixed
-            x_new = torch.where(moves.unsqueeze(-1), x_new, x)
+            x_new = self._hold(batch, x, x_new, converged)
             batch = {**batch, self.key: x_new}
             batch = self.after_step(batch, i + 1, n_steps)
         return batch
