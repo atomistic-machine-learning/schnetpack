@@ -1,8 +1,8 @@
 """
 Guidance: terms a calculator adds to the field it returns.
 
-Where a :class:`~schnetpack.dynamics.constraints.state.StateConstraint` edits
-the iterate between a driver's steps, guidance changes the field itself —
+Where a :class:`~schnetpack.dynamics.hooks.Hook` edits the iterate between
+a driver's steps, guidance changes the field itself —
 restraint forces, classifier guidance — so it acts at every point the field is
 evaluated (Heun's predictor, an L-BFGS step alike), and the driver never sees
 it apart from the model's own field.
@@ -39,7 +39,7 @@ class Guidance(nn.Module):
     """
     Base class of the guidance terms.
 
-    Subclasses implement :meth:`forward`. Unlike state constraints their
+    Subclasses implement :meth:`forward`. Unlike hooks their
     order does not matter: every one is evaluated on the same batch, and the
     weighted terms of all of them add up.
     """

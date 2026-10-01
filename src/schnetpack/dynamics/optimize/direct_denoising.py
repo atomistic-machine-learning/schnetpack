@@ -39,7 +39,7 @@ class DirectDenoising(Optimizer):
         calculator,
         prior: Prior | None = None,
         fmax: float | None = None,
-        constraints: Sequence = (),
+        hooks: Sequence = (),
         key: str = properties.R,
     ):
         """
@@ -50,8 +50,7 @@ class DirectDenoising(Optimizer):
             prior: starting distribution :meth:`sample` draws from
             fmax: stop criterion on the largest pseudo-force, in Angstrom;
                 None runs all ``n_steps``
-            constraints: state constraints applied around every step, in
-                order
+            hooks: run around every step, in order
             key: batch key this driver moves
         """
         if not isinstance(calculator, Calculator):
@@ -64,7 +63,7 @@ class DirectDenoising(Optimizer):
         super().__init__(
             calculator,
             prior=prior,
-            constraints=constraints,
+            hooks=hooks,
             key=key,
             fmax=fmax,
         )

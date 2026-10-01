@@ -8,25 +8,25 @@ from schnetpack.dynamics import (
     Dynamics,
     EulerMaruyama,
     ForceCalculator,
+    FreezeScaffold,
     GenerativeCalculator,
-    Scaffold,
-    StateConstraint,
+    Hook,
 )
-from schnetpack.generative import VE, VP, ScoreParametrization, expand_t
+from schnetpack.generative import VE, VP, ScoreParametrization
 from tests.dynamics.test_sampling import batch_model
 
 
-class Recorder(StateConstraint):
+class Recorder(Hook):
     """Logs (hook, step, t) and leaves the state alone; t is None if time-free."""
 
     def __init__(self):
         self.log = []
 
-    def before_step(self, batch, step, n_steps, dynamics):
+    def before_step(self, batch, step, n_steps):
         self.log.append(("before", step, batch.get(properties.t)))
         return batch
 
-    def after_step(self, batch, step, n_steps, dynamics):
+    def after_step(self, batch, step, n_steps):
         self.log.append(("after", step, batch.get(properties.t)))
         return batch
 
@@ -48,7 +48,7 @@ def test_sampler_hooks_see_grid_times_around_each_step():
     recorder = Recorder()
     sampler = EulerMaruyama(
         GenerativeCalculator(batch_model(lambda x, t: -x), vp, ScoreParametrization()),
-        constraints=[recorder],
+        hooks=[recorder],
     )
     n_steps = 4
     sampler.run(
@@ -72,7 +72,7 @@ def test_sampler_run_starts_at_t_start():
         GenerativeCalculator(
             batch_model(lambda x, t: -x), VP(), ScoreParametrization()
         ),
-        constraints=[recorder],
+        hooks=[recorder],
     )
     sampler.run({properties.R: torch.randn(2, 1)}, 3, t_start=0.5)
     assert torch.allclose(recorder.log[0][2], torch.full((2,), 0.5))
@@ -80,7 +80,7 @@ def test_sampler_run_starts_at_t_start():
 
 def test_direct_denoising_hooks_run_around_each_step_without_a_time():
     recorder = Recorder()
-    sampler = direct_denoising(lambda x, t: torch.zeros_like(x), constraints=[recorder])
+    sampler = direct_denoising(lambda x, t: torch.zeros_like(x), hooks=[recorder])
     sampler.run(sampler.prior.sample_from_batch({properties.R: torch.empty(2, 1)}), 3)
     assert [(h, s) for h, s, _ in recorder.log] == [
         ("before", 0),
@@ -113,7 +113,7 @@ def test_scaffold_direct_denoising_model_sees_clean_scaffold():
         seen.append(x[mask].clone())
         return -x  # pseudo force pulling everything to the origin
 
-    sampler = direct_denoising(model, constraints=[Scaffold()])
+    sampler = direct_denoising(model, hooks=[FreezeScaffold()])
     out = sampler.run(
         sampler.prior.sample_from_batch(scaffold_batch(mask, reference)), 6
     )
@@ -125,34 +125,24 @@ def test_scaffold_direct_denoising_model_sees_clean_scaffold():
     assert not torch.allclose(x[~mask], torch.zeros(2, 2))  # still moved
 
 
-def test_scaffold_sampler_renoises_to_the_grid_time():
-    torch.manual_seed(0)
-    vp = VP()
-    n = 4000
-    mask = torch.zeros(n, dtype=torch.bool)
-    mask[: n - 2] = True
-    reference = torch.full((n, 1), 2.0)
-    standardized = []
+def test_scaffold_sampler_model_sees_clean_scaffold():
+    mask = torch.tensor([True, False, True, False])
+    reference = torch.tensor([[1.0, 2.0], [0.0, 0.0], [-3.0, 0.5], [0.0, 0.0]])
+    seen = []
 
     def model(x, t):
-        a = expand_t(vp.a(t), x)[mask]
-        b = expand_t(vp.b(t), x)[mask]
-        standardized.append((x[mask] - a * reference[mask]) / b)
+        seen.append(x[mask].clone())
         return -x
 
     sampler = EulerMaruyama(
-        GenerativeCalculator(batch_model(model), vp, ScoreParametrization()),
-        constraints=[Scaffold()],
+        GenerativeCalculator(batch_model(model), VP(), ScoreParametrization()),
+        hooks=[FreezeScaffold()],
     )
     out = sampler.run(
         sampler.prior.sample_from_batch(scaffold_batch(mask, reference)), 5
     )
 
-    # every model input carries the scaffold at the noise level of its t
-    for z in standardized:
-        assert z.mean().item() == pytest.approx(0.0, abs=0.1)
-        assert z.std().item() == pytest.approx(1.0, abs=0.1)
-    # and the output holds it exactly
+    assert all(torch.equal(s, reference[mask]) for s in seen)
     assert torch.equal(out[properties.R][mask], reference[mask])
 
 
@@ -181,7 +171,7 @@ def test_scaffold_non_generative_dynamics_overwrites():
 
     batch = scaffold_batch(mask, reference)
     batch[properties.R] = torch.ones(3, 2)
-    out = Descent(Calculator(model), constraints=[Scaffold()]).run(batch, 4)
+    out = Descent(Calculator(model), hooks=[FreezeScaffold()]).run(batch, 4)
     x = out[properties.R]
 
     assert all(torch.equal(s, reference[mask]) for s in seen)
@@ -195,7 +185,7 @@ def test_sample_without_prior_raises():
 
 
 def test_scaffold_validates_its_keys():
-    sampler = direct_denoising(lambda x, t: x, constraints=[Scaffold()])
+    sampler = direct_denoising(lambda x, t: x, hooks=[FreezeScaffold()])
     bad_mask = scaffold_batch(torch.tensor([True, False]), torch.zeros(3, 1))
     with pytest.raises(ValueError, match="one flag per row"):
         sampler.run(sampler.prior.sample_from_batch(bad_mask), 2)

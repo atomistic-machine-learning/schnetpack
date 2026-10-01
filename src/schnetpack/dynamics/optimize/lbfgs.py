@@ -58,8 +58,8 @@ class LBFGS(Optimizer):
     F = 2 (x0 - x), whose first step x + F/2 is then exactly GPFF's jump to
     the x0-estimate (when ``maxstep`` allows it).
 
-    The history lives in an :class:`LBFGSState`, one per run. A state
-    constraint that moves atoms between steps makes the history describe a
+    The history lives in an :class:`LBFGSState`, one per run. A hook that
+    moves atoms between steps makes the history describe a
     path the structures did not take. Pure overwrites of fixed atoms are
     harmless, since their forces are zeroed by the loop.
     """
@@ -74,7 +74,7 @@ class LBFGS(Optimizer):
         alpha: float | None = None,
         device: str | torch.device = "cpu",
         prior: Prior | None = None,
-        constraints: Sequence = (),
+        hooks: Sequence = (),
         key: str = properties.R,
     ):
         """
@@ -98,7 +98,7 @@ class LBFGS(Optimizer):
                 atoms — so the default is cpu wherever the model runs. Worth
                 re-measuring before overriding for much larger batches.
             prior: see :class:`~schnetpack.dynamics.optimize.Optimizer`
-            constraints: see :class:`~schnetpack.dynamics.optimize.Optimizer`
+            hooks: see :class:`~schnetpack.dynamics.optimize.Optimizer`
             key: see :class:`~schnetpack.dynamics.optimize.Optimizer`
         """
         if maxstep > 1.0:
@@ -106,9 +106,7 @@ class LBFGS(Optimizer):
                 "You are using a much too large value for the maximum step "
                 f"size: {maxstep:.1f} Angstrom"
             )
-        super().__init__(
-            calculator, prior=prior, constraints=constraints, key=key, fmax=fmax
-        )
+        super().__init__(calculator, prior=prior, hooks=hooks, key=key, fmax=fmax)
         if alpha is None:
             alpha = 70.0 if self.calculator.physical else 2.0
         self.maxstep = maxstep

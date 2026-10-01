@@ -347,18 +347,18 @@ def test_direct_denoising_relaxes_onto_a_restraint():
     assert torch.norm(positions[4] - positions[3]) == pytest.approx(0.9, abs=1e-4)
 
 
-def test_guidance_passed_as_a_constraint_is_redirected_to_the_calculator():
+def test_guidance_passed_as_a_hook_is_redirected_to_the_calculator():
     with pytest.raises(TypeError, match="calculator's guidance"):
-        LBFGS(ZeroModel(), constraints=[HarmonicRestraint()])
+        LBFGS(ZeroModel(), hooks=[HarmonicRestraint()])
     with pytest.raises(TypeError, match="calculator's guidance"):
         EulerMaruyama(
             GenerativeCalculator(IDLE, VP(), ScoreParametrization()),
-            constraints=[HarmonicRestraint()],
+            hooks=[HarmonicRestraint()],
         )
 
 
-def test_unknown_constraints_and_guidance_are_refused():
-    with pytest.raises(TypeError, match="not a StateConstraint"):
-        LBFGS(ZeroModel(), constraints=[object()])
+def test_unknown_hooks_and_guidance_are_refused():
+    with pytest.raises(TypeError, match="not a Hook"):
+        LBFGS(ZeroModel(), hooks=[object()])
     with pytest.raises(TypeError, match="not a Guidance"):
         ForceCalculator(ZeroModel(), guidance=[object()])

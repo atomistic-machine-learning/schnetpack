@@ -1,6 +1,6 @@
 """
 What every driver shares: the calculator, the starting distribution, the
-moved key, the constraint hooks and the batch contract.
+moved key, the hooks and the batch contract.
 
 The structure is the batch dict used by datasets, transforms and models. A
 driver moves one key and carries everything else along; inference goes
@@ -15,8 +15,8 @@ from typing import Any
 
 from schnetpack import properties
 from schnetpack.dynamics.calculator import Calculator
-from schnetpack.dynamics.constraints.state import StateConstraint
 from schnetpack.dynamics.guidance import Guidance
+from schnetpack.dynamics.hooks import Hook
 from schnetpack.generative.priors import Prior
 
 __all__ = ["Dynamics"]
@@ -33,7 +33,7 @@ class Dynamics(abc.ABC):
             batch = <one step>
             batch = self.after_step(batch, i + 1, n_steps)
 
-    so state constraints run in the same order everywhere, between full steps
+    so hooks run in the same order everywhere, between full steps
     only. Terms that change the field itself
     (:class:`~schnetpack.dynamics.guidance.Guidance`) belong to the
     calculator, which returns the guided field. :meth:`sample` draws
@@ -45,7 +45,7 @@ class Dynamics(abc.ABC):
         self,
         calculator: Calculator,
         prior: Prior | None = None,
-        constraints: Sequence = (),
+        hooks: Sequence = (),
         key: str = properties.R,
     ):
         """
@@ -55,33 +55,32 @@ class Dynamics(abc.ABC):
                 :class:`~schnetpack.dynamics.calculator.GenerativeCalculator`)
             prior: starting distribution :meth:`sample` draws from; without
                 one, only :meth:`run` on given structures is available
-            constraints: state constraints applied around every step, in
-                order
+            hooks: run around every step, in order
             key: batch key this driver moves
         """
         self.calculator = calculator
         self.prior = prior
-        self.constraints = list(constraints)
-        for constraint in self.constraints:
-            if isinstance(constraint, Guidance):
+        self.hooks = list(hooks)
+        for hook in self.hooks:
+            if isinstance(hook, Guidance):
                 raise TypeError(
-                    f"{type(constraint).__name__} is guidance, which changes "
+                    f"{type(hook).__name__} is guidance, which changes "
                     "the field: pass it to the calculator's guidance"
                 )
-            if not isinstance(constraint, StateConstraint):
-                raise TypeError(f"{type(constraint).__name__} is not a StateConstraint")
+            if not isinstance(hook, Hook):
+                raise TypeError(f"{type(hook).__name__} is not a Hook")
         self.key = key
 
     def before_step(self, batch: dict, step: int, n_steps: int) -> dict:
-        """Run the constraints' before-step hooks, in order."""
-        for constraint in self.constraints:
-            batch = constraint.before_step(batch, step, n_steps, self)
+        """Run the hooks' ``before_step``, in order."""
+        for hook in self.hooks:
+            batch = hook.before_step(batch, step, n_steps)
         return batch
 
     def after_step(self, batch: dict, step: int, n_steps: int) -> dict:
-        """Run the constraints' after-step hooks, in order."""
-        for constraint in self.constraints:
-            batch = constraint.after_step(batch, step, n_steps, self)
+        """Run the hooks' ``after_step``, in order."""
+        for hook in self.hooks:
+            batch = hook.after_step(batch, step, n_steps)
         return batch
 
     def sample(self, n_samples: int, n_steps: int) -> dict[str, Any]:

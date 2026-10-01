@@ -7,8 +7,8 @@ import torch
 
 from schnetpack import properties
 from schnetpack.dynamics import GenerativeCalculator
-from schnetpack.dynamics.constraints.state import Scaffold
 from schnetpack.dynamics.guidance import Guidance
+from schnetpack.dynamics.hooks import FreezeScaffold
 from schnetpack.dynamics.sample import sampler as sample
 from schnetpack.generative import (
     VP,
@@ -64,7 +64,7 @@ def test_sample_refuses_a_process_without_the_gaussian_kernel():
         sample.Ancestral(calculator)
 
 
-def test_scaffold_reads_the_process_and_time_key_from_the_sampler():
+def test_freeze_scaffold_holds_the_reference_on_a_sampler():
     process, parametrization = VP(), EpsParametrization()
     batch = start()
     mask = torch.tensor([True, False, True, False, False, False])
@@ -74,12 +74,12 @@ def test_scaffold_reads_the_process_and_time_key_from_the_sampler():
         properties.R_reference: torch.zeros_like(batch[properties.R]),
     }
     driver = sample.EulerMaruyama(
-        GenerativeCalculator(model, process, parametrization), constraints=[Scaffold()]
+        GenerativeCalculator(model, process, parametrization),
+        hooks=[FreezeScaffold()],
     )
     torch.manual_seed(0)
     x = driver.run(batch, 20)[properties.R]
-    # the scaffold rows end on the reference, noised to the final grid time
-    torch.testing.assert_close(x[mask], torch.zeros_like(x[mask]), atol=0.1, rtol=0)
+    assert torch.equal(x[mask], torch.zeros_like(x[mask]))
 
 
 @pytest.mark.parametrize(

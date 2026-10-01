@@ -17,7 +17,7 @@ from schnetpack.dynamics import (
     Calculator,
     ForceCalculator,
     GradientDescent,
-    StateConstraint,
+    Hook,
 )
 from schnetpack.interfaces.ase_interface import atoms_to_batch, batch_to_atoms
 
@@ -77,13 +77,13 @@ def make_descent(model=None, step_size=0.5, **kwargs) -> GradientDescent:
     return GradientDescent(model, step_size=step_size, **kwargs)
 
 
-class StepCounter(StateConstraint):
+class StepCounter(Hook):
     """Counts the steps a relaxation takes; ``run`` returns only the batch."""
 
     def __init__(self):
         self.steps = 0
 
-    def after_step(self, batch, step, n_steps, dynamics):
+    def after_step(self, batch, step, n_steps):
         self.steps = step
         return batch
 
@@ -91,11 +91,11 @@ class StepCounter(StateConstraint):
 def relax_counting(relaxer, batch, n_steps):
     """The relaxed batch and the number of steps it took."""
     counter = StepCounter()
-    relaxer.constraints.append(counter)
+    relaxer.hooks.append(counter)
     try:
         return relaxer.run(batch, n_steps), counter.steps
     finally:
-        relaxer.constraints.remove(counter)
+        relaxer.hooks.remove(counter)
 
 
 KCAL = 1 / 23.0605480121  # eV per kcal/mol
@@ -343,21 +343,21 @@ def test_sample_relaxes_prior_draws():
     assert relaxed[properties.R].norm(dim=-1).max() < 0.05
 
 
-def test_constraints_run_around_every_step():
-    class Recorder(StateConstraint):
+def test_hooks_run_around_every_step():
+    class Recorder(Hook):
         def __init__(self):
             self.calls = []
 
-        def before_step(self, batch, step, n_steps, dynamics):
+        def before_step(self, batch, step, n_steps):
             self.calls.append(("before", step))
             return batch
 
-        def after_step(self, batch, step, n_steps, dynamics):
+        def after_step(self, batch, step, n_steps):
             self.calls.append(("after", step))
             return batch
 
     recorder = Recorder()
-    make_relaxer(constraints=[recorder], fmax=1e-12).run(make_inputs([2]), 3)
+    make_relaxer(hooks=[recorder], fmax=1e-12).run(make_inputs([2]), 3)
 
     assert recorder.calls == [
         ("before", 0),

@@ -54,20 +54,17 @@ class Optimizer(Dynamics):
     zeroed after, and they are left out of the stop
     test.
 
-    Constraints run around every step as in any
-    :class:`~schnetpack.dynamics.base.Dynamics`. A run that converges early stops before ``n_steps``, so a constraint's
-    final ``after_step(step == n_steps)`` only fires when the step limit is
-    reached.
+    Hooks run around every step as in any
+    :class:`~schnetpack.dynamics.base.Dynamics`. A run that converges early
+    stops before ``n_steps``, so a hook's final
+    ``after_step(step == n_steps)`` only fires when the step limit is reached.
     """
-
-    time_free = True
-    """No noise level: constraints overwrite rather than re-noise."""
 
     def __init__(
         self,
         calculator,
         prior: Prior | None = None,
-        constraints: Sequence = (),
+        hooks: Sequence = (),
         key: str = properties.R,
         fmax: float | None = None,
     ):
@@ -77,8 +74,7 @@ class Optimizer(Dynamics):
                 :class:`~schnetpack.dynamics.calculator.ForceCalculator`,
                 or a bare callable batch -> outputs in eV and Angstrom
             prior: starting distribution :meth:`sample` draws from
-            constraints: state constraints applied around every step, in
-                order
+            hooks: run around every step, in order
             key: batch key this driver moves
             fmax: stop criterion on the largest force, in the force's unit;
                 None runs all ``n_steps``
@@ -92,7 +88,7 @@ class Optimizer(Dynamics):
                 f"{type(calculator).__name__}"
             )
         calculator.cache_last = True
-        super().__init__(calculator, prior=prior, constraints=constraints, key=key)
+        super().__init__(calculator, prior=prior, hooks=hooks, key=key)
         self.fmax = fmax
 
     def forces(self, batch: Mapping[str, Any]) -> torch.Tensor:
@@ -222,7 +218,7 @@ class GradientDescent(Optimizer):
         step_size: float,
         fmax: float | None = None,
         prior: Prior | None = None,
-        constraints: Sequence = (),
+        hooks: Sequence = (),
         key: str = properties.R,
     ):
         """
@@ -231,13 +227,13 @@ class GradientDescent(Optimizer):
             step_size: eps, the factor on the force
             fmax: see :class:`Optimizer`
             prior: see :class:`Optimizer`
-            constraints: see :class:`Optimizer`
+            hooks: see :class:`Optimizer`
             key: see :class:`Optimizer`
         """
         super().__init__(
             calculator,
             prior=prior,
-            constraints=constraints,
+            hooks=hooks,
             key=key,
             fmax=fmax,
         )

@@ -41,7 +41,7 @@ class Sampler(Dynamics):
     calculator's score.
 
     The starting distribution defaults to the process's sampling prior. One
-    step of the loop is one :meth:`step`; state constraints run between steps
+    step of the loop is one :meth:`step`; hooks run between steps
     with ``batch[time_key]`` the grid time of the iterate they see.
 
     The batch is in the model's units (see
@@ -49,16 +49,13 @@ class Sampler(Dynamics):
     belongs to the calculator too: the fields it returns are already guided.
     """
 
-    time_free = False
-    """The iterate sits at a known noise level, ``batch[time_key]``."""
-
     def __init__(
         self,
         calculator: GenerativeCalculator,
         grid: TimeGrid | None = None,
         prior: Prior | None = None,
         eta2: float = 1.0,
-        constraints: Sequence = (),
+        hooks: Sequence = (),
     ):
         """
         Args:
@@ -70,8 +67,7 @@ class Sampler(Dynamics):
                 marginal.
             eta2: stochasticity of the reverse process; 1 = reverse SDE,
                 0 = probability-flow ODE
-            constraints: state constraints applied around every step, in
-                order
+            hooks: run around every step, in order
         """
         if not isinstance(calculator, GenerativeCalculator):
             raise TypeError(
@@ -83,7 +79,7 @@ class Sampler(Dynamics):
         super().__init__(
             calculator,
             prior=prior if prior is not None else process.sampling_prior(),
-            constraints=constraints,
+            hooks=hooks,
             key=calculator.key,
         )
         self.grid = grid if grid is not None else UniformGrid()
