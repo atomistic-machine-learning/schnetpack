@@ -15,7 +15,7 @@ the field-binding refactor (2026-08-01). Detailed treatment:
 | `ReverseODE` | `differential_equations.py` | transport `drift = v`, `diffusion = 0` | everything else — chart-free by design |
 | `Parametrization` | `parametrizations.py` | head contract: training `target`, conversions `to_score` / `to_velocity` / `to_x0` | integrators, samplers |
 | `Integrator` (Euler, Heun) | `dynamics/integrators/` | one numerical step on `dynamics.drift` / `dynamics.diffusion` | what the dynamics is made of |
-| `Ancestral`, `AncestralDDPM` | `dynamics/integrators/` | exact-posterior / DDPM steps through the chart's closed forms (`requires_sde = True`) | parametrizations (they see only `score` and the chart) |
+| `Ancestral` | `dynamics/integrators/` | exact-posterior step through the chart's closed forms (`requires_sde = True`) | parametrizations (they see only `score` and the chart) |
 | `TimeGrid` | `dynamics/sampling/grids.py` | where the steps land | everything else |
 | `Prior` | `priors.py` | the x1 endpoint law; the start state | everything else |
 | `Dynamics` | `dynamics/base.py` | the calculator, the optional prior and its draw in `sample`, the moved `key`, the constraint hooks every driver's own `for` loop (abstract `denoise`) calls around each step | generative models, what one step is |
@@ -63,10 +63,9 @@ INTEGRATION (Sampler.denoise: a for loop, one integrator step per iteration)
          batch = after_step(batch, i + 1, n)             batch[t] = ts[i+1]
              │
              ├─ Euler/Heun:      dynamics.drift, dynamics.diffusion
-             ├─ Ancestral:       s = dynamics.score
-             │                   x0̂ = dynamics.sde.x0_from_score(x, s, t)
-             │                   mean, std = dynamics.sde.posterior(x, x0̂, t, t+dt)
-             └─ AncestralDDPM:   dynamics.g2, dynamics.score
+             └─ Ancestral:       s = dynamics.score
+                                 x0̂ = dynamics.sde.x0_from_score(x, s, t)
+                                 mean, std = dynamics.sde.posterior(x, x0̂, t, t+dt)
 ```
 
 The chart-free lane, entirely apart:

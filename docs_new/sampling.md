@@ -3,7 +3,7 @@
 *Modules: `schnetpack.generative.differential_equations`, `.integrators`,
 `.grids`, `.sampler` · classes `SDE`, `ReverseSDE`, `ReverseODE` (assembled
 by `reverse()`), `Integrator`, `EulerMaruyama`, `Heun`, `Ancestral`,
-`AncestralDDPM`, `TimeGrid`, `UniformGrid`, `Dynamics`, `Sampler`,
+`TimeGrid`, `UniformGrid`, `Dynamics`, `Sampler`,
 `DirectDenoising`, `Calculator`, `StateConstraint`, `AnnealedNoise`, `Scaffold`.*
 
 Generation runs the forward process backwards. The machinery factors the
@@ -114,30 +114,6 @@ without the Gaussian kernel is refused at assembly. Works with any head
 that can produce an $x_0$-estimate, and — being intrinsically stochastic —
 **ignores `eta2`**. Note this also means ancestral sampling is perfectly
 valid for a flow-matching model under its default Gaussian prior.
-
-### `AncestralDDPM` — the score-form DDPM step
-
-The exact discrete-time DDPM update written in terms of the raw score,
-
-$$
-x_{k-1} = \frac{x_k + \beta_k\, s}{\sqrt{1 - \beta_k}} + \sqrt{\beta_k}\,z,
-\qquad \beta_k = g^2(t)\,\lvert\mathrm{d}t\rvert,
-$$
-
-with the DDPM $\sigma_t^2 = \beta_t$ variance choice. A deliberate
-exception to the drift/diffusion rule: the step *is* a statement about the
-score, and rewriting it through the drift would only obscure it. Also
-intrinsically stochastic — ignores `eta2`.
-
-> **Warning:** the update's algebra assumes a **unit-scale VP path** — the
-> single number $\beta_k$ serves as both the variance increment and the
-> mean contraction, which requires $g^2(t) = -2 f(t)$ (an identity for any
-> unit-scale variance-preserving schedule, false elsewhere). On `VE`,
-> `FlowMatching`, or a `VP(scale≠1)` it runs without error and produces a
-> subtly wrong discretization. Pairing it correctly is currently the
-> caller's responsibility; `Ancestral` subsumes it (on unit VP the exact
-> posterior *is* the $\tilde\beta$ DDPM step) and is safe everywhere it
-> constructs.
 
 ### Choosing
 

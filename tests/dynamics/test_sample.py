@@ -52,13 +52,14 @@ def test_sample_refuses_a_calculator_without_a_process():
         sample.Heun(model)
 
 
-def test_ancestral_refuses_a_process_without_the_gaussian_kernel():
+def test_sample_refuses_a_process_without_the_gaussian_kernel():
     from tests.dynamics.test_sampling import ShapedPrior
 
     calculator = GenerativeCalculator(
         model, FlowMatching(prior=ShapedPrior()), VelocityParametrization()
     )
-    sample.Heun(calculator, eta2=0.0)  # chart-free: assembles
+    with pytest.raises(ValueError, match="chart"):
+        sample.Heun(calculator, eta2=0.0)
     with pytest.raises(ValueError, match="chart"):
         sample.Ancestral(calculator)
 
@@ -89,9 +90,8 @@ def test_scaffold_reads_the_process_and_time_key_from_the_sampler():
         (FlowMatching(), VelocityParametrization(), 0.0),
     ],
 )
-def test_drift_costs_exactly_one_model_evaluation(process, parametrization, eta2):
-    # The drift is one statement about one score (or one velocity) — a
-    # single model call, whatever the eta2 and the route.
+def test_euler_step_costs_exactly_one_model_evaluation(process, parametrization, eta2):
+    # The step reads one score — a single model call, whatever the eta2.
     calls = []
 
     def counting(batch):
@@ -102,20 +102,6 @@ def test_drift_costs_exactly_one_model_evaluation(process, parametrization, eta2
         GenerativeCalculator(counting, process, parametrization), eta2=eta2
     )
     x = start()[properties.R]
-    driver.drift({}, x, torch.full((x.shape[0],), 0.5, dtype=x.dtype))
+    t = torch.full((x.shape[0],), 0.5, dtype=x.dtype)
+    driver.step({}, x, t, torch.tensor(-0.1, dtype=x.dtype))
     assert len(calls) == 1
-
-
-def test_chart_free_route_steps_on_the_reverse_ode():
-    from schnetpack.generative import ReverseODE, ReverseSDE
-
-    calculator = GenerativeCalculator(model, FlowMatching(), VelocityParametrization())
-    assert isinstance(sample.Heun(calculator, eta2=0.0).reverse, ReverseODE)
-    assert isinstance(sample.Heun(calculator, eta2=1.0).reverse, ReverseSDE)
-    guided = GenerativeCalculator(
-        model, FlowMatching(), VelocityParametrization(), guidance=[Pull()]
-    )
-    # the calculator holds the chart to fold F into the velocity; the sampler
-    # stays on the chart-free route
-    assert guided.sde is not None
-    assert isinstance(sample.Heun(guided, eta2=0.0).reverse, ReverseODE)

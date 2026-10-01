@@ -201,6 +201,10 @@ def sampler_and_batch(parametrization, integrator, eta2, weight, model):
     return sampler, plain, {**batch, properties.t: t}, t
 
 
+def drift(sampler, batch, x, t):
+    return sampler.reverse.drift(x, t, sampler.calculator.score(batch, x, t))
+
+
 def test_score_guidance_shifts_score_and_drift_by_the_weighted_forces():
     model = batch_model(analytic_score(VP(), 0.5, 1.0))
     guided, unguided, batch, t = sampler_and_batch(
@@ -215,7 +219,7 @@ def test_score_guidance_shifts_score_and_drift_by_the_weighted_forces():
     assert torch.allclose(shift, 2.5 * forces)
     g2 = expand_t(VP().sde().g2(t), x)
     assert torch.allclose(
-        guided.drift(batch, x, t) - unguided.drift(batch, x, t), -g2 * 2.5 * forces
+        drift(guided, batch, x, t) - drift(unguided, batch, x, t), -g2 * 2.5 * forces
     )
 
 
@@ -228,7 +232,7 @@ def test_velocity_guidance_goes_through_g2():
     _, forces = terms(batch, x)
 
     g2 = expand_t(VP().sde().g2(t), x)
-    shift = sampler.drift(batch, x, t) - plain.drift(batch, x, t)
+    shift = drift(sampler, batch, x, t) - drift(plain, batch, x, t)
     assert torch.allclose(shift, -0.5 * g2 * 2.5 * forces)
 
 

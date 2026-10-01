@@ -4,7 +4,6 @@ import torch
 from schnetpack import properties
 from schnetpack.dynamics import (
     Ancestral,
-    AncestralDDPM,
     EulerMaruyama,
     GenerativeCalculator,
     Heun,
@@ -129,23 +128,12 @@ def test_sampler_validates_the_pair():
 
 def test_sampler_refuses_when_the_process_cannot_state_its_start():
     # A coupling that reshapes x1's marginal has no data-free start; the
-    # sampler must refuse rather than guess. (eta2 = 0 with a velocity head
-    # so the chart is never demanded — this test is about the start, and
-    # eta2 > 0 on this configuration is refused earlier, for the chart.)
+    # sampler must refuse rather than guess, before it reaches for the chart.
     process = VP(coupling=PCVarianceCoupling())
     with pytest.raises(ValueError, match="marginal"):
         EulerMaruyama(
             GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=0.0
         )
-
-    # An explicit prior always wins.
-    explicit = GaussianPrior()
-    sampler = EulerMaruyama(
-        GenerativeCalculator(IDLE, process, VelocityParametrization()),
-        prior=explicit,
-        eta2=0.0,
-    )
-    assert sampler.prior is explicit
 
 
 # --- the reverse process -------------------------------------------------- #
@@ -209,23 +197,6 @@ class ShapedPrior(Prior):
         return self.std * (2.0 * u - 1.0)
 
 
-def test_chart_free_velocity_sampling_runs_without_the_kernel():
-    # eta2 = 0 with a velocity head must assemble the chart-free ReverseODE:
-    # on a configuration with no chart, sampling still runs end to end. A
-    # wrong dispatch to ReverseSDE would raise at the chart acquisition.
-    process = FlowMatching(prior=ShapedPrior())
-    sampler = Heun(
-        GenerativeCalculator(
-            batch_model(lambda x, t, cond=None: torch.zeros_like(x)),
-            process,
-            VelocityParametrization(),
-        ),
-        eta2=0.0,
-    )
-    out = draw(sampler, (8, 2), 5)
-    assert out.shape == (8, 2)
-
-
 def test_sde_refuses_without_the_gaussian_kernel():
     with pytest.raises(ValueError, match="chart"):
         FlowMatching(prior=ShapedPrior()).sde()
@@ -254,9 +225,8 @@ def test_shape_prior_with_declared_scale_fails_at_assembly_not_silently():
         EulerMaruyama(
             GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=1.0
         )
-
-    # The chart-free assemblies stay open on the same configuration.
-    Heun(GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=0.0)
+    with pytest.raises(ValueError, match="chart"):
+        Heun(GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=0.0)
 
 
 # --- end-to-end recovery of the data distribution ------------------------- #
@@ -281,19 +251,6 @@ def test_reverse_process_recovers_data_stats(vp, integrator, n_steps, eta2):
     samples = draw(sampler, (4096, 1), n_steps)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
     assert samples.std().item() == pytest.approx(s0, abs=0.1)
-
-
-def test_ancestral_ddpm_recovers_data_stats(vp):
-    torch.manual_seed(0)
-    mu0, s0 = -0.5, 0.8
-    sampler = AncestralDDPM(
-        GenerativeCalculator(
-            batch_model(analytic_score(vp, mu0, s0)), vp, ScoreParametrization()
-        )
-    )
-    samples = draw(sampler, (4096, 1), 1000)
-    assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
-    assert samples.std().item() == pytest.approx(s0, abs=0.15)
 
 
 def test_scaled_ve_recovers_data_stats():
@@ -426,26 +383,6 @@ def test_fm_velocity_ode_recovers_data_stats():
     samples = draw(sampler, (4096, 1), 100)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
     assert samples.std().item() == pytest.approx(s0, abs=0.1)
-
-
-def test_fm_ode_never_converts_velocity_to_score(monkeypatch):
-    # The reason the reverse family is written around the velocity: at eta2=0
-    # the singular inverse must not be touched at all.
-    fm = FlowMatching()
-
-    def explode(*args, **kwargs):
-        raise AssertionError("to_score must not run on the ODE path")
-
-    monkeypatch.setattr(VelocityParametrization, "to_score", explode)
-
-    sampler = Heun(
-        GenerativeCalculator(
-            batch_model(analytic_velocity(fm, 0.0, 1.0)), fm, VelocityParametrization()
-        ),
-        eta2=0.0,
-    )
-    samples = draw(sampler, (16, 1), 10)
-    assert torch.isfinite(samples).all()
 
 
 def test_fm_stochastic_sampling_stays_finite():

@@ -4,8 +4,7 @@ process from t_max down to t_min.
 
 :class:`Sampler` owns the loop along the time grid and the reverse process's
 drift and diffusion; a subclass is one step rule on them —
-:class:`EulerMaruyama`, :class:`Heun`, :class:`Ancestral`,
-:class:`AncestralDDPM`. The model, the process and the parametrization come
+:class:`EulerMaruyama`, :class:`Heun`, :class:`Ancestral`. The model, the process and the parametrization come
 from one :class:`~schnetpack.dynamics.calculator.GenerativeCalculator`.
 Details: ``docs_new/sampling.md`` §4.
 """
@@ -19,11 +18,11 @@ import torch
 from schnetpack.dynamics.base import Dynamics
 from schnetpack.dynamics.calculator import GenerativeCalculator
 from schnetpack.dynamics.sample.grids import TimeGrid, UniformGrid
-from schnetpack.generative.differential_equations import ReverseODE, ReverseSDE
+from schnetpack.generative.differential_equations import ReverseSDE
 from schnetpack.generative.priors import Prior
 from schnetpack.generative.processes import Process, expand_t
 
-__all__ = ["Sampler", "EulerMaruyama", "Heun", "Ancestral", "AncestralDDPM"]
+__all__ = ["Sampler", "EulerMaruyama", "Heun", "Ancestral"]
 
 
 class Sampler(Dynamics):
@@ -36,14 +35,10 @@ class Sampler(Dynamics):
         dx = [f x - 1/2 (1 + eta2) g^2 score] dt + sqrt(eta2) g dw,
 
     eta2 = 1 the reverse-time SDE and eta2 = 0 the probability-flow ODE.
-    Its coefficients are :attr:`reverse`: a
+    Its coefficients are :attr:`reverse`, a
     :class:`~schnetpack.generative.differential_equations.ReverseSDE` on the
-    calculator's process, or at eta2 = 0 with a velocity head the chart-free
-    :class:`~schnetpack.generative.differential_equations.ReverseODE`, so
-    flow-matching sampling never crosses the (f, g) chart. :meth:`drift`
-    asks the calculator for the score or the velocity and hands it to
-    :attr:`reverse`; a subclass implements :meth:`step` on :meth:`drift` and
-    :meth:`diffusion`.
+    calculator's process; a subclass implements :meth:`step` on it and the
+    calculator's score.
 
     The starting distribution defaults to the process's sampling prior. One
     step of the loop is one :meth:`step`; state constraints run between steps
@@ -56,9 +51,6 @@ class Sampler(Dynamics):
 
     time_free = False
     """The iterate sits at a known noise level, ``batch[time_key]``."""
-
-    needs_score: bool = False
-    """Whether :meth:`step` reads the score itself, not only the drift."""
 
     def __init__(
         self,
@@ -96,20 +88,10 @@ class Sampler(Dynamics):
         )
         self.grid = grid if grid is not None else UniformGrid()
         self.eta2 = eta2
-        # Validity settles here, not mid-run: if anything in this assembly
-        # will cross the (f, g) chart — stochastic sampling, a non-velocity
-        # head's conversion, a step rule that reads the score — acquire the
-        # chart once now, so a configuration without it fails with the
-        # obstruction named instead of sampling garbage.
-        self.needs_chart = (
-            eta2 > 0.0
-            or calculator.parametrization.velocity_needs_chart
-            or self.needs_score
-        )
-        self.sde = process.sde() if self.needs_chart else None
-        self.reverse = (
-            ReverseSDE(self.sde, eta2=eta2) if self.needs_chart else ReverseODE()
-        )
+        # Acquire the (f, g) chart now, so a configuration without it fails
+        # with the obstruction named instead of sampling garbage mid-run.
+        self.sde = process.sde()
+        self.reverse = ReverseSDE(self.sde, eta2=eta2)
 
     @property
     def process(self) -> Process:
@@ -185,32 +167,14 @@ class Sampler(Dynamics):
         """
         raise NotImplementedError
 
-    # -- the reverse process ---------------------------------------------- #
-
-    def drift(
-        self, batch: Mapping[str, Any], x: torch.Tensor, t: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Drift of the reverse process at (x, t); one model evaluation.
-
-        f x - 1/2 (1 + eta2) g^2 score through the chart when this assembly
-        needs it, the chart-free velocity otherwise.
-        """
-        if self.needs_chart:
-            return self.reverse.drift(x, t, self.calculator.score(batch, x, t))
-        return self.reverse.drift(x, t, self.calculator.velocity(batch, x, t))
-
-    def diffusion(self, t: torch.Tensor) -> torch.Tensor:
-        """Diffusion sqrt(eta2) g(t) of the reverse process, shaped like t."""
-        return self.reverse.diffusion(t)
-
 
 class EulerMaruyama(Sampler):
     """First-order step: x <- x + drift dt + g sqrt(|dt|) z; plain Euler at eta2 = 0."""
 
     def step(self, batch, x, t, dt):
-        x_new = x + self.drift(batch, x, t) * dt
-        g = expand_t(self.diffusion(t), x)
+        drift = self.reverse.drift(x, t, self.calculator.score(batch, x, t))
+        x_new = x + drift * dt
+        g = expand_t(self.reverse.diffusion(t), x)
         return x_new + g * dt.abs().sqrt() * torch.randn_like(x)
 
 
@@ -221,11 +185,14 @@ class Heun(Sampler):
     """
 
     def step(self, batch, x, t, dt):
-        f1 = self.drift(batch, x, t)
+        f1 = self.reverse.drift(x, t, self.calculator.score(batch, x, t))
         x_pred = x + f1 * dt
-        f2 = self.drift(batch, x_pred, t + dt)
+        t_pred = t + dt
+        f2 = self.reverse.drift(
+            x_pred, t_pred, self.calculator.score(batch, x_pred, t_pred)
+        )
         x_new = x + 0.5 * (f1 + f2) * dt
-        g = expand_t(self.diffusion(t), x)
+        g = expand_t(self.reverse.diffusion(t), x)
         return x_new + g * dt.abs().sqrt() * torch.randn_like(x)
 
 
@@ -241,29 +208,8 @@ class Ancestral(Sampler):
     sampler on VE. Intrinsically stochastic, so it ignores ``eta2``.
     """
 
-    needs_score = True
-
     def step(self, batch, x, t, dt):
         sde = self.sde
         x0_hat = sde.x0_from_score(x, self.calculator.score(batch, x, t), t)
         mean, std = sde.posterior(x, x0_hat, t, t + dt)
         return mean + expand_t(std, x) * torch.randn_like(x)
-
-
-class AncestralDDPM(Sampler):
-    """
-    DDPM ancestral step in score form, with beta_k = g(t)^2 |dt|:
-
-        x_{k-1} = (x_k + beta_k * score) / sqrt(1 - beta_k) + sqrt(beta_k) z.
-
-    A discretization of the reverse VP process using the DDPM
-    ``sigma_t^2 = beta_t`` variance; needs a VP-type process. Intrinsically
-    stochastic, so it ignores ``eta2``.
-    """
-
-    needs_score = True
-
-    def step(self, batch, x, t, dt):
-        beta = expand_t(self.sde.g2(t), x) * dt.abs()
-        mean = (x + beta * self.calculator.score(batch, x, t)) / torch.sqrt(1.0 - beta)
-        return mean + beta.sqrt() * torch.randn_like(x)

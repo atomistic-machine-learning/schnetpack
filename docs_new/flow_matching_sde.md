@@ -452,7 +452,7 @@ obstruction named.
 
 And the two time-endpoint guards of §3, restated in code terms:
 $t_{\max} < 1$ protects consumers of $f, g^2$ (eta2 $> 0$,
-`AncestralDDPM`) from the finite-time-prior singularity, which pure-ODE use
+`Ancestral`) from the finite-time-prior singularity, which pure-ODE use
 may waive; $t_{\min} > 0$ protects everything that touches the score from
 the genuine collapse of $\sigma \to 0$, and no chart waives that.
 
