@@ -78,7 +78,7 @@ def make_descent(model=None, step_size=0.5, **kwargs) -> Langevin:
 
 
 class StepCounter(StateConstraint):
-    """Counts the steps a relaxation takes; ``denoise`` returns only the batch."""
+    """Counts the steps a relaxation takes; ``run`` returns only the batch."""
 
     def __init__(self):
         self.steps = 0
@@ -93,7 +93,7 @@ def relax_counting(relaxer, batch, n_steps):
     counter = StepCounter()
     relaxer.constraints.append(counter)
     try:
-        return relaxer.denoise(batch, n_steps), counter.steps
+        return relaxer.run(batch, n_steps), counter.steps
     finally:
         relaxer.constraints.remove(counter)
 
@@ -113,7 +113,7 @@ def harmonic_in_kcal_and_nm() -> ForceCalculator:
 def test_full_cell_survives_the_round_trip():
     """A triclinic cell must come back as it went in, off-diagonal entries included."""
     cell = np.array([[4.0, 0.0, 0.0], [1.5, 3.5, 0.0], [0.5, 1.0, 5.0]])
-    relaxed = make_relaxer().denoise(make_inputs([4, 4], cell=cell), 5)
+    relaxed = make_relaxer().run(make_inputs([4, 4], cell=cell), 5)
 
     for structure in batch_to_atoms(relaxed):
         np.testing.assert_allclose(structure.cell[:], cell, atol=1e-5)
@@ -121,10 +121,8 @@ def test_full_cell_survives_the_round_trip():
 
 
 def test_no_mask_matches_an_all_free_mask():
-    without = make_relaxer(fmax=1e-3).denoise(make_inputs([5, 5]), 20)
-    explicit = make_relaxer(fmax=1e-3).denoise(
-        make_inputs([5, 5], fixed=[False] * 10), 20
-    )
+    without = make_relaxer(fmax=1e-3).run(make_inputs([5, 5]), 20)
+    explicit = make_relaxer(fmax=1e-3).run(make_inputs([5, 5], fixed=[False] * 10), 20)
 
     torch.testing.assert_close(without[properties.R], explicit[properties.R])
 
@@ -133,7 +131,7 @@ def test_fixed_atoms_do_not_move():
     fixed = [True, False, False, False, False] * 2
     inputs = make_inputs([5, 5], fixed=fixed)
 
-    relaxed = make_relaxer(fmax=1e-3).denoise(inputs, 20)
+    relaxed = make_relaxer(fmax=1e-3).run(inputs, 20)
 
     moved = (relaxed[properties.R] - inputs[properties.R]).abs().max(dim=1).values
     assert torch.equal(moved[torch.tensor(fixed)], torch.zeros(2))
@@ -151,7 +149,7 @@ def test_fixed_atoms_do_not_move_whatever_the_step_rule(build):
     fixed = [True, False, False] * 2
     inputs = make_inputs([3, 3], fixed=fixed)
 
-    relaxed = build().denoise(inputs, 10)
+    relaxed = build().run(inputs, 10)
 
     mask = torch.tensor(fixed)
     assert torch.equal(relaxed[properties.R][mask], inputs[properties.R][mask])
@@ -170,7 +168,7 @@ def test_fixed_atoms_are_left_out_of_the_convergence_check():
 
 
 def test_ragged_batches_relax_under_lbfgs():
-    relaxed = make_relaxer(fmax=1e-4).denoise(make_inputs([3, 4, 1]), 100)
+    relaxed = make_relaxer(fmax=1e-4).run(make_inputs([3, 4, 1]), 100)
 
     torch.testing.assert_close(
         relaxed[properties.R], torch.zeros(8, 3), atol=1e-4, rtol=0
@@ -182,14 +180,14 @@ def test_a_ragged_batch_relaxes_each_structure_as_it_would_alone():
     sizes = [2, 5, 3]
     inputs = make_inputs(sizes)
 
-    relaxed = make_relaxer(fmax=1e-12).denoise(inputs, 4)
+    relaxed = make_relaxer(fmax=1e-12).run(inputs, 4)
 
     for positions, alone in zip(
         inputs[properties.R].split(sizes), relaxed[properties.R].split(sizes)
     ):
         single = make_inputs([len(positions)])
         single[properties.R] = positions
-        expected = make_relaxer(fmax=1e-12).denoise(single, 4)[properties.R]
+        expected = make_relaxer(fmax=1e-12).run(single, 4)[properties.R]
         torch.testing.assert_close(alone, expected)
 
 
@@ -200,7 +198,7 @@ def test_lbfgs_limits_the_step_per_structure_in_a_ragged_batch():
     inputs[properties.R][3:] *= 0.1  # its first step is far below
     relaxer = make_relaxer(maxstep=0.2, fmax=1e-12)
 
-    relaxed = relaxer.denoise(inputs, 1)
+    relaxed = relaxer.run(inputs, 1)
 
     step = relaxed[properties.R] - inputs[properties.R]
     assert step[:3].norm(dim=-1).max() == pytest.approx(0.2, rel=1e-5)
@@ -210,7 +208,7 @@ def test_lbfgs_limits_the_step_per_structure_in_a_ragged_batch():
 
 def test_ragged_batches_relax_under_steepest_descent():
     """The loop itself is per-structure throughout."""
-    relaxed = make_descent(fmax=1e-4).denoise(make_inputs([3, 4]), 100)
+    relaxed = make_descent(fmax=1e-4).run(make_inputs([3, 4]), 100)
     torch.testing.assert_close(
         relaxed[properties.R], torch.zeros(7, 3), atol=1e-4, rtol=0
     )
@@ -219,7 +217,7 @@ def test_ragged_batches_relax_under_steepest_descent():
 def test_steepest_descent_steps_by_step_size():
     """Gradient descent on the force field is x <- x + step_size * F."""
     inputs = make_inputs([2])
-    relaxed = make_descent(step_size=0.25, fmax=1e-12).denoise(inputs, 1)
+    relaxed = make_descent(step_size=0.25, fmax=1e-12).run(inputs, 1)
     torch.testing.assert_close(relaxed[properties.R], inputs[properties.R] * 0.75)
 
 
@@ -235,7 +233,7 @@ def test_converged_structures_do_not_move():
     # structure 0 starts at the minimum
     inputs[properties.R][:3] = 0.0
 
-    relaxed = make_relaxer(fmax=1e-3).denoise(inputs, 5)
+    relaxed = make_relaxer(fmax=1e-3).run(inputs, 5)
 
     assert torch.equal(relaxed[properties.R][:3], torch.zeros(3, 3))
 
@@ -246,7 +244,7 @@ def test_converged_structures_do_not_move_whatever_the_step_rule(build):
     # structure 0 starts below fmax, but off the minimum: its force is not zero
     inputs[properties.R][:3] = 1e-4
 
-    relaxed = build(fmax=1e-3).denoise(inputs, 5)
+    relaxed = build(fmax=1e-3).run(inputs, 5)
 
     assert torch.equal(relaxed[properties.R][:3], inputs[properties.R][:3])
     assert not torch.equal(relaxed[properties.R][3:], inputs[properties.R][3:])
@@ -262,7 +260,7 @@ def test_the_forces_are_zero_on_fixed_atoms():
 
 
 def test_relaxation_finds_the_analytic_minimum():
-    relaxed = make_relaxer(fmax=1e-4).denoise(make_inputs([6, 6]), 100)
+    relaxed = make_relaxer(fmax=1e-4).run(make_inputs([6, 6]), 100)
 
     np.testing.assert_allclose(
         relaxed[properties.R].numpy(), np.zeros((12, 3)), atol=1e-4
@@ -273,8 +271,8 @@ def test_a_model_in_other_units_relaxes_the_same_angstrom_batch():
     """A model in kcal/mol and nm takes the same steps on the same batch in Angstrom."""
     inputs = make_inputs([3])
 
-    ev = make_relaxer(fmax=1e-12).denoise(inputs, 3)
-    other = make_relaxer(harmonic_in_kcal_and_nm(), fmax=1e-12).denoise(inputs, 3)
+    ev = make_relaxer(fmax=1e-12).run(inputs, 3)
+    other = make_relaxer(harmonic_in_kcal_and_nm(), fmax=1e-12).run(inputs, 3)
 
     torch.testing.assert_close(other[properties.R], ev[properties.R])
 
@@ -283,7 +281,7 @@ def test_the_input_batch_is_left_alone_and_nothing_leaks_into_the_output():
     inputs = make_inputs([3, 3])
     before = {k: v.clone() for k, v in inputs.items()}
 
-    relaxed = make_relaxer().denoise(inputs, 10)
+    relaxed = make_relaxer().run(inputs, 10)
 
     for key, value in before.items():
         assert torch.equal(inputs[key], value)
@@ -330,9 +328,7 @@ def test_a_calculator_without_units_is_refused():
 
 def test_a_model_without_forces_is_reported():
     with pytest.raises(KeyError, match="forces"):
-        make_relaxer(lambda batch: {"energy": torch.zeros(1)}).denoise(
-            make_inputs([2]), 3
-        )
+        make_relaxer(lambda batch: {"energy": torch.zeros(1)}).run(make_inputs([2]), 3)
 
 
 def test_sample_relaxes_prior_draws():
@@ -361,7 +357,7 @@ def test_constraints_run_around_every_step():
             return batch
 
     recorder = Recorder()
-    make_relaxer(constraints=[recorder], fmax=1e-12).denoise(make_inputs([2]), 3)
+    make_relaxer(constraints=[recorder], fmax=1e-12).run(make_inputs([2]), 3)
 
     assert recorder.calls == [
         ("before", 0),
@@ -375,7 +371,7 @@ def test_constraints_run_around_every_step():
 
 def test_negative_step_limit_is_rejected():
     with pytest.raises(ValueError, match="n_steps"):
-        make_relaxer().denoise(make_inputs([2]), -1)
+        make_relaxer().run(make_inputs([2]), -1)
 
 
 def test_zero_step_limit_evaluates_the_start():
@@ -393,7 +389,7 @@ def test_langevin_samples_the_boltzmann_density():
     torch.manual_seed(0)
     kT = 0.1
     inputs = make_inputs([2000])
-    sampled = make_descent(step_size=0.01, kT=kT).denoise(inputs, 1000)
+    sampled = make_descent(step_size=0.01, kT=kT).run(inputs, 1000)
     variance = sampled[properties.R].double().var().item()
     assert variance == pytest.approx(kT, rel=0.05)
 
@@ -416,7 +412,7 @@ def test_lbfgs_on_a_pseudo_force_starts_with_the_gpff_jump():
     relaxer = make_relaxer(ForceCalculator(gpff, kind="pseudo"), maxstep=1.0)
     assert relaxer.H0 == pytest.approx(0.5)
 
-    relaxed = relaxer.denoise(inputs, 1)
+    relaxed = relaxer.run(inputs, 1)
     torch.testing.assert_close(relaxed[properties.R], torch.zeros(5, 3))
 
 

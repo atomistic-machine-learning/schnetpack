@@ -1,5 +1,5 @@
 """
-The Sample base: what every step rule inherits from it.
+The Sampler base: what every step rule inherits from it.
 """
 
 import pytest
@@ -9,7 +9,7 @@ from schnetpack import properties
 from schnetpack.dynamics import GenerativeCalculator
 from schnetpack.dynamics.constraints.state import Scaffold
 from schnetpack.dynamics.guidance import Guidance
-from schnetpack.dynamics.sampling import sampler as sample
+from schnetpack.dynamics.sample import sampler as sample
 from schnetpack.generative import (
     VP,
     EpsParametrization,
@@ -42,7 +42,7 @@ def test_sample_draws_from_the_processs_prior():
     driver = sample.Heun(GenerativeCalculator(model, VP(), EpsParametrization()))
     assert driver.prior is not None
     template = {properties.R: torch.empty(5, 3, dtype=torch.float64)}
-    out = driver.denoise(driver.prior.sample_from_batch(template), 4)
+    out = driver.run(driver.prior.sample_from_batch(template), 4)
     assert out[properties.R].shape == (5, 3)
     assert torch.all(out[properties.t] == driver.process.t_min)
 
@@ -76,7 +76,7 @@ def test_scaffold_reads_the_process_and_time_key_from_the_sampler():
         GenerativeCalculator(model, process, parametrization), constraints=[Scaffold()]
     )
     torch.manual_seed(0)
-    x = driver.denoise(batch, 20)[properties.R]
+    x = driver.run(batch, 20)[properties.R]
     # the scaffold rows end on the reference, noised to the final grid time
     torch.testing.assert_close(x[mask], torch.zeros_like(x[mask]), atol=0.1, rtol=0)
 

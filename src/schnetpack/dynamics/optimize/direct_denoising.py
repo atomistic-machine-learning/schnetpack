@@ -11,26 +11,26 @@ from collections.abc import Sequence
 
 from schnetpack import properties
 from schnetpack.dynamics.calculator import Calculator, ForceCalculator
-from schnetpack.dynamics.relax.noise import AnnealedNoise
-from schnetpack.dynamics.relax.optimizer import Optimize
+from schnetpack.dynamics.optimize.noise import AnnealedNoise
+from schnetpack.dynamics.optimize.optimizer import Optimizer
 from schnetpack.generative.priors import Prior
 
 __all__ = ["DirectDenoising"]
 
 
-class DirectDenoising(Optimize):
+class DirectDenoising(Optimizer):
     """
     GPFF's direct denoising: repeat "inject noise, jump to the x0-estimate".
 
     Each of the ``n_steps`` iterations does x <- x + lambda (1 - k/N) z (an
-    :class:`~schnetpack.dynamics.relax.AnnealedNoise` schedule, absent when
+    :class:`~schnetpack.dynamics.optimize.AnnealedNoise` schedule, absent when
     ``stochastic_lambda = 0``) and then x <- x + F/2, F the pseudo-force
     2 (x0 - x) at the noisy x. The calculator must be a pseudo-force
     :class:`~schnetpack.dynamics.calculator.ForceCalculator`: it shows the
     model the path time 0 and returns F in Angstrom, so lambda is in
     Angstrom like the batch. The model must therefore ignore its time input.
     Time-conditioned models belong in
-    :class:`~schnetpack.dynamics.sampling.Sample`.
+    :class:`~schnetpack.dynamics.sample.Sampler`.
 
     There is no process to derive a starting distribution from: :meth:`sample`
     needs an explicit ``prior``, e.g. the training process's

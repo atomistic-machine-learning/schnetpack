@@ -166,7 +166,7 @@ def test_the_sampler_starts_a_batch_on_the_subspace():
     sampler = EulerMaruyama(GenerativeCalculator(model, process, EpsParametrization()))
 
     template = {properties.idx_m: idx_m, properties.R: torch.empty(96, 3)}
-    sampler.denoise(sampler.prior.sample_from_batch(template), n_steps=2)
+    sampler.run(sampler.prior.sample_from_batch(template), n_steps=2)
     for m in range(8):
         assert seen["x_init"][idx_m == m].mean(0).norm().item() == pytest.approx(
             0.0, abs=1e-4
@@ -189,7 +189,7 @@ def test_given_positions_are_denoised_as_they_are():
 
     # the prior is not consulted, so the layout does not re-center them
     batch = {properties.R: x_init, properties.idx_m: torch.zeros(6, dtype=torch.long)}
-    sampler.denoise(batch, n_steps=1)
+    sampler.run(batch, n_steps=1)
     assert torch.allclose(seen["x_init"], x_init)
 
 

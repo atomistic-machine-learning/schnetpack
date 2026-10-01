@@ -52,7 +52,7 @@ def test_sampler_hooks_see_grid_times_around_each_step():
         constraints=[recorder],
     )
     n_steps = 4
-    sampler.denoise(
+    sampler.run(
         sampler.prior.sample_from_batch({properties.R: torch.empty(3, 1)}), n_steps
     )
 
@@ -67,7 +67,7 @@ def test_sampler_hooks_see_grid_times_around_each_step():
         assert torch.allclose(t, ts[i + 1].expand(3))
 
 
-def test_sampler_denoise_starts_at_t_start():
+def test_sampler_run_starts_at_t_start():
     recorder = Recorder()
     sampler = EulerMaruyama(
         GenerativeCalculator(
@@ -75,16 +75,14 @@ def test_sampler_denoise_starts_at_t_start():
         ),
         constraints=[recorder],
     )
-    sampler.denoise({properties.R: torch.randn(2, 1)}, 3, t_start=0.5)
+    sampler.run({properties.R: torch.randn(2, 1)}, 3, t_start=0.5)
     assert torch.allclose(recorder.log[0][2], torch.full((2,), 0.5))
 
 
 def test_direct_denoising_hooks_run_around_each_step_without_a_time():
     recorder = Recorder()
     sampler = direct_denoising(lambda x, t: torch.zeros_like(x), constraints=[recorder])
-    sampler.denoise(
-        sampler.prior.sample_from_batch({properties.R: torch.empty(2, 1)}), 3
-    )
+    sampler.run(sampler.prior.sample_from_batch({properties.R: torch.empty(2, 1)}), 3)
     assert [(h, s) for h, s, _ in recorder.log] == [
         ("before", 0),
         ("after", 1),
@@ -114,7 +112,7 @@ def test_fixed_atoms_receive_no_noise():
 
     fixed = torch.tensor([True, False, True, False])
     batch = {properties.R: torch.ones(4, 2), properties.fixed_atoms: fixed}
-    direct_denoising(model, stochastic_lambda=1.0).denoise(batch, 3)
+    direct_denoising(model, stochastic_lambda=1.0).run(batch, 3)
     for x in seen:
         assert torch.equal(x[fixed], torch.ones(2, 2))
     assert not torch.equal(seen[0][~fixed], torch.ones(2, 2))
@@ -141,7 +139,7 @@ def test_scaffold_direct_denoising_model_sees_clean_scaffold():
         return -x  # pseudo force pulling everything to the origin
 
     sampler = direct_denoising(model, stochastic_lambda=1.0, constraints=[Scaffold()])
-    out = sampler.denoise(
+    out = sampler.run(
         sampler.prior.sample_from_batch(scaffold_batch(mask, reference)), 6
     )
     x = out[properties.R]
@@ -171,7 +169,7 @@ def test_scaffold_sampler_renoises_to_the_grid_time():
         GenerativeCalculator(batch_model(model), vp, ScoreParametrization()),
         constraints=[Scaffold()],
     )
-    out = sampler.denoise(
+    out = sampler.run(
         sampler.prior.sample_from_batch(scaffold_batch(mask, reference)), 5
     )
 
@@ -186,7 +184,7 @@ def test_scaffold_sampler_renoises_to_the_grid_time():
 class Descent(Dynamics):
     """Minimal non-generative driver: x <- x + 0.5 * force."""
 
-    def denoise(self, batch, n_steps):
+    def run(self, batch, n_steps):
         batch = self.calculator.prepare(batch)
         for i in range(n_steps):
             batch = self.before_step(batch, i, n_steps)
@@ -208,7 +206,7 @@ def test_scaffold_non_generative_dynamics_overwrites():
 
     batch = scaffold_batch(mask, reference)
     batch[properties.R] = torch.ones(3, 2)
-    out = Descent(Calculator(model), constraints=[Scaffold()]).denoise(batch, 4)
+    out = Descent(Calculator(model), constraints=[Scaffold()]).run(batch, 4)
     x = out[properties.R]
 
     assert all(torch.equal(s, reference[mask]) for s in seen)
@@ -228,10 +226,10 @@ def test_scaffold_validates_its_keys():
     )
     bad_mask = scaffold_batch(torch.tensor([True, False]), torch.zeros(3, 1))
     with pytest.raises(ValueError, match="one flag per row"):
-        sampler.denoise(sampler.prior.sample_from_batch(bad_mask), 2)
+        sampler.run(sampler.prior.sample_from_batch(bad_mask), 2)
     bad_reference = scaffold_batch(
         torch.tensor([True, False, False]), torch.zeros(3, 1)
     )
     bad_reference[properties.R_reference] = torch.zeros(2, 1)
     with pytest.raises(ValueError, match="shaped like"):
-        sampler.denoise(sampler.prior.sample_from_batch(bad_reference), 2)
+        sampler.run(sampler.prior.sample_from_batch(bad_reference), 2)

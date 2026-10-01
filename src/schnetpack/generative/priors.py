@@ -280,7 +280,7 @@ class GaussianPrior(Prior):
 class DatasetPrior(Prior):
     """
     Stored structures returned unchanged, positions included: the start of a
-    relaxation (e.g. :class:`~schnetpack.dynamics.relax.DirectDenoising`).
+    relaxation (e.g. :class:`~schnetpack.dynamics.optimize.DirectDenoising`).
 
     Has no positions law, so it cannot serve as a training endpoint.
     """

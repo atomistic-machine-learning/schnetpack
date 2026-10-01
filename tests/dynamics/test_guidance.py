@@ -133,7 +133,7 @@ def restrained(*guidance, model=None, **kwargs):
 
 def test_relaxer_relaxes_onto_the_restraint():
     batch = restrained_batch([3, 3], [[(0, 2)], [(0, 1)]], [1.3, 0.9], [5.0, 5.0])
-    positions = LBFGS(restrained(HarmonicRestraint()), fmax=1e-4).denoise(batch, 200)[
+    positions = LBFGS(restrained(HarmonicRestraint()), fmax=1e-4).run(batch, 200)[
         properties.R
     ]
     assert torch.norm(positions[2] - positions[0]) == pytest.approx(1.3, abs=1e-4)
@@ -145,7 +145,7 @@ def test_relaxer_relaxes_onto_the_restraint():
 def test_relaxer_holds_fixed_atoms_against_the_restraint():
     batch = restrained_batch([3], [[(0, 2)]], [1.3], [5.0])
     batch[properties.fixed_atoms] = torch.tensor([True, False, False])
-    positions = LBFGS(restrained(HarmonicRestraint()), fmax=1e-4).denoise(batch, 200)[
+    positions = LBFGS(restrained(HarmonicRestraint()), fmax=1e-4).run(batch, 200)[
         properties.R
     ]
     assert torch.equal(positions[0], batch[properties.R][0])
@@ -156,7 +156,7 @@ def test_relaxer_evaluates_the_restraint_in_angstrom_whatever_the_models_units()
     # the model works in nm; the batch and the restraint's 1.3 Angstrom do not
     batch = restrained_batch([2], [[(0, 1)]], [1.3], [5.0])
     calculator = restrained(HarmonicRestraint(), position_unit="nm")
-    positions = LBFGS(calculator, fmax=1e-4).denoise(batch, 200)[properties.R]
+    positions = LBFGS(calculator, fmax=1e-4).run(batch, 200)[properties.R]
     assert torch.norm(positions[1] - positions[0]) == pytest.approx(1.3, abs=1e-4)
 
 
@@ -315,7 +315,7 @@ def test_sampler_runs_with_a_restraint():
             model, VP(), ScoreParametrization(), guidance=[HarmonicRestraint()]
         )
     )
-    out = sampler.denoise(batch, 10)
+    out = sampler.run(batch, 10)
     assert torch.isfinite(out[properties.R]).all()
 
 
@@ -338,7 +338,7 @@ def test_direct_denoising_relaxes_onto_a_restraint():
     calculator = ForceCalculator(
         IDLE, kind="pseudo", guidance=[HarmonicRestraint(weight=0.1)]
     )
-    positions = DirectDenoising(calculator, stochastic_lambda=0.0).denoise(batch, 200)[
+    positions = DirectDenoising(calculator, stochastic_lambda=0.0).run(batch, 200)[
         properties.R
     ]
     assert torch.norm(positions[2] - positions[0]) == pytest.approx(1.3, abs=1e-4)

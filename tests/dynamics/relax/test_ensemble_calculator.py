@@ -219,7 +219,7 @@ def test_batch_of_one_matches_the_ase_ensemble_calculator():
 def test_a_missing_property_is_reported():
     calculator = EnsembleCalculator(models=[NoForcesModel(), NoForcesModel()])
     with pytest.raises(KeyError, match="forces"):
-        LBFGS(calculator).denoise(make_inputs([3]), 3)
+        LBFGS(calculator).run(make_inputs([3]), 3)
 
 
 def test_the_ensemble_is_evaluated_once_per_step():
@@ -262,7 +262,7 @@ def test_models_are_loaded_from_a_directory(tmp_path):
 def test_an_ensemble_relaxes_a_batch():
     """End to end: the mean drives the relaxation, and the batch reaches the minimum."""
     calculator = make_calculator([1.0, 2.0])
-    relaxed = LBFGS(calculator, fmax=1e-4).denoise(make_inputs([4, 4]), 60)
+    relaxed = LBFGS(calculator, fmax=1e-4).run(make_inputs([4, 4]), 60)
 
     # every spring pulls towards the origin, and a relaxed batch sits there
     assert relaxed[properties.R].abs().max() < 1e-4

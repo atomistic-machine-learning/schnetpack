@@ -53,7 +53,7 @@ class Parametrization(abc.ABC):
     """Whether :meth:`to_velocity` crosses the (f, g) chart.
 
     False only for a head that predicts the velocity itself; the
-    :class:`~schnetpack.dynamics.sampling.Sample` then uses the
+    :class:`~schnetpack.dynamics.sample.Sampler` then uses the
     chart-free :class:`~schnetpack.generative.differential_equations.ReverseODE`
     at eta2 = 0.
     """
@@ -209,7 +209,7 @@ class PseudoForceParametrization(Parametrization):
     Any process.
 
     Recovering x0 = x_t + F/2 needs neither division nor sigma, which is what
-    :class:`~schnetpack.dynamics.relax.DirectDenoising` relies on. On a VE
+    :class:`~schnetpack.dynamics.optimize.DirectDenoising` relies on. On a VE
     path the target is -2 b x1, so |F| carries the noise level and the head
     needs no time input; the target's scale then runs with b, so pass
     ``weight=lambda t: (1 / process.b(t)**2).clamp(max=1.0)`` to the loss.

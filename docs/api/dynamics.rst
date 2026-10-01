@@ -30,7 +30,7 @@ A batch-wise relaxation with one inverse Hessian approximation per structure is
     :nosignatures:
     :template: classtemplate.rst
 
-    Optimize
+    Optimizer
     LBFGS
     LBFGSState
     Langevin
@@ -51,7 +51,7 @@ diffusion.
     :nosignatures:
     :template: classtemplate.rst
 
-    Sample
+    Sampler
     EulerMaruyama
     Heun
     Ancestral

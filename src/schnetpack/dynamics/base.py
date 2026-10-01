@@ -37,7 +37,7 @@ class Dynamics(abc.ABC):
     only. Terms that change the field itself
     (:class:`~schnetpack.dynamics.guidance.Guidance`) belong to the
     calculator, which returns the guided field. :meth:`sample` draws
-    starting structures from the prior and hands them to :meth:`denoise`,
+    starting structures from the prior and hands them to :meth:`run`,
     which also takes given structures.
     """
 
@@ -54,7 +54,7 @@ class Dynamics(abc.ABC):
                 (:class:`~schnetpack.dynamics.calculator.ForceCalculator` or
                 :class:`~schnetpack.dynamics.calculator.GenerativeCalculator`)
             prior: starting distribution :meth:`sample` draws from; without
-                one, only :meth:`denoise` on given structures is available
+                one, only :meth:`run` on given structures is available
             constraints: state constraints applied around every step, in
                 order
             key: batch key this driver moves
@@ -86,7 +86,7 @@ class Dynamics(abc.ABC):
 
     def sample(self, n_samples: int, n_steps: int) -> dict[str, Any]:
         """
-        Draw ``n_samples`` starting structures from the prior and denoise.
+        Draw ``n_samples`` starting structures from the prior and run on them.
 
         Args:
             n_samples: number of structures
@@ -98,17 +98,17 @@ class Dynamics(abc.ABC):
         if self.prior is None:
             raise ValueError(
                 f"{type(self).__name__} has no prior to sample from; pass one "
-                "at construction or call denoise on given structures"
+                "at construction or call run on given structures"
             )
-        return self.denoise(self.prior.sample(n_samples), n_steps)
+        return self.run(self.prior.sample(n_samples), n_steps)
 
     @abc.abstractmethod
-    def denoise(self, batch: Mapping[str, Any], n_steps: int) -> dict[str, Any]:
+    def run(self, batch: Mapping[str, Any], n_steps: int) -> dict[str, Any]:
         """
         Run the loop on the structures in ``batch``. Drivers may add keywords.
 
         Args:
-            batch: structures to denoise
+            batch: structures to move
             n_steps: number of steps
 
         Returns:

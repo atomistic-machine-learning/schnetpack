@@ -50,7 +50,7 @@ def test_neighbor_list_runs_on_every_model_call_and_never_reaches_the_loop():
     )
     sampler = Heun(calculator, eta2=0.0)
     batch = {properties.R: torch.randn(5, 3)}
-    out = sampler.denoise(batch, 4)
+    out = sampler.run(batch, 4)
     assert nbl.calls == 8
     assert nbl.resets == 1
     assert properties.idx_i not in out and properties.idx_i not in batch
@@ -80,7 +80,7 @@ def test_driver_runs_in_the_calculators_dtype():
     sampler = DirectDenoising(
         ForceCalculator(model, kind="pseudo", dtype=torch.float64)
     )
-    out = sampler.denoise({properties.R: torch.randn(3, 3)}, 2)
+    out = sampler.run({properties.R: torch.randn(3, 3)}, 2)
     assert seen == [torch.float64, torch.float64]
     assert out[properties.R].dtype == torch.float64
 

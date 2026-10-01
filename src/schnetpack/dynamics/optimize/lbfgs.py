@@ -6,7 +6,7 @@ from collections.abc import Sequence
 import torch
 
 from schnetpack import properties
-from schnetpack.dynamics.relax.optimizer import Optimize
+from schnetpack.dynamics.optimize.optimizer import Optimizer
 from schnetpack.generative.priors import Prior
 
 __all__ = ["LBFGS", "LBFGSState"]
@@ -40,7 +40,7 @@ class LBFGSState:
     iteration: int = 0
 
 
-class LBFGS(Optimize):
+class LBFGS(Optimizer):
     """
     Limited-memory BFGS, one inverse-Hessian approximation per structure.
 
@@ -51,7 +51,7 @@ class LBFGS(Optimize):
     own layout, the atoms of every structure end to end, and reduces per
     structure over ``idx_m``. The step length is set by ``maxstep`` and
     ``damping``; the loop, the stop test and the holding of converged
-    structures and fixed atoms are :class:`~schnetpack.dynamics.relax.Optimize`'s.
+    structures and fixed atoms are :class:`~schnetpack.dynamics.optimize.Optimizer`'s.
 
     The starting curvature ``alpha`` depends on the force's kind: 70
     eV/Angstrom^2 for a physical force, as ase's BFGS; 2 for a pseudo-force
@@ -80,7 +80,7 @@ class LBFGS(Optimize):
     ):
         """
         Args:
-            calculator: see :class:`~schnetpack.dynamics.relax.Optimize`
+            calculator: see :class:`~schnetpack.dynamics.optimize.Optimizer`
             fmax: stop criterion on the largest force, in the force's unit
                 (eV/Angstrom, or Angstrom for a pseudo-force); None runs all
                 ``n_steps``
@@ -98,9 +98,9 @@ class LBFGS(Optimize):
                 cuda than on cpu for batches up to 256 structures of 1000
                 atoms — so the default is cpu wherever the model runs. Worth
                 re-measuring before overriding for much larger batches.
-            prior: see :class:`~schnetpack.dynamics.relax.Optimize`
-            constraints: see :class:`~schnetpack.dynamics.relax.Optimize`
-            key: see :class:`~schnetpack.dynamics.relax.Optimize`
+            prior: see :class:`~schnetpack.dynamics.optimize.Optimizer`
+            constraints: see :class:`~schnetpack.dynamics.optimize.Optimizer`
+            key: see :class:`~schnetpack.dynamics.optimize.Optimizer`
         """
         if maxstep > 1.0:
             raise ValueError(

@@ -2,7 +2,7 @@
 The time-indexed family: drivers that solve a generative model's reverse
 process from t_max down to t_min.
 
-:class:`Sample` owns the loop along the time grid and the reverse process's
+:class:`Sampler` owns the loop along the time grid and the reverse process's
 drift and diffusion; a subclass is one step rule on them —
 :class:`EulerMaruyama`, :class:`Heun`, :class:`Ancestral`,
 :class:`AncestralDDPM`. The model, the process and the parametrization come
@@ -18,15 +18,15 @@ import torch
 
 from schnetpack.dynamics.base import Dynamics
 from schnetpack.dynamics.calculator import GenerativeCalculator
-from schnetpack.dynamics.sampling.grids import TimeGrid, UniformGrid
+from schnetpack.dynamics.sample.grids import TimeGrid, UniformGrid
 from schnetpack.generative.differential_equations import ReverseODE, ReverseSDE
 from schnetpack.generative.priors import Prior
 from schnetpack.generative.processes import Process, expand_t
 
-__all__ = ["Sample", "EulerMaruyama", "Heun", "Ancestral", "AncestralDDPM"]
+__all__ = ["Sampler", "EulerMaruyama", "Heun", "Ancestral", "AncestralDDPM"]
 
 
-class Sample(Dynamics):
+class Sampler(Dynamics):
     """
     Base class of the samplers: prior -> reverse process -> step rule along a
     time grid.
@@ -123,7 +123,7 @@ class Sample(Dynamics):
 
     # -- the loop --------------------------------------------------------- #
 
-    def denoise(
+    def run(
         self,
         batch: Mapping[str, Any],
         n_steps: int,
@@ -205,7 +205,7 @@ class Sample(Dynamics):
         return self.reverse.diffusion(t)
 
 
-class EulerMaruyama(Sample):
+class EulerMaruyama(Sampler):
     """First-order step: x <- x + drift dt + g sqrt(|dt|) z; plain Euler at eta2 = 0."""
 
     def step(self, batch, x, t, dt):
@@ -214,7 +214,7 @@ class EulerMaruyama(Sample):
         return x_new + g * dt.abs().sqrt() * torch.randn_like(x)
 
 
-class Heun(Sample):
+class Heun(Sampler):
     """
     Second-order Heun step on the drift, plus an Euler–Maruyama diffusion
     increment. At eta2 = 0 this is the EDM (Karras et al. 2022) sampler.
@@ -229,7 +229,7 @@ class Heun(Sample):
         return x_new + g * dt.abs().sqrt() * torch.randn_like(x)
 
 
-class Ancestral(Sample):
+class Ancestral(Sampler):
     """
     Exact-posterior ancestral step: estimate x0 from the score
     (:meth:`~schnetpack.generative.differential_equations.SDE.x0_from_score`),
@@ -250,7 +250,7 @@ class Ancestral(Sample):
         return mean + expand_t(std, x) * torch.randn_like(x)
 
 
-class AncestralDDPM(Sample):
+class AncestralDDPM(Sampler):
     """
     DDPM ancestral step in score form, with beta_k = g(t)^2 |dt|:
 

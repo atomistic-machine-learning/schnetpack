@@ -2,11 +2,11 @@
 The time-free family: drivers that step structures along a force until they
 are relaxed, or for a fixed number of steps.
 
-:class:`Optimize` owns the loop: the stop test, the holding of converged
+:class:`Optimizer` owns the loop: the stop test, the holding of converged
 structures and fixed atoms and the noise injection. A subclass is one step rule on the force —
 :class:`Langevin` (gradient descent at kT = 0),
-:class:`~schnetpack.dynamics.relax.LBFGS`,
-:class:`~schnetpack.dynamics.relax.DirectDenoising`. The force comes from one
+:class:`~schnetpack.dynamics.optimize.LBFGS`,
+:class:`~schnetpack.dynamics.optimize.DirectDenoising`. The force comes from one
 :class:`~schnetpack.dynamics.calculator.ForceCalculator`.
 """
 
@@ -20,13 +20,13 @@ import torch
 from schnetpack import properties
 from schnetpack.dynamics.base import Dynamics
 from schnetpack.dynamics.calculator import Calculator, ForceCalculator
-from schnetpack.dynamics.relax.noise import ConstantNoise, NoiseSchedule
+from schnetpack.dynamics.optimize.noise import ConstantNoise, NoiseSchedule
 from schnetpack.generative.priors import Prior
 
-__all__ = ["Optimize", "Langevin"]
+__all__ = ["Optimizer", "Langevin"]
 
 
-class Optimize(Dynamics):
+class Optimizer(Dynamics):
     """
     Base class of the time-free drivers: x <- step(x, F(x)), with optional
     noise before every step.
@@ -37,7 +37,7 @@ class Optimize(Dynamics):
     ``fmax`` the loop stops once the largest force on any free atom of every
     structure is below it, and structures that already meet the criterion
     are not moved further, whatever the step rule; without one it runs all
-    ``n_steps``. :meth:`denoise` returns the final batch.
+    ``n_steps``. :meth:`run` returns the final batch.
 
     The batch is in Angstrom. The force is what the
     :class:`~schnetpack.dynamics.calculator.ForceCalculator` returns: a
@@ -166,7 +166,7 @@ class Optimize(Dynamics):
             x_new = torch.where(moves.unsqueeze(-1), x_new, x)
         return {**batch, self.key: x_new}
 
-    def denoise(self, batch: Mapping[str, Any], n_steps: int) -> dict[str, Any]:
+    def run(self, batch: Mapping[str, Any], n_steps: int) -> dict[str, Any]:
         """
         Step the structures in ``batch`` until relaxed, or ``n_steps`` times.
 
@@ -236,7 +236,7 @@ class Optimize(Dynamics):
         raise NotImplementedError
 
 
-class Langevin(Optimize):
+class Langevin(Optimizer):
     """
     Overdamped Langevin dynamics, x <- x + eps F + sqrt(2 eps kT) z; gradient
     descent at kT = 0.
@@ -264,13 +264,13 @@ class Langevin(Optimize):
     ):
         """
         Args:
-            calculator: see :class:`Optimize`
+            calculator: see :class:`Optimizer`
             step_size: eps, the factor on the force
             kT: temperature; 0 is gradient descent
-            fmax: stop criterion, kT = 0 only (see :class:`Optimize`)
-            prior: see :class:`Optimize`
-            constraints: see :class:`Optimize`
-            key: see :class:`Optimize`
+            fmax: stop criterion, kT = 0 only (see :class:`Optimizer`)
+            prior: see :class:`Optimizer`
+            constraints: see :class:`Optimizer`
+            key: see :class:`Optimizer`
         """
         if kT < 0.0:
             raise ValueError(f"kT must be non-negative, got {kT}")

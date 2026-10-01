@@ -47,7 +47,7 @@ def test_direct_denoising_is_time_free_and_passes_the_batch():
         return {"prediction": torch.zeros_like(batch[properties.R])}
 
     sampler = gpff(model)
-    sampler.denoise({properties.R: torch.randn(4, 1), "condition": 7}, 3)
+    sampler.run({properties.R: torch.randn(4, 1), "condition": 7}, 3)
 
     assert len(seen) == 3
     assert all((b[properties.t] == 0.0).all() for b in seen)
@@ -86,8 +86,8 @@ def test_direct_denoising_lambda_zero_is_deterministic():
     sampler = gpff(model, stochastic_lambda=0.0)
 
     batch = {properties.R: torch.randn(8, 2)}
-    out1 = sampler.denoise(batch, 10)
-    out2 = sampler.denoise(batch, 10)
+    out1 = sampler.run(batch, 10)
+    out2 = sampler.run(batch, 10)
     assert torch.equal(out1[properties.R], out2[properties.R])
 
 
@@ -116,7 +116,7 @@ def test_direct_denoising_stops_on_fmax():
         properties.n_atoms: torch.tensor([3]),
         properties.idx_m: torch.zeros(3, dtype=torch.long),
     }
-    out = gpff(model, stochastic_lambda=0.0, fmax=1e-6).denoise(batch, 10)
+    out = gpff(model, stochastic_lambda=0.0, fmax=1e-6).run(batch, 10)
     assert torch.equal(out[properties.R], torch.zeros(3, 3))
     assert len(calls) == 2
 

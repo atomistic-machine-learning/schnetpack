@@ -10,7 +10,7 @@ from schnetpack.dynamics import (
     Heun,
     UniformGrid,
 )
-from schnetpack.dynamics.sampling import sampler as sample
+from schnetpack.dynamics.sample import sampler as sample
 from schnetpack.generative import (
     VE,
     VP,
@@ -41,7 +41,7 @@ IDLE = batch_model(lambda x, t: torch.zeros_like(x))
 def draw(dynamics, shape, n_steps):
     """Sample from the prior; return the positions."""
     template = {properties.R: torch.empty(shape)}
-    return dynamics.denoise(dynamics.prior.sample_from_batch(template), n_steps)[
+    return dynamics.run(dynamics.prior.sample_from_batch(template), n_steps)[
         properties.R
     ]
 
@@ -316,7 +316,7 @@ def test_scaled_ve_recovers_data_stats():
     assert samples.std().item() == pytest.approx(s0, abs=0.15)
 
 
-def test_denoise_partial(vp):
+def test_run_partial(vp):
     torch.manual_seed(0)
     sampler = EulerMaruyama(
         GenerativeCalculator(
@@ -324,7 +324,7 @@ def test_denoise_partial(vp):
         )
     )
     x_t = torch.randn(8, 5, 3)
-    out = sampler.denoise(
+    out = sampler.run(
         {properties.R: x_t},
         n_steps=10,
         t_start=0.5,
@@ -484,9 +484,9 @@ def test_batch_keys_reach_the_model_and_the_input_batch_is_untouched(vp):
         "condition": torch.ones(4),
         properties.Rij: torch.zeros(2, 1),
     }
-    out = EulerMaruyama(
-        GenerativeCalculator(model, vp, ScoreParametrization())
-    ).denoise(batch, 3)
+    out = EulerMaruyama(GenerativeCalculator(model, vp, ScoreParametrization())).run(
+        batch, 3
+    )
     assert len(seen) == 3
     assert all(torch.equal(b["condition"], torch.ones(4)) for b in seen)
     assert all(b[properties.t].shape == (4,) for b in seen)
@@ -508,7 +508,7 @@ def test_sampler_moves_any_declared_key(vp):
         GenerativeCalculator(model, vp, ScoreParametrization(), key="x")
     )
     start = {"x": sampler.prior.sample_positions({properties.R: torch.empty(8, 2)})}
-    out = sampler.denoise(start, 5)
+    out = sampler.run(start, 5)
     assert out["x"].shape == (8, 2)
 
 
@@ -517,7 +517,7 @@ def test_sampler_derives_position_shape_from_atom_types(vp):
         GenerativeCalculator(batch_model(lambda x, t: -x), vp, ScoreParametrization())
     )
     batch = {properties.Z: torch.tensor([1, 6, 8])}
-    out = sampler.denoise(sampler.prior.sample_from_batch(batch), 2)
+    out = sampler.run(sampler.prior.sample_from_batch(batch), 2)
     assert out[properties.R].shape == (3, 3)
 
 
@@ -555,7 +555,7 @@ def test_sampler_accepts_given_starting_states(vp):
         )
     )
     x_init = torch.full((8, 1), 3.0)
-    out = sampler.denoise({properties.R: x_init}, 5)
+    out = sampler.run({properties.R: x_init}, 5)
     assert out[properties.R].shape == x_init.shape
 
 

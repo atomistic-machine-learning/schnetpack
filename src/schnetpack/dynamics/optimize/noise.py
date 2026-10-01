@@ -1,6 +1,6 @@
 """
 Noise schedules of the time-free family: how much Gaussian noise an
-:class:`~schnetpack.dynamics.relax.Optimize` loop injects before each step.
+:class:`~schnetpack.dynamics.optimize.Optimizer` loop injects before each step.
 
 A schedule is a callable ``(step, n_steps) -> scale``; the loop adds
 ``scale * z``, z ~ N(0, I), to the moved atoms before the step's force is
