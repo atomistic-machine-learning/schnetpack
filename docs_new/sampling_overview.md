@@ -11,7 +11,7 @@ the field-binding refactor (2026-08-01). Detailed treatment:
 |---|---|---|---|
 | `Process` (VE, VP, FM, …) | `processes.py` | the interpolant chart: schedules a/b, `sigma`, `perturb`, `sampling_prior`, the kernel check | models, sampling, integrators |
 | `SDE` | `differential_equations.py` | the (f, g) chart: `f`, `g2`, `kernel`, `posterior`, `x0_from_score`; constructing it **is** the Gaussian-kernel check | models, parametrizations |
-| `ReverseSDE` | `differential_equations.py` | Anderson family on the chart: `drift = f x − ½(1+churn) g² s`, `diffusion`, `score`, `g2` | how the score was produced |
+| `ReverseSDE` | `differential_equations.py` | Anderson family on the chart: `drift = f x − ½(1+eta2) g² s`, `diffusion`, `score`, `g2` | how the score was produced |
 | `ReverseODE` | `differential_equations.py` | transport `drift = v`, `diffusion = 0` | everything else — chart-free by design |
 | `Parametrization` | `parametrizations.py` | head contract: training `target`, conversions `to_score` / `to_velocity` / `to_x0` | integrators, samplers |
 | `Integrator` (Euler, Heun) | `dynamics/integrators/` | one numerical step on `dynamics.drift` / `dynamics.diffusion` | what the dynamics is made of |
@@ -44,10 +44,10 @@ ASSEMBLY (Sampler.reverse, once per step — calculator and batch arrive here)
   parametrization ─┤  bound into ONE field callable (x, t) → raw
   output_key ──────┘
         │
-        ├─ needs_chart?  churn > 0  OR  velocity_needs_chart  OR  integrator.requires_sde
+        ├─ needs_chart?  eta2 > 0  OR  velocity_needs_chart  OR  integrator.requires_sde
         │
         ├─ yes:  score_fn(x,t) = to_score(process, model(...), x, t)
-        │        dynamics = ReverseSDE(process.sde(), score_fn, churn)
+        │        dynamics = ReverseSDE(process.sde(), score_fn, eta2)
         │
         └─ no:   velocity_fn(x,t) = to_velocity(process, model(...), x, t)
                  dynamics = ReverseODE(velocity_fn)          ← never touches the chart
@@ -85,15 +85,15 @@ The chart-free lane, entirely apart:
    pure transport over a `velocity_fn(x, t)`. The composition of head +
    conversion + batch happens once per step, in `Sampler.reverse` — or by
    hand, if you hold a ready field:
-   `ReverseSDE(process.sde(), score_fn, churn=1.0)`.
+   `ReverseSDE(process.sde(), score_fn, eta2=1.0)`.
 
 2. **The chart is acquired where it is needed, and acquisition is the
-   check.** One condition — `churn > 0 or velocity_needs_chart or
+   check.** One condition — `eta2 > 0 or velocity_needs_chart or
    integrator.requires_sde` — decides both the eager check in
    `Sampler.__init__` (fail at assembly, obstruction named) and the class
    picked in `reverse()`. Configurations without the kernel (shape prior,
    value-dependent coupling) keep the chart-free lanes: velocity head at
-   churn = 0, and direct denoising.
+   eta2 = 0, and direct denoising.
 
 3. **Integrators see only the dynamics.** The generic solvers consume
    `drift`/`diffusion` and work on either reverse class. The ancestral pair

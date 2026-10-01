@@ -14,7 +14,7 @@ sampling machinery, one for training:
 | [priors.md](priors.md) | **Axis 2 — the endpoint.** What $x_1$ is, who owns the noise scale, the `gaussian`/`std` declarations, per-molecule centering, structured priors. |
 | [couplings.md](couplings.md) | **Axis 3 — the pairing.** The joint law of $(x_0, x_1)$ as a re-pairing of batches, marginal preservation, the `groups` mechanism, OT-style couplings. |
 | [parametrizations.md](parametrizations.md) | **Axis 4 — the prediction.** Score, noise, denoiser, velocity and pseudo-force heads: training targets, conversions, validity, loss weighting. |
-| [sampling.md](sampling.md) | The reverse process and its churn knob, integrators (Euler–Maruyama, Heun, ancestral), time grids, `Sampler` and `DirectDenoising`. |
+| [sampling.md](sampling.md) | The reverse process and its eta2 knob, integrators (Euler–Maruyama, Heun, ancestral), time grids, `Sampler` and `DirectDenoising`. |
 | [training.md](training.md) | The two training routes: `MatchingLoss` (tensor level) and `Diffuse` (data-pipeline transform), time samplers and loss weights. |
 | [flow_matching_sde.md](flow_matching_sde.md) | Deep dive: how flow matching is represented in the $(f, g)$ SDE framework, and what changes under a non-Gaussian endpoint. |
 
@@ -38,17 +38,17 @@ four independent choices plus a sampling strategy:
 
 Plus, at generation time: how the reverse process is discretized
 (integrator), where the steps go (grid), and how much stochasticity is used
-(churn).
+(eta2).
 
 The literature's named methods are *points in this configuration space*, not
 special cases with bespoke logic:
 
 | named method | schedule | endpoint | pairing | prediction | typical sampling |
 | --- | --- | --- | --- | --- | --- |
-| DDPM / VP diffusion | `VP()` | unit Gaussian (default) | identity | `EpsParametrization` | ancestral, or SDE at churn 1 |
+| DDPM / VP diffusion | `VP()` | unit Gaussian (default) | identity | `EpsParametrization` | ancestral, or SDE at eta2 1 |
 | Score matching (NCSN/SMLD) | `VE(sigma_min, sigma_max)` | Gaussian, `std=sigma_max` (built internally) | identity | `ScoreParametrization` + $b^2$ weight | ancestral / SDE |
-| EDM-style denoiser | `VELinear(scale=sigma_max)` | Gaussian | identity | `X0Parametrization` | `Heun`, churn 0 |
-| Flow matching / rectified flow | `FlowMatching()` | unit Gaussian | identity (OT later) | `VelocityParametrization` | ODE, churn 0 |
+| EDM-style denoiser | `VELinear(scale=sigma_max)` | Gaussian | identity | `X0Parametrization` | `Heun`, eta2 0 |
+| Flow matching / rectified flow | `FlowMatching()` | unit Gaussian | identity (OT later) | `VelocityParametrization` | ODE, eta2 0 |
 | GPFF | `VE(b_min=..., prior=...)` | shape prior | identity / structured | `PseudoForceParametrization` + clamped $1/b^2$ weight | `DirectDenoising` |
 | TV/SNR ISSNR | `VPISSNR(eta, kappa)` | unit Gaussian | identity | any | any |
 
@@ -77,7 +77,7 @@ for x0 in loader:
     loss.backward(); ...
 
 batch_model = lambda b: {"prediction": model(b[properties.R], b[properties.t])}
-sampler = Sampler(batch_model, process, param, Heun(), churn=0.0)  # the SAME two objects
+sampler = Sampler(batch_model, process, param, Heun(), eta2=0.0)  # the SAME two objects
 out = sampler.denoise(
     sampler.prior.sample_from_batch({properties.R: torch.empty(64, 3)}), n_steps=50
 )

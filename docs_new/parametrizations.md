@@ -43,7 +43,7 @@ coefficients. Two identities are load-bearing:
 2. The Anderson reverse-time drift $f x - \tfrac12(1 + \eta^2) g^2 s$
    equals $v - \tfrac12 \eta^2 g^2 s$ — so the whole
    [reverse family](sampling.md) is one knob around the velocity, and at
-   churn 0 a velocity-predicting model is used *directly*, never touching
+   eta2 0 a velocity-predicting model is used *directly*, never touching
    the singular velocity→score inversion.
 
 Conversions route through the score: each head's `to_score` is its way *in*,
@@ -65,7 +65,7 @@ $\sigma = b\cdot\mathrm{std}$.
 | `ScoreParametrization` | $-x_1 / (b\,\mathrm{std}^2)$ | **yes** | target $\to\infty$ as $b \to 0$ | NCSN/SMLD on `VE`, with $b^2$ weight |
 | `EpsParametrization` | $x_1 / \mathrm{std}$ | **yes** | — (unit variance always) | DDPM on `VP` |
 | `X0Parametrization` | $x_0$ | no | Tweedie `to_score` needs $\sigma > 0$ | EDM-style denoisers |
-| `VelocityParametrization` | $\dot a\,x_0 + \dot b\,x_1$ | no | `to_score` divides by $g^2 \to 0$ at $t \to 0$ | flow matching, churn 0 |
+| `VelocityParametrization` | $\dot a\,x_0 + \dot b\,x_1$ | no | `to_score` divides by $g^2 \to 0$ at $t \to 0$ | flow matching, eta2 0 |
 | `PseudoForceParametrization` | $2\big((1-a)\,x_0 - b\,x_1\big)$ | no | — (recovery is division-free) | GPFF on `VE` |
 
 Notes per head:
@@ -91,7 +91,7 @@ for every process — which is why flow, OT and bridge matching all regress
 it. For `FlowMatching` the target is $x_1 - x_0$, constant along a pair —
 the straightness that makes few-step sampling work. Its `to_score` inverts
 identity 1 and degenerates as $g^2 \to 0$; reverse processes only ask for
-the score at churn $> 0$, and their grids stop at `t_min`.
+the score at eta2 $> 0$, and their grids stop at `t_min`.
 
 **Pseudo-force (GPFF convention).** $F = 2(x_0 - x_t)$, the negative
 gradient of the pseudo-energy $\lVert x_t - x_0\rVert^2$: the head answers
@@ -152,7 +152,7 @@ parametrization declares `velocity_needs_chart` — `True` except for the
 velocity head, whose conversion returns the output untouched. The reverse
 processes read it at assembly: a chart-bound head on a chartless
 configuration is refused when the `Sampler` is built, while a velocity head
-at churn 0 rides the chart-free `ReverseODE`
+at eta2 0 rides the chart-free `ReverseODE`
 ([sampling.md](sampling.md#1-the-reverse-process-one-family-one-knob)).
 
 
@@ -163,7 +163,7 @@ at churn 0 rides the chart-free `ReverseODE`
 - **`VE` at data scale** → `EpsParametrization`, or `ScoreParametrization`
   with the $b^2$ weight; `PseudoForceParametrization` with the clamped
   weight when you want GPFF's time-free sampling and noise-level metering.
-- **`FlowMatching`** → `VelocityParametrization`, churn 0.
+- **`FlowMatching`** → `VelocityParametrization`, eta2 0.
 - **Structured (non-Gaussian) priors, marginal-changing couplings** →
   velocity, x0 or pseudo-force only; the score/eps heads will refuse, and
   [flow_matching_sde.md §8](flow_matching_sde.md) explains what is and is

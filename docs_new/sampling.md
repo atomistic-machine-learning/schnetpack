@@ -15,7 +15,7 @@ composition that binds them (the sampler).
 ```
 prior.sample(n) ──> x at t_max ──[ integrator steps on the reverse process ]──> x at t_min
                                      │ grid: which times      │
-                                     │ churn: how stochastic  │
+                                     │ eta2: how stochastic  │
 ```
 
 
@@ -36,7 +36,7 @@ $$
 integrated from $t_{\max}$ down to $t_{\min}$ (integrators receive
 $\mathrm{d}t < 0$). Every member shares the forward marginals — the extra
 drift and the extra noise cancel in Fokker–Planck
-([flow_matching_sde.md §6](flow_matching_sde.md)) — so `churn` $= \chi$
+([flow_matching_sde.md §6](flow_matching_sde.md)) — so `eta2` $= \chi$
 moves the *path measure*, never the distribution being sampled. $\chi = 1$
 is the reverse-time SDE, $\chi = 0$ the PF-ODE, and the knob maps onto the
 usual $\eta$ by $\chi = \eta^2$.
@@ -50,11 +50,11 @@ model call.
 
 Reverse processes are never implemented per schedule; they split by
 **capability** instead, and the factory
-`reverse(process, parametrization, model, churn, cond, require_sde)` picks:
+`reverse(process, parametrization, model, eta2, cond, require_sde)` picks:
 
 - **`ReverseSDE(process.sde(), ...)`** — everything that crosses the
   [(f, g) chart](processes.md#3-derived-quantities-the-sde-chart):
-  churn $> 0$ outright, and churn $= 0$ for any non-velocity head (the
+  eta2 $> 0$ outright, and eta2 $= 0$ for any non-velocity head (the
   PF-ODE drift converts through $f$ and $g^2$). Taking the `SDE` in its
   constructor means it *cannot exist* for a configuration without the
   Gaussian kernel — the refusal happens at assembly and names the
@@ -109,10 +109,10 @@ Schedule logic lives entirely in
 process with a Gaussian kernel: on `VP` it is the textbook DDPM ancestral
 step with the exact ($\tilde\beta$) posterior variance; on `VE` it reduces
 to the familiar NCSN/GPFF ancestral update. Declares `requires_sde`, so
-the `Sampler` assembles a `ReverseSDE` even at churn 0 and a configuration
+the `Sampler` assembles a `ReverseSDE` even at eta2 0 and a configuration
 without the Gaussian kernel is refused at assembly. Works with any head
 that can produce an $x_0$-estimate, and — being intrinsically stochastic —
-**ignores `churn`**. Note this also means ancestral sampling is perfectly
+**ignores `eta2`**. Note this also means ancestral sampling is perfectly
 valid for a flow-matching model under its default Gaussian prior.
 
 ### `AncestralDDPM` — the score-form DDPM step
@@ -127,7 +127,7 @@ $$
 with the DDPM $\sigma_t^2 = \beta_t$ variance choice. A deliberate
 exception to the drift/diffusion rule: the step *is* a statement about the
 score, and rewriting it through the drift would only obscure it. Also
-intrinsically stochastic — ignores `churn`.
+intrinsically stochastic — ignores `eta2`.
 
 > **Warning:** the update's algebra assumes a **unit-scale VP path** — the
 > single number $\beta_k$ serves as both the variance increment and the
@@ -141,13 +141,13 @@ intrinsically stochastic — ignores `churn`.
 
 ### Choosing
 
-| situation | integrator, churn |
+| situation | integrator, eta2 |
 | --- | --- |
-| flow matching, few steps | `Heun`, churn 0 (or `EulerMaruyama` for very few, cheap steps) |
-| classic DDPM behavior | `Ancestral` (exact posterior), or `EulerMaruyama` at churn 1 |
+| flow matching, few steps | `Heun`, eta2 0 (or `EulerMaruyama` for very few, cheap steps) |
+| classic DDPM behavior | `Ancestral` (exact posterior), or `EulerMaruyama` at eta2 1 |
 | NCSN/GPFF-style annealed Langevin flavor | `Ancestral` on `VE` |
-| error-tolerant long runs, many steps | `EulerMaruyama`, churn $\in (0, 1]$ — stochasticity re-contracts accumulated error |
-| quality per model call is the metric | `Heun`, churn 0, on a warped grid |
+| error-tolerant long runs, many steps | `EulerMaruyama`, eta2 $\in (0, 1]$ — stochasticity re-contracts accumulated error |
+| quality per model call is the metric | `Heun`, eta2 0, on a warped grid |
 
 
 ## 3. Time grids
@@ -180,7 +180,7 @@ sampler = Sampler(
     integrator=Heun(),
     grid=None,           # default UniformGrid()
     prior=None,          # default: derived from the process (see below)
-    churn=0.0,
+    eta2=0.0,
     t_min=None, t_max=None,   # default: the process's own bounds
     output_key="eps_pred",    # model output holding the raw head
 )
@@ -214,7 +214,7 @@ Design points worth knowing:
   `GaussianPrior` reads the molecule layout (`idx_m`) out of it and
   per-molecule centering works exactly as during training.
 - **The assembly is validated at construction**: the pairing via
-  `parametrization.validate(process)`, and — whenever churn $> 0$, the head
+  `parametrization.validate(process)`, and — whenever eta2 $> 0$, the head
   is not a chart-free velocity, or the integrator declares `requires_sde` —
   the chart via `process.sde()`. An invalid assembly fails when built, with
   the obstruction named; nothing is left to fail mid-run or, worse, to
@@ -284,15 +284,15 @@ sampler = Sampler(calc, process, param, Ancestral())          # textbook DDPM
 samples = sampler.sample(64, n_steps=1000)
 
 # pivot 1: deterministic few-step sampling of the SAME model
-sampler = Sampler(calc, process, param, Heun(), churn=0.0)    # PF-ODE
+sampler = Sampler(calc, process, param, Heun(), eta2=0.0)    # PF-ODE
 samples = sampler.sample(64, n_steps=30)
 
 # pivot 2: interpolate stochasticity
-sampler = Sampler(calc, process, param, EulerMaruyama(), churn=0.3)
+sampler = Sampler(calc, process, param, EulerMaruyama(), eta2=0.3)
 ```
 
 The same trained checkpoint serves all three — the sampler family shares
-the marginals the model learned, and the churn knob, the integrator and the
+the marginals the model learned, and the eta2 knob, the integrator and the
 grid are pure inference-time choices. That is the practical payoff of
 [deriving the reverse process](README.md#5-the-interpolant-is-the-primitive-the-sde-is-derived)
 instead of implementing it per method.

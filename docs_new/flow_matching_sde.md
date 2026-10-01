@@ -163,7 +163,7 @@ is an approximation.
 Crucially the singularity lives in the *chart*, not the object: the
 interpolant is perfectly regular at $t = 1$ ($a = 0$, $b = 1$, $x_1$ exact).
 This is why `FlowMatching` defaults to $t_{\max} = 1 - 10^{-3}$ — the guard is
-for consumers of $f$ and $g^2$ — while pure-ODE use (churn $= 0$, where $g^2$
+for consumers of $f$ and $g^2$ — while pure-ODE use (eta2 $= 0$, where $g^2$
 is never evaluated; see §6) may pass `t_max=1.0` and start from the exact
 endpoint.
 
@@ -244,7 +244,7 @@ $$
 which is how a velocity-predicting model yields a score
 (`VelocityParametrization.to_score`). Note the division: $g^2 \to 0$ as
 $t \to 0$, so the inversion degenerates exactly where §3 said the score
-genuinely explodes. The design consequence is in §6: the churn $= 0$ path is
+genuinely explodes. The design consequence is in §6: the eta2 $= 0$ path is
 written so this inversion never runs.
 
 
@@ -253,7 +253,7 @@ written so this inversion never runs.
 Reversing the forward SDE ([Anderson 1982]) gives the reverse-time SDE with
 drift $f x - g^2 s$; the probability-flow ODE shares its marginals with drift
 $f x - \tfrac12 g^2 s = v$. `ReverseSDE` interpolates between them as a
-one-parameter family in the churn $\chi = \eta^2 \in [0, 1]$:
+one-parameter family in $\chi = \eta^2 \in [0, 1]$ (the `eta2` argument):
 
 $$
 \mathrm{d}x = \Big[\, v(x, t) - \tfrac{1}{2}\,\chi\, g^2(t)\, s(x, t) \,\Big]\mathrm{d}t
@@ -268,15 +268,15 @@ to the Fokker–Planck equation, which is exactly what the
 $\chi$-dependent noise term removes — the two cancel for every $\chi$, so the
 knob moves the path measure, never the marginals.
 
-**Churn $= 0$ is vanilla flow matching.** The drift is $v$ itself — for a
+**$\eta^2 = 0$ is vanilla flow matching.** The drift is $v$ itself — for a
 velocity-predicting model, the raw output, used directly. Neither $g^2$ nor
 the score inversion is ever evaluated: the assembly is a `ReverseODE`,
 which holds no chart at all — which is why the ODE path tolerates
 $t_{\max} = 1$ and priors with no scalar scale, and why flow matching
 "costs nothing it shouldn't" in this framework. (A score/eps/x0 head at
-churn $= 0$ still converts through the chart, and rides `ReverseSDE`.)
+eta2 $= 0$ still converts through the chart, and rides `ReverseSDE`.)
 
-**Churn $= 1$ is the stochastic flow-matching sampler.** Explicitly, with
+**$\eta^2 = 1$ is the stochastic flow-matching sampler.** Explicitly, with
 $\tfrac12 g^2 = \tfrac{t\,\sigma_1^2}{1-t}$:
 
 $$
@@ -389,7 +389,7 @@ statements about the Gaussian kernel, and with it fall: the score/noise
 training targets, the §5 identity $v = f x - \tfrac12 g^2 s$ and its
 inversion, Tweedie $x_0$-recovery (the *direct* $x_0$ and pseudo-force
 recoveries survive — they never formed a score), the closed-form posterior
-$p(x_s \mid x_t, x_0)$ and with it ancestral/DDIM steps, and churn $> 0$
+$p(x_s \mid x_t, x_0)$ and with it ancestral/DDIM steps, and eta2 $> 0$
 sampling through any of those conversions.
 
 That this is genuine and not a formula gap, one example shows: take $\rho_1$
@@ -432,7 +432,7 @@ $p_t$ it refers to now includes the $\gamma$-blur.)
 Two smaller boundaries, same spirit:
 
 - **Undeclared scale** (`prior.std` is `None`): $\sigma(t)$, and hence
-  $g^2$, cannot even be formed; the routes that never form it (churn $= 0$
+  $g^2$, cannot even be formed; the routes that never form it (eta2 $= 0$
   velocity sampling, direct $x_0$/pseudo-force recovery) remain.
 - **A coupling that re-pairs endpoints** changes $p(x_1 \mid x_0)$ even while
   preserving $x_1$'s marginal, so the one-sided kernel must be re-judged per
@@ -444,14 +444,14 @@ In the code the judgment is `Process.gaussian_kernel_obstruction` /
 diffusion under its default prior and a general stochastic interpolant
 under a structured one, with the closed forms gated by the configuration
 rather than the class. Under a non-Gaussian endpoint the supported surface
-is: velocity / $x_0$ / pseudo-force training, the churn $= 0$ velocity
+is: velocity / $x_0$ / pseudo-force training, the eta2 $= 0$ velocity
 `Sampler` (a `ReverseODE`), and `DirectDenoising`; the score/noise
 parametrizations refuse at `validate`, and the chart refuses to exist —
 every consumer that would need it fails at its own construction, with the
 obstruction named.
 
 And the two time-endpoint guards of §3, restated in code terms:
-$t_{\max} < 1$ protects consumers of $f, g^2$ (churn $> 0$,
+$t_{\max} < 1$ protects consumers of $f, g^2$ (eta2 $> 0$,
 `AncestralDDPM`) from the finite-time-prior singularity, which pure-ODE use
 may waive; $t_{\min} > 0$ protects everything that touches the score from
 the genuine collapse of $\sigma \to 0$, and no chart waives that.
@@ -474,7 +474,7 @@ the genuine collapse of $\sigma \to 0$, and no chart waives that.
 | $v = f x - \tfrac12 g^2 s$ | `Parametrization.to_velocity` |
 | $s = 2(f x - v)/g^2$ | `VelocityParametrization.to_score` |
 | Tweedie $\mathbb{E}[x_0 \mid x_t] = (x + \sigma^2 s)/a$ | `Parametrization.to_x0` / `X0Parametrization.to_score` |
-| churn family drift / diffusion, $\chi = \eta^2$ (the $\varepsilon = \tfrac12 \chi g^2$ instance of §8.2) | `ReverseSDE.drift` / `ReverseSDE.diffusion`, `churn`; chart-free velocity ODE: `ReverseODE` |
+| eta2 family drift / diffusion, $\chi = \eta^2$ (the $\varepsilon = \tfrac12 \chi g^2$ instance of §8.2) | `ReverseSDE.drift` / `ReverseSDE.diffusion`, `eta2`; chart-free velocity ODE: `ReverseODE` |
 | bridge noise $\gamma(t)\,\epsilon$; $s = -\mathbb{E}[\epsilon \mid x_t]/\gamma$ | `Process.gamma`; the `eps` drawn and returned by `Process.perturb` |
 
 

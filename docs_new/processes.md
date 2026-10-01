@@ -141,7 +141,7 @@ the Gaussian closed forms (§5). The chart exists exactly when the one-sided
 Gaussian kernel holds, and *constructing it is the check* — a shape prior,
 a value-dependent coupling or bridge noise cannot obtain one, and the error
 names the obstruction. Consumers that need the chart acquire it at their
-own construction; the routes that never do (velocity sampling at churn 0,
+own construction; the routes that never do (velocity sampling at eta2 0,
 direct $x_0$/pseudo-force recovery) never call `sde()`, which is visible in
 the code rather than asserted in prose.
 
@@ -149,7 +149,7 @@ Two things $g^2$ is *not*: it is not defined for priors that declare no
 scalar scale (the chart refuses to exist, with a diagnosis), and it is not
 an intrinsic property of the interpolant — it is the canonical choice that
 makes the forward drift linear. Samplers decide how much of it to use via
-their churn knob; flow matching at churn 0 never evaluates it.
+their eta2 knob; flow matching at eta2 0 never evaluates it.
 
 
 ## 4. The forward move: `perturb`
@@ -296,7 +296,7 @@ Prefer `VE` for the geometric ramp of classic score matching.
 
 $a = 1 - t$, $b = t$. The velocity target is constant along a pair,
 $x_1 - x_0$, which is what makes the learned field straight and few-step
-sampling work. Pair with `VelocityParametrization` and churn 0. The prior at
+sampling work. Pair with `VelocityParametrization` and eta2 0. The prior at
 $t = 1$ is exact ($a(1) = 0$), but $g^2 = 2t/(1-t)$ (unit scale) diverges
 there, so `t_max` defaults to $1 - 10^{-3}$; pure-ODE users may pass
 `t_max=1.0`. The full SDE story is in

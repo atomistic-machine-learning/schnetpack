@@ -44,9 +44,9 @@ process reads its noise level from this,
 $$\sigma(t) = b(t)\cdot\texttt{prior.std},$$
 
 so everything that needs $\sigma$ — score conversions, the SDE diffusion
-$g^2$, churn $> 0$ sampling — needs a declared `std`, and fails with a
+$g^2$, eta2 $> 0$ sampling — needs a declared `std`, and fails with a
 diagnosis (the `Process.std` property) rather than a `NoneType` error when
-it is absent. The routes that never form $\sigma$ — churn 0 velocity
+it is absent. The routes that never form $\sigma$ — eta2 0 velocity
 sampling, the pseudo-force/x0 recoveries — work without it.
 
 ### Scale ownership, concretely
@@ -186,7 +186,7 @@ Guidelines:
   a false `gaussian = True` makes score/eps training silently meaningless;
   a false `std` corrupts every $\sigma$-consuming conversion. When in doubt,
   leave the conservative defaults — the machinery will tell you exactly
-  which routes that closes (velocity/x0/pseudo-force training and churn 0
+  which routes that closes (velocity/x0/pseudo-force training and eta2 0
   sampling all remain open; see
   [flow_matching_sde.md §8](flow_matching_sde.md)).
 - A structured prior usually pairs with `Sampler.denoise` (starting below
