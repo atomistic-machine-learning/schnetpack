@@ -4,36 +4,41 @@ import torch
 from schnetpack import properties
 from schnetpack.dynamics import (
     AnnealedNoise,
+    Calculator,
     DirectDenoising,
     Dynamics,
     EulerMaruyama,
-    Sampler,
+    ForceCalculator,
+    GenerativeCalculator,
     Scaffold,
     StateConstraint,
 )
-from schnetpack.generative import (
-    VE,
-    VP,
-    PseudoForceParametrization,
-    ScoreParametrization,
-    expand_t,
-)
+from schnetpack.generative import VE, VP, ScoreParametrization, expand_t
 from tests.dynamics.test_sampling import batch_model
 
 
 class Recorder(StateConstraint):
-    """Logs (hook, step, t) and leaves the state alone."""
+    """Logs (hook, step, t) and leaves the state alone; t is None if time-free."""
 
     def __init__(self):
         self.log = []
 
     def before_step(self, batch, step, n_steps, dynamics):
-        self.log.append(("before", step, batch[dynamics.time_key]))
+        self.log.append(("before", step, batch.get(properties.t)))
         return batch
 
     def after_step(self, batch, step, n_steps, dynamics):
-        self.log.append(("after", step, batch[dynamics.time_key]))
+        self.log.append(("after", step, batch.get(properties.t)))
         return batch
+
+
+def direct_denoising(fn, **kwargs):
+    """Direct denoising on a pseudo-force fn(x, t), from VE(0.01, 3)'s prior."""
+    return DirectDenoising(
+        ForceCalculator(batch_model(fn), kind="pseudo"),
+        prior=VE(0.01, 3.0).sampling_prior(),
+        **kwargs,
+    )
 
 
 # --- the loop ------------------------------------------------------------- #
@@ -42,11 +47,8 @@ class Recorder(StateConstraint):
 def test_sampler_hooks_see_grid_times_around_each_step():
     vp = VP()
     recorder = Recorder()
-    sampler = Sampler(
-        batch_model(lambda x, t: -x),
-        vp,
-        ScoreParametrization(),
-        EulerMaruyama(),
+    sampler = EulerMaruyama(
+        GenerativeCalculator(batch_model(lambda x, t: -x), vp, ScoreParametrization()),
         constraints=[recorder],
     )
     n_steps = 4
@@ -67,23 +69,19 @@ def test_sampler_hooks_see_grid_times_around_each_step():
 
 def test_sampler_denoise_starts_at_t_start():
     recorder = Recorder()
-    sampler = Sampler(
-        batch_model(lambda x, t: -x),
-        VP(),
-        ScoreParametrization(),
-        EulerMaruyama(),
+    sampler = EulerMaruyama(
+        GenerativeCalculator(
+            batch_model(lambda x, t: -x), VP(), ScoreParametrization()
+        ),
         constraints=[recorder],
     )
     sampler.denoise({properties.R: torch.randn(2, 1)}, 3, t_start=0.5)
     assert torch.allclose(recorder.log[0][2], torch.full((2,), 0.5))
 
 
-def test_direct_denoising_hooks_see_zero_time():
+def test_direct_denoising_hooks_run_around_each_step_without_a_time():
     recorder = Recorder()
-    model = batch_model(lambda x, t: torch.zeros_like(x))
-    sampler = DirectDenoising(
-        model, VE(0.01, 3.0), PseudoForceParametrization(), constraints=[recorder]
-    )
+    sampler = direct_denoising(lambda x, t: torch.zeros_like(x), constraints=[recorder])
     sampler.denoise(
         sampler.prior.sample_from_batch({properties.R: torch.empty(2, 1)}), 3
     )
@@ -95,24 +93,31 @@ def test_direct_denoising_hooks_see_zero_time():
         ("before", 2),
         ("after", 3),
     ]
-    assert all((t == 0.0).all() for _, _, t in recorder.log)
+    assert all(t is None for _, _, t in recorder.log)
 
 
-def test_stochastic_lambda_is_an_annealed_noise_constraint():
-    # The built-in injection and the explicit constraint are the same draw.
-    process, param = VE(0.01, 3.0), PseudoForceParametrization()
-    model = batch_model(lambda x, t: -x)
-    batch = {properties.R: torch.randn(8, 2)}
+def test_stochastic_lambda_is_an_annealed_noise_schedule():
+    schedule = direct_denoising(lambda x, t: -x, stochastic_lambda=0.7).noise
+    assert isinstance(schedule, AnnealedNoise)
+    scales = [schedule(k, 5) for k in range(5)]
+    assert scales == pytest.approx([0.7 * (1 - (k + 1) / 5) for k in range(5)])
+    assert scales[-1] == 0.0
+    assert direct_denoising(lambda x, t: -x, stochastic_lambda=0.0).noise is None
 
-    torch.manual_seed(1)
-    builtin = DirectDenoising(model, process, param, stochastic_lambda=0.7).denoise(
-        batch, 5
-    )
-    torch.manual_seed(1)
-    explicit = DirectDenoising(
-        model, process, param, stochastic_lambda=0.0, constraints=[AnnealedNoise(0.7)]
-    ).denoise(batch, 5)
-    assert torch.equal(builtin[properties.R], explicit[properties.R])
+
+def test_fixed_atoms_receive_no_noise():
+    seen = []
+
+    def model(x, t):
+        seen.append(x.clone())
+        return torch.zeros_like(x)
+
+    fixed = torch.tensor([True, False, True, False])
+    batch = {properties.R: torch.ones(4, 2), properties.fixed_atoms: fixed}
+    direct_denoising(model, stochastic_lambda=1.0).denoise(batch, 3)
+    for x in seen:
+        assert torch.equal(x[fixed], torch.ones(2, 2))
+    assert not torch.equal(seen[0][~fixed], torch.ones(2, 2))
 
 
 # --- scaffold ------------------------------------------------------------- #
@@ -135,19 +140,13 @@ def test_scaffold_direct_denoising_model_sees_clean_scaffold():
         seen.append(x[mask].clone())
         return -x  # pseudo force pulling everything to the origin
 
-    sampler = DirectDenoising(
-        batch_model(model),
-        VE(0.01, 3.0),
-        PseudoForceParametrization(),
-        stochastic_lambda=1.0,
-        constraints=[Scaffold()],
-    )
+    sampler = direct_denoising(model, stochastic_lambda=1.0, constraints=[Scaffold()])
     out = sampler.denoise(
         sampler.prior.sample_from_batch(scaffold_batch(mask, reference)), 6
     )
     x = out[properties.R]
 
-    # scaffold overwrites after the noise injection, so every input holds it
+    # the scaffold atoms are fixed: held, never noised, and overwritten
     assert all(torch.equal(s, reference[mask]) for s in seen)
     assert torch.equal(x[mask], reference[mask])
     assert not torch.allclose(x[~mask], torch.zeros(2, 2))  # still moved
@@ -168,11 +167,8 @@ def test_scaffold_sampler_renoises_to_the_grid_time():
         standardized.append((x[mask] - a * reference[mask]) / b)
         return -x
 
-    sampler = Sampler(
-        batch_model(model),
-        vp,
-        ScoreParametrization(),
-        EulerMaruyama(),
+    sampler = EulerMaruyama(
+        GenerativeCalculator(batch_model(model), vp, ScoreParametrization()),
         constraints=[Scaffold()],
     )
     out = sampler.denoise(
@@ -212,7 +208,7 @@ def test_scaffold_non_generative_dynamics_overwrites():
 
     batch = scaffold_batch(mask, reference)
     batch[properties.R] = torch.ones(3, 2)
-    out = Descent(model, constraints=[Scaffold()]).denoise(batch, 4)
+    out = Descent(Calculator(model), constraints=[Scaffold()]).denoise(batch, 4)
     x = out[properties.R]
 
     assert all(torch.equal(s, reference[mask]) for s in seen)
@@ -222,13 +218,13 @@ def test_scaffold_non_generative_dynamics_overwrites():
 
 def test_sample_without_prior_raises():
     with pytest.raises(ValueError, match="no prior"):
-        Descent(lambda batch: {}).sample(2, 1)
+        Descent(Calculator(lambda batch: {})).sample(2, 1)
 
 
 def test_scaffold_validates_its_keys():
-    model = batch_model(lambda x, t: x)
-    sampler = DirectDenoising(
-        model, VE(0.01, 3.0), PseudoForceParametrization(), constraints=[Scaffold()]
+    # no noise: the loop would trip over the malformed mask before the scaffold
+    sampler = direct_denoising(
+        lambda x, t: x, stochastic_lambda=0.0, constraints=[Scaffold()]
     )
     bad_mask = scaffold_batch(torch.tensor([True, False]), torch.zeros(3, 1))
     with pytest.raises(ValueError, match="one flag per row"):

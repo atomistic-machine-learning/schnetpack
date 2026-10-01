@@ -5,17 +5,17 @@ Differential-equation representations of a process and their reversal.
   linear forward SDE dx = f x dt + g dw with the same marginals as the
   interpolant, plus its closed forms (perturbation kernel, exact posterior).
 - :class:`ReverseSDE`: the Anderson family reversing that chart, from the
-  reverse-time SDE (churn = 1) to the probability-flow ODE (churn = 0).
+  reverse-time SDE (eta2 = 1) to the probability-flow ODE (eta2 = 0).
 - :class:`ReverseODE`: transport along a learned velocity, dx = v dt, valid
   for any endpoint law and independent of the chart.
 
-Both reverse classes take a bound field ``(x, t) -> score | velocity`` and
-expose ``drift``/``diffusion`` for the integrators, which run backwards in
-time (dt < 0). Derivations: ``docs_new/processes.md`` §3 and
+Both reverse classes are coefficient math only: ``drift`` takes the field —
+the score for :class:`ReverseSDE`, the velocity for :class:`ReverseODE` — as
+an input, so evaluating the model stays with the driver. Both expose
+``drift``/``diffusion`` for steppers that run backwards in time (dt < 0).
+Derivations: ``docs_new/processes.md`` §3 and
 ``docs_new/flow_matching_sde.md``.
 """
-
-from collections.abc import Callable
 
 import torch
 
@@ -48,7 +48,7 @@ class SDE:
             raise ValueError(
                 f"No (f, g) SDE chart for this configuration: {obstruction}. "
                 "The chart-free routes remain available: velocity sampling "
-                "at churn = 0 and the direct x0/pseudo-force recovery "
+                "at eta2 = 0 and the direct x0/pseudo-force recovery "
                 "(DirectDenoising)."
             )
         self.process = process
@@ -118,55 +118,51 @@ class ReverseSDE:
     """
     Time reversal of a forward SDE as a one-parameter family,
 
-        dx = [f x - 1/2 (1 + churn) g^2 score(x, t)] dt + sqrt(churn) g dw,
+        dx = [f x - 1/2 (1 + eta2) g^2 score(x, t)] dt + sqrt(eta2) g dw,
 
-    churn in [0, 1]: 1 is the Anderson (1982) reverse-time SDE, 0 the
+    eta2 in [0, 1]: 1 is the Anderson (1982) reverse-time SDE, 0 the
     probability-flow ODE, and every member shares the forward marginals.
-    churn equals eta^2 of the usual eta knob. Takes the :class:`SDE` chart
-    and a bound score field; composing model, parametrization and
-    conditioning into that field is the caller's job
-    (:meth:`~schnetpack.dynamics.sampling.sampler.Sampler.reverse`).
+    eta2 is the square of the eta knob of DDIM. Takes the :class:`SDE` chart
+    only; the score is an input to :meth:`drift`, and composing model,
+    parametrization and conditioning into it is the caller's job
+    (:meth:`~schnetpack.dynamics.calculator.GenerativeCalculator.score`).
     """
 
-    def __init__(
-        self,
-        sde: SDE,
-        score_fn: Callable,
-        churn: float = 1.0,
-    ):
+    def __init__(self, sde: SDE, eta2: float = 1.0):
         """
         Args:
             sde: the (f, g) chart of the forward process being reversed
-            score_fn: bound score field, callable (x, t) -> score of the
-                marginal p_t
-            churn: stochasticity in [0, 1]; 1 = reverse SDE, 0 =
+            eta2: stochasticity in [0, 1]; 1 = reverse SDE, 0 =
                 probability-flow ODE
         """
         self.sde = sde
         self.process = sde.process
-        self.score_fn = score_fn
-        self.churn = churn
+        self.eta2 = eta2
 
     def g2(self, t: torch.Tensor) -> torch.Tensor:
         """Squared diffusion of the process being reversed."""
         return self.sde.g2(t)
 
-    def drift(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        """Anderson drift f x - 1/2 (1 + churn) g^2 score; one field evaluation."""
-        score = self.score_fn(x, t)
+    def drift(
+        self, x: torch.Tensor, t: torch.Tensor, score: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Anderson drift f x - 1/2 (1 + eta2) g^2 score.
+
+        Args:
+            x: current state
+            t: current time, per-sample or scalar
+            score: score of the marginal p_t at (x, t)
+        """
         f = expand_t(self.sde.f(t), x)
         g2 = expand_t(self.g2(t), x)
-        return f * x - 0.5 * (1.0 + self.churn) * g2 * score
+        return f * x - 0.5 * (1.0 + self.eta2) * g2 * score
 
     def diffusion(self, t: torch.Tensor) -> torch.Tensor:
-        """Diffusion sqrt(churn) g(t), shaped like t; zero on the ODE."""
-        if self.churn == 0.0:
+        """Diffusion sqrt(eta2) g(t), shaped like t; zero on the ODE."""
+        if self.eta2 == 0.0:
             return torch.zeros_like(t)
-        return torch.sqrt(self.churn * self.g2(t))
-
-    def score(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        """The bound score field, for integrators that step through the chart's closed forms."""
-        return self.score_fn(x, t)
+        return torch.sqrt(self.eta2 * self.g2(t))
 
 
 class ReverseODE:
@@ -174,20 +170,26 @@ class ReverseODE:
     Deterministic reverse transport along a learned velocity: dx = v dt.
 
     Valid for any endpoint law and never touches the :class:`SDE` chart, so
-    the bound velocity field must not cross it either (a velocity head, see
+    the velocity handed to :meth:`drift` must not cross it either (a velocity
+    head, see
     :attr:`~schnetpack.generative.parametrizations.Parametrization.velocity_needs_chart`).
     """
 
-    def __init__(self, velocity_fn: Callable):
-        """
-        Args:
-            velocity_fn: bound velocity field, callable (x, t) -> velocity
-        """
-        self.velocity_fn = velocity_fn
+    eta2 = 0.0
+    """Deterministic: the ODE is the eta2 = 0 member."""
 
-    def drift(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        """The learned velocity; one field evaluation."""
-        return self.velocity_fn(x, t)
+    def drift(
+        self, x: torch.Tensor, t: torch.Tensor, velocity: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        The drift is the velocity itself.
+
+        Args:
+            x: current state
+            t: current time, per-sample or scalar
+            velocity: probability-flow velocity at (x, t)
+        """
+        return velocity
 
     def diffusion(self, t: torch.Tensor) -> torch.Tensor:
         """Zero: this is the ODE."""

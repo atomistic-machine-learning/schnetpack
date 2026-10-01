@@ -1,4 +1,4 @@
-"""Compare the ``Relaxer`` (with ``LBFGS``) against a sequential loop over ase ``LBFGS``.
+"""Compare the batch-wise ``dynamics.LBFGS`` against a sequential loop over ase ``LBFGS``.
 
 The comparison is on the outcome of the relaxation only: both optimizers must land in
 the same minima, and a structure must relax the same way alone as inside a batch. The
@@ -21,8 +21,8 @@ from ase.io import read
 from ase.optimize import LBFGS
 
 import schnetpack as spk
-from schnetpack import properties
-from schnetpack.dynamics import ForceFieldCalculator, Relaxer
+from schnetpack import dynamics, properties
+from schnetpack.dynamics import ForceCalculator
 from schnetpack.interfaces.ase_interface import (
     SpkCalculator,
     atoms_to_batch,
@@ -97,13 +97,13 @@ def make_structures(n_structures: int = N_STRUCTURES) -> list[Atoms]:
     return structures
 
 
-def build_relaxer(**kwargs) -> Relaxer:
+def build_relaxer(fmax: float = FMAX, **kwargs) -> dynamics.LBFGS:
     """Everything needed to relax a batch, short of actually running it.
 
     Kept separate from the run so the benchmark can time only the relaxation.
-    Keyword arguments go to ``Relaxer``.
+    Keyword arguments go to ``dynamics.LBFGS``.
     """
-    calculator = ForceFieldCalculator(
+    calculator = ForceCalculator(
         MODEL_PATH,
         neighbor_list=_batch_neighbor_list(),
         device=DEVICE,
@@ -111,13 +111,13 @@ def build_relaxer(**kwargs) -> Relaxer:
         energy_unit=ENERGY_UNIT,
         position_unit=POSITION_UNIT,
     )
-    return Relaxer(calculator, **kwargs)
+    return dynamics.LBFGS(calculator, fmax=fmax, **kwargs)
 
 
 def relax_batchwise(atoms_list: list[Atoms]) -> Relaxed:
-    """Relax a batch of structures in parallel with the ``Relaxer``."""
+    """Relax a batch of structures in parallel with ``dynamics.LBFGS``."""
     inputs = atoms_to_batch(deepcopy(atoms_list), device=DEVICE)
-    relaxed, steps = relax_counting(build_relaxer(), inputs, MAX_STEPS, fmax=FMAX)
+    relaxed, steps = relax_counting(build_relaxer(), inputs, MAX_STEPS)
 
     # the relaxer hands back tensors; ase structures are a boundary conversion
     return Relaxed(atoms=batch_to_atoms(relaxed), steps=[steps])
@@ -239,7 +239,7 @@ def test_forces_are_computed_once_per_step(initial_structures):
 
     relaxer.calculator._evaluate = counting_evaluate
     inputs = atoms_to_batch(deepcopy(initial_structures[:3]), device=DEVICE)
-    _, steps = relax_counting(relaxer, inputs, MAX_STEPS, fmax=FMAX)
+    _, steps = relax_counting(relaxer, inputs, MAX_STEPS)
 
     # one for the initial forces, one per step taken
     assert len(calls) == steps + 1
@@ -308,7 +308,9 @@ def test_a_ragged_batch_relaxes_as_ase_relaxes_each_structure():
     sequential = relax_sequential(clusters, EMT())
 
     inputs = atoms_to_batch(deepcopy(clusters), dtype=torch.float64)
-    relaxed, steps = relax_counting(Relaxer(EMTModel()), inputs, MAX_STEPS, fmax=FMAX)
+    relaxed, steps = relax_counting(
+        dynamics.LBFGS(EMTModel(), fmax=FMAX), inputs, MAX_STEPS
+    )
     batchwise = batch_to_atoms(relaxed)
 
     assert max(sequential.steps) < MAX_STEPS

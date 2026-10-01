@@ -3,8 +3,8 @@ schnetpack.dynamics
 .. currentmodule:: dynamics
 
 Loops that move structures with a model: sampling a generative model down its reverse
-process and relaxing structures on a force field. Every driver shares the calculator,
-the integrators and the constraints below. The vocabulary is collected in
+process and relaxing structures on a force field. Every driver shares the calculators and
+the constraints below; the step rules are subclasses of the two families' bases. The vocabulary is collected in
 ``CONTEXT.md``, the design of relaxation in ``docs/adr/0001-relaxation-in-dynamics.md``.
 
 Drivers
@@ -16,10 +16,46 @@ Drivers
     :template: classtemplate.rst
 
     Dynamics
-    Sampler
-    Relaxer
-    ForceField
+
+
+Time-free drivers
+-----------------
+
+The loop that steps structures along a force until they are relaxed, and its step rules.
+A batch-wise relaxation with one inverse Hessian approximation per structure is
+:class:`LBFGS`; steepest descent is :class:`Langevin` at ``kT = 0``.
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+    :template: classtemplate.rst
+
+    Optimize
+    LBFGS
+    LBFGSState
+    Langevin
     DirectDenoising
+    NoiseSchedule
+    ConstantNoise
+    AnnealedNoise
+
+
+Samplers
+--------
+
+The time-indexed loop and its step rules on the reverse process's drift and
+diffusion.
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+    :template: classtemplate.rst
+
+    Sample
+    EulerMaruyama
+    Heun
+    Ancestral
+    AncestralDDPM
 
 
 Calculators
@@ -31,30 +67,10 @@ Calculators
     :template: classtemplate.rst
 
     Calculator
-    ForceFieldCalculator
+    ForceCalculator
+    GenerativeCalculator
     EnsembleCalculator
     NNEnsemble
-
-
-Integrators
------------
-
-Reverse-process solvers and relaxation step rules. A batch-wise relaxation with one
-inverse Hessian approximation per structure is :class:`LBFGS`, run by a
-:class:`Relaxer`.
-
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
-    :template: classtemplate.rst
-
-    Integrator
-    EulerMaruyama
-    Heun
-    Ancestral
-    AncestralDDPM
-    LBFGS
-    LBFGSState
 
 
 Constraints
@@ -66,9 +82,20 @@ Constraints
     :template: classtemplate.rst
 
     StateConstraint
-    AnnealedNoise
     Scaffold
-    FieldConstraint
+
+
+Guidance
+--------
+
+Terms a calculator adds to the field it returns: to the forces, or to the score.
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+    :template: classtemplate.rst
+
+    Guidance
     HarmonicRestraint
 
 

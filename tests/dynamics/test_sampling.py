@@ -5,12 +5,12 @@ from schnetpack import properties
 from schnetpack.dynamics import (
     Ancestral,
     AncestralDDPM,
-    DirectDenoising,
     EulerMaruyama,
+    GenerativeCalculator,
     Heun,
-    Sampler,
     UniformGrid,
 )
+from schnetpack.dynamics.sampling import sampler as sample
 from schnetpack.generative import (
     VE,
     VP,
@@ -20,7 +20,6 @@ from schnetpack.generative import (
     MatchingLoss,
     PCVarianceCoupling,
     Prior,
-    PseudoForceParametrization,
     ReverseSDE,
     ScoreParametrization,
     StatisticsStructures,
@@ -102,7 +101,7 @@ def test_gaussian_prior_has_the_declared_std():
 
 def test_sampler_defaults_to_the_processs_sampling_prior(vp):
     # b(t_max) = 1, so the default unit Gaussian diffusion starts at N(0, I).
-    sampler = Sampler(IDLE, vp, ScoreParametrization(), EulerMaruyama())
+    sampler = EulerMaruyama(GenerativeCalculator(IDLE, vp, ScoreParametrization()))
     assert isinstance(sampler.prior, GaussianPrior)
     assert sampler.prior.std == pytest.approx(1.0)
 
@@ -111,7 +110,7 @@ def test_sampler_derives_the_scale_from_the_process():
     # The train/sample tie: the process carries the prior its x1 endpoint was
     # drawn from, and the sampler starts from exactly that — the same object.
     process = VE(0.01, 50.0)
-    sampler = Sampler(IDLE, process, ScoreParametrization(), EulerMaruyama())
+    sampler = EulerMaruyama(GenerativeCalculator(IDLE, process, ScoreParametrization()))
     assert isinstance(sampler.prior, GaussianPrior)
     assert sampler.prior.std == pytest.approx(50.0)
     assert sampler.prior is process.prior
@@ -122,33 +121,29 @@ def test_sampler_validates_the_pair():
     # (process, parametrization) pair meets, so it must refuse at construction.
     reshaped = VP(coupling=PCVarianceCoupling())
     with pytest.raises(TypeError, match="Gaussian kernel"):
-        Sampler(
-            IDLE,
-            reshaped,
-            ScoreParametrization(),
-            EulerMaruyama(),
+        EulerMaruyama(
+            GenerativeCalculator(IDLE, reshaped, ScoreParametrization()),
             prior=GaussianPrior(),
         )
 
 
 def test_sampler_refuses_when_the_process_cannot_state_its_start():
     # A coupling that reshapes x1's marginal has no data-free start; the
-    # sampler must refuse rather than guess. (churn = 0 with a velocity head
+    # sampler must refuse rather than guess. (eta2 = 0 with a velocity head
     # so the chart is never demanded — this test is about the start, and
-    # churn > 0 on this configuration is refused earlier, for the chart.)
+    # eta2 > 0 on this configuration is refused earlier, for the chart.)
     process = VP(coupling=PCVarianceCoupling())
     with pytest.raises(ValueError, match="marginal"):
-        Sampler(IDLE, process, VelocityParametrization(), EulerMaruyama(), churn=0.0)
+        EulerMaruyama(
+            GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=0.0
+        )
 
     # An explicit prior always wins.
     explicit = GaussianPrior()
-    sampler = Sampler(
-        IDLE,
-        process,
-        VelocityParametrization(),
-        EulerMaruyama(),
+    sampler = EulerMaruyama(
+        GenerativeCalculator(IDLE, process, VelocityParametrization()),
         prior=explicit,
-        churn=0.0,
+        eta2=0.0,
     )
     assert sampler.prior is explicit
 
@@ -156,63 +151,46 @@ def test_sampler_refuses_when_the_process_cannot_state_its_start():
 # --- the reverse process -------------------------------------------------- #
 
 
-def test_reverse_drift_at_churn_one_matches_the_anderson_form(vp):
-    # Anderson: f x - 1/2 (1 + eta^2) g^2 s, at eta = 1 (churn = eta^2 = 1).
-    score_fn = analytic_score(vp, 0.5, 1.0)
-    rev = ReverseSDE(vp.sde(), score_fn, churn=1.0)
+def test_reverse_drift_at_eta2_one_matches_the_anderson_form(vp):
+    # Anderson: f x - 1/2 (1 + eta^2) g^2 s, at eta = 1 (eta2 = eta^2 = 1).
+    rev = ReverseSDE(vp.sde(), eta2=1.0)
 
     x = torch.randn(16, 2, dtype=torch.float64)
     t = torch.full((16,), 0.5, dtype=torch.float64)
 
-    s = score_fn(x, t)
+    s = analytic_score(vp, 0.5, 1.0)(x, t)
     sde = vp.sde()
     expected = expand_t(sde.f(t), x) * x - expand_t(sde.g2(t), x) * s
-    assert torch.allclose(rev.drift(x, t), expected, rtol=1e-8)
+    assert torch.allclose(rev.drift(x, t, s), expected, rtol=1e-8)
 
 
-def test_reverse_drift_at_churn_zero_is_the_probability_flow(vp):
-    score_fn = analytic_score(vp, 0.5, 1.0)
-    rev = ReverseSDE(vp.sde(), score_fn, churn=0.0)
+def test_reverse_drift_at_eta2_zero_is_the_probability_flow(vp):
+    rev = ReverseSDE(vp.sde(), eta2=0.0)
 
     x = torch.randn(16, 2, dtype=torch.float64)
     t = torch.full((16,), 0.5, dtype=torch.float64)
 
-    s = score_fn(x, t)
+    s = analytic_score(vp, 0.5, 1.0)(x, t)
     sde = vp.sde()
     expected = expand_t(sde.f(t), x) * x - 0.5 * expand_t(sde.g2(t), x) * s
-    assert torch.allclose(rev.drift(x, t), expected, rtol=1e-8)
+    assert torch.allclose(rev.drift(x, t, s), expected, rtol=1e-8)
 
 
-@pytest.mark.parametrize("churn", [0.0, 0.25, 1.0])
-def test_reverse_diffusion(vp, churn):
+@pytest.mark.parametrize("eta2", [0.0, 0.25, 1.0])
+def test_reverse_diffusion(vp, eta2):
     t = torch.tensor([0.3, 0.7], dtype=torch.float64)
-    rev = ReverseSDE(vp.sde(), analytic_score(vp, 0.0, 1.0), churn=churn)
-    assert torch.allclose(rev.diffusion(t), torch.sqrt(churn * vp.sde().g2(t)))
-
-
-@pytest.mark.parametrize("churn", [0.0, 1.0])
-def test_drift_costs_exactly_one_model_evaluation(vp, churn):
-    # The drift is one statement about one score — a single evaluation of
-    # the bound field, whatever the churn.
-    calls = []
-
-    def counting_score(x, t):
-        calls.append(1)
-        return analytic_score(vp, 0.0, 1.0)(x, t)
-
-    rev = ReverseSDE(vp.sde(), counting_score, churn=churn)
-    rev.drift(torch.randn(4, 2), torch.full((4,), 0.5))
-    assert len(calls) == 1
+    rev = ReverseSDE(vp.sde(), eta2=eta2)
+    assert torch.allclose(rev.diffusion(t), torch.sqrt(eta2 * vp.sde().g2(t)))
 
 
 def test_reverse_process_exposes_the_reversed_process(vp):
-    rev = ReverseSDE(vp.sde(), analytic_score(vp, 0.0, 1.0), churn=0.5)
+    rev = ReverseSDE(vp.sde(), eta2=0.5)
     assert rev.process is vp
-    assert rev.churn == 0.5
+    assert rev.eta2 == 0.5
 
 
-def test_churn_zero_has_no_diffusion(vp):
-    rev = ReverseSDE(vp.sde(), analytic_score(vp, 0.0, 1.0), churn=0.0)
+def test_eta2_zero_has_no_diffusion(vp):
+    rev = ReverseSDE(vp.sde(), eta2=0.0)
     assert torch.equal(rev.diffusion(torch.rand(4)), torch.zeros(4))
 
 
@@ -232,16 +210,17 @@ class ShapedPrior(Prior):
 
 
 def test_chart_free_velocity_sampling_runs_without_the_kernel():
-    # churn = 0 with a velocity head must assemble the chart-free ReverseODE:
+    # eta2 = 0 with a velocity head must assemble the chart-free ReverseODE:
     # on a configuration with no chart, sampling still runs end to end. A
     # wrong dispatch to ReverseSDE would raise at the chart acquisition.
     process = FlowMatching(prior=ShapedPrior())
-    sampler = Sampler(
-        batch_model(lambda x, t, cond=None: torch.zeros_like(x)),
-        process,
-        VelocityParametrization(),
-        Heun(),
-        churn=0.0,
+    sampler = Heun(
+        GenerativeCalculator(
+            batch_model(lambda x, t, cond=None: torch.zeros_like(x)),
+            process,
+            VelocityParametrization(),
+        ),
+        eta2=0.0,
     )
     out = draw(sampler, (8, 2), 5)
     assert out.shape == (8, 2)
@@ -256,44 +235,48 @@ def test_shape_prior_with_declared_scale_fails_at_assembly_not_silently():
     # Defect the split fixes: an x0/velocity head on a non-Gaussian prior with
     # a declared std validates fine (its target is a plain conditional
     # expectation) but its sampling conversions are Gaussian-kernel
-    # statements. The Sampler must refuse at construction, naming the
+    # statements. The sampler must refuse at construction, naming the
     # obstruction — before this, f/g2 and Tweedie returned wrong numbers
     # without a raise.
     process = FlowMatching(prior=ShapedPrior())
     with pytest.raises(ValueError, match="chart"):
-        Sampler(IDLE, process, X0Parametrization(), EulerMaruyama(), churn=1.0)
+        EulerMaruyama(
+            GenerativeCalculator(IDLE, process, X0Parametrization()), eta2=1.0
+        )
     with pytest.raises(ValueError, match="chart"):
         # the probability-flow ODE converts too
-        Sampler(IDLE, process, X0Parametrization(), Heun(), churn=0.0)
+        Heun(GenerativeCalculator(IDLE, process, X0Parametrization()), eta2=0.0)
     with pytest.raises(ValueError, match="chart"):
-        Sampler(IDLE, process, VelocityParametrization(), Ancestral(), churn=0.0)
-    with pytest.raises(ValueError, match="chart"):  # churn > 0 crosses it too
-        Sampler(IDLE, process, VelocityParametrization(), EulerMaruyama(), churn=1.0)
+        Ancestral(
+            GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=0.0
+        )
+    with pytest.raises(ValueError, match="chart"):  # eta2 > 0 crosses it too
+        EulerMaruyama(
+            GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=1.0
+        )
 
     # The chart-free assemblies stay open on the same configuration.
-    Sampler(IDLE, process, VelocityParametrization(), Heun(), churn=0.0)
-    DirectDenoising(IDLE, process, PseudoForceParametrization())
+    Heun(GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=0.0)
 
 
 # --- end-to-end recovery of the data distribution ------------------------- #
 
 
 @pytest.mark.parametrize(
-    "integrator,n_steps,churn",
+    "integrator,n_steps,eta2",
     [
-        (EulerMaruyama(), 400, 1.0),  # reverse SDE
-        (Heun(), 100, 0.0),  # probability-flow ODE (EDM-style)
+        (EulerMaruyama, 400, 1.0),  # reverse SDE
+        (Heun, 100, 0.0),  # probability-flow ODE (EDM-style)
     ],
 )
-def test_reverse_process_recovers_data_stats(vp, integrator, n_steps, churn):
+def test_reverse_process_recovers_data_stats(vp, integrator, n_steps, eta2):
     torch.manual_seed(0)
     mu0, s0 = 1.5, 0.5
-    sampler = Sampler(
-        batch_model(analytic_score(vp, mu0, s0)),
-        vp,
-        ScoreParametrization(),
-        integrator,
-        churn=churn,
+    sampler = integrator(
+        GenerativeCalculator(
+            batch_model(analytic_score(vp, mu0, s0)), vp, ScoreParametrization()
+        ),
+        eta2=eta2,
     )
     samples = draw(sampler, (4096, 1), n_steps)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
@@ -303,11 +286,10 @@ def test_reverse_process_recovers_data_stats(vp, integrator, n_steps, churn):
 def test_ancestral_ddpm_recovers_data_stats(vp):
     torch.manual_seed(0)
     mu0, s0 = -0.5, 0.8
-    sampler = Sampler(
-        batch_model(analytic_score(vp, mu0, s0)),
-        vp,
-        ScoreParametrization(),
-        AncestralDDPM(),
+    sampler = AncestralDDPM(
+        GenerativeCalculator(
+            batch_model(analytic_score(vp, mu0, s0)), vp, ScoreParametrization()
+        )
     )
     samples = draw(sampler, (4096, 1), 1000)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
@@ -321,12 +303,13 @@ def test_scaled_ve_recovers_data_stats():
     scale = 10.0
     process = VE(2e-4 * scale, scale)
     mu0, s0 = 0.5, 1.0
-    sampler = Sampler(
-        batch_model(analytic_score(process, mu0, s0, x1_std=scale)),
-        process,
-        ScoreParametrization(),
-        EulerMaruyama(),
-        churn=1.0,
+    sampler = EulerMaruyama(
+        GenerativeCalculator(
+            batch_model(analytic_score(process, mu0, s0, x1_std=scale)),
+            process,
+            ScoreParametrization(),
+        ),
+        eta2=1.0,
     )
     samples = draw(sampler, (4096, 1), 500)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.15)
@@ -335,11 +318,10 @@ def test_scaled_ve_recovers_data_stats():
 
 def test_denoise_partial(vp):
     torch.manual_seed(0)
-    sampler = Sampler(
-        batch_model(analytic_score(vp, 0.0, 1.0)),
-        vp,
-        ScoreParametrization(),
-        EulerMaruyama(),
+    sampler = EulerMaruyama(
+        GenerativeCalculator(
+            batch_model(analytic_score(vp, 0.0, 1.0)), vp, ScoreParametrization()
+        )
     )
     x_t = torch.randn(8, 5, 3)
     out = sampler.denoise(
@@ -356,11 +338,10 @@ def test_denoise_partial(vp):
 def test_ancestral_recovers_data_stats(vp):
     torch.manual_seed(0)
     mu0, s0 = -0.5, 0.8
-    sampler = Sampler(
-        batch_model(analytic_score(vp, mu0, s0)),
-        vp,
-        ScoreParametrization(),
-        Ancestral(),
+    sampler = Ancestral(
+        GenerativeCalculator(
+            batch_model(analytic_score(vp, mu0, s0)), vp, ScoreParametrization()
+        )
     )
     samples = draw(sampler, (4096, 1), 1000)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
@@ -373,14 +354,16 @@ def test_ancestral_on_ve_matches_the_score_form_update():
     # GPFF/NCSN sampler, here recovered rather than reimplemented.
     process = VE(0.01, 3.0)
     score_fn = analytic_score(process, 0.5, 0.7, x1_std=process.std)
-    rev = ReverseSDE(process.sde(), score_fn)
+    calculator = GenerativeCalculator(
+        batch_model(score_fn), process, ScoreParametrization()
+    )
 
     x = torch.randn(32, 2, dtype=torch.float64)
     t = torch.full((32,), 0.8, dtype=torch.float64)
     dt = torch.tensor(-0.1, dtype=torch.float64)
 
     torch.manual_seed(1)
-    stepped, _ = Ancestral().step(rev, x, t, dt)
+    stepped = sample.Ancestral(calculator).step({}, x, t, dt)
 
     sig_t = expand_t(process.sigma(t), x)
     sig_s = expand_t(process.sigma(t + dt), x)
@@ -403,11 +386,10 @@ def test_ancestral_x0_via_score_round_trips_an_x0_head(vp):
     def x0_model(x, t):
         return torch.full_like(x, 1.5)
 
-    rev = ReverseSDE(vp.sde(), lambda x, t: par.to_score(vp, x0_model(x, t), x, t))
-
     x = torch.randn(16, 2, dtype=torch.float64)
     t = torch.full((16,), 0.7, dtype=torch.float64)
-    x0_hat = rev.sde.x0_from_score(x, rev.score(x, t), t)
+    score = par.to_score(vp, x0_model(x, t), x, t)
+    x0_hat = vp.sde().x0_from_score(x, score, t)
     assert torch.allclose(x0_hat, torch.full_like(x, 1.5), rtol=1e-12)
 
 
@@ -416,11 +398,12 @@ def test_ancestral_on_scaled_ve_recovers_data_stats():
     scale = 10.0
     process = VE(2e-4 * scale, scale)
     mu0, s0 = 0.5, 1.0
-    sampler = Sampler(
-        batch_model(analytic_score(process, mu0, s0, x1_std=scale)),
-        process,
-        ScoreParametrization(),
-        Ancestral(),
+    sampler = Ancestral(
+        GenerativeCalculator(
+            batch_model(analytic_score(process, mu0, s0, x1_std=scale)),
+            process,
+            ScoreParametrization(),
+        )
     )
     samples = draw(sampler, (4096, 1), 500)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.15)
@@ -434,12 +417,11 @@ def test_fm_velocity_ode_recovers_data_stats():
     torch.manual_seed(0)
     fm = FlowMatching()
     mu0, s0 = 1.0, 0.5
-    sampler = Sampler(
-        batch_model(analytic_velocity(fm, mu0, s0)),
-        fm,
-        VelocityParametrization(),
-        Heun(),
-        churn=0.0,
+    sampler = Heun(
+        GenerativeCalculator(
+            batch_model(analytic_velocity(fm, mu0, s0)), fm, VelocityParametrization()
+        ),
+        eta2=0.0,
     )
     samples = draw(sampler, (4096, 1), 100)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
@@ -447,7 +429,7 @@ def test_fm_velocity_ode_recovers_data_stats():
 
 
 def test_fm_ode_never_converts_velocity_to_score(monkeypatch):
-    # The reason the reverse family is written around the velocity: at churn=0
+    # The reason the reverse family is written around the velocity: at eta2=0
     # the singular inverse must not be touched at all.
     fm = FlowMatching()
 
@@ -456,12 +438,11 @@ def test_fm_ode_never_converts_velocity_to_score(monkeypatch):
 
     monkeypatch.setattr(VelocityParametrization, "to_score", explode)
 
-    sampler = Sampler(
-        batch_model(analytic_velocity(fm, 0.0, 1.0)),
-        fm,
-        VelocityParametrization(),
-        Heun(),
-        churn=0.0,
+    sampler = Heun(
+        GenerativeCalculator(
+            batch_model(analytic_velocity(fm, 0.0, 1.0)), fm, VelocityParametrization()
+        ),
+        eta2=0.0,
     )
     samples = draw(sampler, (16, 1), 10)
     assert torch.isfinite(samples).all()
@@ -469,15 +450,14 @@ def test_fm_ode_never_converts_velocity_to_score(monkeypatch):
 
 def test_fm_stochastic_sampling_stays_finite():
     # Regression: g^2 = 2 t sigma_max^2 / (1 - t) diverges at t = 1, so a
-    # t_max of exactly 1 would produce NaNs the moment churn > 0.
+    # t_max of exactly 1 would produce NaNs the moment eta2 > 0.
     torch.manual_seed(0)
     fm = FlowMatching()
-    sampler = Sampler(
-        batch_model(analytic_velocity(fm, 0.0, 1.0)),
-        fm,
-        VelocityParametrization(),
-        EulerMaruyama(),
-        churn=1.0,
+    sampler = EulerMaruyama(
+        GenerativeCalculator(
+            batch_model(analytic_velocity(fm, 0.0, 1.0)), fm, VelocityParametrization()
+        ),
+        eta2=1.0,
     )
     samples = draw(sampler, (64, 1), 100)
     assert torch.isfinite(samples).all()
@@ -504,7 +484,9 @@ def test_batch_keys_reach_the_model_and_the_input_batch_is_untouched(vp):
         "condition": torch.ones(4),
         properties.Rij: torch.zeros(2, 1),
     }
-    out = Sampler(model, vp, ScoreParametrization(), EulerMaruyama()).denoise(batch, 3)
+    out = EulerMaruyama(
+        GenerativeCalculator(model, vp, ScoreParametrization())
+    ).denoise(batch, 3)
     assert len(seen) == 3
     assert all(torch.equal(b["condition"], torch.ones(4)) for b in seen)
     assert all(b[properties.t].shape == (4,) for b in seen)
@@ -522,15 +504,17 @@ def test_sampler_moves_any_declared_key(vp):
     def model(batch):
         return {"prediction": -batch["x"]}
 
-    sampler = Sampler(model, vp, ScoreParametrization(), EulerMaruyama(), key="x")
+    sampler = EulerMaruyama(
+        GenerativeCalculator(model, vp, ScoreParametrization(), key="x")
+    )
     start = {"x": sampler.prior.sample_positions({properties.R: torch.empty(8, 2)})}
     out = sampler.denoise(start, 5)
     assert out["x"].shape == (8, 2)
 
 
 def test_sampler_derives_position_shape_from_atom_types(vp):
-    sampler = Sampler(
-        batch_model(lambda x, t: -x), vp, ScoreParametrization(), EulerMaruyama()
+    sampler = EulerMaruyama(
+        GenerativeCalculator(batch_model(lambda x, t: -x), vp, ScoreParametrization())
     )
     batch = {properties.Z: torch.tensor([1, 6, 8])}
     out = sampler.denoise(sampler.prior.sample_from_batch(batch), 2)
@@ -542,11 +526,8 @@ def test_sampler_samples_n_structures_from_statistics(vp):
         n_atoms=torch.tensor([0, 0, 1, 1]),
         atom_types=torch.tensor([0, 2, 0, 0, 0, 0, 1, 0, 1]),
     )
-    sampler = Sampler(
-        batch_model(lambda x, t: -x),
-        vp,
-        ScoreParametrization(),
-        EulerMaruyama(),
+    sampler = EulerMaruyama(
+        GenerativeCalculator(batch_model(lambda x, t: -x), vp, ScoreParametrization()),
         prior=GaussianPrior(structures=structures),
     )
     out = sampler.sample(5, n_steps=2)
@@ -562,17 +543,16 @@ def test_sampler_samples_n_structures_from_statistics(vp):
 
 
 def test_sample_without_structures_raises(vp):
-    sampler = Sampler(IDLE, vp, ScoreParametrization(), EulerMaruyama())
+    sampler = EulerMaruyama(GenerativeCalculator(IDLE, vp, ScoreParametrization()))
     with pytest.raises(ValueError, match="no structures"):
         sampler.sample(4, n_steps=2)
 
 
 def test_sampler_accepts_given_starting_states(vp):
-    sampler = Sampler(
-        batch_model(analytic_score(vp, 0.0, 1.0)),
-        vp,
-        ScoreParametrization(),
-        EulerMaruyama(),
+    sampler = EulerMaruyama(
+        GenerativeCalculator(
+            batch_model(analytic_score(vp, 0.0, 1.0)), vp, ScoreParametrization()
+        )
     )
     x_init = torch.full((8, 1), 3.0)
     out = sampler.denoise({properties.R: x_init}, 5)
@@ -611,20 +591,20 @@ def train_toy(loss_fn, model, mu, sd, steps=1000):
 
 
 @pytest.mark.parametrize(
-    "process,param_cls,integrator,n_steps,churn",
+    "process,param_cls,integrator,n_steps,eta2",
     [
-        (VP(), EpsParametrization, EulerMaruyama(), 200, 1.0),
-        (VP(), EpsParametrization, Heun(), 50, 0.0),
-        (FlowMatching(), VelocityParametrization, Heun(), 50, 0.0),
-        (FlowMatching(), VelocityParametrization, EulerMaruyama(), 200, 1.0),
+        (VP(), EpsParametrization, EulerMaruyama, 200, 1.0),
+        (VP(), EpsParametrization, Heun, 50, 0.0),
+        (FlowMatching(), VelocityParametrization, Heun, 50, 0.0),
+        (FlowMatching(), VelocityParametrization, EulerMaruyama, 200, 1.0),
         # the classic (sigma_min=0.01, sigma_max=3) schedule, built in the
         # literature's vocabulary — the split happens inside VE.__init__
-        (VE(0.01, 3.0), EpsParametrization, EulerMaruyama(), 500, 1.0),
+        (VE(0.01, 3.0), EpsParametrization, EulerMaruyama, 500, 1.0),
     ],
     ids=["vp-eps-sde", "vp-eps-ode", "fm-vel-ode", "fm-vel-sde", "ve-eps-sde"],
 )
 def test_trained_model_recovers_data_stats(
-    process, param_cls, integrator, n_steps, churn
+    process, param_cls, integrator, n_steps, eta2
 ):
     # The analytic-score tests above check the machinery; this checks that each
     # advertised assembly is actually trainable, which an exact score hides.
@@ -637,7 +617,10 @@ def test_trained_model_recovers_data_stats(
     parametrization = param_cls()
     model = train_toy(MatchingLoss(process, parametrization), ToyNet(), mu, sd)
     samples = draw(
-        Sampler(batch_model(model), process, parametrization, integrator, churn=churn),
+        integrator(
+            GenerativeCalculator(batch_model(model), process, parametrization),
+            eta2=eta2,
+        ),
         (4096, 1),
         n_steps,
     )

@@ -53,9 +53,9 @@ class Parametrization(abc.ABC):
     """Whether :meth:`to_velocity` crosses the (f, g) chart.
 
     False only for a head that predicts the velocity itself; the
-    :class:`~schnetpack.dynamics.sampling.sampler.Sampler` then uses the
+    :class:`~schnetpack.dynamics.sampling.Sample` then uses the
     chart-free :class:`~schnetpack.generative.differential_equations.ReverseODE`
-    at churn = 0.
+    at eta2 = 0.
     """
 
     def validate(self, process: Process) -> None:  # noqa: B027 - optional hook
@@ -182,7 +182,7 @@ class VelocityParametrization(Parametrization):
     Any process.
 
     :meth:`to_score` divides by g^2, which vanishes as t -> 0 on VE and flow
-    matching paths; it only runs at churn > 0, and the grids stop at t_min.
+    matching paths; it only runs at eta2 > 0, and the grids stop at t_min.
     """
 
     velocity_needs_chart = False  # the head *is* the velocity

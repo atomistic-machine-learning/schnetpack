@@ -13,12 +13,10 @@ import abc
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-import torch
-
 from schnetpack import properties
-from schnetpack.dynamics.calculator import as_calculator
-from schnetpack.dynamics.constraints.field import FieldConstraint
+from schnetpack.dynamics.calculator import Calculator
 from schnetpack.dynamics.constraints.state import StateConstraint
+from schnetpack.dynamics.guidance import Guidance
 from schnetpack.generative.priors import Prior
 
 __all__ = ["Dynamics"]
@@ -36,91 +34,55 @@ class Dynamics(abc.ABC):
             batch = self.after_step(batch, i + 1, n_steps)
 
     so state constraints run in the same order everywhere, between full steps
-    only. Field constraints
-    (:class:`~schnetpack.dynamics.constraints.field.FieldConstraint`) share
-    the list but act inside the field, at every evaluation; the driver folds
-    :meth:`constraint_field` into whatever its field is. :meth:`sample` draws
+    only. Terms that change the field itself
+    (:class:`~schnetpack.dynamics.guidance.Guidance`) belong to the
+    calculator, which returns the guided field. :meth:`sample` draws
     starting structures from the prior and hands them to :meth:`denoise`,
     which also takes given structures.
     """
 
     def __init__(
         self,
-        calculator,
+        calculator: Calculator,
         prior: Prior | None = None,
         constraints: Sequence = (),
         key: str = properties.R,
     ):
         """
         Args:
-            calculator: runs the model: a
-                :class:`~schnetpack.dynamics.calculator.Calculator`, or a bare
-                callable batch -> outputs
+            calculator: runs the model; each family asks for its own kind
+                (:class:`~schnetpack.dynamics.calculator.ForceCalculator` or
+                :class:`~schnetpack.dynamics.calculator.GenerativeCalculator`)
             prior: starting distribution :meth:`sample` draws from; without
                 one, only :meth:`denoise` on given structures is available
-            constraints: state-level constraints applied around every step,
-                in order, and field-level constraints added to the field
+            constraints: state constraints applied around every step, in
+                order
             key: batch key this driver moves
         """
-        self.calculator = as_calculator(calculator)
+        self.calculator = calculator
         self.prior = prior
         self.constraints = list(constraints)
         for constraint in self.constraints:
-            if not isinstance(constraint, (StateConstraint, FieldConstraint)):
+            if isinstance(constraint, Guidance):
                 raise TypeError(
-                    f"{type(constraint).__name__} is neither a StateConstraint "
-                    "nor a FieldConstraint"
+                    f"{type(constraint).__name__} is guidance, which changes "
+                    "the field: pass it to the calculator's guidance"
                 )
+            if not isinstance(constraint, StateConstraint):
+                raise TypeError(f"{type(constraint).__name__} is not a StateConstraint")
         self.key = key
 
-    @property
-    def state_constraints(self) -> list[StateConstraint]:
-        """The state constraints of :attr:`constraints`, in order."""
-        return [c for c in self.constraints if isinstance(c, StateConstraint)]
-
-    @property
-    def field_constraints(self) -> list[FieldConstraint]:
-        """The field constraints of :attr:`constraints`."""
-        return [c for c in self.constraints if isinstance(c, FieldConstraint)]
-
     def before_step(self, batch: dict, step: int, n_steps: int) -> dict:
-        """Run the state constraints' before-step hooks, in order."""
-        for constraint in self.state_constraints:
+        """Run the constraints' before-step hooks, in order."""
+        for constraint in self.constraints:
             batch = constraint.before_step(batch, step, n_steps, self)
         return batch
 
     def after_step(self, batch: dict, step: int, n_steps: int) -> dict:
-        """Run the state constraints' after-step hooks, in order."""
-        for constraint in self.state_constraints:
+        """Run the constraints' after-step hooks, in order."""
+        for constraint in self.constraints:
             batch = constraint.after_step(batch, step, n_steps, self)
         return batch
-
-    def constraint_field(
-        self, batch: Mapping[str, Any], positions
-    ) -> torch.Tensor | None:
-        """
-        The field the field constraints add at ``positions``: the sum of
-        their terms, each scaled by its ``weight``.
-
-        Every constraint is called on a copy of ``batch`` with ``positions``
-        under ``properties.R``.
-
-        Args:
-            batch: current batch
-            positions: positions in Angstrom to evaluate at
-
-        Returns:
-            The field ``(n_atoms, 3)`` in eV/Angstrom, or None without field
-            constraints.
-        """
-        constraints = self.field_constraints
-        if not constraints:
-            return None
-        inputs = {**batch, properties.R: positions}
-        field = torch.zeros_like(positions)
-        for constraint in constraints:
-            field = field + constraint.weight * constraint(inputs)
-        return field
 
     def sample(self, n_samples: int, n_steps: int) -> dict[str, Any]:
         """

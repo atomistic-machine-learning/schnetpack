@@ -1,4 +1,4 @@
-"""Wall clock scaling of the ``Relaxer`` against sequential ase ``LBFGS``.
+"""Wall clock scaling of the batch-wise ``dynamics.LBFGS`` against sequential ase ``LBFGS``.
 
 Nothing here asserts on time, since wall clock thresholds are machine dependent.
 
@@ -13,7 +13,6 @@ from schnetpack.interfaces.ase_interface import atoms_to_batch
 from .test_relaxer_units import relax_counting
 from .test_relaxer_vs_ase import (
     DEVICE,
-    FMAX,
     MAX_STEPS,
     build_relaxer,
     make_structures,
@@ -39,7 +38,7 @@ def test_batchwise_relaxation(benchmark, n_structures):
         return (relaxer, inputs), {}
 
     def run(relaxer, inputs):
-        steps.append(relax_counting(relaxer, inputs, MAX_STEPS, fmax=FMAX)[1])
+        steps.append(relax_counting(relaxer, inputs, MAX_STEPS)[1])
 
     benchmark.pedantic(run, setup=setup, rounds=ROUNDS, iterations=1)
 

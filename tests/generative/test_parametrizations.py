@@ -408,7 +408,7 @@ def test_direct_routes_survive_where_the_generic_one_would_not():
     # At t -> 0 on flow matching, g^2 -> 0: the velocity's route back through
     # the score is 2 (f x - v) / g^2 and blows up by 1/g^2, while the direct
     # routes stay O(1). Not a NaN — just a drift large enough to wreck a step,
-    # which is why churn = 0 must never take that route.
+    # which is why eta2 = 0 must never take that route.
     process = FlowMatching()
     torch.manual_seed(0)
     x_t = torch.randn(8, 3)

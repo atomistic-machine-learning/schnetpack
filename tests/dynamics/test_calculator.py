@@ -3,16 +3,19 @@ import torch
 
 from schnetpack import properties
 from schnetpack.dynamics import (
+    LBFGS,
     Calculator,
     DirectDenoising,
-    ForceFieldCalculator,
+    ForceCalculator,
+    GenerativeCalculator,
     Heun,
-    Sampler,
 )
 from schnetpack.generative import (
     VE,
     VP,
+    EpsParametrization,
     PseudoForceParametrization,
+    ScoreParametrization,
     VelocityParametrization,
 )
 
@@ -42,8 +45,10 @@ def test_neighbor_list_runs_on_every_model_call_and_never_reaches_the_loop():
     # Heun evaluates twice per step; each call gets a fresh neighbor list,
     # built on a copy, so the loop's batch never holds a derived key.
     nbl = InPlaceNeighborList()
-    calculator = Calculator(zero_model, neighbor_list=nbl)
-    sampler = Sampler(calculator, VP(), VelocityParametrization(), Heun(), churn=0.0)
+    calculator = GenerativeCalculator(
+        zero_model, VP(), VelocityParametrization(), neighbor_list=nbl
+    )
+    sampler = Heun(calculator, eta2=0.0)
     batch = {properties.R: torch.randn(5, 3)}
     out = sampler.denoise(batch, 4)
     assert nbl.calls == 8
@@ -73,9 +78,7 @@ def test_driver_runs_in_the_calculators_dtype():
         return {"prediction": torch.zeros_like(batch[properties.R])}
 
     sampler = DirectDenoising(
-        Calculator(model, dtype=torch.float64),
-        VE(0.01, 3.0),
-        PseudoForceParametrization(),
+        ForceCalculator(model, kind="pseudo", dtype=torch.float64)
     )
     out = sampler.denoise({properties.R: torch.randn(3, 3)}, 2)
     assert seen == [torch.float64, torch.float64]
@@ -227,7 +230,7 @@ def test_the_model_and_the_neighbor_list_see_the_models_units():
     model = RecordingForceField()
     batch = angstrom_batch()
     before = {key: value.clone() for key, value in batch.items()}
-    ForceFieldCalculator(model, neighbor_list=neighbor_list, position_unit="nm")(batch)
+    ForceCalculator(model, neighbor_list=neighbor_list, position_unit="nm")(batch)
 
     torch.testing.assert_close(seen["positions"], batch[properties.R] / 10.0)
     torch.testing.assert_close(model.inputs[properties.R], batch[properties.R] / 10.0)
@@ -239,7 +242,7 @@ def test_the_model_and_the_neighbor_list_see_the_models_units():
 
 
 def test_energy_forces_and_stress_come_back_in_ev_and_angstrom():
-    calculator = ForceFieldCalculator(
+    calculator = ForceCalculator(
         RecordingForceField(),
         energy_unit="kcal/mol",
         position_unit="nm",
@@ -255,7 +258,7 @@ def test_energy_forces_and_stress_come_back_in_ev_and_angstrom():
 
 
 def test_stress_is_left_alone_without_a_stress_key():
-    calculator = ForceFieldCalculator(RecordingForceField(), position_unit="nm")
+    calculator = ForceCalculator(RecordingForceField(), position_unit="nm")
     torch.testing.assert_close(
         calculator(angstrom_batch())["stress"], torch.ones(2, 3, 3)
     )
@@ -264,7 +267,7 @@ def test_stress_is_left_alone_without_a_stress_key():
 def test_a_model_in_ev_and_angstrom_gets_the_positions_as_they_are():
     model = RecordingForceField()
     batch = angstrom_batch()
-    ForceFieldCalculator(model, enable_grad=False)(batch)
+    ForceCalculator(model, enable_grad=False)(batch)
     assert model.inputs[properties.R] is batch[properties.R]
     assert model.inputs[properties.cell] is batch[properties.cell]
 
@@ -277,12 +280,12 @@ def test_a_force_field_must_return_energy_and_forces(missing):
         return outputs
 
     with pytest.raises(KeyError, match=missing):
-        ForceFieldCalculator(model)(angstrom_batch())
+        ForceCalculator(model)(angstrom_batch())
 
 
 def test_a_force_field_runs_with_grad_by_default():
     model = RecordingForceField()
-    ForceFieldCalculator(model)(angstrom_batch())
+    ForceCalculator(model)(angstrom_batch())
     assert model.grad_enabled
 
 
@@ -296,7 +299,7 @@ def test_the_cache_answers_an_unchanged_angstrom_batch():
             "forces": torch.zeros_like(batch[properties.R]),
         }
 
-    calculator = ForceFieldCalculator(model, position_unit="nm", cache_last=True)
+    calculator = ForceCalculator(model, position_unit="nm", cache_last=True)
     batch = angstrom_batch()
     first = calculator(batch)
     second = calculator(batch)
@@ -304,31 +307,88 @@ def test_the_cache_answers_an_unchanged_angstrom_batch():
     torch.testing.assert_close(first["forces"], second["forces"])
 
 
+def test_samplers_refuse_a_force_calculator():
+    # it knows no process and no parametrization to read the head with
+    with pytest.raises(TypeError, match="GenerativeCalculator"):
+        Heun(ForceCalculator(zero_model), eta2=0.0)
+
+
+@pytest.mark.parametrize("build", [LBFGS, DirectDenoising], ids=["LBFGS", "DD"])
+def test_time_free_drivers_refuse_a_generative_calculator(build):
+    # its fields need a time, and it names no units
+    calculator = GenerativeCalculator(
+        zero_model, VE(0.01, 3.0), PseudoForceParametrization()
+    )
+    with pytest.raises(TypeError, match="ForceCalculator"):
+        build(calculator)
+
+
+# ------------------------------------------------------------------ pseudo-forces
+
+
+def test_a_pseudo_force_model_sees_time_zero_and_returns_a_length():
+    seen = {}
+
+    def gpff(batch):
+        seen["t"] = batch[properties.t]
+        return {"prediction": -2.0 * batch[properties.R]}
+
+    batch = angstrom_batch()
+    batch[properties.t] = torch.ones(3)
+    for unit in ("Ang", "nm"):
+        calculator = ForceCalculator(gpff, kind="pseudo", position_unit=unit)
+        forces = calculator.forces(batch)
+        assert torch.equal(seen["t"], torch.zeros(3))
+        # the jump x + F/2 lands on the model's x0 = 0 in any unit
+        torch.testing.assert_close(batch[properties.R] + forces / 2, torch.zeros(3, 3))
+    assert not calculator.physical
+    assert not calculator.enable_grad
+
+
+def test_a_pseudo_force_has_no_energy_and_no_stress():
+    calculator = ForceCalculator(zero_model, kind="pseudo")
+    with pytest.raises(TypeError, match="energy"):
+        calculator.energy(angstrom_batch())
+    with pytest.raises(ValueError, match="stress"):
+        ForceCalculator(zero_model, kind="pseudo", stress_key="stress")
+    with pytest.raises(ValueError, match="kind"):
+        ForceCalculator(zero_model, kind="virtual")
+
+
+# ------------------------------------------------------------- generative fields
+
+
+def toy_head(batch):
+    x, t = batch[properties.R], batch[properties.t]
+    return {"prediction": torch.tanh(x) * (1.0 + t[:, None])}
+
+
 @pytest.mark.parametrize(
-    "build",
-    [
-        lambda calc: Sampler(calc, VP(), VelocityParametrization(), Heun(), churn=0.0),
-        lambda calc: DirectDenoising(calc, VE(0.01, 3.0), PseudoForceParametrization()),
-    ],
-    ids=["Sampler", "DirectDenoising"],
+    "parametrization",
+    [EpsParametrization(), VelocityParametrization(), PseudoForceParametrization()],
 )
-def test_generative_drivers_refuse_a_force_field_calculator(build):
-    # it would convert the positions going in, but not the raw head coming out
-    with pytest.raises(TypeError, match="ForceFieldCalculator"):
-        build(ForceFieldCalculator(zero_model))
+def test_generative_fields_are_the_parametrizations_conversions(parametrization):
+    process = VP()
+    calculator = GenerativeCalculator(toy_head, process, parametrization)
+    x = torch.randn(4, 3, dtype=torch.float64)
+    t = torch.full((4,), 0.4, dtype=torch.float64)
+    raw = toy_head({properties.R: x, properties.t: t})["prediction"]
+    torch.testing.assert_close(calculator.raw({}, x, t), raw)
+    for field in ("score", "x0", "velocity"):
+        convert = getattr(parametrization, f"to_{field}")
+        torch.testing.assert_close(
+            getattr(calculator, field)({}, x, t), convert(process, raw, x, t)
+        )
+    # a scalar time is spread over the rows
+    torch.testing.assert_close(
+        calculator.score({}, x, t[0]), calculator.score({}, x, t)
+    )
 
 
-# ------------------------------------------------------------- integrator history
+def test_generative_calculator_validates_the_pair():
+    from schnetpack.generative import PCVarianceCoupling
 
-
-def test_one_step_integrators_carry_no_history():
-    from schnetpack.dynamics import EulerMaruyama
-    from schnetpack.generative import ReverseODE
-
-    field = ReverseODE(lambda x, t: -x)
-    x = torch.ones(3, 3)
-    integrator = EulerMaruyama()
-    state = integrator.init_state(field, x)
-    x_new, state = integrator.step(field, x, torch.ones(3), torch.tensor(-0.1), state)
-    assert state is None
-    torch.testing.assert_close(x_new, x * 1.1)
+    with pytest.raises(TypeError, match="Gaussian kernel"):
+        GenerativeCalculator(
+            toy_head, VP(coupling=PCVarianceCoupling()), ScoreParametrization()
+        )

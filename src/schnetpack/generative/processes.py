@@ -190,9 +190,9 @@ class Process(abc.ABC):  # noqa: B024 - schedule enforced in __init_subclass__
                 f"{type(self.prior).__name__} declares no scalar endpoint "
                 "scale (std is None), so this process has no single noise "
                 "level sigma(t) = b(t) * std. Score conversions, the SDE "
-                "diffusion and churn > 0 sampling all need one — use a prior "
+                "diffusion and eta2 > 0 sampling all need one — use a prior "
                 "with a declared std, or stick to the routes that never form "
-                "sigma (the pseudo-force x0 recovery, churn = 0 velocity "
+                "sigma (the pseudo-force x0 recovery, eta2 = 0 velocity "
                 "sampling)."
             )
         return self.prior.std
@@ -306,7 +306,7 @@ class Process(abc.ABC):  # noqa: B024 - schedule enforced in __init_subclass__
         raise ValueError(
             f"{type(self.coupling).__name__} reshapes x1's marginal from the "
             "data, so there is no data-free distribution to start sampling "
-            "from. Pass an explicit Prior to the Sampler — one matching the "
+            "from. Pass an explicit Prior to the sampler — one matching the "
             "statistics this coupling trained under."
         )
 
@@ -530,8 +530,8 @@ class FlowMatching(Process):
     Linear interpolant for flow matching / rectified flow: a = 1 - t, b = t.
 
     Pair with :class:`~schnetpack.generative.parametrizations.VelocityParametrization`
-    and churn = 0. g^2 = 2t / (1 - t) diverges at t = 1, so ``t_max`` defaults
-    just below 1; pure-ODE sampling (churn = 0) may use ``t_max=1.0``.
+    and eta2 = 0. g^2 = 2t / (1 - t) diverges at t = 1, so ``t_max`` defaults
+    just below 1; pure-ODE sampling (eta2 = 0) may use ``t_max=1.0``.
     """
 
     def __init__(

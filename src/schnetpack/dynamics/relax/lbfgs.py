@@ -1,10 +1,13 @@
-"""Limited-memory BFGS as a step rule for relaxation."""
+"""Limited-memory BFGS relaxation, one inverse Hessian per structure."""
 
 import dataclasses
+from collections.abc import Sequence
 
 import torch
 
-from schnetpack.dynamics.integrators.base import Integrator
+from schnetpack import properties
+from schnetpack.dynamics.relax.optimizer import Optimize
+from schnetpack.generative.priors import Prior
 
 __all__ = ["LBFGS", "LBFGSState"]
 
@@ -37,7 +40,7 @@ class LBFGSState:
     iteration: int = 0
 
 
-class LBFGS(Integrator):
+class LBFGS(Optimize):
     """
     Limited-memory BFGS, one inverse-Hessian approximation per structure.
 
@@ -46,67 +49,84 @@ class LBFGS(Integrator):
     structure, so structures of different sizes and compositions relax
     together exactly as they would alone. The recursion runs on the batch's
     own layout, the atoms of every structure end to end, and reduces per
-    structure over ``idx_m``.
+    structure over ``idx_m``. The step length is set by ``maxstep`` and
+    ``damping``; the loop, the stop test and the holding of converged
+    structures and fixed atoms are :class:`~schnetpack.dynamics.relax.Optimize`'s.
 
-    A step rule for a :class:`~schnetpack.dynamics.relax.Relaxer`: it follows
-    the field's drift as forces (eV/Angstrom on positions in Angstrom) and
-    ignores ``t`` and ``dt`` — the step length is set by ``maxstep`` and
-    ``damping``. It reads the structure layout off the field
-    (``requires_structure``); holding converged structures still is the
-    relaxer's job.
+    The starting curvature ``alpha`` depends on the force's kind: 70
+    eV/Angstrom^2 for a physical force, as ase's BFGS; 2 for a pseudo-force
+    F = 2 (x0 - x), whose first step x + F/2 is then exactly GPFF's jump to
+    the x0-estimate (when ``maxstep`` allows it).
 
-    The history lives in an :class:`LBFGSState`, one per run. A constraint
-    that moves atoms between steps (e.g. noise injection) makes the history
-    describe a path the structures did not take; pure overwrites of fixed
-    atoms are harmless, since their forces are zeroed by the relaxer.
+    The history lives in an :class:`LBFGSState`, one per run. Injected noise
+    would make the history describe a path the structures did not take, so
+    L-BFGS takes no noise schedule; a state constraint that moves atoms
+    between steps has the same effect. Pure overwrites of fixed atoms are
+    harmless, since their forces are zeroed by the loop.
     """
-
-    requires_structure = True
 
     def __init__(
         self,
+        calculator,
+        fmax: float | None = 0.05,
         maxstep: float = 0.2,
         memory: int = 100,
         damping: float = 1.0,
-        alpha: float = 70.0,
+        alpha: float | None = None,
         device: str | torch.device = "cpu",
+        prior: Prior | None = None,
+        constraints: Sequence = (),
+        key: str = properties.R,
     ):
         """
         Args:
+            calculator: see :class:`~schnetpack.dynamics.relax.Optimize`
+            fmax: stop criterion on the largest force, in the force's unit
+                (eV/Angstrom, or Angstrom for a pseudo-force); None runs all
+                ``n_steps``
             maxstep: how far a single atom may move in one step, in Angstrom.
                 Each structure is rescaled on its own.
             memory: steps of history kept for the two-loop recursion
             damping: the computed step is multiplied by this before it is
                 taken
-            alpha: initial guess for the curvature of the energy surface. The
-                conservative default of 70.0 emulates BFGS; a lower value may
-                converge in fewer steps at the cost of stability.
+            alpha: initial guess for the curvature of the surface (default:
+                70.0 for a physical force, which emulates BFGS; 2.0 for a
+                pseudo-force). A lower value may converge in fewer steps at
+                the cost of stability.
             device: device the recursion runs on. It is bound by kernel
                 launches rather than arithmetic — measured 2-3x slower on
                 cuda than on cpu for batches up to 256 structures of 1000
                 atoms — so the default is cpu wherever the model runs. Worth
                 re-measuring before overriding for much larger batches.
+            prior: see :class:`~schnetpack.dynamics.relax.Optimize`
+            constraints: see :class:`~schnetpack.dynamics.relax.Optimize`
+            key: see :class:`~schnetpack.dynamics.relax.Optimize`
         """
         if maxstep > 1.0:
             raise ValueError(
                 "You are using a much too large value for the maximum step "
                 f"size: {maxstep:.1f} Angstrom"
             )
+        super().__init__(
+            calculator, prior=prior, constraints=constraints, key=key, fmax=fmax
+        )
+        if alpha is None:
+            alpha = 70.0 if self.calculator.physical else 2.0
         self.maxstep = maxstep
         self.memory = memory
         self.damping = damping
         self.H0 = 1.0 / alpha  # initial inverse Hessian
         self.device = torch.device(device)
 
-    def init_state(self, dynamics, x) -> LBFGSState:
+    def init_state(self, batch, x) -> LBFGSState:
         # the layout is fixed for a run: read it once, not on every step
         return LBFGSState(
-            n_structures=dynamics.n_atoms.shape[0],
-            idx_m=dynamics.idx_m.to(self.device),
+            n_structures=batch[properties.n_atoms].shape[0],
+            idx_m=batch[properties.idx_m].to(self.device),
         )
 
-    def step(self, dynamics, x, t, dt, state):
-        f = dynamics.drift(x, t).to(device=self.device, dtype=torch.float64)
+    def step(self, batch, x, forces, state):
+        f = forces.to(device=self.device, dtype=torch.float64)
         r = x.to(device=self.device, dtype=torch.float64)
 
         state = self._update(state, r, f)

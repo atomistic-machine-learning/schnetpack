@@ -2,20 +2,26 @@ import pytest
 import torch
 
 from schnetpack import properties
-from schnetpack.dynamics import DirectDenoising
+from schnetpack.dynamics import DirectDenoising, ForceCalculator, GenerativeCalculator
 from schnetpack.generative import (
     VE,
-    VP,
     DatasetPrior,
-    GaussianPrior,
     MatchingLoss,
-    PCVarianceCoupling,
     PseudoForceParametrization,
-    ScoreParametrization,
 )
 from tests.dynamics.test_sampling import IDLE, batch_model, draw, train_toy
 
 # --- direct denoising ------------------------------------------------------ #
+
+
+def gpff(model, process=None, **kwargs):
+    """Direct denoising on a pseudo-force model, started from the process's prior."""
+    process = process if process is not None else VE(0.01, 3.0)
+    return DirectDenoising(
+        ForceCalculator(model, kind="pseudo"),
+        prior=process.sampling_prior(),
+        **kwargs,
+    )
 
 
 def test_direct_denoising_ends_on_the_x0_estimate():
@@ -27,7 +33,7 @@ def test_direct_denoising_ends_on_the_x0_estimate():
     def model(x, t):
         return 2.0 * (mu0 - x)  # pseudo force straight to mu0
 
-    sampler = DirectDenoising(batch_model(model), process, PseudoForceParametrization())
+    sampler = gpff(batch_model(model), process)
 
     out = draw(sampler, (16, 3), 5)
     assert torch.allclose(out, torch.full_like(out, mu0))
@@ -40,8 +46,7 @@ def test_direct_denoising_is_time_free_and_passes_the_batch():
         seen.append(batch)
         return {"prediction": torch.zeros_like(batch[properties.R])}
 
-    process = VE(0.01, 3.0)
-    sampler = DirectDenoising(model, process, PseudoForceParametrization())
+    sampler = gpff(model)
     sampler.denoise({properties.R: torch.randn(4, 1), "condition": 7}, 3)
 
     assert len(seen) == 3
@@ -66,9 +71,7 @@ def test_direct_denoising_relaxes_structures_from_a_dataset_prior():
         return {"prediction": torch.zeros_like(batch[properties.R])}
 
     sampler = DirectDenoising(
-        model,
-        VE(0.01, 3.0),
-        PseudoForceParametrization(),
+        ForceCalculator(model, kind="pseudo"),
         prior=DatasetPrior(dataset),
         stochastic_lambda=0.0,
     )
@@ -79,11 +82,8 @@ def test_direct_denoising_relaxes_structures_from_a_dataset_prior():
 
 
 def test_direct_denoising_lambda_zero_is_deterministic():
-    process = VE(0.01, 3.0)
     model = batch_model(lambda x, t: -x)  # some deterministic field
-    sampler = DirectDenoising(
-        model, process, PseudoForceParametrization(), stochastic_lambda=0.0
-    )
+    sampler = gpff(model, stochastic_lambda=0.0)
 
     batch = {properties.R: torch.randn(8, 2)}
     out1 = sampler.denoise(batch, 10)
@@ -91,20 +91,34 @@ def test_direct_denoising_lambda_zero_is_deterministic():
     assert torch.equal(out1[properties.R], out2[properties.R])
 
 
-def test_direct_denoising_validates_pair_and_prior():
-    # Same construction contract as Sampler: the pair is validated, and a
-    # marginal-changing coupling has no data-free start to derive.
-    reshaped = VP(coupling=PCVarianceCoupling())
-    with pytest.raises(TypeError, match="Gaussian kernel"):
-        DirectDenoising(IDLE, reshaped, ScoreParametrization(), prior=GaussianPrior())
-    with pytest.raises(ValueError, match="marginal"):
-        DirectDenoising(IDLE, reshaped, PseudoForceParametrization())
+def test_direct_denoising_runs_on_a_pseudo_force_only():
+    # a bare model is taken as a pseudo-force in Angstrom
+    calculator = DirectDenoising(IDLE).calculator
+    assert isinstance(calculator, ForceCalculator) and not calculator.physical
+    with pytest.raises(TypeError, match="physical"):
+        DirectDenoising(ForceCalculator(IDLE))
+    with pytest.raises(TypeError, match="ForceCalculator"):
+        DirectDenoising(
+            GenerativeCalculator(IDLE, VE(0.01, 3.0), PseudoForceParametrization())
+        )
 
-    explicit = GaussianPrior()
-    sampler = DirectDenoising(
-        IDLE, reshaped, PseudoForceParametrization(), prior=explicit
-    )
-    assert sampler.prior is explicit
+
+def test_direct_denoising_stops_on_fmax():
+    # F = 2 (0 - x): the first jump lands on 0, the second check stops the run
+    calls = []
+
+    def model(batch):
+        calls.append(None)
+        return {"prediction": -2.0 * batch[properties.R]}
+
+    batch = {
+        properties.R: torch.randn(3, 3),
+        properties.n_atoms: torch.tensor([3]),
+        properties.idx_m: torch.zeros(3, dtype=torch.long),
+    }
+    out = gpff(model, stochastic_lambda=0.0, fmax=1e-6).denoise(batch, 10)
+    assert torch.equal(out[properties.R], torch.zeros(3, 3))
+    assert len(calls) == 2
 
 
 class TimeFreeToyNet(torch.nn.Module):
@@ -139,9 +153,7 @@ def test_direct_denoising_trained_gpff_assembly():
     )
     model = train_toy(loss, TimeFreeToyNet(), mu, sd)
 
-    sampler = DirectDenoising(
-        batch_model(model), process, parametrization, stochastic_lambda=1.0
-    )
+    sampler = gpff(batch_model(model), process, stochastic_lambda=1.0)
     samples = draw(sampler, (4096, 1), 50)
 
     assert torch.isfinite(samples).all()

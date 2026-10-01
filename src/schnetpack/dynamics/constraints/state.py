@@ -12,7 +12,7 @@ import torch
 
 from schnetpack import properties
 
-__all__ = ["StateConstraint", "AnnealedNoise", "Scaffold"]
+__all__ = ["StateConstraint", "Scaffold"]
 
 
 class StateConstraint:
@@ -33,28 +33,6 @@ class StateConstraint:
     def after_step(self, batch, step: int, n_steps: int, dynamics):
         """Edit the batch after the step: what the step produced."""
         return batch
-
-
-class AnnealedNoise(StateConstraint):
-    """
-    GPFF's decaying noise injection before each step k = 1..N:
-    x <- x + lambda (1 - k/N) z, z ~ N(0, I), on the driver's moved key.
-    The last step injects nothing.
-    """
-
-    def __init__(self, stochastic_lambda: float = 1.0):
-        """
-        Args:
-            stochastic_lambda: scale of the injected noise, in data units
-        """
-        self.stochastic_lambda = stochastic_lambda
-
-    def before_step(self, batch, step, n_steps, dynamics):
-        noise_scale = self.stochastic_lambda * (1.0 - (step + 1) / n_steps)
-        if noise_scale <= 0.0:
-            return batch
-        x = batch[dynamics.key]
-        return {**batch, dynamics.key: x + noise_scale * torch.randn_like(x)}
 
 
 class Scaffold(StateConstraint):
@@ -109,8 +87,8 @@ class Scaffold(StateConstraint):
     def before_step(self, batch, step, n_steps, dynamics):
         x = batch[dynamics.key]
         mask, reference = self._mask_and_reference(batch, x)
-        # Drivers without a time_free flag (force-field optimizers) have no
-        # noise level to re-noise to.
+        # Time-free drivers, and those without the flag, have no noise level
+        # to re-noise to.
         if getattr(dynamics, "time_free", True):
             return self._overwrite(batch, dynamics, mask, reference)
         # A full-size prior draw lets the prior see the layout it expects in

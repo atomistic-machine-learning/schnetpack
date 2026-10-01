@@ -1,12 +1,8 @@
 """
-Constraints on a :class:`~schnetpack.dynamics.base.Dynamics` loop.
-
-- :mod:`~schnetpack.dynamics.constraints.state`: edits of the iterate
-  between steps (:class:`StateConstraint`, :class:`AnnealedNoise`,
-  :class:`Scaffold`).
-- :mod:`~schnetpack.dynamics.constraints.field`: terms added to the field a
-  step follows (:class:`FieldConstraint`, :class:`HarmonicRestraint`).
+State constraints on a :class:`~schnetpack.dynamics.base.Dynamics` loop:
+edits of the iterate between steps (:class:`StateConstraint`,
+:class:`Scaffold`). Terms that change the field itself are
+:mod:`~schnetpack.dynamics.guidance`, given to the calculator.
 """
 
-from schnetpack.dynamics.constraints.field import *
 from schnetpack.dynamics.constraints.state import *

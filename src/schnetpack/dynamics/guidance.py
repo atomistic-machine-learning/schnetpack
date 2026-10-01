@@ -1,30 +1,30 @@
 """
-Field-level constraints: terms added to the field a
-:class:`~schnetpack.dynamics.base.Dynamics` step follows.
+Guidance: terms a calculator adds to the field it returns.
 
 Where a :class:`~schnetpack.dynamics.constraints.state.StateConstraint` edits
-the iterate between steps, a field constraint adds to what the step is driven
-by — restraint forces, guidance — so its effect enters through the integrator
-rather than around it, at every point the integrator evaluates the field
-(Heun's predictor, an L-BFGS step alike).
+the iterate between a driver's steps, guidance changes the field itself —
+restraint forces, classifier guidance — so it acts at every point the field is
+evaluated (Heun's predictor, an L-BFGS step alike), and the driver never sees
+it apart from the model's own field.
 
-A field constraint returns one force-like term. It is a
+A guidance term returns one force-like term. It is a
 :class:`~torch.nn.Module` whose ``forward`` reads the positions in
 ``batch[properties.R]``, in Angstrom, and returns a tensor ``(n_atoms, 3)`` in
 eV/Angstrom: the force of a restraint, or kT times the gradient of a
 log-density for guidance that is no energy (a classifier's
 kT ∇ log p(y|x)). No energy is returned, so a term need not be conservative.
-Its ``weight`` scales it, and the driver applies that weight. Folding the
-weighted terms into the field is the driver's job, since only the driver knows
-what its field is:
+Its ``weight`` scales it, and the calculator applies that weight. How the
+weighted terms enter depends on the calculator's field:
 
-- :class:`~schnetpack.dynamics.relax.Relaxer` — the term is part of the
-  force field: it is added to the model's forces, and the weight is a plain
-  factor.
-- :class:`~schnetpack.dynamics.sampling.Sampler` — guidance: the weighted term
-  is added to the score, so the weight is 1/kT, in 1/eV. The batch the
-  constraint sees then also holds the path time under the sampler's
-  ``time_key``, for guidance that depends on t.
+- :class:`~schnetpack.dynamics.calculator.ForceCalculator` — the term is
+  added to the model's forces. On a physical force the weight is a plain
+  factor; on a pseudo-force, minus the gradient of ||x - x0||^2 in
+  Angstrom^2, it is in Angstrom^2/eV and turns the term into a length.
+- :class:`~schnetpack.dynamics.calculator.GenerativeCalculator` — the
+  weighted term is added to the score, so the weight is 1/kT, in 1/eV; the
+  velocity and x0 follow from the guided score. The batch the term sees then
+  also holds the path time under the calculator's ``time_key``, for guidance
+  that depends on t.
 """
 
 import torch
@@ -32,48 +32,50 @@ from torch import nn
 
 from schnetpack import properties
 
-__all__ = ["FieldConstraint", "HarmonicRestraint"]
+__all__ = ["Guidance", "HarmonicRestraint"]
 
 
-class FieldConstraint(nn.Module):
+class Guidance(nn.Module):
     """
-    Base class of field-level constraints.
+    Base class of the guidance terms.
 
     Subclasses implement :meth:`forward`. Unlike state constraints their
     order does not matter: every one is evaluated on the same batch, and the
-    weighted terms of all field constraints add up.
+    weighted terms of all of them add up.
     """
 
     def __init__(self, weight: float = 1.0):
         """
         Args:
-            weight: factor the driver scales this constraint's term by: a
-                plain factor in a relaxer, 1/kT in 1/eV in a sampler
+            weight: factor the calculator scales this term by: a plain
+                factor on a physical force, Angstrom^2/eV on a pseudo-force,
+                1/kT in 1/eV on a score
         """
         super().__init__()
         self.weight = weight
 
     def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
         """
-        Evaluate the constraint at ``batch[properties.R]``.
+        Evaluate the term at ``batch[properties.R]``.
 
-        The positions are in Angstrom and are the integrator's evaluation
-        point, not necessarily the driver's iterate. During sampling the batch
-        also holds the path time under the sampler's ``time_key``; a
-        constraint that needs it should raise if it is missing.
+        The positions are in Angstrom and are the step rule's evaluation
+        point, not necessarily the driver's iterate. On a score the batch
+        also holds the path time under the calculator's ``time_key``; a term
+        that needs it should raise if it is missing.
 
         Args:
             batch: batch to evaluate on, for the positions, the structure
-                layout and the constraint's own inputs
+                layout and the term's own inputs
 
         Returns:
             The force-like term ``(n_atoms, 3)`` in eV/Angstrom, unweighted —
-            the driver applies :attr:`weight`. ``batch`` is left unchanged.
+            the calculator applies :attr:`weight`. ``batch`` is left
+            unchanged.
         """
         raise NotImplementedError
 
 
-class HarmonicRestraint(FieldConstraint):
+class HarmonicRestraint(Guidance):
     """
     Harmonic restraints on the distances of atom pairs,
 
@@ -115,8 +117,9 @@ class HarmonicRestraint(FieldConstraint):
             count_key: batch key of the number of pairs per structure
             lengths_key: batch key of the target distances, in Angstrom
             constants_key: batch key of the force constants, in eV/Angstrom^2
-            weight: factor the driver scales the forces by: a plain factor
-                in a relaxer, 1/kT in 1/eV in a sampler
+            weight: factor the calculator scales the forces by: a plain
+                factor on a physical force, Angstrom^2/eV on a pseudo-force,
+                1/kT in 1/eV on a score
         """
         super().__init__(weight=weight)
         self.pairs_key = pairs_key

@@ -3,18 +3,18 @@ import torch
 
 from schnetpack import properties
 from schnetpack.dynamics import (
+    LBFGS,
     DirectDenoising,
     EulerMaruyama,
-    FieldConstraint,
-    ForceFieldCalculator,
+    ForceCalculator,
+    GenerativeCalculator,
+    Guidance,
     HarmonicRestraint,
     Heun,
-    Relaxer,
-    Sampler,
 )
 from schnetpack.generative import (
     VP,
-    PseudoForceParametrization,
+    EpsParametrization,
     ScoreParametrization,
     VELinear,
     VelocityParametrization,
@@ -125,11 +125,17 @@ class ZeroModel:
         }
 
 
+def restrained(*guidance, model=None, **kwargs):
+    """A force calculator on ``model`` (default: flat) carrying ``guidance``."""
+    model = model if model is not None else ZeroModel()
+    return ForceCalculator(model, guidance=list(guidance), **kwargs)
+
+
 def test_relaxer_relaxes_onto_the_restraint():
     batch = restrained_batch([3, 3], [[(0, 2)], [(0, 1)]], [1.3, 0.9], [5.0, 5.0])
-    positions = Relaxer(ZeroModel(), constraints=[HarmonicRestraint()]).denoise(
-        batch, 200, fmax=1e-4
-    )[properties.R]
+    positions = LBFGS(restrained(HarmonicRestraint()), fmax=1e-4).denoise(batch, 200)[
+        properties.R
+    ]
     assert torch.norm(positions[2] - positions[0]) == pytest.approx(1.3, abs=1e-4)
     assert torch.norm(positions[4] - positions[3]) == pytest.approx(0.9, abs=1e-4)
     # the unrestrained atom feels nothing and stays put
@@ -139,9 +145,9 @@ def test_relaxer_relaxes_onto_the_restraint():
 def test_relaxer_holds_fixed_atoms_against_the_restraint():
     batch = restrained_batch([3], [[(0, 2)]], [1.3], [5.0])
     batch[properties.fixed_atoms] = torch.tensor([True, False, False])
-    positions = Relaxer(ZeroModel(), constraints=[HarmonicRestraint()]).denoise(
-        batch, 200, fmax=1e-4
-    )[properties.R]
+    positions = LBFGS(restrained(HarmonicRestraint()), fmax=1e-4).denoise(batch, 200)[
+        properties.R
+    ]
     assert torch.equal(positions[0], batch[properties.R][0])
     assert torch.norm(positions[2] - positions[0]) == pytest.approx(1.3, abs=1e-4)
 
@@ -149,90 +155,123 @@ def test_relaxer_holds_fixed_atoms_against_the_restraint():
 def test_relaxer_evaluates_the_restraint_in_angstrom_whatever_the_models_units():
     # the model works in nm; the batch and the restraint's 1.3 Angstrom do not
     batch = restrained_batch([2], [[(0, 1)]], [1.3], [5.0])
-    positions = Relaxer(
-        ForceFieldCalculator(ZeroModel(), position_unit="nm"),
-        constraints=[HarmonicRestraint()],
-    ).denoise(batch, 200, fmax=1e-4)[properties.R]
+    calculator = restrained(HarmonicRestraint(), position_unit="nm")
+    positions = LBFGS(calculator, fmax=1e-4).denoise(batch, 200)[properties.R]
     assert torch.norm(positions[1] - positions[0]) == pytest.approx(1.3, abs=1e-4)
 
 
-def test_relaxer_sums_the_field_constraints():
+def test_force_guidance_sums_the_terms():
     batch = restrained_batch([3], [[(0, 2)]], [1.3], [5.0])
     _, expected = terms(batch, batch[properties.R])
-    relaxer = Relaxer(
-        ZeroModel(), constraints=[HarmonicRestraint(), HarmonicRestraint()]
-    )
-    assert torch.allclose(relaxer._forces(batch), 2 * expected)
+    calculator = restrained(HarmonicRestraint(), HarmonicRestraint())
+    assert torch.allclose(calculator.forces(batch), 2 * expected)
 
 
-def test_relaxer_scales_each_field_constraint_by_its_weight():
+def test_force_guidance_scales_each_term_by_its_weight():
     batch = restrained_batch([3], [[(0, 2)]], [1.3], [5.0])
     _, expected = terms(batch, batch[properties.R])
-    relaxer = Relaxer(
-        ZeroModel(),
-        constraints=[HarmonicRestraint(weight=2.0), HarmonicRestraint(weight=0.5)],
+    calculator = restrained(
+        HarmonicRestraint(weight=2.0), HarmonicRestraint(weight=0.5)
     )
-    assert torch.allclose(relaxer._forces(batch), 2.5 * expected)
+    assert torch.allclose(calculator.forces(batch), 2.5 * expected)
+
+
+def test_force_guidance_stays_out_of_the_model_outputs():
+    batch = restrained_batch([3], [[(0, 2)]], [1.3], [5.0])
+    calculator = restrained(HarmonicRestraint())
+    assert torch.equal(
+        calculator(batch)["forces"], torch.zeros(3, 3, dtype=torch.float64)
+    )
+    assert not torch.equal(calculator.forces(batch), calculator(batch)["forces"])
 
 
 # --- sampling: the restraint guides the score ------------------------------ #
 
 
-def sampler_and_batch(parametrization, integrator, churn, weight, model):
+def sampler_and_batch(parametrization, integrator, eta2, weight, model):
     batch = restrained_batch([3, 2], [[(0, 2)], [(0, 1)]], [1.3, 0.9], [5.0, 5.0])
-    sampler = Sampler(
-        model,
-        VP(),
-        parametrization,
-        integrator,
-        churn=churn,
-        constraints=[HarmonicRestraint(weight=weight)],
+    sampler = integrator(
+        GenerativeCalculator(
+            model, VP(), parametrization, guidance=[HarmonicRestraint(weight=weight)]
+        ),
+        eta2=eta2,
     )
-    plain = Sampler(model, VP(), parametrization, integrator, churn=churn)
+    plain = integrator(GenerativeCalculator(model, VP(), parametrization), eta2=eta2)
     t = torch.full((5,), 0.4, dtype=torch.float64)
     return sampler, plain, {**batch, properties.t: t}, t
 
 
 def test_score_guidance_shifts_score_and_drift_by_the_weighted_forces():
     model = batch_model(analytic_score(VP(), 0.5, 1.0))
-    sampler, plain, batch, t = sampler_and_batch(
-        ScoreParametrization(), EulerMaruyama(), 1.0, 2.5, model
+    guided, unguided, batch, t = sampler_and_batch(
+        ScoreParametrization(), EulerMaruyama, 1.0, 2.5, model
     )
     x = batch[properties.R]
     _, forces = terms(batch, x)
 
-    guided, unguided = sampler.reverse(batch), plain.reverse(batch)
-    assert torch.allclose(guided.score(x, t) - unguided.score(x, t), 2.5 * forces)
+    shift = guided.calculator.score(batch, x, t) - unguided.calculator.score(
+        batch, x, t
+    )
+    assert torch.allclose(shift, 2.5 * forces)
     g2 = expand_t(VP().sde().g2(t), x)
-    assert torch.allclose(guided.drift(x, t) - unguided.drift(x, t), -g2 * 2.5 * forces)
+    assert torch.allclose(
+        guided.drift(batch, x, t) - unguided.drift(batch, x, t), -g2 * 2.5 * forces
+    )
 
 
 def test_velocity_guidance_goes_through_g2():
     model = batch_model(lambda x, t: torch.zeros_like(x))
     sampler, plain, batch, t = sampler_and_batch(
-        VelocityParametrization(), Heun(), 0.0, 2.5, model
+        VelocityParametrization(), Heun, 0.0, 2.5, model
     )
     x = batch[properties.R]
     _, forces = terms(batch, x)
 
     g2 = expand_t(VP().sde().g2(t), x)
-    shift = sampler.reverse(batch).drift(x, t) - plain.reverse(batch).drift(x, t)
+    shift = sampler.drift(batch, x, t) - plain.drift(batch, x, t)
     assert torch.allclose(shift, -0.5 * g2 * 2.5 * forces)
 
 
-def test_score_guidance_scales_each_field_constraint_by_its_weight():
+@pytest.mark.parametrize(
+    "parametrization",
+    [ScoreParametrization(), EpsParametrization(), VelocityParametrization()],
+)
+def test_the_guided_fields_agree_with_the_guided_score(parametrization):
+    # x0 and the velocity are the guided score's, through Tweedie and the chart
+    process = VP()
+    model = batch_model(lambda x, t: torch.tanh(x) * (1.0 + t[:, None]))
+    calculator = GenerativeCalculator(
+        model, process, parametrization, guidance=[HarmonicRestraint(weight=2.5)]
+    )
+    _, _, batch, t = sampler_and_batch(parametrization, Heun, 0.0, 2.5, model)
+    x = batch[properties.R]
+    score = calculator.score(batch, x, t)
+    sde = process.sde()
+    torch.testing.assert_close(
+        calculator.x0(batch, x, t), sde.x0_from_score(x, score, t)
+    )
+    torch.testing.assert_close(
+        calculator.velocity(batch, x, t),
+        ScoreParametrization().to_velocity(process, score, x, t),
+    )
+
+
+def test_score_guidance_scales_each_term_by_its_weight():
     model = batch_model(analytic_score(VP(), 0.5, 1.0))
     sampler, plain, batch, t = sampler_and_batch(
-        ScoreParametrization(), EulerMaruyama(), 1.0, 2.5, model
+        ScoreParametrization(), EulerMaruyama, 1.0, 2.5, model
     )
-    sampler.constraints = [HarmonicRestraint(weight=3.0), HarmonicRestraint(weight=0.5)]
+    sampler.calculator.guidance = [
+        HarmonicRestraint(weight=3.0),
+        HarmonicRestraint(weight=0.5),
+    ]
     x = batch[properties.R]
     _, forces = terms(batch, x)
-    shift = sampler.reverse(batch).score(x, t) - plain.reverse(batch).score(x, t)
+    shift = sampler.calculator.score(batch, x, t) - plain.calculator.score(batch, x, t)
     assert torch.allclose(shift, 3.5 * forces)
 
 
-class TimeGuidance(FieldConstraint):
+class TimeGuidance(Guidance):
     """A guidance term that depends on the path time: t on every component."""
 
     def __init__(self):
@@ -245,17 +284,17 @@ class TimeGuidance(FieldConstraint):
         return t.unsqueeze(-1).expand_as(batch[properties.R]).clone()
 
 
-def test_field_constraints_see_the_time_they_are_evaluated_at():
+def test_guidance_sees_the_time_it_is_evaluated_at():
     model = batch_model(analytic_score(VP(), 0.5, 1.0))
     sampler, plain, batch, _ = sampler_and_batch(
-        ScoreParametrization(), EulerMaruyama(), 1.0, 2.5, model
+        ScoreParametrization(), EulerMaruyama, 1.0, 2.5, model
     )
     guidance = TimeGuidance()
-    sampler.constraints = [guidance]
+    sampler.calculator.guidance = [guidance]
     x = batch[properties.R]
     # not the batch's own time: an integrator's evaluation point
     t = torch.full((5,), 0.7, dtype=torch.float64)
-    shift = sampler.reverse(batch).score(x, t) - plain.reverse(batch).score(x, t)
+    shift = sampler.calculator.score(batch, x, t) - plain.calculator.score(batch, x, t)
     assert torch.equal(guidance.seen[-1], t)
     assert torch.allclose(shift, t.unsqueeze(-1).expand_as(x))
 
@@ -263,25 +302,18 @@ def test_field_constraints_see_the_time_they_are_evaluated_at():
 def test_velocity_guidance_needs_the_chart_at_assembly():
     process = VELinear(prior=ShapedPrior())
     with pytest.raises(ValueError, match="chart"):
-        Sampler(
-            IDLE,
-            process,
-            VelocityParametrization(),
-            Heun(),
-            churn=0.0,
-            constraints=[HarmonicRestraint()],
+        GenerativeCalculator(
+            IDLE, process, VelocityParametrization(), guidance=[HarmonicRestraint()]
         )
 
 
 def test_sampler_runs_with_a_restraint():
     model = batch_model(analytic_score(VP(), 0.0, 1.0))
     batch = restrained_batch([3, 2], [[(0, 2)], [(0, 1)]], [1.3, 0.9], [5.0, 5.0])
-    sampler = Sampler(
-        model,
-        VP(),
-        ScoreParametrization(),
-        EulerMaruyama(),
-        constraints=[HarmonicRestraint()],
+    sampler = EulerMaruyama(
+        GenerativeCalculator(
+            model, VP(), ScoreParametrization(), guidance=[HarmonicRestraint()]
+        )
     )
     out = sampler.denoise(batch, 10)
     assert torch.isfinite(out[properties.R]).all()
@@ -290,16 +322,41 @@ def test_sampler_runs_with_a_restraint():
 # --- who refuses what ------------------------------------------------------- #
 
 
-def test_direct_denoising_refuses_field_constraints():
-    with pytest.raises(ValueError, match="field constraint"):
-        DirectDenoising(
-            IDLE,
-            VP(),
-            PseudoForceParametrization(),
+def test_pseudo_force_guidance_is_added_as_a_length():
+    # w in Angstrom^2/eV turns the restraint's eV/Angstrom into Angstrom
+    batch = restrained_batch([3], [[(0, 2)]], [1.3], [5.0])
+    _, expected = terms(batch, batch[properties.R])
+    calculator = ForceCalculator(
+        IDLE, kind="pseudo", guidance=[HarmonicRestraint(weight=0.1)]
+    )
+    torch.testing.assert_close(calculator.forces(batch), 0.1 * expected)
+
+
+def test_direct_denoising_relaxes_onto_a_restraint():
+    # a flat pseudo-force: the jump x + F/2 follows the restraint alone
+    batch = restrained_batch([3, 3], [[(0, 2)], [(0, 1)]], [1.3, 0.9], [5.0, 5.0])
+    calculator = ForceCalculator(
+        IDLE, kind="pseudo", guidance=[HarmonicRestraint(weight=0.1)]
+    )
+    positions = DirectDenoising(calculator, stochastic_lambda=0.0).denoise(batch, 200)[
+        properties.R
+    ]
+    assert torch.norm(positions[2] - positions[0]) == pytest.approx(1.3, abs=1e-4)
+    assert torch.norm(positions[4] - positions[3]) == pytest.approx(0.9, abs=1e-4)
+
+
+def test_guidance_passed_as_a_constraint_is_redirected_to_the_calculator():
+    with pytest.raises(TypeError, match="calculator's guidance"):
+        LBFGS(ZeroModel(), constraints=[HarmonicRestraint()])
+    with pytest.raises(TypeError, match="calculator's guidance"):
+        EulerMaruyama(
+            GenerativeCalculator(IDLE, VP(), ScoreParametrization()),
             constraints=[HarmonicRestraint()],
         )
 
 
-def test_unknown_constraints_are_refused():
-    with pytest.raises(TypeError, match="neither"):
-        Relaxer(ZeroModel(), constraints=[object()])
+def test_unknown_constraints_and_guidance_are_refused():
+    with pytest.raises(TypeError, match="not a StateConstraint"):
+        LBFGS(ZeroModel(), constraints=[object()])
+    with pytest.raises(TypeError, match="not a Guidance"):
+        ForceCalculator(ZeroModel(), guidance=[object()])
