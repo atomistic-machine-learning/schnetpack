@@ -2,8 +2,7 @@
 GPFF's direct denoising: a relaxation on a pseudo-force, not a time-stepped
 sampler.
 
-The loop repeats "inject noise, jump to the model's x0-estimate"; there is no
-time grid and no reverse SDE. The jump x <- x + F/2 is the Newton step on the
+The loop repeats "jump to the model's x0-estimate"; there is no time grid and no reverse SDE. The jump x <- x + F/2 is the Newton step on the
 pseudo-energy ||x - x0||^2. Details: ``docs_new/sampling.md`` §5.
 """
 
@@ -11,7 +10,6 @@ from collections.abc import Sequence
 
 from schnetpack import properties
 from schnetpack.dynamics.calculator import Calculator, ForceCalculator
-from schnetpack.dynamics.optimize.noise import AnnealedNoise
 from schnetpack.dynamics.optimize.optimizer import Optimizer
 from schnetpack.generative.priors import Prior
 
@@ -20,15 +18,12 @@ __all__ = ["DirectDenoising"]
 
 class DirectDenoising(Optimizer):
     """
-    GPFF's direct denoising: repeat "inject noise, jump to the x0-estimate".
+    GPFF's direct denoising: repeat "jump to the x0-estimate".
 
-    Each of the ``n_steps`` iterations does x <- x + lambda (1 - k/N) z (an
-    :class:`~schnetpack.dynamics.optimize.AnnealedNoise` schedule, absent when
-    ``stochastic_lambda = 0``) and then x <- x + F/2, F the pseudo-force
-    2 (x0 - x) at the noisy x. The calculator must be a pseudo-force
+    Each of the ``n_steps`` iterations does x <- x + F/2, F the pseudo-force
+    2 (x0 - x). The calculator must be a pseudo-force
     :class:`~schnetpack.dynamics.calculator.ForceCalculator`: it shows the
-    model the path time 0 and returns F in Angstrom, so lambda is in
-    Angstrom like the batch. The model must therefore ignore its time input.
+    model the path time 0 and returns F in Angstrom. The model must therefore ignore its time input.
     Time-conditioned models belong in
     :class:`~schnetpack.dynamics.sample.Sampler`.
 
@@ -43,7 +38,6 @@ class DirectDenoising(Optimizer):
         self,
         calculator,
         prior: Prior | None = None,
-        stochastic_lambda: float = 1.0,
         fmax: float | None = None,
         constraints: Sequence = (),
         key: str = properties.R,
@@ -54,12 +48,10 @@ class DirectDenoising(Optimizer):
                 :class:`~schnetpack.dynamics.calculator.ForceCalculator`, or a
                 bare callable batch -> outputs, taken as one in Angstrom
             prior: starting distribution :meth:`sample` draws from
-            stochastic_lambda: scale of the injected noise, in Angstrom; 0
-                disables the injection
             fmax: stop criterion on the largest pseudo-force, in Angstrom;
                 None runs all ``n_steps``
-            constraints: state constraints, applied after the noise
-                injection
+            constraints: state constraints applied around every step, in
+                order
             key: batch key this driver moves
         """
         if not isinstance(calculator, Calculator):
@@ -75,11 +67,7 @@ class DirectDenoising(Optimizer):
             constraints=constraints,
             key=key,
             fmax=fmax,
-            noise=(
-                AnnealedNoise(stochastic_lambda) if stochastic_lambda > 0.0 else None
-            ),
         )
-        self.stochastic_lambda = stochastic_lambda
 
     def step(self, batch, x, forces, state):
         return x + 0.5 * forces, state

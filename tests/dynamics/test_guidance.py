@@ -342,9 +342,7 @@ def test_direct_denoising_relaxes_onto_a_restraint():
     calculator = ForceCalculator(
         IDLE, kind="pseudo", guidance=[HarmonicRestraint(weight=0.1)]
     )
-    positions = DirectDenoising(calculator, stochastic_lambda=0.0).run(batch, 200)[
-        properties.R
-    ]
+    positions = DirectDenoising(calculator).run(batch, 200)[properties.R]
     assert torch.norm(positions[2] - positions[0]) == pytest.approx(1.3, abs=1e-4)
     assert torch.norm(positions[4] - positions[3]) == pytest.approx(0.9, abs=1e-4)
 

@@ -3,15 +3,14 @@ The time-free family: drivers that step structures along a force until they
 are relaxed, or for a fixed number of steps.
 
 :class:`Optimizer` owns the loop: the stop test, the holding of converged
-structures and fixed atoms and the noise injection. A subclass is one step rule on the force —
-:class:`Langevin` (gradient descent at kT = 0),
+structures and fixed atoms. A subclass is one step rule on the force —
+:class:`GradientDescent`,
 :class:`~schnetpack.dynamics.optimize.LBFGS`,
 :class:`~schnetpack.dynamics.optimize.DirectDenoising`. The force comes from one
 :class:`~schnetpack.dynamics.calculator.ForceCalculator`.
 """
 
 import abc
-import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -20,20 +19,17 @@ import torch
 from schnetpack import properties
 from schnetpack.dynamics.base import Dynamics
 from schnetpack.dynamics.calculator import Calculator, ForceCalculator
-from schnetpack.dynamics.optimize.noise import ConstantNoise, NoiseSchedule
 from schnetpack.generative.priors import Prior
 
-__all__ = ["Optimizer", "Langevin"]
+__all__ = ["Optimizer", "GradientDescent"]
 
 
 class Optimizer(Dynamics):
     """
-    Base class of the time-free drivers: x <- step(x, F(x)), with optional
-    noise before every step.
+    Base class of the time-free drivers: x <- step(x, F(x)).
 
     Each step evaluates the force at the current structures and hands it to
-    :meth:`step`, the subclass's rule. Before the force is evaluated, a
-    ``noise`` schedule, if any, adds ``scale * z`` to the moved atoms. With an
+    :meth:`step`, the subclass's rule. With an
     ``fmax`` the loop stops once the largest force on any free atom of every
     structure is below it, and structures that already meet the criterion
     are not moved further, whatever the step rule; without one it runs all
@@ -54,13 +50,12 @@ class Optimizer(Dynamics):
     drives the step and counts towards ``fmax``.
 
     Atoms flagged in ``batch[properties.fixed_atoms]`` are held in place:
-    their forces are zeroed before the step rule sees them, they receive no
-    noise, their step is zeroed after, and they are left out of the stop
+    their forces are zeroed before the step rule sees them, their step is
+    zeroed after, and they are left out of the stop
     test.
 
     Constraints run around every step as in any
-    :class:`~schnetpack.dynamics.base.Dynamics`, after the noise injection.
-    A run that converges early stops before ``n_steps``, so a constraint's
+    :class:`~schnetpack.dynamics.base.Dynamics`. A run that converges early stops before ``n_steps``, so a constraint's
     final ``after_step(step == n_steps)`` only fires when the step limit is
     reached.
     """
@@ -75,7 +70,6 @@ class Optimizer(Dynamics):
         constraints: Sequence = (),
         key: str = properties.R,
         fmax: float | None = None,
-        noise: NoiseSchedule | None = None,
     ):
         """
         Args:
@@ -88,8 +82,6 @@ class Optimizer(Dynamics):
             key: batch key this driver moves
             fmax: stop criterion on the largest force, in the force's unit;
                 None runs all ``n_steps``
-            noise: schedule of the noise injected before every step; None
-                injects nothing
         """
         if not isinstance(calculator, Calculator):
             calculator = ForceCalculator(calculator)
@@ -102,7 +94,6 @@ class Optimizer(Dynamics):
         calculator.cache_last = True
         super().__init__(calculator, prior=prior, constraints=constraints, key=key)
         self.fmax = fmax
-        self.noise = noise
 
     def forces(self, batch: Mapping[str, Any]) -> torch.Tensor:
         """
@@ -148,24 +139,6 @@ class Optimizer(Dynamics):
             moves = ~fixed if moves is None else moves & ~fixed
         return moves
 
-    def _inject(
-        self,
-        batch: Mapping[str, Any],
-        step: int,
-        n_steps: int,
-        converged: torch.Tensor | None,
-    ) -> dict[str, Any]:
-        """``batch`` with the noise of ``step`` added to the moving atoms."""
-        scale = self.noise(step, n_steps) if self.noise is not None else 0.0
-        if scale <= 0.0:
-            return batch
-        x = batch[self.key]
-        x_new = x + scale * torch.randn_like(x)
-        moves = self._moves(batch, converged)
-        if moves is not None:
-            x_new = torch.where(moves.unsqueeze(-1), x_new, x)
-        return {**batch, self.key: x_new}
-
     def run(self, batch: Mapping[str, Any], n_steps: int) -> dict[str, Any]:
         """
         Step the structures in ``batch`` until relaxed, or ``n_steps`` times.
@@ -188,7 +161,6 @@ class Optimizer(Dynamics):
             if converged is not None and bool(converged.all()):
                 break
 
-            batch = self._inject(batch, i, n_steps, converged)
             batch = self.before_step(batch, i, n_steps)
             x = batch[self.key]
             x_new, state = self.step(batch, x, self.forces(batch).to(x.dtype), state)
@@ -236,27 +208,18 @@ class Optimizer(Dynamics):
         raise NotImplementedError
 
 
-class Langevin(Optimizer):
+class GradientDescent(Optimizer):
     """
-    Overdamped Langevin dynamics, x <- x + eps F + sqrt(2 eps kT) z; gradient
-    descent at kT = 0.
+    Gradient descent, x <- x + eps F.
 
-    At kT > 0 the chain samples the Boltzmann density exp(-E/kT) up to the
-    discretization error of ``step_size``; it has no minimum to stop at, so
-    ``fmax`` is refused. The noise is injected before each step's force
-    evaluation, so the returned batch is the last step's deterministic
-    update.
-
-    With a physical force ``step_size`` is in Angstrom^2/eV and ``kT`` in
-    eV; with a pseudo-force F = -grad |x - x0|^2 ``step_size`` is unitless
-    and ``kT`` in Angstrom^2.
+    With a physical force ``step_size`` is in Angstrom^2/eV; with a
+    pseudo-force F = -grad |x - x0|^2 it is unitless.
     """
 
     def __init__(
         self,
         calculator,
         step_size: float,
-        kT: float = 0.0,
         fmax: float | None = None,
         prior: Prior | None = None,
         constraints: Sequence = (),
@@ -266,30 +229,19 @@ class Langevin(Optimizer):
         Args:
             calculator: see :class:`Optimizer`
             step_size: eps, the factor on the force
-            kT: temperature; 0 is gradient descent
-            fmax: stop criterion, kT = 0 only (see :class:`Optimizer`)
+            fmax: see :class:`Optimizer`
             prior: see :class:`Optimizer`
             constraints: see :class:`Optimizer`
             key: see :class:`Optimizer`
         """
-        if kT < 0.0:
-            raise ValueError(f"kT must be non-negative, got {kT}")
-        if kT > 0.0 and fmax is not None:
-            raise ValueError(
-                "Langevin at kT > 0 samples; it has no minimum to stop at, so "
-                "fmax must be None"
-            )
-        noise = ConstantNoise(math.sqrt(2.0 * step_size * kT)) if kT > 0.0 else None
         super().__init__(
             calculator,
             prior=prior,
             constraints=constraints,
             key=key,
             fmax=fmax,
-            noise=noise,
         )
         self.step_size = step_size
-        self.kT = kT
 
     def step(self, batch, x, forces, state):
         return x + self.step_size * forces, state

@@ -1,4 +1,4 @@
-"""Behaviour of the time-free drivers (``LBFGS``, ``Langevin``) that does not need a trained model.
+"""Behaviour of the time-free drivers (``LBFGS``, ``GradientDescent``) that does not need a trained model.
 
 ``test_relaxer_vs_ase.py`` checks that a relaxation lands where ase's ``LBFGS`` lands.
 The mechanics around it -- what comes back out of the batch, which atoms are allowed
@@ -16,7 +16,7 @@ from schnetpack.dynamics import (
     LBFGS,
     Calculator,
     ForceCalculator,
-    Langevin,
+    GradientDescent,
     StateConstraint,
 )
 from schnetpack.interfaces.ase_interface import atoms_to_batch, batch_to_atoms
@@ -71,10 +71,10 @@ def make_relaxer(model=None, **kwargs) -> LBFGS:
     return LBFGS(model if model is not None else HarmonicModel(), **kwargs)
 
 
-def make_descent(model=None, step_size=0.5, **kwargs) -> Langevin:
-    """Steepest descent: Langevin at kT = 0."""
+def make_descent(model=None, step_size=0.5, **kwargs) -> GradientDescent:
+    """Steepest descent."""
     model = model if model is not None else HarmonicModel()
-    return Langevin(model, step_size=step_size, **kwargs)
+    return GradientDescent(model, step_size=step_size, **kwargs)
 
 
 class StepCounter(StateConstraint):
@@ -381,24 +381,7 @@ def test_zero_step_limit_evaluates_the_start():
     assert torch.equal(relaxed[properties.position], batch[properties.position])
 
 
-# ------------------------------------------------------------- langevin, pseudo-forces
-
-
-def test_langevin_samples_the_boltzmann_density():
-    """On the unit spring exp(-|x|^2 / 2kT) has variance kT per coordinate."""
-    torch.manual_seed(0)
-    kT = 0.1
-    inputs = make_inputs([2000])
-    sampled = make_descent(step_size=0.01, kT=kT).run(inputs, 1000)
-    variance = sampled[properties.R].double().var().item()
-    assert variance == pytest.approx(kT, rel=0.05)
-
-
-def test_langevin_validates_its_temperature():
-    with pytest.raises(ValueError, match="fmax"):
-        make_descent(kT=0.1, fmax=0.05)
-    with pytest.raises(ValueError, match="non-negative"):
-        make_descent(kT=-1.0)
+# ------------------------------------------------------------- gradient descent, pseudo-forces
 
 
 def test_lbfgs_on_a_pseudo_force_starts_with_the_gpff_jump():

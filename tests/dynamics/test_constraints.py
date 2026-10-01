@@ -3,7 +3,6 @@ import torch
 
 from schnetpack import properties
 from schnetpack.dynamics import (
-    AnnealedNoise,
     Calculator,
     DirectDenoising,
     Dynamics,
@@ -94,30 +93,6 @@ def test_direct_denoising_hooks_run_around_each_step_without_a_time():
     assert all(t is None for _, _, t in recorder.log)
 
 
-def test_stochastic_lambda_is_an_annealed_noise_schedule():
-    schedule = direct_denoising(lambda x, t: -x, stochastic_lambda=0.7).noise
-    assert isinstance(schedule, AnnealedNoise)
-    scales = [schedule(k, 5) for k in range(5)]
-    assert scales == pytest.approx([0.7 * (1 - (k + 1) / 5) for k in range(5)])
-    assert scales[-1] == 0.0
-    assert direct_denoising(lambda x, t: -x, stochastic_lambda=0.0).noise is None
-
-
-def test_fixed_atoms_receive_no_noise():
-    seen = []
-
-    def model(x, t):
-        seen.append(x.clone())
-        return torch.zeros_like(x)
-
-    fixed = torch.tensor([True, False, True, False])
-    batch = {properties.R: torch.ones(4, 2), properties.fixed_atoms: fixed}
-    direct_denoising(model, stochastic_lambda=1.0).run(batch, 3)
-    for x in seen:
-        assert torch.equal(x[fixed], torch.ones(2, 2))
-    assert not torch.equal(seen[0][~fixed], torch.ones(2, 2))
-
-
 # --- scaffold ------------------------------------------------------------- #
 
 
@@ -138,13 +113,13 @@ def test_scaffold_direct_denoising_model_sees_clean_scaffold():
         seen.append(x[mask].clone())
         return -x  # pseudo force pulling everything to the origin
 
-    sampler = direct_denoising(model, stochastic_lambda=1.0, constraints=[Scaffold()])
+    sampler = direct_denoising(model, constraints=[Scaffold()])
     out = sampler.run(
         sampler.prior.sample_from_batch(scaffold_batch(mask, reference)), 6
     )
     x = out[properties.R]
 
-    # the scaffold atoms are fixed: held, never noised, and overwritten
+    # the scaffold atoms are fixed: held and overwritten
     assert all(torch.equal(s, reference[mask]) for s in seen)
     assert torch.equal(x[mask], reference[mask])
     assert not torch.allclose(x[~mask], torch.zeros(2, 2))  # still moved
@@ -220,10 +195,7 @@ def test_sample_without_prior_raises():
 
 
 def test_scaffold_validates_its_keys():
-    # no noise: the loop would trip over the malformed mask before the scaffold
-    sampler = direct_denoising(
-        lambda x, t: x, stochastic_lambda=0.0, constraints=[Scaffold()]
-    )
+    sampler = direct_denoising(lambda x, t: x, constraints=[Scaffold()])
     bad_mask = scaffold_batch(torch.tensor([True, False]), torch.zeros(3, 1))
     with pytest.raises(ValueError, match="one flag per row"):
         sampler.run(sampler.prior.sample_from_batch(bad_mask), 2)

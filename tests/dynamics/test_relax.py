@@ -25,8 +25,7 @@ def gpff(model, process=None, **kwargs):
 
 
 def test_direct_denoising_ends_on_the_x0_estimate():
-    # The last iteration injects nothing (noise ratio 0) and then jumps, so a
-    # model whose x0-estimate is a fixed point lands there exactly.
+    # A model whose x0-estimate is a fixed point lands there exactly.
     mu0 = 1.5
     process = VE(0.01, 3.0)
 
@@ -73,7 +72,6 @@ def test_direct_denoising_relaxes_structures_from_a_dataset_prior():
     sampler = DirectDenoising(
         ForceCalculator(model, kind="pseudo"),
         prior=DatasetPrior(dataset),
-        stochastic_lambda=0.0,
     )
     out = sampler.sample(2, n_steps=1)
 
@@ -81,9 +79,9 @@ def test_direct_denoising_relaxes_structures_from_a_dataset_prior():
     assert torch.equal(out[properties.Z], torch.tensor([1, 8, 1, 1, 8, 1]))
 
 
-def test_direct_denoising_lambda_zero_is_deterministic():
+def test_direct_denoising_is_deterministic():
     model = batch_model(lambda x, t: -x)  # some deterministic field
-    sampler = gpff(model, stochastic_lambda=0.0)
+    sampler = gpff(model)
 
     batch = {properties.R: torch.randn(8, 2)}
     out1 = sampler.run(batch, 10)
@@ -116,7 +114,7 @@ def test_direct_denoising_stops_on_fmax():
         properties.n_atoms: torch.tensor([3]),
         properties.idx_m: torch.zeros(3, dtype=torch.long),
     }
-    out = gpff(model, stochastic_lambda=0.0, fmax=1e-6).run(batch, 10)
+    out = gpff(model, fmax=1e-6).run(batch, 10)
     assert torch.equal(out[properties.R], torch.zeros(3, 3))
     assert len(calls) == 2
 
@@ -140,8 +138,7 @@ class TimeFreeToyNet(torch.nn.Module):
 
 def test_direct_denoising_trained_gpff_assembly():
     # The full GPFF recipe end to end: scaled VE + pseudo-force head with the
-    # clipped 1/b^2 weight, a time-free net, and the stochastic
-    # direct-denoising loop.
+    # clipped 1/b^2 weight, a time-free net, and the direct-denoising loop.
     torch.manual_seed(0)
     mu, sd = 1.0, 0.5
     process = VE(0.01, 3.0)
@@ -153,7 +150,7 @@ def test_direct_denoising_trained_gpff_assembly():
     )
     model = train_toy(loss, TimeFreeToyNet(), mu, sd)
 
-    sampler = gpff(batch_model(model), process, stochastic_lambda=1.0)
+    sampler = gpff(batch_model(model), process)
     samples = draw(sampler, (4096, 1), 50)
 
     assert torch.isfinite(samples).all()

@@ -58,10 +58,9 @@ class LBFGS(Optimizer):
     F = 2 (x0 - x), whose first step x + F/2 is then exactly GPFF's jump to
     the x0-estimate (when ``maxstep`` allows it).
 
-    The history lives in an :class:`LBFGSState`, one per run. Injected noise
-    would make the history describe a path the structures did not take, so
-    L-BFGS takes no noise schedule; a state constraint that moves atoms
-    between steps has the same effect. Pure overwrites of fixed atoms are
+    The history lives in an :class:`LBFGSState`, one per run. A state
+    constraint that moves atoms between steps makes the history describe a
+    path the structures did not take. Pure overwrites of fixed atoms are
     harmless, since their forces are zeroed by the loop.
     """
 
