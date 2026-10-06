@@ -65,7 +65,7 @@ Tensor level, toy data, flow matching:
 import torch
 from schnetpack.generative import FlowMatching, VelocityParametrization, MatchingLoss
 from schnetpack import properties
-from schnetpack.dynamics import Sampler, Heun
+from schnetpack.dynamics import GenerativeCalculator, Heun
 
 process = FlowMatching()                     # a = 1 - t, b = t, unit Gaussian endpoint
 param   = VelocityParametrization()          # the model predicts d/dt x_t
