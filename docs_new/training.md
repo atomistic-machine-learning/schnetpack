@@ -191,9 +191,9 @@ for x0 in data:
     optimizer.step()
 
 batch_model = lambda b: {"prediction": model(b[properties.R], b[properties.t])}
-sampler = Sampler(batch_model, process, param, Ancestral())    # same objects
+sampler = Ancestral(GenerativeCalculator(batch_model, process, param))  # same objects
 start = sampler.prior.sample_from_batch({properties.R: torch.empty_like(x0)})
-samples = sampler.denoise(start, n_steps=200)
+samples = sampler.run(start, n_steps=200)
 ```
 
 And the pipeline variant of the training half:

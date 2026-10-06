@@ -1,10 +1,11 @@
 # Sampling: reverse processes, integrators, grids, samplers
 
-*Modules: `schnetpack.generative.differential_equations`, `.integrators`,
-`.grids`, `.sampler` · classes `SDE`, `ReverseSDE`, `ReverseODE` (assembled
-by `reverse()`), `Integrator`, `EulerMaruyama`, `Heun`, `Ancestral`,
-`TimeGrid`, `UniformGrid`, `Dynamics`, `Sampler`,
-`DirectDenoising`, `Calculator`, `StateConstraint`, `AnnealedNoise`, `Scaffold`.*
+*Modules: `schnetpack.generative.differential_equations`,
+`schnetpack.dynamics` (`.sample`, `.optimize`, `.calculator`, `.hooks`,
+`.guidance`) · classes `SDE`, `ReverseSDE`, `ReverseODE`, `Sampler`,
+`EulerMaruyama`, `Heun`, `Ancestral`, `TimeGrid`, `UniformGrid`, `Dynamics`,
+`DirectDenoising`, `Calculator`, `GenerativeCalculator`, `ForceCalculator`,
+`Hook`, `FreezeScaffold`, `Guidance`.*
 
 Generation runs the forward process backwards. The machinery factors the
 same way as the forward side: **what** is integrated (the reverse process,
@@ -49,34 +50,33 @@ the score is a *second conversion of the same raw output* — never a second
 model call.
 
 Reverse processes are never implemented per schedule; they split by
-**capability** instead, and the factory
-`reverse(process, parametrization, model, eta2, cond, require_sde)` picks:
+**capability** instead:
 
-- **`ReverseSDE(process.sde(), ...)`** — everything that crosses the
-  [(f, g) chart](processes.md#3-derived-quantities-the-sde-chart):
-  eta2 $> 0$ outright, and eta2 $= 0$ for any non-velocity head (the
-  PF-ODE drift converts through $f$ and $g^2$). Taking the `SDE` in its
-  constructor means it *cannot exist* for a configuration without the
-  Gaussian kernel — the refusal happens at assembly and names the
-  obstruction. Exposes `drift(x, t)`/`diffusion(t)` for the generic
-  integrators, `score(x, t)`/`x0(x, t)` for the ancestral ones, and
-  `g2(t)`/`sde` read through to the chart.
+- **`ReverseSDE(process.sde(), eta2)`** — everything that crosses the
+  [(f, g) chart](processes.md#3-derived-quantities-the-sde-chart). Taking
+  the `SDE` in its constructor means it *cannot exist* for a configuration
+  without the Gaussian kernel — the refusal happens at assembly and names
+  the obstruction. The `Sampler` builds one at construction and steps on the
+  calculator's score: `drift(x, t, score)`/`diffusion(t)` for the generic
+  integrators, the chart's `x0_from_score`/`posterior` for the ancestral
+  one.
 - **`ReverseODE(process, ...)`** — continuity-equation transport
   $\mathrm{d}x = v\,\mathrm{d}t$, valid for **any** endpoint law
   ([flow_matching_sde.md §8.2](flow_matching_sde.md)); accepts only
   chart-free velocity heads. This is vanilla flow matching's path, and the
-  reason shape-prior velocity sampling never touches the chart.
+  reason shape-prior velocity sampling never touches the chart. No shipped
+  sampler steps on it yet.
 
 Method-specific behavior belongs in the composed parts.
 
 
 ## 2. Integrators
 
-An integrator advances the state one step and is agnostic to what it
-integrates — it consumes only `drift` and `diffusion` (a reverse SDE, a
-PF-ODE, or even a forward process). It has no loop of its own: the
-`Sampler` calls `step` once per grid interval inside the shared `Dynamics`
-loop, which is where state constraints hook in (§7).
+An integrator is a `Sampler` subclass: its `step(batch, x, t, dt)` advances
+the state one grid interval on the reverse process's `drift` and
+`diffusion` and the calculator's score. It has no loop of its own: the
+`Sampler` base calls `step` once per grid interval inside its `run` loop,
+which is where hooks run (§7).
 
 ### `EulerMaruyama` — first order
 
@@ -108,9 +108,9 @@ Schedule logic lives entirely in
 [the closed form](processes.md#the-closed-forms), so one class covers every
 process with a Gaussian kernel: on `VP` it is the textbook DDPM ancestral
 step with the exact ($\tilde\beta$) posterior variance; on `VE` it reduces
-to the familiar NCSN/GPFF ancestral update. Declares `requires_sde`, so
-the `Sampler` assembles a `ReverseSDE` even at eta2 0 and a configuration
-without the Gaussian kernel is refused at assembly. Works with any head
+to the familiar NCSN/GPFF ancestral update. Like every sampler it assembles
+a `ReverseSDE`, so a configuration without the Gaussian kernel is refused
+at assembly. Works with any head
 that can produce an $x_0$-estimate, and — being intrinsically stochastic —
 **ignores `eta2`**. Note this also means ancestral sampling is perfectly
 valid for a flow-matching model under its default Gaussian prior.
@@ -146,19 +146,20 @@ subclass away — the seam exists precisely so they never touch a solver.
 A thin wrapper: prior → reverse process → integrator.
 
 ```python
-# inference: device, dtype, neighbor list, grad policy (§7)
-calculator = Calculator(model, neighbor_list=None, device="cuda")
-
-sampler = Sampler(
-    calculator,          # runs the model; a bare batch -> outputs callable works too
+# inference: device, dtype, neighbor list, grad policy (§7), and the pair
+calculator = GenerativeCalculator(
+    model,               # batch -> outputs, or a path to a saved model
     process,             # the SAME process the model trained under
     parametrization,     # the SAME head contract
-    integrator=Heun(),
+    output_key="eps_pred",    # model output holding the raw head
+    device="cuda",
+)
+
+sampler = Heun(          # the integrator is the Sampler subclass
+    calculator,
     grid=None,           # default UniformGrid()
     prior=None,          # default: derived from the process (see below)
     eta2=0.0,
-    t_min=None, t_max=None,   # default: the process's own bounds
-    output_key="eps_pred",    # model output holding the raw head
 )
 
 # 64 structures from the prior's structures (e.g.
@@ -168,7 +169,7 @@ out = sampler.sample(64, n_steps=50)
 
 # or redraw the positions of a batch of your own (a test-set batch, a template
 # with Z, n_atoms, idx_m and any conditioning keys)
-out = sampler.denoise(sampler.prior.sample_from_batch(batch), n_steps=50)
+out = sampler.run(sampler.prior.sample_from_batch(batch), n_steps=50)
 positions = out[properties.R]
 ```
 
@@ -183,24 +184,23 @@ Design points worth knowing:
   [couplings.md](couplings.md).
 - **The batch dict is the whole interface** (§7). The model is
   `batch -> outputs`, like any `NeuralNetworkPotential`, reached through a
-  `Calculator` (a bare callable is wrapped in one): the time arrives
+  `GenerativeCalculator`: the time arrives
   under `properties.t` (the key `Diffuse` writes in training), conditioning
   keys simply stay in the batch, and the raw head is read from
   `outputs[output_key]`. The prior receives the batch as its context, so a
   `GaussianPrior` reads the molecule layout (`idx_m`) out of it and
   per-molecule centering works exactly as during training.
 - **The assembly is validated at construction**: the pairing via
-  `parametrization.validate(process)`, and — whenever eta2 $> 0$, the head
-  is not a chart-free velocity, or the integrator declares `requires_sde` —
-  the chart via `process.sde()`. An invalid assembly fails when built, with
+  `parametrization.validate(process)` in the calculator, and the chart via
+  `process.sde()` in the sampler, which always steps on the score. An invalid assembly fails when built, with
   the obstruction named; nothing is left to fail mid-run or, worse, to
   return plausible wrong numbers.
-- **`denoise(model, batch, n_steps, t_start=None)`** is the partial-denoising
+- **`run(batch, n_steps, t_start=None)`** is the partial-denoising
   entry point: relaxation of given structures, scaffolded generation, and
   structured priors that start below $t_{\max}$ all enter here — `sample`
-  is just `denoise` from a prior draw at $t_{\max}$.
+  is just `run` from a prior draw at $t_{\max}$.
 - If you find yourself subclassing `Sampler`, the logic probably belongs in
-  a process, parametrization, integrator or grid — that is what the axes
+  a process, parametrization, step rule or grid — that is what the axes
   are for.
 
 `generate()` — the "model in, ASE Atoms out" convenience on top of this —
@@ -210,25 +210,20 @@ lands with the M1.3 milestone, together with the `spkgenerate` CLI.
 ## 5. `DirectDenoising` — GPFF's time-free loop
 
 GPFF's direct denoising is not an integrator on a time grid, which is why it
-is a *sibling* of `Sampler` rather than a part of one. Each of `n_steps`
-iterations does
+is an `Optimizer` rather than a `Sampler`. Each of `n_steps` iterations
+jumps to the model's $x_0$-estimate,
 
 $$
-x \leftarrow x + \lambda\,\big(1 - k/N\big)\,z, \quad z \sim \mathcal{N}(0, I)
-\qquad\text{(decaying injection)},
-$$
-$$
-x \leftarrow \hat x_0(x)
-\qquad\text{(jump to the model's } x_0\text{-estimate)}.
+x \leftarrow x + \tfrac12 F(x) = \hat x_0(x),
+\qquad F = 2\,(\hat x_0 - x)
+\quad\text{(the pseudo-force)}.
 $$
 
 There is no time grid, no reverse SDE/ODE, no noise schedule at sampling
-time; the only ingredients are `parametrization.to_x0` and the injection.
-The injection is an `AnnealedNoise` state constraint (§7) that
-`stochastic_lambda` puts first in the constraint list; the step itself is
-the bare jump.
-`stochastic_lambda` is in **data units** (Å for positions); 0 disables the
-injection (plain direct denoising), positive values buy sample diversity.
+time; the only ingredient is the pseudo-force, which a
+`ForceCalculator(model, kind="pseudo")` returns in Å. Being an `Optimizer`,
+it stops early once every structure's largest pseudo-force is below `fmax`
+(Å), and holds fixed atoms. It injects no noise.
 
 The model is evaluated at $t = 0$ throughout — the sampler never knows the
 noise level of its iterate. It therefore presumes the **time-free
@@ -238,7 +233,7 @@ heads satisfy that (their recoveries are
 [division- and $\sigma$-free](parametrizations.md#2-the-catalog)); a
 score-type head divides by $\sigma(t)$ and would read the lie.
 Time-conditioned models belong in `Sampler` — including
-`Sampler.denoise` for relaxing structures whose noise level you *do* know.
+`Sampler.run` for relaxing structures whose noise level you *do* know.
 
 The flip side of time-freeness: on a `VE` path the pseudo-force magnitude
 itself carries $\sigma$, so the model meters its own noise level from the
@@ -254,17 +249,17 @@ DDPM, exactly, from parts — then two one-line pivots:
 stats   = StatisticsStructures.from_dataset(train)            # compositions to generate
 process = VP(prior=GaussianPrior(structures=stats))          # unit Gaussian endpoint
 param   = EpsParametrization()
-calc    = Calculator(model)                # the trained checkpoint
+calc    = GenerativeCalculator(model, process, param)        # the trained checkpoint
 
-sampler = Sampler(calc, process, param, Ancestral())          # textbook DDPM
+sampler = Ancestral(calc)                                     # textbook DDPM
 samples = sampler.sample(64, n_steps=1000)
 
 # pivot 1: deterministic few-step sampling of the SAME model
-sampler = Sampler(calc, process, param, Heun(), eta2=0.0)    # PF-ODE
+sampler = Heun(calc, eta2=0.0)                                # PF-ODE
 samples = sampler.sample(64, n_steps=30)
 
 # pivot 2: interpolate stochasticity
-sampler = Sampler(calc, process, param, EulerMaruyama(), eta2=0.3)
+sampler = EulerMaruyama(calc, eta2=0.3)
 ```
 
 The same trained checkpoint serves all three — the sampler family shares
@@ -274,47 +269,47 @@ grid are pure inference-time choices. That is the practical payoff of
 instead of implementing it per method.
 
 
-## 7. The loop, the batch, the calculator and state constraints
+## 7. The loop, the batch, the calculator and hooks
 
-`Sampler` and `DirectDenoising` are both `Dynamics`. `Dynamics` holds only
-the calculator, an optional prior, the moved key and the constraint hooks,
-so non-generative drivers (L-BFGS and friends) subclass it without a
-process, parametrization or time key. The two generative drivers hold the
-`(process, parametrization)` pair, `output_key` and `time_key` themselves,
-and default the prior to the process's sampling prior. The structure they
-move is the batch dict — the one datasets, transforms and models use — and
-nothing else. Each driver holds its model as `self.calculator` and writes
-its loop out in `denoise(batch, n_steps)` (the sampler adds
-`t_start=None`),
+`Sampler` and the optimizers (`DirectDenoising`, `LBFGS`, ...) are all
+`Dynamics`. `Dynamics` holds only the calculator, an optional prior, the
+moved key and the hooks, so non-generative drivers subclass it without a
+process, parametrization or time key. The generative pair, `output_key` and
+`time_key` live on the `GenerativeCalculator`, and the sampler defaults the
+prior to the process's sampling prior. The structure they move is the batch
+dict — the one datasets, transforms and models use — and nothing else. Each
+driver holds its model as `self.calculator`, and each family's base writes
+the loop out in `run(batch, n_steps)` (the sampler adds `t_start=None`),
 
 ```
+self.calculator.reset()
 batch = self.calculator.prepare(batch)       # to the run's device/dtype, once
-batch = {**batch, time_key: t_0}
+batch = {**batch, time_key: t_0}             # sampler only
 for i in range(n_steps):
-    batch = self.before_step(batch, i, n_steps)       # constraints, in order
-    batch = <one step>                                # integrator step / x0 jump
-    batch = self.after_step(batch, i + 1, n_steps)    # constraints, in order
+    batch = self.before_step(batch, i, n_steps)       # hooks, in order
+    batch = <one step>                                # self.step(...)
+    batch = self.after_step(batch, i + 1, n_steps)    # hooks, in order
 return batch
 ```
 
 and `sample(n_samples, n_steps)`, shared by every driver, draws
 `n_samples` starting structures from the prior first
 (`prior.sample(n_samples)`). To start from a batch of your own, redraw its
-positions with `prior.sample_from_batch(batch)` and call `denoise`; a
-relaxation from stored structures passes `prior=DatasetPrior(dataset)`. Per-run data (the sampler's time grid) are locals of that loop.
+positions with `prior.sample_from_batch(batch)` and call `run`; a
+relaxation from stored structures passes `prior=DatasetPrior(dataset)`. Per-run data (the sampler's time grid, the optimizer's step-rule history) are locals of that loop.
 
 The first constructor argument of every driver is its calculator; the
-batch contract is the keywords of `Dynamics` (`key`) and of the generative
-drivers (`output_key`, `time_key`):
+batch contract is the keyword `key` of `Dynamics` (the sampler takes it
+from its calculator) and the keywords of the `GenerativeCalculator`:
 
 | keyword | default | meaning |
 |---|---|---|
-| `key` | `properties.R` | batch key the driver moves. Process, parametrization and integrator stay pure tensor math on it; the driver reads it and writes it back. Joint iterates (positions + cell + types) need per-key processes and are not built yet. |
+| `key` | `properties.R` | batch key the driver moves. Process, parametrization and step rule stay pure tensor math on it; the driver reads it and writes it back. Joint iterates (positions + cell + types) need per-key processes and are not built yet. |
 | `output_key` | `"prediction"` | model output holding the raw head |
-| `time_key` | `properties.t` | where the path time goes, one value per row of the moved key (grid time on the sampler, zeros on time-free dynamics) |
+| `time_key` | `properties.t` | where the path time goes, one value per row of the moved key (grid time on the sampler, zeros on a pseudo-force calculator) |
 
 **Inference goes through a `Calculator`**
-(`Calculator(model, neighbor_list=None, device=None, dtype=None, enable_grad=False)`):
+(`Calculator(model, neighbor_list=None, device=None, dtype=None, enable_grad=False, cache_last=False, guidance=())`):
 it moves the batch to the run's device/dtype once at loop entry
 (`prepare`), rebuilds the neighbor list on every call, sets the gradient
 policy (off for generative heads, on for models that differentiate an
@@ -323,42 +318,46 @@ energy) and calls the model. It works on a shallow copy, so neighbor lists,
 has to invalidate them when the structure moves. Keys the driver does not
 move are carried along as given: a static, fully connected neighbor list in
 the template simply stays valid, while a cutoff list needs `neighbor_list=`.
-The calculator keeps no output cache (Heun evaluates two structures per
-step); its only per-run state is the neighbor list's, cleared by `reset()`
-at the start of every run.
+Output caching is off by default (Heun evaluates two structures per step);
+the optimizers turn on `cache_last`, since the stop test and the step ask
+about the same positions. Its per-run state is cleared by `reset()` at the
+start of every run.
 
-A `StateConstraint` edits the batch **before** a step (what the model sees)
-or **after** it (what the step produced), with hooks
-`before_step(batch, step, n_steps, dynamics)` / `after_step(...)` that return
+**Guidance lives on the calculator.** A `Guidance` term
+(`HarmonicRestraint`, or kT ∇ log p of a classifier) returns one force-like
+term in eV/Å; the calculator adds the weighted sum to the field it returns
+— to the forces of a `ForceCalculator`, to the score (and through it to x0
+and the velocity) of a `GenerativeCalculator`. The drivers never see it as
+a separate part: the field they step on is already guided. Passing a
+guidance term as a hook raises a `TypeError`.
+
+A `Hook` edits the batch **before** a step (what the model sees)
+or **after** it (what the step produced), with
+`before_step(batch, step, n_steps)` / `after_step(...)` that return
 a new dict. `step` counts completed steps.
-Constraints run between full steps only, never between the stages of Heun;
-they run in list order, so a constraint that overwrites rows belongs after
+Hooks run between full steps only, never between the stages of Heun;
+they run in list order, so a hook that overwrites rows belongs after
 one that perturbs them.
 
-- **`AnnealedNoise(lambda)`** — GPFF's injection
-  $x \leftarrow x + \lambda(1 - k/N)z$ before step $k$.
-- **`Scaffold(mask_key=properties.fixed_atoms, reference_key=properties.R_reference)`**
+- **`FreezeScaffold(key=properties.R, mask_key=properties.fixed_atoms, reference_key=properties.R_reference)`**
   — holds the atoms flagged in the per-atom mask at the reference positions.
   Both are batch keys, so they collate with the structures and each molecule
-  may carry its own scaffold. Before every step the scaffold rows are set to
-  where the scaffold belongs at the iterate's noise level: overwritten on
-  time-free dynamics, re-noised to the current time as
-  $a(t)\,x_{\text{ref}} + b(t)\,x_1$ on the sampler (RePaint-style
-  inpainting, which keeps $x_t$ on the noise manifold). After the last step
-  they are overwritten with the reference.
+  may carry its own scaffold. The scaffold rows of `key` are overwritten
+  with the reference before and after every step, on any driver: the model
+  always sees the clean scaffold, and the run ends on it.
 
 ```python
 template[properties.fixed_atoms] = mask            # bool, one per atom
 template[properties.R_reference] = reference       # (n_atoms, 3); masked rows read
-gpff = DirectDenoising(Calculator(model), process, PseudoForceParametrization(),
-                       stochastic_lambda=1.0, constraints=[Scaffold()],
-                       output_key="pseudo_force_pred")
-out = gpff.denoise(gpff.prior.sample_from_batch(template), n_steps=100)
+gpff = DirectDenoising(ForceCalculator(model, kind="pseudo"),
+                       prior=process.sampling_prior(),
+                       hooks=[FreezeScaffold()])
+out = gpff.run(gpff.prior.sample_from_batch(template), n_steps=100)
 ```
 
-On a time-aware sampler an edit that moves $x_t$ off the noise manifold at
-$t$ (projecting a bond on a noisy iterate, say) feeds the model inputs it
-never saw in training; that is why `Scaffold` re-noises. On a time-free
-loop any edit is fine. Overwriting rows also breaks the zero center of
-geometry a centered `GaussianPrior` guarantees: give the reference in the
-frame the model expects.
+On a time-aware sampler a clean scaffold sits off the noise manifold at
+$t$, so the model sees inputs it never saw in training; that is the price of
+overwriting rather than re-noising. On a time-free loop any edit is fine.
+Overwriting rows also breaks the zero center of geometry a centered
+`GaussianPrior` guarantees: give the reference in the frame the model
+expects.
