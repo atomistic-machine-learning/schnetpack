@@ -20,7 +20,7 @@ import torch
 
 from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn, split_batch
-from schnetpack.transform import Transform
+from schnetpack.transform import NeighborListTransform, Transform
 
 __all__ = ["BatchNeighborList"]
 
@@ -73,7 +73,7 @@ class BatchNeighborList:
 
     def __init__(
         self,
-        neighbor_list: Transform,
+        neighbor_list: NeighborListTransform,
         cutoff_skin: float = 0.3,
         transforms: Transform | list[Transform] | None = None,
         device: str | torch.device | None = None,
@@ -255,6 +255,7 @@ class BatchNeighborList:
         does the same thing one structure at a time on the cpu.
         """
         cache = self._cache
+        assert cache is not None, "_prune runs after _rebuild has filled the cache"
         idx_i, idx_j = cache[properties.idx_i], cache[properties.idx_j]
         offsets = cache[properties.offsets]
 
