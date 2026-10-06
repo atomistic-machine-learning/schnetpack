@@ -272,9 +272,9 @@ class TorchNeighborList(NeighborListTransform):
             pbc, num_repeats, torch.Tensor([0], device=cell.device).long()
         )
 
-        r1 = torch.arange(1, num_repeats[0] + 1, device=cell.device)
-        r2 = torch.arange(1, num_repeats[1] + 1, device=cell.device)
-        r3 = torch.arange(1, num_repeats[2] + 1, device=cell.device)
+        r1 = torch.arange(1, int(num_repeats[0]) + 1, device=cell.device)
+        r2 = torch.arange(1, int(num_repeats[1]) + 1, device=cell.device)
+        r3 = torch.arange(1, int(num_repeats[2]) + 1, device=cell.device)
         o = torch.zeros(1, dtype=torch.long, device=cell.device)
 
         return torch.cat(
@@ -416,11 +416,10 @@ class CachedNeighborList(NeighborListWrapper):
         self.cache_path = cache_path
         self.cache_workdir = cache_workdir
         self.preexisting_cache = os.path.exists(self.cache_path)
-        self.has_tmp_workdir = cache_workdir is not None
 
         os.makedirs(cache_path, exist_ok=True)
 
-        if self.has_tmp_workdir:
+        if cache_workdir is not None:
             # cache workdir should be empty to avoid loading nbh lists from earlier runs
             if os.path.exists(cache_workdir):
                 raise CacheException("The provided `cache_workdir` already exists!")
@@ -524,7 +523,7 @@ class SkinNeighborList(NeighborListWrapper):
 
         self.cutoff = neighbor_list._cutoff
         self.cutoff_skin = cutoff_skin
-        self.neighbor_list._cutoff = self.cutoff + cutoff_skin
+        neighbor_list._cutoff = self.cutoff + cutoff_skin
         self.distance_calculator = spk.model.PairwiseDistances()
         self.previous_inputs = {}
 
