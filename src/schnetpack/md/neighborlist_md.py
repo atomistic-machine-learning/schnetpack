@@ -1,11 +1,8 @@
 import torch
 
 from schnetpack.data.loader import _atoms_collate_fn
-from schnetpack.transform import (
-    BatchNeighborList,
-    CollectAtomTriples,
-    NeighborListTransform,
-)
+from schnetpack.dynamics import BatchNeighborList
+from schnetpack.transform import CollectAtomTriples, NeighborListTransform
 
 __all__ = ["NeighborListMD"]
 
@@ -15,7 +12,7 @@ class NeighborListMD:
     Wrapper for neighbor list transforms to make them suitable for molecular dynamics simulations. Introduces handling
     of multiple replicas and a cutoff shell (buffer region) to avoid recomputations of the neighbor list in every step.
 
-    The work is done by :class:`~schnetpack.transform.BatchNeighborList`, shared with batchwise structure relaxation
+    The work is done by :class:`~schnetpack.dynamics.BatchNeighborList`, shared with batchwise structure relaxation
     framework.
     """
 

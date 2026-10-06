@@ -42,8 +42,8 @@ def make_structures(
     ]
 
 
-def make_batch_neighbor_list(**kwargs) -> spk.transform.BatchNeighborList:
-    return spk.transform.BatchNeighborList(
+def make_batch_neighbor_list(**kwargs) -> spk.dynamics.BatchNeighborList:
+    return spk.dynamics.BatchNeighborList(
         neighbor_list=spk.transform.MatScipyNeighborList(cutoff=CUTOFF),
         cutoff_skin=CUTOFF_SKIN,
         dtype=torch.float64,

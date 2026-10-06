@@ -8,14 +8,7 @@ from ase import Atoms
 from ase.neighborlist import neighbor_list as ase_neighbor_list
 from dirsync import sync
 from matscipy.neighbours import neighbour_list as msp_neighbor_list
-
-try:
-    from vesin import NeighborList as vesin_nl
-except ImportError:
-    # vesin is a declared dependency, but environments built before it was
-    # added (e.g. older containers) should still import; only
-    # VesinNeighborList actually needs it.
-    vesin_nl = None
+from vesin import NeighborList as vesin_nl
 
 from .base import Transform
 

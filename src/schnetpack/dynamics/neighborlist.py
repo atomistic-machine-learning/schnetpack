@@ -20,8 +20,7 @@ import torch
 
 from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn, split_batch
-
-from .base import Transform
+from schnetpack.transform import Transform
 
 __all__ = ["BatchNeighborList"]
 
@@ -252,8 +251,8 @@ class BatchNeighborList:
         """Restrict the cached cutoff+skin lists to the pairs within the cutoff.
 
         The whole batch at once and on its own device -- the counterpart of
-        :meth:`SkinNeighborList._remove_neighbors_in_skin`, which does the same thing one
-        structure at a time on the cpu.
+        :meth:`~schnetpack.transform.SkinNeighborList._remove_neighbors_in_skin`, which
+        does the same thing one structure at a time on the cpu.
         """
         cache = self._cache
         idx_i, idx_j = cache[properties.idx_i], cache[properties.idx_j]

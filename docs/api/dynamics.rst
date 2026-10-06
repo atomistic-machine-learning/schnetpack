@@ -71,6 +71,7 @@ Calculators
     GenerativeCalculator
     EnsembleCalculator
     NNEnsemble
+    BatchNeighborList
 
 
 Constraints

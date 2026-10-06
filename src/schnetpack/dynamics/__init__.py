@@ -15,10 +15,10 @@ are subclasses of the two families' bases,
 :mod:`schnetpack.generative`.
 """
 
-from schnetpack.dynamics import calculator, guidance, hooks, optimize, sample
 from schnetpack.dynamics.base import *
 from schnetpack.dynamics.calculator import *
 from schnetpack.dynamics.guidance import *
 from schnetpack.dynamics.hooks import *
+from schnetpack.dynamics.neighborlist import *
 from schnetpack.dynamics.optimize import *
 from schnetpack.dynamics.sample import *
