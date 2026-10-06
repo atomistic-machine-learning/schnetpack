@@ -606,10 +606,6 @@ class SkinNeighborList(NeighborListWrapper):
 
     def _build(self, inputs):
         inputs = self._build_neighbors(inputs)
-
-        # store new reference conformation and remove old one. This runs from _update,
-        # i.e. before forward prunes the skin away, so what is stored is the full
-        # cutoff+skin list -- the one a later step can reuse.
         sample_idx = inputs[properties.idx].item()
         stored_inputs = {
             properties.R: inputs[properties.R],
