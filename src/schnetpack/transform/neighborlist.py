@@ -527,21 +527,20 @@ class SkinNeighborList(NeighborListWrapper):
         self.distance_calculator = spk.model.PairwiseDistances()
         self.previous_inputs = {}
 
-    # @timeit
     def forward(
         self,
         inputs: dict[str, torch.Tensor],
     ) -> dict[str, torch.Tensor]:
-        update_required, inputs = self._update(inputs)
+        inputs = self._update(inputs)
         inputs = self.distance_calculator(inputs)
-        inputs = self._remove_neighbors_in_skin(inputs)
+        inputs = self._prune(inputs)
 
         return inputs
 
     def reset(self):
         self.previous_inputs = {}
 
-    def _remove_neighbors_in_skin(
+    def _prune(
         self,
         inputs: dict[str, torch.Tensor],
     ) -> dict[str, torch.Tensor]:
@@ -599,11 +598,11 @@ class SkinNeighborList(NeighborListWrapper):
                 inputs[properties.idx_j] = previous_inputs[properties.idx_j]
                 inputs[properties.offsets] = previous_inputs[properties.offsets]
 
-                return False, inputs
+                return inputs
 
         # build new neighbor list
         inputs = self._build(inputs)
-        return True, inputs
+        return inputs
 
     def _build(self, inputs):
         inputs = self._build_neighbors(inputs)

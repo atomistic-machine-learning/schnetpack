@@ -251,7 +251,7 @@ class BatchNeighborList:
         """Restrict the cached cutoff+skin lists to the pairs within the cutoff.
 
         The whole batch at once and on its own device -- the counterpart of
-        :meth:`~schnetpack.transform.SkinNeighborList._remove_neighbors_in_skin`, which
+        :meth:`~schnetpack.transform.SkinNeighborList._prune`, which
         does the same thing one structure at a time on the cpu.
         """
         cache = self._cache
