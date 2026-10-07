@@ -9,12 +9,13 @@ checkpoints referencing ``schnetpack.task.ModelOutput`` keep working.
 import warnings
 
 from schnetpack.objectives import (
-    ConsiderOnlySelectedAtoms,
+    AtomMask,
+    LossMask,
     ModelOutput,
     UnsupervisedModelOutput,
 )
 
-__all__ = ["ModelOutput", "UnsupervisedModelOutput", "ConsiderOnlySelectedAtoms"]
+__all__ = ["ModelOutput", "UnsupervisedModelOutput", "LossMask", "AtomMask"]
 
 
 def __getattr__(name):

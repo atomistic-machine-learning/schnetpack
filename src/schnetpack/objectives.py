@@ -5,7 +5,9 @@ Loss assembly for training — pure PyTorch, no Lightning dependency.
 The module-level functions assemble the composite loss from a list of outputs,
 so a model can be trained in a hand-written PyTorch loop:
 
-    loss = compute_loss(outputs, model, batch)
+    targets = extract_targets(outputs, batch)
+    pred = model(batch)
+    loss = calculate_loss(outputs, pred, targets)
     loss.backward()
 
 :class:`schnetpack.lightning.AtomisticTask` uses these same functions for training with
@@ -19,12 +21,57 @@ from torchmetrics import Metric
 __all__ = [
     "ModelOutput",
     "UnsupervisedModelOutput",
-    "ConsiderOnlySelectedAtoms",
+    "LossMask",
+    "AtomMask",
     "extract_targets",
-    "apply_constraints",
     "calculate_loss",
-    "compute_loss",
 ]
+
+
+class LossMask(nn.Module):
+    """
+    Restricts which entries of a model output are compared with its target.
+
+    A mask returns one bool per entry along the first dimension of the
+    prediction (per atom or per structure); only the entries it keeps enter
+    the loss and the logged metrics of its :class:`ModelOutput`. The masks of
+    one output combine by logical AND. A mask never changes the model output
+    itself.
+
+    Subclasses implement :meth:`forward` and name the batch keys it reads in
+    :attr:`required_keys`, so that :func:`extract_targets` collects them.
+    """
+
+    @property
+    def required_keys(self) -> tuple[str, ...]:
+        """The batch keys :meth:`forward` reads from the targets."""
+        return ()
+
+    def forward(self, targets: dict[str, torch.Tensor]) -> torch.Tensor:
+        raise NotImplementedError
+
+
+class AtomMask(LossMask):
+    """
+    Keeps the entries flagged in a batch key, e.g. to leave the forces of some
+    atoms out of training. The dataset stores one flag per atom (True:
+    considered, False: neglected).
+    """
+
+    def __init__(self, key: str):
+        """
+        Args:
+            key: batch key of the per-atom flags.
+        """
+        super().__init__()
+        self.key = key
+
+    @property
+    def required_keys(self) -> tuple[str, ...]:
+        return (self.key,)
+
+    def forward(self, targets: dict[str, torch.Tensor]) -> torch.Tensor:
+        return targets[self.key].bool()
 
 
 class ModelOutput(nn.Module):
@@ -39,7 +86,7 @@ class ModelOutput(nn.Module):
         loss_fn: nn.Module | None = None,
         loss_weight: float = 1.0,
         metrics: dict[str, Metric] | None = None,
-        constraints: list[torch.nn.Module] | None = None,
+        masks: list[LossMask] | None = None,
         target_property: str | None = None,
     ):
         r"""
@@ -50,12 +97,10 @@ class ModelOutput(nn.Module):
             loss_fn: function to compute the loss
             loss_weight: loss weight in the composite loss: $l = w_1 l_1 + \dots + w_n l_n$
             metrics: dictionary of metrics with names as keys
-            constraints:
-                constraint class for specifying the usage of model output in the loss function and logged metrics,
-                while not changing the model output itself. Essentially, constraints represent postprocessing transforms
-                that do not affect the model output but only change the loss value. For example, constraints can be used
-                to neglect or weight some atomic forces in the loss function. This may be useful when training on
-                systems, where only some forces are crucial for its dynamics.
+            masks: loss masks restricting which entries of the output are
+                compared with the target, in the loss and in the metrics, e.g.
+                to neglect the forces of some atoms. They don't change the model
+                output; see :class:`LossMask`.
         """
         super().__init__()
         self.name = name
@@ -70,28 +115,53 @@ class ModelOutput(nn.Module):
             "val": self.val_metrics,
             "test": self.test_metrics,
         }
-        self.constraints = constraints or []
+        self.masks = masks or []
+
+    def masked(
+        self, pred: dict[str, torch.Tensor], target: dict[str, torch.Tensor]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """This output's prediction and target, restricted to the entries its
+        masks keep."""
+        prediction, reference = pred[self.name], target[self.target_property]
+        if not self.masks:
+            return prediction, reference
+        keep = self.masks[0](target)
+        for mask in self.masks[1:]:
+            keep = keep & mask(target)
+        if keep.shape != prediction.shape[:1]:
+            raise ValueError(
+                f"the masks of output {self.name!r} select from {keep.shape[0]} "
+                f"entries, but its prediction has {prediction.shape[0]}"
+            )
+        return prediction[keep], reference[keep]
 
     def calculate_loss(self, pred, target):
         if self.loss_weight == 0 or self.loss_fn is None:
             return 0.0
 
-        loss = self.loss_weight * self.loss_fn(
-            pred[self.name], target[self.target_property]
-        )
+        loss = self.loss_weight * self.loss_fn(*self.masked(pred, target))
         return loss
 
     def update_metrics(self, pred, target, subset):
+        prediction, reference = self.masked(pred, target)
         for metric in self.metrics[subset].values():
-            metric(pred[self.name], target[self.target_property])
+            metric(prediction, reference)
 
 
 class UnsupervisedModelOutput(ModelOutput):
     """
     Defines an unsupervised output of a model, i.e. an unsupervised loss or a regularizer
     that do not depend on label data. It includes mappings to the loss function,
-    a weight for training and metrics to be logged.
+    a weight for training and metrics to be logged. It takes no masks, as it
+    has no target.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.masks:
+            raise ValueError(
+                f"unsupervised output {self.name!r} has no target, so it takes no masks"
+            )
 
     def calculate_loss(self, pred, target=None):
         if self.loss_weight == 0 or self.loss_fn is None:
@@ -104,67 +174,29 @@ class UnsupervisedModelOutput(ModelOutput):
             metric(pred[self.name])
 
 
-class ConsiderOnlySelectedAtoms(nn.Module):
-    """
-    Constraint that allows to neglect some atomic targets (e.g. forces of some specified atoms) for model optimization,
-    while not affecting the actual model output. The indices of the atoms, which targets to consider in the loss
-    function, must be provided in the dataset for each sample in form of a torch tensor of type boolean
-    (True: considered, False: neglected).
-    """
-
-    def __init__(self, selection_name):
-        """
-        Args:
-            selection_name: string associated with the list of considered atoms in the dataset
-        """
-        super().__init__()
-        self.selection_name = selection_name
-
-    def forward(self, pred, targets, output_module):
-        """
-        A torch tensor is loaded from the dataset, which specifies the considered atoms. Only the
-        predictions of those atoms are considered for training, validation, and testing.
-
-        :param pred: python dictionary containing model outputs
-        :param targets: python dictionary containing targets
-        :param output_module: torch.nn.Module class of a particular property (e.g. forces)
-        :return: model outputs and targets of considered atoms only
-        """
-
-        considered_atoms = targets[self.selection_name].nonzero()[:, 0]
-
-        # drop neglected atoms
-        pred[output_module.name] = pred[output_module.name][considered_atoms]
-        targets[output_module.target_property] = targets[output_module.target_property][
-            considered_atoms
-        ]
-
-        return pred, targets
-
-
 def extract_targets(
     outputs: list[ModelOutput], batch: dict[str, torch.Tensor]
 ) -> dict[str, torch.Tensor]:
-    """Collect the target properties of all supervised outputs from a batch."""
+    """Collect the target properties of all supervised outputs from a batch.
+
+    The keys the outputs' masks read are collected too. Call it before the
+    forward pass: SchNetPack models write their results into the input dict,
+    so a target stored under an output's name would be overwritten.
+    """
+    supervised = [o for o in outputs if not isinstance(o, UnsupervisedModelOutput)]
     targets = {
-        output.target_property: batch[output.target_property]
-        for output in outputs
-        if not isinstance(output, UnsupervisedModelOutput)
+        output.target_property: batch[output.target_property] for output in supervised
     }
-    if "considered_atoms" in batch:
-        targets["considered_atoms"] = batch["considered_atoms"]
+    for output in supervised:
+        for mask in output.masks:
+            for key in mask.required_keys:
+                if key not in batch:
+                    raise KeyError(
+                        f"{type(mask).__name__} of output {output.name!r} reads "
+                        f"{key!r}, which the batch lacks"
+                    )
+                targets[key] = batch[key]
     return targets
-
-
-def apply_constraints(
-    outputs: list[ModelOutput],
-    pred: dict[str, torch.Tensor],
-    targets: dict[str, torch.Tensor],
-):
-    for output in outputs:
-        for constraint in output.constraints:
-            pred, targets = constraint(pred, targets, output)
-    return pred, targets
 
 
 def calculate_loss(
@@ -173,26 +205,7 @@ def calculate_loss(
     targets: dict[str, torch.Tensor],
 ) -> torch.Tensor:
     """Weighted composite loss over all outputs."""
-    loss = 0.0
+    loss: torch.Tensor | float = 0.0
     for output in outputs:
         loss = loss + output.calculate_loss(pred, targets)
-    return loss
-
-
-def compute_loss(
-    outputs: list[ModelOutput],
-    model: nn.Module,
-    batch: dict[str, torch.Tensor],
-) -> torch.Tensor:
-    """
-    One-call loss for hand-written training loops: extract targets, run the
-    model, apply constraints and assemble the weighted composite loss.
-
-    Takes the model rather than precomputed predictions because SchNetPack
-    models write their results into the input dict — the targets must be
-    extracted from the batch before the forward pass overwrites them.
-    """
-    targets = extract_targets(outputs, batch)
-    pred = model(batch)
-    pred, targets = apply_constraints(outputs, pred, targets)
-    return calculate_loss(outputs, pred, targets)
+    return loss if isinstance(loss, torch.Tensor) else torch.tensor(loss)

@@ -17,7 +17,8 @@ from schnetpack import dynamics
 from schnetpack.units import *
 from schnetpack import uncertainty
 from schnetpack.objectives import (
-    ConsiderOnlySelectedAtoms,
+    AtomMask,
+    LossMask,
     ModelOutput,
     UnsupervisedModelOutput,
 )

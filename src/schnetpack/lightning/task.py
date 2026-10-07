@@ -8,7 +8,6 @@ from torch import nn as nn
 from schnetpack.model.base import AtomisticModel
 from schnetpack.objectives import (
     ModelOutput,
-    apply_constraints,
     calculate_loss,
     extract_targets,
 )
@@ -87,14 +86,10 @@ class AtomisticTask(pl.LightningModule):
                     prog_bar=False,
                 )
 
-    def apply_constraints(self, pred, targets):
-        return apply_constraints(self.outputs, pred, targets)
-
     def training_step(self, batch, batch_idx):
         targets = extract_targets(self.outputs, batch)
 
         pred = self.predict_without_postprocessing(batch)
-        pred, targets = self.apply_constraints(pred, targets)
 
         loss = self.loss_fn(pred, targets)
 
@@ -108,7 +103,6 @@ class AtomisticTask(pl.LightningModule):
         targets = extract_targets(self.outputs, batch)
 
         pred = self.predict_without_postprocessing(batch)
-        pred, targets = self.apply_constraints(pred, targets)
 
         loss = self.loss_fn(pred, targets)
 
@@ -130,7 +124,6 @@ class AtomisticTask(pl.LightningModule):
         targets = extract_targets(self.outputs, batch)
 
         pred = self.predict_without_postprocessing(batch)
-        pred, targets = self.apply_constraints(pred, targets)
 
         loss = self.loss_fn(pred, targets)
 

@@ -1,3 +1,4 @@
+import pytest
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
@@ -6,7 +7,13 @@ from torchmetrics import MeanAbsoluteError
 
 from schnetpack.lightning import AtomisticTask
 from schnetpack.model.base import AtomisticModel
-from schnetpack.objectives import ModelOutput, compute_loss
+from schnetpack.objectives import (
+    AtomMask,
+    ModelOutput,
+    UnsupervisedModelOutput,
+    calculate_loss,
+    extract_targets,
+)
 
 
 class LinearModel(AtomisticModel):
@@ -38,18 +45,25 @@ def make_output(loss_weight=1.0):
     )
 
 
-def test_compute_loss_weighted_composite():
+def batch_loss(outputs, model, batch):
+    """The loss of a hand-written training loop."""
+    targets = extract_targets(outputs, batch)
+    pred = model(batch)
+    return calculate_loss(outputs, pred, targets)
+
+
+def test_calculate_loss_weighted_composite():
     model = LinearModel()
     outputs = [make_output(loss_weight=0.5)]
     batch = make_batch()
 
-    loss = compute_loss(outputs, model, batch)
+    loss = batch_loss(outputs, model, batch)
 
     expected = 0.5 * nn.functional.mse_loss(batch["y"], batch["y_ref"])
     assert torch.isclose(loss, expected)
 
 
-def test_compute_loss_when_model_overwrites_target_key():
+def test_targets_extracted_before_the_forward_pass_survive_overwrite():
     """SchNetPack models write predictions into the input dict. If the output
     name equals the target property (the common case, e.g. energy_U0), the
     targets must be extracted before the forward pass — otherwise the loss
@@ -59,7 +73,7 @@ def test_compute_loss_when_model_overwrites_target_key():
     batch = make_batch()
     batch["y"] = batch.pop("y_ref")  # target under the same key as the output
 
-    loss = compute_loss(outputs, model, batch)
+    loss = batch_loss(outputs, model, batch)
 
     assert loss.item() > 0.0
     loss.backward()
@@ -76,9 +90,9 @@ def test_plain_torch_training_loop_reduces_loss():
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.1)
     batch = make_batch()
 
-    initial = compute_loss(outputs, model, batch).item()
+    initial = batch_loss(outputs, model, batch).item()
     for _ in range(100):
-        loss = compute_loss(outputs, model, batch)
+        loss = batch_loss(outputs, model, batch)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -93,15 +107,104 @@ def test_task_and_plain_loop_compute_identical_loss():
     task = AtomisticTask(model=model, outputs=outputs, optimizer_args={"lr": 1e-3})
     batch = make_batch()
 
-    plain = compute_loss(outputs, model, dict(batch))
-    from schnetpack.objectives import extract_targets
-
+    plain = batch_loss(outputs, model, dict(batch))
     targets = extract_targets(task.outputs, batch)
     pred = task.predict_without_postprocessing(dict(batch))
-    pred, targets = task.apply_constraints(pred, targets)
     via_task = task.loss_fn(pred, targets)
 
     assert torch.isclose(plain, via_task)
+
+
+def masked_output(masks, target_property="y_ref"):
+    return ModelOutput(
+        name="y",
+        target_property=target_property,
+        loss_fn=nn.MSELoss(),
+        metrics={"mae": MeanAbsoluteError()},
+        masks=masks,
+    )
+
+
+def test_a_mask_restricts_loss_and_metrics_to_the_selected_entries():
+    model = LinearModel()
+    batch = make_batch()
+    keep = torch.arange(16) % 2 == 0
+    batch["considered"] = keep
+    output = masked_output([AtomMask("considered")])
+
+    targets = extract_targets([output], batch)
+    pred = model(batch)
+    loss = output.calculate_loss(pred, targets)
+    output.update_metrics(pred, targets, "train")
+
+    y, y_ref = pred["y"][keep], batch["y_ref"][keep]
+    assert torch.isclose(loss, nn.functional.mse_loss(y, y_ref))
+    mae = output.metrics["train"]["mae"].compute()
+    assert torch.isclose(mae, (y - y_ref).abs().mean())
+
+
+def test_a_mask_on_one_output_leaves_another_on_the_same_prediction_whole():
+    """Two terms on the same prediction, e.g. forces against labels and
+    against the teacher: masking one must not shrink the other's prediction."""
+    model = LinearModel()
+    batch = make_batch()
+    batch["y_other"] = torch.zeros(16, 1)
+    keep = torch.arange(16) < 4
+    batch["considered"] = keep
+    outputs = [
+        masked_output([AtomMask("considered")]),
+        ModelOutput(
+            name="y", target_property="y_other", loss_fn=nn.MSELoss(), metrics={}
+        ),
+    ]
+
+    loss = batch_loss(outputs, model, batch)
+
+    y = batch["y"]
+    expected = nn.functional.mse_loss(
+        y[keep], batch["y_ref"][keep]
+    ) + nn.functional.mse_loss(y, batch["y_other"])
+    assert torch.isclose(loss, expected)
+
+
+def test_the_masks_of_one_output_combine():
+    model = LinearModel()
+    batch = make_batch()
+    batch["first_half"] = torch.arange(16) < 8
+    batch["even"] = torch.arange(16) % 2 == 0
+    output = masked_output([AtomMask("first_half"), AtomMask("even")])
+
+    loss = batch_loss([output], model, batch)
+
+    keep = batch["first_half"] & batch["even"]
+    expected = nn.functional.mse_loss(batch["y"][keep], batch["y_ref"][keep])
+    assert torch.isclose(loss, expected)
+
+
+def test_a_mask_key_missing_from_the_batch_names_mask_and_output():
+    output = masked_output([AtomMask("considered")])
+
+    with pytest.raises(KeyError, match="AtomMask of output 'y' reads 'considered'"):
+        extract_targets([output], make_batch())
+
+
+def test_a_mask_of_the_wrong_length_names_the_output():
+    batch = make_batch()
+    batch["considered"] = torch.ones(3, dtype=torch.bool)
+    output = masked_output([AtomMask("considered")])
+
+    with pytest.raises(ValueError, match="output 'y'"):
+        batch_loss([output], LinearModel(), batch)
+
+
+def test_an_unsupervised_output_takes_no_masks():
+    with pytest.raises(ValueError, match="masks"):
+        UnsupervisedModelOutput(
+            name="y",
+            loss_fn=nn.MSELoss(),
+            metrics={},
+            masks=[AtomMask("considered")],
+        )
 
 
 def test_trainer_fast_dev_run(tmp_path):
