@@ -171,5 +171,7 @@ class AtomisticTask(pl.LightningModule):
             pp_status = self.model.do_postprocessing
             if do_postprocessing is not None:
                 self.model.do_postprocessing = do_postprocessing
-            torch.save(self.model, path)
-            self.model.do_postprocessing = pp_status
+            try:
+                torch.save(self.model, path)
+            finally:
+                self.model.do_postprocessing = pp_status

@@ -127,6 +127,16 @@ def test_predict_without_postprocessing_restores_the_flag():
     assert model.do_postprocessing
 
 
+def test_save_model_restores_the_flag_when_saving_fails(tmp_path):
+    model = LinearModel()
+    task = AtomisticTask(
+        model=model, outputs=[make_output()], optimizer_args={"lr": 1e-3}
+    )
+    with pytest.raises(RuntimeError, match="does not exist"):
+        task.save_model(str(tmp_path / "missing" / "model.pt"), do_postprocessing=True)
+    assert not model.do_postprocessing
+
+
 def masked_output(masks, target_property="y_ref"):
     return ModelOutput(
         name="y",
