@@ -171,7 +171,7 @@ def atoms_to_batch(
 
     The inverse of :func:`batch_to_atoms`, and what code working on batches of tensors
     needs at its entry: the batch-wise optimizer takes it from here, and its calculator's
-    :class:`~schnetpack.transform.BatchNeighborList` fills in the neighborhoods on every
+    :class:`~schnetpack.dynamics.BatchNeighborList` fills in the neighborhoods on every
     step. Use :class:`AtomsConverter` instead when the batch has to be complete right
     away, e.g. to call a model on it directly.
 

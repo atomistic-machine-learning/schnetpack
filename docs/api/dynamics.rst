@@ -4,8 +4,8 @@ schnetpack.dynamics
 
 Loops that move structures with a model: sampling a generative model down its reverse
 process and relaxing structures on a force field. Every driver shares the calculators and
-the constraints below; the step rules are subclasses of the two families' bases. The vocabulary is collected in
-``CONTEXT.md``, the design of relaxation in ``docs/adr/0001-relaxation-in-dynamics.md``.
+the hooks below, and the calculators carry the guidance; the step rules are subclasses of
+the two families' bases.
 
 Drivers
 -------
@@ -18,12 +18,12 @@ Drivers
     Dynamics
 
 
-Time-free drivers
------------------
+Optimizers
+----------
 
-The loop that steps structures along a force until they are relaxed, and its step rules.
-A batch-wise relaxation with one inverse Hessian approximation per structure is
-:class:`LBFGS`; steepest descent is :class:`Langevin` at ``kT = 0``.
+The time-free loop that steps structures along a force until they are relaxed, and its
+step rules. A batch-wise relaxation with one inverse Hessian approximation per structure
+is :class:`LBFGS`; steepest descent is :class:`GradientDescent`.
 
 .. autosummary::
     :toctree: generated
@@ -31,20 +31,17 @@ A batch-wise relaxation with one inverse Hessian approximation per structure is
     :template: classtemplate.rst
 
     Optimizer
+    GradientDescent
     LBFGS
     LBFGSState
-    Langevin
     DirectDenoising
-    NoiseSchedule
-    ConstantNoise
-    AnnealedNoise
 
 
 Samplers
 --------
 
 The time-indexed loop and its step rules on the reverse process's drift and
-diffusion.
+diffusion, and the grids its steps land on.
 
 .. autosummary::
     :toctree: generated
@@ -55,7 +52,8 @@ diffusion.
     EulerMaruyama
     Heun
     Ancestral
-    AncestralDDPM
+    TimeGrid
+    UniformGrid
 
 
 Calculators
@@ -71,18 +69,21 @@ Calculators
     GenerativeCalculator
     EnsembleCalculator
     NNEnsemble
+    BatchNeighborList
 
 
-Constraints
------------
+Hooks
+-----
+
+Edits of the batch before and/or after every step of a driver.
 
 .. autosummary::
     :toctree: generated
     :nosignatures:
     :template: classtemplate.rst
 
-    StateConstraint
-    Scaffold
+    Hook
+    FreezeScaffold
 
 
 Guidance

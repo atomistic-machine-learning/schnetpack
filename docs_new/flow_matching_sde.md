@@ -469,7 +469,7 @@ the genuine collapse of $\sigma \to 0$, and no chart waives that.
 | $\log\operatorname{SNR} = 2(\log a - \log b)$ | `Process.log_snr` |
 | $x_t = a x_0 + b x_1$ | `Process.interpolate` / `Process.perturb` |
 | $p(x_t \mid x_0) = \mathcal{N}(a x_0, \sigma^2 I)$ | `SDE.kernel` — the chart's construction is the gate |
-| $p(x_s \mid x_t, x_0)$ | `SDE.posterior`; stepped by `integrators.Ancestral` |
+| $p(x_s \mid x_t, x_0)$ | `SDE.posterior`; stepped by `dynamics.sample.Ancestral` |
 | velocity target $\dot a\,x_0 + \dot b\,x_1$ | `VelocityParametrization.target` |
 | $v = f x - \tfrac12 g^2 s$ | `Parametrization.to_velocity` |
 | $s = 2(f x - v)/g^2$ | `VelocityParametrization.to_score` |

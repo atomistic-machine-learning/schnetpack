@@ -182,7 +182,7 @@ def test_the_drivers_positions_never_require_grad():
 
 
 def test_a_batch_neighbor_list_plugs_in_as_a_transform():
-    from schnetpack.transform import BatchNeighborList
+    from schnetpack.dynamics import BatchNeighborList
 
     assert callable(BatchNeighborList.__call__)
     assert BatchNeighborList.__call__ is not object.__call__
