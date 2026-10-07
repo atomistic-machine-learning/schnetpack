@@ -20,21 +20,9 @@ import torch
 
 from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn, split_batch
-from schnetpack.transform import NeighborListTransform, Transform
+from schnetpack.transform import NeighborListTransform, Transform, prune_neighbors
 
 __all__ = ["BatchNeighborList"]
-
-#: entries of a cached list that are pair-indexed, i.e. shrink when the skin is pruned
-_PAIR_KEYS = (
-    properties.idx_i,
-    properties.idx_j,
-    properties.offsets,
-    properties.lidx_i,
-    properties.lidx_j,
-)
-
-#: entries that index into the pair arrays and have to be renumbered along with them
-_TRIPLE_KEYS = (properties.idx_j_triples, properties.idx_k_triples)
 
 
 class BatchNeighborList:
@@ -250,57 +238,12 @@ class BatchNeighborList:
     ) -> dict[str, torch.Tensor]:
         """Restrict the cached cutoff+skin lists to the pairs within the cutoff.
 
-        The whole batch at once and on its own device -- the counterpart of
-        :meth:`~schnetpack.transform.SkinNeighborList._prune`, which
-        does the same thing one structure at a time on the cpu.
+        The whole batch at once and on its own device, through
+        :func:`~schnetpack.transform.prune_neighbors`, which renumbers the
+        triples along with the pairs.
         """
         cache = self._cache
         assert cache is not None, "_prune runs after _rebuild has filled the cache"
-        idx_i, idx_j = cache[properties.idx_i], cache[properties.idx_j]
-        offsets = cache[properties.offsets]
-
-        positions = inputs[properties.R]
-        Rij = positions[idx_j] - positions[idx_i] + offsets
-        within_cutoff = Rij.pow(2).sum(-1) <= self.cutoff**2
-
-        neighbors = {
-            key: cache[key][within_cutoff] for key in _PAIR_KEYS if key in cache
-        }
-        if with_distances:
-            neighbors[properties.Rij] = Rij[within_cutoff]
-
-        if properties.idx_i_triples in cache:
-            neighbors.update(self._prune_triples(cache, within_cutoff))
-
-        return neighbors
-
-    @staticmethod
-    def _prune_triples(
-        cache: dict[str, torch.Tensor], within_cutoff: torch.Tensor
-    ) -> dict[str, torch.Tensor]:
-        """Renumber the triples onto the pairs that survived the pruning.
-
-        ``idx_j_triples`` and ``idx_k_triples`` index into the pair arrays, so dropping
-        pairs without renumbering would leave them pointing at the wrong pairs, or past
-        the end of the array altogether. Triples with a leg that did not survive are
-        dropped.
-        """
-        renumbered = torch.full(
-            within_cutoff.shape,
-            -1,
-            dtype=torch.long,
-            device=within_cutoff.device,
+        return prune_neighbors(
+            cache, inputs[properties.R], self.cutoff, with_distances=with_distances
         )
-        renumbered[within_cutoff] = torch.arange(
-            int(within_cutoff.sum()), device=within_cutoff.device
-        )
-
-        legs = [cache[key] for key in _TRIPLE_KEYS]
-        keep = renumbered[legs[0]] >= 0
-        for leg in legs[1:]:
-            keep &= renumbered[leg] >= 0
-
-        triples = {properties.idx_i_triples: cache[properties.idx_i_triples][keep]}
-        for key, leg in zip(_TRIPLE_KEYS, legs):
-            triples[key] = renumbered[leg[keep]]
-        return triples
