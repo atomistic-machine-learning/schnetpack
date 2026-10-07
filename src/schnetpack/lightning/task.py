@@ -1,8 +1,13 @@
-from typing import Any
+from typing import Any, cast
 
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning.utilities.types import (
+    LRSchedulerConfigType,
+    OptimizerLRScheduler,
+)
 from torch import nn as nn
+from torchmetrics import Metric
 
 from schnetpack.model.base import AtomisticModel
 from schnetpack.objectives import (
@@ -52,14 +57,14 @@ class AtomisticTask(pl.LightningModule):
         super().__init__()
         self.model = model
         self.optimizer_cls = optimizer_cls
-        self.optimizer_kwargs = optimizer_args
+        self.optimizer_kwargs = optimizer_args or {}
         self.scheduler_cls = scheduler_cls
-        self.scheduler_kwargs = scheduler_args
+        self.scheduler_kwargs = scheduler_args or {}
         self.schedule_monitor = scheduler_monitor
         self.outputs = nn.ModuleList(outputs)
 
-        self.grad_enabled = len(self.model.required_derivatives) > 0
-        self.lr = optimizer_args["lr"]
+        self.grad_enabled = bool(self.model.required_derivatives)
+        self.lr = self.optimizer_kwargs["lr"]
         self.warmup_steps = warmup_steps
         self.save_hyperparameters()
 
@@ -77,7 +82,7 @@ class AtomisticTask(pl.LightningModule):
             for metric_name, metric in output.metrics[subset].items():
                 self.log(
                     f"{subset}_{output.name}_{metric_name}",
-                    metric,
+                    cast(Metric, metric),
                     on_step=(subset == "train"),
                     on_epoch=(subset != "train"),
                     prog_bar=False,
@@ -122,7 +127,7 @@ class AtomisticTask(pl.LightningModule):
         )
         return {"test_loss": loss}
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> OptimizerLRScheduler:
         optimizer = self.optimizer_cls(
             params=self.parameters(), **self.optimizer_kwargs
         )
@@ -131,7 +136,10 @@ class AtomisticTask(pl.LightningModule):
             return optimizer
 
         scheduler = self.scheduler_cls(optimizer=optimizer, **self.scheduler_kwargs)
-        scheduler_config = {"scheduler": scheduler, "name": "lr_schedule"}
+        scheduler_config: LRSchedulerConfigType = {
+            "scheduler": scheduler,
+            "name": "lr_schedule",
+        }
         if self.schedule_monitor:
             scheduler_config["monitor"] = self.schedule_monitor
         return {"optimizer": optimizer, "lr_scheduler": scheduler_config}
