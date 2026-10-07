@@ -132,24 +132,23 @@ class AtomisticTask(pl.LightningModule):
                     prog_bar=False,
                 )
 
-    def _predictions(self, batch, subset):
-        """Predictions and targets of a step: labels from the batch, and with a
-        teacher its targets and the student's curvature."""
+    def _step(self, batch, subset):
+        """Composite loss of one batch, with the metrics of ``subset`` logged.
+
+        Targets are the labels from the batch; with a teacher they are its
+        targets, and the student's curvature is predicted too."""
         if self.teacher is None:
             targets = extract_targets(self.outputs, batch)
-            return predict_without_postprocessing(self.model, batch), targets
-        return distillation_predictions(
-            self.outputs,
-            self.model,
-            self.teacher,
-            batch,
-            generator=None if subset == "train" else self._probe_generator,
-            create_graph=subset == "train",
-        )
-
-    def _step(self, batch, subset):
-        """Composite loss of one batch, with the metrics of ``subset`` logged."""
-        pred, targets = self._predictions(batch, subset)
+            pred = predict_without_postprocessing(self.model, batch)
+        else:
+            pred, targets = distillation_predictions(
+                self.outputs,
+                self.model,
+                self.teacher,
+                batch,
+                generator=None if subset == "train" else self._probe_generator,
+                create_graph=subset == "train",
+            )
         loss = calculate_loss(self.outputs, pred, targets)
         self.log_metrics(pred, targets, subset)
         return loss
