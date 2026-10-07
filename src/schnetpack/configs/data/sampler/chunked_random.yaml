@@ -1,0 +1,4 @@
+# @package data
+train_sampler_cls: schnetpack.data.sampler.ChunkedRandomSampler
+train_sampler_args:
+  num_samples: ???   # samples per (short) epoch

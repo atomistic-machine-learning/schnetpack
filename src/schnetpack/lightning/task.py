@@ -1,4 +1,3 @@
-import warnings
 from typing import Any
 
 import pytorch_lightning as pl
@@ -128,28 +127,14 @@ class AtomisticTask(pl.LightningModule):
             params=self.parameters(), **self.optimizer_kwargs
         )
 
-        if self.scheduler_cls:
-            schedulers = []
-            schedule = self.scheduler_cls(optimizer=optimizer, **self.scheduler_kwargs)
-            optimconf = {"scheduler": schedule, "name": "lr_schedule"}
-            if self.schedule_monitor:
-                optimconf["monitor"] = self.schedule_monitor
-            # incase model is validated before epoch end (not recommended use of val_check_interval)
-            if self.trainer.val_check_interval < 1.0:
-                warnings.warn(
-                    "Learning rate scheduling is set to occur after the epoch ends. To enable scheduling before the "
-                    "epoch end, please set the `val_check_interval` parameter to a value greater than 1.0, which "
-                    "indicates the number of training steps after which the model should be validated.",
-                    stacklevel=2,
-                )
-            # incase model is validated before epoch end (recommended use of val_check_interval)
-            if self.trainer.val_check_interval > 1.0:
-                optimconf["interval"] = "step"
-                optimconf["frequency"] = self.trainer.val_check_interval
-            schedulers.append(optimconf)
-            return [optimizer], schedulers
-        else:
+        if not self.scheduler_cls:
             return optimizer
+
+        scheduler = self.scheduler_cls(optimizer=optimizer, **self.scheduler_kwargs)
+        scheduler_config = {"scheduler": scheduler, "name": "lr_schedule"}
+        if self.schedule_monitor:
+            scheduler_config["monitor"] = self.schedule_monitor
+        return {"optimizer": optimizer, "lr_scheduler": scheduler_config}
 
     def optimizer_step(
         self,
