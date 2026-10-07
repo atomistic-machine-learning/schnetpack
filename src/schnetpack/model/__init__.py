@@ -13,6 +13,8 @@ Three layers, and the split between them is what the sub-packages name:
 - :mod:`~schnetpack.model.base` — the container that runs them in order
   (``NeuralNetworkPotential``), plus the postprocessing and dtype handling every
   model shares (``AtomisticModel``).
+- :mod:`~schnetpack.model.utils` — ``train_mode``, which runs a model in train
+  mode for a block, as curvature in distillation needs.
 
 Every public name is re-exported here, so ``spk.model.PaiNN`` and
 ``spk.model.Atomwise`` both work and the sub-package path is only needed when it
@@ -26,5 +28,6 @@ from schnetpack.model import atomistic
 from schnetpack.model import representation
 
 from schnetpack.model.base import *
+from schnetpack.model.utils import *
 from schnetpack.model.atomistic import *
 from schnetpack.model.representation import *

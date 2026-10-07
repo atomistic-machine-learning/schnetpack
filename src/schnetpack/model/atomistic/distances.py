@@ -3,7 +3,7 @@ import torch.nn as nn
 
 import schnetpack.properties as properties
 
-__all__ = ["PairwiseDistances"]
+__all__ = ["PairwiseDistances", "FilterShortRange"]
 
 
 class PairwiseDistances(nn.Module):

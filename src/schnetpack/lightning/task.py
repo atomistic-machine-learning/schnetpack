@@ -81,7 +81,7 @@ class AtomisticTask(pl.LightningModule):
             output.update_metrics(pred, targets, subset)
             for metric_name, metric in output.metrics[subset].items():
                 self.log(
-                    f"{subset}_{output.name}_{metric_name}",
+                    f"{subset}_{output.target_property}_{metric_name}",
                     cast(Metric, metric),
                     on_step=(subset == "train"),
                     on_epoch=(subset != "train"),

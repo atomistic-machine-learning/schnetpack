@@ -14,6 +14,8 @@ so a model can be trained in a hand-written PyTorch loop:
 the PyTorch Lightning Trainer.
 """
 
+from collections.abc import Collection
+
 import torch
 from torch import nn as nn
 from torchmetrics import Metric
@@ -179,17 +181,23 @@ class UnsupervisedModelOutput(ModelOutput):
 
 
 def extract_targets(
-    outputs: list[ModelOutput], batch: dict[str, torch.Tensor]
+    outputs: list[ModelOutput],
+    batch: dict[str, torch.Tensor],
+    skip: Collection[str] = (),
 ) -> dict[str, torch.Tensor]:
     """Collect the target properties of all supervised outputs from a batch.
 
-    The keys the outputs' masks read are collected too. Call it before the
-    forward pass: SchNetPack models write their results into the input dict,
-    so a target stored under an output's name would be overwritten.
+    Targets named in ``skip`` are left out: something other than the batch
+    supplies them, e.g. the teacher in knowledge distillation. The keys the
+    outputs' masks read are collected too, whoever supplies the target. Call it
+    before the forward pass: SchNetPack models write their results into the
+    input dict, so a target stored under an output's name would be overwritten.
     """
     supervised = [o for o in outputs if not isinstance(o, UnsupervisedModelOutput)]
     targets = {
-        output.target_property: batch[output.target_property] for output in supervised
+        output.target_property: batch[output.target_property]
+        for output in supervised
+        if output.target_property not in skip
     }
     for output in supervised:
         for mask in output.masks:

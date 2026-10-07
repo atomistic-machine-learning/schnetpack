@@ -256,3 +256,57 @@ def test_trainer_fast_dev_run(tmp_path):
         default_root_dir=str(tmp_path),
     )
     trainer.fit(task, train_dataloaders=loader, val_dataloaders=loader)
+
+
+def test_extract_targets_skips_keys_supplied_elsewhere():
+    """Teacher targets are not in the batch; extracting them must not fail."""
+    outputs = [
+        make_output(),
+        ModelOutput(
+            name="y", target_property="teacher_y", loss_fn=nn.MSELoss(), metrics={}
+        ),
+    ]
+    batch = make_batch()
+
+    targets = extract_targets(outputs, batch, skip=("teacher_y",))
+
+    assert set(targets) == {"y_ref"}
+
+
+def test_outputs_on_one_prediction_log_their_metrics_apart(tmp_path):
+    """Two targets for one prediction, as a label and a teacher target in
+    distillation: each output's metrics are named after its target (ADR-0026)."""
+    outputs = [
+        make_output(),
+        ModelOutput(
+            name="y",
+            target_property="y_alt",
+            loss_fn=nn.MSELoss(),
+            metrics={"mae": MeanAbsoluteError()},
+        ),
+    ]
+    task = AtomisticTask(
+        model=LinearModel(), outputs=outputs, optimizer_args={"lr": 1e-3}
+    )
+    batch = make_batch()
+    batch["y_alt"] = 3.0 * batch["x"]
+    keys = list(batch)
+    loader = DataLoader(
+        TensorDataset(*batch.values()),
+        batch_size=8,
+        collate_fn=lambda samples: {
+            key: torch.stack([s[i] for s in samples]) for i, key in enumerate(keys)
+        },
+    )
+    trainer = pl.Trainer(
+        fast_dev_run=True,
+        accelerator="cpu",
+        logger=False,
+        enable_checkpointing=False,
+        enable_progress_bar=False,
+        default_root_dir=str(tmp_path),
+    )
+
+    trainer.fit(task, train_dataloaders=loader, val_dataloaders=loader)
+
+    assert {"val_y_ref_mae", "val_y_alt_mae"} <= set(trainer.callback_metrics)
