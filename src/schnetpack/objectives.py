@@ -18,6 +18,8 @@ import torch
 from torch import nn as nn
 from torchmetrics import Metric
 
+from schnetpack.model.base import AtomisticModel
+
 __all__ = [
     "ModelOutput",
     "UnsupervisedModelOutput",
@@ -108,6 +110,7 @@ class ModelOutput(nn.Module):
         self.target_property = target_property or name
         self.loss_fn = loss_fn
         self.loss_weight = loss_weight
+        metrics = metrics or {}
         self.train_metrics = nn.ModuleDict(metrics)
         self.val_metrics = nn.ModuleDict({k: v.clone() for k, v in metrics.items()})
         self.test_metrics = nn.ModuleDict({k: v.clone() for k, v in metrics.items()})
@@ -201,7 +204,7 @@ def extract_targets(
 
 
 def predict_without_postprocessing(
-    model: nn.Module, batch: dict[str, torch.Tensor]
+    model: "AtomisticModel", batch: dict[str, torch.Tensor]
 ) -> dict[str, torch.Tensor]:
     """Run ``model`` on ``batch`` with its postprocessing switched off.
 
