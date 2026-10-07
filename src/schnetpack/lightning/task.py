@@ -10,6 +10,7 @@ from schnetpack.objectives import (
     ModelOutput,
     calculate_loss,
     extract_targets,
+    predict_without_postprocessing,
 )
 
 __all__ = ["AtomisticTask"]
@@ -71,9 +72,6 @@ class AtomisticTask(pl.LightningModule):
         results = self.model(inputs)
         return results
 
-    def loss_fn(self, pred, targets):
-        return calculate_loss(self.outputs, pred, targets)
-
     def log_metrics(self, pred, targets, subset):
         for output in self.outputs:
             output.update_metrics(pred, targets, subset)
@@ -86,26 +84,22 @@ class AtomisticTask(pl.LightningModule):
                     prog_bar=False,
                 )
 
-    def training_step(self, batch, batch_idx):
+    def _step(self, batch, subset):
+        """Composite loss of one batch, with the metrics of ``subset`` logged."""
         targets = extract_targets(self.outputs, batch)
+        pred = predict_without_postprocessing(self.model, batch)
+        loss = calculate_loss(self.outputs, pred, targets)
+        self.log_metrics(pred, targets, subset)
+        return loss
 
-        pred = self.predict_without_postprocessing(batch)
-
-        loss = self.loss_fn(pred, targets)
-
+    def training_step(self, batch, batch_idx):
+        loss = self._step(batch, "train")
         self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
-        self.log_metrics(pred, targets, "train")
         return loss
 
     def validation_step(self, batch, batch_idx):
         torch.set_grad_enabled(self.grad_enabled)
-
-        targets = extract_targets(self.outputs, batch)
-
-        pred = self.predict_without_postprocessing(batch)
-
-        loss = self.loss_fn(pred, targets)
-
+        loss = self._step(batch, "val")
         self.log(
             "val_loss",
             loss,
@@ -114,19 +108,11 @@ class AtomisticTask(pl.LightningModule):
             prog_bar=True,
             batch_size=len(batch["_idx"]),
         )
-        self.log_metrics(pred, targets, "val")
-
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_idx):
         torch.set_grad_enabled(self.grad_enabled)
-
-        targets = extract_targets(self.outputs, batch)
-
-        pred = self.predict_without_postprocessing(batch)
-
-        loss = self.loss_fn(pred, targets)
-
+        loss = self._step(batch, "test")
         self.log(
             "test_loss",
             loss,
@@ -135,16 +121,7 @@ class AtomisticTask(pl.LightningModule):
             prog_bar=True,
             batch_size=len(batch["_idx"]),
         )
-        self.log_metrics(pred, targets, "test")
-
         return {"test_loss": loss}
-
-    def predict_without_postprocessing(self, batch):
-        pp = self.model.do_postprocessing
-        self.model.do_postprocessing = False
-        pred = self(batch)
-        self.model.do_postprocessing = pp
-        return pred
 
     def configure_optimizers(self):
         optimizer = self.optimizer_cls(

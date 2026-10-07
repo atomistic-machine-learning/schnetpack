@@ -13,6 +13,7 @@ from schnetpack.objectives import (
     UnsupervisedModelOutput,
     calculate_loss,
     extract_targets,
+    predict_without_postprocessing,
 )
 
 
@@ -108,11 +109,22 @@ def test_task_and_plain_loop_compute_identical_loss():
     batch = make_batch()
 
     plain = batch_loss(outputs, model, dict(batch))
-    targets = extract_targets(task.outputs, batch)
-    pred = task.predict_without_postprocessing(dict(batch))
-    via_task = task.loss_fn(pred, targets)
+    via_task = task.training_step(dict(batch), 0)
 
     assert torch.isclose(plain, via_task)
+
+
+def test_predict_without_postprocessing_restores_the_flag():
+    class Failing(LinearModel):
+        def forward(self, inputs):
+            assert not self.do_postprocessing
+            raise RuntimeError("forward failed")
+
+    model = Failing()
+    model.do_postprocessing = True
+    with pytest.raises(RuntimeError, match="forward failed"):
+        predict_without_postprocessing(model, make_batch())
+    assert model.do_postprocessing
 
 
 def masked_output(masks, target_property="y_ref"):

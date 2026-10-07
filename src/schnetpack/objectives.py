@@ -24,6 +24,7 @@ __all__ = [
     "LossMask",
     "AtomMask",
     "extract_targets",
+    "predict_without_postprocessing",
     "calculate_loss",
 ]
 
@@ -197,6 +198,24 @@ def extract_targets(
                     )
                 targets[key] = batch[key]
     return targets
+
+
+def predict_without_postprocessing(
+    model: nn.Module, batch: dict[str, torch.Tensor]
+) -> dict[str, torch.Tensor]:
+    """Run ``model`` on ``batch`` with its postprocessing switched off.
+
+    The loss compares the model's raw outputs with the targets, so the
+    postprocessors (e.g. adding back the mean energy) must not run. The flag is
+    restored afterwards, even if the forward pass fails. Call
+    :func:`extract_targets` first, as the forward pass writes into ``batch``.
+    """
+    pp = model.do_postprocessing
+    model.do_postprocessing = False
+    try:
+        return model(batch)
+    finally:
+        model.do_postprocessing = pp
 
 
 def calculate_loss(
