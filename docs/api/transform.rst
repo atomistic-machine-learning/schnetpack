@@ -44,7 +44,14 @@ Neighbor lists
     TorchNeighborList
     AllToAllNeighborList
     CachedNeighborList
+    DistillationNeighborList
     CountNeighbors
     FilterNeighbors
     WrapPositions
     CollectAtomTriples
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+
+    prune_neighbors
