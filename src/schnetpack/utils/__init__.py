@@ -32,9 +32,11 @@ TORCH_DTYPES = {
 TORCH_DTYPES.update({"torch." + k: v for k, v in TORCH_DTYPES.items()})
 
 
-def as_dtype(dtype_str: str) -> torch.dtype:
-    """Convert a string to torch.dtype"""
-    return TORCH_DTYPES[dtype_str]
+def as_dtype(dtype: str | torch.dtype) -> torch.dtype:
+    """Convert a string to torch.dtype. A torch.dtype is returned unchanged."""
+    if isinstance(dtype, torch.dtype):
+        return dtype
+    return TORCH_DTYPES[dtype]
 
 
 def int2precision(precision: int | torch.dtype):

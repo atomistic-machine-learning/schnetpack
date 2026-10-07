@@ -1,4 +1,5 @@
 from .lr_scheduler import *
+from .teacher import *
 
 
 _MOVED_TO_LIGHTNING = (

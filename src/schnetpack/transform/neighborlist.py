@@ -25,12 +25,14 @@ __all__ = [
     "NeighborListWrapper",
     "WrapPositions",
     "SkinNeighborList",
+    "DistillationNeighborList",
     "FilterNeighbors",
     "prune_neighbors",
 ]
 
 import schnetpack as spk
 from schnetpack import properties
+from schnetpack.units import convert_units
 
 # ------------------------------------------------------------------------ neighbor lists
 
@@ -619,6 +621,51 @@ class SkinNeighborList(NeighborListWrapper):
         self.previous_inputs.update({sample_idx: stored_inputs})
 
         return inputs
+
+
+class DistillationNeighborList(NeighborListWrapper):
+    """
+    Neighbor list shared by a student and its teacher in distillation.
+
+    Wraps the student's neighbor list and raises its cutoff to the teacher's if
+    that is larger, so one list covers both models; each model then prunes it to
+    its own cutoff. The teacher's cutoff is converted from the teacher's distance
+    unit to the student's before the comparison. The wrapped neighbor list is
+    modified in place, as :class:`SkinNeighborList` does it.
+    """
+
+    def __init__(
+        self,
+        neighbor_list: NeighborListTransform,
+        teacher_cutoff: float,
+        teacher_distance_unit: str | float,
+        student_distance_unit: str | float,
+        nbh_transforms: list[torch.nn.Module] | None = None,
+    ):
+        """
+        Args:
+            neighbor_list: the student's neighbor list, with the student's
+                cutoff in ``student_distance_unit``.
+            teacher_cutoff: the teacher's cutoff, in ``teacher_distance_unit``.
+            teacher_distance_unit: length unit the teacher works in.
+            student_distance_unit: length unit the student works in, which is
+                also that of the data.
+            nbh_transforms: transforms for manipulating the neighbor lists
+                provided by neighbor_list
+        """
+        super().__init__(neighbor_list, nbh_transforms)
+        self.student_cutoff = neighbor_list._cutoff
+        self.teacher_cutoff = teacher_cutoff * convert_units(
+            teacher_distance_unit, student_distance_unit
+        )
+        self.cutoff = max(self.student_cutoff, self.teacher_cutoff)
+        neighbor_list._cutoff = self.cutoff
+
+    def forward(
+        self,
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
+        return self._build_neighbors(inputs)
 
 
 # ------------------------------------------------------------------------------- helpers
