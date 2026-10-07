@@ -21,8 +21,8 @@ from torch import nn
 from torch.autograd import grad
 
 from schnetpack import properties
+from schnetpack.data import prune_neighbors
 from schnetpack.model.utils import train_mode, train_mode_sensitive_modules
-from schnetpack.transform import prune_neighbors
 from schnetpack.units import convert_units
 from schnetpack.utils import as_dtype
 from schnetpack.utils.compatibility import load_model
@@ -80,7 +80,7 @@ class TeacherWrapper:
             pipeline to cover both cutoffs (see
             :class:`~schnetpack.transform.DistillationNeighborList`); the
             teacher prunes it to ``cutoff`` with
-            :func:`~schnetpack.transform.prune_neighbors`, triples included
+            :func:`~schnetpack.data.prune_neighbors`, triples included
             (ADR-0012, ADR-0013, ADR-0027). None passes the list through as it
             is -- right for a list built at the teacher's own cutoff.
         dtype: floating dtype the teacher runs in.

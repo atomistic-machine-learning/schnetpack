@@ -6,13 +6,11 @@ import pytest
 import torch
 from ase import Atoms
 
+import schnetpack.transform
 from schnetpack import properties
+from schnetpack.data import prune_neighbors
 from schnetpack.interfaces.ase_interface import AtomsConverter
-from schnetpack.transform import (
-    CollectAtomTriples,
-    MatScipyNeighborList,
-    prune_neighbors,
-)
+from schnetpack.transform import CollectAtomTriples, MatScipyNeighborList
 
 CUTOFF = 3.0
 WIDER = 4.0
@@ -105,3 +103,9 @@ def test_only_the_neighbor_entries_come_back_with_distances_on_request():
         with_distances[properties.Rij],
         positions[idx_j] - positions[idx_i] + with_distances[properties.offsets],
     )
+
+
+def test_the_transforms_keep_no_alias():
+    """It works on collated batches, so it lives with the collate function
+    (ADR-0028), not with the per-sample transforms."""
+    assert not hasattr(schnetpack.transform, "prune_neighbors")

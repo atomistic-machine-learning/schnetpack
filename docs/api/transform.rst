@@ -49,9 +49,3 @@ Neighbor lists
     FilterNeighbors
     WrapPositions
     CollectAtomTriples
-
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
-
-    prune_neighbors

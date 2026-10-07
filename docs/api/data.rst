@@ -15,6 +15,12 @@ Atoms data
     AtomsLoader
     StratifiedSampler
 
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+
+    prune_neighbors
+
 Statistics
 ----------
 

@@ -27,7 +27,6 @@ __all__ = [
     "SkinNeighborList",
     "DistillationNeighborList",
     "FilterNeighbors",
-    "prune_neighbors",
 ]
 
 import schnetpack as spk
@@ -669,86 +668,6 @@ class DistillationNeighborList(NeighborListWrapper):
 
 
 # ------------------------------------------------------------------------------- helpers
-
-#: entries of a neighbor list that are pair-indexed, i.e. shrink when it is pruned
-_PAIR_KEYS = (
-    properties.idx_i,
-    properties.idx_j,
-    properties.offsets,
-    properties.lidx_i,
-    properties.lidx_j,
-)
-
-#: entries that index into the pair arrays and have to be renumbered along with them
-_TRIPLE_KEYS = (properties.idx_j_triples, properties.idx_k_triples)
-
-
-def prune_neighbors(
-    neighbors: dict[str, torch.Tensor],
-    positions: torch.Tensor,
-    cutoff: float,
-    with_distances: bool = False,
-) -> dict[str, torch.Tensor]:
-    """The entries of a neighbor list, restricted to the pairs within ``cutoff``.
-
-    A pair is kept when ``|R[j] - R[i] + offsets| <= cutoff``. The pair-indexed
-    entries are pruned together, on the device they live on, and atom triples are
-    renumbered onto the kept pairs. Only these entries come back, so the caller
-    merges them into its batch.
-
-    Args:
-        neighbors: the neighbor list, ``idx_i``, ``idx_j`` and ``offsets``, with
-            any other pair-indexed entries and triples to prune along with them.
-        positions: the positions the pairs are measured at, in the length unit of
-            ``offsets`` and ``cutoff``.
-        cutoff: the cutoff to prune to.
-        with_distances: also return ``Rij`` of the kept pairs.
-    """
-    idx_i, idx_j = neighbors[properties.idx_i], neighbors[properties.idx_j]
-    Rij = positions[idx_j] - positions[idx_i] + neighbors[properties.offsets]
-    within_cutoff = Rij.pow(2).sum(-1) <= cutoff**2
-
-    pruned = {
-        key: neighbors[key][within_cutoff] for key in _PAIR_KEYS if key in neighbors
-    }
-    if with_distances:
-        pruned[properties.Rij] = Rij[within_cutoff]
-
-    if properties.idx_i_triples in neighbors:
-        pruned.update(_prune_triples(neighbors, within_cutoff))
-
-    return pruned
-
-
-def _prune_triples(
-    neighbors: dict[str, torch.Tensor], within_cutoff: torch.Tensor
-) -> dict[str, torch.Tensor]:
-    """Renumber the triples onto the pairs that survived the pruning.
-
-    ``idx_j_triples`` and ``idx_k_triples`` index into the pair arrays, so dropping
-    pairs without renumbering would leave them pointing at the wrong pairs, or past
-    the end of the array altogether. Triples with a leg that did not survive are
-    dropped.
-    """
-    renumbered = torch.full(
-        within_cutoff.shape,
-        -1,
-        dtype=torch.long,
-        device=within_cutoff.device,
-    )
-    renumbered[within_cutoff] = torch.arange(
-        int(within_cutoff.sum()), device=within_cutoff.device
-    )
-
-    legs = [neighbors[key] for key in _TRIPLE_KEYS]
-    keep = renumbered[legs[0]] >= 0
-    for leg in legs[1:]:
-        keep &= renumbered[leg] >= 0
-
-    triples = {properties.idx_i_triples: neighbors[properties.idx_i_triples][keep]}
-    for key, leg in zip(_TRIPLE_KEYS, legs):
-        triples[key] = renumbered[leg[keep]]
-    return triples
 
 
 class FilterNeighbors(Transform):

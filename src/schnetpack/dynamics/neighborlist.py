@@ -19,8 +19,8 @@ from collections.abc import Sequence
 import torch
 
 from schnetpack import properties
-from schnetpack.data.loader import _atoms_collate_fn, split_batch
-from schnetpack.transform import NeighborListTransform, Transform, prune_neighbors
+from schnetpack.data.loader import _atoms_collate_fn, prune_neighbors, split_batch
+from schnetpack.transform import NeighborListTransform, Transform
 
 __all__ = ["BatchNeighborList"]
 
@@ -239,7 +239,7 @@ class BatchNeighborList:
         """Restrict the cached cutoff+skin lists to the pairs within the cutoff.
 
         The whole batch at once and on its own device, through
-        :func:`~schnetpack.transform.prune_neighbors`, which renumbers the
+        :func:`~schnetpack.data.prune_neighbors`, which renumbers the
         triples along with the pairs.
         """
         cache = self._cache
