@@ -65,7 +65,7 @@ Tensor level, toy data, flow matching:
 import torch
 from schnetpack.generative import FlowMatching, VelocityParametrization, MatchingLoss
 from schnetpack import properties
-from schnetpack.dynamics import Sampler, Heun
+from schnetpack.dynamics import GenerativeCalculator, Heun
 
 process = FlowMatching()                     # a = 1 - t, b = t, unit Gaussian endpoint
 param   = VelocityParametrization()          # the model predicts d/dt x_t
@@ -77,8 +77,9 @@ for x0 in loader:
     loss.backward(); ...
 
 batch_model = lambda b: {"prediction": model(b[properties.R], b[properties.t])}
-sampler = Sampler(batch_model, process, param, Heun(), eta2=0.0)  # the SAME two objects
-out = sampler.denoise(
+calc = GenerativeCalculator(batch_model, process, param)          # the SAME two objects
+sampler = Heun(calc, eta2=0.0)
+out = sampler.run(
     sampler.prior.sample_from_batch({properties.R: torch.empty(64, 3)}), n_steps=50
 )
 samples = out[properties.R]
@@ -97,7 +98,7 @@ the time arrives under `properties.t`, the raw head is read from
 `outputs[output_key]`, and the sample axis is the leading axis of the moved
 key (atoms, for positions). A tensor-level model enters the drivers through
 a one-line wrapper, as above; see
-[sampling.md §7](sampling.md#7-the-shared-loop-the-batch-and-state-constraints).
+[sampling.md §7](sampling.md#7-the-loop-the-batch-the-calculator-and-hooks).
 
 
 ## The design argument

@@ -68,7 +68,7 @@ def _batch_neighbor_list(cutoff_skin: float = CUTOFF_SKIN):
     the skin, which is what makes the batch-wise path worth using. The sequential ase
     reference gets a plain list instead -- ase rebuilds per structure anyway.
     """
-    return spk.transform.BatchNeighborList(
+    return spk.dynamics.BatchNeighborList(
         neighbor_list=_neighbor_list(), cutoff_skin=cutoff_skin
     )
 

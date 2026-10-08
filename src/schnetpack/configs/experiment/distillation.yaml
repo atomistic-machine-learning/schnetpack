@@ -1,0 +1,132 @@
+# @package _global_
+#
+# Distills a frozen teacher into a student. The teacher runs on every
+# batch and supplies all targets: energy, forces, and the Hessian along a fresh
+# random probe (the curvature target). The dataset needs structures only; any
+# labels in it are not loaded.
+#
+# The teacher is machine-specific, so pass it on the command line:
+#
+#   spktrain experiment=distillation data.dataset.datapath=/path/to/structures.db \
+#       task.teacher.model_path=/path/to/teacher/best_model
+#
+# A TorchScript archive loads as well, without the classes it was built from
+# having to be importable (auto-detected, or task.teacher.model_format=torchscript).
+#
+# The teacher family is chosen from task/teacher: schnetpack (the default) or
+# mace. Each sets its cutoff and length unit in globals.teacher_*, which the
+# shared neighbor list needs too, and everything else under task.teacher:
+#
+#   spktrain experiment=distillation task/teacher=mace \
+#       task.teacher.model_path=/path/to/MACE-OFF23_medium.pt ...
+#
+# Teacher and student share one neighbor list, built by the data pipeline at
+# the larger of their cutoffs, compared in distance_unit
+# (DistillationNeighborList). Each model prunes it to its own cutoff: the
+# student with FilterShortRange, the teacher in its wrapper. Each cutoff is in
+# its model's own length unit.
+#
+# Each teacher target is named after the student key it is compared with:
+# teacher_<energy_key>, teacher_<forces_key>, and teacher_hvp for the student's
+# hvp. The teacher is told the student's keys and supplies exactly those targets.
+#
+# The student's energy offsets (AddOffsets below) are fitted to the teacher's
+# energies on at most task.teacher_stats_size training structures, or to the
+# labels if a label term trains the student's energy. The teacher's result is
+# stored next to the split's statistics, so reruns and resumes read it.
+
+defaults:
+  - /task/teacher: schnetpack
+  - override /model: nnp
+  - override /data: custom
+
+run:
+  experiment: distillation
+
+globals:
+  cutoff: 5.  # the student's cutoff, in distance_unit
+  lr: 5e-4
+  energy_key: energy
+  forces_key: forces
+  # the student's units, those of the data and of the logged metrics
+  distance_unit: Ang
+  energy_unit: eV
+
+data:
+  dataset:
+    distance_unit: ${globals.distance_unit}
+    load_properties: [] # every target comes from the teacher
+    transforms:
+      - _target_: schnetpack.transform.SubtractCenterOfMass
+      - _target_: schnetpack.transform.DistillationNeighborList
+        neighbor_list:
+          _target_: schnetpack.transform.MatScipyNeighborList
+          cutoff: ${globals.cutoff}
+        teacher_cutoff: ${globals.teacher_cutoff}
+        teacher_distance_unit: ${globals.teacher_distance_unit}
+        student_distance_unit: ${globals.distance_unit}
+      - _target_: schnetpack.transform.CastTo32
+
+model:
+  input_modules:
+    - _target_: schnetpack.model.PairwiseDistances
+    - _target_: schnetpack.model.FilterShortRange
+      short_range_cutoff: ${globals.cutoff}
+  output_modules:
+    - _target_: schnetpack.model.Atomwise
+      output_key: ${globals.energy_key}
+      n_in: ${model.representation.n_atom_basis}
+      aggregation_mode: sum
+    - _target_: schnetpack.model.Forces
+      energy_key: ${globals.energy_key}
+      force_key: ${globals.forces_key}
+  postprocessors:
+    - _target_: schnetpack.transform.CastTo64
+    # initialized from the teacher's energies, since the data has no labels:
+    - _target_: schnetpack.transform.AddOffsets
+      property: ${globals.energy_key}
+      add_mean: True
+      add_atomrefs: True
+      estimate_atomref: True
+
+task:
+  teacher_stats_size: 10000  # null for the whole training split
+  outputs:
+    - _target_: schnetpack.ModelOutput
+      name: ${globals.energy_key}
+      target_property: teacher_${globals.energy_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 0.01
+    - _target_: schnetpack.ModelOutput
+      name: ${globals.forces_key}
+      target_property: teacher_${globals.forces_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 0.99
+    # the student's H v against the teacher's, along the same probe. A starting
+    # weight only: curvature errors are far larger than force errors, so sweep it.
+    - _target_: schnetpack.ModelOutput
+      name: hvp
+      target_property: teacher_hvp
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 0.10

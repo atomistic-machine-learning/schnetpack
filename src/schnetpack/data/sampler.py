@@ -1,12 +1,14 @@
 from collections.abc import Callable
 
 import numpy as np
-from torch.utils.data import WeightedRandomSampler
+import torch
+from torch.utils.data import Sampler, WeightedRandomSampler
 
 from schnetpack import properties
 from schnetpack.data import ASEAtomsData
 
 __all__ = [
+    "ChunkedRandomSampler",
     "StratifiedSampler",
     "NumberOfAtomsCriterion",
     "PropertyCriterion",
@@ -41,6 +43,44 @@ class PropertyCriterion:
             sample = dataset[spl_idx]
             property_values.append(sample[self.property_key].item())
         return property_values
+
+
+class ChunkedRandomSampler(Sampler[int]):
+    """
+    Random sampler that splits each pass over the dataset into shorter epochs.
+
+    One random permutation of the dataset is consumed in chunks of `num_samples`
+    indices, one chunk per epoch, and reshuffled once it runs out. Unlike
+    `RandomSampler(num_samples=...)`, every sample is visited exactly once per full
+    pass, so per-epoch machinery (LR schedulers, checkpointing, early stopping) can
+    run more often than once per pass over large datasets.
+
+    Note: epoch-counted settings (e.g. `patience`, `max_epochs`) count short epochs,
+    so scale them accordingly. The permutation is not checkpointed; resuming
+    training starts a fresh one.
+    """
+
+    def __init__(self, data_source: ASEAtomsData, num_samples: int) -> None:
+        """
+        Args:
+            data_source: The data source to be sampled from.
+            num_samples: The number of samples drawn per epoch.
+        """
+        self.data_source = data_source
+        self.num_samples = num_samples
+        self._permutation = torch.empty(0, dtype=torch.long)
+        self._cursor = 0
+
+    def __len__(self) -> int:
+        return self.num_samples
+
+    def __iter__(self):
+        for _ in range(self.num_samples):
+            if self._cursor == len(self._permutation):
+                self._permutation = torch.randperm(len(self.data_source))
+                self._cursor = 0
+            yield int(self._permutation[self._cursor])
+            self._cursor += 1
 
 
 class StratifiedSampler(WeightedRandomSampler):

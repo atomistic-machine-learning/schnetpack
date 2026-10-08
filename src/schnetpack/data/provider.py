@@ -89,7 +89,7 @@ class StatsAtomrefProvider:
             return {}
         return entries
 
-    def _read_or_compute(
+    def read_or_compute(
         self, entry_key: str, compute: Callable[[], np.ndarray]
     ) -> np.ndarray:
         """
@@ -97,7 +97,10 @@ class StatsAtomrefProvider:
 
         The lock — the same one that serializes split creation — is held
         across the whole miss → compute → write cycle, so concurrent ranks
-        compute each entry at most once.
+        compute each entry at most once. Entries are only valid for this
+        train partition. Other stats sources store their results here too,
+        under keys of their own (e.g. ``TeacherStats``, ``teacher:...``).
+        Without a stats file, every call computes.
         """
         if self.stats_file is None:
             return compute()
@@ -130,7 +133,7 @@ class StatsAtomrefProvider:
             )[property]
             return np.array([mean.item(), std.item()], dtype=np.float64)
 
-        stored = self._read_or_compute("stats:" + json.dumps(list(key)), compute)
+        stored = self.read_or_compute("stats:" + json.dumps(list(key)), compute)
         stats = (torch.tensor(stored[0]), torch.tensor(stored[1]))
 
         self._stats_cache[key] = stats
@@ -167,7 +170,7 @@ class StatsAtomrefProvider:
                 .numpy()
             )
 
-        stored = self._read_or_compute("atomrefs:" + json.dumps(list(key)), compute)
+        stored = self.read_or_compute("atomrefs:" + json.dumps(list(key)), compute)
         atomref = torch.tensor(stored)
 
         self._atomref_cache[key] = atomref

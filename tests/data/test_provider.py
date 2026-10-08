@@ -4,6 +4,7 @@ base dataset plus an explicit train index list, it must serve raw-data
 statistics no matter what transforms are attached to the dataset.
 """
 
+import numpy as np
 import pytest
 import torch
 
@@ -92,3 +93,27 @@ def test_datamodule_get_atomrefs_passes_estimate_through(
 
     with pytest.raises(RuntimeError, match=ENERGY):
         dm.get_atomrefs(ENERGY, True, estimate=False)
+
+
+def test_other_stats_sources_store_entries_through_the_provider(
+    stats_dbpath, tmp_path, monkeypatch
+):
+    """An entry is computed once per train partition and then read back, also
+    by another provider on the same stats file (a rerun, another rank)."""
+    monkeypatch.chdir(tmp_path)  # the provider's lock lives in the working dir
+    stats_file = str(tmp_path / "split_stats.npz")
+    calls = []
+
+    def compute():
+        calls.append(1)
+        return np.array([1.5, -2.0])
+
+    providers = [
+        StatsAtomrefProvider(ASEAtomsData(stats_dbpath), TRAIN_IDX, stats_file)
+        for _ in range(2)
+    ]
+    values = [p.read_or_compute("teacher:abc:stats", compute) for p in providers]
+
+    assert len(calls) == 1
+    for value in values:
+        np.testing.assert_array_equal(value, [1.5, -2.0])

@@ -9,3 +9,5 @@ schnetpack.objectives
 
     ModelOutput
     UnsupervisedModelOutput
+    LossMask
+    AtomMask

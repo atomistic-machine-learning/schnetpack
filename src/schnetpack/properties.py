@@ -77,6 +77,11 @@ nuclear_magnetic_moments: Final[str] = "nuclear_magnetic_moments"
 shielding: Final[str] = "shielding"
 nuclear_spin_coupling: Final[str] = "nuclear_spin_coupling"
 
+## knowledge distillation
+#: Hessian-vector product ``H v`` along a probe
+hvp: Final[str] = "hvp"
+teacher_hvp: Final[str] = "teacher_hvp"
+
 ## external fields needed for different response properties
 required_external_fields = {
     dipole_moment: [electric_field],

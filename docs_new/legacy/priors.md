@@ -127,7 +127,7 @@ A sampling start is a full batch — atom types, positions, `n_atoms`,
 
 | Entry | Returns | Used by |
 |---|---|---|
-| `sample_positions(batch)` | positions tensor | training (`Process.perturb`), `Scaffold` re-noising |
+| `sample_positions(batch)` | positions tensor | training (`Process.perturb`) |
 | `sample_from_batch(batch)` | the batch with its positions redrawn | sampling from a test set |
 | `sample(n_samples)` | `n_samples` structures from `prior.structures`, positions redrawn | `Dynamics.sample` |
 
@@ -147,16 +147,17 @@ A sampling start is a full batch — atom types, positions, `n_atoms`,
 ```python
 stats = StatisticsStructures.from_dataset(train)
 process = VP(prior=GaussianPrior(structures=stats))   # training ignores structures
-samples = Sampler(calc, process, param, Heun()).sample(64, n_steps=50)
+sampler = Heun(GenerativeCalculator(model, process, param))
+samples = sampler.sample(64, n_steps=50)
 
 for batch in test_loader:                              # or: from a test set
-    out = sampler.denoise(sampler.prior.sample_from_batch(batch), n_steps=50)
+    out = sampler.run(sampler.prior.sample_from_batch(batch), n_steps=50)
 ```
 
 **`DatasetPrior(dataset, shuffle=True)`** returns stored structures
 unchanged — non-equilibrium structures to relax, say — so it is a sampling
-start only: `DirectDenoising(calc, process, param, prior=DatasetPrior(noneq))
-.sample(n, n_steps)`. It has no positions law, and `sample_positions` raises
+start only: `DirectDenoising(ForceCalculator(model, kind="pseudo"),
+prior=DatasetPrior(noneq)).sample(n, n_steps)`. It has no positions law, and `sample_positions` raises
 rather than silently training on $x_1 = x_0$.
 
 
@@ -189,7 +190,7 @@ Guidelines:
   which routes that closes (velocity/x0/pseudo-force training and eta2 0
   sampling all remain open; see
   [flow_matching_sde.md §8](flow_matching_sde.md)).
-- A structured prior usually pairs with `Sampler.denoise` (starting below
+- A structured prior usually pairs with `Sampler.run` (starting below
   $t_{\max}$ from a structured state) or with `DirectDenoising` —
   see [sampling.md](sampling.md).
 

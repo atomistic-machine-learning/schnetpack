@@ -42,6 +42,7 @@ Input modules
     :template: classtemplate.rst
 
     PairwiseDistances
+    FilterShortRange
     StaticExternalFields
 
 Output modules
@@ -81,3 +82,11 @@ Output modules
     DampedCoulombPotential
     EnergyCoulomb
     EnergyEwald
+
+Model state
+-----------
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+
+    train_mode

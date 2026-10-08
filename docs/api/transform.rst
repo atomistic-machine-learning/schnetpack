@@ -44,6 +44,7 @@ Neighbor lists
     TorchNeighborList
     AllToAllNeighborList
     CachedNeighborList
+    DistillationNeighborList
     CountNeighbors
     FilterNeighbors
     WrapPositions

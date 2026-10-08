@@ -1,17 +1,29 @@
-import warnings
-from typing import Any
+from typing import Any, cast
 
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning.utilities.types import (
+    LRSchedulerConfigType,
+    OptimizerLRScheduler,
+)
 from torch import nn as nn
+from torchmetrics import Metric
 
 from schnetpack.model.base import AtomisticModel
 from schnetpack.objectives import (
     ModelOutput,
-    apply_constraints,
     calculate_loss,
     extract_targets,
+    predict_without_postprocessing,
 )
+from schnetpack.train.distillation import (
+    TEACHER_STATS_SIZE,
+    check_distillation_setup,
+    distillation_predictions,
+    needs_curvature,
+    student_stats_source,
+)
+from schnetpack.train.teacher import TeacherWrapper
 
 __all__ = ["AtomisticTask"]
 
@@ -37,6 +49,9 @@ class AtomisticTask(pl.LightningModule):
         scheduler_args: dict[str, Any] | None = None,
         scheduler_monitor: str | None = None,
         warmup_steps: int = 0,
+        teacher: TeacherWrapper | None = None,
+        probe_seed: int = 0,
+        teacher_stats_size: int | None = TEACHER_STATS_SIZE,
     ):
         """
         Args:
@@ -49,69 +64,108 @@ class AtomisticTask(pl.LightningModule):
             scheduler_monitor: name of metric to be observed for ReduceLROnPlateau
             warmup_steps: number of steps used to increase the learning rate from zero
               linearly to the target learning rate at the beginning of training
+            teacher: the teacher of knowledge distillation. Outputs may then be
+              trained on its targets, ``teacher.target_keys``: ``teacher_<key>``
+              for the student's energy and force keys, and ``teacher_hvp``; see
+              :mod:`schnetpack.train.distillation`.
+            probe_seed: seed of the probes drawn in validation and testing, so
+              their losses depend on it. The probe generator is reset to this
+              seed at the start of every validation and test epoch, so each
+              epoch sees the same probes and validation losses are comparable
+              across epochs. Training draws fresh probes every step.
+            teacher_stats_size: training structures the teacher runs on to fit
+              the student's energy offsets when no label trains its energy;
+              None for the whole split. The result is stored with the
+              datamodule's statistics, so reruns and resumes read it.
         """
         super().__init__()
         self.model = model
         self.optimizer_cls = optimizer_cls
-        self.optimizer_kwargs = optimizer_args
+        self.optimizer_kwargs = optimizer_args or {}
         self.scheduler_cls = scheduler_cls
-        self.scheduler_kwargs = scheduler_args
+        self.scheduler_kwargs = scheduler_args or {}
         self.schedule_monitor = scheduler_monitor
         self.outputs = nn.ModuleList(outputs)
 
-        self.grad_enabled = len(self.model.required_derivatives) > 0
-        self.lr = optimizer_args["lr"]
+        self.teacher = teacher
+        self.probe_seed = probe_seed
+        self.teacher_stats_size = teacher_stats_size
+        self._probe_generator = torch.Generator().manual_seed(probe_seed)
+        check_distillation_setup(self.outputs, self.model, teacher)
+
+        # curvature is a derivative, in validation and testing too
+        self.grad_enabled = bool(self.model.required_derivatives) or needs_curvature(
+            self.outputs
+        )
+        self.lr = self.optimizer_kwargs["lr"]
         self.warmup_steps = warmup_steps
         self.save_hyperparameters()
 
     def setup(self, stage=None):
         if stage == "fit":
-            self.model.initialize_transforms(self.trainer.datamodule)
+            stats = self.trainer.datamodule
+            if self.teacher is not None and stats is not None:
+                # labels first; without them, the teacher's energies
+                stats = student_stats_source(
+                    self.outputs,
+                    stats,
+                    self.teacher,
+                    device=self.trainer.strategy.root_device,
+                    max_structures=self.teacher_stats_size,
+                )
+            self.model.initialize_transforms(stats)
 
     def forward(self, inputs: dict[str, torch.Tensor]):
         results = self.model(inputs)
         return results
-
-    def loss_fn(self, pred, targets):
-        return calculate_loss(self.outputs, pred, targets)
 
     def log_metrics(self, pred, targets, subset):
         for output in self.outputs:
             output.update_metrics(pred, targets, subset)
             for metric_name, metric in output.metrics[subset].items():
                 self.log(
-                    f"{subset}_{output.name}_{metric_name}",
-                    metric,
+                    f"{subset}_{output.target_property}_{metric_name}",
+                    cast(Metric, metric),
                     on_step=(subset == "train"),
                     on_epoch=(subset != "train"),
                     prog_bar=False,
                 )
 
-    def apply_constraints(self, pred, targets):
-        return apply_constraints(self.outputs, pred, targets)
+    def _step(self, batch, subset):
+        """Composite loss of one batch, with the metrics of ``subset`` logged.
+
+        Targets are the labels from the batch; with a teacher they are its
+        targets, and the student's curvature is predicted too."""
+        if self.teacher is None:
+            targets = extract_targets(self.outputs, batch)
+            pred = predict_without_postprocessing(self.model, batch)
+        else:
+            pred, targets = distillation_predictions(
+                self.outputs,
+                self.model,
+                self.teacher,
+                batch,
+                generator=None if subset == "train" else self._probe_generator,
+                create_graph=subset == "train",
+            )
+        loss = calculate_loss(self.outputs, pred, targets)
+        self.log_metrics(pred, targets, subset)
+        return loss
+
+    def on_validation_epoch_start(self):
+        self._probe_generator.manual_seed(self.probe_seed)
+
+    def on_test_epoch_start(self):
+        self._probe_generator.manual_seed(self.probe_seed)
 
     def training_step(self, batch, batch_idx):
-        targets = extract_targets(self.outputs, batch)
-
-        pred = self.predict_without_postprocessing(batch)
-        pred, targets = self.apply_constraints(pred, targets)
-
-        loss = self.loss_fn(pred, targets)
-
+        loss = self._step(batch, "train")
         self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
-        self.log_metrics(pred, targets, "train")
         return loss
 
     def validation_step(self, batch, batch_idx):
         torch.set_grad_enabled(self.grad_enabled)
-
-        targets = extract_targets(self.outputs, batch)
-
-        pred = self.predict_without_postprocessing(batch)
-        pred, targets = self.apply_constraints(pred, targets)
-
-        loss = self.loss_fn(pred, targets)
-
+        loss = self._step(batch, "val")
         self.log(
             "val_loss",
             loss,
@@ -120,20 +174,11 @@ class AtomisticTask(pl.LightningModule):
             prog_bar=True,
             batch_size=len(batch["_idx"]),
         )
-        self.log_metrics(pred, targets, "val")
-
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_idx):
         torch.set_grad_enabled(self.grad_enabled)
-
-        targets = extract_targets(self.outputs, batch)
-
-        pred = self.predict_without_postprocessing(batch)
-        pred, targets = self.apply_constraints(pred, targets)
-
-        loss = self.loss_fn(pred, targets)
-
+        loss = self._step(batch, "test")
         self.log(
             "test_loss",
             loss,
@@ -142,44 +187,24 @@ class AtomisticTask(pl.LightningModule):
             prog_bar=True,
             batch_size=len(batch["_idx"]),
         )
-        self.log_metrics(pred, targets, "test")
-
         return {"test_loss": loss}
 
-    def predict_without_postprocessing(self, batch):
-        pp = self.model.do_postprocessing
-        self.model.do_postprocessing = False
-        pred = self(batch)
-        self.model.do_postprocessing = pp
-        return pred
-
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> OptimizerLRScheduler:
         optimizer = self.optimizer_cls(
             params=self.parameters(), **self.optimizer_kwargs
         )
 
-        if self.scheduler_cls:
-            schedulers = []
-            schedule = self.scheduler_cls(optimizer=optimizer, **self.scheduler_kwargs)
-            optimconf = {"scheduler": schedule, "name": "lr_schedule"}
-            if self.schedule_monitor:
-                optimconf["monitor"] = self.schedule_monitor
-            # incase model is validated before epoch end (not recommended use of val_check_interval)
-            if self.trainer.val_check_interval < 1.0:
-                warnings.warn(
-                    "Learning rate scheduling is set to occur after the epoch ends. To enable scheduling before the "
-                    "epoch end, please set the `val_check_interval` parameter to a value greater than 1.0, which "
-                    "indicates the number of training steps after which the model should be validated.",
-                    stacklevel=2,
-                )
-            # incase model is validated before epoch end (recommended use of val_check_interval)
-            if self.trainer.val_check_interval > 1.0:
-                optimconf["interval"] = "step"
-                optimconf["frequency"] = self.trainer.val_check_interval
-            schedulers.append(optimconf)
-            return [optimizer], schedulers
-        else:
+        if not self.scheduler_cls:
             return optimizer
+
+        scheduler = self.scheduler_cls(optimizer=optimizer, **self.scheduler_kwargs)
+        scheduler_config: LRSchedulerConfigType = {
+            "scheduler": scheduler,
+            "name": "lr_schedule",
+        }
+        if self.schedule_monitor:
+            scheduler_config["monitor"] = self.schedule_monitor
+        return {"optimizer": optimizer, "lr_scheduler": scheduler_config}
 
     def optimizer_step(
         self,
@@ -201,5 +226,7 @@ class AtomisticTask(pl.LightningModule):
             pp_status = self.model.do_postprocessing
             if do_postprocessing is not None:
                 self.model.do_postprocessing = do_postprocessing
-            torch.save(self.model, path)
-            self.model.do_postprocessing = pp_status
+            try:
+                torch.save(self.model, path)
+            finally:
+                self.model.do_postprocessing = pp_status
