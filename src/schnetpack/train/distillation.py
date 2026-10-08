@@ -1,7 +1,7 @@
 """Knowledge distillation: a student trained on its teacher's energy, forces
 and curvature.
 
-The teacher runs online, on the batch the student sees (ADR-0010). For the
+The teacher runs online, on the batch the student sees. For the
 curvature term both models are probed along the same random vector v: the
 teacher supplies the curvature target ``H_t v``, the student its own
 ``H_s v``, both exact second derivatives. With v ~ N(0, 1) per component,
@@ -10,7 +10,7 @@ teacher supplies the curvature target ``H_t v``, the student its own
 Everything here is pure PyTorch. :class:`~schnetpack.lightning.AtomisticTask`
 distills through :func:`distillation_predictions`, and so does a hand-written
 loop, which checks the setup once and assembles the loss with
-:func:`~schnetpack.objectives.calculate_loss` (ADR-0025)::
+:func:`~schnetpack.objectives.calculate_loss`::
 
     check_distillation_setup(outputs, model, teacher)
     for batch in loader:
@@ -62,7 +62,9 @@ def draw_probe(
     positions: torch.Tensor, generator: torch.Generator | None = None
 ) -> torch.Tensor:
     """A probe shaped like the positions: N(0, 1) per atom and Cartesian
-    component, not normalized (ADR-0010 §2).
+    component, not normalized: a per-component loss then weighs the
+    curvature of every atom alike, as it does forces, whatever the
+    structure's size.
 
     With a generator the probe is drawn on cpu and moved over, so a seeded
     generator gives the same probes on every device.
@@ -250,7 +252,7 @@ def student_stats_source(
     device: torch.device | str | None = None,
     max_structures: int | None = TEACHER_STATS_SIZE,
 ):
-    """The stats source the student's offsets are fitted to (ADR-0017).
+    """The stats source the student's offsets are fitted to.
 
     A label term on the student's energy key means the data pipeline removes
     offsets fitted to those labels from them. The student's offsets must be the
@@ -276,7 +278,7 @@ class TeacherStats:
     ``AddOffsets`` initializes from a stats source (``get_stats`` and
     ``get_atomrefs``), normally the datamodule, which computes them from energy
     labels. A distillation dataset may have none, so this source runs the
-    teacher instead (ADR-0010 §6, ADR-0017): once, on the first query for the
+    teacher instead: once, on the first query for the
     student's energy, ``teacher.student_energy_key``, and on a seeded random
     subset of at most ``max_structures`` training structures, the same on
     every rank. Queries for any other property go to the datamodule.

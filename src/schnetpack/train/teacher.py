@@ -4,11 +4,11 @@ A teacher is the frozen model a student is distilled from. It may work in other
 units than the student, with another cutoff and -- if it is not a SchNetPack
 model -- with another input and output format. :class:`TeacherWrapper` is the
 boundary between a teacher and training: it takes a student batch in the
-student's units and returns the teacher targets in the student's units
-(ADR-0011), named after the student's keys (ADR-0014).
+student's units and returns the teacher targets in the student's units,
+named after the student's keys.
 
 Each teacher family is a subclass that says how the teacher is loaded and how
-its output for a batch is computed (ADR-0018, ADR-0020).
+its output for a batch is computed.
 """
 
 import contextlib
@@ -64,11 +64,9 @@ class TeacherWrapper:
     ``parameters()`` and the optimizer. It pickles as its configuration -- its
     public attributes; private ones are runtime state that :meth:`load`
     rebuilds -- and loads the teacher again when unpickled, so checkpoints stay
-    small. Being frozen, it is shared rather than copied by ``copy.deepcopy``
-    (ADR-0011 §4).
+    small. Being frozen, it is shared rather than copied by ``copy.deepcopy``.
 
-    Subclasses implement :meth:`load` and :meth:`teacher_output` (ADR-0018,
-    ADR-0020).
+    Subclasses implement :meth:`load` and :meth:`teacher_output`.
 
     Args:
         teacher_energy_unit: energy unit the teacher works in.
@@ -80,9 +78,9 @@ class TeacherWrapper:
             pipeline to cover both cutoffs (see
             :class:`~schnetpack.transform.DistillationNeighborList`); the
             teacher prunes it to ``cutoff`` with
-            :func:`~schnetpack.data.prune_neighbors`, triples included
-            (ADR-0012, ADR-0013, ADR-0027). None passes the list through as it
-            is -- right for a list built at the teacher's own cutoff.
+            :func:`~schnetpack.data.prune_neighbors`, triples included.
+            None passes the list through as it is -- right for a list
+            built at the teacher's own cutoff.
         dtype: floating dtype the teacher runs in.
         student_energy_key: the student's energy output: the teacher's energy
             is its target, and the student's offsets are those of this key.
@@ -254,9 +252,8 @@ class SchNetPackTeacher(TeacherWrapper):
     """A SchNetPack model as teacher, saved with ``torch.save`` or as TorchScript.
 
     The model runs as it predicts: its postprocessing stays on, so its energies
-    are absolute (ADR-0011 §3). It is kept in eval mode, and switched to train
-    mode while a curvature target is taken so that its ``Forces`` keep their
-    graph (ADR-0010 §5).
+    are absolute. It is kept in eval mode, and switched to train mode while a
+    curvature target is taken so that its ``Forces`` keep their graph.
 
     Args:
         model_path: path to the saved model.
@@ -351,7 +348,7 @@ class SchNetPackTeacher(TeacherWrapper):
     def teacher_output(
         self, inputs: dict[str, torch.Tensor], create_graph: bool
     ) -> dict[str, torch.Tensor]:
-        # its Forces keep their graph only in train mode (ADR-0010 §5)
+        # its Forces keep their graph only in train mode
         mode = train_mode(self.model) if create_graph else contextlib.nullcontext()
         with mode:
             output = self.model(inputs)
@@ -377,7 +374,7 @@ class MaceTeacher(TeacherWrapper):
     per-element reference energies (E0s). These are summed in float64, read
     from the archive before it is cast to ``dtype``, and added to MACE's
     ``interaction_energy``, so a float32 teacher keeps the digits of its
-    energies (ADR-0019). Its forces keep their graph when MACE is called with
+    energies. Its forces keep their graph when MACE is called with
     ``training=True``, which is passed whenever a curvature target is asked
     for. MACE-OFF is licensed for academic use only (ASL).
 

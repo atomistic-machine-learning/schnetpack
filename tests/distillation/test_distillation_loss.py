@@ -19,7 +19,7 @@ from .conftest import make_nnp, molecules_batch
 
 
 def distillation_loss(outputs, student, teacher, batch, generator=None):
-    """The loss of a hand-written distillation loop (ADR-0025)."""
+    """The loss of a hand-written distillation loop."""
     check_distillation_setup(outputs, student, teacher)
     pred, targets = distillation_predictions(
         outputs, student, teacher, batch, generator=generator

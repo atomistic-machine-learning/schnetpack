@@ -76,8 +76,7 @@ class AtomisticTask(pl.LightningModule):
             teacher_stats_size: training structures the teacher runs on to fit
               the student's energy offsets when no label trains its energy;
               None for the whole split. The result is stored with the
-              datamodule's statistics, so reruns and resumes read it
-              (ADR-0017).
+              datamodule's statistics, so reruns and resumes read it.
         """
         super().__init__()
         self.model = model
@@ -106,7 +105,7 @@ class AtomisticTask(pl.LightningModule):
         if stage == "fit":
             stats = self.trainer.datamodule
             if self.teacher is not None and stats is not None:
-                # labels first; without them, the teacher's energies (ADR-0017)
+                # labels first; without them, the teacher's energies
                 stats = student_stats_source(
                     self.outputs,
                     stats,

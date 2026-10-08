@@ -275,7 +275,7 @@ def test_extract_targets_skips_keys_supplied_elsewhere():
 
 def test_outputs_on_one_prediction_log_their_metrics_apart(tmp_path):
     """Two targets for one prediction, as a label and a teacher target in
-    distillation: each output's metrics are named after its target (ADR-0026)."""
+    distillation: each output's metrics are named after its target."""
     outputs = [
         make_output(),
         ModelOutput(

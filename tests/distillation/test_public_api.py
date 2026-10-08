@@ -1,8 +1,7 @@
-"""What ``schnetpack.train`` offers for distillation (ADR-0018 §3, ADR-0025):
-the teacher families and what a hand-written loop needs; the helpers stay
-importable from their modules. ``schnetpack.model`` offers the train-mode
-switch (ADR-0021 §3-4) and the module the student prunes the shared neighbor
-list with (ADR-0012 §2)."""
+"""What ``schnetpack.train`` offers for distillation: the teacher families and
+what a hand-written loop needs; the helpers stay importable from their
+modules. ``schnetpack.model`` offers the train-mode switch and the module the
+student prunes the shared neighbor list with."""
 
 import schnetpack.model as model
 import schnetpack.train as train
@@ -36,8 +35,8 @@ def test_the_package_offers_the_families_and_the_loop_api():
 
 
 def test_a_loop_assembles_the_loss_with_calculate_loss():
-    """The one composite-loss function is objectives.calculate_loss (ADR-0023);
-    distillation has no one-call loss of its own (ADR-0025)."""
+    """The one composite-loss function is objectives.calculate_loss;
+    distillation has no one-call loss of its own."""
     assert not hasattr(train, "compute_distillation_loss")
     assert not hasattr(train.distillation, "compute_distillation_loss")
 
@@ -58,7 +57,7 @@ def test_helpers_stay_in_their_modules():
 
 def test_the_model_package_offers_the_train_mode_switch():
     """Curvature switches train mode on. Postprocessing is switched off by
-    objectives.predict_without_postprocessing (ADR-0024), not here."""
+    objectives.predict_without_postprocessing, not here."""
     assert hasattr(model, "train_mode")
     assert not hasattr(model, "set_postprocessing")
     assert not hasattr(model, "train_mode_sensitive_modules")

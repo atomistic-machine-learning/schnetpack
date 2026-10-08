@@ -31,7 +31,7 @@ def train_mode(model: nn.Module) -> Generator[nn.Module, None, None]:
 
     SchNetPack's ``Forces`` differentiates with ``create_graph=self.training``:
     in eval mode the forces come back without a graph, and no Hessian-vector
-    product can be taken through them (ADR-0010 §5).
+    product can be taken through them.
     """
     was_training = model.training
     model.train(True)

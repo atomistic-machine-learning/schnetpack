@@ -106,6 +106,6 @@ def test_only_the_neighbor_entries_come_back_with_distances_on_request():
 
 
 def test_the_transforms_keep_no_alias():
-    """It works on collated batches, so it lives with the collate function
-    (ADR-0028), not with the per-sample transforms."""
+    """It works on collated batches, so it lives with the collate function,
+    not with the per-sample transforms."""
     assert not hasattr(schnetpack.transform, "prune_neighbors")

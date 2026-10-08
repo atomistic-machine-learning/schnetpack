@@ -240,7 +240,7 @@ def triple_atoms(inputs):
 
 
 def test_a_cutoff_keeps_the_triples_of_the_pairs_within_it(batch):
-    """Triples index into the pairs, so pruning renumbers them (ADR-0027): the
+    """Triples index into the pairs, so pruning renumbers them: the
     teacher sees the triples of a list built at its own cutoff."""
     teacher = RecordingTeacher(cutoff=2.8, **STUDENT_UNITS)
 
