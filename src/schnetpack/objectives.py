@@ -121,7 +121,7 @@ class ModelOutput(nn.Module):
             "val": self.val_metrics,
             "test": self.test_metrics,
         }
-        self.masks = masks or []
+        self.masks = nn.ModuleList(masks or [])
 
     def masked(
         self, pred: dict[str, torch.Tensor], target: dict[str, torch.Tensor]

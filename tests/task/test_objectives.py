@@ -9,6 +9,7 @@ from schnetpack.lightning import AtomisticTask
 from schnetpack.model.base import AtomisticModel
 from schnetpack.objectives import (
     AtomMask,
+    LossMask,
     ModelOutput,
     UnsupervisedModelOutput,
     calculate_loss,
@@ -217,6 +218,24 @@ def test_a_mask_of_the_wrong_length_names_the_output():
 
     with pytest.raises(ValueError, match="output 'y'"):
         batch_loss([output], LinearModel(), batch)
+
+
+def test_the_state_of_a_custom_mask_belongs_to_its_output():
+    """A mask's buffers follow its output into the state dict and across
+    devices and dtypes."""
+
+    class ThresholdMask(LossMask):
+        def __init__(self):
+            super().__init__()
+            self.register_buffer("threshold", torch.tensor(0.0))
+
+        def forward(self, targets):
+            return targets["y_ref"].squeeze(-1) > self.threshold
+
+    output = masked_output([ThresholdMask()])
+
+    assert "masks.0.threshold" in output.state_dict()
+    assert output.double().masks[0].threshold.dtype == torch.float64
 
 
 def test_an_unsupervised_output_takes_no_masks():

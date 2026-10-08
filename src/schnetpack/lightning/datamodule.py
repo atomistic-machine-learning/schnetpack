@@ -310,7 +310,7 @@ class AtomsDataModule(pl.LightningDataModule):
                 **{"num_samples": len(dataset), **sampler_args},
             ),
             batch_size=self.batch_size,
-            drop_last=True,
+            drop_last=False,
         )
 
     def train_dataloader(self):

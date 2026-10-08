@@ -47,3 +47,19 @@ def test_setup_sampler_respects_num_samples_override():
     )
     assert len(batch_sampler.sampler) == 4
     assert len(list(batch_sampler)) == 2
+
+
+def test_setup_sampler_keeps_the_partial_batch_of_a_short_epoch():
+    """The sampler has moved past the indices of a dropped batch, so dropping it
+    would leave those samples out of the pass."""
+    torch.manual_seed(0)
+    datamodule = SimpleNamespace(batch_size=2)
+    batch_sampler = AtomsDataModule._setup_sampler(
+        datamodule,
+        sampler_cls=ChunkedRandomSampler,
+        sampler_args={"num_samples": 5},
+        dataset=range(10),
+    )
+
+    pass_indices = [i for _ in range(2) for batch in batch_sampler for i in batch]
+    assert sorted(pass_indices) == list(range(10))
