@@ -1,11 +1,3 @@
----
-aliases: [Time-aware model, time-agnostic model, time predictor]
-tags: [spk3, generative-models, time]
-sources: []
-created: 2026-10-07
-updated: 2026-10-07
----
-
 # Time
 
 The fields of an interpolant depend on time, $\phi(t,x)$. A model can receive the time as an input or not. This choice decides which generation methods the model can drive and from which structures generation can start. Notation follows the [[overview#Notation|overview]].

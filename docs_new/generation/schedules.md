@@ -1,11 +1,3 @@
----
-aliases: [Schedule, noise schedule, interpolant schedule]
-tags: [spk3, generative-models, schedules]
-sources: []
-created: 2026-10-07
-updated: 2026-10-07
----
-
 # Schedules
 
 The schedule $a(t)$, $b(t)$ sets how fast a structure moves from the data at $t=0$ to the prior at $t=1$. It fixes the noise level at every time, and with it which noise levels training and sampling see. This page collects the common schedules of flow matching and diffusion models, in the form they are known in the literature. Notation follows the [[overview#Notation|overview]].

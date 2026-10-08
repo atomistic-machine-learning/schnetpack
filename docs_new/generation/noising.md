@@ -1,11 +1,3 @@
----
-aliases: [Noising, noising process, Interpolant, interpolant path, coupling]
-tags: [spk3, generative-models, noising]
-sources: []
-created: 2026-10-07
-updated: 2026-10-07
----
-
 # Noising
 
 The generative models learn to undo noising by training a denoising field $\phi$. The network takes a noisy sample $\tilde x$, and optionally its time $t$, as input and predicts one of the field targets defined by the parametrization. The key ingredient is that every noisy sample $\tilde x$ is assigned to a clean structure $x_0$, and the noising process generates these pairs. Depending on the parametrization, the noising has to meet different requirements, and different parametrizations allow different generative processes. Notation follows the [[overview#Notation|overview]].

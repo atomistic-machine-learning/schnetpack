@@ -1,11 +1,3 @@
----
-aliases: [spk3 overview, generative models overview]
-tags: [spk3, generative-models]
-sources: []
-created: 2026-10-07
-updated: 2026-10-07
----
-
 # Overview
 
 Diffusion-based generative models learn to undo a noising process. A neural network is trained on pairs of clean structures $x_0$, drawn from the data distribution $\rho_0$, and noisy structures $x_t$ derived from them. Generation runs the noising backwards: it starts from a sample $x_1$ of a prior distribution $\rho_1$, which is easy to sample, and follows the learned field to a clean structure.

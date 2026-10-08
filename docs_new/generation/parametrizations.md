@@ -1,11 +1,3 @@
----
-aliases: [Parametrization, model parametrizations, prediction targets]
-tags: [spk3, generative-models, parametrizations]
-sources: []
-created: 2026-10-06
-updated: 2026-10-07
----
-
 # Parametrizations
 
 A parametrization fixes what the network predicts. The parametrizations form a **hierarchy** that follows the levels of noising: some only need pairs of noisy and clean structures, others need the schedule of an interpolant, and others need a Gaussian interpolant. The more a parametrization assumes, the more fields can be computed from it. This page introduces the hierarchy and then, for each parametrization, states what it requires and what can be computed from it. Notation follows the [[overview#Notation|overview]].

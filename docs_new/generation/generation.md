@@ -1,11 +1,3 @@
----
-aliases: [Dynamics, Structure generation, Sampling, Samplers, Optimization, Relaxation, ODE and SDE sampling, Constraints, Guidance]
-tags: [spk3, generative-models, generation]
-sources: []
-created: 2026-10-06
-updated: 2026-10-08
----
-
 # Generation
 
 Generation starts from noisy structures $\tilde x$ or $x_t$ and turns them into clean equilibrium structures. This can be done in two ways. **Optimization**, also called relaxation, follows the field with a step size until it vanishes. **Sampling** follows an ODE or SDE along a time schedule from the prior to the data. Both end in equilibrium structures, but sampling obeys the data distribution, while optimization finds the nearest equilibrium structure, so the distribution of its results depends on the starting structures. Both can be steered with constraints and guidance. Which fields are available depends on the noising used in training, see the [[parametrizations#2 Hierarchy|hierarchy of parametrizations]]. Notation follows the [[overview#Notation|overview]].
