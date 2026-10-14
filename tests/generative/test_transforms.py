@@ -170,9 +170,9 @@ def test_prior_decides_the_noise():
     # transform: a prior that projects out the mean must give a mean-free
     # label and a mean-free displacement, with no change to the transform.
     class MeanFreePrior(GaussianPrior):
-        def sample_positions(self, batch):
-            z = super().sample_positions(batch)
-            return z - z.mean(0, keepdim=True)
+        def __call__(self, batch):
+            z = super().__call__(batch)[properties.R]
+            return {**batch, properties.R: z - z.mean(0, keepdim=True)}
 
     torch.manual_seed(0)
     process = Interpolant(FlowMatching(), prior=MeanFreePrior())

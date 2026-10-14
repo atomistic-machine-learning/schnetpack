@@ -30,6 +30,7 @@ from schnetpack.dynamics.calculator import (
 )
 from schnetpack.dynamics.sample.grids import TimeGrid, UniformGrid
 from schnetpack.dynamics.sample.integrators import Euler, Integrator
+from schnetpack.dynamics.structures import StructureProvider
 from schnetpack.generative.differential_equations import SDE, ReverseODE
 from schnetpack.generative.noising import GaussianInterpolant, expand_t
 from schnetpack.generative.priors import Prior
@@ -50,6 +51,7 @@ class Sampler(Dynamics):
         self,
         calculator,
         grid: TimeGrid,
+        structures: StructureProvider | None = None,
         prior: Prior | None = None,
         hooks: Sequence = (),
     ):
@@ -57,11 +59,19 @@ class Sampler(Dynamics):
         Args:
             calculator: the model's field
             grid: where to place the steps, and the time range they cover
-            prior: starting distribution :meth:`sample` draws from; without
-                one, only :meth:`run` on given structures is available
+            structures: source of the structures :meth:`sample` starts
+                from
+            prior: redraws the provided structures before :meth:`sample`
+                runs them; without one they are run as provided
             hooks: run around every step, in order
         """
-        super().__init__(calculator, prior=prior, hooks=hooks, key=calculator.key)
+        super().__init__(
+            calculator,
+            structures=structures,
+            prior=prior,
+            hooks=hooks,
+            key=calculator.key,
+        )
         self.grid = grid
 
     @property
@@ -159,6 +169,7 @@ class SDESampler(Sampler):
         eta2: float = 1.0,
         integrator: Integrator | None = None,
         grid: TimeGrid | None = None,
+        structures: StructureProvider | None = None,
         prior: Prior | None = None,
         hooks: Sequence = (),
     ):
@@ -172,8 +183,10 @@ class SDESampler(Sampler):
                 :class:`~schnetpack.dynamics.sample.integrators.Euler`)
             grid: where to place the steps (default: uniform from the
                 schedule's t_max to its t_min)
-            prior: starting distribution (default: the forward process's
-                prior)
+            structures: source of the structures :meth:`sample` starts
+                from
+            prior: redraws the provided structures before :meth:`sample`
+                runs them (default: the forward process's prior)
             hooks: run around every step, in order
         """
         if not isinstance(calculator, ScoreCalculator):
@@ -187,7 +200,9 @@ class SDESampler(Sampler):
             grid = UniformGrid(schedule.t_max, schedule.t_min)
         if prior is None:
             prior = forward_process.prior
-        super().__init__(calculator, grid=grid, prior=prior, hooks=hooks)
+        super().__init__(
+            calculator, grid=grid, structures=structures, prior=prior, hooks=hooks
+        )
         self.forward_process = forward_process
         self.eta2 = eta2
         self.integrator = _check_integrator(integrator)
@@ -221,6 +236,7 @@ class ODESampler(Sampler):
         calculator: VelocityCalculator,
         integrator: Integrator | None = None,
         grid: TimeGrid | None = None,
+        structures: StructureProvider | None = None,
         prior: Prior | None = None,
         hooks: Sequence = (),
     ):
@@ -230,8 +246,10 @@ class ODESampler(Sampler):
             integrator: step rule (default:
                 :class:`~schnetpack.dynamics.sample.integrators.Euler`)
             grid: where to place the steps (default: uniform from 1 to 0)
-            prior: starting distribution :meth:`sample` draws from; without
-                one, only :meth:`run` on given structures is available
+            structures: source of the structures :meth:`sample` starts
+                from
+            prior: redraws the provided structures before :meth:`sample`
+                runs them; without one they are run as provided
             hooks: run around every step, in order
         """
         if not isinstance(calculator, VelocityCalculator):
@@ -241,7 +259,9 @@ class ODESampler(Sampler):
             )
         if grid is None:
             grid = UniformGrid()
-        super().__init__(calculator, grid=grid, prior=prior, hooks=hooks)
+        super().__init__(
+            calculator, grid=grid, structures=structures, prior=prior, hooks=hooks
+        )
         self.integrator = _check_integrator(integrator)
         self.reverse_ode = ReverseODE()
 
@@ -273,6 +293,7 @@ class AncestralSampler(Sampler):
         calculator: X0Calculator,
         forward_process: GaussianInterpolant,
         grid: TimeGrid | None = None,
+        structures: StructureProvider | None = None,
         prior: Prior | None = None,
         hooks: Sequence = (),
     ):
@@ -282,8 +303,10 @@ class AncestralSampler(Sampler):
             forward_process: Gaussian interpolant the model was trained on
             grid: where to place the steps (default: uniform from the
                 schedule's t_max to its t_min)
-            prior: starting distribution (default: the forward process's
-                prior)
+            structures: source of the structures :meth:`sample` starts
+                from
+            prior: redraws the provided structures before :meth:`sample`
+                runs them (default: the forward process's prior)
             hooks: run around every step, in order
         """
         if not isinstance(calculator, X0Calculator):
@@ -297,7 +320,9 @@ class AncestralSampler(Sampler):
             grid = UniformGrid(schedule.t_max, schedule.t_min)
         if prior is None:
             prior = forward_process.prior
-        super().__init__(calculator, grid=grid, prior=prior, hooks=hooks)
+        super().__init__(
+            calculator, grid=grid, structures=structures, prior=prior, hooks=hooks
+        )
         self.forward_process = forward_process
         self.schedule = schedule
 

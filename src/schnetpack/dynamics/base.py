@@ -1,6 +1,6 @@
 """
-What every driver shares: the calculator, the starting distribution, the
-moved key, the hooks and the batch contract.
+What every driver shares: the calculator, the starting structures and
+their prior, the moved key, the hooks and the batch contract.
 
 The structure is the batch dict used by datasets, transforms and models. A
 driver moves one key and carries everything else along; inference goes
@@ -17,6 +17,7 @@ from schnetpack import properties
 from schnetpack.dynamics.calculator import Calculator
 from schnetpack.dynamics.guidance import Guidance
 from schnetpack.dynamics.hooks import Hook
+from schnetpack.dynamics.structures import StructureProvider
 from schnetpack.generative.priors import Prior
 
 __all__ = ["Dynamics"]
@@ -37,13 +38,15 @@ class Dynamics(abc.ABC):
     only. Terms that change the field itself
     (:class:`~schnetpack.dynamics.guidance.Guidance`) belong to the
     calculator, which returns the guided field. :meth:`sample` draws
-    starting structures from the prior and hands them to :meth:`run`,
-    which also takes given structures.
+    starting structures from the structure provider, redraws them from the
+    prior, if any, and hands them to :meth:`run`, which also takes given
+    structures.
     """
 
     def __init__(
         self,
         calculator: Calculator,
+        structures: StructureProvider | None = None,
         prior: Prior | None = None,
         hooks: Sequence = (),
         key: str = properties.R,
@@ -53,12 +56,16 @@ class Dynamics(abc.ABC):
             calculator: runs the model; each family asks for its own kind
                 (:class:`~schnetpack.dynamics.calculator.ForceCalculator` or
                 :class:`~schnetpack.dynamics.calculator.GenerativeCalculator`)
-            prior: starting distribution :meth:`sample` draws from; without
-                one, only :meth:`run` on given structures is available
+            structures: source of the structures :meth:`sample` starts
+                from; without one, only :meth:`run` on given structures is
+                available
+            prior: redraws the structures' positions before :meth:`sample`
+                runs; without one they are run as provided
             hooks: run around every step, in order
             key: batch key this driver moves
         """
         self.calculator = calculator
+        self.structures = structures
         self.prior = prior
         self.hooks = list(hooks)
         for hook in self.hooks:
@@ -85,7 +92,10 @@ class Dynamics(abc.ABC):
 
     def sample(self, n_samples: int, n_steps: int) -> dict[str, Any]:
         """
-        Draw ``n_samples`` starting structures from the prior and run on them.
+        Draw ``n_samples`` starting structures and run on them.
+
+        The structures come from :attr:`structures`; a :attr:`prior`
+        redraws the keys it owns.
 
         Args:
             n_samples: number of structures
@@ -94,12 +104,16 @@ class Dynamics(abc.ABC):
         Returns:
             The final batch.
         """
-        if self.prior is None:
+        if self.structures is None:
             raise ValueError(
-                f"{type(self).__name__} has no prior to sample from; pass one "
-                "at construction or call run on given structures"
+                f"{type(self).__name__} has no structures to sample from; pass "
+                "structures=DatasetStructures(...) or StatisticsStructures(...) "
+                "at construction, or call run on given structures"
             )
-        return self.run(self.prior.sample(n_samples), n_steps)
+        batch = self.structures(n_samples)
+        if self.prior is not None:
+            batch = self.prior(batch)
+        return self.run(batch, n_steps)
 
     @abc.abstractmethod
     def run(self, batch: Mapping[str, Any], n_steps: int) -> dict[str, Any]:

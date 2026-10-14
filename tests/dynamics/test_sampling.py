@@ -9,6 +9,7 @@ from schnetpack.dynamics import (
     ODESampler,
     ScoreCalculator,
     SDESampler,
+    StatisticsStructures,
     UniformGrid,
     VelocityCalculator,
     X0Calculator,
@@ -29,7 +30,6 @@ from schnetpack.generative import (
     ReverseODE,
     ReverseSDE,
     ScoreParametrization,
-    StatisticsStructures,
     VelocityParametrization,
     X0Parametrization,
     expand_t,
@@ -72,9 +72,7 @@ def x0_calculator(model, process, parametrization=None, key=properties.R, **kw):
 def draw(dynamics, shape, n_steps):
     """Sample from the prior; return the positions."""
     template = {properties.R: torch.empty(shape)}
-    return dynamics.run(dynamics.prior.sample_from_batch(template), n_steps)[
-        properties.R
-    ]
+    return dynamics.run(dynamics.prior(template), n_steps)[properties.R]
 
 
 @pytest.fixture
@@ -127,9 +125,9 @@ def test_grids_respect_dtype():
 
 def test_gaussian_prior_has_the_declared_std():
     torch.manual_seed(0)
-    samples = GaussianPrior(std=3.0).sample_positions(
-        {properties.R: torch.empty(10000, 1)}
-    )
+    samples = GaussianPrior(std=3.0)({properties.R: torch.empty(10000, 1)})[
+        properties.R
+    ]
     assert samples.std().item() == pytest.approx(3.0, rel=0.05)
 
 
@@ -543,7 +541,7 @@ def test_sampler_moves_any_declared_key(vp):
         return {"prediction": -batch["x"]}
 
     sampler = SDESampler(score_calculator(model, vp, key="x"), vp)
-    start = {"x": sampler.prior.sample_positions({properties.R: torch.empty(8, 2)})}
+    start = {"x": sampler.prior({properties.R: torch.empty(8, 2)})[properties.R]}
     out = sampler.run(start, 5)
     assert out["x"].shape == (8, 2)
 
@@ -551,7 +549,7 @@ def test_sampler_moves_any_declared_key(vp):
 def test_sampler_derives_position_shape_from_atom_types(vp):
     sampler = SDESampler(score_calculator(batch_model(lambda x, t: -x), vp), vp)
     batch = {properties.Z: torch.tensor([1, 6, 8])}
-    out = sampler.run(sampler.prior.sample_from_batch(batch), 2)
+    out = sampler.run(sampler.prior(batch), 2)
     assert out[properties.R].shape == (3, 3)
 
 
@@ -563,7 +561,7 @@ def test_sampler_samples_n_structures_from_statistics(vp):
     sampler = SDESampler(
         score_calculator(batch_model(lambda x, t: -x), vp),
         vp,
-        prior=GaussianPrior(structures=structures),
+        structures=structures,
     )
     out = sampler.sample(5, n_steps=2)
     n_atoms = out[properties.n_atoms]

@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from schnetpack import properties
 from schnetpack.dynamics.calculator import Calculator, ForceCalculator
 from schnetpack.dynamics.optimize.optimizer import Optimizer
+from schnetpack.dynamics.structures import StructureProvider
 from schnetpack.generative.priors import Prior
 
 __all__ = ["DirectDenoising"]
@@ -27,16 +28,18 @@ class DirectDenoising(Optimizer):
     Time-conditioned models belong in
     :class:`~schnetpack.dynamics.sample.Sampler`.
 
-    There is no process to derive a starting distribution from: :meth:`sample`
-    needs an explicit ``prior``, e.g. the training process's
-    ``sampling_prior()``. Guidance on the calculator enters the pseudo-force,
-    and with it the jump, as w F with w in Angstrom^2/eV (see
+    There is no process to derive a prior from: :meth:`sample` relaxes the
+    provided structures as they are, unless an explicit ``prior``, e.g. the
+    training process's ``sampling_prior()``, redraws them. Guidance on the
+    calculator enters the pseudo-force, and with it the jump, as w F with w
+    in Angstrom^2/eV (see
     :class:`~schnetpack.dynamics.calculator.ForceCalculator`).
     """
 
     def __init__(
         self,
         calculator,
+        structures: StructureProvider | None = None,
         prior: Prior | None = None,
         fmax: float | None = None,
         hooks: Sequence = (),
@@ -47,7 +50,10 @@ class DirectDenoising(Optimizer):
             calculator: a pseudo-force
                 :class:`~schnetpack.dynamics.calculator.ForceCalculator`, or a
                 bare callable batch -> outputs, taken as one in Angstrom
-            prior: starting distribution :meth:`sample` draws from
+            structures: source of the structures :meth:`sample` starts
+                from
+            prior: redraws the provided structures before :meth:`sample`
+                runs them; without one they are run as provided
             fmax: stop criterion on the largest pseudo-force, in Angstrom;
                 None runs all ``n_steps``
             hooks: run around every step, in order
@@ -62,6 +68,7 @@ class DirectDenoising(Optimizer):
             )
         super().__init__(
             calculator,
+            structures=structures,
             prior=prior,
             hooks=hooks,
             key=key,

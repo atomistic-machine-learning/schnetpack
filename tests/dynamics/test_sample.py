@@ -58,7 +58,7 @@ def test_sample_draws_from_the_forward_process_prior():
     )
     assert driver.prior is process.prior
     template = {properties.R: torch.empty(5, 3, dtype=torch.float64)}
-    out = driver.run(driver.prior.sample_from_batch(template), 4)
+    out = driver.run(driver.prior(template), 4)
     assert out[properties.R].shape == (5, 3)
     assert torch.all(out[properties.t] == process.schedule.t_min)
 

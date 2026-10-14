@@ -50,9 +50,7 @@ def test_sampler_hooks_see_grid_times_around_each_step():
         score_calculator(batch_model(lambda x, t: -x), vp), vp, hooks=[recorder]
     )
     n_steps = 4
-    sampler.run(
-        sampler.prior.sample_from_batch({properties.R: torch.empty(3, 1)}), n_steps
-    )
+    sampler.run(sampler.prior({properties.R: torch.empty(3, 1)}), n_steps)
 
     ts = sampler.grid(n_steps)
     assert len(recorder.log) == 2 * n_steps
@@ -81,7 +79,7 @@ def test_sampler_run_starts_at_the_grids_t_start():
 def test_direct_denoising_hooks_run_around_each_step_without_a_time():
     recorder = Recorder()
     sampler = direct_denoising(lambda x, t: torch.zeros_like(x), hooks=[recorder])
-    sampler.run(sampler.prior.sample_from_batch({properties.R: torch.empty(2, 1)}), 3)
+    sampler.run(sampler.prior({properties.R: torch.empty(2, 1)}), 3)
     assert [(h, s) for h, s, _ in recorder.log] == [
         ("before", 0),
         ("after", 1),
@@ -114,9 +112,7 @@ def test_scaffold_direct_denoising_model_sees_clean_scaffold():
         return -x  # pseudo force pulling everything to the origin
 
     sampler = direct_denoising(model, hooks=[FreezeScaffold()])
-    out = sampler.run(
-        sampler.prior.sample_from_batch(scaffold_batch(mask, reference)), 6
-    )
+    out = sampler.run(sampler.prior(scaffold_batch(mask, reference)), 6)
     x = out[properties.R]
 
     # the scaffold atoms are fixed: held and overwritten
@@ -138,9 +134,7 @@ def test_scaffold_sampler_model_sees_clean_scaffold():
     sampler = SDESampler(
         score_calculator(batch_model(model), vp), vp, hooks=[FreezeScaffold()]
     )
-    out = sampler.run(
-        sampler.prior.sample_from_batch(scaffold_batch(mask, reference)), 5
-    )
+    out = sampler.run(sampler.prior(scaffold_batch(mask, reference)), 5)
 
     assert all(torch.equal(s, reference[mask]) for s in seen)
     assert torch.equal(out[properties.R][mask], reference[mask])
@@ -179,8 +173,8 @@ def test_scaffold_non_generative_dynamics_overwrites():
     assert torch.allclose(x[~mask], torch.full((1, 2), 0.5**4))
 
 
-def test_sample_without_prior_raises():
-    with pytest.raises(ValueError, match="no prior"):
+def test_sample_without_structures_raises():
+    with pytest.raises(ValueError, match="no structures"):
         Descent(Calculator(lambda batch: {})).sample(2, 1)
 
 
@@ -188,10 +182,10 @@ def test_scaffold_validates_its_keys():
     sampler = direct_denoising(lambda x, t: x, hooks=[FreezeScaffold()])
     bad_mask = scaffold_batch(torch.tensor([True, False]), torch.zeros(3, 1))
     with pytest.raises(ValueError, match="one flag per row"):
-        sampler.run(sampler.prior.sample_from_batch(bad_mask), 2)
+        sampler.run(sampler.prior(bad_mask), 2)
     bad_reference = scaffold_batch(
         torch.tensor([True, False, False]), torch.zeros(3, 1)
     )
     bad_reference[properties.R_reference] = torch.zeros(2, 1)
     with pytest.raises(ValueError, match="shaped like"):
-        sampler.run(sampler.prior.sample_from_batch(bad_reference), 2)
+        sampler.run(sampler.prior(bad_reference), 2)

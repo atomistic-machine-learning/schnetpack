@@ -2,10 +2,14 @@ import pytest
 import torch
 
 from schnetpack import properties
-from schnetpack.dynamics import DirectDenoising, ForceCalculator, PseudoForceCalculator
+from schnetpack.dynamics import (
+    DatasetStructures,
+    DirectDenoising,
+    ForceCalculator,
+    PseudoForceCalculator,
+)
 from schnetpack.generative import (
     VE,
-    DatasetPrior,
     GaussianInterpolant,
     MatchingLoss,
     PseudoForceParametrization,
@@ -72,7 +76,7 @@ def test_direct_denoising_relaxes_structures_from_a_dataset_prior():
 
     sampler = DirectDenoising(
         ForceCalculator(model, kind="pseudo"),
-        prior=DatasetPrior(dataset),
+        structures=DatasetStructures(dataset),
     )
     out = sampler.sample(2, n_steps=1)
 

@@ -7,6 +7,7 @@ import torch
 
 from schnetpack import properties
 from schnetpack.dynamics.optimize.optimizer import Optimizer
+from schnetpack.dynamics.structures import StructureProvider
 from schnetpack.generative.priors import Prior
 
 __all__ = ["LBFGS", "LBFGSState"]
@@ -73,6 +74,7 @@ class LBFGS(Optimizer):
         damping: float = 1.0,
         alpha: float | None = None,
         device: str | torch.device = "cpu",
+        structures: StructureProvider | None = None,
         prior: Prior | None = None,
         hooks: Sequence = (),
         key: str = properties.R,
@@ -97,6 +99,7 @@ class LBFGS(Optimizer):
                 cuda than on cpu for batches up to 256 structures of 1000
                 atoms — so the default is cpu wherever the model runs. Worth
                 re-measuring before overriding for much larger batches.
+            structures: see :class:`~schnetpack.dynamics.optimize.Optimizer`
             prior: see :class:`~schnetpack.dynamics.optimize.Optimizer`
             hooks: see :class:`~schnetpack.dynamics.optimize.Optimizer`
             key: see :class:`~schnetpack.dynamics.optimize.Optimizer`
@@ -106,7 +109,14 @@ class LBFGS(Optimizer):
                 "You are using a much too large value for the maximum step "
                 f"size: {maxstep:.1f} Angstrom"
             )
-        super().__init__(calculator, prior=prior, hooks=hooks, key=key, fmax=fmax)
+        super().__init__(
+            calculator,
+            structures=structures,
+            prior=prior,
+            hooks=hooks,
+            key=key,
+            fmax=fmax,
+        )
         if alpha is None:
             alpha = 70.0 if self.calculator.physical else 2.0
         self.maxstep = maxstep

@@ -18,6 +18,7 @@ from schnetpack.dynamics import (
     ForceCalculator,
     GradientDescent,
     Hook,
+    StructureProvider,
 )
 from schnetpack.interfaces.ase_interface import atoms_to_batch, batch_to_atoms
 
@@ -331,14 +332,14 @@ def test_a_model_without_forces_is_reported():
         make_relaxer(lambda batch: {"energy": torch.zeros(1)}).run(make_inputs([2]), 3)
 
 
-def test_sample_relaxes_prior_draws():
-    class NoisyStructures:
-        """A prior in the sense of Dynamics.sample: n -> a batch of n structures."""
+def test_sample_relaxes_provided_structures():
+    class NoisyStructures(StructureProvider):
+        """n -> a batch of n displaced structures, relaxed as provided."""
 
-        def sample(self, n):
+        def __call__(self, n):
             return make_inputs([4] * n, seed=n)
 
-    relaxed = make_relaxer(prior=NoisyStructures()).sample(2, 100)
+    relaxed = make_relaxer(structures=NoisyStructures()).sample(2, 100)
     # sample() relaxes to the default fmax of 0.05 eV/Ang, i.e. |x| < 0.05 here
     assert relaxed[properties.R].norm(dim=-1).max() < 0.05
 

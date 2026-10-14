@@ -141,7 +141,7 @@ class Interpolant(ForwardNoising):
             endpoints and the times.
         """
         batch = {} if batch is None else batch
-        x1 = self.prior.sample_positions({**batch, properties.R: x0})
+        x1 = self.prior({**batch, properties.R: x0})[properties.R]
         x0, x1 = self.coupling.pair(x0, x1, groups)
         if t is None:
             t = self.sample_t(x0.shape[0], x0.device).to(x0.dtype)
