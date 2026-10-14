@@ -3,7 +3,7 @@ Differential-equation representations of a schedule and their reversal.
 
 - :class:`SDE`: the (f, g) chart of a Gaussian schedule, the linear forward
   SDE dx = f x dt + g dw with the same marginals as the Gaussian
-  interpolant, plus its closed forms (perturbation kernel, exact posterior).
+  interpolant.
 - :class:`ReverseSDE`: the Anderson family reversing that chart, from the
   reverse-time SDE (eta2 = 1) to the probability-flow ODE (eta2 = 0).
 - :class:`ReverseODE`: transport along a learned velocity, dx = v dt, valid
@@ -71,52 +71,6 @@ class SDE:
         """
         sigma = self.schedule.sigma(t)
         return 2.0 * sigma * (self.schedule.sigma_dot(t) - self.f(t) * sigma)
-
-    def posterior(
-        self,
-        x_t: torch.Tensor,
-        x0: torch.Tensor,
-        t: torch.Tensor,
-        s: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Mean and std of the exact Gaussian posterior p(x_s | x_t, x0), s < t.
-
-        With r = a_t / a_s and var_ts = sigma_t^2 - r^2 sigma_s^2:
-        mean = (r sigma_s^2 / sigma_t^2) x_t + (a_s var_ts / sigma_t^2) x0
-        and var = sigma_s^2 var_ts / sigma_t^2. This is the step ancestral
-        sampling and DDIM discretize.
-
-        Args:
-            x_t: states at time t
-            x0: clean data, or the model's estimate of it
-            t: current times, per-sample or scalar
-            s: target times, s < t elementwise
-
-        Returns:
-            (mean, std): mean shaped like x_t, std shaped like t.
-        """
-        a_t, sig_t = self.schedule.a(t), self.schedule.sigma(t)
-        a_s, sig_s = self.schedule.a(s), self.schedule.sigma(s)
-        r = a_t / a_s
-        var_ts = sig_t**2 - r**2 * sig_s**2
-        mean = (
-            expand_t(r * sig_s**2 / sig_t**2, x_t) * x_t
-            + expand_t(a_s * var_ts / sig_t**2, x0) * x0
-        )
-        std = torch.sqrt(torch.clamp(sig_s**2 * var_ts / sig_t**2, min=0.0))
-        return mean, std
-
-    def x0_from_score(
-        self, x_t: torch.Tensor, score: torch.Tensor, t: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Tweedie's formula: x0 = (x_t + sigma^2 score) / a.
-
-        Singular where a -> 0 (flow matching at t = 1, VP at large t).
-        """
-        a, sigma = self.schedule.a(t), self.schedule.sigma(t)
-        return (x_t + expand_t(sigma**2, x_t) * score) / expand_t(a, x_t)
 
 
 class ReverseSDE:

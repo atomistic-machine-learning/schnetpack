@@ -11,6 +11,7 @@ from schnetpack.dynamics import (
     SDESampler,
     UniformGrid,
     VelocityCalculator,
+    X0Calculator,
 )
 from schnetpack.dynamics.sample import sampler as sample
 from schnetpack.generative import (
@@ -49,6 +50,18 @@ def score_calculator(model, process, parametrization=None, key=properties.R, **k
     return ScoreCalculator(
         ParametrizedModel(
             model, parametrization, process.schedule, key=key, score_key="score"
+        ),
+        key=key,
+        **kw,
+    )
+
+
+def x0_calculator(model, process, parametrization=None, key=properties.R, **kw):
+    """The denoised sample of a raw-head ``model`` trained on ``process`` under ``parametrization`` (default: score)."""
+    parametrization = parametrization or ScoreParametrization()
+    return X0Calculator(
+        ParametrizedModel(
+            model, parametrization, process.schedule, key=key, x0_key="x0"
         ),
         key=key,
         **kw,
@@ -239,7 +252,7 @@ def test_non_gaussian_interpolant_fails_at_assembly_not_silently(process):
                 with pytest.raises(TypeError, match="GaussianInterpolant"):
                     SDESampler(calculator, process, eta2=eta2, integrator=integrator)
         with pytest.raises(TypeError, match="GaussianInterpolant"):
-            AncestralSampler(calculator, process)
+            AncestralSampler(x0_calculator(IDLE, process, parametrization), process)
 
 
 def test_sde_sampler_refuses_a_velocity_calculator(vp):
@@ -248,8 +261,10 @@ def test_sde_sampler_refuses_a_velocity_calculator(vp):
 
 
 def test_ancestral_sampler_refuses_a_velocity_calculator(vp):
-    with pytest.raises(TypeError, match="ScoreCalculator"):
+    with pytest.raises(TypeError, match="X0Calculator"):
         AncestralSampler(VelocityCalculator(IDLE), vp)
+    with pytest.raises(TypeError, match="X0Calculator"):
+        AncestralSampler(score_calculator(IDLE, vp), vp)
 
 
 def test_ode_sampler_refuses_a_score_calculator(vp):
@@ -271,11 +286,10 @@ def test_ode_sampler_refuses_a_non_integrator(integrator):
 
 def test_ancestral_sampler_defaults_like_the_sde_sampler():
     process = GaussianInterpolant(VE(0.01, 3.0))
-    sampler = AncestralSampler(score_calculator(IDLE, process), process)
+    sampler = AncestralSampler(x0_calculator(IDLE, process), process)
     assert sampler.prior is process.prior
     assert sampler.forward_process is process
-    assert isinstance(sampler.sde, SDE)
-    assert sampler.sde.schedule is process.schedule
+    assert sampler.schedule is process.schedule
     ts = sampler.grid(4)
     assert ts[0].item() == pytest.approx(process.schedule.t_max)
     assert ts[-1].item() == pytest.approx(process.schedule.t_min)
@@ -391,11 +405,52 @@ def test_ode_sampler_default_grid_runs_from_one_to_zero():
 # --- generic ancestral sampling ------------------------------------------- #
 
 
+def test_posterior_matches_the_ve_closed_form():
+    # For VE (a = 1) the posterior mean is the convex blend
+    # (sigma_s^2/sigma_t^2) x_t + (1 - sigma_s^2/sigma_t^2) x0, and its
+    # variance is sigma_s^2 (sigma_t^2 - sigma_s^2)/sigma_t^2.
+    process = GaussianInterpolant(VE(0.3, 30.0))
+    t = torch.full((16,), 0.6, dtype=torch.float64)
+    s = torch.full((16,), 0.4, dtype=torch.float64)
+    x_t = torch.randn(16, 1, dtype=torch.float64)
+    x0 = torch.randn(16, 1, dtype=torch.float64)
+
+    mean, std = AncestralSampler(x0_calculator(IDLE, process), process).posterior(
+        x_t, x0, t, s
+    )
+
+    sig_t = process.schedule.sigma(t).reshape(-1, 1)
+    sig_s = process.schedule.sigma(s).reshape(-1, 1)
+    w = sig_s**2 / sig_t**2
+    expected_mean = w * x_t + (1.0 - w) * x0
+    expected_var = (sig_s**2 * (sig_t**2 - sig_s**2) / sig_t**2).reshape(-1)
+
+    assert torch.allclose(mean, expected_mean, rtol=1e-8)
+    assert torch.allclose(std**2, expected_var, rtol=1e-8)
+
+
+def test_posterior_recovers_the_ddpm_marginal_variance_on_vp():
+    # Sanity on VP: the posterior variance is non-negative and the mean is a
+    # genuine interpolation (bounded by the two inputs is not required, but
+    # finiteness and the s->0 collapse are).
+    process = GaussianInterpolant(VP())
+    t = torch.full((8,), 0.5, dtype=torch.float64)
+    s = torch.full((8,), 0.5 - 1e-6, dtype=torch.float64)
+    x_t = torch.randn(8, 1, dtype=torch.float64)
+    x0 = torch.randn(8, 1, dtype=torch.float64)
+    mean, std = AncestralSampler(x0_calculator(IDLE, process), process).posterior(
+        x_t, x0, t, s
+    )
+    # as s -> t the posterior concentrates on x_t
+    assert torch.allclose(mean, x_t, atol=1e-4)
+    assert std.max().item() < 1e-2
+
+
 def test_ancestral_recovers_data_stats(vp):
     torch.manual_seed(0)
     mu0, s0 = -0.5, 0.8
     sampler = AncestralSampler(
-        score_calculator(batch_model(analytic_score(vp, mu0, s0)), vp), vp
+        x0_calculator(batch_model(analytic_score(vp, mu0, s0)), vp), vp
     )
     samples = draw(sampler, (4096, 1), 1000)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
@@ -408,7 +463,7 @@ def test_ancestral_on_ve_matches_the_score_form_update():
     # GPFF/NCSN sampler, here recovered rather than reimplemented.
     process = GaussianInterpolant(VE(0.01, 3.0))
     score_fn = analytic_score(process, 0.5, 0.7, x1_std=process.schedule.sigma_max)
-    calculator = score_calculator(batch_model(score_fn), process)
+    calculator = x0_calculator(batch_model(score_fn), process)
 
     x = torch.randn(32, 2, dtype=torch.float64)
     t = torch.full((32,), 0.8, dtype=torch.float64)
@@ -430,29 +485,13 @@ def test_ancestral_on_ve_matches_the_score_form_update():
     assert torch.allclose(stepped, expected, rtol=1e-10)
 
 
-def test_ancestral_x0_via_score_round_trips_an_x0_head(vp):
-    # Ancestral reads x0 through score -> Tweedie on the chart. For an
-    # x0-predicting head the two Tweedie directions cancel algebraically;
-    # the round trip must reproduce the head's output.
-    par = X0Parametrization()
-
-    def x0_model(x, t):
-        return torch.full_like(x, 1.5)
-
-    x = torch.randn(16, 2, dtype=torch.float64)
-    t = torch.full((16,), 0.7, dtype=torch.float64)
-    score = par.to_score(vp.schedule, x0_model(x, t), x, t)
-    x0_hat = SDE(vp.schedule).x0_from_score(x, score, t)
-    assert torch.allclose(x0_hat, torch.full_like(x, 1.5), rtol=1e-12)
-
-
 def test_ancestral_on_scaled_ve_recovers_data_stats():
     torch.manual_seed(0)
     scale = 10.0
     process = GaussianInterpolant(VE(2e-4 * scale, scale))
     mu0, s0 = 0.5, 1.0
     sampler = AncestralSampler(
-        score_calculator(
+        x0_calculator(
             batch_model(analytic_score(process, mu0, s0, x1_std=scale)), process
         ),
         process,

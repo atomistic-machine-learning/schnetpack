@@ -26,7 +26,7 @@ from schnetpack.generative import (
     VELinear,
     VelocityParametrization,
 )
-from tests.dynamics.test_sampling import score_calculator
+from tests.dynamics.test_sampling import score_calculator, x0_calculator
 
 
 def model(batch):
@@ -69,9 +69,9 @@ def test_sample_refuses_a_calculator_without_a_score():
         sample.SDESampler(model, process, integrator=Heun())
     with pytest.raises(TypeError, match="ScoreCalculator"):
         sample.SDESampler(VelocityCalculator(model), process, integrator=Heun())
-    with pytest.raises(TypeError, match="ScoreCalculator"):
+    with pytest.raises(TypeError, match="X0Calculator"):
         AncestralSampler(model, process)
-    with pytest.raises(TypeError, match="ScoreCalculator"):
+    with pytest.raises(TypeError, match="X0Calculator"):
         AncestralSampler(VelocityCalculator(model), process)
 
 
@@ -93,7 +93,9 @@ def test_sample_refuses_a_non_gaussian_interpolant(process):
     with pytest.raises(TypeError, match="GaussianInterpolant"):
         sample.SDESampler(calculator, process, eta2=0.0, integrator=Heun())
     with pytest.raises(TypeError, match="GaussianInterpolant"):
-        sample.AncestralSampler(calculator, process)
+        sample.AncestralSampler(
+            x0_calculator(model, process, VelocityParametrization()), process
+        )
 
 
 def test_ode_sample_runs_along_its_grid():
@@ -185,7 +187,7 @@ def test_ancestral_step_costs_exactly_one_model_evaluation():
     calls = []
     process = GaussianInterpolant(VP())
     driver = AncestralSampler(
-        score_calculator(counted(calls), process, EpsParametrization()), process
+        x0_calculator(counted(calls), process, EpsParametrization()), process
     )
     x = start()[properties.R]
     t = torch.full((x.shape[0],), 0.5, dtype=x.dtype)
