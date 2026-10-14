@@ -116,10 +116,10 @@ class ReverseSDE:
         g2 = expand_t(self.g2(t), x)
         return f * x - 0.5 * (1.0 + self.eta2) * g2 * score
 
-    def diffusion(self, t: torch.Tensor) -> torch.Tensor:
-        """Diffusion sqrt(eta2) g(t), shaped like t; zero on the ODE."""
+    def diffusion(self, t: torch.Tensor) -> torch.Tensor | None:
+        """Diffusion sqrt(eta2) g(t), shaped like t; None on the ODE (eta2 = 0)."""
         if self.eta2 == 0.0:
-            return torch.zeros_like(t)
+            return None
         return torch.sqrt(self.eta2 * self.g2(t))
 
 
@@ -149,6 +149,6 @@ class ReverseODE:
         """
         return velocity
 
-    def diffusion(self, t: torch.Tensor) -> torch.Tensor:
-        """Zero: this is the ODE."""
-        return torch.zeros_like(t)
+    def diffusion(self, t: torch.Tensor) -> None:
+        """None: this is the ODE."""
+        return None

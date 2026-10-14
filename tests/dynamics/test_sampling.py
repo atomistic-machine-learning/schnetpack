@@ -26,6 +26,7 @@ from schnetpack.generative import (
     MatchingLoss,
     ParametrizedModel,
     PermutationCoupling,
+    ReverseODE,
     ReverseSDE,
     ScoreParametrization,
     StatisticsStructures,
@@ -164,8 +165,8 @@ def test_sde_sampler_exposes_its_reverse_sde(vp):
     assert sampler.forward_process is vp
     assert sampler.eta2 == 0.25
     assert isinstance(sampler.integrator, Euler)
-    assert sampler.diffusion(torch.rand(3)) is not None
     assert isinstance(sampler.reverse_sde, ReverseSDE)
+    assert sampler.reverse_sde.diffusion(torch.rand(3)) is not None
     assert sampler.reverse_sde.eta2 == 0.25
     assert sampler.reverse_sde.sde.schedule is vp.schedule
 
@@ -198,7 +199,7 @@ def test_reverse_drift_at_eta2_zero_is_the_probability_flow(vp):
     assert torch.allclose(rev.drift(x, t, s), expected, rtol=1e-8)
 
 
-@pytest.mark.parametrize("eta2", [0.0, 0.25, 1.0])
+@pytest.mark.parametrize("eta2", [0.25, 1.0])
 def test_reverse_diffusion(vp, eta2):
     t = torch.tensor([0.3, 0.7], dtype=torch.float64)
     rev = ReverseSDE(SDE(vp.schedule), eta2=eta2)
@@ -223,7 +224,7 @@ def test_sde_reverse_builds_the_reverse_of_the_schedules_sde(vp):
 
 def test_eta2_zero_has_no_diffusion(vp):
     rev = ReverseSDE(SDE(vp.schedule), eta2=0.0)
-    assert torch.equal(rev.diffusion(torch.rand(4)), torch.zeros(4))
+    assert rev.diffusion(torch.rand(4)) is None
 
 
 # --- assembly: who gets the chart, who never touches it -------------------- #
@@ -297,7 +298,7 @@ def test_ancestral_sampler_defaults_like_the_sde_sampler():
 
 def test_sde_sampler_is_deterministic_at_eta2_zero(vp):
     sampler = SDESampler(score_calculator(IDLE, vp), vp, eta2=0.0)
-    assert sampler.diffusion(torch.rand(3)) is None
+    assert sampler.reverse_sde.diffusion(torch.rand(3)) is None
 
 
 # --- end-to-end recovery of the data distribution ------------------------- #
@@ -399,7 +400,8 @@ def test_ode_sampler_default_grid_runs_from_one_to_zero():
     assert ts[0].item() == pytest.approx(1.0)
     assert ts[-1].item() == pytest.approx(0.0)
     assert isinstance(sampler.integrator, Euler)
-    assert sampler.diffusion(torch.rand(3)) is None
+    assert isinstance(sampler.reverse_ode, ReverseODE)
+    assert sampler.reverse_ode.diffusion(torch.rand(3)) is None
 
 
 # --- generic ancestral sampling ------------------------------------------- #

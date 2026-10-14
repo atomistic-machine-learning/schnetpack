@@ -30,7 +30,7 @@ from schnetpack.dynamics.calculator import (
 )
 from schnetpack.dynamics.sample.grids import TimeGrid, UniformGrid
 from schnetpack.dynamics.sample.integrators import Euler, Integrator
-from schnetpack.generative.differential_equations import SDE
+from schnetpack.generative.differential_equations import SDE, ReverseODE
 from schnetpack.generative.noising import GaussianInterpolant, expand_t
 from schnetpack.generative.priors import Prior
 
@@ -147,8 +147,9 @@ class SDESampler(Sampler):
 
     eta2 = 1 the reverse-time SDE and eta2 = 0 the probability-flow ODE.
     Its coefficients are :attr:`reverse_sde`, built as
-    ``SDE.reverse(schedule, eta2)``. The integrator reads them through
-    :meth:`drift` and :meth:`diffusion`.
+    ``SDE.reverse(schedule, eta2)``: the integrator's stages are evaluated
+    on its drift of the calculator's score, and its diffusion enters the
+    combination.
     """
 
     def __init__(
@@ -192,18 +193,16 @@ class SDESampler(Sampler):
         self.integrator = _check_integrator(integrator)
         self.reverse_sde = SDE.reverse(schedule, eta2)
 
-    def drift(self, batch, x, t):
-        """Anderson drift f x - 1/2 (1 + eta2) g^2 score at (x, t)."""
-        return self.reverse_sde.drift(x, t, self.calculator.field(batch, x, t))
-
-    def diffusion(self, t):
-        """sqrt(eta2) g(t); None on the probability-flow ODE (eta2 = 0)."""
-        if self.eta2 == 0.0:
-            return None
-        return self.reverse_sde.diffusion(t)
-
     def step(self, batch, x, t, dt):
-        return self.integrator.step(self, batch, x, t, dt)
+        t_next = t + dt
+        drifts = []
+        for stage in range(self.integrator.n_stages):
+            x_stage, t_stage = self.integrator.point(stage, x, t, t_next, drifts)
+            field = self.calculator.field(batch, x_stage, t_stage)
+            drifts.append(self.reverse_sde.drift(x_stage, t_stage, field))
+        return self.integrator.combine(
+            x, t, t_next, drifts, self.reverse_sde.diffusion(t)
+        )
 
 
 class ODESampler(Sampler):
@@ -211,7 +210,10 @@ class ODESampler(Sampler):
     Deterministic transport along a learned velocity, dx = v dt.
 
     Needs no forward process: the time range is the grid's and the starting
-    distribution is passed explicitly.
+    distribution is passed explicitly. The integrator steps on
+    :attr:`reverse_ode`, a
+    :class:`~schnetpack.generative.differential_equations.ReverseODE` whose
+    drift is the calculator's velocity.
     """
 
     def __init__(
@@ -241,17 +243,18 @@ class ODESampler(Sampler):
             grid = UniformGrid()
         super().__init__(calculator, grid=grid, prior=prior, hooks=hooks)
         self.integrator = _check_integrator(integrator)
-
-    def drift(self, batch, x, t):
-        """The velocity at (x, t)."""
-        return self.calculator.field(batch, x, t)
-
-    def diffusion(self, t):
-        """None: the transport is deterministic."""
-        return None
+        self.reverse_ode = ReverseODE()
 
     def step(self, batch, x, t, dt):
-        return self.integrator.step(self, batch, x, t, dt)
+        t_next = t + dt
+        drifts = []
+        for stage in range(self.integrator.n_stages):
+            x_stage, t_stage = self.integrator.point(stage, x, t, t_next, drifts)
+            field = self.calculator.field(batch, x_stage, t_stage)
+            drifts.append(self.reverse_ode.drift(x_stage, t_stage, field))
+        return self.integrator.combine(
+            x, t, t_next, drifts, self.reverse_ode.diffusion(t)
+        )
 
 
 class AncestralSampler(Sampler):
