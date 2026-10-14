@@ -1,13 +1,18 @@
 """
 The time-indexed family: drivers that solve a generative model's reverse
-process from t_max down to t_min.
+process along a time grid.
 
-:class:`Sampler` owns the loop along the time grid and the reverse process's
-drift and diffusion; a subclass is one step rule on them —
-:class:`EulerMaruyama`, :class:`Heun`, :class:`Ancestral`. The score comes
-from a :class:`~schnetpack.dynamics.calculator.ScoreCalculator`, the
-coefficients from the Gaussian schedule.
-Details: ``docs_new/sampling.md`` §4.
+- :class:`SDESampler` integrates the reverse SDE of a Gaussian forward
+  process on the score of a
+  :class:`~schnetpack.dynamics.calculator.ScoreCalculator`.
+- :class:`ODESampler` integrates dx = v dt on the velocity of a
+  :class:`~schnetpack.dynamics.calculator.VelocityCalculator`.
+- :class:`AncestralSampler` steps with the exact Gaussian posterior of the
+  forward process on the score.
+
+All share the loop of :class:`Sampler`, and the time range is the grid's.
+The SDE and ODE samplers take their step rule as an
+:class:`~schnetpack.dynamics.sample.integrators.Integrator`.
 """
 
 import abc
@@ -17,96 +22,56 @@ from typing import Any
 import torch
 
 from schnetpack.dynamics.base import Dynamics
-from schnetpack.dynamics.calculator import ScoreCalculator
+from schnetpack.dynamics.calculator import ScoreCalculator, VelocityCalculator
 from schnetpack.dynamics.sample.grids import TimeGrid, UniformGrid
-from schnetpack.generative.differential_equations import SDE, ReverseSDE
-from schnetpack.generative.noising import expand_t
-from schnetpack.generative.priors import GaussianPrior, Prior
-from schnetpack.generative.schedules import GaussianSchedule
+from schnetpack.dynamics.sample.integrators import Euler, Integrator
+from schnetpack.generative.differential_equations import SDE
+from schnetpack.generative.noising import GaussianInterpolant, expand_t
+from schnetpack.generative.priors import Prior
 
-__all__ = ["Sampler", "EulerMaruyama", "Heun", "Ancestral"]
+__all__ = ["Sampler", "SDESampler", "ODESampler", "AncestralSampler"]
 
 
 class Sampler(Dynamics):
     """
-    Base class of the samplers: prior -> reverse process -> step rule along a
-    time grid.
+    Shared loop of the samplers: prior -> :meth:`step` along a time grid.
 
-    The reverse process is the Anderson family
-
-        dx = [f x - 1/2 (1 + eta2) g^2 score] dt + sqrt(eta2) g dw,
-
-    eta2 = 1 the reverse-time SDE and eta2 = 0 the probability-flow ODE.
-    Its coefficients are :attr:`reverse`, a
-    :class:`~schnetpack.generative.differential_equations.ReverseSDE` on the
-    schedule; a subclass implements :meth:`step` on it and the calculator's
-    score.
-
-    The starting distribution defaults to N(0, sigma_max^2 I). One
-    step of the loop is one :meth:`step`; hooks run between steps
-    with ``batch[time_key]`` the grid time of the iterate they see.
-
-    The batch is in the model's units. Guidance belongs to the calculator: the fields it returns are already guided.
+    Hooks run between steps with ``batch[time_key]`` the grid time of the
+    iterate they see. The batch is in the model's units. Guidance belongs to
+    the calculator: the field it returns is already guided.
     """
 
     def __init__(
         self,
-        calculator: ScoreCalculator,
-        schedule: GaussianSchedule,
-        grid: TimeGrid | None = None,
+        calculator,
+        grid: TimeGrid,
         prior: Prior | None = None,
-        eta2: float = 1.0,
         hooks: Sequence = (),
     ):
         """
         Args:
-            calculator: the model's score
-            schedule: Gaussian schedule the model was trained on
-            grid: where to place the steps (default: uniform)
-            prior: starting distribution (default:
-                N(0, sigma_max^2 I) with the schedule's sigma_max)
-            eta2: stochasticity of the reverse process; 1 = reverse SDE,
-                0 = probability-flow ODE
+            calculator: the model's field
+            grid: where to place the steps, and the time range they cover
+            prior: starting distribution :meth:`sample` draws from; without
+                one, only :meth:`run` on given structures is available
             hooks: run around every step, in order
         """
-        if not isinstance(calculator, ScoreCalculator):
-            raise TypeError(
-                f"{type(self).__name__} steps on the score and needs a "
-                f"ScoreCalculator; got {type(calculator).__name__}"
-            )
-        # The (f, g) chart: a schedule without one fails here, not mid-run.
-        self.sde = SDE(schedule)
-        self.schedule = schedule
-        if prior is None:
-            prior = GaussianPrior(std=schedule.sigma_max)
         super().__init__(calculator, prior=prior, hooks=hooks, key=calculator.key)
-        self.grid = grid if grid is not None else UniformGrid()
-        self.eta2 = eta2
-        self.reverse = ReverseSDE(self.sde, eta2=eta2)
+        self.grid = grid
 
     @property
     def time_key(self) -> str:
         """Batch key the path time is written to, the calculator's."""
         return self.calculator.time_key
 
-    # -- the loop --------------------------------------------------------- #
-
-    def run(
-        self,
-        batch: Mapping[str, Any],
-        n_steps: int,
-        t_start: float | None = None,
-    ) -> dict[str, Any]:
+    def run(self, batch: Mapping[str, Any], n_steps: int) -> dict[str, Any]:
         """
-        Denoise the structures in ``batch`` from ``t_start`` down to the
-        schedule's ``t_min``.
+        Move the structures in ``batch`` along the grid, from its ``t_start``
+        to its ``t_end``.
 
         Args:
-            batch: structures to denoise
+            batch: structures sitting at the grid's ``t_start``
             n_steps: number of steps
-            t_start: path time the structures are assumed to sit at
-                (default: the schedule's ``t_max``); the partial-denoising
-                entry
 
         Returns:
             The final batch.
@@ -114,14 +79,7 @@ class Sampler(Dynamics):
         self.calculator.reset()
         batch = self.calculator.prepare(batch)
         x = batch[self.key]
-        t_start = self.schedule.t_max if t_start is None else t_start
-        ts = self.grid(
-            t_start,
-            self.schedule.t_min,
-            n_steps,
-            dtype=x.dtype,
-            device=x.device,
-        )
+        ts = self.grid(n_steps, dtype=x.dtype, device=x.device)
         n_steps = ts.shape[0] - 1
         n_rows = x.shape[0]
 
@@ -158,48 +116,183 @@ class Sampler(Dynamics):
         raise NotImplementedError
 
 
-class EulerMaruyama(Sampler):
-    """First-order step: x <- x + drift dt + g sqrt(|dt|) z; plain Euler at eta2 = 0."""
-
-    def step(self, batch, x, t, dt):
-        drift = self.reverse.drift(x, t, self.calculator.field(batch, x, t))
-        x_new = x + drift * dt
-        g = expand_t(self.reverse.diffusion(t), x)
-        return x_new + g * dt.abs().sqrt() * torch.randn_like(x)
-
-
-class Heun(Sampler):
-    """
-    Second-order Heun step on the drift, plus an Euler–Maruyama diffusion
-    increment. At eta2 = 0 this is the EDM (Karras et al. 2022) sampler.
-    """
-
-    def step(self, batch, x, t, dt):
-        f1 = self.reverse.drift(x, t, self.calculator.field(batch, x, t))
-        x_pred = x + f1 * dt
-        t_pred = t + dt
-        f2 = self.reverse.drift(
-            x_pred, t_pred, self.calculator.field(batch, x_pred, t_pred)
+def _check_score_sampler(sampler, calculator, forward_process) -> None:
+    """Raise unless the sampler gets a score and a Gaussian forward process."""
+    name = type(sampler).__name__
+    if not isinstance(calculator, ScoreCalculator):
+        raise TypeError(
+            f"{name} steps on the score and needs a ScoreCalculator; got "
+            f"{type(calculator).__name__}"
         )
-        x_new = x + 0.5 * (f1 + f2) * dt
-        g = expand_t(self.reverse.diffusion(t), x)
-        return x_new + g * dt.abs().sqrt() * torch.randn_like(x)
+    if not isinstance(forward_process, GaussianInterpolant):
+        raise TypeError(
+            f"{name} reverses a Gaussian forward process and needs a "
+            f"GaussianInterpolant; got {type(forward_process).__name__}"
+        )
 
 
-class Ancestral(Sampler):
+def _check_integrator(integrator: Integrator | None) -> Integrator:
+    """The integrator, defaulting to Euler; raise unless it is one."""
+    if integrator is None:
+        return Euler()
+    if not isinstance(integrator, Integrator):
+        raise TypeError(f"{type(integrator).__name__} is not an Integrator")
+    return integrator
+
+
+class SDESampler(Sampler):
     """
-    Exact-posterior ancestral step: estimate x0 from the score
-    (:meth:`~schnetpack.generative.differential_equations.SDE.x0_from_score`),
-    then draw x_s ~ p(x_s | x_t, x0_hat)
-    (:meth:`~schnetpack.generative.differential_equations.SDE.posterior`).
+    Reverse SDE of a Gaussian forward process, integrated on the score:
 
-    One class for every Gaussian schedule, which is checked at
-    construction: the textbook DDPM step on VP, the NCSN/GPFF ancestral
-    sampler on VE. Intrinsically stochastic, so it ignores ``eta2``.
+        dx = [f x - 1/2 (1 + eta2) g^2 score] dt + sqrt(eta2) g dw,
+
+    eta2 = 1 the reverse-time SDE and eta2 = 0 the probability-flow ODE.
+    Its coefficients are :attr:`reverse_sde`, built as
+    ``SDE.reverse(schedule, eta2)``. The integrator reads them through
+    :meth:`drift` and :meth:`diffusion`.
     """
+
+    def __init__(
+        self,
+        calculator: ScoreCalculator,
+        forward_process: GaussianInterpolant,
+        eta2: float = 1.0,
+        integrator: Integrator | None = None,
+        grid: TimeGrid | None = None,
+        prior: Prior | None = None,
+        hooks: Sequence = (),
+    ):
+        """
+        Args:
+            calculator: the model's score
+            forward_process: Gaussian interpolant the model was trained on
+            eta2: stochasticity of the reverse process; 1 = reverse SDE,
+                0 = probability-flow ODE
+            integrator: step rule (default:
+                :class:`~schnetpack.dynamics.sample.integrators.Euler`)
+            grid: where to place the steps (default: uniform from the
+                schedule's t_max to its t_min)
+            prior: starting distribution (default: the forward process's
+                prior)
+            hooks: run around every step, in order
+        """
+        _check_score_sampler(self, calculator, forward_process)
+        schedule = forward_process.schedule
+        if grid is None:
+            grid = UniformGrid(schedule.t_max, schedule.t_min)
+        if prior is None:
+            prior = forward_process.prior
+        super().__init__(calculator, grid=grid, prior=prior, hooks=hooks)
+        self.forward_process = forward_process
+        self.eta2 = eta2
+        self.integrator = _check_integrator(integrator)
+        self.reverse_sde = SDE.reverse(schedule, eta2)
+
+    def drift(self, batch, x, t):
+        """Anderson drift f x - 1/2 (1 + eta2) g^2 score at (x, t)."""
+        return self.reverse_sde.drift(x, t, self.calculator.field(batch, x, t))
+
+    def diffusion(self, t):
+        """sqrt(eta2) g(t); None on the probability-flow ODE (eta2 = 0)."""
+        if self.eta2 == 0.0:
+            return None
+        return self.reverse_sde.diffusion(t)
 
     def step(self, batch, x, t, dt):
-        sde = self.sde
-        x0_hat = sde.x0_from_score(x, self.calculator.field(batch, x, t), t)
-        mean, std = sde.posterior(x, x0_hat, t, t + dt)
+        return self.integrator.step(self, batch, x, t, dt)
+
+
+class ODESampler(Sampler):
+    """
+    Deterministic transport along a learned velocity, dx = v dt.
+
+    Needs no forward process: the time range is the grid's and the starting
+    distribution is passed explicitly.
+    """
+
+    def __init__(
+        self,
+        calculator: VelocityCalculator,
+        integrator: Integrator | None = None,
+        grid: TimeGrid | None = None,
+        prior: Prior | None = None,
+        hooks: Sequence = (),
+    ):
+        """
+        Args:
+            calculator: the model's velocity
+            integrator: step rule (default:
+                :class:`~schnetpack.dynamics.sample.integrators.Euler`)
+            grid: where to place the steps (default: uniform from 1 to 0)
+            prior: starting distribution :meth:`sample` draws from; without
+                one, only :meth:`run` on given structures is available
+            hooks: run around every step, in order
+        """
+        if not isinstance(calculator, VelocityCalculator):
+            raise TypeError(
+                f"{type(self).__name__} steps on the velocity and needs a "
+                f"VelocityCalculator; got {type(calculator).__name__}"
+            )
+        if grid is None:
+            grid = UniformGrid()
+        super().__init__(calculator, grid=grid, prior=prior, hooks=hooks)
+        self.integrator = _check_integrator(integrator)
+
+    def drift(self, batch, x, t):
+        """The velocity at (x, t)."""
+        return self.calculator.field(batch, x, t)
+
+    def diffusion(self, t):
+        """None: the transport is deterministic."""
+        return None
+
+    def step(self, batch, x, t, dt):
+        return self.integrator.step(self, batch, x, t, dt)
+
+
+class AncestralSampler(Sampler):
+    """
+    Exact-posterior steps on the score of a Gaussian forward process.
+
+    Each step estimates x0 from the score by Tweedie
+    (:meth:`~schnetpack.generative.differential_equations.SDE.x0_from_score`)
+    and draws x_s ~ p(x_s | x_t, x0_hat), the Gaussian posterior of the
+    forward process
+    (:meth:`~schnetpack.generative.differential_equations.SDE.posterior`).
+    Not a discretization of the reverse SDE but its exact transition given
+    x0_hat: the DDPM step on VP, the NCSN/GPFF ancestral sampler on VE.
+    Intrinsically stochastic.
+    """
+
+    def __init__(
+        self,
+        calculator: ScoreCalculator,
+        forward_process: GaussianInterpolant,
+        grid: TimeGrid | None = None,
+        prior: Prior | None = None,
+        hooks: Sequence = (),
+    ):
+        """
+        Args:
+            calculator: the model's score
+            forward_process: Gaussian interpolant the model was trained on
+            grid: where to place the steps (default: uniform from the
+                schedule's t_max to its t_min)
+            prior: starting distribution (default: the forward process's
+                prior)
+            hooks: run around every step, in order
+        """
+        _check_score_sampler(self, calculator, forward_process)
+        schedule = forward_process.schedule
+        if grid is None:
+            grid = UniformGrid(schedule.t_max, schedule.t_min)
+        if prior is None:
+            prior = forward_process.prior
+        super().__init__(calculator, grid=grid, prior=prior, hooks=hooks)
+        self.forward_process = forward_process
+        self.sde = SDE(schedule)
+
+    def step(self, batch, x, t, dt):
+        x0_hat = self.sde.x0_from_score(x, self.calculator.field(batch, x, t), t)
+        mean, std = self.sde.posterior(x, x0_hat, t, t + dt)
         return mean + expand_t(std, x) * torch.randn_like(x)

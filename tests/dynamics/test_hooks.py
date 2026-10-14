@@ -6,10 +6,11 @@ from schnetpack.dynamics import (
     Calculator,
     DirectDenoising,
     Dynamics,
-    EulerMaruyama,
     ForceCalculator,
     FreezeScaffold,
     Hook,
+    SDESampler,
+    UniformGrid,
 )
 from schnetpack.generative import VE, VP, GaussianInterpolant
 from tests.dynamics.test_sampling import batch_model, score_calculator
@@ -45,17 +46,15 @@ def direct_denoising(fn, **kwargs):
 def test_sampler_hooks_see_grid_times_around_each_step():
     vp = GaussianInterpolant(VP())
     recorder = Recorder()
-    sampler = EulerMaruyama(
-        score_calculator(batch_model(lambda x, t: -x), vp.schedule),
-        vp.schedule,
-        hooks=[recorder],
+    sampler = SDESampler(
+        score_calculator(batch_model(lambda x, t: -x), vp), vp, hooks=[recorder]
     )
     n_steps = 4
     sampler.run(
         sampler.prior.sample_from_batch({properties.R: torch.empty(3, 1)}), n_steps
     )
 
-    ts = sampler.grid(vp.schedule.t_max, vp.schedule.t_min, n_steps)
+    ts = sampler.grid(n_steps)
     assert len(recorder.log) == 2 * n_steps
     for i in range(n_steps):
         hook, step, t = recorder.log[2 * i]
@@ -66,12 +65,16 @@ def test_sampler_hooks_see_grid_times_around_each_step():
         assert torch.allclose(t, ts[i + 1].expand(3))
 
 
-def test_sampler_run_starts_at_t_start():
+def test_sampler_run_starts_at_the_grids_t_start():
     recorder = Recorder()
-    sampler = EulerMaruyama(
-        score_calculator(batch_model(lambda x, t: -x), VP()), VP(), hooks=[recorder]
+    vp = GaussianInterpolant(VP())
+    sampler = SDESampler(
+        score_calculator(batch_model(lambda x, t: -x), vp),
+        vp,
+        grid=UniformGrid(0.5, vp.schedule.t_min),
+        hooks=[recorder],
     )
-    sampler.run({properties.R: torch.randn(2, 1)}, 3, t_start=0.5)
+    sampler.run({properties.R: torch.randn(2, 1)}, 3)
     assert torch.allclose(recorder.log[0][2], torch.full((2,), 0.5))
 
 
@@ -131,8 +134,9 @@ def test_scaffold_sampler_model_sees_clean_scaffold():
         seen.append(x[mask].clone())
         return -x
 
-    sampler = EulerMaruyama(
-        score_calculator(batch_model(model), VP()), VP(), hooks=[FreezeScaffold()]
+    vp = GaussianInterpolant(VP())
+    sampler = SDESampler(
+        score_calculator(batch_model(model), vp), vp, hooks=[FreezeScaffold()]
     )
     out = sampler.run(
         sampler.prior.sample_from_batch(scaffold_batch(mask, reference)), 5

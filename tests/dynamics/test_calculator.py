@@ -11,6 +11,7 @@ from schnetpack.dynamics import (
     NoiseCalculator,
     PseudoForceCalculator,
     ScoreCalculator,
+    SDESampler,
     VelocityCalculator,
     X0Calculator,
 )
@@ -18,6 +19,7 @@ from schnetpack.generative import (
     VP,
     EpsParametrization,
     FlowMatching,
+    GaussianInterpolant,
     ParametrizedModel,
     PseudoForceParametrization,
     ScoreParametrization,
@@ -50,14 +52,14 @@ def test_neighbor_list_runs_on_every_model_call_and_never_reaches_the_loop():
     # Heun evaluates twice per step; each call gets a fresh neighbor list,
     # built on a copy, so the loop's batch never holds a derived key.
     nbl = InPlaceNeighborList()
-    schedule = VP()
+    process = GaussianInterpolant(VP())
     calculator = ScoreCalculator(
         ParametrizedModel(
-            zero_model, VelocityParametrization(), schedule, score_key="score"
+            zero_model, VelocityParametrization(), process.schedule, score_key="score"
         ),
         neighbor_list=nbl,
     )
-    sampler = Heun(calculator, schedule, eta2=0.0)
+    sampler = SDESampler(calculator, process, eta2=0.0, integrator=Heun())
     batch = {properties.R: torch.randn(5, 3)}
     out = sampler.run(batch, 4)
     assert nbl.calls == 8
@@ -319,12 +321,22 @@ def test_the_cache_answers_an_unchanged_angstrom_batch():
 def test_samplers_refuse_a_force_calculator():
     # it returns no score to step on
     with pytest.raises(TypeError, match="ScoreCalculator"):
-        Heun(ForceCalculator(zero_model), VP(), eta2=0.0)
+        SDESampler(
+            ForceCalculator(zero_model),
+            GaussianInterpolant(VP()),
+            eta2=0.0,
+            integrator=Heun(),
+        )
 
 
 def test_samplers_refuse_a_non_score_generative_calculator():
     with pytest.raises(TypeError, match="ScoreCalculator"):
-        Heun(VelocityCalculator(zero_model), VP(), eta2=0.0)
+        SDESampler(
+            VelocityCalculator(zero_model),
+            GaussianInterpolant(VP()),
+            eta2=0.0,
+            integrator=Heun(),
+        )
 
 
 @pytest.mark.parametrize("build", [LBFGS, DirectDenoising], ids=["LBFGS", "DD"])

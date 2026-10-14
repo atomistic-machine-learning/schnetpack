@@ -49,6 +49,18 @@ class SDE:
             )
         self.schedule = schedule
 
+    @classmethod
+    def reverse(cls, schedule: GaussianSchedule, eta2: float = 1.0) -> "ReverseSDE":
+        """
+        The reverse of the schedule's forward SDE, as a :class:`ReverseSDE`.
+
+        Args:
+            schedule: the Gaussian schedule a(t), sigma(t)
+            eta2: stochasticity in [0, 1]; 1 = reverse SDE, 0 =
+                probability-flow ODE
+        """
+        return ReverseSDE(cls(schedule), eta2=eta2)
+
     def f(self, t: torch.Tensor) -> torch.Tensor:
         """Drift coefficient f(t) = d/dt log a."""
         return self.schedule.log_a_dot(t)

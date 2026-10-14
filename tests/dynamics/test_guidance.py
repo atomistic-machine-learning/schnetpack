@@ -5,12 +5,13 @@ from schnetpack import properties
 from schnetpack.dynamics import (
     LBFGS,
     DirectDenoising,
-    EulerMaruyama,
+    Euler,
     ForceCalculator,
     Guidance,
     HarmonicRestraint,
     Heun,
     ScoreCalculator,
+    SDESampler,
     VelocityCalculator,
 )
 from schnetpack.generative import (
@@ -196,32 +197,36 @@ def test_force_guidance_stays_out_of_the_model_outputs():
 
 def sampler_and_batch(parametrization, integrator, eta2, weight, model):
     batch = restrained_batch([3, 2], [[(0, 2)], [(0, 1)]], [1.3, 0.9], [5.0, 5.0])
-    schedule = VP()
-    sampler = integrator(
+    process = GaussianInterpolant(VP())
+    sampler = SDESampler(
         score_calculator(
             model,
-            schedule,
+            process,
             parametrization,
             guidance=[HarmonicRestraint(weight=weight)],
         ),
-        schedule,
+        process,
         eta2=eta2,
+        integrator=integrator,
     )
-    plain = integrator(
-        score_calculator(model, schedule, parametrization), schedule, eta2=eta2
+    plain = SDESampler(
+        score_calculator(model, process, parametrization),
+        process,
+        eta2=eta2,
+        integrator=integrator,
     )
     t = torch.full((5,), 0.4, dtype=torch.float64)
     return sampler, plain, {**batch, properties.t: t}, t
 
 
 def drift(sampler, batch, x, t):
-    return sampler.reverse.drift(x, t, sampler.calculator.field(batch, x, t))
+    return sampler.reverse_sde.drift(x, t, sampler.calculator.field(batch, x, t))
 
 
 def test_score_guidance_shifts_score_and_drift_by_the_weighted_forces():
     model = batch_model(analytic_score(GaussianInterpolant(VP()), 0.5, 1.0))
     guided, unguided, batch, t = sampler_and_batch(
-        ScoreParametrization(), EulerMaruyama, 1.0, 2.5, model
+        ScoreParametrization(), Euler(), 1.0, 2.5, model
     )
     x = batch[properties.R]
     _, forces = terms(batch, x)
@@ -239,7 +244,7 @@ def test_score_guidance_shifts_score_and_drift_by_the_weighted_forces():
 def test_velocity_guidance_goes_through_g2():
     model = batch_model(lambda x, t: torch.zeros_like(x))
     sampler, plain, batch, t = sampler_and_batch(
-        VelocityParametrization(), Heun, 0.0, 2.5, model
+        VelocityParametrization(), Heun(), 0.0, 2.5, model
     )
     x = batch[properties.R]
     _, forces = terms(batch, x)
@@ -252,7 +257,7 @@ def test_velocity_guidance_goes_through_g2():
 def test_score_guidance_scales_each_term_by_its_weight():
     model = batch_model(analytic_score(GaussianInterpolant(VP()), 0.5, 1.0))
     sampler, plain, batch, t = sampler_and_batch(
-        ScoreParametrization(), EulerMaruyama, 1.0, 2.5, model
+        ScoreParametrization(), Euler(), 1.0, 2.5, model
     )
     sampler.calculator.guidance = [
         HarmonicRestraint(weight=3.0),
@@ -299,7 +304,7 @@ class TimeGuidance(Guidance):
 def test_guidance_sees_the_time_it_is_evaluated_at():
     model = batch_model(analytic_score(GaussianInterpolant(VP()), 0.5, 1.0))
     sampler, plain, batch, _ = sampler_and_batch(
-        ScoreParametrization(), EulerMaruyama, 1.0, 2.5, model
+        ScoreParametrization(), Euler(), 1.0, 2.5, model
     )
     guidance = TimeGuidance()
     sampler.calculator.guidance = [guidance]
@@ -314,8 +319,9 @@ def test_guidance_sees_the_time_it_is_evaluated_at():
 def test_sampler_runs_with_a_restraint():
     model = batch_model(analytic_score(GaussianInterpolant(VP()), 0.0, 1.0))
     batch = restrained_batch([3, 2], [[(0, 2)], [(0, 1)]], [1.3, 0.9], [5.0, 5.0])
-    sampler = EulerMaruyama(
-        score_calculator(model, VP(), guidance=[HarmonicRestraint()]), VP()
+    process = GaussianInterpolant(VP())
+    sampler = SDESampler(
+        score_calculator(model, process, guidance=[HarmonicRestraint()]), process
     )
     out = sampler.run(batch, 10)
     assert torch.isfinite(out[properties.R]).all()
@@ -349,7 +355,10 @@ def test_guidance_passed_as_a_hook_is_redirected_to_the_calculator():
     with pytest.raises(TypeError, match="calculator's guidance"):
         LBFGS(ZeroModel(), hooks=[HarmonicRestraint()])
     with pytest.raises(TypeError, match="calculator's guidance"):
-        EulerMaruyama(score_calculator(IDLE, VP()), VP(), hooks=[HarmonicRestraint()])
+        process = GaussianInterpolant(VP())
+        SDESampler(
+            score_calculator(IDLE, process), process, hooks=[HarmonicRestraint()]
+        )
 
 
 def test_unknown_hooks_and_guidance_are_refused():

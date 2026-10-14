@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from schnetpack import properties
-from schnetpack.dynamics import EulerMaruyama
+from schnetpack.dynamics import SDESampler
 from schnetpack.generative import (
     VE,
     DatasetPrior,
@@ -166,9 +166,9 @@ def test_the_sampler_starts_a_batch_on_the_subspace():
         seen.setdefault("x_init", x.clone())
         return {"prediction": torch.zeros_like(x)}
 
-    sampler = EulerMaruyama(
-        score_calculator(model, process.schedule, EpsParametrization()),
-        process.schedule,
+    sampler = SDESampler(
+        score_calculator(model, process, EpsParametrization()),
+        process,
         prior=process.sampling_prior(),
     )
 
@@ -192,9 +192,8 @@ def test_given_positions_are_denoised_as_they_are():
         seen.setdefault("x_init", x.clone())
         return {"prediction": torch.zeros_like(x)}
 
-    sampler = EulerMaruyama(
-        score_calculator(model, process.schedule, EpsParametrization()),
-        process.schedule,
+    sampler = SDESampler(
+        score_calculator(model, process, EpsParametrization()), process
     )
 
     # the prior is not consulted, so the layout does not re-center them
