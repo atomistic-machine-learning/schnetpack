@@ -8,10 +8,12 @@ from schnetpack.generative import (
     Diffuse,
     EpsParametrization,
     FlowMatching,
+    GaussianInterpolant,
     GaussianPrior,
-    PCVarianceCoupling,
+    Interpolant,
     PermutationCoupling,
     ScoreParametrization,
+    VELinear,
     VelocityParametrization,
     X0Parametrization,
     expand_t,
@@ -31,7 +33,7 @@ def structure(n_atoms=7):
 
 @pytest.fixture
 def vp():
-    return VP()
+    return GaussianInterpolant(VP())
 
 
 # --- what it writes ------------------------------------------------------- #
@@ -65,8 +67,8 @@ def test_time_lands_in_the_processs_usable_range(vp):
         Diffuse(vp, EpsParametrization())(structure())["t_structure"].item()
         for _ in range(200)
     ]
-    assert min(times) >= vp.t_min
-    assert max(times) <= vp.t_max
+    assert min(times) >= vp.schedule.t_min
+    assert max(times) <= vp.schedule.t_max
     assert min(times) < 0.2 and max(times) > 0.8  # covers the range
 
 
@@ -105,14 +107,13 @@ def test_untouched_properties_survive(vp):
     ],
     ids=lambda c: c.__name__,
 )
-@pytest.mark.parametrize(
-    "process_cls", [VP, VE, FlowMatching], ids=lambda c: c.__name__
-)
+@pytest.mark.parametrize("process_cls", [VP, VE, VELinear], ids=lambda c: c.__name__)
 def test_label_matches_the_parametrizations_target(process_cls, param_cls):
     # The whole point of "arbitrary label": swapping the parametrization must
     # swap the target with no other change.
     torch.manual_seed(0)
-    process = VE(2e-4, 1.0) if process_cls is VE else process_cls()
+    schedule = VE(2e-4, 1.0) if process_cls is VE else process_cls()
+    process = GaussianInterpolant(schedule)
     parametrization = param_cls()
     inputs = structure(6)
     x0 = inputs[properties.R].clone()
@@ -121,11 +122,11 @@ def test_label_matches_the_parametrizations_target(process_cls, param_cls):
 
     # recover the noise the transform drew, then rebuild the target by hand
     t = out["t"]
-    a = expand_t(process.a(t), x0)
-    b = expand_t(process.b(t), x0)
+    a = expand_t(process.schedule.a(t), x0)
+    b = expand_t(process.schedule.b(t), x0)
     x1 = (out[properties.R] - a * x0) / b
 
-    expected = parametrization.target(process, x0, x1, t)
+    expected = parametrization.target(process.schedule, x0, x1, t)
     assert torch.allclose(out["label"], expected, rtol=1e-4, atol=1e-5)
 
 
@@ -137,8 +138,8 @@ def test_eps_label_is_the_noise_that_made_x_t(vp):
     out = Diffuse(vp, EpsParametrization(), original_key="x_0")(inputs)
 
     t = out["t"]
-    a = expand_t(vp.a(t), x0)
-    b = expand_t(vp.b(t), x0)
+    a = expand_t(vp.schedule.a(t), x0)
+    b = expand_t(vp.schedule.b(t), x0)
     reconstructed = a * x0 + b * out["label"]
     assert torch.allclose(reconstructed, out[properties.R], rtol=1e-5, atol=1e-6)
 
@@ -155,11 +156,11 @@ def test_x0_label_is_the_clean_structure(vp):
 
 
 @pytest.mark.parametrize(
-    "process", [VP(), VE(2e-4, 1.0), FlowMatching()], ids=lambda p: type(p).__name__
+    "schedule", [VP(), VE(2e-4, 1.0), VELinear()], ids=lambda s: type(s).__name__
 )
-def test_any_schedule_works(process):
+def test_any_schedule_works(schedule):
     torch.manual_seed(0)
-    out = Diffuse(process, EpsParametrization())(structure())
+    out = Diffuse(GaussianInterpolant(schedule), EpsParametrization())(structure())
     assert torch.isfinite(out[properties.R]).all()
     assert torch.isfinite(out["label"]).all()
 
@@ -174,7 +175,7 @@ def test_prior_decides_the_noise():
             return z - z.mean(0, keepdim=True)
 
     torch.manual_seed(0)
-    process = FlowMatching(prior=MeanFreePrior())
+    process = Interpolant(FlowMatching(), prior=MeanFreePrior())
     out = Diffuse(process, VelocityParametrization(), original_key="x0")(structure(8))
 
     # flow-matching velocity target is x1 - x0, and x1 is mean-free
@@ -186,15 +187,15 @@ def test_reconfigured_process_flows_through_the_transform():
     # A re-paired assembly diffuses just as the plain one does, as long as its
     # parametrization is valid — the transform validates the pair but never
     # inspects the process beyond that.
-    process = VE(2e-4, 1.0, coupling=PermutationCoupling())
+    process = Interpolant(VE(2e-4, 1.0), coupling=PermutationCoupling())
     out = Diffuse(process, VelocityParametrization())(structure(8))
     assert torch.isfinite(out["label"]).all()
 
 
 def test_transform_validates_the_pair():
-    # A Gaussian-only head on a kernel-less configuration must fail at
+    # A Gaussian-only head on a schedule without sigma must fail at
     # construction, not at the first batch.
-    process = VP(coupling=PCVarianceCoupling())
+    process = Interpolant(FlowMatching())
     with pytest.raises(TypeError, match="Gaussian kernel"):
         Diffuse(process, EpsParametrization())
 

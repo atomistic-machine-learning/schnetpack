@@ -2,7 +2,7 @@
 Noising as a preprocessing transform: the training half of a generative model
 inside the SchNetPack data pipeline.
 
-:class:`Diffuse` runs :meth:`~schnetpack.generative.processes.Process.perturb`
+:class:`Diffuse` runs :meth:`~schnetpack.generative.noising.Interpolant.perturb`
 and the parametrization's target per structure in the dataloader and writes
 the result into the batch dict, so training is an ordinary supervised loss.
 It is :class:`~schnetpack.generative.losses.MatchingLoss` minus the model
@@ -14,8 +14,8 @@ from collections.abc import Callable, Sequence
 import torch
 
 from schnetpack import properties
+from schnetpack.generative.noising import Interpolant
 from schnetpack.generative.parametrizations import Parametrization
-from schnetpack.generative.processes import Process
 from schnetpack.transform.base import Transform
 
 __all__ = ["Diffuse"]
@@ -43,7 +43,7 @@ class Diffuse(Transform):
 
     def __init__(
         self,
-        process: Process,
+        process: Interpolant,
         parametrization: Parametrization,
         t_sampler: Callable[[int, torch.device], torch.Tensor] | None = None,
         diffuse_property: str = properties.R,
@@ -60,7 +60,7 @@ class Diffuse(Transform):
             t_sampler: draws times, mapping (n, device) -> (n,); the same
                 hook as :class:`~schnetpack.generative.losses.MatchingLoss`
                 (default: the process's own
-                :meth:`~schnetpack.generative.processes.Process.sample_t`)
+                :meth:`~schnetpack.generative.noising.Interpolant.sample_t`)
             diffuse_property: property to noise; overwritten with x_t
             label_key: key to write the training target to
             time_key: key for the per-element time, for conditioning
@@ -72,7 +72,7 @@ class Diffuse(Transform):
                 or () leaves the assignment unrestricted.
         """
         super().__init__()
-        parametrization.validate(process)
+        parametrization.validate(process.schedule)
         self.process = process
         self.parametrization = parametrization
         self.t_sampler = t_sampler
@@ -117,7 +117,7 @@ class Diffuse(Transform):
 
         inputs[self.diffuse_property] = x_t
         inputs[self.label_key] = self.parametrization.target(
-            self.process, x0, x1, t_elements
+            self.process.schedule, x0, x1, t_elements
         )
         inputs[self.time_key] = t_elements
         if self.structure_time_key is not None:

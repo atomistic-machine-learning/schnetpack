@@ -13,14 +13,15 @@ from schnetpack.dynamics import (
     Heun,
 )
 from schnetpack.generative import (
+    SDE,
     VP,
     EpsParametrization,
+    GaussianInterpolant,
     ScoreParametrization,
-    VELinear,
     VelocityParametrization,
     expand_t,
 )
-from tests.dynamics.test_sampling import IDLE, ShapedPrior, analytic_score, batch_model
+from tests.dynamics.test_sampling import IDLE, analytic_score, batch_model
 
 
 def restrained_batch(n_atoms, pairs, lengths, constants, seed=0):
@@ -192,11 +193,17 @@ def sampler_and_batch(parametrization, integrator, eta2, weight, model):
     batch = restrained_batch([3, 2], [[(0, 2)], [(0, 1)]], [1.3, 0.9], [5.0, 5.0])
     sampler = integrator(
         GenerativeCalculator(
-            model, VP(), parametrization, guidance=[HarmonicRestraint(weight=weight)]
+            model,
+            GaussianInterpolant(VP()),
+            parametrization,
+            guidance=[HarmonicRestraint(weight=weight)],
         ),
         eta2=eta2,
     )
-    plain = integrator(GenerativeCalculator(model, VP(), parametrization), eta2=eta2)
+    plain = integrator(
+        GenerativeCalculator(model, GaussianInterpolant(VP()), parametrization),
+        eta2=eta2,
+    )
     t = torch.full((5,), 0.4, dtype=torch.float64)
     return sampler, plain, {**batch, properties.t: t}, t
 
@@ -206,7 +213,7 @@ def drift(sampler, batch, x, t):
 
 
 def test_score_guidance_shifts_score_and_drift_by_the_weighted_forces():
-    model = batch_model(analytic_score(VP(), 0.5, 1.0))
+    model = batch_model(analytic_score(GaussianInterpolant(VP()), 0.5, 1.0))
     guided, unguided, batch, t = sampler_and_batch(
         ScoreParametrization(), EulerMaruyama, 1.0, 2.5, model
     )
@@ -217,7 +224,7 @@ def test_score_guidance_shifts_score_and_drift_by_the_weighted_forces():
         batch, x, t
     )
     assert torch.allclose(shift, 2.5 * forces)
-    g2 = expand_t(VP().sde().g2(t), x)
+    g2 = expand_t(SDE(VP()).g2(t), x)
     assert torch.allclose(
         drift(guided, batch, x, t) - drift(unguided, batch, x, t), -g2 * 2.5 * forces
     )
@@ -231,7 +238,7 @@ def test_velocity_guidance_goes_through_g2():
     x = batch[properties.R]
     _, forces = terms(batch, x)
 
-    g2 = expand_t(VP().sde().g2(t), x)
+    g2 = expand_t(SDE(VP()).g2(t), x)
     shift = drift(sampler, batch, x, t) - drift(plain, batch, x, t)
     assert torch.allclose(shift, -0.5 * g2 * 2.5 * forces)
 
@@ -242,7 +249,7 @@ def test_velocity_guidance_goes_through_g2():
 )
 def test_the_guided_fields_agree_with_the_guided_score(parametrization):
     # x0 and the velocity are the guided score's, through Tweedie and the chart
-    process = VP()
+    process = GaussianInterpolant(VP())
     model = batch_model(lambda x, t: torch.tanh(x) * (1.0 + t[:, None]))
     calculator = GenerativeCalculator(
         model, process, parametrization, guidance=[HarmonicRestraint(weight=2.5)]
@@ -250,18 +257,18 @@ def test_the_guided_fields_agree_with_the_guided_score(parametrization):
     _, _, batch, t = sampler_and_batch(parametrization, Heun, 0.0, 2.5, model)
     x = batch[properties.R]
     score = calculator.score(batch, x, t)
-    sde = process.sde()
+    sde = SDE(process.schedule)
     torch.testing.assert_close(
         calculator.x0(batch, x, t), sde.x0_from_score(x, score, t)
     )
     torch.testing.assert_close(
         calculator.velocity(batch, x, t),
-        ScoreParametrization().to_velocity(process, score, x, t),
+        ScoreParametrization().to_velocity(process.schedule, score, x, t),
     )
 
 
 def test_score_guidance_scales_each_term_by_its_weight():
-    model = batch_model(analytic_score(VP(), 0.5, 1.0))
+    model = batch_model(analytic_score(GaussianInterpolant(VP()), 0.5, 1.0))
     sampler, plain, batch, t = sampler_and_batch(
         ScoreParametrization(), EulerMaruyama, 1.0, 2.5, model
     )
@@ -289,7 +296,7 @@ class TimeGuidance(Guidance):
 
 
 def test_guidance_sees_the_time_it_is_evaluated_at():
-    model = batch_model(analytic_score(VP(), 0.5, 1.0))
+    model = batch_model(analytic_score(GaussianInterpolant(VP()), 0.5, 1.0))
     sampler, plain, batch, _ = sampler_and_batch(
         ScoreParametrization(), EulerMaruyama, 1.0, 2.5, model
     )
@@ -303,20 +310,15 @@ def test_guidance_sees_the_time_it_is_evaluated_at():
     assert torch.allclose(shift, t.unsqueeze(-1).expand_as(x))
 
 
-def test_velocity_guidance_needs_the_chart_at_assembly():
-    process = VELinear(prior=ShapedPrior())
-    with pytest.raises(ValueError, match="chart"):
-        GenerativeCalculator(
-            IDLE, process, VelocityParametrization(), guidance=[HarmonicRestraint()]
-        )
-
-
 def test_sampler_runs_with_a_restraint():
-    model = batch_model(analytic_score(VP(), 0.0, 1.0))
+    model = batch_model(analytic_score(GaussianInterpolant(VP()), 0.0, 1.0))
     batch = restrained_batch([3, 2], [[(0, 2)], [(0, 1)]], [1.3, 0.9], [5.0, 5.0])
     sampler = EulerMaruyama(
         GenerativeCalculator(
-            model, VP(), ScoreParametrization(), guidance=[HarmonicRestraint()]
+            model,
+            GaussianInterpolant(VP()),
+            ScoreParametrization(),
+            guidance=[HarmonicRestraint()],
         )
     )
     out = sampler.run(batch, 10)
@@ -352,7 +354,9 @@ def test_guidance_passed_as_a_hook_is_redirected_to_the_calculator():
         LBFGS(ZeroModel(), hooks=[HarmonicRestraint()])
     with pytest.raises(TypeError, match="calculator's guidance"):
         EulerMaruyama(
-            GenerativeCalculator(IDLE, VP(), ScoreParametrization()),
+            GenerativeCalculator(
+                IDLE, GaussianInterpolant(VP()), ScoreParametrization()
+            ),
             hooks=[HarmonicRestraint()],
         )
 

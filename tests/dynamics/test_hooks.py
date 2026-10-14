@@ -12,7 +12,7 @@ from schnetpack.dynamics import (
     GenerativeCalculator,
     Hook,
 )
-from schnetpack.generative import VE, VP, ScoreParametrization
+from schnetpack.generative import VE, VP, GaussianInterpolant, ScoreParametrization
 from tests.dynamics.test_sampling import batch_model
 
 
@@ -35,7 +35,7 @@ def direct_denoising(fn, **kwargs):
     """Direct denoising on a pseudo-force fn(x, t), from VE(0.01, 3)'s prior."""
     return DirectDenoising(
         ForceCalculator(batch_model(fn), kind="pseudo"),
-        prior=VE(0.01, 3.0).sampling_prior(),
+        prior=GaussianInterpolant(VE(0.01, 3.0)).sampling_prior(),
         **kwargs,
     )
 
@@ -44,7 +44,7 @@ def direct_denoising(fn, **kwargs):
 
 
 def test_sampler_hooks_see_grid_times_around_each_step():
-    vp = VP()
+    vp = GaussianInterpolant(VP())
     recorder = Recorder()
     sampler = EulerMaruyama(
         GenerativeCalculator(batch_model(lambda x, t: -x), vp, ScoreParametrization()),
@@ -55,7 +55,7 @@ def test_sampler_hooks_see_grid_times_around_each_step():
         sampler.prior.sample_from_batch({properties.R: torch.empty(3, 1)}), n_steps
     )
 
-    ts = sampler.grid(vp.t_max, vp.t_min, n_steps)
+    ts = sampler.grid(vp.schedule.t_max, vp.schedule.t_min, n_steps)
     assert len(recorder.log) == 2 * n_steps
     for i in range(n_steps):
         hook, step, t = recorder.log[2 * i]
@@ -70,7 +70,9 @@ def test_sampler_run_starts_at_t_start():
     recorder = Recorder()
     sampler = EulerMaruyama(
         GenerativeCalculator(
-            batch_model(lambda x, t: -x), VP(), ScoreParametrization()
+            batch_model(lambda x, t: -x),
+            GaussianInterpolant(VP()),
+            ScoreParametrization(),
         ),
         hooks=[recorder],
     )
@@ -135,7 +137,9 @@ def test_scaffold_sampler_model_sees_clean_scaffold():
         return -x
 
     sampler = EulerMaruyama(
-        GenerativeCalculator(batch_model(model), VP(), ScoreParametrization()),
+        GenerativeCalculator(
+            batch_model(model), GaussianInterpolant(VP()), ScoreParametrization()
+        ),
         hooks=[FreezeScaffold()],
     )
     out = sampler.run(

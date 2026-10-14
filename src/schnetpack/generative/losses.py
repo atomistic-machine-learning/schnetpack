@@ -14,8 +14,8 @@ from collections.abc import Callable
 
 import torch
 
+from schnetpack.generative.noising import Interpolant, expand_t
 from schnetpack.generative.parametrizations import Parametrization
-from schnetpack.generative.processes import Process, expand_t
 
 __all__ = ["MatchingLoss"]
 
@@ -30,7 +30,7 @@ class MatchingLoss:
 
     def __init__(
         self,
-        process: Process,
+        process: Interpolant,
         parametrization: Parametrization,
         weight: Callable[[torch.Tensor], torch.Tensor] | None = None,
         t_sampler: Callable[[int, torch.device], torch.Tensor] | None = None,
@@ -43,10 +43,10 @@ class MatchingLoss:
                 (n_samples,) (default: uniform)
             t_sampler: draws training times, mapping (n_samples, device) ->
                 (n_samples,) (default: the process's own
-                :meth:`~schnetpack.generative.processes.Process.sample_t`);
+                :meth:`~schnetpack.generative.noising.Interpolant.sample_t`);
                 see :mod:`schnetpack.generative.times`
         """
-        parametrization.validate(process)
+        parametrization.validate(process.schedule)
         self.process = process
         self.parametrization = parametrization
         self.weight = weight if weight is not None else (lambda t: torch.ones_like(t))
@@ -75,6 +75,6 @@ class MatchingLoss:
         x_t, x0, x1, t = self.process.perturb(x0, t=t, batch=batch)
 
         prediction = model(x_t, t, cond)
-        target = self.parametrization.target(self.process, x0, x1, t)
+        target = self.parametrization.target(self.process.schedule, x0, x1, t)
         w = expand_t(self.weight(t), x_t)
         return (w * (prediction - target) ** 2).mean()

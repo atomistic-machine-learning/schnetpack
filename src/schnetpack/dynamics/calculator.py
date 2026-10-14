@@ -35,8 +35,9 @@ from torch import nn
 
 from schnetpack import properties
 from schnetpack.dynamics.guidance import Guidance
+from schnetpack.generative.differential_equations import SDE
+from schnetpack.generative.noising import Interpolant, expand_t
 from schnetpack.generative.parametrizations import Parametrization
-from schnetpack.generative.processes import Process, expand_t
 from schnetpack.uncertainty import AbsoluteUncertainty, Uncertainty
 from schnetpack.units import convert_units
 
@@ -403,7 +404,7 @@ class GenerativeCalculator(Calculator):
     def __init__(
         self,
         model: str | Callable[[dict[str, torch.Tensor]], dict[str, torch.Tensor]],
-        process: Process,
+        process: Interpolant,
         parametrization: Parametrization,
         key: str = properties.R,
         output_key: str = "prediction",
@@ -428,7 +429,7 @@ class GenerativeCalculator(Calculator):
 
         Remaining keyword arguments are those of :class:`Calculator`.
         """
-        parametrization.validate(process)
+        parametrization.validate(process.schedule)
         super().__init__(model, **kwargs)
         self.process = process
         self.parametrization = parametrization
@@ -438,7 +439,7 @@ class GenerativeCalculator(Calculator):
         self.position_conversion = convert_units(position_unit, "Angstrom")
         # guidance reaches the velocity and x0 through the chart: acquire it
         # now, so a configuration without one fails here, not mid-run
-        self.sde = process.sde() if self.guidance else None
+        self.sde = SDE(process.schedule) if self.guidance else None
 
     @staticmethod
     def _rows(x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
@@ -479,7 +480,7 @@ class GenerativeCalculator(Calculator):
     ) -> torch.Tensor:
         """Score of the marginal p_t at (x, t), plus the guidance's term."""
         raw = self.raw(batch, x, t)
-        score = self.parametrization.to_score(self.process, raw, x, t)
+        score = self.parametrization.to_score(self.process.schedule, raw, x, t)
         guidance = self.guidance_score(batch, x, t)
         return score if guidance is None else score + guidance
 
@@ -488,12 +489,12 @@ class GenerativeCalculator(Calculator):
     ) -> torch.Tensor:
         """Denoised sample x0 at (x, t), shifted by sigma^2 / a times the guidance."""
         raw = self.raw(batch, x, t)
-        x0 = self.parametrization.to_x0(self.process, raw, x, t)
+        x0 = self.parametrization.to_x0(self.process.schedule, raw, x, t)
         guidance = self.guidance_score(batch, x, t)
         if guidance is None:
             return x0
         t = self._rows(x, t)
-        scale = self.process.sigma(t) ** 2 / self.process.a(t)
+        scale = self.process.schedule.sigma(t) ** 2 / self.process.schedule.a(t)
         return x0 + expand_t(scale, x) * guidance
 
     def velocity(
@@ -501,7 +502,7 @@ class GenerativeCalculator(Calculator):
     ) -> torch.Tensor:
         """Probability-flow velocity at (x, t), shifted by -1/2 g^2 times the guidance."""
         raw = self.raw(batch, x, t)
-        velocity = self.parametrization.to_velocity(self.process, raw, x, t)
+        velocity = self.parametrization.to_velocity(self.process.schedule, raw, x, t)
         guidance = self.guidance_score(batch, x, t)
         if guidance is None:
             return velocity

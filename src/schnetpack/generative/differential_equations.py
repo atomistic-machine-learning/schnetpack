@@ -1,8 +1,8 @@
 """
-Differential-equation representations of a process and their reversal.
+Differential-equation representations of a schedule and their reversal.
 
-- :class:`SDE`: the (f, g) chart of a process with a Gaussian kernel, the
-  linear forward SDE dx = f x dt + g dw with the same marginals as the
+- :class:`SDE`: the (f, g) chart of a Gaussian schedule, the linear forward
+  SDE dx = f x dt + g dw with the same marginals as the Gaussian
   interpolant, plus its closed forms (perturbation kernel, exact posterior).
 - :class:`ReverseSDE`: the Anderson family reversing that chart, from the
   reverse-time SDE (eta2 = 1) to the probability-flow ODE (eta2 = 0).
@@ -13,59 +13,52 @@ Both reverse classes are coefficient math only: ``drift`` takes the field —
 the score for :class:`ReverseSDE`, the velocity for :class:`ReverseODE` — as
 an input, so evaluating the model stays with the driver. Both expose
 ``drift``/``diffusion`` for steppers that run backwards in time (dt < 0).
-Derivations: ``docs_new/processes.md`` §3 and
-``docs_new/flow_matching_sde.md``.
+Theory: ``docs_new/generation/generation.md``.
 """
 
 import torch
 
-from schnetpack.generative.processes import Process, expand_t
+from schnetpack.generative.noising import expand_t
+from schnetpack.generative.schedules import GaussianSchedule
 
 __all__ = ["SDE", "ReverseSDE", "ReverseODE"]
 
 
 class SDE:
     """
-    The (f, g) chart of a process: the linear forward SDE whose conditional
-    marginals match the interpolant's.
-
-    Exists only when the one-sided Gaussian kernel p(x_t | x0) = N(a x0,
-    sigma^2 I) holds; construction is the check. Obtain it via
-    :meth:`~schnetpack.generative.processes.Process.sde`.
+    The (f, g) chart of a Gaussian schedule: the linear forward SDE whose
+    conditional marginals N(a x0, sigma^2 I) match those of a
+    :class:`~schnetpack.generative.noising.GaussianInterpolant` with this
+    schedule.
     """
 
-    def __init__(self, process: Process):
+    def __init__(self, schedule: GaussianSchedule):
         """
         Args:
-            process: the forward process
+            schedule: the Gaussian schedule a(t), sigma(t)
 
         Raises:
-            ValueError: if the process has no Gaussian kernel; the message
-                names the obstruction.
+            TypeError: if the schedule is not a GaussianSchedule.
         """
-        obstruction = process.gaussian_kernel_obstruction()
-        if obstruction is not None:
-            raise ValueError(
-                f"No (f, g) SDE chart for this configuration: {obstruction}. "
-                "The chart-free routes remain available: velocity sampling "
-                "at eta2 = 0 and the direct x0/pseudo-force recovery "
-                "(DirectDenoising)."
+        if not isinstance(schedule, GaussianSchedule):
+            raise TypeError(
+                f"No (f, g) SDE chart for {type(schedule).__name__}: it needs "
+                "a GaussianSchedule, which defines sigma(t). The chart-free "
+                "routes remain available: velocity sampling at eta2 = 0 and "
+                "the direct x0/pseudo-force recovery (DirectDenoising)."
             )
-        self.process = process
+        self.schedule = schedule
 
     def f(self, t: torch.Tensor) -> torch.Tensor:
         """Drift coefficient f(t) = d/dt log a."""
-        return self.process.log_a_dot(t)
+        return self.schedule.log_a_dot(t)
 
     def g2(self, t: torch.Tensor) -> torch.Tensor:
         """
-        Squared diffusion g^2(t) = -sigma^2 d/dt log SNR.
-
-        Equal to 2 b b' - 2 f b^2 at unit scale, written as one
-        log-derivative so nothing degenerates where a or b vanish.
+        Squared diffusion g^2(t) = 2 sigma (sigma' - f sigma).
         """
-        process = self.process
-        return -(process.sigma(t) ** 2) * process.log_snr_dot(t)
+        sigma = self.schedule.sigma(t)
+        return 2.0 * sigma * (self.schedule.sigma_dot(t) - self.f(t) * sigma)
 
     def posterior(
         self,
@@ -91,8 +84,8 @@ class SDE:
         Returns:
             (mean, std): mean shaped like x_t, std shaped like t.
         """
-        a_t, sig_t = self.process.a(t), self.process.sigma(t)
-        a_s, sig_s = self.process.a(s), self.process.sigma(s)
+        a_t, sig_t = self.schedule.a(t), self.schedule.sigma(t)
+        a_s, sig_s = self.schedule.a(s), self.schedule.sigma(s)
         r = a_t / a_s
         var_ts = sig_t**2 - r**2 * sig_s**2
         mean = (
@@ -110,7 +103,7 @@ class SDE:
 
         Singular where a -> 0 (flow matching at t = 1, VP at large t).
         """
-        a, sigma = self.process.a(t), self.process.sigma(t)
+        a, sigma = self.schedule.a(t), self.schedule.sigma(t)
         return (x_t + expand_t(sigma**2, x_t) * score) / expand_t(a, x_t)
 
 
@@ -136,7 +129,6 @@ class ReverseSDE:
                 probability-flow ODE
         """
         self.sde = sde
-        self.process = sde.process
         self.eta2 = eta2
 
     def g2(self, t: torch.Tensor) -> torch.Tensor:

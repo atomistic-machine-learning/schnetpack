@@ -4,8 +4,10 @@ composable building blocks. Pure PyTorch, no Lightning.
 
 A model is a configuration of four independent axes plus its training:
 
-- :mod:`~schnetpack.generative.processes`: the forward noising process
-  x_t = a(t) x0 + b(t) x1 (the schedule), holding the prior and coupling.
+- :mod:`~schnetpack.generative.noising`: how noisy samples are paired with
+  clean ones; the interpolant x_t = a(t) x0 + b(t) x1 holds the schedule,
+  prior and coupling.
+- :mod:`~schnetpack.generative.schedules`: a(t) and b(t), or a(t) and sigma(t).
 - :mod:`~schnetpack.generative.priors`: what the x1 endpoint is.
 - :mod:`~schnetpack.generative.couplings`: how (x0, x1) batches are paired.
 - :mod:`~schnetpack.generative.parametrizations`: what the network predicts,
@@ -18,7 +20,7 @@ A model is a configuration of four independent axes plus its training:
   level and as a data-pipeline transform.
 
 Running a trained model lives in :mod:`schnetpack.dynamics`. Training and
-sampling must share the same (process, parametrization) objects. Theory and
+sampling must share the same (noising, parametrization) objects. Theory and
 design: ``docs_new/README.md``.
 """
 
@@ -26,7 +28,8 @@ from schnetpack.generative.couplings import *
 from schnetpack.generative.losses import *
 from schnetpack.generative.parametrizations import *
 from schnetpack.generative.priors import *
-from schnetpack.generative.processes import *
+from schnetpack.generative.schedules import *
+from schnetpack.generative.noising import *
 from schnetpack.generative.differential_equations import *
 from schnetpack.generative.times import *
 from schnetpack.generative.transforms import *

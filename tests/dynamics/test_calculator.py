@@ -14,6 +14,8 @@ from schnetpack.generative import (
     VE,
     VP,
     EpsParametrization,
+    GaussianInterpolant,
+    Interpolant,
     PseudoForceParametrization,
     ScoreParametrization,
     VelocityParametrization,
@@ -46,7 +48,10 @@ def test_neighbor_list_runs_on_every_model_call_and_never_reaches_the_loop():
     # built on a copy, so the loop's batch never holds a derived key.
     nbl = InPlaceNeighborList()
     calculator = GenerativeCalculator(
-        zero_model, VP(), VelocityParametrization(), neighbor_list=nbl
+        zero_model,
+        GaussianInterpolant(VP()),
+        VelocityParametrization(),
+        neighbor_list=nbl,
     )
     sampler = Heun(calculator, eta2=0.0)
     batch = {properties.R: torch.randn(5, 3)}
@@ -317,7 +322,7 @@ def test_samplers_refuse_a_force_calculator():
 def test_time_free_drivers_refuse_a_generative_calculator(build):
     # its fields need a time, and it names no units
     calculator = GenerativeCalculator(
-        zero_model, VE(0.01, 3.0), PseudoForceParametrization()
+        zero_model, GaussianInterpolant(VE(0.01, 3.0)), PseudoForceParametrization()
     )
     with pytest.raises(TypeError, match="ForceCalculator"):
         build(calculator)
@@ -368,7 +373,7 @@ def toy_head(batch):
     [EpsParametrization(), VelocityParametrization(), PseudoForceParametrization()],
 )
 def test_generative_fields_are_the_parametrizations_conversions(parametrization):
-    process = VP()
+    process = GaussianInterpolant(VP())
     calculator = GenerativeCalculator(toy_head, process, parametrization)
     x = torch.randn(4, 3, dtype=torch.float64)
     t = torch.full((4,), 0.4, dtype=torch.float64)
@@ -377,7 +382,7 @@ def test_generative_fields_are_the_parametrizations_conversions(parametrization)
     for field in ("score", "x0", "velocity"):
         convert = getattr(parametrization, f"to_{field}")
         torch.testing.assert_close(
-            getattr(calculator, field)({}, x, t), convert(process, raw, x, t)
+            getattr(calculator, field)({}, x, t), convert(process.schedule, raw, x, t)
         )
     # a scalar time is spread over the rows
     torch.testing.assert_close(
@@ -386,9 +391,11 @@ def test_generative_fields_are_the_parametrizations_conversions(parametrization)
 
 
 def test_generative_calculator_validates_the_pair():
-    from schnetpack.generative import PCVarianceCoupling
+    from schnetpack.generative import FlowMatching
 
     with pytest.raises(TypeError, match="Gaussian kernel"):
         GenerativeCalculator(
-            toy_head, VP(coupling=PCVarianceCoupling()), ScoreParametrization()
+            toy_head,
+            Interpolant(FlowMatching()),
+            ScoreParametrization(),
         )

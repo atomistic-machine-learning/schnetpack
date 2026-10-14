@@ -2,10 +2,10 @@
 Parametrizations: what the network predicts, and the conversions that follow.
 
 A parametrization is stateless field math; every method takes the
-:class:`~schnetpack.generative.processes.Process` it applies to. It owns the
+:class:`~schnetpack.generative.schedules.Schedule` it applies to. It owns the
 training target (:meth:`Parametrization.target`) and the conversions of a raw
 output into the canonical fields (``to_score``, ``to_velocity``, ``to_x0``).
-Consumers that pair it with a process call :meth:`Parametrization.validate`
+Consumers that pair it with a schedule call :meth:`Parametrization.validate`
 at construction. The model stays a bare callable ``model(x, t, cond)``.
 Theory and the catalog: ``docs_new/parametrizations.md``.
 """
@@ -14,7 +14,9 @@ import abc
 
 import torch
 
-from schnetpack.generative.processes import Process, expand_t
+from schnetpack.generative.differential_equations import SDE
+from schnetpack.generative.noising import expand_t
+from schnetpack.generative.schedules import GaussianSchedule, Schedule
 
 __all__ = [
     "Parametrization",
@@ -26,16 +28,15 @@ __all__ = [
 ]
 
 
-def _require_gaussian(process: Process, cls: type) -> None:
-    """Raise unless ``process`` has the one-sided Gaussian kernel."""
-    obstruction = process.gaussian_kernel_obstruction()
-    if obstruction is not None:
+def _require_gaussian(schedule: Schedule, cls: type) -> None:
+    """Raise unless ``schedule`` is a Gaussian schedule."""
+    if not isinstance(schedule, GaussianSchedule):
         raise TypeError(
             f"{cls.__name__} regresses a target that is a statement about a "
-            f"Gaussian kernel, which this process does not have: "
-            f"{obstruction}. Fix the configuration, or switch to a "
-            "velocity, x0 or pseudo-force parametrization — those targets "
-            "are plain conditional expectations, valid for any process."
+            f"Gaussian kernel, which needs a GaussianSchedule; got "
+            f"{type(schedule).__name__}. Switch to a velocity, x0 or "
+            "pseudo-force parametrization — those targets are plain "
+            "conditional expectations, valid for any schedule."
         )
 
 
@@ -58,15 +59,15 @@ class Parametrization(abc.ABC):
     at eta2 = 0.
     """
 
-    def validate(self, process: Process) -> None:  # noqa: B027 - optional hook
-        """Raise unless this parametrization's target is meaningful for ``process``."""
+    def validate(self, schedule: Schedule) -> None:  # noqa: B027 - optional hook
+        """Raise unless this parametrization's target is meaningful for ``schedule``."""
 
     # -- training --------------------------------------------------------- #
 
     @abc.abstractmethod
     def target(
         self,
-        process: Process,
+        schedule: Schedule,
         x0: torch.Tensor,
         x1: torch.Tensor,
         t: torch.Tensor,
@@ -75,7 +76,7 @@ class Parametrization(abc.ABC):
         Training target the head regresses, from the endpoint pair.
 
         Args:
-            process: forward process the pair was drawn from
+            schedule: schedule the pair was placed on
             x0: data endpoint
             x1: prior endpoint
             t: path time, per-sample or scalar
@@ -87,7 +88,7 @@ class Parametrization(abc.ABC):
     @abc.abstractmethod
     def to_score(
         self,
-        process: Process,
+        schedule: Schedule,
         output: torch.Tensor,
         x_t: torch.Tensor,
         t: torch.Tensor,
@@ -97,29 +98,29 @@ class Parametrization(abc.ABC):
 
     def to_velocity(
         self,
-        process: Process,
+        schedule: Schedule,
         output: torch.Tensor,
         x_t: torch.Tensor,
         t: torch.Tensor,
     ) -> torch.Tensor:
         """Probability-flow velocity v = f x - 1/2 g^2 score, from the raw output."""
-        score = self.to_score(process, output, x_t, t)
-        sde = process.sde()
+        score = self.to_score(schedule, output, x_t, t)
+        sde = SDE(schedule)
         f = expand_t(sde.f(t), x_t)
         g2 = expand_t(sde.g2(t), x_t)
         return f * x_t - 0.5 * g2 * score
 
     def to_x0(
         self,
-        process: Process,
+        schedule: Schedule,
         output: torch.Tensor,
         x_t: torch.Tensor,
         t: torch.Tensor,
     ) -> torch.Tensor:
         """Denoised sample x0 = (x + sigma^2 score) / a; singular where a -> 0."""
-        score = self.to_score(process, output, x_t, t)
-        a = expand_t(process.a(t), x_t)
-        sigma = expand_t(process.sigma(t), x_t)
+        score = self.to_score(schedule, output, x_t, t)
+        a = expand_t(schedule.a(t), x_t)
+        sigma = expand_t(schedule.sigma(t), x_t)
         return (x_t + sigma**2 * score) / a
 
 
@@ -128,17 +129,17 @@ class ScoreParametrization(Parametrization):
     The head predicts the score directly. Requires the Gaussian kernel.
 
     The target -x1 / (b std^2) spans whatever range b does; on a VE schedule
-    pass ``weight=lambda t: process.b(t)**2`` to the loss.
+    pass ``weight=lambda t: schedule.b(t)**2`` to the loss.
     """
 
-    def validate(self, process):
-        _require_gaussian(process, type(self))
+    def validate(self, schedule):
+        _require_gaussian(schedule, type(self))
 
-    def target(self, process, x0, x1, t):
+    def target(self, schedule, x0, x1, t):
         # score of p(x_t | x0): -(x_t - a x0) / sigma^2 = -x1 / (b std^2)
-        return -x1 / expand_t(process.b(t) * process.std**2, x1)
+        return -x1 / expand_t(schedule.b(t) * schedule.sigma_max**2, x1)
 
-    def to_score(self, process, output, x_t, t):
+    def to_score(self, schedule, output, x_t, t):
         return output
 
 
@@ -148,30 +149,30 @@ class EpsParametrization(Parametrization):
     Requires the Gaussian kernel; the target has unit variance at every t.
     """
 
-    def validate(self, process):
-        _require_gaussian(process, type(self))
+    def validate(self, schedule):
+        _require_gaussian(schedule, type(self))
 
-    def target(self, process, x0, x1, t):
-        return x1 / process.std
+    def target(self, schedule, x0, x1, t):
+        return x1 / schedule.sigma_max
 
-    def to_score(self, process, output, x_t, t):
+    def to_score(self, schedule, output, x_t, t):
         # score = -eps / sigma
-        return -output / expand_t(process.sigma(t), output)
+        return -output / expand_t(schedule.sigma(t), output)
 
 
 class X0Parametrization(Parametrization):
-    """The head predicts the clean sample x0 (denoiser convention). Any process."""
+    """The head predicts the clean sample x0 (denoiser convention). Any schedule."""
 
-    def target(self, process, x0, x1, t):
+    def target(self, schedule, x0, x1, t):
         return x0
 
-    def to_score(self, process, output, x_t, t):
+    def to_score(self, schedule, output, x_t, t):
         # Tweedie: score = (a x0_hat - x) / sigma^2
-        a = expand_t(process.a(t), x_t)
-        sigma = expand_t(process.sigma(t), x_t)
+        a = expand_t(schedule.a(t), x_t)
+        sigma = expand_t(schedule.sigma(t), x_t)
         return (a * output - x_t) / sigma**2
 
-    def to_x0(self, process, output, x_t, t):
+    def to_x0(self, schedule, output, x_t, t):
         # Direct: the round trip through the score would divide by a.
         return output
 
@@ -179,7 +180,7 @@ class X0Parametrization(Parametrization):
 class VelocityParametrization(Parametrization):
     """
     The head predicts the velocity d/dt x_t = a' x0 + b' x1 (flow matching).
-    Any process.
+    Any schedule.
 
     :meth:`to_score` divides by g^2, which vanishes as t -> 0 on VE and flow
     matching paths; it only runs at eta2 > 0, and the grids stop at t_min.
@@ -187,45 +188,45 @@ class VelocityParametrization(Parametrization):
 
     velocity_needs_chart = False  # the head *is* the velocity
 
-    def target(self, process, x0, x1, t):
-        a_dot = expand_t(process.a_dot(t), x0)
-        b_dot = expand_t(process.b_dot(t), x1)
+    def target(self, schedule, x0, x1, t):
+        a_dot = expand_t(schedule.a_dot(t), x0)
+        b_dot = expand_t(schedule.b_dot(t), x1)
         return a_dot * x0 + b_dot * x1
 
-    def to_score(self, process, output, x_t, t):
+    def to_score(self, schedule, output, x_t, t):
         # Invert v = f x - 1/2 g^2 s.
-        sde = process.sde()
+        sde = SDE(schedule)
         f = expand_t(sde.f(t), x_t)
         g2 = expand_t(sde.g2(t), x_t)
         return 2.0 * (f * x_t - output) / g2
 
-    def to_velocity(self, process, output, x_t, t):
+    def to_velocity(self, schedule, output, x_t, t):
         return output
 
 
 class PseudoForceParametrization(Parametrization):
     """
     The head predicts the pseudo force F = 2 (x0 - x_t) (GPFF convention).
-    Any process.
+    Any schedule.
 
     Recovering x0 = x_t + F/2 needs neither division nor sigma, which is what
     :class:`~schnetpack.dynamics.optimize.DirectDenoising` relies on. On a VE
     path the target is -2 b x1, so |F| carries the noise level and the head
     needs no time input; the target's scale then runs with b, so pass
-    ``weight=lambda t: (1 / process.b(t)**2).clamp(max=1.0)`` to the loss.
+    ``weight=lambda t: (1 / schedule.b(t)**2).clamp(max=1.0)`` to the loss.
     """
 
-    def target(self, process, x0, x1, t):
-        a = expand_t(process.a(t), x0)
-        b = expand_t(process.b(t), x1)
+    def target(self, schedule, x0, x1, t):
+        a = expand_t(schedule.a(t), x0)
+        b = expand_t(schedule.b(t), x1)
         return 2.0 * ((1.0 - a) * x0 - b * x1)
 
-    def to_x0(self, process, output, x_t, t):
+    def to_x0(self, schedule, output, x_t, t):
         # Direct, and exact at b = 0 — the definition of F rearranged.
         return x_t + 0.5 * output
 
-    def to_score(self, process, output, x_t, t):
+    def to_score(self, schedule, output, x_t, t):
         # Tweedie on the recovered x0; for VE this reduces to F / (2 sigma^2).
-        a = expand_t(process.a(t), x_t)
-        sigma = expand_t(process.sigma(t), x_t)
-        return (a * self.to_x0(process, output, x_t, t) - x_t) / sigma**2
+        a = expand_t(schedule.a(t), x_t)
+        sigma = expand_t(schedule.sigma(t), x_t)
+        return (a * self.to_x0(schedule, output, x_t, t) - x_t) / sigma**2

@@ -6,6 +6,7 @@ from schnetpack.dynamics import DirectDenoising, ForceCalculator, GenerativeCalc
 from schnetpack.generative import (
     VE,
     DatasetPrior,
+    GaussianInterpolant,
     MatchingLoss,
     PseudoForceParametrization,
 )
@@ -16,7 +17,7 @@ from tests.dynamics.test_sampling import IDLE, batch_model, draw, train_toy
 
 def gpff(model, process=None, **kwargs):
     """Direct denoising on a pseudo-force model, started from the process's prior."""
-    process = process if process is not None else VE(0.01, 3.0)
+    process = process if process is not None else GaussianInterpolant(VE(0.01, 3.0))
     return DirectDenoising(
         ForceCalculator(model, kind="pseudo"),
         prior=process.sampling_prior(),
@@ -27,7 +28,7 @@ def gpff(model, process=None, **kwargs):
 def test_direct_denoising_ends_on_the_x0_estimate():
     # A model whose x0-estimate is a fixed point lands there exactly.
     mu0 = 1.5
-    process = VE(0.01, 3.0)
+    process = GaussianInterpolant(VE(0.01, 3.0))
 
     def model(x, t):
         return 2.0 * (mu0 - x)  # pseudo force straight to mu0
@@ -97,7 +98,9 @@ def test_direct_denoising_runs_on_a_pseudo_force_only():
         DirectDenoising(ForceCalculator(IDLE))
     with pytest.raises(TypeError, match="ForceCalculator"):
         DirectDenoising(
-            GenerativeCalculator(IDLE, VE(0.01, 3.0), PseudoForceParametrization())
+            GenerativeCalculator(
+                IDLE, GaussianInterpolant(VE(0.01, 3.0)), PseudoForceParametrization()
+            )
         )
 
 
@@ -141,12 +144,12 @@ def test_direct_denoising_trained_gpff_assembly():
     # clipped 1/b^2 weight, a time-free net, and the direct-denoising loop.
     torch.manual_seed(0)
     mu, sd = 1.0, 0.5
-    process = VE(0.01, 3.0)
+    process = GaussianInterpolant(VE(0.01, 3.0))
     parametrization = PseudoForceParametrization()
     loss = MatchingLoss(
         process,
         parametrization,
-        weight=lambda t: (1.0 / process.b(t) ** 2).clamp(max=1.0),
+        weight=lambda t: (1.0 / process.schedule.b(t) ** 2).clamp(max=1.0),
     )
     model = train_toy(loss, TimeFreeToyNet(), mu, sd)
 

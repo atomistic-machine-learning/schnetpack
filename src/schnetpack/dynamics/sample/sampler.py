@@ -18,9 +18,9 @@ import torch
 from schnetpack.dynamics.base import Dynamics
 from schnetpack.dynamics.calculator import GenerativeCalculator
 from schnetpack.dynamics.sample.grids import TimeGrid, UniformGrid
-from schnetpack.generative.differential_equations import ReverseSDE
+from schnetpack.generative.differential_equations import SDE, ReverseSDE
+from schnetpack.generative.noising import Interpolant, expand_t
 from schnetpack.generative.priors import Prior
-from schnetpack.generative.processes import Process, expand_t
 
 __all__ = ["Sampler", "EulerMaruyama", "Heun", "Ancestral"]
 
@@ -86,11 +86,11 @@ class Sampler(Dynamics):
         self.eta2 = eta2
         # Acquire the (f, g) chart now, so a configuration without it fails
         # with the obstruction named instead of sampling garbage mid-run.
-        self.sde = process.sde()
+        self.sde = SDE(process.schedule)
         self.reverse = ReverseSDE(self.sde, eta2=eta2)
 
     @property
-    def process(self) -> Process:
+    def process(self) -> Interpolant:
         """The forward process, the calculator's."""
         return self.calculator.process
 
@@ -124,9 +124,13 @@ class Sampler(Dynamics):
         self.calculator.reset()
         batch = self.calculator.prepare(batch)
         x = batch[self.key]
-        t_start = self.process.t_max if t_start is None else t_start
+        t_start = self.process.schedule.t_max if t_start is None else t_start
         ts = self.grid(
-            t_start, self.process.t_min, n_steps, dtype=x.dtype, device=x.device
+            t_start,
+            self.process.schedule.t_min,
+            n_steps,
+            dtype=x.dtype,
+            device=x.device,
         )
         n_steps = ts.shape[0] - 1
         n_rows = x.shape[0]

@@ -9,7 +9,9 @@ from schnetpack.generative import (
     DatasetStructures,
     EpsParametrization,
     FlowMatching,
+    GaussianInterpolant,
     GaussianPrior,
+    Interpolant,
     StatisticsStructures,
 )
 
@@ -114,12 +116,12 @@ def test_it_declares_itself_gaussian_with_a_scale():
     assert prior.std == 10.0
 
 
-def test_the_kernel_is_not_obstructed():
-    assert VE(2e-3, 10.0).gaussian_kernel_obstruction() is None
+def test_a_gaussian_interpolant_accepts_it():
+    GaussianInterpolant(VE(2e-3, 10.0), prior=GaussianPrior(10.0))  # must not raise
 
 
 def test_the_noise_parametrization_accepts_it():
-    EpsParametrization().validate(VE(2e-3, 10.0))
+    EpsParametrization().validate(GaussianInterpolant(VE(2e-3, 10.0)).schedule)
 
 
 # --- the two entry points -------------------------------------------------- #
@@ -140,7 +142,7 @@ def test_perturb_stays_on_the_subspace_for_centered_data():
     # The precondition made visible: centered x0 plus centered x1 keeps x_t
     # centered at every time, which is what makes the targets learnable.
     torch.manual_seed(0)
-    process = VE(0.05, 10.0)
+    process = GaussianInterpolant(VE(0.05, 10.0))
     x0 = torch.randn(12, 3)
     x0 = x0 - x0.mean(0)
     for t in (0.1, 0.5, 1.0):
@@ -154,7 +156,7 @@ def test_the_sampler_starts_a_batch_on_the_subspace():
     # start of a multi-molecule batch is centered per molecule.
     torch.manual_seed(0)
     idx_m = torch.arange(8).repeat_interleave(12)
-    process = VE(0.05, 10.0)
+    process = GaussianInterpolant(VE(0.05, 10.0))
 
     seen = {}
 
@@ -175,7 +177,7 @@ def test_the_sampler_starts_a_batch_on_the_subspace():
 
 def test_given_positions_are_denoised_as_they_are():
     torch.manual_seed(0)
-    process = VE(0.05, 10.0)
+    process = GaussianInterpolant(VE(0.05, 10.0))
     x_init = torch.full((6, 3), 7.0)
 
     seen = {}
@@ -193,12 +195,12 @@ def test_given_positions_are_denoised_as_they_are():
     assert torch.allclose(seen["x_init"], x_init)
 
 
-# --- the process derives its start from it, unchanged ---------------------- #
+# --- the interpolant derives its start from it, unchanged ------------------ #
 
 
 def test_the_sampling_prior_is_the_training_prior():
     prior = GaussianPrior(10.0)
-    assert FlowMatching(prior=prior).sampling_prior() is prior
+    assert Interpolant(FlowMatching(), prior=prior).sampling_prior() is prior
 
 
 # --- the flag -------------------------------------------------------------- #
@@ -219,9 +221,10 @@ def test_centering_can_be_switched_off():
 
 
 def test_the_sugar_constructor_gets_a_centered_prior():
-    # VE(sigma_min, sigma_max) builds its own GaussianPrior(sigma_max); the
-    # default has to carry through, or the common path stays off-subspace.
-    process = VE(sigma_min=0.05, sigma_max=10.0)
+    # GaussianInterpolant(VE(sigma_min, sigma_max)) builds its own
+    # GaussianPrior(sigma_max); the default has to carry through, or the
+    # common path stays off-subspace.
+    process = GaussianInterpolant(VE(sigma_min=0.05, sigma_max=10.0))
     assert process.prior.centered is True
     assert process.prior.std == 10.0
 
@@ -236,7 +239,7 @@ def test_diffuse_centers_each_molecule_of_a_collated_batch():
 
     torch.manual_seed(0)
     idx_m = torch.arange(4).repeat_interleave(6)
-    process = VE(0.05, 10.0)
+    process = GaussianInterpolant(VE(0.05, 10.0))
     transform = Diffuse(process, EpsParametrization(), label_key="eps", time_key="t")
 
     x0 = GaussianPrior.center(torch.randn(24, 3), idx_m)  # centered data, per molecule
@@ -263,7 +266,7 @@ def test_diffuse_per_structure_centers_the_one_molecule():
     from schnetpack.generative import Diffuse, EpsParametrization
 
     torch.manual_seed(0)
-    process = VE(0.05, 10.0)
+    process = GaussianInterpolant(VE(0.05, 10.0))
     transform = Diffuse(process, EpsParametrization(), label_key="eps", time_key="t")
 
     x0 = torch.randn(9, 3)
@@ -355,4 +358,6 @@ def test_the_dataset_prior_returns_the_stored_structures():
 
 def test_the_dataset_prior_is_no_training_endpoint():
     with pytest.raises(TypeError, match="no positions law"):
-        FlowMatching(prior=DatasetPrior(DATASET)).perturb(torch.randn(4, 3))
+        Interpolant(FlowMatching(), prior=DatasetPrior(DATASET)).perturb(
+            torch.randn(4, 3)
+        )

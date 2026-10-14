@@ -11,11 +11,14 @@ from schnetpack.dynamics import (
 )
 from schnetpack.dynamics.sample import sampler as sample
 from schnetpack.generative import (
+    SDE,
     VE,
     VP,
     EpsParametrization,
     FlowMatching,
+    GaussianInterpolant,
     GaussianPrior,
+    Interpolant,
     MatchingLoss,
     PCVarianceCoupling,
     Prior,
@@ -47,29 +50,19 @@ def draw(dynamics, shape, n_steps):
 
 @pytest.fixture
 def vp():
-    return VP()
+    return GaussianInterpolant(VP())
 
 
 def analytic_score(process, mu0, s0, x1_std=1.0):
     """Exact score of p_t for Gaussian data N(mu0, s0^2) under an affine schedule."""
 
     def score(x, t, cond=None):
-        a = expand_t(process.a(t), x)
-        sigma = expand_t(process.b(t), x) * x1_std
+        a = expand_t(process.schedule.a(t), x)
+        sigma = expand_t(process.schedule.b(t), x) * x1_std
         var = a**2 * s0**2 + sigma**2
         return -(x - a * mu0) / var
 
     return score
-
-
-def analytic_velocity(process, mu0, s0):
-    """The same process, expressed as a velocity — what an FM net would learn."""
-
-    def velocity(x, t, cond=None):
-        score = analytic_score(process, mu0, s0)(x, t)
-        return ScoreParametrization().to_velocity(process, score, x, t)
-
-    return velocity
 
 
 # --- grids ---------------------------------------------------------------- #
@@ -108,7 +101,7 @@ def test_sampler_defaults_to_the_processs_sampling_prior(vp):
 def test_sampler_derives_the_scale_from_the_process():
     # The train/sample tie: the process carries the prior its x1 endpoint was
     # drawn from, and the sampler starts from exactly that — the same object.
-    process = VE(0.01, 50.0)
+    process = GaussianInterpolant(VE(0.01, 50.0))
     sampler = EulerMaruyama(GenerativeCalculator(IDLE, process, ScoreParametrization()))
     assert isinstance(sampler.prior, GaussianPrior)
     assert sampler.prior.std == pytest.approx(50.0)
@@ -118,10 +111,10 @@ def test_sampler_derives_the_scale_from_the_process():
 def test_sampler_validates_the_pair():
     # The score/noise heads demand a Gaussian kernel; the sampler is where the
     # (process, parametrization) pair meets, so it must refuse at construction.
-    reshaped = VP(coupling=PCVarianceCoupling())
+    plain = Interpolant(FlowMatching())
     with pytest.raises(TypeError, match="Gaussian kernel"):
         EulerMaruyama(
-            GenerativeCalculator(IDLE, reshaped, ScoreParametrization()),
+            GenerativeCalculator(IDLE, plain, ScoreParametrization()),
             prior=GaussianPrior(),
         )
 
@@ -129,7 +122,7 @@ def test_sampler_validates_the_pair():
 def test_sampler_refuses_when_the_process_cannot_state_its_start():
     # A coupling that reshapes x1's marginal has no data-free start; the
     # sampler must refuse rather than guess, before it reaches for the chart.
-    process = VP(coupling=PCVarianceCoupling())
+    process = Interpolant(VP(), coupling=PCVarianceCoupling())
     with pytest.raises(ValueError, match="marginal"):
         EulerMaruyama(
             GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=0.0
@@ -141,25 +134,25 @@ def test_sampler_refuses_when_the_process_cannot_state_its_start():
 
 def test_reverse_drift_at_eta2_one_matches_the_anderson_form(vp):
     # Anderson: f x - 1/2 (1 + eta^2) g^2 s, at eta = 1 (eta2 = eta^2 = 1).
-    rev = ReverseSDE(vp.sde(), eta2=1.0)
+    rev = ReverseSDE(SDE(vp.schedule), eta2=1.0)
 
     x = torch.randn(16, 2, dtype=torch.float64)
     t = torch.full((16,), 0.5, dtype=torch.float64)
 
     s = analytic_score(vp, 0.5, 1.0)(x, t)
-    sde = vp.sde()
+    sde = SDE(vp.schedule)
     expected = expand_t(sde.f(t), x) * x - expand_t(sde.g2(t), x) * s
     assert torch.allclose(rev.drift(x, t, s), expected, rtol=1e-8)
 
 
 def test_reverse_drift_at_eta2_zero_is_the_probability_flow(vp):
-    rev = ReverseSDE(vp.sde(), eta2=0.0)
+    rev = ReverseSDE(SDE(vp.schedule), eta2=0.0)
 
     x = torch.randn(16, 2, dtype=torch.float64)
     t = torch.full((16,), 0.5, dtype=torch.float64)
 
     s = analytic_score(vp, 0.5, 1.0)(x, t)
-    sde = vp.sde()
+    sde = SDE(vp.schedule)
     expected = expand_t(sde.f(t), x) * x - 0.5 * expand_t(sde.g2(t), x) * s
     assert torch.allclose(rev.drift(x, t, s), expected, rtol=1e-8)
 
@@ -167,18 +160,20 @@ def test_reverse_drift_at_eta2_zero_is_the_probability_flow(vp):
 @pytest.mark.parametrize("eta2", [0.0, 0.25, 1.0])
 def test_reverse_diffusion(vp, eta2):
     t = torch.tensor([0.3, 0.7], dtype=torch.float64)
-    rev = ReverseSDE(vp.sde(), eta2=eta2)
-    assert torch.allclose(rev.diffusion(t), torch.sqrt(eta2 * vp.sde().g2(t)))
+    rev = ReverseSDE(SDE(vp.schedule), eta2=eta2)
+    expected = torch.sqrt(eta2 * SDE(vp.schedule).g2(t))
+    assert torch.allclose(rev.diffusion(t), expected)
 
 
 def test_reverse_process_exposes_the_reversed_process(vp):
-    rev = ReverseSDE(vp.sde(), eta2=0.5)
-    assert rev.process is vp
+    sde = SDE(vp.schedule)
+    rev = ReverseSDE(sde, eta2=0.5)
+    assert rev.sde is sde
     assert rev.eta2 == 0.5
 
 
 def test_eta2_zero_has_no_diffusion(vp):
-    rev = ReverseSDE(vp.sde(), eta2=0.0)
+    rev = ReverseSDE(SDE(vp.schedule), eta2=0.0)
     assert torch.equal(rev.diffusion(torch.rand(4)), torch.zeros(4))
 
 
@@ -197,35 +192,33 @@ class ShapedPrior(Prior):
         return self.std * (2.0 * u - 1.0)
 
 
-def test_sde_refuses_without_the_gaussian_kernel():
-    with pytest.raises(ValueError, match="chart"):
-        FlowMatching(prior=ShapedPrior()).sde()
+def test_sde_refuses_a_plain_schedule():
+    with pytest.raises(TypeError, match="chart"):
+        SDE(FlowMatching())
 
 
-def test_shape_prior_with_declared_scale_fails_at_assembly_not_silently():
-    # Defect the split fixes: an x0/velocity head on a non-Gaussian prior with
-    # a declared std validates fine (its target is a plain conditional
-    # expectation) but its sampling conversions are Gaussian-kernel
-    # statements. The sampler must refuse at construction, naming the
-    # obstruction — before this, f/g2 and Tweedie returned wrong numbers
-    # without a raise.
-    process = FlowMatching(prior=ShapedPrior())
-    with pytest.raises(ValueError, match="chart"):
+def test_plain_schedule_fails_at_assembly_not_silently():
+    # An x0/velocity head on a plain schedule validates fine (its target is a
+    # plain conditional expectation) but its sampling conversions go through
+    # the (f, g) chart, which a plain schedule does not have. The sampler must
+    # refuse at construction, naming the obstruction.
+    process = Interpolant(FlowMatching(), prior=ShapedPrior())
+    with pytest.raises(TypeError, match="chart"):
         EulerMaruyama(
             GenerativeCalculator(IDLE, process, X0Parametrization()), eta2=1.0
         )
-    with pytest.raises(ValueError, match="chart"):
+    with pytest.raises(TypeError, match="chart"):
         # the probability-flow ODE converts too
         Heun(GenerativeCalculator(IDLE, process, X0Parametrization()), eta2=0.0)
-    with pytest.raises(ValueError, match="chart"):
+    with pytest.raises(TypeError, match="chart"):
         Ancestral(
             GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=0.0
         )
-    with pytest.raises(ValueError, match="chart"):  # eta2 > 0 crosses it too
+    with pytest.raises(TypeError, match="chart"):  # eta2 > 0 crosses it too
         EulerMaruyama(
             GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=1.0
         )
-    with pytest.raises(ValueError, match="chart"):
+    with pytest.raises(TypeError, match="chart"):
         Heun(GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=0.0)
 
 
@@ -258,7 +251,7 @@ def test_scaled_ve_recovers_data_stats():
     # derives its start from the process — the full scaled-VE assembly.
     torch.manual_seed(0)
     scale = 10.0
-    process = VE(2e-4 * scale, scale)
+    process = GaussianInterpolant(VE(2e-4 * scale, scale))
     mu0, s0 = 0.5, 1.0
     sampler = EulerMaruyama(
         GenerativeCalculator(
@@ -309,8 +302,8 @@ def test_ancestral_on_ve_matches_the_score_form_update():
     # On VE the exact-posterior step must reduce to the classic ancestral
     # update x + score (sigma_t^2 - sigma_s^2) + matched noise — the
     # GPFF/NCSN sampler, here recovered rather than reimplemented.
-    process = VE(0.01, 3.0)
-    score_fn = analytic_score(process, 0.5, 0.7, x1_std=process.std)
+    process = GaussianInterpolant(VE(0.01, 3.0))
+    score_fn = analytic_score(process, 0.5, 0.7, x1_std=process.schedule.sigma_max)
     calculator = GenerativeCalculator(
         batch_model(score_fn), process, ScoreParametrization()
     )
@@ -322,8 +315,8 @@ def test_ancestral_on_ve_matches_the_score_form_update():
     torch.manual_seed(1)
     stepped = sample.Ancestral(calculator).step({}, x, t, dt)
 
-    sig_t = expand_t(process.sigma(t), x)
-    sig_s = expand_t(process.sigma(t + dt), x)
+    sig_t = expand_t(process.schedule.sigma(t), x)
+    sig_s = expand_t(process.schedule.sigma(t + dt), x)
     torch.manual_seed(1)
     z = torch.randn_like(x)
     expected = (
@@ -345,15 +338,15 @@ def test_ancestral_x0_via_score_round_trips_an_x0_head(vp):
 
     x = torch.randn(16, 2, dtype=torch.float64)
     t = torch.full((16,), 0.7, dtype=torch.float64)
-    score = par.to_score(vp, x0_model(x, t), x, t)
-    x0_hat = vp.sde().x0_from_score(x, score, t)
+    score = par.to_score(vp.schedule, x0_model(x, t), x, t)
+    x0_hat = SDE(vp.schedule).x0_from_score(x, score, t)
     assert torch.allclose(x0_hat, torch.full_like(x, 1.5), rtol=1e-12)
 
 
 def test_ancestral_on_scaled_ve_recovers_data_stats():
     torch.manual_seed(0)
     scale = 10.0
-    process = VE(2e-4 * scale, scale)
+    process = GaussianInterpolant(VE(2e-4 * scale, scale))
     mu0, s0 = 0.5, 1.0
     sampler = Ancestral(
         GenerativeCalculator(
@@ -365,39 +358,6 @@ def test_ancestral_on_scaled_ve_recovers_data_stats():
     samples = draw(sampler, (4096, 1), 500)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.15)
     assert samples.std().item() == pytest.approx(s0, abs=0.15)
-
-
-# --- flow matching -------------------------------------------------------- #
-
-
-def test_fm_velocity_ode_recovers_data_stats():
-    torch.manual_seed(0)
-    fm = FlowMatching()
-    mu0, s0 = 1.0, 0.5
-    sampler = Heun(
-        GenerativeCalculator(
-            batch_model(analytic_velocity(fm, mu0, s0)), fm, VelocityParametrization()
-        ),
-        eta2=0.0,
-    )
-    samples = draw(sampler, (4096, 1), 100)
-    assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
-    assert samples.std().item() == pytest.approx(s0, abs=0.1)
-
-
-def test_fm_stochastic_sampling_stays_finite():
-    # Regression: g^2 = 2 t sigma_max^2 / (1 - t) diverges at t = 1, so a
-    # t_max of exactly 1 would produce NaNs the moment eta2 > 0.
-    torch.manual_seed(0)
-    fm = FlowMatching()
-    sampler = EulerMaruyama(
-        GenerativeCalculator(
-            batch_model(analytic_velocity(fm, 0.0, 1.0)), fm, VelocityParametrization()
-        ),
-        eta2=1.0,
-    )
-    samples = draw(sampler, (64, 1), 100)
-    assert torch.isfinite(samples).all()
 
 
 # --- plumbing ------------------------------------------------------------- #
@@ -530,15 +490,19 @@ def train_toy(loss_fn, model, mu, sd, steps=1000):
 @pytest.mark.parametrize(
     "process,param_cls,integrator,n_steps,eta2",
     [
-        (VP(), EpsParametrization, EulerMaruyama, 200, 1.0),
-        (VP(), EpsParametrization, Heun, 50, 0.0),
-        (FlowMatching(), VelocityParametrization, Heun, 50, 0.0),
-        (FlowMatching(), VelocityParametrization, EulerMaruyama, 200, 1.0),
+        (GaussianInterpolant(VP()), EpsParametrization, EulerMaruyama, 200, 1.0),
+        (GaussianInterpolant(VP()), EpsParametrization, Heun, 50, 0.0),
         # the classic (sigma_min=0.01, sigma_max=3) schedule, built in the
-        # literature's vocabulary — the split happens inside VE.__init__
-        (VE(0.01, 3.0), EpsParametrization, EulerMaruyama, 500, 1.0),
+        # literature's vocabulary
+        (
+            GaussianInterpolant(VE(0.01, 3.0)),
+            EpsParametrization,
+            EulerMaruyama,
+            500,
+            1.0,
+        ),
     ],
-    ids=["vp-eps-sde", "vp-eps-ode", "fm-vel-ode", "fm-vel-sde", "ve-eps-sde"],
+    ids=["vp-eps-sde", "vp-eps-ode", "ve-eps-sde"],
 )
 def test_trained_model_recovers_data_stats(
     process, param_cls, integrator, n_steps, eta2

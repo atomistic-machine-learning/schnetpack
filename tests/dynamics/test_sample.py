@@ -14,6 +14,9 @@ from schnetpack.generative import (
     VP,
     EpsParametrization,
     FlowMatching,
+    GaussianInterpolant,
+    Interpolant,
+    VELinear,
     VelocityParametrization,
 )
 
@@ -39,12 +42,14 @@ def start(n_rows=6, seed=1):
 
 
 def test_sample_draws_from_the_processs_prior():
-    driver = sample.Heun(GenerativeCalculator(model, VP(), EpsParametrization()))
+    driver = sample.Heun(
+        GenerativeCalculator(model, GaussianInterpolant(VP()), EpsParametrization())
+    )
     assert driver.prior is not None
     template = {properties.R: torch.empty(5, 3, dtype=torch.float64)}
     out = driver.run(driver.prior.sample_from_batch(template), 4)
     assert out[properties.R].shape == (5, 3)
-    assert torch.all(out[properties.t] == driver.process.t_min)
+    assert torch.all(out[properties.t] == driver.process.schedule.t_min)
 
 
 def test_sample_refuses_a_calculator_without_a_process():
@@ -52,20 +57,22 @@ def test_sample_refuses_a_calculator_without_a_process():
         sample.Heun(model)
 
 
-def test_sample_refuses_a_process_without_the_gaussian_kernel():
+def test_sample_refuses_a_plain_schedule():
     from tests.dynamics.test_sampling import ShapedPrior
 
     calculator = GenerativeCalculator(
-        model, FlowMatching(prior=ShapedPrior()), VelocityParametrization()
+        model,
+        Interpolant(FlowMatching(), prior=ShapedPrior()),
+        VelocityParametrization(),
     )
-    with pytest.raises(ValueError, match="chart"):
+    with pytest.raises(TypeError, match="chart"):
         sample.Heun(calculator, eta2=0.0)
-    with pytest.raises(ValueError, match="chart"):
+    with pytest.raises(TypeError, match="chart"):
         sample.Ancestral(calculator)
 
 
 def test_freeze_scaffold_holds_the_reference_on_a_sampler():
-    process, parametrization = VP(), EpsParametrization()
+    process, parametrization = GaussianInterpolant(VP()), EpsParametrization()
     batch = start()
     mask = torch.tensor([True, False, True, False, False, False])
     batch = {
@@ -85,9 +92,9 @@ def test_freeze_scaffold_holds_the_reference_on_a_sampler():
 @pytest.mark.parametrize(
     "process, parametrization, eta2",
     [
-        (VP(), EpsParametrization(), 1.0),
-        (VP(), EpsParametrization(), 0.0),
-        (FlowMatching(), VelocityParametrization(), 0.0),
+        (GaussianInterpolant(VP()), EpsParametrization(), 1.0),
+        (GaussianInterpolant(VP()), EpsParametrization(), 0.0),
+        (GaussianInterpolant(VELinear()), VelocityParametrization(), 0.0),
     ],
 )
 def test_euler_step_costs_exactly_one_model_evaluation(process, parametrization, eta2):
