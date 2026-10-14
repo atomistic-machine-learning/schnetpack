@@ -51,16 +51,6 @@ class Integrator(abc.ABC):
         """
         raise NotImplementedError
 
-    @staticmethod
-    def noise(
-        sampler: "Sampler", x: torch.Tensor, t: torch.Tensor, dt: torch.Tensor
-    ) -> torch.Tensor | float:
-        """Euler–Maruyama increment g(t) sqrt(|dt|) z, or 0 without diffusion."""
-        g = sampler.diffusion(t)
-        if g is None:
-            return 0.0
-        return expand_t(g, x) * dt.abs().sqrt() * torch.randn_like(x)
-
 
 class Euler(Integrator):
     """
@@ -69,7 +59,11 @@ class Euler(Integrator):
     """
 
     def step(self, sampler, batch, x, t, dt):
-        return x + sampler.drift(batch, x, t) * dt + self.noise(sampler, x, t, dt)
+        x_new = x + sampler.drift(batch, x, t) * dt
+        g = sampler.diffusion(t)
+        if g is None:
+            return x_new
+        return x_new + expand_t(g, x) * dt.abs().sqrt() * torch.randn_like(x)
 
 
 class Heun(Integrator):
@@ -82,4 +76,8 @@ class Heun(Integrator):
     def step(self, sampler, batch, x, t, dt):
         f1 = sampler.drift(batch, x, t)
         f2 = sampler.drift(batch, x + f1 * dt, t + dt)
-        return x + 0.5 * (f1 + f2) * dt + self.noise(sampler, x, t, dt)
+        x_new = x + 0.5 * (f1 + f2) * dt
+        g = sampler.diffusion(t)
+        if g is None:
+            return x_new
+        return x_new + expand_t(g, x) * dt.abs().sqrt() * torch.randn_like(x)
