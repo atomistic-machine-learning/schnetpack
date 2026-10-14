@@ -11,9 +11,12 @@ Theory and the catalog: ``docs_new/parametrizations.md``.
 """
 
 import abc
+from collections.abc import Callable
 
 import torch
+from torch import nn
 
+from schnetpack import properties
 from schnetpack.generative.differential_equations import SDE
 from schnetpack.generative.noising import expand_t
 from schnetpack.generative.schedules import GaussianSchedule, Schedule
@@ -25,6 +28,7 @@ __all__ = [
     "X0Parametrization",
     "VelocityParametrization",
     "PseudoForceParametrization",
+    "ParametrizedModel",
 ]
 
 
@@ -42,7 +46,8 @@ def _require_gaussian(schedule: Schedule, cls: type) -> None:
 
 class Parametrization(abc.ABC):
     """
-    Contract between a raw model output and the score/velocity/x0 fields.
+    Contract between a raw model output and the score, noise, velocity, x0
+    and pseudo-force fields.
 
     Every conversion routes through the score by default; a parametrization
     that *is* one of the fields overrides that field to return the output
@@ -123,6 +128,27 @@ class Parametrization(abc.ABC):
         sigma = expand_t(schedule.sigma(t), x_t)
         return (x_t + sigma**2 * score) / a
 
+    def to_noise(
+        self,
+        schedule: Schedule,
+        output: torch.Tensor,
+        x_t: torch.Tensor,
+        t: torch.Tensor,
+    ) -> torch.Tensor:
+        """Expected unit noise eps = -sigma score, from the raw output."""
+        score = self.to_score(schedule, output, x_t, t)
+        return -expand_t(schedule.sigma(t), x_t) * score
+
+    def to_pseudo_force(
+        self,
+        schedule: Schedule,
+        output: torch.Tensor,
+        x_t: torch.Tensor,
+        t: torch.Tensor,
+    ) -> torch.Tensor:
+        """Pseudo force F = 2 (x0 - x_t), from the raw output."""
+        return 2.0 * (self.to_x0(schedule, output, x_t, t) - x_t)
+
 
 class ScoreParametrization(Parametrization):
     """
@@ -158,6 +184,9 @@ class EpsParametrization(Parametrization):
     def to_score(self, schedule, output, x_t, t):
         # score = -eps / sigma
         return -output / expand_t(schedule.sigma(t), output)
+
+    def to_noise(self, schedule, output, x_t, t):
+        return output
 
 
 class X0Parametrization(Parametrization):
@@ -225,8 +254,83 @@ class PseudoForceParametrization(Parametrization):
         # Direct, and exact at b = 0 — the definition of F rearranged.
         return x_t + 0.5 * output
 
+    def to_pseudo_force(self, schedule, output, x_t, t):
+        return output
+
     def to_score(self, schedule, output, x_t, t):
         # Tweedie on the recovered x0; for VE this reduces to F / (2 sigma^2).
         a = expand_t(schedule.a(t), x_t)
         sigma = expand_t(schedule.sigma(t), x_t)
         return (a * self.to_x0(schedule, output, x_t, t) - x_t) / sigma**2
+
+
+class ParametrizedModel(nn.Module):
+    """
+    A model with a raw head, read as the fields a calculator expects.
+
+    Runs ``model`` and converts its raw head ``outputs[output_key]`` with the
+    parametrization it was trained under into every field whose key is set,
+    written next to the model's own outputs. Fields whose key is None are not
+    computed. This is where the conversions live, so the
+    :class:`~schnetpack.dynamics.calculator.GenerativeCalculator` subclasses
+    can read their field straight from the outputs.
+    """
+
+    def __init__(
+        self,
+        model: Callable[[dict[str, torch.Tensor]], dict[str, torch.Tensor]],
+        parametrization: Parametrization,
+        schedule: Schedule,
+        output_key: str = "prediction",
+        key: str = properties.R,
+        time_key: str = properties.t,
+        score_key: str | None = None,
+        noise_key: str | None = None,
+        velocity_key: str | None = None,
+        x0_key: str | None = None,
+        pseudo_force_key: str | None = None,
+    ):
+        """
+        Args:
+            model: batch -> outputs, with the raw head under ``output_key``
+            parametrization: contract the model was trained under
+            schedule: schedule the model was trained on
+            output_key: model output holding the raw head
+            key: batch key holding x_t
+            time_key: batch key holding the path time
+            score_key: output key for the score, or None
+            noise_key: output key for the expected unit noise, or None
+            velocity_key: output key for the velocity, or None
+            x0_key: output key for the denoised sample, or None
+            pseudo_force_key: output key for the pseudo force, or None
+
+        Raises:
+            ValueError: if no field key is set.
+        """
+        super().__init__()
+        parametrization.validate(schedule)
+        conversions = {
+            score_key: parametrization.to_score,
+            noise_key: parametrization.to_noise,
+            velocity_key: parametrization.to_velocity,
+            x0_key: parametrization.to_x0,
+            pseudo_force_key: parametrization.to_pseudo_force,
+        }
+        conversions.pop(None, None)
+        if not conversions:
+            raise ValueError("ParametrizedModel needs at least one field key")
+        self.model = model
+        self.parametrization = parametrization
+        self.schedule = schedule
+        self.output_key = output_key
+        self.key = key
+        self.time_key = time_key
+        self.conversions = conversions
+
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        outputs = dict(self.model(inputs))
+        raw = outputs[self.output_key]
+        x_t, t = inputs[self.key], inputs[self.time_key]
+        for field_key, convert in self.conversions.items():
+            outputs[field_key] = convert(self.schedule, raw, x_t, t)
+        return outputs

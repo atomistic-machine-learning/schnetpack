@@ -9,11 +9,10 @@ from schnetpack.dynamics import (
     EulerMaruyama,
     ForceCalculator,
     FreezeScaffold,
-    GenerativeCalculator,
     Hook,
 )
-from schnetpack.generative import VE, VP, GaussianInterpolant, ScoreParametrization
-from tests.dynamics.test_sampling import batch_model
+from schnetpack.generative import VE, VP, GaussianInterpolant
+from tests.dynamics.test_sampling import batch_model, score_calculator
 
 
 class Recorder(Hook):
@@ -47,7 +46,8 @@ def test_sampler_hooks_see_grid_times_around_each_step():
     vp = GaussianInterpolant(VP())
     recorder = Recorder()
     sampler = EulerMaruyama(
-        GenerativeCalculator(batch_model(lambda x, t: -x), vp, ScoreParametrization()),
+        score_calculator(batch_model(lambda x, t: -x), vp.schedule),
+        vp.schedule,
         hooks=[recorder],
     )
     n_steps = 4
@@ -69,12 +69,7 @@ def test_sampler_hooks_see_grid_times_around_each_step():
 def test_sampler_run_starts_at_t_start():
     recorder = Recorder()
     sampler = EulerMaruyama(
-        GenerativeCalculator(
-            batch_model(lambda x, t: -x),
-            GaussianInterpolant(VP()),
-            ScoreParametrization(),
-        ),
-        hooks=[recorder],
+        score_calculator(batch_model(lambda x, t: -x), VP()), VP(), hooks=[recorder]
     )
     sampler.run({properties.R: torch.randn(2, 1)}, 3, t_start=0.5)
     assert torch.allclose(recorder.log[0][2], torch.full((2,), 0.5))
@@ -137,10 +132,7 @@ def test_scaffold_sampler_model_sees_clean_scaffold():
         return -x
 
     sampler = EulerMaruyama(
-        GenerativeCalculator(
-            batch_model(model), GaussianInterpolant(VP()), ScoreParametrization()
-        ),
-        hooks=[FreezeScaffold()],
+        score_calculator(batch_model(model), VP()), VP(), hooks=[FreezeScaffold()]
     )
     out = sampler.run(
         sampler.prior.sample_from_batch(scaffold_batch(mask, reference)), 5

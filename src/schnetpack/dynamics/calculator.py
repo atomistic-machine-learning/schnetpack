@@ -8,18 +8,17 @@ A calculator turns a model into the field one family of drivers steps on:
   negative gradient of an energy, in eV/Angstrom; or a *pseudo* force, a
   displacement such as GPFF's 2 (x0 - x), in Angstrom, with no energy
   behind it.
-- :class:`GenerativeCalculator` hands the time-indexed drivers the score,
-  the denoised sample x0 or the probability-flow velocity at (x, t). It owns
-  the model together with the process and the parametrization it was trained
-  under, validated once, so the drivers read the process from here.
+- :class:`GenerativeCalculator` hands the time-indexed drivers one field
+  at (x, t) — score, noise, velocity, x0 or pseudo force, one subclass
+  each — read directly from the model's outputs, without conversion.
 
 Both share the plumbing of :class:`Calculator`: the device and dtype, the
 neighbor list, the gradient policy, the optional cache of the last outputs,
 and the rule that the driver's batch is never written to — the neighbor list
 and the model get a shallow copy, so the keys they add never reach it. Both
 also take :mod:`~schnetpack.dynamics.guidance` terms, which they add to the
-field they return: to the forces, or to the score (and through it to x0 and
-the velocity). A driver sees only the guided field.
+field they return: to the forces, or to the generative field. A driver sees
+only the guided field.
 
 :class:`EnsembleCalculator` is a :class:`ForceCalculator` for an ensemble of
 force fields: it reports the members' mean, which drives any driver exactly
@@ -35,9 +34,6 @@ from torch import nn
 
 from schnetpack import properties
 from schnetpack.dynamics.guidance import Guidance
-from schnetpack.generative.differential_equations import SDE
-from schnetpack.generative.noising import Interpolant, expand_t
-from schnetpack.generative.parametrizations import Parametrization
 from schnetpack.uncertainty import AbsoluteUncertainty, Uncertainty
 from schnetpack.units import convert_units
 
@@ -45,6 +41,11 @@ __all__ = [
     "Calculator",
     "ForceCalculator",
     "GenerativeCalculator",
+    "ScoreCalculator",
+    "NoiseCalculator",
+    "VelocityCalculator",
+    "X0Calculator",
+    "PseudoForceCalculator",
     "EnsembleCalculator",
     "NNEnsemble",
 ]
@@ -371,43 +372,36 @@ class ForceCalculator(Calculator):
 
 class GenerativeCalculator(Calculator):
     """
-    Run a generative model on spk batches and read its head as a field.
+    Run a time-indexed generative model on spk batches and read one output.
 
-    Owns the model together with the process and the parametrization it was
-    trained under; the pair is validated at construction, so it cannot
-    diverge between the calculator and the driver, which reads
-    :attr:`process` from here. :meth:`score`, :meth:`x0` and
-    :meth:`velocity` evaluate the model at (x, t) and convert its raw head,
-    ``outputs[output_key]``; the driver asks for whichever its step needs.
-
-    The batch is in the model's units: the process's prior and schedule are
-    fixed in the training data's units, and the raw head has no single unit
-    of its own (x0 is a length, the noise has none, the score is an inverse
-    length), so nothing is converted. ``position_unit`` names that length
-    unit for the guidance alone.
+    :meth:`field` evaluates the model at (x, t) — ``batch`` with the moved
+    key replaced by ``x`` and the time by ``t`` — and returns
+    ``outputs[output_key]`` plus the guidance. There are no conversions: the
+    model must return the field the calculator stands for. A model that
+    returns a raw head under another parametrization is wrapped in
+    :class:`~schnetpack.generative.parametrizations.ParametrizedModel` first.
 
     Guidance — restraints such as
     :class:`~schnetpack.dynamics.guidance.HarmonicRestraint`, or terms
-    kT ∇ log p — guides the score: the sum of the weighted terms
-    F = sum_i w_i F_i is added to it, score + F. A term's ``weight`` w_i is
-    its 1/kT, in 1/eV, so a restraint of weight w tilts the sampled density
-    by exp(-w E). The terms see the batch with the path time under
-    ``time_key``, so a term may depend on t. The other fields follow from the
-    guided score through the process's (f, g) chart, the velocity as
-    v - 1/2 g^2 F and x0 by Tweedie's formula as x0 + sigma^2 / a F, so
-    guidance requires the chart, which is acquired at construction. The
-    guidance is evaluated at the noisy iterate x_t, not at a clean estimate:
-    an approximation that is exact only as t -> t_min. :meth:`raw` stays the
-    model's own head.
+    kT ∇ log p — is added to the field as it is: field + sum_i w_i F_i, so
+    the same terms tilt whichever field the calculator returns. The terms see
+    the batch with the path time under ``time_key``, so a term may depend on
+    t. The guidance is evaluated at the noisy iterate x_t, not at a clean
+    estimate.
+
+    The subclasses name the field: :class:`ScoreCalculator`,
+    :class:`NoiseCalculator`, :class:`VelocityCalculator`,
+    :class:`X0Calculator`, :class:`PseudoForceCalculator`.
     """
+
+    default_output_key: str = ""
+    """Model output holding the field, unless overridden at construction."""
 
     def __init__(
         self,
         model: str | Callable[[dict[str, torch.Tensor]], dict[str, torch.Tensor]],
-        process: Interpolant,
-        parametrization: Parametrization,
+        output_key: str | None = None,
         key: str = properties.R,
-        output_key: str = "prediction",
         time_key: str = properties.t,
         position_unit: str | float = "Ang",
         **kwargs,
@@ -415,98 +409,90 @@ class GenerativeCalculator(Calculator):
         """
         Args:
             model: batch -> outputs, or the path to a model saved on disk
-            process: forward process the model was trained on
-            parametrization: contract the model was trained under
-            key: batch key the fields are taken with respect to
-            output_key: model output holding the raw head
+            output_key: model output holding the field (default: the
+                subclass's :attr:`default_output_key`)
+            key: batch key the field is taken with respect to
             time_key: batch key the path time is written to, one value per
-                row of ``key`` (the key
-                :class:`~schnetpack.generative.transforms.Diffuse` wrote in
-                training)
-            position_unit: length unit of ``key`` — the process's space,
-                i.e. the training data's. Used only to evaluate the guidance
-                in Angstrom.
+                row of ``key``
+            position_unit: length unit of ``key``, the training data's. Used
+                only to evaluate the guidance in Angstrom.
 
         Remaining keyword arguments are those of :class:`Calculator`.
         """
-        parametrization.validate(process.schedule)
         super().__init__(model, **kwargs)
-        self.process = process
-        self.parametrization = parametrization
+        self.output_key = output_key or self.default_output_key
         self.key = key
-        self.output_key = output_key
         self.time_key = time_key
         self.position_conversion = convert_units(position_unit, "Angstrom")
-        # guidance reaches the velocity and x0 through the chart: acquire it
-        # now, so a configuration without one fails here, not mid-run
-        self.sde = SDE(process.schedule) if self.guidance else None
 
     @staticmethod
     def _rows(x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         """``t`` as one value per row of ``x``."""
         return t.expand(x.shape[0]) if t.dim() == 0 else t
 
-    def raw(
-        self, batch: Mapping[str, Any], x: torch.Tensor, t: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        The model's raw head at (x, t): ``batch`` with the moved key replaced
-        by ``x`` and the time by ``t``, a scalar or one value per row of x.
-        """
-        inputs = {**batch, self.key: x, self.time_key: self._rows(x, t)}
-        return self(inputs)[self.output_key]
-
-    def guidance_score(
+    def guidance_term(
         self, batch: Mapping[str, Any], x: torch.Tensor, t: torch.Tensor
     ) -> torch.Tensor | None:
         """
-        The guidance's score term F at (x, t), in the moved key's units, or
-        None without guidance. F is the sum of the weighted terms — each
-        weight a 1/kT — evaluated on ``batch`` with the path time ``t`` under
-        ``time_key``, for guidance that depends on t.
+        The weighted sum of the guidance terms at (x, t), in the moved key's
+        units, or None without guidance.
         """
-        # TODO: only score guidance for now: every term is a force-like score
-        # increment, and velocity and x0 follow from it through the chart.
-        # Velocity guidance (e.g. for chart-free flow matching) needs terms
-        # that declare their own space, converted per requested field.
         if not self.guidance:
             return None
         inputs = {**batch, self.key: x, self.time_key: self._rows(x, t)}
         field = self.guidance_field(inputs, x * self.position_conversion)
         return self.position_conversion * field.to(x)
 
-    def score(
+    def field(
         self, batch: Mapping[str, Any], x: torch.Tensor, t: torch.Tensor
     ) -> torch.Tensor:
-        """Score of the marginal p_t at (x, t), plus the guidance's term."""
-        raw = self.raw(batch, x, t)
-        score = self.parametrization.to_score(self.process.schedule, raw, x, t)
-        guidance = self.guidance_score(batch, x, t)
-        return score if guidance is None else score + guidance
+        """
+        The model's ``output_key`` at (x, t) plus the guidance, with ``t`` a
+        scalar or one value per row of x.
 
-    def x0(
-        self, batch: Mapping[str, Any], x: torch.Tensor, t: torch.Tensor
-    ) -> torch.Tensor:
-        """Denoised sample x0 at (x, t), shifted by sigma^2 / a times the guidance."""
-        raw = self.raw(batch, x, t)
-        x0 = self.parametrization.to_x0(self.process.schedule, raw, x, t)
-        guidance = self.guidance_score(batch, x, t)
-        if guidance is None:
-            return x0
-        t = self._rows(x, t)
-        scale = self.process.schedule.sigma(t) ** 2 / self.process.schedule.a(t)
-        return x0 + expand_t(scale, x) * guidance
+        Raises:
+            KeyError: if the model does not return ``output_key``.
+        """
+        inputs = {**batch, self.key: x, self.time_key: self._rows(x, t)}
+        outputs = self(inputs)
+        if self.output_key not in outputs:
+            raise KeyError(
+                f"{type(self).__name__} expects the model to return "
+                f"{self.output_key!r}; got {sorted(outputs)}"
+            )
+        field = outputs[self.output_key]
+        guidance = self.guidance_term(batch, x, t)
+        return field if guidance is None else field + guidance
 
-    def velocity(
-        self, batch: Mapping[str, Any], x: torch.Tensor, t: torch.Tensor
-    ) -> torch.Tensor:
-        """Probability-flow velocity at (x, t), shifted by -1/2 g^2 times the guidance."""
-        raw = self.raw(batch, x, t)
-        velocity = self.parametrization.to_velocity(self.process.schedule, raw, x, t)
-        guidance = self.guidance_score(batch, x, t)
-        if guidance is None:
-            return velocity
-        return velocity - 0.5 * expand_t(self.sde.g2(self._rows(x, t)), x) * guidance
+
+class ScoreCalculator(GenerativeCalculator):
+    """The score of the marginal p_t at (x, t)."""
+
+    default_output_key = "score"
+
+
+class NoiseCalculator(GenerativeCalculator):
+    """The expected unit noise E[eps | x_t = x] at (x, t)."""
+
+    default_output_key = "noise"
+
+
+class VelocityCalculator(GenerativeCalculator):
+    """The velocity E[d/dt x_t | x_t = x] at (x, t)."""
+
+    default_output_key = "velocity"
+
+
+class X0Calculator(GenerativeCalculator):
+    """The denoised sample E[x0 | x_t = x] at (x, t)."""
+
+    default_output_key = "x0"
+
+
+class PseudoForceCalculator(GenerativeCalculator):
+    """The pseudo force at (x, t), a displacement toward the clean structure."""
+
+    default_output_key = "pseudo_force"
 
 
 class NNEnsemble(nn.Module):

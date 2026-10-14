@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from schnetpack import properties
-from schnetpack.dynamics import GenerativeCalculator
+from schnetpack.dynamics import VelocityCalculator
 from schnetpack.dynamics.guidance import Guidance
 from schnetpack.dynamics.hooks import FreezeScaffold
 from schnetpack.dynamics.sample import sampler as sample
@@ -15,10 +15,10 @@ from schnetpack.generative import (
     EpsParametrization,
     FlowMatching,
     GaussianInterpolant,
-    Interpolant,
     VELinear,
     VelocityParametrization,
 )
+from tests.dynamics.test_sampling import score_calculator
 
 
 def model(batch):
@@ -41,34 +41,32 @@ def start(n_rows=6, seed=1):
     }
 
 
-def test_sample_draws_from_the_processs_prior():
+def test_sample_draws_from_the_schedules_prior():
+    schedule = VP()
     driver = sample.Heun(
-        GenerativeCalculator(model, GaussianInterpolant(VP()), EpsParametrization())
+        score_calculator(model, schedule, EpsParametrization()), schedule
     )
     assert driver.prior is not None
     template = {properties.R: torch.empty(5, 3, dtype=torch.float64)}
     out = driver.run(driver.prior.sample_from_batch(template), 4)
     assert out[properties.R].shape == (5, 3)
-    assert torch.all(out[properties.t] == driver.process.schedule.t_min)
+    assert torch.all(out[properties.t] == schedule.t_min)
 
 
-def test_sample_refuses_a_calculator_without_a_process():
-    with pytest.raises(TypeError, match="GenerativeCalculator"):
-        sample.Heun(model)
+def test_sample_refuses_a_calculator_without_a_score():
+    with pytest.raises(TypeError, match="ScoreCalculator"):
+        sample.Heun(model, VP())
+    with pytest.raises(TypeError, match="ScoreCalculator"):
+        sample.Heun(VelocityCalculator(model), VP())
 
 
 def test_sample_refuses_a_plain_schedule():
-    from tests.dynamics.test_sampling import ShapedPrior
-
-    calculator = GenerativeCalculator(
-        model,
-        Interpolant(FlowMatching(), prior=ShapedPrior()),
-        VelocityParametrization(),
-    )
+    schedule = FlowMatching()
+    calculator = score_calculator(model, schedule, VelocityParametrization())
     with pytest.raises(TypeError, match="chart"):
-        sample.Heun(calculator, eta2=0.0)
+        sample.Heun(calculator, schedule, eta2=0.0)
     with pytest.raises(TypeError, match="chart"):
-        sample.Ancestral(calculator)
+        sample.Ancestral(calculator, schedule)
 
 
 def test_freeze_scaffold_holds_the_reference_on_a_sampler():
@@ -81,7 +79,8 @@ def test_freeze_scaffold_holds_the_reference_on_a_sampler():
         properties.R_reference: torch.zeros_like(batch[properties.R]),
     }
     driver = sample.EulerMaruyama(
-        GenerativeCalculator(model, process, parametrization),
+        score_calculator(model, process.schedule, parametrization),
+        process.schedule,
         hooks=[FreezeScaffold()],
     )
     torch.manual_seed(0)
@@ -106,7 +105,9 @@ def test_euler_step_costs_exactly_one_model_evaluation(process, parametrization,
         return model(batch)
 
     driver = sample.EulerMaruyama(
-        GenerativeCalculator(counting, process, parametrization), eta2=eta2
+        score_calculator(counting, process.schedule, parametrization),
+        process.schedule,
+        eta2=eta2,
     )
     x = start()[properties.R]
     t = torch.full((x.shape[0],), 0.5, dtype=x.dtype)

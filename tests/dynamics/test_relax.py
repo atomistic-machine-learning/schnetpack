@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from schnetpack import properties
-from schnetpack.dynamics import DirectDenoising, ForceCalculator, GenerativeCalculator
+from schnetpack.dynamics import DirectDenoising, ForceCalculator, PseudoForceCalculator
 from schnetpack.generative import (
     VE,
     DatasetPrior,
@@ -97,11 +97,7 @@ def test_direct_denoising_runs_on_a_pseudo_force_only():
     with pytest.raises(TypeError, match="physical"):
         DirectDenoising(ForceCalculator(IDLE))
     with pytest.raises(TypeError, match="ForceCalculator"):
-        DirectDenoising(
-            GenerativeCalculator(
-                IDLE, GaussianInterpolant(VE(0.01, 3.0)), PseudoForceParametrization()
-            )
-        )
+        DirectDenoising(PseudoForceCalculator(IDLE))
 
 
 def test_direct_denoising_stops_on_fmax():

@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from schnetpack import properties
-from schnetpack.dynamics import EulerMaruyama, GenerativeCalculator
+from schnetpack.dynamics import EulerMaruyama
 from schnetpack.generative import (
     VE,
     DatasetPrior,
@@ -14,6 +14,7 @@ from schnetpack.generative import (
     Interpolant,
     StatisticsStructures,
 )
+from tests.dynamics.test_sampling import score_calculator
 
 
 def positions(n, idx_m=None):
@@ -165,7 +166,11 @@ def test_the_sampler_starts_a_batch_on_the_subspace():
         seen.setdefault("x_init", x.clone())
         return {"prediction": torch.zeros_like(x)}
 
-    sampler = EulerMaruyama(GenerativeCalculator(model, process, EpsParametrization()))
+    sampler = EulerMaruyama(
+        score_calculator(model, process.schedule, EpsParametrization()),
+        process.schedule,
+        prior=process.sampling_prior(),
+    )
 
     template = {properties.idx_m: idx_m, properties.R: torch.empty(96, 3)}
     sampler.run(sampler.prior.sample_from_batch(template), n_steps=2)
@@ -187,7 +192,10 @@ def test_given_positions_are_denoised_as_they_are():
         seen.setdefault("x_init", x.clone())
         return {"prediction": torch.zeros_like(x)}
 
-    sampler = EulerMaruyama(GenerativeCalculator(model, process, EpsParametrization()))
+    sampler = EulerMaruyama(
+        score_calculator(model, process.schedule, EpsParametrization()),
+        process.schedule,
+    )
 
     # the prior is not consulted, so the layout does not re-center them
     batch = {properties.R: x_init, properties.idx_m: torch.zeros(6, dtype=torch.long)}

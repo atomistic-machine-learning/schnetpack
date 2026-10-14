@@ -5,8 +5,8 @@ from schnetpack import properties
 from schnetpack.dynamics import (
     Ancestral,
     EulerMaruyama,
-    GenerativeCalculator,
     Heun,
+    ScoreCalculator,
     UniformGrid,
 )
 from schnetpack.dynamics.sample import sampler as sample
@@ -18,10 +18,8 @@ from schnetpack.generative import (
     FlowMatching,
     GaussianInterpolant,
     GaussianPrior,
-    Interpolant,
     MatchingLoss,
-    PCVarianceCoupling,
-    Prior,
+    ParametrizedModel,
     ReverseSDE,
     ScoreParametrization,
     StatisticsStructures,
@@ -38,6 +36,16 @@ def batch_model(fn):
 
 #: placeholder calculator for drivers that are only assembled, never run
 IDLE = batch_model(lambda x, t: torch.zeros_like(x))
+
+
+def score_calculator(model, schedule, parametrization=None, key=properties.R, **kw):
+    """The score of a raw-head ``model`` trained under ``parametrization`` (default: score)."""
+    parametrization = parametrization or ScoreParametrization()
+    return ScoreCalculator(
+        ParametrizedModel(model, parametrization, schedule, key=key, score_key="score"),
+        key=key,
+        **kw,
+    )
 
 
 def draw(dynamics, shape, n_steps):
@@ -91,42 +99,26 @@ def test_gaussian_prior_has_the_declared_std():
     assert samples.std().item() == pytest.approx(3.0, rel=0.05)
 
 
-def test_sampler_defaults_to_the_processs_sampling_prior(vp):
-    # b(t_max) = 1, so the default unit Gaussian diffusion starts at N(0, I).
-    sampler = EulerMaruyama(GenerativeCalculator(IDLE, vp, ScoreParametrization()))
+def test_sampler_defaults_to_a_gaussian_at_sigma_max(vp):
+    # sigma(t_max) = 1 on VP, so the default start is N(0, I).
+    sampler = EulerMaruyama(score_calculator(IDLE, vp.schedule), vp.schedule)
     assert isinstance(sampler.prior, GaussianPrior)
     assert sampler.prior.std == pytest.approx(1.0)
 
 
-def test_sampler_derives_the_scale_from_the_process():
-    # The train/sample tie: the process carries the prior its x1 endpoint was
-    # drawn from, and the sampler starts from exactly that — the same object.
-    process = GaussianInterpolant(VE(0.01, 50.0))
-    sampler = EulerMaruyama(GenerativeCalculator(IDLE, process, ScoreParametrization()))
+def test_sampler_derives_the_scale_from_the_schedule():
+    schedule = VE(0.01, 50.0)
+    sampler = EulerMaruyama(score_calculator(IDLE, schedule), schedule)
     assert isinstance(sampler.prior, GaussianPrior)
     assert sampler.prior.std == pytest.approx(50.0)
-    assert sampler.prior is process.prior
 
 
-def test_sampler_validates_the_pair():
-    # The score/noise heads demand a Gaussian kernel; the sampler is where the
-    # (process, parametrization) pair meets, so it must refuse at construction.
-    plain = Interpolant(FlowMatching())
-    with pytest.raises(TypeError, match="Gaussian kernel"):
-        EulerMaruyama(
-            GenerativeCalculator(IDLE, plain, ScoreParametrization()),
-            prior=GaussianPrior(),
-        )
-
-
-def test_sampler_refuses_when_the_process_cannot_state_its_start():
-    # A coupling that reshapes x1's marginal has no data-free start; the
-    # sampler must refuse rather than guess, before it reaches for the chart.
-    process = Interpolant(VP(), coupling=PCVarianceCoupling())
-    with pytest.raises(ValueError, match="marginal"):
-        EulerMaruyama(
-            GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=0.0
-        )
+def test_sampler_takes_a_given_prior(vp):
+    prior = GaussianPrior(std=2.0)
+    sampler = EulerMaruyama(
+        score_calculator(IDLE, vp.schedule), vp.schedule, prior=prior
+    )
+    assert sampler.prior is prior
 
 
 # --- the reverse process -------------------------------------------------- #
@@ -180,18 +172,6 @@ def test_eta2_zero_has_no_diffusion(vp):
 # --- assembly: who gets the chart, who never touches it -------------------- #
 
 
-class ShapedPrior(Prior):
-    """A non-Gaussian endpoint *with* a declared scale — the configuration
-    that used to sail through f/g2 and Tweedie silently."""
-
-    gaussian = False
-    std = 2.0
-
-    def sample_positions(self, batch):
-        u = torch.rand_like(batch[properties.R])
-        return self.std * (2.0 * u - 1.0)
-
-
 def test_sde_refuses_a_plain_schedule():
     with pytest.raises(TypeError, match="chart"):
         SDE(FlowMatching())
@@ -199,27 +179,19 @@ def test_sde_refuses_a_plain_schedule():
 
 def test_plain_schedule_fails_at_assembly_not_silently():
     # An x0/velocity head on a plain schedule validates fine (its target is a
-    # plain conditional expectation) but its sampling conversions go through
-    # the (f, g) chart, which a plain schedule does not have. The sampler must
-    # refuse at construction, naming the obstruction.
-    process = Interpolant(FlowMatching(), prior=ShapedPrior())
-    with pytest.raises(TypeError, match="chart"):
-        EulerMaruyama(
-            GenerativeCalculator(IDLE, process, X0Parametrization()), eta2=1.0
-        )
-    with pytest.raises(TypeError, match="chart"):
-        # the probability-flow ODE converts too
-        Heun(GenerativeCalculator(IDLE, process, X0Parametrization()), eta2=0.0)
-    with pytest.raises(TypeError, match="chart"):
-        Ancestral(
-            GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=0.0
-        )
-    with pytest.raises(TypeError, match="chart"):  # eta2 > 0 crosses it too
-        EulerMaruyama(
-            GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=1.0
-        )
-    with pytest.raises(TypeError, match="chart"):
-        Heun(GenerativeCalculator(IDLE, process, VelocityParametrization()), eta2=0.0)
+    # plain conditional expectation) but the reverse process needs the (f, g)
+    # chart, which a plain schedule does not have. The sampler must refuse at
+    # construction, naming the obstruction.
+    schedule = FlowMatching()
+    for parametrization in (X0Parametrization(), VelocityParametrization()):
+        calculator = score_calculator(IDLE, schedule, parametrization)
+        with pytest.raises(TypeError, match="chart"):
+            EulerMaruyama(calculator, schedule, eta2=1.0)
+        with pytest.raises(TypeError, match="chart"):
+            # the probability-flow ODE needs it too
+            Heun(calculator, schedule, eta2=0.0)
+        with pytest.raises(TypeError, match="chart"):
+            Ancestral(calculator, schedule, eta2=0.0)
 
 
 # --- end-to-end recovery of the data distribution ------------------------- #
@@ -236,9 +208,8 @@ def test_reverse_process_recovers_data_stats(vp, integrator, n_steps, eta2):
     torch.manual_seed(0)
     mu0, s0 = 1.5, 0.5
     sampler = integrator(
-        GenerativeCalculator(
-            batch_model(analytic_score(vp, mu0, s0)), vp, ScoreParametrization()
-        ),
+        score_calculator(batch_model(analytic_score(vp, mu0, s0)), vp.schedule),
+        vp.schedule,
         eta2=eta2,
     )
     samples = draw(sampler, (4096, 1), n_steps)
@@ -247,18 +218,18 @@ def test_reverse_process_recovers_data_stats(vp, integrator, n_steps, eta2):
 
 
 def test_scaled_ve_recovers_data_stats():
-    # The endpoint scale (the old sigma_max) rides on the prior; the sampler
-    # derives its start from the process — the full scaled-VE assembly.
+    # The sampler derives its start N(0, sigma_max^2) from the schedule — the
+    # full scaled-VE assembly.
     torch.manual_seed(0)
     scale = 10.0
     process = GaussianInterpolant(VE(2e-4 * scale, scale))
     mu0, s0 = 0.5, 1.0
     sampler = EulerMaruyama(
-        GenerativeCalculator(
+        score_calculator(
             batch_model(analytic_score(process, mu0, s0, x1_std=scale)),
-            process,
-            ScoreParametrization(),
+            process.schedule,
         ),
+        process.schedule,
         eta2=1.0,
     )
     samples = draw(sampler, (4096, 1), 500)
@@ -269,9 +240,8 @@ def test_scaled_ve_recovers_data_stats():
 def test_run_partial(vp):
     torch.manual_seed(0)
     sampler = EulerMaruyama(
-        GenerativeCalculator(
-            batch_model(analytic_score(vp, 0.0, 1.0)), vp, ScoreParametrization()
-        )
+        score_calculator(batch_model(analytic_score(vp, 0.0, 1.0)), vp.schedule),
+        vp.schedule,
     )
     x_t = torch.randn(8, 5, 3)
     out = sampler.run(
@@ -289,9 +259,8 @@ def test_ancestral_recovers_data_stats(vp):
     torch.manual_seed(0)
     mu0, s0 = -0.5, 0.8
     sampler = Ancestral(
-        GenerativeCalculator(
-            batch_model(analytic_score(vp, mu0, s0)), vp, ScoreParametrization()
-        )
+        score_calculator(batch_model(analytic_score(vp, mu0, s0)), vp.schedule),
+        vp.schedule,
     )
     samples = draw(sampler, (4096, 1), 1000)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.1)
@@ -304,16 +273,14 @@ def test_ancestral_on_ve_matches_the_score_form_update():
     # GPFF/NCSN sampler, here recovered rather than reimplemented.
     process = GaussianInterpolant(VE(0.01, 3.0))
     score_fn = analytic_score(process, 0.5, 0.7, x1_std=process.schedule.sigma_max)
-    calculator = GenerativeCalculator(
-        batch_model(score_fn), process, ScoreParametrization()
-    )
+    calculator = score_calculator(batch_model(score_fn), process.schedule)
 
     x = torch.randn(32, 2, dtype=torch.float64)
     t = torch.full((32,), 0.8, dtype=torch.float64)
     dt = torch.tensor(-0.1, dtype=torch.float64)
 
     torch.manual_seed(1)
-    stepped = sample.Ancestral(calculator).step({}, x, t, dt)
+    stepped = sample.Ancestral(calculator, process.schedule).step({}, x, t, dt)
 
     sig_t = expand_t(process.schedule.sigma(t), x)
     sig_s = expand_t(process.schedule.sigma(t + dt), x)
@@ -349,11 +316,11 @@ def test_ancestral_on_scaled_ve_recovers_data_stats():
     process = GaussianInterpolant(VE(2e-4 * scale, scale))
     mu0, s0 = 0.5, 1.0
     sampler = Ancestral(
-        GenerativeCalculator(
+        score_calculator(
             batch_model(analytic_score(process, mu0, s0, x1_std=scale)),
-            process,
-            ScoreParametrization(),
-        )
+            process.schedule,
+        ),
+        process.schedule,
     )
     samples = draw(sampler, (4096, 1), 500)
     assert samples.mean().item() == pytest.approx(mu0, abs=0.15)
@@ -381,9 +348,7 @@ def test_batch_keys_reach_the_model_and_the_input_batch_is_untouched(vp):
         "condition": torch.ones(4),
         properties.Rij: torch.zeros(2, 1),
     }
-    out = EulerMaruyama(GenerativeCalculator(model, vp, ScoreParametrization())).run(
-        batch, 3
-    )
+    out = EulerMaruyama(score_calculator(model, vp.schedule), vp.schedule).run(batch, 3)
     assert len(seen) == 3
     assert all(torch.equal(b["condition"], torch.ones(4)) for b in seen)
     assert all(b[properties.t].shape == (4,) for b in seen)
@@ -401,9 +366,7 @@ def test_sampler_moves_any_declared_key(vp):
     def model(batch):
         return {"prediction": -batch["x"]}
 
-    sampler = EulerMaruyama(
-        GenerativeCalculator(model, vp, ScoreParametrization(), key="x")
-    )
+    sampler = EulerMaruyama(score_calculator(model, vp.schedule, key="x"), vp.schedule)
     start = {"x": sampler.prior.sample_positions({properties.R: torch.empty(8, 2)})}
     out = sampler.run(start, 5)
     assert out["x"].shape == (8, 2)
@@ -411,7 +374,7 @@ def test_sampler_moves_any_declared_key(vp):
 
 def test_sampler_derives_position_shape_from_atom_types(vp):
     sampler = EulerMaruyama(
-        GenerativeCalculator(batch_model(lambda x, t: -x), vp, ScoreParametrization())
+        score_calculator(batch_model(lambda x, t: -x), vp.schedule), vp.schedule
     )
     batch = {properties.Z: torch.tensor([1, 6, 8])}
     out = sampler.run(sampler.prior.sample_from_batch(batch), 2)
@@ -424,7 +387,8 @@ def test_sampler_samples_n_structures_from_statistics(vp):
         atom_types=torch.tensor([0, 2, 0, 0, 0, 0, 1, 0, 1]),
     )
     sampler = EulerMaruyama(
-        GenerativeCalculator(batch_model(lambda x, t: -x), vp, ScoreParametrization()),
+        score_calculator(batch_model(lambda x, t: -x), vp.schedule),
+        vp.schedule,
         prior=GaussianPrior(structures=structures),
     )
     out = sampler.sample(5, n_steps=2)
@@ -440,16 +404,15 @@ def test_sampler_samples_n_structures_from_statistics(vp):
 
 
 def test_sample_without_structures_raises(vp):
-    sampler = EulerMaruyama(GenerativeCalculator(IDLE, vp, ScoreParametrization()))
+    sampler = EulerMaruyama(score_calculator(IDLE, vp.schedule), vp.schedule)
     with pytest.raises(ValueError, match="no structures"):
         sampler.sample(4, n_steps=2)
 
 
 def test_sampler_accepts_given_starting_states(vp):
     sampler = EulerMaruyama(
-        GenerativeCalculator(
-            batch_model(analytic_score(vp, 0.0, 1.0)), vp, ScoreParametrization()
-        )
+        score_calculator(batch_model(analytic_score(vp, 0.0, 1.0)), vp.schedule),
+        vp.schedule,
     )
     x_init = torch.full((8, 1), 3.0)
     out = sampler.run({properties.R: x_init}, 5)
@@ -519,7 +482,8 @@ def test_trained_model_recovers_data_stats(
     model = train_toy(MatchingLoss(process, parametrization), ToyNet(), mu, sd)
     samples = draw(
         integrator(
-            GenerativeCalculator(batch_model(model), process, parametrization),
+            score_calculator(batch_model(model), process.schedule, parametrization),
+            process.schedule,
             eta2=eta2,
         ),
         (4096, 1),

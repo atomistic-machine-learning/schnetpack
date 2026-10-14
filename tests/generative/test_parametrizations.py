@@ -358,6 +358,42 @@ def test_x0_parametrization_returns_its_output_untouched():
     assert torch.equal(p.to_x0(process.schedule, output, x_t, t), output)
 
 
+def test_eps_parametrization_returns_its_noise_untouched():
+    p = EpsParametrization()
+    output = torch.randn(8, 3)
+    x_t = torch.randn(8, 3)
+    t = torch.full((8,), 0.5)
+    assert torch.equal(p.to_noise(VP(), output, x_t, t), output)
+
+
+def test_pseudo_force_parametrization_returns_its_output_untouched():
+    p = PseudoForceParametrization()
+    output = torch.randn(8, 3)
+    x_t = torch.randn(8, 3)
+    t = torch.full((8,), 0.5)
+    assert torch.equal(p.to_pseudo_force(VP(), output, x_t, t), output)
+
+
+@pytest.mark.parametrize("cls", PARAM_CLASSES, ids=lambda c: c.__name__)
+def test_noise_and_pseudo_force_follow_from_score_and_x0(cls):
+    # eps = -sigma score and F = 2 (x0 - x_t), whichever route computes them
+    schedule = VP()
+    p = cls()
+    torch.manual_seed(0)
+    output = torch.randn(8, 3, dtype=torch.float64)
+    x_t = torch.randn(8, 3, dtype=torch.float64)
+    t = torch.linspace(0.2, 0.8, 8, dtype=torch.float64)
+    sigma = expand_t(schedule.sigma(t), x_t)
+    torch.testing.assert_close(
+        p.to_noise(schedule, output, x_t, t),
+        -sigma * p.to_score(schedule, output, x_t, t),
+    )
+    torch.testing.assert_close(
+        p.to_pseudo_force(schedule, output, x_t, t),
+        2.0 * (p.to_x0(schedule, output, x_t, t) - x_t),
+    )
+
+
 def test_pseudo_force_magnitude_carries_b_on_a_ve_schedule():
     # The claim the parametrization exists for: on VE a = 1, so the target
     # collapses to -2 b x1 and the spread of F/2 estimates b. This is what

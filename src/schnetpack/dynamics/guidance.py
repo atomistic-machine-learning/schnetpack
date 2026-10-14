@@ -21,8 +21,9 @@ weighted terms enter depends on the calculator's field:
   factor; on a pseudo-force, minus the gradient of ||x - x0||^2 in
   Angstrom^2, it is in Angstrom^2/eV and turns the term into a length.
 - :class:`~schnetpack.dynamics.calculator.GenerativeCalculator` — the
-  weighted term is added to the score, so the weight is 1/kT, in 1/eV; the
-  velocity and x0 follow from the guided score. The batch the term sees then
+  weighted term is added to the calculator's field (score, noise, velocity,
+  x0 or pseudo force) as it is; on the score the weight is 1/kT, in 1/eV.
+  The batch the term sees then
   also holds the path time under the calculator's ``time_key``, for guidance
   that depends on t.
 """
