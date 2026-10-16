@@ -1,7 +1,10 @@
+import importlib.util
+
 import numpy as np
 import pytest
 import torch
 from ase import Atoms
+from ase.build import molecule
 
 import schnetpack as spk
 
@@ -440,3 +443,49 @@ def environment_nonperiodic():
 def environment(request, environment_nonperiodic, environment_periodic):
     environments = [environment_nonperiodic, environment_periodic]
     return environments[request.param]
+
+
+# MACE-OFF, compiled by schnetpack.interfaces.mace_interface
+@pytest.fixture(scope="session")
+def mace_off_archive():
+    """MACE-OFF23 medium as a TorchScript archive in the interface's cache; the
+    first run downloads the weights. Skipped without mace-torch."""
+    if importlib.util.find_spec("mace") is None:
+        pytest.skip("needs mace-torch: pip install 'schnetpack[mace]'")
+    from schnetpack.interfaces.mace_interface import compile_mace_off
+
+    return compile_mace_off("medium")
+
+
+def mace_off_structures():
+    """Rattled ethanol, and ethanol in a cell smaller than twice the cutoff:
+    pairs between images."""
+    ethanol = molecule("CH3CH2OH")
+    ethanol.rattle(0.05, seed=0)
+    periodic = molecule("CH3CH2OH")
+    periodic.rattle(0.05, seed=1)
+    periodic.cell = [6.0, 6.5, 7.0]
+    periodic.pbc = True
+    periodic.center()
+    return {"ethanol": ethanol, "ethanol_periodic": periodic}
+
+
+@pytest.fixture(scope="session")
+def mace_off_reference(mace_off_archive):
+    """MACE's own energies and forces (eV, eV/Å) on :func:`mace_off_structures`,
+    from eager MACE-OFF23 medium, as ``(name, atoms, energy, forces)``."""
+    # import mace sets this on its first import only, and the interface has
+    # undone it; e3nn's constants and MACE's pickled models need it to load
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", "1")
+        from mace.calculators import mace_off
+
+        calc = mace_off(model="medium", default_dtype="float64", device="cpu")
+
+    reference = []
+    for name, atoms in mace_off_structures().items():
+        atoms.calc = calc
+        energy, forces = atoms.get_potential_energy(), atoms.get_forces()
+        atoms.calc = None
+        reference.append((name, atoms, energy, forces))
+    return reference

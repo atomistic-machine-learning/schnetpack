@@ -1,7 +1,7 @@
 """The MACE teacher, checked against a scripted stand-in with MACE's interface
-and, if one is given, against a real exported MACE-OFF archive."""
+and, if mace-torch is installed, against MACE-OFF compiled by the MACE
+interface."""
 
-import os
 import pickle
 
 import numpy as np
@@ -307,58 +307,18 @@ def test_pickles_as_its_configuration(fake_path):
     torch.testing.assert_close(restored(batch), teacher(batch))
 
 
-real_archive = pytest.mark.skipif(
-    "SCHNETPACK_MACE_TEACHER" not in os.environ,
-    reason="set SCHNETPACK_MACE_TEACHER to an exported MACE-OFF archive",
-)
-
-
-def reference_batches(dtype):
-    """The structures the export script evaluated with MACE itself, next to the
-    archive as ``<archive>.reference.npz``, with MACE's energies and forces."""
-    reference = np.load(os.environ["SCHNETPACK_MACE_TEACHER"] + ".reference.npz")
-    for name in sorted({key.split("/")[0] for key in reference.files}):
-        atoms = Atoms(
-            numbers=reference[f"{name}/numbers"],
-            positions=reference[f"{name}/positions"],
-            cell=reference[f"{name}/cell"],
-            pbc=reference[f"{name}/pbc"],
-        )
+def reference_batches(reference, dtype):
+    """The structures of ``mace_off_reference`` as batches, with MACE's energies
+    and forces; their match with MACE is the interface's golden test."""
+    for name, atoms, energy, forces in reference:
         batch = with_neighbors(atoms_to_batch([atoms], dtype=dtype))
-        yield name, batch, reference[f"{name}/energy"], reference[f"{name}/forces"]
+        yield name, batch, energy, forces
 
 
-@real_archive
-def test_a_real_mace_off_archive_reproduces_mace():
-    teacher = MaceTeacher(
-        model_path=os.environ["SCHNETPACK_MACE_TEACHER"], cutoff=5.0, dtype="float64"
-    )
-    for name, batch, energy, forces in reference_batches(torch.float64):
-        targets = teacher(batch)
-
-        torch.testing.assert_close(
-            targets[teacher_key(properties.energy)],
-            torch.tensor([float(energy)], dtype=torch.float64),
-            rtol=0,
-            atol=1e-6,
-            msg=name,
-        )
-        torch.testing.assert_close(
-            targets[teacher_key(properties.forces)],
-            torch.from_numpy(forces),
-            rtol=0,
-            atol=1e-6,
-            msg=name,
-        )
-
-
-@real_archive
-def test_a_real_mace_off_archive_gives_curvature():
+def test_a_real_mace_off_archive_gives_curvature(mace_off_archive, mace_off_reference):
     """Curvature against a central difference of the forces, in float64."""
-    teacher = MaceTeacher(
-        model_path=os.environ["SCHNETPACK_MACE_TEACHER"], cutoff=5.0, dtype="float64"
-    )
-    _, batch, _, _ = next(reference_batches(torch.float64))
+    teacher = MaceTeacher(model_path=mace_off_archive, cutoff=5.0, dtype="float64")
+    _, batch, _, _ = next(reference_batches(mace_off_reference, torch.float64))
     probe = torch.randn_like(batch[properties.R])
 
     targets = teacher(batch, probe)
@@ -375,11 +335,12 @@ def test_a_real_mace_off_archive_gives_curvature():
     )
 
 
-@real_archive
-def test_a_real_mace_off_archive_runs_in_float32():
+def test_a_real_mace_off_archive_runs_in_float32(mace_off_archive, mace_off_reference):
     """The default: a float64 archive cast to float32, double backward included."""
-    path = os.environ["SCHNETPACK_MACE_TEACHER"]
-    _, batch64, energy, forces = next(reference_batches(torch.float64))
+    path = mace_off_archive
+    _, batch64, energy, forces = next(
+        reference_batches(mace_off_reference, torch.float64)
+    )
     batch = with_neighbors(
         {k: v.float() if v.is_floating_point() else v for k, v in batch64.items()}
     )
