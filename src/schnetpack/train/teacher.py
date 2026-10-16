@@ -361,14 +361,12 @@ class SchNetPackTeacher(TeacherWrapper):
 class MaceTeacher(TeacherWrapper):
     """A MACE model as teacher, from a TorchScript archive (e.g. MACE-OFF).
 
-    The archive is made in an environment with ``mace-torch`` installed, so
-    SchNetPack itself does not depend on it::
+    The archive loads without ``mace-torch``. Building the archive needs
+    ``schnetpack[mace]`` installed::
 
-        from e3nn.util import jit
-        from mace.calculators import mace_off
+        from schnetpack.interfaces.mace_interface import compile_mace_off
 
-        calc = mace_off(model="medium", default_dtype="float64")
-        torch.jit.save(jit.compile(calc.models[0]), "MACE-OFF23_medium.pt")
+        path = compile_mace_off("medium")
 
     The teacher works in eV and Å. Its energies are absolute: they include its
     per-element reference energies (E0s). These are summed in float64, read

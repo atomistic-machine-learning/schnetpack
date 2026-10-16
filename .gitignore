@@ -130,3 +130,6 @@ interfaces/lammps/examples/*/deployed_model
 examples/howtos/howto_batchwise_relaxations_outputs/*
 # local experiments, never committed
 sandbox/
+
+# compiled MACE models and their references (MACE-OFF weights are ASL-licensed)
+src/schnetpack/interfaces/cache/
