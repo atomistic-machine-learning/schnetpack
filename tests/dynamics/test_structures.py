@@ -53,6 +53,8 @@ def test_statistics_structures_follow_the_histograms():
     assert set(batch[properties.Z].tolist()) == {6}
     assert torch.equal(batch[properties.idx_m], torch.arange(4).repeat_interleave(3))
     assert properties.R not in batch
+    assert batch[properties.cell].shape == (4, 3, 3)
+    assert not batch[properties.pbc].any()
 
 
 def test_statistics_structures_from_a_dataset():

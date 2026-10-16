@@ -81,7 +81,9 @@ class StatisticsStructures(StructureProvider):
 
     Each structure draws its atom count from the ``n_atoms`` histogram, then
     each atom its type independently from ``atom_types``; a draw may be a
-    composition the dataset does not contain. The batch has no positions.
+    composition the dataset does not contain. The batch has no positions;
+    structures are non-periodic, with a zero cell, as in a collated molecule
+    dataset.
     """
 
     def __init__(self, n_atoms: torch.Tensor, atom_types: torch.Tensor):
@@ -119,8 +121,8 @@ class StatisticsStructures(StructureProvider):
         Draw ``n_samples`` compositions.
 
         Returns:
-            A batch with ``Z``, ``n_atoms``, ``idx_m`` and ``idx``; the
-            positions are the prior's to draw.
+            A batch with ``Z``, ``n_atoms``, ``idx_m``, ``idx``, ``cell`` and
+            ``pbc``; the positions are the prior's to draw.
         """
         n_atoms = torch.multinomial(self.n_atoms, n_samples, replacement=True)
         z = torch.multinomial(self.atom_types, int(n_atoms.sum()), replacement=True)
@@ -129,4 +131,6 @@ class StatisticsStructures(StructureProvider):
             properties.Z: z,
             properties.n_atoms: n_atoms,
             properties.idx_m: torch.repeat_interleave(torch.arange(n_samples), n_atoms),
+            properties.cell: torch.zeros(n_samples, 3, 3),
+            properties.pbc: torch.zeros(3 * n_samples, dtype=torch.bool),
         }
