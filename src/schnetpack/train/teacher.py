@@ -22,6 +22,7 @@ from torch.autograd import grad
 
 from schnetpack import properties
 from schnetpack.data import prune_neighbors
+from schnetpack.model.mace import MaceModel, load_mace
 from schnetpack.model.utils import train_mode, train_mode_sensitive_modules
 from schnetpack.units import convert_units
 from schnetpack.utils import as_dtype
@@ -358,8 +359,9 @@ class SchNetPackTeacher(TeacherWrapper):
         }
 
 
-class MaceTeacher(TeacherWrapper):
-    """A MACE model as teacher, from a TorchScript archive (e.g. MACE-OFF).
+class MaceTeacher(SchNetPackTeacher):
+    """A MACE model as teacher (e.g. MACE-OFF), run through
+    :class:`~schnetpack.model.MaceModel`.
 
     The archive loads without ``mace-torch``. Building the archive needs
     ``schnetpack[mace]`` installed::
@@ -368,16 +370,14 @@ class MaceTeacher(TeacherWrapper):
 
         path = compile_mace_off("medium")
 
-    The teacher works in eV and Å. Its energies are absolute: they include its
-    per-element reference energies (E0s). These are summed in float64, read
-    from the archive before it is cast to ``dtype``, and added to MACE's
-    ``interaction_energy``, so a float32 teacher keeps the digits of its
-    energies. Its forces keep their graph when MACE is called with
-    ``training=True``, which is passed whenever a curvature target is asked
-    for. MACE-OFF is licensed for academic use only (ASL).
+    The teacher works in eV and Å. Its energies are absolute: its per-element
+    reference energies (E0s) are added in float64, read from the model before
+    it is cast to ``dtype``, so a float32 teacher keeps the digits of its
+    energies. Its forces keep their graph in train mode, which a curvature
+    target switches on. MACE-OFF is licensed for academic use only (ASL).
 
     Args:
-        model_path: path to the archive written by ``torch.jit.save``.
+        model_path: path to the TorchScript archive.
         teacher_energy_unit: energy unit the model works in.
         teacher_distance_unit: length unit the model works in.
         student_energy_unit: energy unit of the student.
@@ -402,8 +402,8 @@ class MaceTeacher(TeacherWrapper):
         student_energy_key: str = properties.energy,
         student_force_key: str = properties.forces,
     ):
-        self.model_path = model_path
         super().__init__(
+            model_path=model_path,
             teacher_energy_unit=teacher_energy_unit,
             teacher_distance_unit=teacher_distance_unit,
             student_energy_unit=student_energy_unit,
@@ -414,97 +414,15 @@ class MaceTeacher(TeacherWrapper):
             student_force_key=student_force_key,
         )
 
-    def load(self) -> nn.Module:
-        if not os.path.exists(self.model_path):
-            raise FileNotFoundError(f"no teacher model at {self.model_path!r}")
-        model = torch.jit.load(self.model_path, map_location="cpu")
-        self._e0 = self._reference_energies(model)
-        model = model.to(self.dtype)
+    def load(self) -> MaceModel:
+        model = MaceModel(load_mace(self.model_path), dtype=self.dtype)
         model.eval()
         for parameter in model.parameters():
             parameter.requires_grad_(False)
 
-        r_max = float(model.r_max)
-        if self.cutoff is not None and self.cutoff < r_max:
+        if self.cutoff is not None and self.cutoff < model.r_max:
             raise ValueError(
                 f"the teacher's cutoff {self.cutoff} is below the model's r_max "
-                f"{r_max}; pruning would drop pairs the model sees"
+                f"{model.r_max}; pruning would drop pairs the model sees"
             )
         return model
-
-    @staticmethod
-    def _reference_energies(model: nn.Module) -> torch.Tensor | None:
-        """The model's E0 table in float64, or None if it has none. Newer MACE
-        versions keep one row per head; without a head in its input MACE
-        evaluates the first."""
-        try:
-            table = model.atomic_energies_fn.atomic_energies
-        except AttributeError:
-            return None
-        table = table.detach().to(torch.float64)
-        return table[0] if table.dim() == 2 else table
-
-    def teacher_output(
-        self, inputs: dict[str, torch.Tensor], create_graph: bool
-    ) -> dict[str, torch.Tensor]:
-        data = self._mace_input(inputs)
-        # MACE keeps its forces' graph through its training argument
-        output = self.model(data, training=create_graph)
-        return {
-            properties.energy: self._energy(output, data),
-            properties.forces: output["forces"],
-        }
-
-    def _energy(
-        self, output: dict[str, torch.Tensor], data: dict[str, torch.Tensor]
-    ) -> torch.Tensor:
-        """The E0s summed in float64 plus the interaction energy; MACE's own
-        total, summed in its dtype, for an archive without either."""
-        interaction = output.get("interaction_energy")
-        if self._e0 is None or interaction is None:
-            warnings.warn(
-                "the MACE archive provides no E0 table or no interaction_energy, "
-                "so its energies are summed in its own dtype and may lose digits "
-                "in float32",
-                stacklevel=2,
-            )
-            return output["energy"]
-        e0 = self._e0.to(interaction.device)[data["node_attrs"].argmax(-1)]
-        energy = torch.zeros(
-            interaction.shape[0], dtype=torch.float64, device=interaction.device
-        )
-        return energy.index_add(0, data["batch"], e0) + interaction.to(torch.float64)
-
-    def _mace_input(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-        """The dict MACE reads, built on the batch's positions and pruned list."""
-        atomic_numbers = inputs[properties.Z]
-        # MACE's one-hot columns follow the order of its own element table
-        node_attrs = atomic_numbers.unsqueeze(-1) == self.model.atomic_numbers
-        uncovered = ~node_attrs.any(-1)
-        if uncovered.any():
-            raise ValueError(
-                "the teacher does not cover the atomic numbers "
-                f"{atomic_numbers[uncovered].unique().tolist()}"
-            )
-        positions = inputs[properties.R]
-        n_atoms = inputs[properties.n_atoms]
-        cell = inputs.get(properties.cell)
-        data = {
-            "positions": positions,
-            "node_attrs": node_attrs.to(positions.dtype),
-            # MACE's edge vectors are positions[edge_index[1]] -
-            # positions[edge_index[0]] + shifts, SchNetPack's are R[idx_j] -
-            # R[idx_i] + offsets
-            "edge_index": torch.stack(
-                (inputs[properties.idx_i], inputs[properties.idx_j])
-            ),
-            "shifts": inputs[properties.offsets],
-            "batch": inputs[properties.idx_m],
-            "ptr": torch.cat((n_atoms.new_zeros(1), n_atoms.cumsum(0))),
-            "cell": (
-                positions.new_zeros(3 * n_atoms.shape[0], 3)
-                if cell is None
-                else cell.reshape(-1, 3)
-            ),
-        }
-        return data
