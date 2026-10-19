@@ -1,147 +1,23 @@
 """The MACE teacher, checked against a scripted stand-in with MACE's interface
-and, if one is given, against a real exported MACE-OFF archive."""
+and, if mace-torch is installed, against MACE-OFF compiled by the MACE
+interface."""
 
-import os
 import pickle
+import warnings
 
 import numpy as np
 import pytest
 import torch
 from ase import Atoms
 from ase.build import molecule
-from torch import nn
 from torch.autograd import grad
 
 from schnetpack import properties
 from schnetpack.interfaces.ase_interface import atoms_to_batch
 from schnetpack.train.teacher import MaceTeacher, teacher_key
 
+from ..mace.fakes import R_MAX, FakeMace, RecordingMace, reference
 from .conftest import molecules_batch, with_neighbors
-
-R_MAX = 4.0
-DIRECTION = (0.3, -0.2, 0.5)
-#: per-element reference energies of H, C and O, as large as MACE-OFF's
-E0 = (-13.6, -1029.8, -2041.8)
-
-
-class AtomicEnergies(nn.Module):
-    """MACE's ``AtomicEnergiesBlock``: the E0 table, one row per head on newer
-    MACE versions."""
-
-    def __init__(self, heads: int | None):
-        super().__init__()
-        table = torch.tensor(E0, dtype=torch.float64)
-        if heads is not None:
-            # only the first head is right; another one would show up as an offset
-            table = torch.stack([table + 100.0 * head for head in range(heads)])
-        self.register_buffer("atomic_energies", table)
-
-
-class FakeMace(nn.Module):
-    """MACE's interface on a toy potential.
-
-    Like ``ScaleShiftMACE`` it reads a dict with a one-hot ``node_attrs``
-    ordered by its ``atomic_numbers`` buffer, takes edge vectors as
-    ``positions[edge_index[1]] - positions[edge_index[0]] + shifts``, adds the
-    per-element reference energies of ``atomic_energies_fn`` (its first head)
-    to the interaction energy in its own dtype, returns both, and keeps the
-    graph of its forces only when called with ``training=True``. Its pair term
-    depends on the direction of each edge, so a list handed in the wrong way
-    round gives other energies.
-    """
-
-    def __init__(self, heads: int | None = None, interaction_energy: bool = True):
-        super().__init__()
-        self.with_interaction_energy = interaction_energy
-        self.atomic_energies_fn = AtomicEnergies(heads)
-        self.register_buffer("atomic_numbers", torch.tensor([1, 6, 8]))
-        self.register_buffer("r_max", torch.tensor(R_MAX, dtype=torch.float64))
-        self.register_buffer(
-            "strength", torch.tensor([0.5, 1.0, 1.5], dtype=torch.float64)
-        )
-        self.register_buffer("direction", torch.tensor(DIRECTION, dtype=torch.float64))
-
-    def forward(
-        self, data: dict[str, torch.Tensor], training: bool = False
-    ) -> dict[str, torch.Tensor | None]:
-        positions = data["positions"]
-        node_attrs = data["node_attrs"]
-        edge_index = data["edge_index"]
-        num_graphs = data["ptr"].numel() - 1
-        vectors = positions[edge_index[1]] - positions[edge_index[0]] + data["shifts"]
-        per_edge = pair_energy(
-            vectors, (node_attrs @ self.strength)[edge_index[1]], self.r_max
-        )
-        per_edge = per_edge * (self.direction * vectors).sum(-1).add(1.0)
-        node_interaction = torch.zeros_like(node_attrs[:, 0]).index_add(
-            0, edge_index[0], per_edge
-        )
-        table = self.atomic_energies_fn.atomic_energies
-        if table.dim() == 2:
-            table = table[0]
-        node_e0 = node_attrs @ table
-        zeros = torch.zeros(num_graphs, dtype=positions.dtype, device=positions.device)
-        e0 = zeros.index_add(0, data["batch"], node_e0)
-        interaction = zeros.index_add(0, data["batch"], node_interaction)
-        energy = e0 + interaction
-        forces = grad(
-            [energy.sum()], [positions], create_graph=training, retain_graph=training
-        )[0]
-        assert forces is not None
-        output: dict[str, torch.Tensor | None] = {
-            "energy": energy,
-            "forces": -forces,
-            "node_energy": node_e0 + node_interaction,
-        }
-        if self.with_interaction_energy:
-            output["interaction_energy"] = interaction
-        return output
-
-
-def pair_energy(vectors, strength, r_max):
-    lengths = torch.linalg.norm(vectors, dim=-1)
-    return strength * (1 - (lengths / r_max) ** 2).clamp(min=0) ** 2
-
-
-def reference(atoms_list, dtype=torch.float64):
-    """FakeMace's energies, built from every periodic image of every ordered
-    pair, without a neighbor list; forces and Hessians by autograd."""
-    model = FakeMace()
-    energies, positions_list = [], []
-    for atoms in atoms_list:
-        positions = torch.tensor(atoms.positions, dtype=dtype, requires_grad=True)
-        columns = torch.tensor(
-            [model.atomic_numbers.tolist().index(z) for z in atoms.numbers]
-        )
-        cell = torch.tensor(np.asarray(atoms.cell), dtype=dtype)
-        reps = [range(-2, 3) if periodic else range(1) for periodic in atoms.pbc]
-        energy = torch.tensor(E0, dtype=torch.float64)[columns].sum().to(dtype)
-        for n in np.stack(np.meshgrid(*reps, indexing="ij"), -1).reshape(-1, 3):
-            shift = torch.tensor(n, dtype=dtype) @ cell
-            vectors = positions[None, :] - positions[:, None] + shift
-            mask = vectors.norm(dim=-1) < R_MAX
-            if not n.any():
-                mask &= ~torch.eye(len(atoms), dtype=torch.bool)
-            receiver = columns[None, :].expand(len(atoms), -1)[mask]
-            per_edge = pair_energy(vectors[mask], model.strength[receiver], model.r_max)
-            per_edge = per_edge * (vectors[mask] @ model.direction).add(1.0)
-            energy = energy + per_edge.sum()
-        energies.append(energy)
-        positions_list.append(positions)
-    return energies, positions_list
-
-
-class RecordingMace(nn.Module):
-    """Stands in for a loaded archive and records how it is called."""
-
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-        self.atomic_numbers = model.atomic_numbers
-
-    def forward(self, data, training=False):
-        self.training_argument = training
-        return self.model(data, training=training)
 
 
 @pytest.fixture
@@ -245,27 +121,24 @@ def test_float32_energies_keep_their_digits(tmp_path, heads):
     batch64 = with_neighbors(atoms_to_batch(atoms, dtype=torch.float64))
     batch32 = with_neighbors(atoms_to_batch(atoms, dtype=torch.float32))
 
-    energy = MaceTeacher(model_path=path, cutoff=R_MAX)(batch32)
-    exact = MaceTeacher(model_path=path, cutoff=R_MAX, dtype="float64")(batch64)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "the MACE model has 2 heads")
+        energy = MaceTeacher(model_path=path, cutoff=R_MAX)(batch32)
+        exact = MaceTeacher(model_path=path, cutoff=R_MAX, dtype="float64")(batch64)
 
     key = teacher_key(properties.energy)
     assert batch32[properties.n_atoms].item() == 200
     assert abs(energy[key] - exact[key]).item() < 1e-3
 
 
-def test_an_archive_without_interaction_energy_falls_back_to_its_energy(tmp_path):
+def test_an_archive_without_interaction_energy_is_refused(tmp_path):
+    """Its energy would carry the E0s that the teacher adds itself."""
     path = str(tmp_path / "mace.pt")
     torch.jit.save(torch.jit.script(FakeMace(interaction_energy=False)), path)
-    atoms = rattled(MOLECULES)
-    batch = with_neighbors(atoms_to_batch(atoms, dtype=torch.float64))
+    batch = with_neighbors(atoms_to_batch(rattled(MOLECULES), dtype=torch.float64))
 
-    with pytest.warns(UserWarning, match="interaction_energy"):
-        targets = MaceTeacher(model_path=path, cutoff=R_MAX, dtype="float64")(batch)
-
-    energies, _ = reference(atoms)
-    torch.testing.assert_close(
-        targets[teacher_key(properties.energy)], torch.stack(energies).detach()
-    )
+    with pytest.raises(KeyError, match="interaction_energy"):
+        MaceTeacher(model_path=path, cutoff=R_MAX, dtype="float64")(batch)
 
 
 @pytest.mark.parametrize("with_probe", [True, False])
@@ -274,11 +147,11 @@ def test_mace_keeps_the_graph_only_for_a_curvature_target(fake_path, with_probe)
 
     batch = molecules_batch()
     teacher = MaceTeacher(model_path=fake_path, cutoff=R_MAX)
-    teacher.model = RecordingMace(teacher.model)
+    teacher.model.core = RecordingMace(teacher.model.core)
 
     teacher(batch, torch.randn_like(batch[properties.R]) if with_probe else None)
 
-    assert teacher.model.training_argument is with_probe
+    assert teacher.model.core.training_argument is with_probe
 
 
 def test_a_cutoff_below_the_models_r_max_is_refused(fake_path):
@@ -307,58 +180,18 @@ def test_pickles_as_its_configuration(fake_path):
     torch.testing.assert_close(restored(batch), teacher(batch))
 
 
-real_archive = pytest.mark.skipif(
-    "SCHNETPACK_MACE_TEACHER" not in os.environ,
-    reason="set SCHNETPACK_MACE_TEACHER to an exported MACE-OFF archive",
-)
-
-
-def reference_batches(dtype):
-    """The structures the export script evaluated with MACE itself, next to the
-    archive as ``<archive>.reference.npz``, with MACE's energies and forces."""
-    reference = np.load(os.environ["SCHNETPACK_MACE_TEACHER"] + ".reference.npz")
-    for name in sorted({key.split("/")[0] for key in reference.files}):
-        atoms = Atoms(
-            numbers=reference[f"{name}/numbers"],
-            positions=reference[f"{name}/positions"],
-            cell=reference[f"{name}/cell"],
-            pbc=reference[f"{name}/pbc"],
-        )
+def reference_batches(reference, dtype):
+    """The structures of ``mace_off_reference`` as batches, with MACE's energies
+    and forces; their match with MACE is the interface's golden test."""
+    for name, atoms, energy, forces in reference:
         batch = with_neighbors(atoms_to_batch([atoms], dtype=dtype))
-        yield name, batch, reference[f"{name}/energy"], reference[f"{name}/forces"]
+        yield name, batch, energy, forces
 
 
-@real_archive
-def test_a_real_mace_off_archive_reproduces_mace():
-    teacher = MaceTeacher(
-        model_path=os.environ["SCHNETPACK_MACE_TEACHER"], cutoff=5.0, dtype="float64"
-    )
-    for name, batch, energy, forces in reference_batches(torch.float64):
-        targets = teacher(batch)
-
-        torch.testing.assert_close(
-            targets[teacher_key(properties.energy)],
-            torch.tensor([float(energy)], dtype=torch.float64),
-            rtol=0,
-            atol=1e-6,
-            msg=name,
-        )
-        torch.testing.assert_close(
-            targets[teacher_key(properties.forces)],
-            torch.from_numpy(forces),
-            rtol=0,
-            atol=1e-6,
-            msg=name,
-        )
-
-
-@real_archive
-def test_a_real_mace_off_archive_gives_curvature():
+def test_a_real_mace_off_archive_gives_curvature(mace_off_archive, mace_off_reference):
     """Curvature against a central difference of the forces, in float64."""
-    teacher = MaceTeacher(
-        model_path=os.environ["SCHNETPACK_MACE_TEACHER"], cutoff=5.0, dtype="float64"
-    )
-    _, batch, _, _ = next(reference_batches(torch.float64))
+    teacher = MaceTeacher(model_path=mace_off_archive, cutoff=5.0, dtype="float64")
+    _, batch, _, _ = next(reference_batches(mace_off_reference, torch.float64))
     probe = torch.randn_like(batch[properties.R])
 
     targets = teacher(batch, probe)
@@ -375,11 +208,12 @@ def test_a_real_mace_off_archive_gives_curvature():
     )
 
 
-@real_archive
-def test_a_real_mace_off_archive_runs_in_float32():
+def test_a_real_mace_off_archive_runs_in_float32(mace_off_archive, mace_off_reference):
     """The default: a float64 archive cast to float32, double backward included."""
-    path = os.environ["SCHNETPACK_MACE_TEACHER"]
-    _, batch64, energy, forces = next(reference_batches(torch.float64))
+    path = mace_off_archive
+    _, batch64, energy, forces = next(
+        reference_batches(mace_off_reference, torch.float64)
+    )
     batch = with_neighbors(
         {k: v.float() if v.is_floating_point() else v for k, v in batch64.items()}
     )

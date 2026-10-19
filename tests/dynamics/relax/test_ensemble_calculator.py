@@ -1,7 +1,7 @@
 """``EnsembleCalculator``: the ensemble mean drives any driver, and the spread across
-the members is reported per structure.
+the models is reported per structure.
 
-The members are analytic springs of different stiffness, so every mean and every
+The models are analytic springs of different stiffness, so every mean and every
 standard deviation below is known exactly and no trained model is needed.
 """
 
@@ -15,8 +15,9 @@ from ase import Atoms
 from torch import nn
 
 from schnetpack import properties
-from schnetpack.dynamics import LBFGS, EnsembleCalculator, NNEnsemble
+from schnetpack.dynamics import LBFGS, EnsembleCalculator
 from schnetpack.interfaces.ase_interface import SpkEnsembleCalculator, atoms_to_batch
+from schnetpack.model import NNEnsemble
 from schnetpack.uncertainty import AbsoluteUncertainty, RelativeUncertainty
 
 from .test_relaxer_units import make_inputs
@@ -46,12 +47,12 @@ class NoForcesModel(nn.Module):
 
 def make_calculator(
     spring_constants: tuple[float, ...] = (1.0, 2.0),
-    uncertainty_fn=None,
+    uncertainty=None,
     dtype: torch.dtype = torch.float32,
 ) -> EnsembleCalculator:
     return EnsembleCalculator(
         models=[HarmonicModel(k) for k in spring_constants],
-        uncertainty_fn=uncertainty_fn,
+        uncertainty=uncertainty,
         dtype=dtype,
     )
 
@@ -81,7 +82,7 @@ def test_energy_is_the_ensemble_mean():
 
 
 def test_the_ensemble_model_keeps_a_model_axis():
-    """``NNEnsemble`` is a model that returns one prediction per member."""
+    """``NNEnsemble`` is a model that returns one prediction per model."""
     inputs = make_inputs([5])
     ensemble = NNEnsemble(
         models=nn.ModuleList([HarmonicModel(1.0), HarmonicModel(2.0)]),
@@ -105,7 +106,7 @@ def test_uncertainty_is_reported_per_structure():
 
     assert uncertainty.shape == (2,)
 
-    # the members differ by -1*R against -2*R, so the per-component spread is 0.5*|R|
+    # the models differ by -1*R against -2*R, so the per-component spread is 0.5*|R|
     # and the per-atom uncertainty its norm; the structure's value is the mean of those
     positions = inputs[properties.R].view(2, 4, 3)
     expected = (0.5 * positions.norm(dim=-1)).mean(dim=-1)
@@ -123,13 +124,13 @@ def test_uncertainty_distinguishes_the_structures_of_a_batch():
     assert uncertainty[1] > 5 * uncertainty[0]
 
 
-def test_identical_members_are_certain():
+def test_identical_models_are_certain():
     inputs = make_inputs([3, 3])
     uncertainty = make_calculator([1.5, 1.5])(inputs)["uncertainty"]
     torch.testing.assert_close(uncertainty, torch.zeros(2))
 
 
-def test_a_single_member_is_certain_rather_than_nan():
+def test_a_single_model_is_certain_rather_than_nan():
     """``torch.std`` of one sample is ``nan`` unless the correction is turned off."""
     inputs = make_inputs([3, 3])
     uncertainty = make_calculator([1.0])(inputs)["uncertainty"]
@@ -138,29 +139,91 @@ def test_a_single_member_is_certain_rather_than_nan():
     torch.testing.assert_close(uncertainty, torch.zeros(2))
 
 
-def test_several_uncertainty_functions_are_reported_by_name():
+def test_several_uncertainties_are_reported_under_their_keys():
     inputs = make_inputs([3, 3])
     calculator = make_calculator(
-        [1.0, 2.0], uncertainty_fn=[AbsoluteUncertainty(), RelativeUncertainty()]
+        [1.0, 2.0],
+        uncertainty={
+            "absolute": AbsoluteUncertainty(),
+            "relative": RelativeUncertainty(),
+        },
     )
 
-    uncertainty = calculator(inputs)["uncertainty"]
+    outputs = calculator(inputs)
 
-    assert set(uncertainty) == {"AbsoluteUncertainty", "RelativeUncertainty"}
-    for value in uncertainty.values():
-        assert value.shape == (2,)
-    # every member points the same way and differs only in magnitude, so the relative
+    assert "uncertainty" not in outputs
+    for key in ("absolute", "relative"):
+        assert outputs[key].shape == (2,)
+    # every model points the same way and differs only in magnitude, so the relative
     # spread is 0.5/1.5 whatever the structure looks like
-    torch.testing.assert_close(
-        uncertainty["RelativeUncertainty"], torch.full((2,), 1.0 / 3.0)
+    torch.testing.assert_close(outputs["relative"], torch.full((2,), 1.0 / 3.0))
+
+
+def test_one_uncertainty_serves_models_with_other_output_names():
+    """The calculator hands the predictions over under the canonical names."""
+
+    class Renamed(nn.Module):
+        def __init__(self, spring_constant):
+            super().__init__()
+            self.inner = HarmonicModel(spring_constant)
+
+        def forward(self, inputs):
+            outputs = self.inner(inputs)
+            return {"E": outputs["energy"], "F": outputs["forces"]}
+
+    inputs = make_inputs([4, 4])
+    shared = AbsoluteUncertainty(energy_weight=1.0, force_weight=1.0)
+    plain = make_calculator([1.0, 2.0], uncertainty=shared)(inputs)
+    renamed = EnsembleCalculator(
+        models=[Renamed(k) for k in (1.0, 2.0)],
+        uncertainty=shared,
+        energy_key="E",
+        force_key="F",
+    )(inputs)
+
+    torch.testing.assert_close(renamed["uncertainty"], plain["uncertainty"])
+    torch.testing.assert_close(renamed["F"], plain["forces"])
+
+
+def test_a_weighted_property_the_ensemble_lacks_is_reported():
+    inputs = make_inputs([3])
+    calculator = make_calculator(
+        [1.0, 2.0], uncertainty=AbsoluteUncertainty(stress_weight=1.0)
     )
+    with pytest.raises(KeyError, match="stress"):
+        calculator(inputs)
+
+
+def test_an_uncertainty_must_be_an_uncertainty():
+    with pytest.raises(TypeError, match="not an Uncertainty"):
+        make_calculator([1.0, 2.0], uncertainty={"u": lambda predictions, n: 0.0})
+
+
+def test_an_uncertainty_key_may_not_overwrite_a_property():
+    with pytest.raises(ValueError, match="forces"):
+        make_calculator([1.0, 2.0], uncertainty={"forces": AbsoluteUncertainty()})
+
+
+def test_extra_properties_are_averaged():
+    class WithCharge(HarmonicModel):
+        def forward(self, inputs):
+            outputs = super().forward(inputs)
+            outputs["charge"] = torch.full_like(outputs["energy"], self.spring_constant)
+            return outputs
+
+    inputs = make_inputs([3, 3])
+    outputs = EnsembleCalculator(
+        models=[WithCharge(1.0), WithCharge(2.0)], extra_properties=["charge"]
+    )(inputs)
+
+    torch.testing.assert_close(outputs["charge"], torch.full((2,), 1.5))
 
 
 def test_uncertainty_weights_are_honoured():
     inputs = make_inputs([3, 3])
     energy_only = make_calculator(
         [1.0, 2.0],
-        uncertainty_fn=AbsoluteUncertainty(energy_weight=1.0, force_weight=0.0),
+        uncertainty=AbsoluteUncertainty(energy_weight=1.0, force_weight=0.0),
     )(inputs)["uncertainty"]
 
     # the energies are 0.5*k*sum(R^2), so their spread is 0.25*sum(R^2)
@@ -189,7 +252,7 @@ def test_batch_of_one_matches_the_ase_ensemble_calculator():
         models=[HarmonicModel(k) for k in springs],
         neighbor_list=None,
         converter=Converter,
-        uncertainty_fn=AbsoluteUncertainty(),
+        uncertainty=AbsoluteUncertainty(),
         energy_unit="eV",
         position_unit="Angstrom",
     )
@@ -197,7 +260,7 @@ def test_batch_of_one_matches_the_ase_ensemble_calculator():
 
     batchwise = EnsembleCalculator(
         models=[HarmonicModel(k) for k in springs],
-        uncertainty_fn=AbsoluteUncertainty(),
+        uncertainty=AbsoluteUncertainty(),
     )
     outputs = batchwise(atoms_to_batch([atoms]))
     batch_uncertainty = outputs["uncertainty"]
@@ -220,6 +283,16 @@ def test_a_missing_property_is_reported():
     calculator = EnsembleCalculator(models=[NoForcesModel(), NoForcesModel()])
     with pytest.raises(KeyError, match="forces"):
         LBFGS(calculator).run(make_inputs([3]), 3)
+
+
+def test_a_model_missing_a_property_is_named():
+    """Without the check, the stack would silently hold fewer models."""
+    ensemble = NNEnsemble(
+        models=nn.ModuleList([HarmonicModel(1.0), NoForcesModel()]),
+        properties=["energy", "forces"],
+    )
+    with pytest.raises(KeyError, match="model 1"):
+        ensemble(make_inputs([3]))
 
 
 def test_the_ensemble_is_evaluated_once_per_step():
@@ -266,7 +339,7 @@ def test_an_ensemble_relaxes_a_batch():
 
     # every spring pulls towards the origin, and a relaxed batch sits there
     assert relaxed[properties.R].abs().max() < 1e-4
-    # a converged batch is one the ensemble agrees about, since the members only
+    # a converged batch is one the ensemble agrees about, since the models only
     # disagree about the magnitude of a force that has gone to zero
     uncertainty = calculator(relaxed)["uncertainty"]
     assert uncertainty.shape == (2,)
@@ -276,11 +349,11 @@ def test_an_ensemble_relaxes_a_batch():
 def test_means_and_uncertainty_are_reported_in_ev_and_angstrom():
     """An ensemble in kcal/mol and nm reports what the same springs in eV and Ang do."""
     inputs = make_inputs([3])
-    in_ev = make_calculator([1.0, 2.0], uncertainty_fn=AbsoluteUncertainty())(inputs)
+    in_ev = make_calculator([1.0, 2.0], uncertainty=AbsoluteUncertainty())(inputs)
     # k eV/Ang^2 is k * 23.06 * 100 kcal/mol/nm^2
     in_kcal = EnsembleCalculator(
         models=[HarmonicModel(k * 23.0605480121 * 100.0) for k in (1.0, 2.0)],
-        uncertainty_fn=AbsoluteUncertainty(),
+        uncertainty=AbsoluteUncertainty(),
         energy_unit="kcal/mol",
         position_unit="nm",
     )(inputs)

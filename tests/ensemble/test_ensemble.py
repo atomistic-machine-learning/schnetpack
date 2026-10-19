@@ -34,12 +34,7 @@ class BrokenModel(torch.nn.Module):
         return {"not_energy": torch.tensor([0.0])}
 
 
-class InvalidUncertainty:
-    def __call__(self, results):
-        return "not a number"
-
-
-class FakeUncertainty:
+class NotAnUncertainty:
     def __call__(self, results):
         return 0.5
 
@@ -63,13 +58,13 @@ def dummy_atoms():
     return Atoms("H2", positions=[[1, 1, 1], [1, 1, 1]])
 
 
-def make_test_calc(models, uncertainty_fn=None):
+def make_test_calc(models, uncertainty=None):
     return SpkEnsembleCalculator(
         models=models,
         neighbor_list=DummyTransform(),
         converter=DummyConverter,
         stress_key="stress",
-        uncertainty_fn=uncertainty_fn,
+        uncertainty=uncertainty,
     )
 
 
@@ -102,7 +97,7 @@ def test_ensemble_stress_tensor(dummy_atoms):
 # === Uncertainty Tests ===
 def test_absolute_uncertainty(dummy_atoms):
     calc = make_test_calc(
-        models=[OnesModel(), TwosModel()], uncertainty_fn=AbsoluteUncertainty()
+        models=[OnesModel(), TwosModel()], uncertainty=AbsoluteUncertainty()
     )
     calc.calculate(dummy_atoms)
     assert isinstance(calc.results["uncertainty"], numbers.Number)
@@ -110,7 +105,7 @@ def test_absolute_uncertainty(dummy_atoms):
 
 def test_relative_uncertainty(dummy_atoms):
     calc = make_test_calc(
-        models=[OnesModel(), TwosModel()], uncertainty_fn=RelativeUncertainty()
+        models=[OnesModel(), TwosModel()], uncertainty=RelativeUncertainty()
     )
     calc.calculate(dummy_atoms)
     assert isinstance(calc.results["uncertainty"], numbers.Number)
@@ -118,7 +113,7 @@ def test_relative_uncertainty(dummy_atoms):
 
 def test_relative_uncertainty_zero_for_identical(dummy_atoms):
     calc = make_test_calc(
-        models=[OnesModel(), OnesModel()], uncertainty_fn=RelativeUncertainty()
+        models=[OnesModel(), OnesModel()], uncertainty=RelativeUncertainty()
     )
     calc.calculate(dummy_atoms)
     assert np.isclose(calc.results["uncertainty"], 0.0)
@@ -126,30 +121,32 @@ def test_relative_uncertainty_zero_for_identical(dummy_atoms):
 
 def test_zero_uncertainty_for_identical_models(dummy_atoms):
     calc = make_test_calc(
-        models=[OnesModel(), OnesModel()], uncertainty_fn=AbsoluteUncertainty()
+        models=[OnesModel(), OnesModel()], uncertainty=AbsoluteUncertainty()
     )
     calc.calculate(dummy_atoms)
     assert np.isclose(calc.results["uncertainty"], 0.0)
 
 
-def test_multiple_uncertainty_functions(dummy_atoms):
+def test_several_uncertainties_are_reported_under_their_keys(dummy_atoms):
     calc = make_test_calc(
         models=[OnesModel(), TwosModel()],
-        uncertainty_fn=[AbsoluteUncertainty(), FakeUncertainty()],
+        uncertainty={
+            "absolute": AbsoluteUncertainty(),
+            "relative": RelativeUncertainty(),
+        },
     )
     calc.calculate(dummy_atoms)
-    result = calc.results["uncertainty"]
-    assert isinstance(result, dict)
-    assert "AbsoluteUncertainty" in result
-    assert "FakeUncertainty" in result
+    assert "uncertainty" not in calc.results
+    for key in ("absolute", "relative"):
+        assert isinstance(calc.results[key], numbers.Number)
+        assert calc.get_uncertainty(dummy_atoms, key) == calc.results[key]
 
 
-def test_invalid_uncertainty_return(dummy_atoms):
-    calc = make_test_calc(
-        models=[OnesModel(), TwosModel()], uncertainty_fn=InvalidUncertainty()
-    )
-    calc.calculate(dummy_atoms)
-    assert not isinstance(calc.results["uncertainty"], numbers.Number)
+def test_an_uncertainty_must_be_an_uncertainty():
+    with pytest.raises(TypeError, match="not an Uncertainty"):
+        make_test_calc(
+            models=[OnesModel(), TwosModel()], uncertainty=NotAnUncertainty()
+        )
 
 
 # === Robustness Tests ===
@@ -165,23 +162,11 @@ def test_missing_property_raises(dummy_atoms):
     assert "energy" in str(excinfo.value)
 
 
-def test_uncertainty_keys_multiple_fns(dummy_atoms):
-    calc = make_test_calc(
-        models=[OnesModel(), TwosModel()],
-        uncertainty_fn=[AbsoluteUncertainty(), RelativeUncertainty()],
-    )
-    calc.calculate(dummy_atoms)
-    u = calc.results["uncertainty"]
-    assert isinstance(u, dict)
-    assert "AbsoluteUncertainty" in u
-    assert "RelativeUncertainty" in u
-
-
 # === Calculation Tests ===
 def test_absolute_energy_uncertainty(dummy_atoms):
     calc = make_test_calc(
         models=[OnesModel(), TwosModel()],
-        uncertainty_fn=AbsoluteUncertainty(
+        uncertainty=AbsoluteUncertainty(
             energy_weight=1.0, force_weight=0.0, stress_weight=0.0
         ),
     )
@@ -196,7 +181,7 @@ def test_absolute_energy_uncertainty(dummy_atoms):
 def test_absolute_force_uncertainty(dummy_atoms):
     calc = make_test_calc(
         models=[OnesModel(), TwosModel()],
-        uncertainty_fn=AbsoluteUncertainty(
+        uncertainty=AbsoluteUncertainty(
             energy_weight=0.0, force_weight=1.0, stress_weight=0.0
         ),
     )
@@ -211,7 +196,7 @@ def test_absolute_force_uncertainty(dummy_atoms):
 def test_absolute_stress_uncertainty(dummy_atoms):
     calc = make_test_calc(
         models=[OnesModel(), TwosModel()],
-        uncertainty_fn=AbsoluteUncertainty(
+        uncertainty=AbsoluteUncertainty(
             energy_weight=0.0, force_weight=0.0, stress_weight=1.0
         ),
     )
@@ -226,7 +211,7 @@ def test_absolute_stress_uncertainty(dummy_atoms):
 def test_relative_energy_uncertainty(dummy_atoms):
     calc = make_test_calc(
         models=[OnesModel(), TwosModel()],
-        uncertainty_fn=RelativeUncertainty(
+        uncertainty=RelativeUncertainty(
             energy_weight=1.0, force_weight=0.0, stress_weight=0.0
         ),
     )
@@ -241,7 +226,7 @@ def test_relative_energy_uncertainty(dummy_atoms):
 def test_relative_force_uncertainty(dummy_atoms):
     calc = make_test_calc(
         models=[OnesModel(), TwosModel()],
-        uncertainty_fn=RelativeUncertainty(
+        uncertainty=RelativeUncertainty(
             energy_weight=0.0, force_weight=1.0, stress_weight=0.0
         ),
     )
@@ -256,7 +241,7 @@ def test_relative_force_uncertainty(dummy_atoms):
 def test_relative_stress_uncertainty(dummy_atoms):
     calc = make_test_calc(
         models=[OnesModel(), TwosModel()],
-        uncertainty_fn=RelativeUncertainty(
+        uncertainty=RelativeUncertainty(
             energy_weight=0.0, force_weight=0.0, stress_weight=1.0
         ),
     )
@@ -270,7 +255,7 @@ def test_relative_stress_uncertainty(dummy_atoms):
 
 def test_absolute_uncertainty_calculation(dummy_atoms):
     calc = make_test_calc(
-        models=[OnesModel(), TwosModel()], uncertainty_fn=AbsoluteUncertainty()
+        models=[OnesModel(), TwosModel()], uncertainty=AbsoluteUncertainty()
     )
 
     calc.calculate(dummy_atoms)
@@ -282,7 +267,7 @@ def test_absolute_uncertainty_calculation(dummy_atoms):
 
 def test_relative_uncertainty_calculation(dummy_atoms):
     calc = make_test_calc(
-        models=[OnesModel(), TwosModel()], uncertainty_fn=RelativeUncertainty()
+        models=[OnesModel(), TwosModel()], uncertainty=RelativeUncertainty()
     )
 
     calc.calculate(dummy_atoms)

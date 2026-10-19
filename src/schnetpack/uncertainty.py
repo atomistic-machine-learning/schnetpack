@@ -1,20 +1,19 @@
-"""How far the members of an ensemble disagree.
+"""How far the models of an ensemble disagree.
 
 An ensemble of models predicts a property several times over; the spread of those
-predictions is the ensemble's estimate of its own uncertainty. Turning that spread into
-one comparable number per structure is what the classes here do, and how the energy, the
-forces and the stress are weighted against each other is the caller's choice.
+predictions is the ensemble's estimate of its own uncertainty. Uncertainty classes
+turn the spread into an uncertaintly value as a weighted sum of multiple property
+uncertainties.
 
-Predictions arrive with the **model axis first** and already converted to the units the
-caller reports in, so an absolute uncertainty comes back in those same units::
+Predictions arrive with the **model axis first**, already converted to the units the
+caller reports in, and keyed by the canonical names of :mod:`schnetpack.properties`::
+    properties.energy   (n_models, n_structures)
+    properties.forces   (n_models, n_total_atoms, 3)
+    properties.stress   (n_models, n_structures, 3, 3)
 
-    energy   (n_models, n_structures)
-    forces   (n_models, n_total_atoms, 3)
-    stress   (n_models, n_structures, 3, 3)
-
-and the result is one value per structure. Pass ``n_atoms`` whenever the batch holds more
-than one structure, so the per-atom terms can be reduced within each structure rather than
-across the whole batch.
+An absolute uncertainty comes back in those same units, and the result is one value per
+structure. Pass ``n_atoms`` whenever the batch holds more than one structure, so the
+per-atom terms can be reduced within each structure rather than across the whole batch.
 
 Note:
     The spread is a standard deviation over the models, taken with ``correction=0`` --
@@ -26,6 +25,7 @@ from abc import ABC, abstractmethod
 
 import torch
 
+from schnetpack import properties
 from schnetpack.nn import scatter_add
 
 __all__ = ["Uncertainty", "AbsoluteUncertainty", "RelativeUncertainty"]
@@ -51,7 +51,7 @@ def _per_structure_mean(
     Args:
         per_atom: ``(n_total_atoms,)``, the atoms of every structure end to end.
         n_atoms: ``(n_structures,)`` atom counts. ``None`` means the whole thing is one
-            structure, which is the case an ase calculator is in.
+            structure.
 
     Returns:
         ``(n_structures,)``
@@ -68,10 +68,17 @@ def _per_structure_mean(
 
 
 class Uncertainty(ABC):
-    """One number per structure, from the disagreement between ensemble members.
+    """One number per structure, from the disagreement between the models of an ensemble.
+
+    Each term reduces its property to a *spread* and a *magnitude* of the same shape --
+    the energy to the standard deviation over the models and the absolute value of
+    their mean; the forces per atom, and the stress per plane, to the length of the
+    per-component standard deviation and the length of the mean -- and :meth:`measure`
+    turns the pair into a number. The forces are then averaged over a structure's atoms
+    and the stress over its three planes, so every term is a scalar per structure before
+    the terms are weighted and summed.
 
     Args:
-        energy_key, force_key, stress_key: names the predictions are keyed by.
         energy_weight, force_weight, stress_weight: how much each term contributes. They
             are normalized to sum to one, so only their ratios matter, and a term with
             weight zero is not computed at all -- which is also how a property the
@@ -80,18 +87,10 @@ class Uncertainty(ABC):
 
     def __init__(
         self,
-        energy_key: str = "energy",
-        force_key: str = "forces",
-        stress_key: str = "stress",
         energy_weight: float = 0.0,
         force_weight: float = 1.0,
         stress_weight: float = 0.0,
     ):
-        self.energy_key = energy_key
-        self.force_key = force_key
-        self.stress_key = stress_key
-
-        # normalize weights
         total_weight = energy_weight + force_weight + stress_weight
         if total_weight == 0:
             raise ValueError("total_weight cannot be zero")
@@ -101,6 +100,14 @@ class Uncertainty(ABC):
         self.stress_weight = stress_weight / total_weight
 
     @abstractmethod
+    def measure(self, spread: torch.Tensor, magnitude: torch.Tensor) -> torch.Tensor:
+        """One term's uncertainty from its spread and the magnitude of its mean.
+
+        Args:
+            spread: spread over the models, per structure, atom or plane.
+            magnitude: length of the models' mean, shaped like ``spread``.
+        """
+
     def __call__(
         self,
         predictions: dict[str, torch.Tensor],
@@ -110,87 +117,62 @@ class Uncertainty(ABC):
 
         Args:
             predictions: the ensemble's predictions, model axis first, in the units the
-                result should be reported in.
+                result should be reported in, keyed by the names of
+                :mod:`schnetpack.properties`.
             n_atoms: ``(n_structures,)`` atom counts, or ``None`` for a single structure.
 
         Returns:
             ``(n_structures,)``
         """
+        terms = []
+        if self.energy_weight > 0:
+            energy = self._get(predictions, properties.energy, "energy_weight")
+            term = self.measure(_ensemble_std(energy), energy.mean(dim=0).abs())
+            terms.append(self.energy_weight * term)
+
+        if self.force_weight > 0:
+            forces = self._get(predictions, properties.forces, "force_weight")
+            per_atom = self._vector_term(forces)
+            terms.append(self.force_weight * _per_structure_mean(per_atom, n_atoms))
+
+        if self.stress_weight > 0:
+            stress = self._get(predictions, properties.stress, "stress_weight")
+            per_plane = self._vector_term(stress)
+            terms.append(self.stress_weight * per_plane.mean(dim=-1))
+
+        return sum(terms).reshape(-1)
+
+    def _vector_term(self, values: torch.Tensor) -> torch.Tensor:
+        """The measure of every row of the last axis: an atom's force, a stress plane."""
+        spread = torch.linalg.norm(_ensemble_std(values), dim=-1)
+        magnitude = torch.linalg.norm(values.mean(dim=0), dim=-1)
+        return self.measure(spread, magnitude)
+
+    def _get(
+        self, predictions: dict[str, torch.Tensor], key: str, weight: str
+    ) -> torch.Tensor:
+        if key not in predictions:
+            raise KeyError(
+                f"{type(self).__name__} has a nonzero {weight}, but the ensemble "
+                f"predicts no {key!r}; set the weight to zero or predict it"
+            )
+        return predictions[key]
 
 
 class AbsoluteUncertainty(Uncertainty):
-    """The spread itself, in the units of the properties it is built from.
+    """The spread itself, in the units of the properties it is built from."""
 
-    The force term is the mean over a structure's atoms of the length of the per-atom
-    standard deviation vector, and the stress term the mean over the three planes of the
-    same thing -- so all three terms are scalars per structure before they are weighted.
-    """
-
-    def __call__(
-        self,
-        predictions: dict[str, torch.Tensor],
-        n_atoms: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        uncertainty = None
-
-        if self.energy_weight > 0:
-            energy_unc = _ensemble_std(predictions[self.energy_key])
-            uncertainty = self.energy_weight * energy_unc
-
-        if self.force_weight > 0:
-            # per atom uncertainty as the L2 norm of the per-component stds
-            force_std = _ensemble_std(predictions[self.force_key])
-            per_atom_uncertainty = torch.linalg.norm(force_std, dim=-1)
-            force_unc = _per_structure_mean(per_atom_uncertainty, n_atoms)
-            term = self.force_weight * force_unc
-            uncertainty = term if uncertainty is None else uncertainty + term
-
-        if self.stress_weight > 0:
-            # uncertainty per plane, then averaged over the three of them
-            stress_std = _ensemble_std(predictions[self.stress_key])
-            per_plane_uncertainty = torch.linalg.norm(stress_std, dim=-1)
-            stress_unc = per_plane_uncertainty.mean(dim=-1)
-            term = self.stress_weight * stress_unc
-            uncertainty = term if uncertainty is None else uncertainty + term
-
-        return uncertainty.reshape(-1)
+    def measure(self, spread: torch.Tensor, magnitude: torch.Tensor) -> torch.Tensor:
+        return spread
 
 
 class RelativeUncertainty(Uncertainty):
     """The spread as a fraction of the predicted magnitude, so it is dimensionless.
 
     Useful when the structures of a batch differ enough in size or composition that their
-    absolute uncertainties are not comparable.
+    absolute uncertainties are not comparable. It grows as the predicted magnitude goes
+    to zero -- the forces of a relaxed structure, say -- even where the spread does not.
     """
 
-    def __call__(
-        self,
-        predictions: dict[str, torch.Tensor],
-        n_atoms: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        uncertainty = None
-
-        if self.energy_weight > 0:
-            energy_preds = predictions[self.energy_key]
-            mean_energy = energy_preds.mean(dim=0)
-            std_energy = _ensemble_std(energy_preds)
-            energy_unc = std_energy / (mean_energy.abs() + _EPS)
-            uncertainty = self.energy_weight * energy_unc
-
-        if self.force_weight > 0:
-            force_preds = predictions[self.force_key]
-            mean_norms = torch.linalg.norm(force_preds.mean(dim=0), dim=-1)
-            std_norms = torch.linalg.norm(_ensemble_std(force_preds), dim=-1)
-            per_atom = std_norms / (mean_norms + _EPS)
-            term = self.force_weight * _per_structure_mean(per_atom, n_atoms)
-            uncertainty = term if uncertainty is None else uncertainty + term
-
-        if self.stress_weight > 0:
-            stress_preds = predictions[self.stress_key]
-            mean_planes = torch.linalg.norm(stress_preds.mean(dim=0), dim=-1)
-            std_planes = torch.linalg.norm(_ensemble_std(stress_preds), dim=-1)
-            per_plane = std_planes / (mean_planes + _EPS)
-            term = self.stress_weight * per_plane.mean(dim=-1)
-            uncertainty = term if uncertainty is None else uncertainty + term
-
-        return uncertainty.reshape(-1)
+    def measure(self, spread: torch.Tensor, magnitude: torch.Tensor) -> torch.Tensor:
+        return spread / (magnitude + _EPS)

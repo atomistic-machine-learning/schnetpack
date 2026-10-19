@@ -19,6 +19,7 @@ Models
 
     AtomisticModel
     NeuralNetworkPotential
+    NNEnsemble
 
 Representations
 ---------------

@@ -14,7 +14,7 @@ from schnetpack.model import FilterShortRange
 from schnetpack.train import MaceTeacher, SchNetPackTeacher, teacher_key
 from schnetpack.transform import AddOffsets
 
-from .test_mace_teacher import FakeMace
+from ..mace.fakes import FakeMace
 
 
 def compose_experiment(overrides):

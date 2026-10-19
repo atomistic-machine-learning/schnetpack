@@ -68,7 +68,6 @@ Calculators
     ForceCalculator
     GenerativeCalculator
     EnsembleCalculator
-    NNEnsemble
     BatchNeighborList
 
 
@@ -105,8 +104,10 @@ Uncertainty
 
 .. currentmodule:: uncertainty
 
-How far the members of an ensemble disagree, one value per structure. Shared with
-:class:`~schnetpack.interfaces.ase_interface.SpkEnsembleCalculator`.
+How far the models of an ensemble disagree, one value per structure. Shared with
+:class:`~schnetpack.interfaces.ase_interface.SpkEnsembleCalculator`. The predictions of
+:class:`~schnetpack.model.NNEnsemble` are handed over keyed by the names of
+:mod:`schnetpack.properties`.
 
 .. autosummary::
     :toctree: generated
