@@ -88,8 +88,6 @@ class MaceModel(AtomisticModel):
         self.core = core
         self.energy_key = energy_key
         self.force_key = force_key
-        # MACE takes the gradients itself; listing the positions makes
-        # initialize_derivatives enable grad on them
         self.required_derivatives = [properties.R]
         self.model_outputs = [energy_key, force_key]
 
@@ -140,9 +138,6 @@ def mace_input(
     return {
         "positions": positions,
         "node_attrs": node_attrs.to(positions.dtype),
-        # MACE's edge vectors are positions[edge_index[1]] -
-        # positions[edge_index[0]] + shifts, SchNetPack's are R[idx_j] -
-        # R[idx_i] + offsets
         "edge_index": torch.stack((inputs[properties.idx_i], inputs[properties.idx_j])),
         "shifts": inputs[properties.offsets],
         "batch": inputs[properties.idx_m],
