@@ -36,3 +36,4 @@ from schnetpack.model.ensemble import *
 from schnetpack.model.mace import *
 from schnetpack.model.representation import *
 from schnetpack.model.utils import *
+from schnetpack.model.ensemble import *
