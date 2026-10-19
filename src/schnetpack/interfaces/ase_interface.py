@@ -13,7 +13,7 @@ References
 
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 
 import numpy as np
@@ -36,10 +36,9 @@ from ase.vibrations import Vibrations
 from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.md.utils import activate_model_stress
+from schnetpack.model.ensemble import NNEnsemble
 from schnetpack.transform import CastTo32, CastTo64, Transform
-from schnetpack.uncertainty import (
-    AbsoluteUncertainty,
-)
+from schnetpack.uncertainty import AbsoluteUncertainty, Uncertainty
 from schnetpack.units import convert_units
 from schnetpack.utils import load_model
 
@@ -413,22 +412,18 @@ class SpkCalculator(Calculator):
         self.results = results
 
 
-def _scalar(uncertainty):
-    """The single value of a one-structure uncertainty.
-
-    An :class:`~schnetpack.uncertainty.Uncertainty` reports one value per structure, and
-    an ase calculator only ever has one. Anything else -- a custom callable returning a
-    plain number, say -- is passed through untouched.
-    """
-    if isinstance(uncertainty, torch.Tensor):
-        return uncertainty.reshape(-1)[0].item()
-    return uncertainty
-
-
 class SpkEnsembleCalculator(SpkCalculator):
     """
-    Calculator for neural network models for ensemble calculations.
-    Requires multiple models
+    ASE calculator for an ensemble of models.
+
+    The models run as one :class:`~schnetpack.model.NNEnsemble`; energy,
+    forces and stress are their mean, in eV and Angstrom. Every
+    :class:`~schnetpack.uncertainty.Uncertainty` adds one float to
+    ``results``: a single one under ``"uncertainty"``, a mapping
+    ``{key: uncertainty}`` each under its key. The uncertainties are computed
+    on the converted predictions, as
+    :class:`~schnetpack.dynamics.EnsembleCalculator` computes them, so the two
+    report the same numbers.
     """
 
     def __init__(
@@ -444,7 +439,7 @@ class SpkEnsembleCalculator(SpkCalculator):
         dtype: torch.dtype = torch.float32,
         converter: Callable = AtomsConverter,
         transforms: Transform | list[Transform] | None = None,
-        uncertainty_fn: Callable | None = None,
+        uncertainty: Uncertainty | Mapping[str, Uncertainty] | None = None,
         additional_inputs: dict[str, torch.Tensor] | None = None,
         **kwargs,
     ):
@@ -458,12 +453,14 @@ class SpkEnsembleCalculator(SpkCalculator):
             energy_unit: energy units used by model (default="kcal/mol")
             position_unit: position units used by model (default="Angstrom")
             device: device used for calculations (default="cpu")
-            input_dtype: select model input precision (default=float32)
-            output_dtype: select model output precision (default=float64)
+            dtype: select model input precision (default=float32)
             converter: converter used to set up input batches
             transforms: transforms for the converter. More information
                 can be found in the AtomsConverter docstring.
-            uncertainty_fn: Function to compute uncertainty. If not provided, defaults to AbsoluteUncertainty.
+            uncertainty: one :class:`~schnetpack.uncertainty.Uncertainty`,
+                reported under ``"uncertainty"``, or a mapping from results key
+                to uncertainty (default:
+                :class:`~schnetpack.uncertainty.AbsoluteUncertainty`)
             additional_inputs: Additional arguments for basic ase calculator class
         """
         # Initialize the parent class without loading a model
@@ -484,7 +481,8 @@ class SpkEnsembleCalculator(SpkCalculator):
         self.force_key = force_key
         self.stress_key = stress_key
 
-        # Mapping between ASE names and model outputs
+        # Mapping between ASE names and model outputs; ASE's names are the
+        # canonical ones an Uncertainty reads
         self.property_map = {
             self.energy: energy_key,
             self.forces: force_key,
@@ -502,8 +500,7 @@ class SpkEnsembleCalculator(SpkCalculator):
             self.stress: self.energy_conversion / self.position_conversion**3,
         }
 
-        # Load multiple models
-        self.models = nn.ModuleList(
+        loaded = nn.ModuleList(
             [
                 (
                     model
@@ -512,24 +509,30 @@ class SpkEnsembleCalculator(SpkCalculator):
                 )
                 for model in models
             ]
+        )
+        self.model = NNEnsemble(
+            loaded,
+            [key for key in self.property_map.values() if key is not None],
         ).to(dtype=self.dtype, device=self.device)
 
-        # define uncertainty function as list
-        if uncertainty_fn is None:
-            uncertainty_fn = [AbsoluteUncertainty()]
-        if not isinstance(uncertainty_fn, list):
-            uncertainty_fn = [uncertainty_fn]
-        self.uncertainty_fn = uncertainty_fn
+        if uncertainty is None:
+            uncertainty = AbsoluteUncertainty()
+        if not isinstance(uncertainty, Mapping):
+            uncertainty = {"uncertainty": uncertainty}
+        for key, fn in uncertainty.items():
+            if not isinstance(fn, Uncertainty):
+                raise TypeError(f"{key!r}: {type(fn).__name__} is not an Uncertainty")
+            if key in self.property_map:
+                raise ValueError(f"uncertainty key {key!r} would overwrite {key!r}")
+        self.uncertainty = dict(uncertainty)
 
     def calculate(
         self,
-        atoms: Atoms = None,
+        atoms: Atoms | None = None,
         # properties is just a placeholder and will be ignored
         properties: list[str] | None = None,
         system_changes: list[str] = all_changes,
     ):
-        if properties is None:
-            properties = ["energy"]
         properties = [
             p_key for p_key, p_value in self.property_map.items() if p_value is not None
         ]
@@ -542,59 +545,50 @@ class SpkEnsembleCalculator(SpkCalculator):
         Calculator.calculate(self, atoms)
         model_inputs = self.converter(atoms)
 
-        # Calculate properties. The predictions are accumulated as tensors carrying a
-        # structure axis, which is what the uncertainty functions expect -- they are
-        # shared with the batch-wise ensemble calculator, where that axis is not 1.
-        accumulated_results = {prop: [] for prop in properties}
-        for model in self.models:
-            model_results = model({p: model_inputs[p].clone() for p in model_inputs})
-            for prop in properties:
-                model_prop = self.property_map[prop]
-                if model_prop not in model_results:
-                    raise AtomsConverterError(
-                        f"'{prop}' is not a property of your models. Please check the model properties!"
-                    )
-                # converted before the ensemble is reduced, so the mean and the
-                # uncertainty both come out in ase units
-                value = model_results[model_prop].detach().cpu()
-                value = value * self.property_units[prop]
-                if prop == self.energy:
-                    value = value.reshape(1)
-                elif prop == self.stress:
-                    value = value.reshape(1, 3, 3)
-                accumulated_results[prop].append(value)
+        try:
+            stacked = self.model(model_inputs)
+        except KeyError as error:
+            raise AtomsConverterError(
+                f"{error}. Please check the model properties!"
+            ) from error
 
-        accumulated_results = {
-            prop: torch.stack(values) for prop, values in accumulated_results.items()
-        }
-
-        # Compute average values, back in the shapes ase expects of a calculator
-        self.results = {}
+        # converted before the ensemble is reduced, so the mean and the
+        # uncertainty both come out in ase units; energy and stress get back the
+        # structure axis of one that the uncertainties reduce over
+        predictions = {}
         for prop in properties:
-            mean = accumulated_results[prop].mean(dim=0).numpy()
+            value = stacked[self.property_map[prop]].detach().cpu()
+            value = value * self.property_units[prop]
+            n_models = value.shape[0]
+            if prop == self.energy:
+                value = value.reshape(n_models, 1)
+            elif prop == self.stress:
+                value = value.reshape(n_models, 1, 3, 3)
+            predictions[prop] = value
+
+        # Compute average values, in the shapes ase expects of a calculator
+        self.results = {}
+        for prop, value in predictions.items():
+            mean = value.mean(dim=0).numpy()
             if prop == self.energy:
                 mean = mean.item()
             elif prop == self.stress:
                 mean = mean.squeeze()
             self.results[prop] = mean
 
-        # Compute uncertainty using assigned uncertainty function
-        if len(self.uncertainty_fn) == 1:
-            self.results["uncertainty"] = _scalar(
-                self.uncertainty_fn[0](accumulated_results)
-            )
-        else:
-            self.results["uncertainty"] = {
-                type(fn).__name__: float(_scalar(fn(accumulated_results)))
-                for fn in self.uncertainty_fn
-            }
+        for key, fn in self.uncertainty.items():
+            self.results[key] = fn(predictions).item()
 
-    def get_uncertainty(self, atoms):
+    def get_uncertainty(self, atoms, key: str = "uncertainty") -> float:
         """
-        Ensure calculation is up to date and return the uncertainty.
+        Ensure calculation is up to date and return one uncertainty.
+
+        Args:
+            atoms: structure to evaluate
+            key: results key of the uncertainty
         """
         self.calculate(atoms)
-        return self.results["uncertainty"]
+        return self.results[key]
 
 
 class AseInterface:

@@ -17,6 +17,8 @@ Three layers, and the split between them is what the sub-packages name:
   mode for a block, as curvature in distillation needs.
 - :mod:`~schnetpack.model.mace` — ``MaceModel``, which runs a compiled MACE
   model on SchNetPack batches, and ``load_mace`` for its archives.
+- :mod:`~schnetpack.model.ensemble` — ``NNEnsemble``, several models run on one
+  batch, with every prediction stacked along a leading model axis.
 
 Every public name is re-exported here, so ``spk.model.PaiNN`` and
 ``spk.model.Atomwise`` both work and the sub-package path is only needed when it
@@ -34,3 +36,4 @@ from schnetpack.model.utils import *
 from schnetpack.model.atomistic import *
 from schnetpack.model.representation import *
 from schnetpack.model.mace import *
+from schnetpack.model.ensemble import *

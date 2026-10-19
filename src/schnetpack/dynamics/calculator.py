@@ -24,8 +24,10 @@ field they return: to the forces, or to the generative field. A driver sees
 only the guided field.
 
 :class:`EnsembleCalculator` is a :class:`ForceCalculator` for an ensemble of
-force fields: it reports the members' mean, which drives any driver exactly
-as a single model's outputs would, and how far the members disagree.
+force fields, run as one :class:`~schnetpack.model.NNEnsemble`: it reports
+the models' mean, which drives any driver exactly as a single model's
+outputs would, and how far the models disagree, one value per structure
+for every :class:`~schnetpack.uncertainty.Uncertainty`.
 """
 
 import os
@@ -37,6 +39,7 @@ from torch import nn
 
 from schnetpack import properties
 from schnetpack.dynamics.guidance import Guidance
+from schnetpack.model.ensemble import NNEnsemble
 from schnetpack.uncertainty import AbsoluteUncertainty, Uncertainty
 from schnetpack.units import convert_units
 
@@ -51,8 +54,14 @@ __all__ = [
     "PseudoForceCalculator",
     "JointCalculator",
     "EnsembleCalculator",
-    "NNEnsemble",
 ]
+
+
+def _load_model(path: str) -> nn.Module:
+    """A model saved on disk, on the cpu and in float64."""
+    from schnetpack.utils.compatibility import load_model
+
+    return load_model(path, device="cpu").to(torch.float64)
 
 
 class Calculator:
@@ -101,9 +110,7 @@ class Calculator:
                 subclass says how (:meth:`guidance_field`)
         """
         if isinstance(model, str):
-            from schnetpack.utils.compatibility import load_model
-
-            model = load_model(model, device="cpu").to(torch.float64)
+            model = _load_model(model)
         if isinstance(model, nn.Module) and (device is not None or dtype is not None):
             model = model.to(device=device, dtype=dtype)
         self.model = model
@@ -596,108 +603,74 @@ class JointCalculator(Calculator):
         return outputs
 
 
-class NNEnsemble(nn.Module):
-    """
-    Several models evaluated together, reported as one prediction per model.
-
-    An ensemble is itself a model: it takes a batch and returns a dictionary
-    of predictions. What is different is that every entry carries a leading
-    model axis, ``(n_models, ...)``, so the caller can take the mean, look at
-    the spread, or both. Reducing that axis is left to the caller —
-    :class:`EnsembleCalculator` averages it for the outputs that drive a
-    loop, and hands the unreduced stack to an
-    :class:`~schnetpack.uncertainty.Uncertainty`.
-    """
-
-    def __init__(self, models: nn.ModuleList, properties: str | list[str]):
-        """
-        Args:
-            models: the ensemble members
-            properties: names of the properties to collect from them
-        """
-        super().__init__()
-        self.models = models
-        if isinstance(properties, str):
-            properties = [properties]
-        self.properties = properties
-
-    def setup(self, stage: str | None = None) -> None:
-        for model in self.models:
-            model.setup(stage)
-
-    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-        collected: dict[str, list[torch.Tensor]] = {p: [] for p in self.properties}
-        for model in self.models:
-            # a shallow copy per member, so the entries one model adds to the
-            # batch (pairwise distances, say) are not seen by the next one;
-            # the tensors themselves are shared
-            predictions = model(dict(inputs))
-            for prop in collected:
-                if prop in predictions:
-                    collected[prop].append(predictions[prop])
-        return {
-            prop: torch.stack(values) for prop, values in collected.items() if values
-        }
-
-
 class EnsembleCalculator(ForceCalculator):
     """
     Run an ensemble of force fields on spk batches, reporting how much it
     disagrees.
 
-    The outputs are the members' mean for every collected property, so any
-    driver runs on them exactly as on a single model's. On top of that
-    ``outputs[uncertainty_key]`` holds how far the members disagreed, one
-    value per structure — which, after a relaxation, tells *which*
-    structures went somewhere the models were not trained. Several
-    uncertainty functions give a dictionary keyed by class name.
+    The outputs are the models' mean for every collected property, so any
+    driver runs on them exactly as on a single model's. On top of that every
+    :class:`~schnetpack.uncertainty.Uncertainty` adds one value per structure
+    under its own key — which, after a relaxation, tells *which* structures
+    went somewhere the models were not trained. A single uncertainty is
+    reported under ``"uncertainty"``; a mapping ``{key: uncertainty}`` reports
+    each under its key.
 
     A physical :class:`ForceCalculator`: it takes batches in Angstrom and
-    reports energy, forces and stress in eV and Angstrom; the uncertainty is
-    computed on the converted members, in the units
+    reports energy, forces and stress in eV and Angstrom. The uncertainties
+    are computed on the converted predictions, keyed by the names of
+    :mod:`schnetpack.properties` whatever the models call their outputs, in
+    the units
     :class:`~schnetpack.interfaces.ase_interface.SpkEnsembleCalculator`
-    reports it in, so a criterion tuned against one applies to the other.
+    reports them in, so a criterion tuned against one applies to the other.
+
+    The models run as one :class:`~schnetpack.model.NNEnsemble` on the same
+    batch, so they share its units and neighbor list.
     """
 
     def __init__(
         self,
         models: str | Sequence[str] | Sequence[nn.Module] | nn.ModuleList,
-        properties: Sequence[str] = ("energy", "forces"),
-        uncertainty_fn: Uncertainty | list[Uncertainty] | None = None,
+        uncertainty: Uncertainty | Mapping[str, Uncertainty] | None = None,
         energy_unit: str | float = "eV",
         position_unit: str | float = "Ang",
-        energy_key: str = "energy",
-        force_key: str = "forces",
+        energy_key: str = properties.energy,
+        force_key: str = properties.forces,
         stress_key: str | None = None,
-        uncertainty_key: str = "uncertainty",
+        extra_properties: Sequence[str] = (),
         **kwargs,
     ):
         """
         Args:
-            models: the ensemble members: a list of paths, a list of modules,
+            models: the models of the ensemble: a list of paths, a list of modules,
                 a ``ModuleList``, or the path of a directory laid out as
                 schnetpack training leaves it, ``<dir>/<run>/best_model``
-            properties: model outputs to collect from the members
-            uncertainty_fn: one :class:`~schnetpack.uncertainty.Uncertainty`
-                or a list of them (default:
+            uncertainty: one :class:`~schnetpack.uncertainty.Uncertainty`,
+                reported under ``"uncertainty"``, or a mapping from output key
+                to uncertainty (default:
                 :class:`~schnetpack.uncertainty.AbsoluteUncertainty`)
             energy_unit: energy unit the models work in
             position_unit: length unit the models work in
             energy_key: energy output
             force_key: force output
             stress_key: stress output; None if the models predict none
-            uncertainty_key: output key the uncertainty is reported under
+            extra_properties: further outputs to average over the models,
+                returned unconverted
 
         Remaining keyword arguments are those of :class:`Calculator`.
         """
-        members = nn.ModuleList(
+        loaded = nn.ModuleList(
             [
-                member if isinstance(member, nn.Module) else self._load_member(member)
-                for member in self._resolve(models)
+                model if isinstance(model, nn.Module) else _load_model(model)
+                for model in self._resolve(models)
             ]
         )
+        collected = [energy_key, force_key]
+        if stress_key is not None:
+            collected.append(stress_key)
+        collected += list(extra_properties)
         super().__init__(
-            NNEnsemble(members, list(properties)),
+            NNEnsemble(loaded, collected),
             kind="physical",
             energy_unit=energy_unit,
             position_unit=position_unit,
@@ -707,14 +680,23 @@ class EnsembleCalculator(ForceCalculator):
             **kwargs,
         )
 
-        if uncertainty_fn is None:
-            uncertainty_fn = AbsoluteUncertainty(
-                energy_key=energy_key, force_key=force_key, stress_key=stress_key or ""
-            )
-        if not isinstance(uncertainty_fn, list):
-            uncertainty_fn = [uncertainty_fn]
-        self.uncertainty_fn = uncertainty_fn
-        self.uncertainty_key = uncertainty_key
+        if uncertainty is None:
+            uncertainty = AbsoluteUncertainty()
+        if not isinstance(uncertainty, Mapping):
+            uncertainty = {"uncertainty": uncertainty}
+        for key, fn in uncertainty.items():
+            if not isinstance(fn, Uncertainty):
+                raise TypeError(f"{key!r}: {type(fn).__name__} is not an Uncertainty")
+            if key in collected:
+                raise ValueError(
+                    f"uncertainty key {key!r} would overwrite the averaged {key!r}"
+                )
+        self.uncertainty = dict(uncertainty)
+        # the model's names for the properties an Uncertainty reads by their
+        # canonical ones
+        self._canonical = {energy_key: properties.energy, force_key: properties.forces}
+        if stress_key is not None:
+            self._canonical[stress_key] = properties.stress
 
     @staticmethod
     def _resolve(models) -> list:
@@ -726,12 +708,6 @@ class EnsembleCalculator(ForceCalculator):
             ]
         return list(models)
 
-    @staticmethod
-    def _load_member(path: str) -> nn.Module:
-        from schnetpack.utils.compatibility import load_model
-
-        return load_model(path, device="cpu").to(torch.float64)
-
     def _evaluate(self, batch: Mapping[str, Any]) -> dict[str, torch.Tensor]:
         # the model axis is kept by the ensemble, and the unit factors
         # broadcast over it: the mean drives the loop, and the spread across
@@ -739,12 +715,12 @@ class EnsembleCalculator(ForceCalculator):
         stacked = super()._evaluate(batch)
         outputs = {prop: value.mean(dim=0) for prop, value in stacked.items()}
 
-        members = {prop: value.detach() for prop, value in stacked.items()}
+        predictions = {
+            self._canonical[prop]: value.detach()
+            for prop, value in stacked.items()
+            if prop in self._canonical
+        }
         n_atoms = batch.get(properties.n_atoms)
-        if len(self.uncertainty_fn) == 1:
-            outputs[self.uncertainty_key] = self.uncertainty_fn[0](members, n_atoms)
-        else:
-            outputs[self.uncertainty_key] = {
-                type(fn).__name__: fn(members, n_atoms) for fn in self.uncertainty_fn
-            }
+        for key, fn in self.uncertainty.items():
+            outputs[key] = fn(predictions, n_atoms)
         return outputs
