@@ -1,11 +1,13 @@
 """Knowledge distillation: a student trained on its teacher's energy, forces
 and curvature.
 
-The teacher runs online, on the batch the student sees. For the
-curvature term both models are probed along the same random vector v: the
-teacher supplies the curvature target ``H_t v``, the student its own
-``H_s v``, both exact second derivatives. With v ~ N(0, 1) per component,
-``E|(H_s - H_t) v|^2`` is the squared Frobenius distance of the two Hessians.
+The teacher runs online, on the batch the student sees. The curvature term
+follows the Hessian distillation of [#hessian_distillation1]_, which matches
+randomly sampled rows of the two Hessians; here both models are instead probed
+along the same random vector v: the teacher supplies the curvature target
+``H_t v``, the student its own ``H_s v``, both exact second derivatives. With
+v ~ N(0, 1) per component, ``E|(H_s - H_t) v|^2`` is the squared Frobenius
+distance of the two Hessians.
 
 Both products are taken through the forces, as ``-(dF/dR)^T v`` (see
 :func:`~schnetpack.train.teacher.curvature_product`), so a model that predicts its
@@ -35,6 +37,13 @@ one, and so does a hand-written loop, which assembles the loss with
 
 Evaluation needs gradients enabled too (see :attr:`Distillation.needs_grad`),
 since curvature is a derivative.
+
+References
+----------
+.. [#hessian_distillation1] Amin, Raja, Krishnapriyan:
+   Towards fast, specialized machine learning force fields: Distilling
+   foundation models via energy hessians.
+   International Conference on Learning Representations. 2025.
 """
 
 import contextlib
