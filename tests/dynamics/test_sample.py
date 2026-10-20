@@ -18,8 +18,10 @@ from schnetpack.dynamics import (
 )
 from schnetpack.dynamics.guidance import Guidance
 from schnetpack.dynamics.hooks import FreezeScaffold
+from schnetpack.dynamics.sample.grids import UniformGrid
 from schnetpack.dynamics.sample.integrators import Integrator
 from schnetpack.generative import (
+    MASK,
     VE,
     VP,
     EpsParametrization,
@@ -27,6 +29,9 @@ from schnetpack.generative import (
     GaussianInterpolant,
     GaussianPrior,
     Interpolant,
+    LogitsParametrization,
+    MaskedTypeWeight,
+    MaskNoising,
     ParametrizedModel,
     Variable,
     VelocityParametrization,
@@ -267,6 +272,124 @@ def test_reverse_diffusion_noise_is_wider_than_the_posteriors():
     mean = (sigma(s) ** 2 / sigma(t) ** 2) * batch[properties.R]
     ratio = (reverse - mean) / (posterior - mean)
     assert torch.allclose(ratio, sigma(t) / sigma(s) * torch.ones_like(ratio))
+
+
+# --- unmasking types ------------------------------------------------------------- #
+
+N_CLASSES = 10
+
+
+def types(t_min=1e-2):
+    return Variable(
+        name="types",
+        key=properties.Z,
+        per="atom",
+        noising=MaskNoising(FlowMatching(t_min=t_min, t_max=1.0)),
+        parametrization=LogitsParametrization(N_CLASSES),
+        weight=MaskedTypeWeight(),
+        output_key="type_logits",
+    )
+
+
+def unmask(z, t, s, excluded=()):
+    """One unmasking step from t to s with uniform p(z0 | z_t)."""
+    probs = torch.full((z.shape[0], N_CLASSES), 1.0 / (N_CLASSES - 1))
+    probs[:, MASK] = 0.0
+    update = AncestralUpdate(types(), "x0_Z", excluded=excluded)
+    return update.transition({properties.Z: z}, probs, torch.tensor(t), torch.tensor(s))
+
+
+def test_unmasking_reveals_a_fraction_of_the_step_over_t_and_keeps_revealed():
+    torch.manual_seed(0)
+    z = torch.full((40000,), MASK)
+    z[:1000] = 3
+    out = unmask(z, 0.5, 0.45)
+    revealed = (out[1000:] != MASK).float().mean().item()
+    assert revealed == pytest.approx(0.05 / 0.5, abs=0.006)
+    assert (out[:1000] == 3).all()
+
+
+def test_unmasking_reveals_every_atom_at_the_end_of_the_grid():
+    torch.manual_seed(0)
+    z = torch.full((1000,), MASK)
+    assert (unmask(z, 0.02, 0.01) != MASK).all()  # s = t_min
+
+
+def test_excluded_classes_are_never_drawn():
+    torch.manual_seed(0)
+    z = torch.full((5000,), MASK)
+    out = unmask(z, 0.02, 0.01, excluded=[2, 3, 4, 5, 6, 7])
+    assert set(out.tolist()) == {1, 8, 9}
+
+
+def typed_network(batch):
+    """Positions as in ``network``; type logits that favor 6 and read R."""
+    logits = torch.zeros(batch[properties.Z].shape[0], N_CLASSES)
+    logits[:, 6] = 2.0 + batch[properties.R][:, 0].float()
+    logits[:, 9] = 1.0  # excluded below
+    return {**network(batch), "type_logits": logits}
+
+
+def types_and_positions(seen=None):
+    pos, z = positions(VE(sigma_min=0.01, sigma_max=10.0), centered=True), types()
+
+    def recording(batch):
+        if seen is not None:
+            seen.append(batch[properties.Z].clone())
+        return typed_network(batch)
+
+    model = fields(recording, pos, score_key="score_R")
+    model = fields(model, z, x0_key="x0_Z")
+    return pos, z, model
+
+
+@pytest.mark.parametrize("integrator", [None, Heun()], ids=["euler", "heun"])
+def test_sampling_types_and_positions_unmasks_every_atom(integrator):
+    torch.manual_seed(0)
+    seen = []
+    pos, z, model = types_and_positions(seen)
+    provider = StatisticsStructures(
+        n_atoms=torch.tensor([0, 0, 0, 1, 1]), atom_types=None
+    )
+    sampler = Sampler(
+        JointCalculator(model, dtype=torch.float64),
+        [
+            SDEUpdate(pos, "score_R", integrator=integrator),
+            AncestralUpdate(z, "x0_Z", excluded=[9]),
+        ],
+        [z, pos],
+        structures=provider,
+    )
+    out = sampler.sample(64, 20)
+    assert (seen[0] == MASK).all()
+    masked = [(s == MASK).float().mean().item() for s in seen]
+    assert all(a >= b for a, b in zip(masked, masked[1:]))
+    assert (out[properties.Z] != MASK).all()
+    assert 9 not in out[properties.Z].tolist()
+    assert out[properties.R].shape == (int(out[properties.n_atoms].sum()), 3)
+
+
+def test_the_grid_has_to_reach_the_t_min_of_a_masked_variable():
+    pos, z, model = types_and_positions()
+    updates = [SDEUpdate(pos, "score_R"), AncestralUpdate(z, "x0_Z")]
+    with pytest.raises(ValueError, match="would stay masked"):
+        Sampler(JointCalculator(model), updates, [z, pos], grid=UniformGrid(1.0, 0.1))
+    # the default grid ends at the largest t_min: the types'
+    assert Sampler(JointCalculator(model), updates, [z, pos]).grid.t_end == 1e-2
+
+
+def test_only_the_ancestral_update_steps_types_and_without_gaussian_options():
+    z = types()
+    calculator = JointCalculator(typed_network)
+    with pytest.raises(TypeError):
+        SDEUpdate(z)
+    with pytest.raises(TypeError, match="interpolant"):
+        Sampler(calculator, [ODEUpdate(z)], [z])
+    with pytest.raises(ValueError, match="draws no noise"):
+        Sampler(calculator, [AncestralUpdate(z, noise="reverse_diffusion")], [z])
+    pos = positions()
+    with pytest.raises(ValueError, match="excluded classes"):
+        Sampler(calculator, [AncestralUpdate(pos, excluded=[1])], [pos])
 
 
 # --- hooks and guidance --------------------------------------------------------- #

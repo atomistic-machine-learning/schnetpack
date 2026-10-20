@@ -27,8 +27,8 @@ class StructureProvider(abc.ABC):
         Draw ``n_samples`` structures.
 
         Returns:
-            A collated batch with at least ``Z``, ``n_atoms``, ``idx_m`` and
-            ``idx``.
+            A collated batch with at least ``n_atoms``, ``idx_m`` and ``idx``,
+            and ``Z`` unless the types are generated.
         """
         raise NotImplementedError
 
@@ -81,22 +81,26 @@ class StatisticsStructures(StructureProvider):
 
     Each structure draws its atom count from the ``n_atoms`` histogram, then
     each atom its type independently from ``atom_types``; a draw may be a
-    composition the dataset does not contain. The batch has no positions;
-    structures are non-periodic, with a zero cell, as in a collated molecule
-    dataset.
+    composition the dataset does not contain. Without ``atom_types`` the
+    batch has no types, for a variable that generates them (its prior writes
+    them). The batch has no positions; structures are non-periodic, with a
+    zero cell, as in a collated molecule dataset.
     """
 
-    def __init__(self, n_atoms: torch.Tensor, atom_types: torch.Tensor):
+    def __init__(self, n_atoms: torch.Tensor, atom_types: torch.Tensor | None):
         """
         Args:
             n_atoms: histogram of atom counts; entry k weighs structures of k
                 atoms. Need not be normalized.
             atom_types: weights of the atom types; entry z weighs atomic
-                number z. Need not be normalized.
+                number z. Need not be normalized. None draws no types.
         """
         n_atoms = torch.as_tensor(n_atoms, dtype=torch.float)
-        atom_types = torch.as_tensor(atom_types, dtype=torch.float)
-        for name, weights in (("n_atoms", n_atoms), ("atom_types", atom_types)):
+        histograms = {"n_atoms": n_atoms}
+        if atom_types is not None:
+            atom_types = torch.as_tensor(atom_types, dtype=torch.float)
+            histograms["atom_types"] = atom_types
+        for name, weights in histograms.items():
             if weights.ndim != 1 or (weights < 0).any() or weights.sum() <= 0:
                 raise ValueError(
                     f"{name} must be a 1-D tensor of non-negative weights "
@@ -108,12 +112,21 @@ class StatisticsStructures(StructureProvider):
         self.atom_types = atom_types
 
     @classmethod
-    def from_dataset(cls, dataset: Dataset) -> "StatisticsStructures":
-        """Count atom numbers and atom types over all structures of a dataset."""
+    def from_dataset(
+        cls, dataset: Dataset, atom_types: bool = True
+    ) -> "StatisticsStructures":
+        """
+        Count atom numbers, and atom types if asked, over all structures of a
+        dataset.
+
+        Args:
+            dataset: the structures to count
+            atom_types: False to draw atom counts only, for generated types
+        """
         zs = [dataset[i][properties.Z] for i in range(len(dataset))]
         return cls(
             n_atoms=torch.bincount(torch.tensor([z.shape[0] for z in zs])),
-            atom_types=torch.bincount(torch.cat(zs).long()),
+            atom_types=torch.bincount(torch.cat(zs).long()) if atom_types else None,
         )
 
     def __call__(self, n_samples):
@@ -121,16 +134,20 @@ class StatisticsStructures(StructureProvider):
         Draw ``n_samples`` compositions.
 
         Returns:
-            A batch with ``Z``, ``n_atoms``, ``idx_m``, ``idx``, ``cell`` and
-            ``pbc``; the positions are the prior's to draw.
+            A batch with ``n_atoms``, ``idx_m``, ``idx``, ``cell``, ``pbc``
+            and, with ``atom_types``, ``Z``; the positions are the prior's to
+            draw.
         """
         n_atoms = torch.multinomial(self.n_atoms, n_samples, replacement=True)
-        z = torch.multinomial(self.atom_types, int(n_atoms.sum()), replacement=True)
-        return {
+        batch = {
             properties.idx: torch.arange(n_samples),
-            properties.Z: z,
             properties.n_atoms: n_atoms,
             properties.idx_m: torch.repeat_interleave(torch.arange(n_samples), n_atoms),
             properties.cell: torch.zeros(n_samples, 3, 3),
             properties.pbc: torch.zeros(3 * n_samples, dtype=torch.bool),
         }
+        if self.atom_types is not None:
+            batch[properties.Z] = torch.multinomial(
+                self.atom_types, int(n_atoms.sum()), replacement=True
+            )
+        return batch

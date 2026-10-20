@@ -12,6 +12,10 @@ Three levels, each a special case of the previous one:
 - :class:`GaussianInterpolant`: x_t = a(t) x0 + sigma(t) eps with a Gaussian
   prior and independent coupling. Adds the noise and the score.
 
+:class:`MaskNoising` masks discrete atom types. It has a schedule and a prior
+but no interpolation, so it stays on the first level: its only field is the
+denoiser p(z0 | z_t).
+
 Theory: ``docs_new/generation/noising.md``.
 """
 
@@ -21,7 +25,7 @@ import math
 import torch
 
 from schnetpack.generative.couplings import Coupling, IdentityCoupling
-from schnetpack.generative.priors import GaussianPrior, Prior
+from schnetpack.generative.priors import MASK, GaussianPrior, MaskPrior, Prior
 from schnetpack.generative.schedules import GaussianSchedule, Schedule
 
 __all__ = [
@@ -29,6 +33,7 @@ __all__ = [
     "ForwardNoising",
     "Interpolant",
     "GaussianInterpolant",
+    "MaskNoising",
 ]
 
 
@@ -221,3 +226,50 @@ class GaussianInterpolant(Interpolant):
                 f"sigma_max ({schedule.sigma_max})."
             )
         super().__init__(schedule, prior=prior, coupling=IdentityCoupling())
+
+
+class MaskNoising(ForwardNoising):
+    """
+    Absorbing-state masking of atom types (D3PM): each atom keeps its type
+    with probability a(t) and is masked (:data:`~schnetpack.generative.priors.MASK`)
+    otherwise, independently of the other atoms. With
+    :class:`~schnetpack.generative.schedules.FlowMatching`, a = 1 - t, every
+    atom is masked at t = 1, the start of sampling.
+
+    There is no interpolation between x0 and x1, so this is not an
+    :class:`Interpolant`: only the ancestral update can step it, by
+    unmasking. Theory: ``docs_new/generation/new_variables.md`` §4.
+    """
+
+    def __init__(self, schedule: Schedule):
+        """
+        Args:
+            schedule: its a(t) is the probability to keep a type, falling
+                from 1 at t = 0 to 0 at t = 1
+        """
+        self.schedule = schedule
+        self.prior = MaskPrior()
+
+    def perturb(self, x0, t=None, batch=None, groups=None):
+        """
+        Mask each type with probability 1 - a(t).
+
+        Args:
+            x0: clean types, shape (n_atoms,)
+            t: times, per atom or scalar; drawn uniformly on the schedule's
+                range if not given
+            batch: unused
+            groups: unused
+
+        Returns:
+            (z_t, x0, None, t)
+        """
+        if t is None:
+            t_min, t_max = self.schedule.t_min, self.schedule.t_max
+            t = t_min + (t_max - t_min) * torch.rand(x0.shape[0], device=x0.device)
+        keep = torch.rand(x0.shape, device=x0.device) < expand_t(self.schedule.a(t), x0)
+        return torch.where(keep, x0, torch.full_like(x0, MASK)), x0, None, t
+
+    def sampling_prior(self) -> Prior:
+        """Every atom masked."""
+        return self.prior

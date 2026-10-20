@@ -14,11 +14,13 @@ import abc
 from collections.abc import Callable
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from schnetpack import properties
 from schnetpack.generative.differential_equations import SDE
 from schnetpack.generative.noising import expand_t
+from schnetpack.generative.priors import MASK
 from schnetpack.generative.schedules import GaussianSchedule, Schedule
 
 __all__ = [
@@ -28,6 +30,8 @@ __all__ = [
     "X0Parametrization",
     "VelocityParametrization",
     "PseudoForceParametrization",
+    "LogitsParametrization",
+    "MaskedTypeWeight",
     "ParametrizedModel",
 ]
 
@@ -262,6 +266,103 @@ class PseudoForceParametrization(Parametrization):
         a = expand_t(schedule.a(t), x_t)
         sigma = expand_t(schedule.sigma(t), x_t)
         return (a * self.to_x0(schedule, output, x_t, t) - x_t) / sigma**2
+
+
+class LogitsParametrization(Parametrization):
+    """
+    The head predicts logits over the classes of a masked type, class index =
+    Z and :data:`~schnetpack.generative.priors.MASK` = 0.
+
+    Read as the denoiser p(z0 | z_t): a softmax with MASK's logit at -inf for
+    a masked atom, since no clean type is masked, and one-hot at z_t for a
+    revealed one. The loss is the cross-entropy of the same softmax. A masked
+    variable has no score, velocity or noise; it is stepped by unmasking.
+    Theory: ``docs_new/generation/new_variables.md`` §4.2–4.3.
+    """
+
+    def __init__(self, n_classes: int = 101):
+        """
+        Args:
+            n_classes: number of classes, MASK included; Z < n_classes
+        """
+        self.n_classes = n_classes
+
+    def target(self, schedule, x0, x1, t):
+        # the clean types; the loss weight decides which atoms count
+        return x0
+
+    def log_probs(self, logits: torch.Tensor) -> torch.Tensor:
+        """log p(z0 | z_t) of a masked atom: log-softmax with MASK at -inf."""
+        logits = logits.clone()
+        logits[..., MASK] = float("-inf")
+        return logits.log_softmax(-1)
+
+    def loss(
+        self, logits: torch.Tensor, label: torch.Tensor, weight: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Cross-entropy weighted per atom, summed over the atoms with a positive
+        weight and divided by their number.
+
+        Args:
+            logits: the head's output, shape (n_atoms, n_classes)
+            label: clean types, shape (n_atoms,)
+            weight: loss weight per atom, 0 for atoms that do not count
+        """
+        counted = weight > 0
+        ce = F.nll_loss(self.log_probs(logits), label, reduction="none")
+        weighted = torch.where(counted, weight * ce, torch.zeros_like(ce))
+        return weighted.sum() / counted.sum().clamp(min=1)
+
+    def to_x0(self, schedule, output, x_t, t):
+        """p(z0 | z_t), shape (n_atoms, n_classes)."""
+        probs = self.log_probs(output).exp()
+        known = F.one_hot(x_t, self.n_classes).to(probs)
+        return torch.where((x_t == MASK)[:, None], probs, known)
+
+    def to_score(self, schedule, output, x_t, t):
+        raise TypeError(
+            "a masked type has no score, velocity or noise; read it as x0 and "
+            "step it with AncestralUpdate"
+        )
+
+    def to_pseudo_force(self, schedule, output, x_t, t):
+        return self.to_score(schedule, output, x_t, t)
+
+
+class MaskedTypeWeight:
+    """
+    Loss weight of a masked type: the KL of one reverse step per unit
+    cross-entropy, plus ``lambda_ce``, on masked atoms; 0 on revealed ones.
+
+    The step of a T-step sampler reveals a masked atom with probability
+    -a'(t) / (T (1 - a(t))), which is 1 / (T t) for a = 1 - t: GEODE's Eq. 16.
+    Use as a :class:`~schnetpack.generative.variables.Variable` weight.
+    Theory: ``docs_new/generation/new_variables.md`` §4.3.
+    """
+
+    def __init__(self, n_steps: int = 1000, lambda_ce: float = 0.005):
+        """
+        Args:
+            n_steps: the T of the reverse step
+            lambda_ce: weight of the plain cross-entropy
+        """
+        self.n_steps = n_steps
+        self.lambda_ce = lambda_ce
+
+    def __call__(self, schedule, t, z_t):
+        """
+        Args:
+            schedule: the masking schedule, with a(t) the keep probability
+            t: times per atom, shape (n_atoms,)
+            z_t: noisy types, shape (n_atoms,)
+
+        Returns:
+            Weight per atom, shaped like t.
+        """
+        reveal = -schedule.a_dot(t) / (self.n_steps * (1.0 - schedule.a(t)))
+        # where, not a product: at a(t) = 1 no atom is masked, but reveal is inf
+        return torch.where(z_t == MASK, reveal + self.lambda_ce, torch.zeros_like(t))
 
 
 class ParametrizedModel(nn.Module):

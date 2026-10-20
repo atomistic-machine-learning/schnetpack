@@ -1,6 +1,6 @@
 # Several variables
 
-The other pages treat one generated quantity $x\in\mathbb R^d$, the positions. A structure can carry several: positions, atom types, a cell. Each is a **variable** with its own noising, parametrization and head, and all of them share one time $t$ and one network. This page describes what changes when there is more than one: how training noises them together, and how sampling steps them together. The notation follows the [[overview#Notation|overview]]; one variable is the special case of everything below.
+The other pages treat one generated quantity $x\in\mathbb R^d$, the positions. A structure can carry several: positions, atom types, a cell. Each is a **variable** with its own noising, parametrization and head, and all of them share one time $t$ and one network. This page describes what changes when there is more than one: how training noises them together, and how sampling steps them together. §4 adds the atom types, the first discrete variable. The notation follows the [[overview#Notation|overview]]; one variable is the special case of everything below.
 
 ---
 
@@ -41,7 +41,7 @@ A sampler steps all variables along one time grid with one model call per stage.
 
 - *SDE update*: the reverse SDE of [[generation#2.2 SDE sampling|generation §2.2]] on the variable's score, with its own $\gamma$, from the probability-flow ODE ($\gamma=0$) to the reverse-time SDE ($\gamma=1$). Needs a Gaussian interpolant.
 - *ODE update*: $dx=\hat v\,dt$ on the variable's velocity, [[generation#2.1 ODE sampling|generation §2.1]]. On a Gaussian interpolant it equals the SDE update at $\gamma=0$.
-- *Ancestral update*: the noising's own reverse transition given $\hat x_0$. On a Gaussian interpolant that is the posterior step of [[generation#2.2 SDE sampling|generation §2.2]], the DDPM step on VP and the NCSN step on VE. A masked variable such as atom types is unmasked instead; it has no score and no velocity, so this is its only update.
+- *Ancestral update*: the noising's own reverse transition given $\hat x_0$. On a Gaussian interpolant that is the posterior step of [[generation#2.2 SDE sampling|generation §2.2]], the DDPM step on VP and the NCSN step on VE. A masked variable such as atom types is unmasked instead (§4.4); it has no score and no velocity, so this is its only update.
 
 SDE and ODE updates take an integrator (Euler or Heun), and the integrator sets how many model calls, or **stages**, the update needs per step. An ancestral update has one stage, at $t$.
 
@@ -63,7 +63,7 @@ With Heun on the positions and an ancestral update on the types:
 
 **The noise is the variable's.** The noise of an SDE or ancestral step is drawn by the variable's prior, as unit noise in the prior's subspace. For centered positions it is centered per structure, so the noise never moves the center of a molecule. An integrator adds no noise of its own.
 
-**Every variable once.** Each variable has exactly one update, and the update has to fit the noising: SDE and ODE updates only for Gaussian interpolants, ancestral updates for everything.
+**Every variable once.** Each variable has exactly one update, and the update has to fit the noising: SDE updates only for Gaussian interpolants, ODE updates for interpolants, ancestral updates for Gaussian interpolants and masked variables.
 
 ### 3.4 One variable
 
@@ -79,6 +79,88 @@ Guidance ([[generation#3.2 Guidance|generation §3.2]]) acts on the positions. W
 
 ---
 
+## 4 Atom types
+
+Atom types are the first discrete variable. Each atom carries a class $z\in\{m,1,\dots,K\}$: its atomic number, or the mask state $m$. The batch stores the mask as $Z=0$, since no element has $Z=0$. Types are noised by masking, an absorbing-state discrete diffusion [2] as in GEODE [1], and are generated next to the positions at one shared $t$ (§2). Everything in §1–§3 holds for them; this section adds what is specific.
+
+### 4.1 Masking
+
+Each atom keeps its type with probability $a(t)$ and is masked otherwise, independently of the other atoms:
+
+$$
+z_t=\begin{cases}z_0&\text{with probability }a(t),\\ m&\text{with probability }1-a(t),\end{cases}\qquad a(t)=1-t .
+$$
+
+$a$ is the linear schedule of [[schedules#1.1 Linear|schedules §1.1]], read as a keep probability. At $t=1$ every atom is masked. That is the prior and the start of sampling; there is no other noise. The mask is absorbing: an atom masked at $s$ stays masked at every $t>s$, and between them a kept atom is masked with probability $1-a(t)/a(s)$. A structure at $t$ has on average a fraction $1-a(t)=t$ of its atoms masked.
+
+Masking has a schedule and a prior, but it does not interpolate between $x_0$ and $x_1$. It is a noising process of the first level, [[noising#1 Noising process|noising §1]]: its only field is the denoiser (§4.2), and only the ancestral update can step it (§3.3).
+
+### 4.2 Denoiser
+
+For the one-hot encoding $e_z$ of a type, the denoiser of [[noising#1 Noising process|noising §1]] is a distribution,
+
+$$
+\eta_0=\mathbb E\big[e_{z_0}\mid\text{noisy structure}\big]=p\big(z_0\mid\text{noisy structure}\big),
+$$
+
+the probability of each clean type given everything at $t$: positions, revealed types, masks and $t$ itself. For a revealed atom it is one-hot at $z_t$, since a revealed type is the clean one. For a masked atom the network predicts it. The head gives $K+1$ logits per atom, one per class index $Z$, and the denoiser is their softmax with the mask's logit set to $-\infty$, since no clean type is masked. The loss (§4.3) and the sampler (§4.4) both use this distribution.
+
+The ancestral update reads the denoiser of every variable it steps. For a Gaussian variable that is the mean $\hat x_0$; for types it is the class distribution.
+
+### 4.3 Loss
+
+The loss is the variational bound of the reverse step [2]. For a step from $t$ to $s<t$, let
+
+$$
+r(t,s)=\frac{a(s)-a(t)}{1-a(t)}
+$$
+
+be the probability that an atom masked at $t$ is revealed at $s$. Given the clean type, the true reverse step $q(z_s\mid z_t=m,z_0)$ reveals $z_0$ with probability $r$ and keeps the mask otherwise. The model's step reveals with the same probability and draws the type from the denoiser $\hat p$. The two steps differ only in the revealed type, so
+
+$$
+\mathrm{KL}\big(q\,\Vert\,p_\theta\big)=r\,\big(-\log\hat p(z_0)\big)=r\,\mathrm{CE}(\hat p,z_0).
+$$
+
+A revealed atom keeps its type in both steps, and its KL is 0. For a small step $h$, $r\approx h\,(-\dot a)/(1-a)$, which is $h/t$ for $a=1-t$. With $T$ steps, $h=1/T$, so the loss weight per atom is
+
+$$
+w_Z(t,z_t)=\begin{cases}\dfrac1{T\,t}+\lambda_{\mathrm{ce}}&z_t=m,\\[6pt]0&z_t\ne m,\end{cases}
+$$
+
+with $\lambda_{\mathrm{ce}}=0.005$, as in GEODE's Eq. 16 [1]. The bound term becomes small at large $t$, where $1/(Tt)\to1/T$, and the plain cross-entropy keeps a signal there. The $1/t$ is the weight of the continuous-time bound of masked diffusion [3, 4]. The $1/T$ is a constant, so the training script's factor $\lambda_Z$ absorbs it.
+
+**Normalization.** The weighted cross-entropy is summed over the masked atoms of the batch and divided by their number, so every masked atom counts the same, as in the bound. GEODE's Eq. 16 divides per structure, by $N_m$ inside the expectation over $t$. That gives a structure with few masked atoms (small $t$) as much weight as one with many.
+
+The positions' loss is unchanged and counts every atom, masked or not. The training loss is $\lambda_R\mathcal L_R+\lambda_Z\mathcal L_Z$. GEODE's factors give $\lambda_R=10$ (its $20\cdot\tfrac12$) and $\lambda_Z=150$. They were tuned on MP-20, so on QM9 both terms are logged on a validation split and the ratio is adjusted from there.
+
+### 4.4 Unmasking
+
+The ancestral update of a masked variable is the model's reverse step of §4.3. From $t$ to $s$, each atom masked at $t$ is revealed with probability $r(t,s)=(t-s)/t$, and its type is drawn from $\hat p$; the other masked atoms stay masked. Revealed types are kept: nothing is masked again, and the step adds no noise. Over a grid the probabilities telescope, $\prod_k\big(1-r(t_k,t_{k+1})\big)=\prod_k t_{k+1}/t_k$, so an atom is still masked at $s$ with probability $s$, as in training.
+
+**The last step reveals every atom.** The types' time range ends at $t_{\min}=1/T$, where the weight $1/(Tt)$ reaches 1; it is unbounded below. A grid that ends at $t_{\min}$ would leave a fraction $t_{\min}$ of the atoms masked. So the step that reaches $t_{\min}$ reveals every remaining atom, $r=1$. That is GEODE's last step from $1/T$ to $0$, where $a=1$. The grid therefore has to reach the types' $t_{\min}$. The default grid ends at the largest $t_{\min}$ of all schedules, which is the types' $1/T$, and the sampler raises for a grid that ends above it.
+
+**Excluded elements.** Elements that should never be generated get probability zero, and $\hat p$ is renormalized over the rest. On QM9 that is every element except H, C, N, O and F; on MP-20 it is GEODE's 24 [1]. Training keeps all $K$ classes.
+
+**Atoms revealed together are drawn independently.** Each draws from its own marginal given the structure at $t$. That is exact only for small steps: two atoms revealed in one step can get types that are each likely but unlikely together. A step reveals on average a fraction $h/t$ of the masked atoms, so about $N h$ atoms. With $T=1000$ steps and at most 29 atoms in a QM9 molecule, that is mostly one atom or none. Sampling with few steps reveals many atoms at once.
+
+**Next to the positions.** Types have one stage, at $t$. With Heun on the positions, the second model call already sees the types revealed at $t'$ (§3.2, §3.3), and the joint step is first order (§3.5).
+
+### 4.5 Start
+
+Sampling starts at $t=1$ with every atom masked and the positions drawn from their prior. The number of atoms is not generated: each structure draws it from the training set's histogram, as in EDM [5]. Training at $t=1$ gives the same state. $a(1)=0$ masks every atom, and the positions are close to their prior when $\sigma_{\max}$ is much wider than the molecule ([[schedules#2.2 Variance exploding (VE)|schedules §2.2]]).
+
+The mask is a class of its own. The network's type embedding has $K+1$ rows, with row $0$ for the mask, and its head predicts $K+1$ logits per atom, one per class index.
+
+### 4.6 When types are decided
+
+Both variables run on one $t$, so their schedules fix when the types are decided relative to the geometry. Take linear masking with the QM9 VE positions ($\sigma_{\min}=0.01$ Å, $\sigma_{\max}=10$ Å). At $t=0.5$ half the types are still masked, while $\sigma=0.32$ Å and the geometry has mostly formed. The network places the atoms first and names most of them afterwards, from the local geometry. A keep probability that stays near 1 for longer, such as $a=1-t^2$, would decide the types earlier; the weight of §4.3 follows from $a$. GEODE's linear masking comes first, and this stays a knob for later.
+
+---
+
 ## References
 
 1. Lou, Ganose (2026). *Symmetry-Preserving Cartesian Diffusion for Crystal Generation.* arXiv:2610.01898.
+2. Austin, Johnson, Ho, Tarlow, van den Berg (2021). *Structured Denoising Diffusion Models in Discrete State-Spaces.* NeurIPS. arXiv:2107.03006.
+3. Sahoo, Arriola, Schiff, Gokaslan, Marroquin, Chiu, Rush, Kuleshov (2024). *Simple and Effective Masked Diffusion Language Models.* NeurIPS. arXiv:2406.07524.
+4. Shi, Han, Wang, Doucet, Titsias (2024). *Simplified and Generalized Masked Diffusion for Discrete Data.* NeurIPS. arXiv:2406.04329.
+5. Hoogeboom, Satorras, Vignac, Welling (2022). *Equivariant Diffusion for Molecule Generation in 3D.* ICML. arXiv:2203.17003.

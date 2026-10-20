@@ -6,7 +6,8 @@ each data batch, and sampling starts from the same distribution. A prior
 maps a batch to a copy with its :attr:`Prior.keys` redrawn, the endpoint
 under :attr:`Prior.key`; the structures
 themselves (atom counts, types) come from a
-:class:`~schnetpack.dynamics.structures.StructureProvider`. A prior declares
+:class:`~schnetpack.dynamics.structures.StructureProvider`, unless the types
+are generated: then :class:`MaskPrior` writes them. A prior declares
 whether its draws are isotropic Gaussian (:attr:`Prior.gaussian`) and their
 scale (:attr:`Prior.std`), which gate the score/noise targets and the SDE
 chart. A draw may read the batch's layout and atom types, never the data
@@ -21,7 +22,10 @@ import torch
 
 from schnetpack import properties
 
-__all__ = ["Prior", "GaussianPrior", "noise_like"]
+__all__ = ["MASK", "Prior", "GaussianPrior", "MaskPrior", "noise_like"]
+
+MASK = 0
+"""Class of a masked atom type: no element has Z = 0."""
 
 
 class Prior(abc.ABC):
@@ -186,6 +190,33 @@ class GaussianPrior(Prior):
         )
         means = totals / counts.reshape(-1, *(1,) * (x.ndim - 1))
         return x - means[segments]
+
+
+class MaskPrior(Prior):
+    """
+    Every atom type masked: the prior of absorbing-state type diffusion.
+
+    Writes :data:`MASK` for every atom, shaped like ``batch[Z]`` if present,
+    else one per atom of ``batch[n_atoms]``.
+    """
+
+    keys = (properties.Z,)
+    key = properties.Z
+
+    def __call__(self, batch):
+        if properties.Z in batch:
+            z = batch[properties.Z]
+            return {**batch, properties.Z: torch.full_like(z, MASK)}
+        if properties.n_atoms not in batch:
+            raise KeyError(
+                f"cannot infer the number of atoms: the batch holds neither "
+                f"{properties.Z!r} nor {properties.n_atoms!r}"
+            )
+        n_atoms = batch[properties.n_atoms]
+        z = torch.full(
+            (int(n_atoms.sum()),), MASK, dtype=torch.long, device=n_atoms.device
+        )
+        return {**batch, properties.Z: z}
 
 
 def noise_like(prior: Prior, x: torch.Tensor, batch: Mapping[str, Any]) -> torch.Tensor:

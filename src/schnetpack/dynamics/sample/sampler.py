@@ -11,13 +11,15 @@ every generated variable along a time grid.
   the score, :class:`ODEUpdate` transports along a velocity; both take an
   :class:`~schnetpack.dynamics.sample.integrators.Integrator`, which sets
   their stages.
-- :class:`AncestralUpdate` takes the exact Gaussian posterior given the
-  denoised sample, in one stage.
+- :class:`AncestralUpdate` takes the noising's own reverse transition given
+  the denoiser, in one stage: the exact Gaussian posterior, or unmasking for
+  masked atom types.
 
 Theory: ``docs_new/generation/generation.md`` (one variable) and
 ``docs_new/generation/new_variables.md`` (several).
 """
 
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -29,8 +31,13 @@ from schnetpack.dynamics.sample.grids import TimeGrid, UniformGrid
 from schnetpack.dynamics.sample.integrators import Euler, Integrator
 from schnetpack.dynamics.structures import StructureProvider
 from schnetpack.generative.differential_equations import SDE
-from schnetpack.generative.noising import GaussianInterpolant, Interpolant, expand_t
-from schnetpack.generative.priors import noise_like
+from schnetpack.generative.noising import (
+    GaussianInterpolant,
+    Interpolant,
+    MaskNoising,
+    expand_t,
+)
+from schnetpack.generative.priors import MASK, noise_like
 from schnetpack.generative.schedules import GaussianSchedule
 from schnetpack.generative.variables import Variable
 
@@ -274,21 +281,35 @@ class ODEUpdate(DriftUpdate):
 
 class AncestralUpdate(Update):
     """
-    The exact Gaussian posterior p(x_s | x_t, x0_hat) of the variable's
-    interpolant, in one stage at t: the DDPM step on VP, the NCSN step on VE.
-    ``noise="reverse_diffusion"`` draws the noise with the std
-    sqrt(sigma_t^2 - sigma_s^2) of the reverse diffusion instead, as GEODE
-    does on its VE positions.
+    The noising's own reverse transition given the denoiser, in one stage at
+    t.
+
+    On a Gaussian interpolant, the exact posterior p(x_s | x_t, x0_hat): the
+    DDPM step on VP, the NCSN step on VE. ``noise="reverse_diffusion"`` draws
+    the noise with the std sqrt(sigma_t^2 - sigma_s^2) of the reverse
+    diffusion instead, as GEODE does on its VE positions.
+
+    On a :class:`~schnetpack.generative.noising.MaskNoising`, unmasking: the
+    field is p(z0 | z_t), and each masked atom is revealed with probability
+    (a_s - a_t) / (1 - a_t), its type drawn from the field without the
+    ``excluded`` classes. Revealed types stay. The step that reaches the
+    schedule's t_min reveals every remaining atom.
     """
 
     def __init__(
-        self, variable: Variable, field_key: str = "x0", noise: str = "posterior"
+        self,
+        variable: Variable,
+        field_key: str = "x0",
+        noise: str = "posterior",
+        excluded: Sequence[int] = (),
     ):
         """
         Args:
             variable: the variable this update steps
-            field_key: the calculator output holding its x0_hat
-            noise: "posterior" or "reverse_diffusion"
+            field_key: the calculator output holding its x0_hat, or
+                p(z0 | z_t) for a masked variable
+            noise: "posterior" or "reverse_diffusion"; Gaussian only
+            excluded: classes never drawn, e.g. atomic numbers; masked only
         """
         if noise not in ("posterior", "reverse_diffusion"):
             raise ValueError(
@@ -296,13 +317,27 @@ class AncestralUpdate(Update):
             )
         super().__init__(variable, field_key)
         self.noise = noise
+        self.excluded = sorted({int(z) for z in excluded})
 
     def check(self):
-        if not isinstance(self.variable.noising, GaussianInterpolant):
+        noising = self.variable.noising
+        if isinstance(noising, MaskNoising):
+            if self.noise != "posterior":
+                raise ValueError(
+                    f"{self.variable.name!r} is unmasked, which draws no noise; "
+                    f"noise={self.noise!r} applies to a Gaussian interpolant"
+                )
+            return
+        if not isinstance(noising, GaussianInterpolant):
             raise TypeError(
-                f"AncestralUpdate takes the posterior of a Gaussian interpolant; "
-                f"{self.variable.name!r} is noised by "
-                f"{type(self.variable.noising).__name__}"
+                f"AncestralUpdate takes the posterior of a Gaussian interpolant "
+                f"or unmasks a MaskNoising; {self.variable.name!r} is noised by "
+                f"{type(noising).__name__}"
+            )
+        if self.excluded:
+            raise ValueError(
+                f"excluded classes apply to a masked variable; "
+                f"{self.variable.name!r} is Gaussian"
             )
 
     def stage(self, stage, batch, fields, t_stage, start, t, t_next, data):
@@ -318,6 +353,8 @@ class AncestralUpdate(Update):
     ) -> torch.Tensor:
         """Draw x_s given x_t = ``batch[key]`` and x0_hat."""
         x = batch[self.variable.key]
+        if isinstance(self.variable.noising, MaskNoising):
+            return self.unmask(x, x0, t, s)
         schedule = self.variable.noising.schedule
         mean, std = gaussian_posterior(schedule, x, x0, t, s)
         if self.noise == "reverse_diffusion":
@@ -326,6 +363,42 @@ class AncestralUpdate(Update):
             )
         noise = noise_like(self.variable.noising.prior, x, batch)
         return mean + expand_t(std, x) * noise
+
+    def unmask(
+        self, z: torch.Tensor, probs: torch.Tensor, t: torch.Tensor, s: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Reveal masked types from t to s.
+
+        Args:
+            z: types at t, MASK for masked atoms, shape (n_atoms,)
+            probs: p(z0 | z_t), shape (n_atoms, n_classes)
+            t: time at the start of the step (0-dim)
+            s: time at the end of the step (0-dim)
+
+        Returns:
+            The types at s.
+        """
+        schedule = self.variable.noising.schedule
+        if reaches(s, schedule.t_min):
+            p = 1.0  # a grid ends at t_min, where a < 1: reveal the rest
+        else:
+            a_t, a_s = schedule.a(t), schedule.a(s)
+            p = (a_s - a_t) / (1.0 - a_t)
+        reveal = (z == MASK) & (torch.rand(z.shape, device=z.device) < p)
+        if not reveal.any():
+            return z
+        probs = probs[reveal]  # a copy: the field stays as it is
+        probs[:, [MASK, *self.excluded]] = 0.0
+        z = z.clone()
+        z[reveal] = torch.multinomial(probs, 1).squeeze(-1).to(z.dtype)
+        return z
+
+
+def reaches(t: torch.Tensor | float, t_min: float) -> bool:
+    """Whether a grid time t is at or below t_min, up to rounding of the grid."""
+    t = float(t)
+    return t <= t_min or math.isclose(t, t_min, rel_tol=1e-5)
 
 
 def check_updates(
@@ -421,6 +494,15 @@ class Sampler(Dynamics):
             grid = UniformGrid(
                 min(s.t_max for s in schedules), max(s.t_min for s in schedules)
             )
+        for v in self.start:
+            if isinstance(v.noising, MaskNoising) and not reaches(
+                grid.t_end, v.noising.schedule.t_min
+            ):
+                raise ValueError(
+                    f"the grid ends at t = {grid.t_end}, above the t_min "
+                    f"{v.noising.schedule.t_min} of {v.name!r}: some of its "
+                    "atoms would stay masked"
+                )
         super().__init__(
             calculator, structures=structures, hooks=hooks, key=self.start[0].key
         )

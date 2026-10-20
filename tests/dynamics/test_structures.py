@@ -3,7 +3,7 @@ import torch
 
 from schnetpack import properties
 from schnetpack.dynamics import DatasetStructures, StatisticsStructures
-from schnetpack.generative import GaussianPrior
+from schnetpack.generative import MASK, GaussianPrior, MaskPrior
 
 
 def molecule(z):
@@ -82,3 +82,14 @@ def test_the_prior_draws_positions_for_statistics_structures():
     structures = StatisticsStructures(torch.tensor([0, 0, 1]), torch.tensor([0, 1]))
     batch = GaussianPrior(1.0)(structures(4))
     assert batch[properties.R].shape == (8, 3)
+
+
+def test_statistics_structures_without_types_leave_them_to_a_prior():
+    torch.manual_seed(0)
+    structures = StatisticsStructures.from_dataset(DATASET, atom_types=False)
+    assert structures.atom_types is None
+    batch = structures(5)
+    assert properties.Z not in batch
+    assert batch[properties.idx_m].shape == (int(batch[properties.n_atoms].sum()),)
+    z = MaskPrior()(batch)[properties.Z]
+    assert z.tolist() == [MASK] * int(batch[properties.n_atoms].sum())
