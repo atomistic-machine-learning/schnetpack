@@ -1,91 +1,454 @@
 """
-The time-indexed family: drivers that solve a generative model's reverse
-process along a time grid.
+The time-indexed family: one sampler that solves the reverse process of
+every generated variable along a time grid.
 
-- :class:`SDESampler` integrates the reverse SDE of a Gaussian forward
-  process on the score of a
-  :class:`~schnetpack.dynamics.calculator.ScoreCalculator`.
-- :class:`ODESampler` integrates dx = v dt on the velocity of a
-  :class:`~schnetpack.dynamics.calculator.VelocityCalculator`.
-- :class:`AncestralSampler` steps with the exact Gaussian posterior of the
-  forward process on the denoised sample of an
-  :class:`~schnetpack.dynamics.calculator.X0Calculator`.
+- :class:`Sampler` steps a list of variables, one update each. A step is a
+  double loop: for every stage, one model call at the stage time, then each
+  update that has this stage reads its field and writes its next stage
+  point; after the last stage every update writes its new value, in list
+  order.
+- :class:`SDEUpdate` integrates the reverse SDE of a Gaussian interpolant on
+  the score, :class:`ODEUpdate` transports along a velocity; both take an
+  :class:`~schnetpack.dynamics.sample.integrators.Integrator`, which sets
+  their stages.
+- :class:`AncestralUpdate` takes the exact Gaussian posterior given the
+  denoised sample, in one stage.
 
-All share the loop of :class:`Sampler`, and the time range is the grid's.
-The SDE and ODE samplers take their step rule as an
-:class:`~schnetpack.dynamics.sample.integrators.Integrator`.
+Theory: ``docs_new/generation/generation.md`` (one variable) and
+``docs_new/generation/new_variables.md`` (several).
 """
 
-import abc
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 import torch
 
 from schnetpack.dynamics.base import Dynamics
-from schnetpack.dynamics.calculator import (
-    ScoreCalculator,
-    VelocityCalculator,
-    X0Calculator,
-)
+from schnetpack.dynamics.calculator import JointCalculator
 from schnetpack.dynamics.sample.grids import TimeGrid, UniformGrid
 from schnetpack.dynamics.sample.integrators import Euler, Integrator
 from schnetpack.dynamics.structures import StructureProvider
-from schnetpack.generative.differential_equations import SDE, ReverseODE
-from schnetpack.generative.noising import GaussianInterpolant, expand_t
-from schnetpack.generative.priors import Prior
+from schnetpack.generative.differential_equations import SDE
+from schnetpack.generative.noising import GaussianInterpolant, Interpolant, expand_t
+from schnetpack.generative.priors import noise_like
+from schnetpack.generative.schedules import GaussianSchedule
+from schnetpack.generative.variables import Variable
 
-__all__ = ["Sampler", "SDESampler", "ODESampler", "AncestralSampler"]
+__all__ = [
+    "Sampler",
+    "Update",
+    "DriftUpdate",
+    "SDEUpdate",
+    "ODEUpdate",
+    "AncestralUpdate",
+    "gaussian_posterior",
+]
 
 
-class Sampler(Dynamics):
+def gaussian_posterior(
+    schedule: GaussianSchedule,
+    x_t: torch.Tensor,
+    x0: torch.Tensor,
+    t: torch.Tensor,
+    s: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Shared loop of the samplers: prior -> :meth:`step` along a time grid.
+    Mean and std of the exact Gaussian posterior p(x_s | x_t, x0), s < t.
 
-    Hooks run between steps with ``batch[time_key]`` the grid time of the
-    iterate they see. The batch is in the model's units. Guidance belongs to
-    the calculator: the field it returns is already guided.
+    With r = a_t / a_s and var_ts = sigma_t^2 - r^2 sigma_s^2,
+    mean = (r sigma_s^2 / sigma_t^2) x_t + (a_s var_ts / sigma_t^2) x0 and
+    var = sigma_s^2 var_ts / sigma_t^2.
+
+    Returns:
+        (mean, std): mean shaped like x_t, std shaped like t.
+    """
+    a_t, sig_t = schedule.a(t), schedule.sigma(t)
+    a_s, sig_s = schedule.a(s), schedule.sigma(s)
+    r = a_t / a_s
+    var_ts = sig_t**2 - r**2 * sig_s**2
+    mean = (
+        expand_t(r * sig_s**2 / sig_t**2, x_t) * x_t
+        + expand_t(a_s * var_ts / sig_t**2, x0) * x0
+    )
+    std = torch.sqrt(torch.clamp(sig_s**2 * var_ts / sig_t**2, min=0.0))
+    return mean, std
+
+
+class Update:
+    """
+    Steps one variable on one field of the calculator's outputs.
+
+    An update has :attr:`n_stages` stages at :attr:`nodes` (fractions of the
+    step). At each of them, :meth:`stage` reads the field and writes the
+    variable's next stage point; at its last one it draws the variable's new
+    value, which later model calls of the step see at t_next.
+    :meth:`combine` only writes that value.
+    """
+
+    n_stages: int = 1
+    nodes: tuple[float, ...] = (0.0,)
+
+    def __init__(self, variable: Variable, field_key: str):
+        """
+        Args:
+            variable: the variable this update steps
+            field_key: the calculator output this update reads
+        """
+        self.variable = variable
+        self.field_key = field_key
+
+    def check(self) -> None:
+        """Raise unless this update can step its variable."""
+
+    def field(self, fields: Mapping[str, Any]) -> torch.Tensor:
+        """This update's field from the calculator's outputs."""
+        if self.field_key not in fields:
+            raise KeyError(
+                f"{type(self).__name__} of {self.variable.name!r} reads "
+                f"{self.field_key!r}; the model returned {sorted(fields)}"
+            )
+        return fields[self.field_key]
+
+    def stage(
+        self,
+        stage: int,
+        batch: Mapping[str, Any],
+        fields: Mapping[str, Any],
+        t_stage: torch.Tensor,
+        start: Mapping[str, Any],
+        t: torch.Tensor,
+        t_next: torch.Tensor,
+        data: Sequence[Any],
+    ) -> tuple[dict[str, Any], Any]:
+        """
+        Read the field of one stage and move the variable on.
+
+        Args:
+            stage: stage index, 0 <= stage < n_stages
+            batch: the current stage point of every variable
+            fields: the model's outputs at ``batch`` and ``t_stage``
+            t_stage: the time of this stage
+            start: the batch at t, the start of the step
+            t: time at the start of the step (0-dim)
+            t_next: time at the end of the step (0-dim)
+            data: what the earlier stages of this step returned
+
+        Returns:
+            (batch, data_stage): the batch with the variable at its next
+            stage point, and what this stage keeps for later stages. At the
+            last stage, data_stage is the new value.
+        """
+        raise NotImplementedError
+
+    def combine(self, batch: Mapping[str, Any], data: Sequence[Any]) -> dict[str, Any]:
+        """Write the new value drawn at the last stage, then decode."""
+        return self.variable.write(batch, data[-1])
+
+
+class DriftUpdate(Update):
+    """
+    An update integrated along a drift by an integrator, which sets its
+    stages. Subclasses give :meth:`drift` and :meth:`diffusion`.
+    """
+
+    def __init__(
+        self, variable: Variable, field_key: str, integrator: Integrator | None = None
+    ):
+        """
+        Args:
+            variable: the variable this update steps
+            field_key: the calculator output this update reads
+            integrator: step rule (default:
+                :class:`~schnetpack.dynamics.sample.integrators.Euler`)
+        """
+        super().__init__(variable, field_key)
+        integrator = Euler() if integrator is None else integrator
+        if not isinstance(integrator, Integrator):
+            raise TypeError(f"{type(integrator).__name__} is not an Integrator")
+        if len(integrator.nodes) != integrator.n_stages:
+            raise ValueError(
+                f"{type(integrator).__name__} has {integrator.n_stages} stages "
+                f"but {len(integrator.nodes)} nodes"
+            )
+        self.integrator = integrator
+        self.nodes = tuple(integrator.nodes)
+        self.n_stages = integrator.n_stages
+
+    def check(self):
+        if not isinstance(self.variable.noising, GaussianInterpolant):
+            raise TypeError(
+                f"{type(self).__name__} steps a Gaussian interpolant; "
+                f"{self.variable.name!r} is noised by "
+                f"{type(self.variable.noising).__name__}"
+            )
+
+    def drift(self, x, t, field) -> torch.Tensor:
+        raise NotImplementedError
+
+    def diffusion(self, t) -> torch.Tensor | None:
+        raise NotImplementedError
+
+    def stage(self, stage, batch, fields, t_stage, start, t, t_next, data):
+        key = self.variable.key
+        x, x_start = batch[key], start[key]
+        drifts = [*data, self.drift(x, t_stage, self.field(fields))]
+        if stage + 1 < self.n_stages:
+            x_next, _ = self.integrator.point(stage + 1, x_start, t, t_next, drifts)
+            return self.variable.write(batch, x_next), drifts[-1]
+        # the last stage: the step itself, drawn once
+        x_new = self.integrator.combine(x_start, t, t_next, drifts)
+        g = self.diffusion(t)
+        if g is not None:
+            scale = expand_t(g * (t_next - t).abs().sqrt(), x_start)
+            x_new = x_new + scale * noise_like(
+                self.variable.noising.prior, x_start, start
+            )
+        return self.variable.write(batch, x_new), x_new
+
+
+class SDEUpdate(DriftUpdate):
+    """
+    The reverse SDE of a Gaussian interpolant on the score field,
+
+        dx = [f x - 1/2 (1 + eta2) g^2 score] dt + sqrt(eta2) g dw,
+
+    eta2 = 1 the reverse-time SDE and eta2 = 0 the probability-flow ODE.
     """
 
     def __init__(
         self,
-        calculator,
-        grid: TimeGrid,
+        variable: Variable,
+        field_key: str = "score",
+        eta2: float = 1.0,
+        integrator: Integrator | None = None,
+    ):
+        """
+        Args:
+            variable: the variable this update steps
+            field_key: the calculator output holding its score
+            eta2: stochasticity; 1 = reverse SDE, 0 = probability-flow ODE
+            integrator: step rule (default: Euler)
+        """
+        super().__init__(variable, field_key, integrator)
+        self.eta2 = eta2
+        self.reverse_sde = SDE.reverse(variable.noising.schedule, eta2)
+
+    def drift(self, x, t, score):
+        return self.reverse_sde.drift(x, t, score)
+
+    def diffusion(self, t):
+        return self.reverse_sde.diffusion(t)
+
+
+class ODEUpdate(DriftUpdate):
+    """Deterministic transport along the velocity field, dx = v dt."""
+
+    def __init__(
+        self,
+        variable: Variable,
+        field_key: str = "velocity",
+        integrator: Integrator | None = None,
+    ):
+        """
+        Args:
+            variable: the variable this update steps
+            field_key: the calculator output holding its velocity
+            integrator: step rule (default: Euler)
+        """
+        super().__init__(variable, field_key, integrator)
+
+    def check(self):
+        """Any interpolant: the velocity needs no Gaussian chart."""
+        if not isinstance(self.variable.noising, Interpolant):
+            raise TypeError(
+                f"ODEUpdate steps an interpolant; {self.variable.name!r} is "
+                f"noised by {type(self.variable.noising).__name__}"
+            )
+
+    def drift(self, x, t, velocity):
+        return velocity
+
+    def diffusion(self, t):
+        return None
+
+
+class AncestralUpdate(Update):
+    """
+    The exact Gaussian posterior p(x_s | x_t, x0_hat) of the variable's
+    interpolant, in one stage at t: the DDPM step on VP, the NCSN step on VE.
+    ``noise="reverse_diffusion"`` draws the noise with the std
+    sqrt(sigma_t^2 - sigma_s^2) of the reverse diffusion instead, as GEODE
+    does on its VE positions.
+    """
+
+    def __init__(
+        self, variable: Variable, field_key: str = "x0", noise: str = "posterior"
+    ):
+        """
+        Args:
+            variable: the variable this update steps
+            field_key: the calculator output holding its x0_hat
+            noise: "posterior" or "reverse_diffusion"
+        """
+        if noise not in ("posterior", "reverse_diffusion"):
+            raise ValueError(
+                f"noise must be 'posterior' or 'reverse_diffusion', got {noise!r}"
+            )
+        super().__init__(variable, field_key)
+        self.noise = noise
+
+    def check(self):
+        if not isinstance(self.variable.noising, GaussianInterpolant):
+            raise TypeError(
+                f"AncestralUpdate takes the posterior of a Gaussian interpolant; "
+                f"{self.variable.name!r} is noised by "
+                f"{type(self.variable.noising).__name__}"
+            )
+
+    def stage(self, stage, batch, fields, t_stage, start, t, t_next, data):
+        x_new = self.transition(batch, self.field(fields), t, t_next)
+        return self.variable.write(batch, x_new), x_new
+
+    def transition(
+        self,
+        batch: Mapping[str, Any],
+        x0: torch.Tensor,
+        t: torch.Tensor,
+        s: torch.Tensor,
+    ) -> torch.Tensor:
+        """Draw x_s given x_t = ``batch[key]`` and x0_hat."""
+        x = batch[self.variable.key]
+        schedule = self.variable.noising.schedule
+        mean, std = gaussian_posterior(schedule, x, x0, t, s)
+        if self.noise == "reverse_diffusion":
+            std = torch.sqrt(
+                torch.clamp(schedule.sigma(t) ** 2 - schedule.sigma(s) ** 2, min=0.0)
+            )
+        noise = noise_like(self.variable.noising.prior, x, batch)
+        return mean + expand_t(std, x) * noise
+
+
+def check_updates(
+    updates: Sequence[Update], variables: Sequence[Variable]
+) -> tuple[float, ...]:
+    """
+    The stage times of a list of updates, after checking it.
+
+    Raises:
+        ValueError: unless every variable has exactly one update, or if the
+            updates disagree on the time of a stage.
+        TypeError: if an update cannot step its variable.
+    """
+    for u in updates:
+        if not isinstance(u, Update):
+            raise TypeError(f"{type(u).__name__} is not an Update")
+    stepped = [u.variable for u in updates]
+    names = [v.name for v in stepped]
+    if len(set(map(id, stepped))) != len(stepped):
+        raise ValueError(f"a variable has more than one update: {names}")
+    missing = [v.name for v in variables if all(v is not w for w in stepped)]
+    unknown = [w.name for w in stepped if all(w is not v for v in variables)]
+    if missing or unknown:
+        raise ValueError(
+            f"every variable needs exactly one update; without one: {missing}, "
+            f"not among the variables: {unknown}"
+        )
+    for u in updates:
+        u.check()
+    nodes = []
+    for stage in range(max(u.n_stages for u in updates)):
+        here = {u.nodes[stage] for u in updates if stage < u.n_stages}
+        if any(stage >= u.n_stages for u in updates):
+            here.add(1.0)  # a finished update sits at t_next
+        if len(here) != 1:
+            raise ValueError(
+                f"the updates disagree on the time of stage {stage}: "
+                f"{sorted(here)} (as fractions of the step)"
+            )
+        nodes.append(here.pop())
+    return tuple(nodes)
+
+
+class Sampler(Dynamics):
+    """
+    Steps several variables along one time grid, one update each.
+
+    A step from t to t_next: for every stage, one model call at the stage
+    time on the current stage point, then each update that has this stage
+    reads its field and writes its variable's next stage point. After the
+    last stage, every update writes its new value in list order, starting
+    from the batch at t, with each variable's decode. An update that has
+    run out of stages sits at its value at t_next for the later model calls.
+
+    Hooks run between steps; the batch they see carries the grid time per
+    atom and per structure, as the model saw it.
+    """
+
+    def __init__(
+        self,
+        calculator: JointCalculator,
+        updates: Sequence[Update],
+        start: Sequence[Variable],
+        grid: TimeGrid | None = None,
         structures: StructureProvider | None = None,
-        prior: Prior | None = None,
         hooks: Sequence = (),
     ):
         """
         Args:
-            calculator: the model's field
-            grid: where to place the steps, and the time range they cover
-            structures: source of the structures :meth:`sample` starts
-                from
-            prior: redraws the provided structures before :meth:`sample`
-                runs them; without one they are run as provided
+            calculator: one model call at time t, with every field the
+                updates read
+            updates: one update per variable; the order in which the new
+                values are written
+            start: the variables in the order their priors are drawn by
+                :meth:`sample`
+            grid: where to place the steps (default: uniform from the
+                smallest t_max to the largest t_min of the schedules)
+            structures: source of the structures :meth:`sample` starts from
             hooks: run around every step, in order
         """
+        if not isinstance(calculator, JointCalculator):
+            raise TypeError(
+                f"Sampler needs a JointCalculator; got {type(calculator).__name__}"
+            )
+        self.updates = list(updates)
+        self.start = list(start)
+        if not self.updates:
+            raise ValueError("Sampler needs at least one update")
+        self.nodes = check_updates(self.updates, self.start)
+        self.n_stages = len(self.nodes)
+        if grid is None:
+            schedules = [v.noising.schedule for v in self.start]
+            grid = UniformGrid(
+                min(s.t_max for s in schedules), max(s.t_min for s in schedules)
+            )
         super().__init__(
-            calculator,
-            structures=structures,
-            prior=prior,
-            hooks=hooks,
-            key=calculator.key,
+            calculator, structures=structures, hooks=hooks, key=self.start[0].key
         )
         self.grid = grid
 
-    @property
-    def time_key(self) -> str:
-        """Batch key the path time is written to, the calculator's."""
-        return self.calculator.time_key
+    def sample(self, n_samples: int, n_steps: int) -> dict[str, Any]:
+        """
+        Draw ``n_samples`` structures, then every variable from its prior in
+        the order of ``start``, and run on them.
+        """
+        if self.structures is None:
+            raise ValueError(
+                "Sampler has no structures to sample from; pass structures=... "
+                "at construction, or call run on given structures"
+            )
+        batch = self.structures(n_samples)
+        for v in self.start:
+            batch = v.noising.sampling_prior()(batch)
+            if v.decode is not None:
+                batch = v.decode(batch)
+        return self.run(batch, n_steps)
 
     def run(self, batch: Mapping[str, Any], n_steps: int) -> dict[str, Any]:
         """
-        Move the structures in ``batch`` along the grid, from its ``t_start``
-        to its ``t_end``.
+        Move the structures in ``batch`` along the grid.
 
         Args:
-            batch: structures sitting at the grid's ``t_start``
+            batch: structures with every variable at the grid's t_start
             n_steps: number of steps
 
         Returns:
@@ -93,274 +456,54 @@ class Sampler(Dynamics):
         """
         self.calculator.reset()
         batch = self.calculator.prepare(batch)
-        x = batch[self.key]
-        ts = self.grid(n_steps, dtype=x.dtype, device=x.device)
+        dtype = next(
+            (
+                batch[v.key].dtype
+                for v in self.start
+                if batch[v.key].is_floating_point()
+            ),
+            None,
+        )
+        device = batch[self.start[0].key].device
+        ts = self.grid(n_steps, dtype=dtype, device=device)
         n_steps = ts.shape[0] - 1
-        n_rows = x.shape[0]
 
-        batch = {**batch, self.time_key: ts[0].expand(n_rows)}
+        batch = self.calculator.with_time(batch, ts[0])
         for i in range(n_steps):
             batch = self.before_step(batch, i, n_steps)
-            x = self.step(
-                batch, batch[self.key], batch[self.time_key], ts[i + 1] - ts[i]
-            )
-            batch = {**batch, self.key: x, self.time_key: ts[i + 1].expand(n_rows)}
+            batch = self.step(batch, ts[i], ts[i + 1])
+            batch = self.calculator.with_time(batch, ts[i + 1])
             batch = self.after_step(batch, i + 1, n_steps)
         return batch
 
-    @abc.abstractmethod
     def step(
-        self,
-        batch: Mapping[str, Any],
-        x: torch.Tensor,
-        t: torch.Tensor,
-        dt: torch.Tensor,
-    ) -> torch.Tensor:
+        self, batch: Mapping[str, Any], t: torch.Tensor, t_next: torch.Tensor
+    ) -> dict[str, Any]:
         """
-        Advance x from t to t + dt.
+        Advance every variable from t to t_next.
 
         Args:
-            batch: the current batch, carried along to every field evaluation
-            x: current state, shape (n_rows, ...)
-            t: current time, shape (n_rows,)
-            dt: time increment (0-dim tensor; negative when denoising)
+            batch: every variable at t
+            t: current time (0-dim)
+            t_next: time at the end of the step (0-dim)
 
         Returns:
-            The advanced state.
+            The batch with every variable at t_next.
         """
-        raise NotImplementedError
-
-
-def _check_gaussian(sampler, forward_process) -> None:
-    """Raise unless the sampler gets a Gaussian forward process."""
-    if not isinstance(forward_process, GaussianInterpolant):
-        raise TypeError(
-            f"{type(sampler).__name__} reverses a Gaussian forward process and "
-            f"needs a GaussianInterpolant; got {type(forward_process).__name__}"
-        )
-
-
-def _check_integrator(integrator: Integrator | None) -> Integrator:
-    """The integrator, defaulting to Euler; raise unless it is one."""
-    if integrator is None:
-        return Euler()
-    if not isinstance(integrator, Integrator):
-        raise TypeError(f"{type(integrator).__name__} is not an Integrator")
-    return integrator
-
-
-class SDESampler(Sampler):
-    """
-    Reverse SDE of a Gaussian forward process, integrated on the score:
-
-        dx = [f x - 1/2 (1 + eta2) g^2 score] dt + sqrt(eta2) g dw,
-
-    eta2 = 1 the reverse-time SDE and eta2 = 0 the probability-flow ODE.
-    Its coefficients are :attr:`reverse_sde`, built as
-    ``SDE.reverse(schedule, eta2)``: the integrator's stages are evaluated
-    on its drift of the calculator's score, and its diffusion enters the
-    combination.
-    """
-
-    def __init__(
-        self,
-        calculator: ScoreCalculator,
-        forward_process: GaussianInterpolant,
-        eta2: float = 1.0,
-        integrator: Integrator | None = None,
-        grid: TimeGrid | None = None,
-        structures: StructureProvider | None = None,
-        prior: Prior | None = None,
-        hooks: Sequence = (),
-    ):
-        """
-        Args:
-            calculator: the model's score
-            forward_process: Gaussian interpolant the model was trained on
-            eta2: stochasticity of the reverse process; 1 = reverse SDE,
-                0 = probability-flow ODE
-            integrator: step rule (default:
-                :class:`~schnetpack.dynamics.sample.integrators.Euler`)
-            grid: where to place the steps (default: uniform from the
-                schedule's t_max to its t_min)
-            structures: source of the structures :meth:`sample` starts
-                from
-            prior: redraws the provided structures before :meth:`sample`
-                runs them (default: the forward process's prior)
-            hooks: run around every step, in order
-        """
-        if not isinstance(calculator, ScoreCalculator):
-            raise TypeError(
-                f"{type(self).__name__} steps on the score and needs a "
-                f"ScoreCalculator; got {type(calculator).__name__}"
+        start = batch_stage = dict(batch)
+        data = [[] for _ in self.updates]
+        for stage, node in enumerate(self.nodes):
+            t_stage = (
+                t if node == 0.0 else t_next if node == 1.0 else t + node * (t_next - t)
             )
-        _check_gaussian(self, forward_process)
-        schedule = forward_process.schedule
-        if grid is None:
-            grid = UniformGrid(schedule.t_max, schedule.t_min)
-        if prior is None:
-            prior = forward_process.prior
-        super().__init__(
-            calculator, grid=grid, structures=structures, prior=prior, hooks=hooks
-        )
-        self.forward_process = forward_process
-        self.eta2 = eta2
-        self.integrator = _check_integrator(integrator)
-        self.reverse_sde = SDE.reverse(schedule, eta2)
-
-    def step(self, batch, x, t, dt):
-        t_next = t + dt
-        drifts = []
-        for stage in range(self.integrator.n_stages):
-            x_stage, t_stage = self.integrator.point(stage, x, t, t_next, drifts)
-            field = self.calculator.field(batch, x_stage, t_stage)
-            drifts.append(self.reverse_sde.drift(x_stage, t_stage, field))
-        return self.integrator.combine(
-            x, t, t_next, drifts, self.reverse_sde.diffusion(t)
-        )
-
-
-class ODESampler(Sampler):
-    """
-    Deterministic transport along a learned velocity, dx = v dt.
-
-    Needs no forward process: the time range is the grid's and the starting
-    distribution is passed explicitly. The integrator steps on
-    :attr:`reverse_ode`, a
-    :class:`~schnetpack.generative.differential_equations.ReverseODE` whose
-    drift is the calculator's velocity.
-    """
-
-    def __init__(
-        self,
-        calculator: VelocityCalculator,
-        integrator: Integrator | None = None,
-        grid: TimeGrid | None = None,
-        structures: StructureProvider | None = None,
-        prior: Prior | None = None,
-        hooks: Sequence = (),
-    ):
-        """
-        Args:
-            calculator: the model's velocity
-            integrator: step rule (default:
-                :class:`~schnetpack.dynamics.sample.integrators.Euler`)
-            grid: where to place the steps (default: uniform from 1 to 0)
-            structures: source of the structures :meth:`sample` starts
-                from
-            prior: redraws the provided structures before :meth:`sample`
-                runs them; without one they are run as provided
-            hooks: run around every step, in order
-        """
-        if not isinstance(calculator, VelocityCalculator):
-            raise TypeError(
-                f"{type(self).__name__} steps on the velocity and needs a "
-                f"VelocityCalculator; got {type(calculator).__name__}"
-            )
-        if grid is None:
-            grid = UniformGrid()
-        super().__init__(
-            calculator, grid=grid, structures=structures, prior=prior, hooks=hooks
-        )
-        self.integrator = _check_integrator(integrator)
-        self.reverse_ode = ReverseODE()
-
-    def step(self, batch, x, t, dt):
-        t_next = t + dt
-        drifts = []
-        for stage in range(self.integrator.n_stages):
-            x_stage, t_stage = self.integrator.point(stage, x, t, t_next, drifts)
-            field = self.calculator.field(batch, x_stage, t_stage)
-            drifts.append(self.reverse_ode.drift(x_stage, t_stage, field))
-        return self.integrator.combine(
-            x, t, t_next, drifts, self.reverse_ode.diffusion(t)
-        )
-
-
-class AncestralSampler(Sampler):
-    """
-    Exact-posterior steps on the denoised sample of a Gaussian forward process.
-
-    Each step reads x0_hat from the calculator and draws
-    x_s ~ p(x_s | x_t, x0_hat), the Gaussian posterior of the forward
-    process (:meth:`posterior`). Not a discretization of the reverse SDE but
-    its exact transition given x0_hat: the DDPM step on VP, the NCSN/GPFF
-    ancestral sampler on VE. Intrinsically stochastic.
-    """
-
-    def __init__(
-        self,
-        calculator: X0Calculator,
-        forward_process: GaussianInterpolant,
-        grid: TimeGrid | None = None,
-        structures: StructureProvider | None = None,
-        prior: Prior | None = None,
-        hooks: Sequence = (),
-    ):
-        """
-        Args:
-            calculator: the model's denoised sample x0
-            forward_process: Gaussian interpolant the model was trained on
-            grid: where to place the steps (default: uniform from the
-                schedule's t_max to its t_min)
-            structures: source of the structures :meth:`sample` starts
-                from
-            prior: redraws the provided structures before :meth:`sample`
-                runs them (default: the forward process's prior)
-            hooks: run around every step, in order
-        """
-        if not isinstance(calculator, X0Calculator):
-            raise TypeError(
-                f"{type(self).__name__} steps on the denoised sample and needs "
-                f"an X0Calculator; got {type(calculator).__name__}"
-            )
-        _check_gaussian(self, forward_process)
-        schedule = forward_process.schedule
-        if grid is None:
-            grid = UniformGrid(schedule.t_max, schedule.t_min)
-        if prior is None:
-            prior = forward_process.prior
-        super().__init__(
-            calculator, grid=grid, structures=structures, prior=prior, hooks=hooks
-        )
-        self.forward_process = forward_process
-        self.schedule = schedule
-
-    def posterior(
-        self,
-        x_t: torch.Tensor,
-        x0: torch.Tensor,
-        t: torch.Tensor,
-        s: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Mean and std of the exact Gaussian posterior p(x_s | x_t, x0), s < t.
-
-        With r = a_t / a_s and var_ts = sigma_t^2 - r^2 sigma_s^2:
-        mean = (r sigma_s^2 / sigma_t^2) x_t + (a_s var_ts / sigma_t^2) x0
-        and var = sigma_s^2 var_ts / sigma_t^2.
-
-        Args:
-            x_t: states at time t
-            x0: clean data, or the model's estimate of it
-            t: current times, per-sample or scalar
-            s: target times, s < t elementwise
-
-        Returns:
-            (mean, std): mean shaped like x_t, std shaped like t.
-        """
-        a_t, sig_t = self.schedule.a(t), self.schedule.sigma(t)
-        a_s, sig_s = self.schedule.a(s), self.schedule.sigma(s)
-        r = a_t / a_s
-        var_ts = sig_t**2 - r**2 * sig_s**2
-        mean = (
-            expand_t(r * sig_s**2 / sig_t**2, x_t) * x_t
-            + expand_t(a_s * var_ts / sig_t**2, x0) * x0
-        )
-        std = torch.sqrt(torch.clamp(sig_s**2 * var_ts / sig_t**2, min=0.0))
-        return mean, std
-
-    def step(self, batch, x, t, dt):
-        x0_hat = self.calculator.field(batch, x, t)
-        mean, std = self.posterior(x, x0_hat, t, t + dt)
-        return mean + expand_t(std, x) * torch.randn_like(x)
+            fields = self.calculator.fields(batch_stage, t_stage)
+            for u, d in zip(self.updates, data):
+                if stage < u.n_stages:
+                    batch_stage, data_stage = u.stage(
+                        stage, batch_stage, fields, t_stage, start, t, t_next, d
+                    )
+                    d.append(data_stage)
+        batch = start
+        for u, d in zip(self.updates, data):
+            batch = u.combine(batch, d)
+        return batch

@@ -15,12 +15,15 @@ A model is a configuration of four independent axes plus its training:
 - :mod:`~schnetpack.generative.differential_equations`: the (f, g) SDE chart
   of a process and its reversal.
 - :mod:`~schnetpack.generative.times`: which times training draws.
+- :mod:`~schnetpack.generative.variables`: a generated quantity (positions,
+  types, a cell) with its noising, parametrization, head and loss; several
+  share one time.
 - :mod:`~schnetpack.generative.losses` and
   :mod:`~schnetpack.generative.transforms`: the training step, at tensor
-  level and as a data-pipeline transform.
+  level for one variable and as a data-pipeline transform for a list.
 
 Running a trained model lives in :mod:`schnetpack.dynamics`. Training and
-sampling must share the same (noising, parametrization) objects. Theory and
+sampling must share the same variables. Theory and
 design: ``docs_new/README.md``.
 """
 
@@ -32,4 +35,5 @@ from schnetpack.generative.schedules import *
 from schnetpack.generative.noising import *
 from schnetpack.generative.differential_equations import *
 from schnetpack.generative.times import *
+from schnetpack.generative.variables import *
 from schnetpack.generative.transforms import *

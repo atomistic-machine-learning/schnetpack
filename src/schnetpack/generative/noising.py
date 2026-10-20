@@ -20,7 +20,6 @@ import math
 
 import torch
 
-from schnetpack import properties
 from schnetpack.generative.couplings import Coupling, IdentityCoupling
 from schnetpack.generative.priors import GaussianPrior, Prior
 from schnetpack.generative.schedules import GaussianSchedule, Schedule
@@ -131,7 +130,7 @@ class Interpolant(ForwardNoising):
             t: path times, per-sample or scalar; drawn from
                 :meth:`sample_t` if not given
             batch: the batch x0 was taken from, handed to the prior (with
-                x0 as its positions) so it can read the layout
+                x0 under the prior's key) so it can read the layout
             groups: per-row labels restricting which rows the coupling may
                 exchange endpoints between; see
                 :meth:`~schnetpack.generative.couplings.Coupling.pair`
@@ -141,7 +140,8 @@ class Interpolant(ForwardNoising):
             endpoints and the times.
         """
         batch = {} if batch is None else batch
-        x1 = self.prior({**batch, properties.R: x0})[properties.R]
+        key = self.prior.key
+        x1 = self.prior({**batch, key: x0})[key]
         x0, x1 = self.coupling.pair(x0, x1, groups)
         if t is None:
             t = self.sample_t(x0.shape[0], x0.device).to(x0.dtype)

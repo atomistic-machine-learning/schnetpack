@@ -1,11 +1,12 @@
 """
 Sampling a generative model: the reverse process, solved step by step.
 
-- :mod:`~schnetpack.dynamics.sample.sampler`: :class:`SDESampler` and
-  :class:`AncestralSampler` on the score of a Gaussian forward process and
-  :class:`ODESampler` on a velocity, sharing the loop of :class:`Sampler`.
+- :mod:`~schnetpack.dynamics.sample.sampler`: :class:`Sampler`, which steps
+  every generated variable with its own update: :class:`SDEUpdate` and
+  :class:`AncestralUpdate` on a Gaussian interpolant, :class:`ODEUpdate` on a
+  velocity.
 - :mod:`~schnetpack.dynamics.sample.integrators`: the step rules
-  :class:`Euler` and :class:`Heun` of the SDE and ODE samplers.
+  :class:`Euler` and :class:`Heun` of the SDE and ODE updates.
 - :mod:`~schnetpack.dynamics.sample.grids`: where the steps land in time,
   and the time range they cover.
 

@@ -9,11 +9,10 @@ from schnetpack.dynamics import (
     ForceCalculator,
     FreezeScaffold,
     Hook,
-    SDESampler,
     UniformGrid,
 )
 from schnetpack.generative import VE, VP, GaussianInterpolant
-from tests.dynamics.test_sampling import batch_model, score_calculator
+from tests.dynamics.test_sampling import batch_model, sde_sampler, toy_batch
 
 
 class Recorder(Hook):
@@ -46,11 +45,9 @@ def direct_denoising(fn, **kwargs):
 def test_sampler_hooks_see_grid_times_around_each_step():
     vp = GaussianInterpolant(VP())
     recorder = Recorder()
-    sampler = SDESampler(
-        score_calculator(batch_model(lambda x, t: -x), vp), vp, hooks=[recorder]
-    )
+    sampler = sde_sampler(batch_model(lambda x, t: -x), vp, hooks=[recorder])
     n_steps = 4
-    sampler.run(sampler.prior({properties.R: torch.empty(3, 1)}), n_steps)
+    sampler.run(vp.prior(toy_batch((3, 1))), n_steps)
 
     ts = sampler.grid(n_steps)
     assert len(recorder.log) == 2 * n_steps
@@ -66,13 +63,13 @@ def test_sampler_hooks_see_grid_times_around_each_step():
 def test_sampler_run_starts_at_the_grids_t_start():
     recorder = Recorder()
     vp = GaussianInterpolant(VP())
-    sampler = SDESampler(
-        score_calculator(batch_model(lambda x, t: -x), vp),
+    sampler = sde_sampler(
+        batch_model(lambda x, t: -x),
         vp,
         grid=UniformGrid(0.5, vp.schedule.t_min),
         hooks=[recorder],
     )
-    sampler.run({properties.R: torch.randn(2, 1)}, 3)
+    sampler.run({**toy_batch((2, 1)), properties.R: torch.randn(2, 1)}, 3)
     assert torch.allclose(recorder.log[0][2], torch.full((2,), 0.5))
 
 
@@ -131,10 +128,9 @@ def test_scaffold_sampler_model_sees_clean_scaffold():
         return -x
 
     vp = GaussianInterpolant(VP())
-    sampler = SDESampler(
-        score_calculator(batch_model(model), vp), vp, hooks=[FreezeScaffold()]
-    )
-    out = sampler.run(sampler.prior(scaffold_batch(mask, reference)), 5)
+    sampler = sde_sampler(batch_model(model), vp, hooks=[FreezeScaffold()])
+    batch = {**toy_batch(reference.shape), **scaffold_batch(mask, reference)}
+    out = sampler.run(vp.prior(batch), 5)
 
     assert all(torch.equal(s, reference[mask]) for s in seen)
     assert torch.equal(out[properties.R][mask], reference[mask])

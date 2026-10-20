@@ -8,10 +8,12 @@ from schnetpack.dynamics import (
     DirectDenoising,
     ForceCalculator,
     Heun,
+    JointCalculator,
     NoiseCalculator,
     PseudoForceCalculator,
+    Sampler,
     ScoreCalculator,
-    SDESampler,
+    SDEUpdate,
     VelocityCalculator,
     X0Calculator,
 )
@@ -23,6 +25,7 @@ from schnetpack.generative import (
     ParametrizedModel,
     PseudoForceParametrization,
     ScoreParametrization,
+    Variable,
     VelocityParametrization,
 )
 
@@ -53,14 +56,21 @@ def test_neighbor_list_runs_on_every_model_call_and_never_reaches_the_loop():
     # built on a copy, so the loop's batch never holds a derived key.
     nbl = InPlaceNeighborList()
     process = GaussianInterpolant(VP())
-    calculator = ScoreCalculator(
+    v = Variable(
+        "x", properties.R, "atom", process, VelocityParametrization(), "prediction"
+    )
+    calculator = JointCalculator(
         ParametrizedModel(
             zero_model, VelocityParametrization(), process.schedule, score_key="score"
         ),
         neighbor_list=nbl,
     )
-    sampler = SDESampler(calculator, process, eta2=0.0, integrator=Heun())
-    batch = {properties.R: torch.randn(5, 3)}
+    sampler = Sampler(calculator, [SDEUpdate(v, eta2=0.0, integrator=Heun())], [v])
+    batch = {
+        properties.R: torch.randn(5, 3),
+        properties.idx_m: torch.zeros(5, dtype=torch.long),
+        properties.n_atoms: torch.tensor([5]),
+    }
     out = sampler.run(batch, 4)
     assert nbl.calls == 8
     assert nbl.resets == 1
@@ -318,25 +328,18 @@ def test_the_cache_answers_an_unchanged_angstrom_batch():
     torch.testing.assert_close(first["forces"], second["forces"])
 
 
-def test_samplers_refuse_a_force_calculator():
-    # it returns no score to step on
-    with pytest.raises(TypeError, match="ScoreCalculator"):
-        SDESampler(
-            ForceCalculator(zero_model),
-            GaussianInterpolant(VP()),
-            eta2=0.0,
-            integrator=Heun(),
-        )
-
-
-def test_samplers_refuse_a_non_score_generative_calculator():
-    with pytest.raises(TypeError, match="ScoreCalculator"):
-        SDESampler(
-            VelocityCalculator(zero_model),
-            GaussianInterpolant(VP()),
-            eta2=0.0,
-            integrator=Heun(),
-        )
+@pytest.mark.parametrize(
+    "calculator",
+    [ForceCalculator(zero_model), VelocityCalculator(zero_model)],
+    ids=["force", "velocity"],
+)
+def test_the_sampler_refuses_a_single_field_calculator(calculator):
+    # it reads every field of every variable from one model call
+    v = Variable(
+        "x", properties.R, "atom", GaussianInterpolant(VP()), EpsParametrization(), "y"
+    )
+    with pytest.raises(TypeError, match="JointCalculator"):
+        Sampler(calculator, [SDEUpdate(v)], [v])
 
 
 @pytest.mark.parametrize("build", [LBFGS, DirectDenoising], ids=["LBFGS", "DD"])

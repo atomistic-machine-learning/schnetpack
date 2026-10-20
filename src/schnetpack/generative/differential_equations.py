@@ -84,7 +84,7 @@ class ReverseSDE:
     eta2 is the square of the eta knob of DDIM. Takes the :class:`SDE` chart
     only; the score is an input to :meth:`drift`, and composing model,
     parametrization and conditioning into it is the caller's job
-    (:class:`~schnetpack.dynamics.calculator.ScoreCalculator`).
+    (:class:`~schnetpack.generative.parametrizations.ParametrizedModel`).
     """
 
     def __init__(self, sde: SDE, eta2: float = 1.0):

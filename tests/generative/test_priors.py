@@ -2,7 +2,6 @@ import pytest
 import torch
 
 from schnetpack import properties
-from schnetpack.dynamics import SDESampler
 from schnetpack.generative import (
     VE,
     EpsParametrization,
@@ -11,7 +10,7 @@ from schnetpack.generative import (
     GaussianPrior,
     Interpolant,
 )
-from tests.dynamics.test_sampling import score_calculator
+from tests.dynamics.test_sampling import sde_sampler
 
 
 def positions(n, idx_m=None):
@@ -174,14 +173,14 @@ def test_the_sampler_starts_a_batch_on_the_subspace():
         seen.setdefault("x_init", x.clone())
         return {"prediction": torch.zeros_like(x)}
 
-    sampler = SDESampler(
-        score_calculator(model, process, EpsParametrization()),
-        process,
-        prior=process.sampling_prior(),
-    )
+    sampler = sde_sampler(model, process, EpsParametrization())
 
-    template = {properties.idx_m: idx_m, properties.R: torch.empty(96, 3)}
-    sampler.run(sampler.prior(template), n_steps=2)
+    template = {
+        properties.idx_m: idx_m,
+        properties.n_atoms: torch.full((8,), 12),
+        properties.R: torch.empty(96, 3),
+    }
+    sampler.run(process.sampling_prior()(template), n_steps=2)
     for m in range(8):
         assert seen["x_init"][idx_m == m].mean(0).norm().item() == pytest.approx(
             0.0, abs=1e-4
@@ -200,12 +199,14 @@ def test_given_positions_are_denoised_as_they_are():
         seen.setdefault("x_init", x.clone())
         return {"prediction": torch.zeros_like(x)}
 
-    sampler = SDESampler(
-        score_calculator(model, process, EpsParametrization()), process
-    )
+    sampler = sde_sampler(model, process, EpsParametrization())
 
     # the prior is not consulted, so the layout does not re-center them
-    batch = {properties.R: x_init, properties.idx_m: torch.zeros(6, dtype=torch.long)}
+    batch = {
+        properties.R: x_init,
+        properties.idx_m: torch.zeros(6, dtype=torch.long),
+        properties.n_atoms: torch.tensor([6]),
+    }
     sampler.run(batch, n_steps=1)
     assert torch.allclose(seen["x_init"], x_init)
 
@@ -250,12 +251,14 @@ def test_the_sugar_constructor_gets_a_centered_prior():
 def test_diffuse_centers_each_molecule_of_a_collated_batch():
     # Diffuse hands the batch to the prior as context, so a batch that carries
     # idx_m is centered per molecule and not as one cloud.
-    from schnetpack.generative import Diffuse, EpsParametrization
+    from schnetpack.generative import Diffuse, EpsParametrization, Variable
 
     torch.manual_seed(0)
     idx_m = torch.arange(4).repeat_interleave(6)
     process = GaussianInterpolant(VE(0.05, 10.0))
-    transform = Diffuse(process, EpsParametrization(), label_key="eps", time_key="t")
+    transform = Diffuse(
+        [Variable("eps", properties.R, "atom", process, EpsParametrization(), "y")]
+    )
 
     x0 = GaussianPrior.center(torch.randn(24, 3), idx_m)  # centered data, per molecule
     out = transform(
@@ -267,7 +270,7 @@ def test_diffuse_centers_each_molecule_of_a_collated_batch():
         }
     )
     for m in range(4):
-        assert out["eps"][idx_m == m].mean(0).norm().item() == pytest.approx(
+        assert out["label_eps"][idx_m == m].mean(0).norm().item() == pytest.approx(
             0.0, abs=1e-4
         )
         assert out[properties.R][idx_m == m].mean(0).norm().item() == pytest.approx(
@@ -278,15 +281,17 @@ def test_diffuse_centers_each_molecule_of_a_collated_batch():
 def test_diffuse_per_structure_centers_the_one_molecule():
     # The dataloader path: no idx_m before collation, and the whole leading
     # axis is the single structure being preprocessed.
-    from schnetpack.generative import Diffuse, EpsParametrization
+    from schnetpack.generative import Diffuse, EpsParametrization, Variable
 
     torch.manual_seed(0)
     process = GaussianInterpolant(VE(0.05, 10.0))
-    transform = Diffuse(process, EpsParametrization(), label_key="eps", time_key="t")
+    transform = Diffuse(
+        [Variable("eps", properties.R, "atom", process, EpsParametrization(), "y")]
+    )
 
     x0 = torch.randn(9, 3)
     out = transform(
         {properties.R: x0 - x0.mean(0), properties.Z: torch.ones(9, dtype=torch.long)}
     )
-    assert out["eps"].mean(0).norm().item() == pytest.approx(0.0, abs=1e-5)
+    assert out["label_eps"].mean(0).norm().item() == pytest.approx(0.0, abs=1e-5)
     assert out[properties.R].mean(0).norm().item() == pytest.approx(0.0, abs=1e-4)

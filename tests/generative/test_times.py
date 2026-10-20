@@ -3,6 +3,7 @@ import math
 import pytest
 import torch
 
+from schnetpack import properties
 from schnetpack.generative import (
     VE,
     VP,
@@ -14,6 +15,7 @@ from schnetpack.generative import (
     LogNormalSigmaTimes,
     PseudoForceParametrization,
     UniformTimes,
+    Variable,
     VELinear,
 )
 
@@ -168,12 +170,15 @@ def test_bad_std_is_rejected(ve):
 def test_diffuse_accepts_a_time_sampler(ve):
     """The transform route: one time per structure, drawn from our density."""
     sampler = LogNormalSigmaTimes(ve, mean=-0.7, std=1.2)
-    diffuse = Diffuse(ve, PseudoForceParametrization(), t_sampler=sampler)
+    v = Variable(
+        "positions", properties.R, "atom", ve, PseudoForceParametrization(), "y"
+    )
+    diffuse = Diffuse([v], t_sampler=sampler)
 
     torch.manual_seed(0)
     times = []
     for _ in range(400):
-        out = diffuse({"_positions": torch.randn(7, 3)})
+        out = diffuse({properties.R: torch.randn(7, 3)})
         assert out["t"].shape == (7,)
         assert torch.allclose(out["t"], out["t"][0])  # one time per structure
         times.append(out["t"][0])

@@ -8,9 +8,12 @@ A calculator turns a model into the field one family of drivers steps on:
   negative gradient of an energy, in eV/Angstrom; or a *pseudo* force, a
   displacement such as GPFF's 2 (x0 - x), in Angstrom, with no energy
   behind it.
-- :class:`GenerativeCalculator` hands the time-indexed drivers one field
-  at (x, t) — score, noise, velocity, x0 or pseudo force, one subclass
-  each — read directly from the model's outputs, without conversion.
+- :class:`GenerativeCalculator` hands out one field at (x, t) — score,
+  noise, velocity, x0 or pseudo force, one subclass each — read directly
+  from the model's outputs, without conversion.
+- :class:`JointCalculator` hands the
+  :class:`~schnetpack.dynamics.sample.sampler.Sampler` the model's outputs
+  at time t, every field of every generated variable at once.
 
 Both share the plumbing of :class:`Calculator`: the device and dtype, the
 neighbor list, the gradient policy, the optional cache of the last outputs,
@@ -46,6 +49,7 @@ __all__ = [
     "VelocityCalculator",
     "X0Calculator",
     "PseudoForceCalculator",
+    "JointCalculator",
     "EnsembleCalculator",
     "NNEnsemble",
 ]
@@ -493,6 +497,103 @@ class PseudoForceCalculator(GenerativeCalculator):
     """The pseudo force at (x, t), a displacement toward the clean structure."""
 
     default_output_key = "pseudo_force"
+
+
+class JointCalculator(Calculator):
+    """
+    One model call at time t, read by every update of a
+    :class:`~schnetpack.dynamics.sample.sampler.Sampler`.
+
+    Returns the model's outputs as they are: the fields the updates read
+    (``score``, ``x0_Z``, ...) are written by the model, one
+    :class:`~schnetpack.generative.parametrizations.ParametrizedModel` per
+    variable, stacked around one network. The time goes in twice, as
+    :class:`~schnetpack.generative.transforms.Diffuse` writes it in
+    training: per atom under ``time_key`` and per structure under
+    ``structure_time_key``.
+
+    Guidance is added to the outputs named in ``guided_fields``, as
+    field + sum_i w_i F_i, evaluated on the positions at the current
+    structures and time; see :class:`GenerativeCalculator`.
+    """
+
+    def __init__(
+        self,
+        model: str | Callable[[dict[str, torch.Tensor]], dict[str, torch.Tensor]],
+        time_key: str = properties.t,
+        structure_time_key: str = "t_structure",
+        guided_fields: Sequence[str] = (),
+        position_unit: str | float = "Ang",
+        **kwargs,
+    ):
+        """
+        Args:
+            model: batch -> outputs with every field the updates read, or
+                the path to a model saved on disk
+            time_key: batch key for the time per atom
+            structure_time_key: batch key for the time per structure
+            guided_fields: outputs the guidance is added to, e.g.
+                ``("score",)``; needed when there is guidance
+            position_unit: length unit of the positions, the training
+                data's. Used only to evaluate the guidance in Angstrom.
+
+        Remaining keyword arguments are those of :class:`Calculator`.
+
+        Raises:
+            ValueError: if there is guidance but no field to add it to.
+        """
+        super().__init__(model, **kwargs)
+        self.time_key = time_key
+        self.structure_time_key = structure_time_key
+        self.guided_fields = tuple(guided_fields)
+        if self.guidance and not self.guided_fields:
+            raise ValueError(
+                "JointCalculator adds guidance to the outputs named in "
+                "guided_fields, e.g. guided_fields=('score',); got none"
+            )
+        self.position_conversion = convert_units(position_unit, "Angstrom")
+
+    def with_time(self, batch: Mapping[str, Any], t: torch.Tensor) -> dict[str, Any]:
+        """
+        A copy of ``batch`` with the time t per atom and per structure.
+
+        Args:
+            batch: structures with ``idx_m`` and ``n_atoms``
+            t: the time, 0-dim
+        """
+        return {
+            **batch,
+            self.time_key: t.expand(batch[properties.idx_m].shape[0]),
+            self.structure_time_key: t.expand(batch[properties.n_atoms].shape[0]),
+        }
+
+    def fields(self, batch: Mapping[str, Any], t: torch.Tensor) -> dict[str, Any]:
+        """
+        The model's outputs at the structures in ``batch`` and time t, with
+        the guidance added to the guided fields.
+
+        Args:
+            batch: structures with ``idx_m`` and ``n_atoms``
+            t: the time, 0-dim
+
+        Raises:
+            KeyError: if the model does not return a guided field.
+        """
+        inputs = self.with_time(batch, t)
+        outputs = dict(self(inputs))
+        if not self.guidance:
+            return outputs
+        positions = inputs[properties.R]
+        term = self.guidance_field(inputs, positions * self.position_conversion)
+        term = self.position_conversion * term.to(positions)
+        for key in self.guided_fields:
+            if key not in outputs:
+                raise KeyError(
+                    f"guidance is added to {key!r}, which the model does not "
+                    f"return; got {sorted(outputs)}"
+                )
+            outputs[key] = outputs[key] + term
+        return outputs
 
 
 class NNEnsemble(nn.Module):
