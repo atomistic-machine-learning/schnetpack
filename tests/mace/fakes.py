@@ -2,6 +2,8 @@
 
 import numpy as np
 import torch
+from ase import Atoms
+from ase.build import molecule
 from torch import nn
 from torch.autograd import grad
 
@@ -131,3 +133,36 @@ class RecordingMace(nn.Module):
     def forward(self, data, training=False):
         self.training_argument = training
         return self.model(data, training=training)
+
+
+def rattled(names):
+    atoms = [molecule(name) for name in names]
+    for seed, structure in enumerate(atoms):
+        structure.rattle(0.05, seed=seed)
+    return atoms
+
+
+def periodic():
+    """Hydrogen and oxygen in a cell smaller than the cutoff, so that most
+    pairs are between periodic images."""
+    atoms = Atoms(
+        "H2O",
+        positions=[[0.0, 0.0, 0.0], [0.9, 0.3, 0.1], [1.4, 1.6, 1.2]],
+        cell=[2.8, 3.1, 2.9],
+        pbc=True,
+    )
+    atoms.rattle(0.05, seed=3)
+    return [atoms]
+
+
+def ethane_lattice(n=25, spacing=6.0):
+    """``n`` ethane molecules in one structure, 8 n atoms: its absolute energy
+    is tens of keV, far beyond float32's digits for a sub-meV target."""
+    structure = Atoms()
+    side = int(np.ceil(n ** (1 / 3)))
+    for index in range(n):
+        ethane = molecule("C2H6")
+        ethane.rattle(0.05, seed=index)
+        ethane.translate(spacing * np.array(np.unravel_index(index, (side,) * 3)))
+        structure += ethane
+    return [structure]

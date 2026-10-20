@@ -1,6 +1,6 @@
 """MaceModel on the scripted stand-in: SchNetPack batches in, energies with the
-E0s as offsets out, in a relaxation; and on MACE-OFF, if mace-torch is
-installed."""
+E0s as offsets out, in a relaxation. Its match with MACE-OFF is the MACE
+interface's golden test."""
 
 import pytest
 import torch
@@ -12,10 +12,17 @@ from schnetpack.interfaces.ase_interface import atoms_to_batch
 from schnetpack.model import MaceModel, load_mace
 from schnetpack.transform import MatScipyNeighborList
 
-from ..conftest import mace_off_structures
 from ..distillation.conftest import with_neighbors
-from ..distillation.test_mace_teacher import ethane_lattice, periodic, rattled
-from .fakes import E0, R_MAX, FakeMace, RecordingMace, reference
+from .fakes import (
+    E0,
+    R_MAX,
+    FakeMace,
+    RecordingMace,
+    ethane_lattice,
+    periodic,
+    rattled,
+    reference,
+)
 
 MOLECULES = ["CH4", "H2O", "C2H6"]
 
@@ -140,45 +147,3 @@ def test_load_mace_reads_an_archive(tmp_path):
 def test_load_mace_reports_a_missing_archive(tmp_path):
     with pytest.raises(FileNotFoundError, match="no MACE model"):
         load_mace(str(tmp_path / "missing.pt"))
-
-
-# ---------------------------------------------------------------- MACE-OFF
-
-
-def test_reproduces_mace_off(mace_off_archive, mace_off_reference):
-    model = MaceModel(load_mace(mace_off_archive), dtype="float64")
-    for name, atoms, energy, forces in mace_off_reference:
-        batch = with_neighbors(atoms_to_batch([atoms], dtype=torch.float64))
-
-        output = model(batch)
-
-        torch.testing.assert_close(
-            output[properties.energy],
-            torch.tensor([float(energy)], dtype=torch.float64),
-            rtol=0,
-            atol=1e-6,
-            msg=name,
-        )
-        torch.testing.assert_close(
-            output[properties.forces],
-            torch.from_numpy(forces),
-            rtol=0,
-            atol=1e-6,
-            msg=name,
-        )
-
-
-def test_relaxes_ethanol_with_mace_off(mace_off_archive):
-    model = MaceModel(load_mace(mace_off_archive), dtype="float64")
-    calculator = ForceCalculator(
-        model,
-        neighbor_list=BatchNeighborList(MatScipyNeighborList(cutoff=model.r_max)),
-    )
-    batch = atoms_to_batch([mace_off_structures()["ethanol"]], dtype=torch.float64)
-    start = calculator.energy(dict(batch))
-
-    relaxed = LBFGS(calculator, fmax=1e-2).run(dict(batch), 200)
-
-    calculator.reset()
-    assert (calculator.energy(relaxed) < start).all()
-    assert calculator.forces(relaxed).norm(dim=-1).max() < 1e-2

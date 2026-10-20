@@ -16,13 +16,7 @@ from schnetpack.objectives import (
     extract_targets,
     predict_without_postprocessing,
 )
-from schnetpack.train.distillation import (
-    TEACHER_STATS_SIZE,
-    check_distillation_setup,
-    distillation_predictions,
-    needs_curvature,
-    student_stats_source,
-)
+from schnetpack.train.distillation import Distillation
 from schnetpack.train.teacher import TeacherWrapper
 
 __all__ = ["AtomisticTask"]
@@ -51,7 +45,6 @@ class AtomisticTask(pl.LightningModule):
         warmup_steps: int = 0,
         teacher: TeacherWrapper | None = None,
         probe_seed: int = 0,
-        teacher_stats_size: int | None = TEACHER_STATS_SIZE,
     ):
         """
         Args:
@@ -65,18 +58,11 @@ class AtomisticTask(pl.LightningModule):
             warmup_steps: number of steps used to increase the learning rate from zero
               linearly to the target learning rate at the beginning of training
             teacher: the teacher of knowledge distillation. Outputs may then be
-              trained on its targets, ``teacher.target_keys``: ``teacher_<key>``
-              for the student's energy and force keys, and ``teacher_hvp``; see
-              :mod:`schnetpack.train.distillation`.
-            probe_seed: seed of the probes drawn in validation and testing, so
-              their losses depend on it. The probe generator is reset to this
-              seed at the start of every validation and test epoch, so each
-              epoch sees the same probes and validation losses are comparable
-              across epochs. Training draws fresh probes every step.
-            teacher_stats_size: training structures the teacher runs on to fit
-              the student's energy offsets when no label trains its energy;
-              None for the whole split. The result is stored with the
-              datamodule's statistics, so reruns and resumes read it.
+              trained on its targets.
+            probe_seed: The probe generator is reset to this seed at the start
+              of every validation and test epoch, so each epoch sees the same
+              probes and validation losses are comparable across epochs. Training
+              draws fresh probes every step.
         """
         super().__init__()
         self.model = model
@@ -89,13 +75,16 @@ class AtomisticTask(pl.LightningModule):
 
         self.teacher = teacher
         self.probe_seed = probe_seed
-        self.teacher_stats_size = teacher_stats_size
-        self._probe_generator = torch.Generator().manual_seed(probe_seed)
-        check_distillation_setup(self.outputs, self.model, teacher)
+        # None without a teacher
+        self.distillation = Distillation.optional(
+            self.outputs, self.model, teacher, probe_seed
+        )
 
         # curvature is a derivative, in validation and testing too
-        self.grad_enabled = bool(self.model.required_derivatives) or needs_curvature(
-            self.outputs
+        self.grad_enabled = (
+            self.distillation.needs_grad
+            if self.distillation is not None
+            else bool(self.model.required_derivatives)
         )
         self.lr = self.optimizer_kwargs["lr"]
         self.warmup_steps = warmup_steps
@@ -103,17 +92,10 @@ class AtomisticTask(pl.LightningModule):
 
     def setup(self, stage=None):
         if stage == "fit":
-            stats = self.trainer.datamodule
-            if self.teacher is not None and stats is not None:
-                # labels first; without them, the teacher's energies
-                stats = student_stats_source(
-                    self.outputs,
-                    stats,
-                    self.teacher,
-                    device=self.trainer.strategy.root_device,
-                    max_structures=self.teacher_stats_size,
-                )
-            self.model.initialize_transforms(stats)
+            if self.distillation is None:
+                self.model.initialize_transforms(self.trainer.datamodule)
+            else:
+                self.distillation.setup(self.trainer.datamodule)
 
     def forward(self, inputs: dict[str, torch.Tensor]):
         results = self.model(inputs)
@@ -132,31 +114,30 @@ class AtomisticTask(pl.LightningModule):
                 )
 
     def _step(self, batch, subset):
-        """Composite loss of one batch, with the metrics of ``subset`` logged.
+        """Loss of one batch, summed over the outputs; logs the metrics of
+        ``subset``.
 
-        Targets are the labels from the batch; with a teacher they are its
-        targets, and the student's curvature is predicted too."""
-        if self.teacher is None:
+        Without distillation, the model is compared with the batch's labels.
+        With distillation, ``Distillation.step`` also adds the teacher's
+        targets and the student's curvature, if an output asks for them. Outside
+        training, the curvature probes come from a seeded generator, so every
+        validation epoch uses the same probes."""
+        if self.distillation is None:
             targets = extract_targets(self.outputs, batch)
             pred = predict_without_postprocessing(self.model, batch)
         else:
-            pred, targets = distillation_predictions(
-                self.outputs,
-                self.model,
-                self.teacher,
-                batch,
-                generator=None if subset == "train" else self._probe_generator,
-                create_graph=subset == "train",
-            )
+            pred, targets = self.distillation.step(batch, train=subset == "train")
         loss = calculate_loss(self.outputs, pred, targets)
         self.log_metrics(pred, targets, subset)
         return loss
 
     def on_validation_epoch_start(self):
-        self._probe_generator.manual_seed(self.probe_seed)
+        if self.distillation is not None:
+            self.distillation.reset_probes()
 
     def on_test_epoch_start(self):
-        self._probe_generator.manual_seed(self.probe_seed)
+        if self.distillation is not None:
+            self.distillation.reset_probes()
 
     def training_step(self, batch, batch_idx):
         loss = self._step(batch, "train")
