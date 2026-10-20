@@ -26,6 +26,14 @@ def with_neighbors(batch, cutoff=CUTOFF):
     return {**batch, **neighbor_list.neighbors(batch)}
 
 
+def absolute_energy(teacher, batch, targets):
+    """The teacher's absolute energy in float64: its energy target plus the
+    offsets it is relative to, in the student's unit."""
+    offsets = teacher.energy_offsets()[batch[properties.Z]]
+    energy = targets[properties.teacher_energy].double()
+    return energy.index_add(0, batch[properties.idx_m], offsets)
+
+
 def molecules_batch(dtype=torch.float32):
     """Three rattled molecules of different sizes; the same batch on every call."""
     atoms = [molecule("CH4"), molecule("H2O"), molecule("C2H6")]
@@ -45,10 +53,12 @@ def make_datamodule(
     energy=lambda atoms: 0.0,
     molecules=MOLECULES,
     transforms=None,
+    forces=None,
     **kwargs,
 ):
     """Twelve rattled molecules, ``molecules`` in turn, each with an energy label
-    ``energy(atoms)`` in eV, loaded only if asked.
+    ``energy(atoms)`` in eV, loaded only if asked; with ``forces``, also force
+    labels ``forces(atoms)`` in eV/Å.
 
     The first eight are the training split, the next two validation, the last
     two test. The pipeline builds one neighbor list, 1 Å beyond the cutoff both
@@ -56,17 +66,20 @@ def make_datamodule(
     datamodule.
     """
     datapath = str(tmp_path / "structures.db")
-    db = ASEAtomsData.create(
-        datapath, distance_unit="Ang", property_unit_dict={"energy": "eV"}
-    )
+    units = {"energy": "eV"} if forces is None else {"energy": "eV", "forces": "eV/Ang"}
+    db = ASEAtomsData.create(datapath, distance_unit="Ang", property_unit_dict=units)
     atoms_list = []
     for seed in range(12):
         structure = molecule(molecules[seed % len(molecules)])
         structure.rattle(0.05, seed=seed)
         atoms_list.append(structure)
-    db.add_systems(
-        [{"energy": np.array([energy(atoms)])} for atoms in atoms_list], atoms_list
-    )
+    labels = []
+    for atoms in atoms_list:
+        label = {"energy": np.array([energy(atoms)])}
+        if forces is not None:
+            label["forces"] = np.asarray(forces(atoms))
+        labels.append(label)
+    db.add_systems(labels, atoms_list)
     split_file = str(tmp_path / "split.npz")
     np.savez(
         split_file,
@@ -143,9 +156,53 @@ def make_nnp(
     )
 
 
+def make_direct_nnp(seed=0, n_atom_basis=16):
+    """A small PaiNN potential that predicts its forces directly, not as
+    -dE/dR: they need no ``Forces`` module and have no energy behind them."""
+    torch.manual_seed(seed)
+    representation = spk.model.PaiNN(
+        n_atom_basis=n_atom_basis,
+        n_interactions=2,
+        radial_basis=spk.nn.GaussianRBF(n_rbf=10, cutoff=CUTOFF),
+        cutoff_fn=spk.nn.CosineCutoff(CUTOFF),
+    )
+    return spk.model.NeuralNetworkPotential(
+        representation=representation,
+        input_modules=[spk.model.PairwiseDistances()],
+        output_modules=[
+            spk.model.Atomwise(n_in=n_atom_basis, output_key=properties.energy),
+            spk.model.AtomwiseVector(n_in=n_atom_basis, output_key=properties.forces),
+        ],
+    )
+
+
+def with_dropout(model, p=0.5):
+    """``model`` with dropout behind its energy head, so that train mode
+    changes its energies."""
+    head = model.output_modules[0]
+    head.outnet = torch.nn.Sequential(head.outnet, torch.nn.Dropout(p))
+    return model
+
+
+def force_jacobian(model, batch):
+    """``dF/dR`` of ``model`` on ``batch``, shape ``(n_atoms * 3, n_atoms * 3)``,
+    in float64."""
+    model = model.double()
+    batch = {
+        key: value.double() if value.is_floating_point() else value
+        for key, value in batch.items()
+    }
+
+    def forces(positions):
+        return model({**batch, properties.R: positions})[properties.forces].flatten()
+
+    jacobian = torch.autograd.functional.jacobian(forces, batch[properties.R])
+    return jacobian.reshape(jacobian.shape[0], -1)
+
+
 @pytest.fixture
 def teacher_model():
-    return make_nnp(seed=1, energy_mean=-3.0)
+    return make_nnp(seed=1, energy_mean=-3.0, atomrefs=True)
 
 
 @pytest.fixture

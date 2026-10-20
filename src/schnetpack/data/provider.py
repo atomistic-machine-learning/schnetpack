@@ -98,8 +98,8 @@ class StatsAtomrefProvider:
         The lock — the same one that serializes split creation — is held
         across the whole miss → compute → write cycle, so concurrent ranks
         compute each entry at most once. Entries are only valid for this
-        train partition. Other stats sources store their results here too,
-        under keys of their own (e.g. ``TeacherStats``, ``teacher:...``).
+        train partition. Other setup passes may store their results here
+        too, under keys of their own.
         Without a stats file, every call computes.
         """
         if self.stats_file is None:

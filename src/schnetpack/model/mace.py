@@ -168,6 +168,15 @@ def reference_energies(core: nn.Module) -> torch.Tensor:
     return atomrefs
 
 
+def energy_shift(core: nn.Module) -> float:
+    """The energy the core's ``ScaleShiftBlock`` adds to every atom, of its
+    first head; 0 for a core without one."""
+    block = getattr(core, "scale_shift", None)
+    if block is None:
+        return 0.0
+    return float(block.shift.detach().reshape(-1)[0])
+
+
 def _e0_table(core: nn.Module) -> torch.Tensor:
     try:
         return core.atomic_energies_fn.atomic_energies

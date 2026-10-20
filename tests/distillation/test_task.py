@@ -3,6 +3,7 @@ teacher at setup, checkpoints."""
 
 import os
 
+import numpy as np
 import pytest
 import pytorch_lightning as pl
 import torch
@@ -12,8 +13,7 @@ from schnetpack import properties
 from schnetpack.lightning import AtomisticTask
 from schnetpack.lightning.utils import load_task_from_checkpoint
 from schnetpack.objectives import ModelOutput, calculate_loss
-from schnetpack.train import SchNetPackTeacher, distillation_predictions, teacher_key
-from schnetpack.transform import CastTo32, MatScipyNeighborList, RemoveOffsets
+from schnetpack.train import Distillation, SchNetPackTeacher
 
 from .conftest import CUTOFF, make_datamodule, make_nnp, molecules_batch
 from .test_distillation_loss import distillation_outputs
@@ -21,7 +21,7 @@ from .test_distillation_loss import distillation_outputs
 
 def make_task(teacher_path, **kwargs):
     return AtomisticTask(
-        model=make_nnp(seed=2, filter_cutoff=CUTOFF),
+        model=make_nnp(seed=2, filter_cutoff=CUTOFF, atomrefs=True),
         outputs=distillation_outputs(),
         optimizer_args={"lr": 1e-3},
         teacher=SchNetPackTeacher(teacher_path, cutoff=CUTOFF),
@@ -69,8 +69,8 @@ def test_a_training_step_is_the_pure_distillation_loss(teacher_path):
     torch.manual_seed(0)
     via_task = task.training_step(molecules_batch(), 0)
     torch.manual_seed(0)
-    pred, targets = distillation_predictions(
-        task.outputs, task.model, task.teacher, molecules_batch()
+    pred, targets = Distillation(task.outputs, task.model, task.teacher).step(
+        molecules_batch()
     )
     plain = calculate_loss(task.outputs, pred, targets)
 
@@ -99,8 +99,10 @@ def test_trainer_distills_and_sets_the_student_offsets_from_the_teacher(
 
     trainer.fit(task, datamodule=make_datamodule(tmp_path))
 
-    # the labels are zero and not even loaded: a nonzero mean came from the teacher
-    assert task.model.postprocessors[1].mean.item() != 0.0
+    # the labels are zero and not even loaded: the offsets came from the teacher
+    offsets = task.model.postprocessors[-1]
+    torch.testing.assert_close(offsets.atomref, task.teacher.energy_offsets()[:100])
+    assert not offsets.mean.any()
     assert torch.isfinite(trainer.callback_metrics["val_loss"])
 
 
@@ -128,58 +130,25 @@ def test_checkpoint_restores_the_teacher_from_its_path(
 def test_a_label_and_a_teacher_target_for_one_output_are_logged_apart(
     tmp_path, monkeypatch, teacher_path
 ):
-    """A DFT energy label next to the teacher's energy: both train the student's
-    energy, so their metrics must not share a name."""
+    """Force labels next to the teacher's forces: both train the student's
+    forces, so their metrics must not share a name."""
     monkeypatch.chdir(tmp_path)
 
     task = AtomisticTask(
-        model=make_nnp(seed=2),
+        model=make_nnp(seed=2, energy_mean=-3.0),
         outputs=[
-            term(properties.energy, properties.energy),
-            term(properties.energy, teacher_key(properties.energy)),
-            term(properties.forces, teacher_key(properties.forces)),
+            term(properties.forces, properties.forces),
+            term(properties.forces, properties.teacher_forces),
         ],
         optimizer_args={"lr": 1e-3},
         teacher=SchNetPackTeacher(teacher_path),
     )
     trainer = fast_trainer(tmp_path)
-
-    trainer.fit(task, datamodule=make_datamodule(tmp_path, ["energy"]))
-
-    assert "val_energy_mae" in trainer.callback_metrics
-    assert "val_teacher_energy_mae" in trainer.callback_metrics
-    assert "val_teacher_forces_mae" in trainer.callback_metrics
-
-
-def test_a_label_energy_term_fits_the_students_offsets_to_the_labels(
-    tmp_path, monkeypatch, teacher_path
-):
-    """The data pipeline removes offsets fitted to the labels from them; the
-    teacher's energy loses the student's offsets. Both terms compare the same
-    raw energy only if the student's offsets are the labels' too."""
-    monkeypatch.chdir(tmp_path)
     datamodule = make_datamodule(
-        tmp_path,
-        load_properties=["energy"],
-        energy=lambda atoms: -2.0 * len(atoms),
-        transforms=[
-            RemoveOffsets(properties.energy, remove_mean=True),
-            MatScipyNeighborList(cutoff=CUTOFF + 1.0),
-            CastTo32(),
-        ],
-    )
-    task = AtomisticTask(
-        model=make_nnp(seed=2),
-        outputs=[
-            term(properties.energy, properties.energy),
-            term(properties.energy, teacher_key(properties.energy)),
-            term(properties.forces, teacher_key(properties.forces)),
-        ],
-        optimizer_args={"lr": 1e-3},
-        teacher=SchNetPackTeacher(teacher_path),
+        tmp_path, ["forces"], forces=lambda atoms: np.zeros((len(atoms), 3))
     )
 
-    fast_trainer(tmp_path).fit(task, datamodule=datamodule)
+    trainer.fit(task, datamodule=datamodule)
 
-    # the teacher's own energies are about -3 eV per atom
-    assert task.model.postprocessors[1].mean.item() == pytest.approx(-2.0)
+    assert "val_forces_mae" in trainer.callback_metrics
+    assert "val_teacher_forces_mae" in trainer.callback_metrics

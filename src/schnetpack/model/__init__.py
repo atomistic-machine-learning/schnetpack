@@ -14,7 +14,7 @@ Three layers, and the split between them is what the sub-packages name:
   (``NeuralNetworkPotential``), plus the postprocessing and dtype handling every
   model shares (``AtomisticModel``).
 - :mod:`~schnetpack.model.utils` — ``train_mode``, which runs a model in train
-  mode for a block, as curvature in distillation needs.
+  mode for a block, as curvature in distillation needs
 - :mod:`~schnetpack.model.mace` — ``MaceModel``, which runs a compiled MACE
   model on SchNetPack batches, and ``load_mace`` for its archives.
 - :mod:`~schnetpack.model.ensemble` — ``NNEnsemble``, several models run on one

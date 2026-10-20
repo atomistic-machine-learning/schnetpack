@@ -18,5 +18,3 @@ task:
     student_distance_unit: ${globals.distance_unit}
     cutoff: ${globals.teacher_cutoff}
     dtype: float32
-    student_energy_key: ${globals.energy_key}
-    student_force_key: ${globals.forces_key}
