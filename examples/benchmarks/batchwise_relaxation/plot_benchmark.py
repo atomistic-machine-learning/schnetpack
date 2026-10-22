@@ -43,21 +43,27 @@ def parse_args():
 
 
 def load_timings(input_dir):
-    """The run settings and the wall times as ``(n_batch_sizes, n_repeats)`` arrays."""
+    """The run settings and, per method, its batch sizes and the wall times as a
+    ``(n_batch_sizes, n_repeats)`` array.
+
+    A method only covers the batch sizes it was timed at: the sequential baseline may
+    stop early (``--sequential-max-batch-size``), and a run that died keeps the batch
+    sizes it finished.
+    """
     with open(os.path.join(input_dir, "timings.json")) as f:
         results = json.load(f)
     meta = results["meta"]
-    batch_sizes = meta["batch_sizes"]
 
-    timings = {
-        method: np.full((len(batch_sizes), meta["repeats"]), np.nan)
-        for method in METHODS
-    }
-    for record in results["records"]:
-        size_idx = batch_sizes.index(record["batch_size"])
-        timings[record["method"]][size_idx, record["repeat"]] = record["time_s"]
-    for method, samples in timings.items():
+    timings = {}
+    for method in METHODS:
+        records = [r for r in results["records"] if r["method"] == method]
+        batch_sizes = sorted({r["batch_size"] for r in records})
+        samples = np.full((len(batch_sizes), meta["repeats"]), np.nan)
+        for record in records:
+            size_idx = batch_sizes.index(record["batch_size"])
+            samples[size_idx, record["repeat"]] = record["time_s"]
         assert not np.isnan(samples).any(), f"{method}: missing timings"
+        timings[method] = (batch_sizes, samples)
     return meta, timings
 
 
@@ -70,32 +76,44 @@ def mean_ci(samples, confidence):
     return mean, half_width
 
 
-def print_table(batch_sizes, summary):
-    (mean_bw, ci_bw), (mean_seq, ci_seq) = summary["batch-wise"], summary["sequential"]
+def print_table(summary):
+    # (mean, half-width) per method and batch size, absent where it was not timed
+    rows = {
+        method: {n: (m, ci) for n, m, ci in zip(sizes, mean, half_width)}
+        for method, (sizes, mean, half_width) in summary.items()
+    }
     header = f"{'batch size':>10} {'batch-wise [s]':>22} {'sequential [s]':>22} {'speedup':>9}"
     print(header)
     print("-" * len(header))
-    for i, n_structures in enumerate(batch_sizes):
-        print(
-            f"{n_structures:>10} "
-            f"{mean_bw[i]:>13.2f} +- {ci_bw[i]:<6.2f} "
-            f"{mean_seq[i]:>13.2f} +- {ci_seq[i]:<6.2f} "
-            f"{mean_seq[i] / mean_bw[i]:>8.2f}x"
-        )
+    for n_structures in sorted(set().union(*rows.values())):
+        line = f"{n_structures:>10}"
+        for method in METHODS:
+            if n_structures in rows[method]:
+                mean, half_width = rows[method][n_structures]
+                line += f" {mean:>13.2f} +- {half_width:<6.2f}"
+            else:
+                line += f" {'-':>22}"
+        if all(n_structures in rows[method] for method in METHODS):
+            speedup = (
+                rows["sequential"][n_structures][0]
+                / rows["batch-wise"][n_structures][0]
+            )
+            line += f" {speedup:>8.2f}x"
+        print(line)
 
 
 def plot(meta, summary, confidence):
-    batch_sizes = meta["batch_sizes"]
+    batch_sizes = sorted(set().union(*(sizes for sizes, *_ in summary.values())))
 
     fig, ax = plt.subplots(figsize=(7.2, 4.8), dpi=130)
     fig.patch.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
 
-    for label, (mean, half_width) in summary.items():
+    for label, (sizes, mean, half_width) in summary.items():
         color = SERIES[label]
         # confidence interval as a band, the mean as the line on top of it
         ax.fill_between(
-            batch_sizes,
+            sizes,
             mean - half_width,
             mean + half_width,
             color=color,
@@ -104,7 +122,7 @@ def plot(meta, summary, confidence):
             zorder=2,
         )
         ax.plot(
-            batch_sizes,
+            sizes,
             mean,
             color=color,
             linewidth=2,
@@ -118,7 +136,7 @@ def plot(meta, summary, confidence):
         # label the series at its end, so the curves can be read without the legend
         ax.annotate(
             label,
-            (batch_sizes[-1], mean[-1]),
+            (sizes[-1], mean[-1]),
             textcoords="offset points",
             xytext=(10, 0),
             va="center",
@@ -182,10 +200,11 @@ def main():
     args = parse_args()
     meta, timings = load_timings(args.input)
     summary = {
-        method: mean_ci(samples, args.confidence) for method, samples in timings.items()
+        method: (sizes, *mean_ci(samples, args.confidence))
+        for method, (sizes, samples) in timings.items()
     }
 
-    print_table(meta["batch_sizes"], summary)
+    print_table(summary)
 
     fig = plot(meta, summary, args.confidence)
     output = args.output or os.path.join(args.input, "relaxation_time.png")
