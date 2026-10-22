@@ -54,6 +54,13 @@ def parse_args():
     )
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument(
+        "--sequential-max-batch-size",
+        type=int,
+        default=None,
+        help="time the sequential baseline only up to this batch size, it scales "
+        "linearly and dominates the run time of large batches; no limit if unset",
+    )
+    parser.add_argument(
         "--fmax", type=float, default=0.001, help="convergence criterion in eV/Ang"
     )
     parser.add_argument("--max-steps", type=int, default=1000)
@@ -179,13 +186,45 @@ def main():
     for timer in timers.values():
         timer(warmup)
 
+    meta = dict(
+        model=os.path.abspath(args.model),
+        structures=os.path.abspath(args.structures),
+        device=benchmark.device.type,
+        # the hardware, so runs on different nodes can be told apart
+        gpu=(
+            torch.cuda.get_device_name(benchmark.device)
+            if benchmark.device.type == "cuda"
+            else None
+        ),
+        hostname=socket.gethostname(),
+        slurm_job_id=os.environ.get("SLURM_JOB_ID"),
+        slurm_partition=os.environ.get("SLURM_JOB_PARTITION"),
+        batch_sizes=args.batch_sizes,
+        repeats=args.repeats,
+        sequential_max_batch_size=args.sequential_max_batch_size,
+        fmax=args.fmax,
+        max_steps=args.max_steps,
+        noise=args.noise,
+        cutoff_skin=args.cutoff_skin,
+        torch_version=torch.__version__,
+        schnetpack_version=spk.__version__,
+    )
+    timings_file = os.path.join(args.output, "timings.json")
+
     records = []
     for n_structures in args.batch_sizes:
-        times = {method: [] for method in METHODS}
+        methods = [
+            method
+            for method in METHODS
+            if method != "sequential"
+            or args.sequential_max_batch_size is None
+            or n_structures <= args.sequential_max_batch_size
+        ]
+        times = {method: [] for method in methods}
         for repeat in range(args.repeats):
             # both optimizers relax the identical batch, so the repeats are paired
             structures = make_structures(conformers, n_structures, args.noise, repeat)
-            for method in METHODS:
+            for method in methods:
                 elapsed, relaxed = timers[method](structures)
                 structures_file = os.path.join(
                     "structures", f"{method}_n{n_structures:03d}_r{repeat:02d}.xyz"
@@ -204,37 +243,14 @@ def main():
                 times[method].append(elapsed)
 
         print(
-            f"batch size {n_structures:>3}: "
-            f"batch-wise {np.mean(times['batch-wise']):6.2f} s, "
-            f"sequential {np.mean(times['sequential']):6.2f} s",
+            f"batch size {n_structures:>5}: "
+            + ", ".join(f"{m} {np.mean(t):6.2f} s" for m, t in times.items()),
             flush=True,
         )
+        # after every batch size, so a run that dies at a large batch keeps the rest
+        with open(timings_file, "w") as f:
+            json.dump(dict(meta=meta, records=records), f, indent=2)
 
-    meta = dict(
-        model=os.path.abspath(args.model),
-        structures=os.path.abspath(args.structures),
-        device=benchmark.device.type,
-        # the hardware, so runs on different nodes can be told apart
-        gpu=(
-            torch.cuda.get_device_name(benchmark.device)
-            if benchmark.device.type == "cuda"
-            else None
-        ),
-        hostname=socket.gethostname(),
-        slurm_job_id=os.environ.get("SLURM_JOB_ID"),
-        slurm_partition=os.environ.get("SLURM_JOB_PARTITION"),
-        batch_sizes=args.batch_sizes,
-        repeats=args.repeats,
-        fmax=args.fmax,
-        max_steps=args.max_steps,
-        noise=args.noise,
-        cutoff_skin=args.cutoff_skin,
-        torch_version=torch.__version__,
-        schnetpack_version=spk.__version__,
-    )
-    timings_file = os.path.join(args.output, "timings.json")
-    with open(timings_file, "w") as f:
-        json.dump(dict(meta=meta, records=records), f, indent=2)
     print(f"results written to {timings_file}")
 
 

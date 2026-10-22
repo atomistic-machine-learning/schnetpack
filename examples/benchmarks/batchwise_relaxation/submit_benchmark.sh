@@ -1,6 +1,7 @@
 #!/bin/bash -l
 #SBATCH --partition=gpu-test
 #SBATCH --gres=gpu:80gb:1
+# Check the H100 GRES name with: sinfo -o "%P %G %f" (gpu:80gb may also match an A100)
 # Whole node, so other jobs do not distort the wall times
 #SBATCH --exclusive
 # Standard output and error:
@@ -26,6 +27,7 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 apptainer exec --nv $CONTAINER python $SLURM_SUBMIT_DIR/run_benchmark.py \
   --device cuda \
-  --batch-sizes 1 2 4 8 16 32 64 128 \
+  --batch-sizes 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 \
   --repeats 5 \
+  --sequential-max-batch-size 32 \
   --output $OUTPUT
