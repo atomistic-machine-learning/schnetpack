@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #SBATCH --partition=gpu-test
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:80gb:1
 # Whole node, so other jobs do not distort the wall times
 #SBATCH --exclusive
 # Standard output and error:

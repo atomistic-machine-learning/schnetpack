@@ -161,7 +161,7 @@ def plot(meta, summary, confidence):
         0.0,
         1.015,
         f"wall time to relax the whole batch to fmax = {meta['fmax']} eV/A "
-        f"on {meta['device']},\n"
+        f"on {meta.get('gpu') or meta['device']},\n"
         f"mean of {meta['repeats']} runs, band is the {confidence:.0%} "
         "confidence interval",
         transform=ax.transAxes,
