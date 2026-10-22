@@ -22,6 +22,7 @@ __all__ = [
     "VP",
     "VE",
     "VELinear",
+    "VPCosine",
 ]
 
 
@@ -339,3 +340,56 @@ class VELinear(GaussianSchedule):
 
     def sigma_dot(self, t):
         return torch.full_like(t, self.sigma_max / self.t_max)
+
+
+class VPCosine(GaussianSchedule):
+    """
+    Variance-preserving schedule with cosine noise (Nichol & Dhariwal 2021),
+
+        a(t) = cos(pi/2 (t + kappa) / (1 + kappa)) / cos(pi/2 kappa / (1 + kappa)),
+
+    sigma = sqrt(1 - a^2) and sigma_max = 1. a(1) = 0, so the prior is
+    reached exactly at t = 1. GEODE noises its cell parameters on it with
+    kappa = 0.008; at t = 1/1000 that gives 1 - a^2 = 4.1e-5, its first
+    discrete step.
+    """
+
+    def __init__(self, kappa: float = 0.008, t_min: float = 1e-3, t_max: float = 1.0):
+        """
+        Args:
+            kappa: offset that keeps sigma away from 0 at small t
+            t_min: smallest usable time; the score diverges as t -> 0
+            t_max: largest usable time
+        """
+        super().__init__(sigma_max=1.0, t_min=t_min, t_max=t_max)
+        self.kappa = kappa
+        self.phase_0 = 0.5 * math.pi * kappa / (1.0 + kappa)
+
+    def phase(self, t: torch.Tensor) -> torch.Tensor:
+        return 0.5 * math.pi * (t + self.kappa) / (1.0 + self.kappa)
+
+    def a(self, t):
+        return torch.cos(self.phase(t)) / math.cos(self.phase_0)
+
+    def a_dot(self, t):
+        rate = 0.5 * math.pi / (1.0 + self.kappa)
+        return -rate * torch.sin(self.phase(t)) / math.cos(self.phase_0)
+
+    def log_a_dot(self, t):
+        # d/dt log cos(phase); infinite at t = 1, where a = 0
+        return -0.5 * math.pi / (1.0 + self.kappa) * torch.tan(self.phase(t))
+
+    def sigma(self, t):
+        # 1 - a^2 = (cos^2 p0 - cos^2 p) / cos^2 p0 = sin(p - p0) sin(p + p0) / cos^2 p0,
+        # which keeps its digits at small t where a^2 is within an ulp of 1
+        p = self.phase(t)
+        one_minus_a2 = (
+            torch.sin(p - self.phase_0)
+            * torch.sin(p + self.phase_0)
+            / math.cos(self.phase_0) ** 2
+        )
+        return torch.sqrt(torch.clamp(one_minus_a2, min=0.0))
+
+    def sigma_dot(self, t):
+        # d/dt sqrt(1 - a^2) = -a a' / sigma
+        return -self.a(t) * self.a_dot(t) / torch.clamp(self.sigma(t), min=1e-12)

@@ -11,6 +11,7 @@ from schnetpack.generative import (
     GaussianInterpolant,
     GaussianPrior,
     Interpolant,
+    KeyView,
     PermutationCoupling,
     ScoreParametrization,
     Variable,
@@ -35,7 +36,7 @@ def structure(n_atoms=7):
 def positions(process, parametrization=None, name="positions"):
     return Variable(
         name=name,
-        key=properties.R,
+        view=properties.R,
         per="atom",
         noising=process,
         parametrization=parametrization or EpsParametrization(),
@@ -43,21 +44,20 @@ def positions(process, parametrization=None, name="positions"):
     )
 
 
-def cell_like(decode=None):
-    """A per-structure variable of width 6 on VP, like the whitened cell."""
+def cell_like(view="y"):
+    """A per-structure variable of width 6 on VP, like the cell's parameters."""
     return Variable(
         name="cell",
-        key="cell_y",
+        view=view,
         per="structure",
         noising=GaussianInterpolant(
             VP(),
             prior=GaussianPrior(
-                std=1.0, centered=False, key="cell_y", per="structure", dim=6
+                std=1.0, centered=False, key="y", per="structure", dim=6
             ),
         ),
         parametrization=EpsParametrization(),
         output_key="eps_cell",
-        decode=decode,
     )
 
 
@@ -247,7 +247,7 @@ def test_can_diffuse_a_property_other_than_positions():
     r = inputs[properties.R].clone()
     v = Variable(
         name="velocities",
-        key="velocities",
+        view="velocities",
         per="atom",
         noising=GaussianInterpolant(VP(), prior=GaussianPrior(key="velocities")),
         parametrization=EpsParametrization(),
@@ -262,9 +262,9 @@ def test_can_diffuse_a_property_other_than_positions():
 
 
 def test_per_structure_rows_and_one_time():
-    inputs = {**structure(5), "cell_y": torch.randn(1, 6)}
+    inputs = {**structure(5), "y": torch.randn(1, 6)}
     out = Diffuse([cell_like(), positions(GaussianInterpolant(VP()))])(inputs)
-    assert out["cell_y"].shape == (1, 6)
+    assert out["y"].shape == (1, 6)
     assert out["label_cell"].shape == (1, 6)
     assert out["weight_cell"].shape == (1,)
     assert out["t"].shape == (5,)
@@ -272,22 +272,24 @@ def test_per_structure_rows_and_one_time():
     assert torch.all(out["t"] == out["t_structure"])
 
 
-def test_noises_in_order_and_each_variable_sees_the_decoded_ones():
+def test_noises_in_order_and_each_variable_sees_what_the_others_wrote():
     shift = 100.0
 
-    def move_atoms(batch):
-        # stands in for the cell's decode: the atoms follow the noisy cell
-        moved = batch[properties.R] + shift * batch["cell_y"].sum()
-        return {**batch, properties.R: moved}
+    class MovesAtoms(KeyView):
+        """Stands in for the cell's view: the atoms follow the noisy cell."""
+
+        def write(self, batch, x):
+            moved = batch[properties.R] + shift * x.sum()
+            return {**batch, self.key: x, properties.R: moved}
 
     clean = structure()
-    inputs = {**clean, "cell_y": torch.randn(1, 6)}
+    inputs = {**clean, "y": torch.randn(1, 6)}
     v_pos = positions(
         GaussianInterpolant(VE(0.01, 10.0), prior=GaussianPrior(10.0, centered=False))
     )
-    out = Diffuse([cell_like(decode=move_atoms), v_pos], keep_clean=True)(inputs)
+    out = Diffuse([cell_like(MovesAtoms("y")), v_pos], keep_clean=True)(inputs)
 
-    expected = clean[properties.R] + shift * out["cell_y"].sum()
+    expected = clean[properties.R] + shift * out["y"].sum()
     assert torch.allclose(out["clean_positions"], expected)
     sigma = v_pos.noising.schedule.sigma(out["t"])[:, None]
     x0_seen = out[properties.R] - sigma * out["label_positions"]  # VE: a = 1

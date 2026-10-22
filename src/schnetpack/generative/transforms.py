@@ -26,10 +26,11 @@ class Diffuse(Transform):
     Noise every variable of a structure at one shared time, in order.
 
     Runs per structure, before collation. One time is drawn per structure and
-    each variable is noised at it; each variable sees the noisy, decoded
-    values of the ones before it. Writes for every variable its x_t (under
-    its key), its label and its loss weight, and once ``time_key`` per atom
-    and ``structure_time_key`` per structure. The molecule index and the
+    each variable is noised at it, reading x0 through its view and writing
+    x_t back; each variable sees the structure the ones before it left. Writes
+    for every variable its x_t (into the structure), its label and its loss
+    weight, and once ``time_key`` per atom and ``structure_time_key`` per
+    structure. The molecule index and the
     atomic numbers are handed to the coupling of a per-atom variable as
     ``groups``, so a re-pairing stays within one element.
 
@@ -105,12 +106,14 @@ class Diffuse(Transform):
         return torch.stack(columns, dim=-1) if columns else None
 
     def forward(self, inputs):
-        first = inputs[self.variables[0].key]
+        first = self.variables[0].read(inputs)
         t = self.sample_t(1, first.device)  # one time for the structure
-        n_atoms = None
+        n_atoms, floating = None, None
         for v in self.variables:
-            x0 = inputs[v.key]
+            x0 = v.read(inputs)
             dtype = x0.dtype if x0.is_floating_point() else t.dtype
+            if floating is None and x0.is_floating_point():
+                floating = dtype
             t_rows = t.to(dtype).repeat(x0.shape[0])
             if v.per == "atom" and n_atoms is None:
                 n_atoms = x0.shape[0]
@@ -124,7 +127,7 @@ class Diffuse(Transform):
                 groups=self._groups(inputs, x0.shape[0]) if v.per == "atom" else None,
             )
             schedule = v.noising.schedule
-            inputs[v.key] = x_t
+            inputs = v.write(inputs, x_t)
             inputs[v.label_key] = v.parametrization.target(schedule, x0, x1, t_rows)
             inputs[v.weight_key] = (
                 v.weight(schedule, t_rows, x_t)
@@ -133,18 +136,8 @@ class Diffuse(Transform):
             )
             if self.keep_clean:
                 inputs[v.clean_key] = x0
-            if v.decode is not None:
-                inputs = v.decode(inputs)
 
-        dtype = next(
-            (
-                inputs[v.key].dtype
-                for v in self.variables
-                if inputs[v.key].is_floating_point()
-            ),
-            t.dtype,
-        )
-        t = t.to(dtype)
+        t = t.to(floating or t.dtype)
         if properties.Z in inputs:
             n_atoms = inputs[properties.Z].shape[0]
         if n_atoms is not None:

@@ -30,7 +30,7 @@ N_CLASSES = 10
 def types(n_classes=N_CLASSES):
     return Variable(
         name="types",
-        key=properties.Z,
+        view=properties.Z,
         per="atom",
         noising=MaskNoising(FlowMatching(t_min=1.0 / T, t_max=1.0)),
         parametrization=LogitsParametrization(n_classes=n_classes),
@@ -42,7 +42,7 @@ def types(n_classes=N_CLASSES):
 def positions():
     return Variable(
         name="positions",
-        key=properties.R,
+        view=properties.R,
         per="atom",
         noising=GaussianInterpolant(
             VE(sigma_min=0.01, sigma_max=10.0), prior=GaussianPrior(std=10.0)

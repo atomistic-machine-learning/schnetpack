@@ -93,3 +93,11 @@ def test_statistics_structures_without_types_leave_them_to_a_prior():
     assert batch[properties.idx_m].shape == (int(batch[properties.n_atoms].sum()),)
     z = MaskPrior()(batch)[properties.Z]
     assert z.tolist() == [MASK] * int(batch[properties.n_atoms].sum())
+
+
+def test_statistics_structures_can_be_periodic_and_leave_the_cell_to_a_prior():
+    structures = StatisticsStructures.from_dataset(DATASET, atom_types=False, pbc=True)
+    batch = structures(4)
+    assert batch[properties.pbc].shape == (12,) and batch[properties.pbc].all()
+    assert (batch[properties.cell] == 0).all()
+    assert not StatisticsStructures.from_dataset(DATASET)(4)[properties.pbc].any()

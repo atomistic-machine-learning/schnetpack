@@ -83,17 +83,24 @@ class StatisticsStructures(StructureProvider):
     each atom its type independently from ``atom_types``; a draw may be a
     composition the dataset does not contain. Without ``atom_types`` the
     batch has no types, for a variable that generates them (its prior writes
-    them). The batch has no positions; structures are non-periodic, with a
-    zero cell, as in a collated molecule dataset.
+    them). The batch has no positions and a zero cell. Structures are
+    non-periodic, as in a collated molecule dataset, or periodic with
+    ``pbc``, for a cell variable that writes the cell.
     """
 
-    def __init__(self, n_atoms: torch.Tensor, atom_types: torch.Tensor | None):
+    def __init__(
+        self,
+        n_atoms: torch.Tensor,
+        atom_types: torch.Tensor | None,
+        pbc: bool = False,
+    ):
         """
         Args:
             n_atoms: histogram of atom counts; entry k weighs structures of k
                 atoms. Need not be normalized.
             atom_types: weights of the atom types; entry z weighs atomic
                 number z. Need not be normalized. None draws no types.
+            pbc: periodic in all three directions
         """
         n_atoms = torch.as_tensor(n_atoms, dtype=torch.float)
         histograms = {"n_atoms": n_atoms}
@@ -110,10 +117,11 @@ class StatisticsStructures(StructureProvider):
             raise ValueError("n_atoms puts weight on structures of zero atoms.")
         self.n_atoms = n_atoms
         self.atom_types = atom_types
+        self.pbc = pbc
 
     @classmethod
     def from_dataset(
-        cls, dataset: Dataset, atom_types: bool = True
+        cls, dataset: Dataset, atom_types: bool = True, pbc: bool = False
     ) -> "StatisticsStructures":
         """
         Count atom numbers, and atom types if asked, over all structures of a
@@ -122,11 +130,13 @@ class StatisticsStructures(StructureProvider):
         Args:
             dataset: the structures to count
             atom_types: False to draw atom counts only, for generated types
+            pbc: draw periodic structures
         """
         zs = [dataset[i][properties.Z] for i in range(len(dataset))]
         return cls(
             n_atoms=torch.bincount(torch.tensor([z.shape[0] for z in zs])),
             atom_types=torch.bincount(torch.cat(zs).long()) if atom_types else None,
+            pbc=pbc,
         )
 
     def __call__(self, n_samples):
@@ -144,7 +154,7 @@ class StatisticsStructures(StructureProvider):
             properties.n_atoms: n_atoms,
             properties.idx_m: torch.repeat_interleave(torch.arange(n_samples), n_atoms),
             properties.cell: torch.zeros(n_samples, 3, 3),
-            properties.pbc: torch.zeros(3 * n_samples, dtype=torch.bool),
+            properties.pbc: torch.full((3 * n_samples,), self.pbc, dtype=torch.bool),
         }
         if self.atom_types is not None:
             batch[properties.Z] = torch.multinomial(

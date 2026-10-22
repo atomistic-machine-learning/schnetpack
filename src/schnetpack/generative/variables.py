@@ -3,9 +3,10 @@ Generated variables: positions, and later atom types and a cell, each with
 its own noising, head and loss, all sharing one time.
 
 - :class:`Variable`: one generated quantity, shared by training and
-  sampling: where it lives in the batch, how it is noised, what its head
-  predicts, how its loss is weighted, and what else has to follow when it
-  changes.
+  sampling: where it lives in the structure (its
+  :class:`~schnetpack.generative.views.View`, which also moves what has to
+  follow it), how it is noised, what its head predicts and how its loss is
+  weighted.
 - :func:`weighted_squared_error`: the default loss of a variable.
 
 :class:`~schnetpack.generative.transforms.Diffuse` noises a list of them in
@@ -22,6 +23,7 @@ import torch
 from schnetpack import properties
 from schnetpack.generative.noising import ForwardNoising
 from schnetpack.generative.parametrizations import Parametrization
+from schnetpack.generative.views import KeyView, View
 
 __all__ = ["Variable", "weighted_squared_error", "STRUCTURE_TIME_KEY"]
 
@@ -51,16 +53,20 @@ class Variable:
     """
     One generated quantity of a structure.
 
-    Training writes its label under :attr:`label_key` and its loss weight
-    under :attr:`weight_key`; sampling reads its fields from the model's
-    outputs by the keys its update is given.
+    The batch holds only the structure; the variable's state is what its
+    :attr:`view` reads from it. Training writes its label under
+    :attr:`label_key` and its loss weight under :attr:`weight_key`; sampling
+    reads its fields from the model's outputs by the keys its update is
+    given.
     """
 
     name: str
     """Names the label, the weight and the variable in error messages."""
 
-    key: str
-    """Batch key of the state, e.g. ``properties.R``."""
+    view: View | str
+    """Reads the state from the structure and writes it back. A batch key,
+    e.g. ``properties.R``, stands for its
+    :class:`~schnetpack.generative.views.KeyView`."""
 
     per: Literal["atom", "structure"]
     """One row per atom or one row per structure."""
@@ -77,10 +83,9 @@ class Variable:
     weight: Callable[..., torch.Tensor] | None = None
     """``(schedule, t, x_t) -> weight per row``; None weighs every row 1."""
 
-    decode: Callable[[dict], dict] | None = None
-    """``batch -> batch``, run after every change of the variable."""
-
     def __post_init__(self):
+        if isinstance(self.view, str):
+            self.view = KeyView(self.view)
         if self.per not in ("atom", "structure"):
             raise ValueError(
                 f"{self.name}: per must be 'atom' or 'structure', got {self.per!r}"
@@ -89,10 +94,17 @@ class Variable:
         if schedule is not None:
             self.parametrization.validate(schedule)
         prior = getattr(self.noising, "prior", None)
-        if prior is not None and prior.key != self.key:
+        per = getattr(prior, "per", self.per)
+        if per != self.per:
             raise ValueError(
-                f"{self.name}: the prior draws {prior.key!r}, the variable is "
-                f"{self.key!r}; give the prior key={self.key!r}"
+                f"{self.name}: the prior draws one row per {per}, the variable "
+                f"has one per {self.per}; give the prior per={self.per!r}"
+            )
+        if self.per == "structure" and getattr(prior, "centered", False):
+            raise ValueError(
+                f"{self.name}: a centered prior subtracts the mean of a "
+                "structure's rows, which leaves one row per structure without "
+                "noise; give the prior centered=False"
             )
 
     @property
@@ -127,7 +139,10 @@ class Variable:
             outputs[self.output_key], batch[self.label_key], batch[self.weight_key]
         )
 
+    def read(self, batch: Mapping[str, Any]) -> torch.Tensor:
+        """The variable's state in ``batch``."""
+        return self.view.read(batch)
+
     def write(self, batch: Mapping[str, Any], x: torch.Tensor) -> dict[str, Any]:
-        """A copy of ``batch`` with ``x`` as the variable's state, decoded."""
-        batch = {**batch, self.key: x}
-        return self.decode(batch) if self.decode is not None else batch
+        """A copy of ``batch`` with ``x`` as the variable's state."""
+        return self.view.write(batch, x)

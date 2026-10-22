@@ -12,7 +12,8 @@ Three levels, each a special case of the previous one:
 - :class:`GaussianInterpolant`: x_t = a(t) x0 + sigma(t) eps with a Gaussian
   prior and independent coupling. Adds the noise and the score.
 
-:class:`MaskNoising` masks discrete atom types. It has a schedule and a prior
+:class:`PeriodicGaussianInterpolant` is a Gaussian interpolant of positions
+in a cell, wrapped into it. :class:`MaskNoising` masks discrete atom types. It has a schedule and a prior
 but no interpolation, so it stays on the first level: its only field is the
 denoiser p(z0 | z_t).
 
@@ -24,15 +25,24 @@ import math
 
 import torch
 
+from schnetpack import properties
 from schnetpack.generative.couplings import Coupling, IdentityCoupling
-from schnetpack.generative.priors import MASK, GaussianPrior, MaskPrior, Prior
+from schnetpack.generative.priors import (
+    MASK,
+    GaussianPrior,
+    MaskPrior,
+    Prior,
+    UniformCellPrior,
+)
 from schnetpack.generative.schedules import GaussianSchedule, Schedule
+from schnetpack.utils.cell import atom_cells, minimum_image, wrap
 
 __all__ = [
     "expand_t",
     "ForwardNoising",
     "Interpolant",
     "GaussianInterpolant",
+    "PeriodicGaussianInterpolant",
     "MaskNoising",
 ]
 
@@ -134,8 +144,9 @@ class Interpolant(ForwardNoising):
             x0: data batch, shape (n_samples, ...)
             t: path times, per-sample or scalar; drawn from
                 :meth:`sample_t` if not given
-            batch: the batch x0 was taken from, handed to the prior (with
-                x0 under the prior's key) so it can read the layout
+            batch: the batch x0 was taken from, handed to the prior's
+                :meth:`~schnetpack.generative.priors.Prior.draw` (with x0
+                as the template) so it can read the layout
             groups: per-row labels restricting which rows the coupling may
                 exchange endpoints between; see
                 :meth:`~schnetpack.generative.couplings.Coupling.pair`
@@ -145,8 +156,7 @@ class Interpolant(ForwardNoising):
             endpoints and the times.
         """
         batch = {} if batch is None else batch
-        key = self.prior.key
-        x1 = self.prior({**batch, key: x0})[key]
+        x1 = self.prior.draw(batch, like=x0)
         x0, x1 = self.coupling.pair(x0, x1, groups)
         if t is None:
             t = self.sample_t(x0.shape[0], x0.device).to(x0.dtype)
@@ -226,6 +236,94 @@ class GaussianInterpolant(Interpolant):
                 f"sigma_max ({schedule.sigma_max})."
             )
         super().__init__(schedule, prior=prior, coupling=IdentityCoupling())
+
+
+class PeriodicGaussianInterpolant(GaussianInterpolant):
+    """
+    Variance-exploding noise on Cartesian positions in a periodic cell,
+
+        x_t = wrap(x0 + sigma(t) eps),
+
+    wrapped into each structure's cell (GEODE's Eq. 13). x0 is what the
+    positions hold when they are noised: after the cell variable's write, the
+    clean fractional coordinates in the noisy cell.
+
+    :meth:`perturb` returns the effective endpoint, the expectation of x1
+    over the lattice images that lead from x0 to the wrapped x_t,
+
+        x1 = sigma_max / sigma sum_n w_n (d + n L),
+        w_n ~ exp(-|d + n L|^2 / (2 sigma^2)),
+
+    with d the shortest displacement, over n in [-n_images, n_images]^3. Every
+    target is linear in x1, so the eps target becomes GEODE's wrapped-normal
+    one (its Eq. 6) and the eps, score and x0 conversions stay as they are.
+    Theory: ``docs_new/generation/new_variables.md`` §5.4.
+    """
+
+    def __init__(self, schedule: GaussianSchedule, n_images: int = 3):
+        """
+        Args:
+            schedule: a variance-exploding schedule, a(t) = 1
+            n_images: the image box spans this many cells on every side
+
+        Raises:
+            ValueError: if the schedule contracts towards an origin
+                (a != 1): a crystal has none.
+        """
+        ts = torch.linspace(schedule.t_min, schedule.t_max, 5, dtype=torch.float64)
+        if not torch.all(schedule.a(ts) == 1.0):
+            raise ValueError(
+                "periodic positions have no origin to contract towards: use a "
+                "variance-exploding schedule, a(t) = 1"
+            )
+        super().__init__(
+            schedule, prior=GaussianPrior(std=schedule.sigma_max, centered=False)
+        )
+        r = torch.arange(-n_images, n_images + 1)
+        self.images = torch.cartesian_prod(r, r, r)  # (K, 3) cell shifts
+
+    def perturb(self, x0, t=None, batch=None, groups=None):
+        """
+        Noise the positions in their cell and wrap them into it.
+
+        Args:
+            x0: positions, shape (n_atoms, 3)
+            t: times, per atom or scalar; drawn if not given
+            batch: the batch x0 was taken from; its cell is read
+            groups: unused, the coupling is independent
+
+        Returns:
+            (x_t, x0, x1, t) with x_t wrapped and x1 the effective endpoint.
+        """
+        if batch is None or properties.cell not in batch:
+            raise KeyError("periodic positions are noised in the batch's cell")
+        x_t, x0, _, t = super().perturb(x0, t, batch)
+        cells = atom_cells(batch)
+        x_t = wrap(x_t, cells)
+        return x_t, x0, self.effective_x1(x_t, x0, cells, t), t
+
+    def effective_x1(
+        self, x_t: torch.Tensor, x0: torch.Tensor, cells: torch.Tensor, t: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        E[x1 | x0, x_t] over the lattice images.
+
+        Args:
+            x_t: wrapped noisy positions, (n_atoms, 3)
+            x0: clean positions, (n_atoms, 3)
+            cells: each atom's cell, (n_atoms, 3, 3)
+            t: times, per atom or scalar
+        """
+        sigma = expand_t(self.schedule.sigma(t), x_t)
+        d = minimum_image(x_t - x0, cells)
+        shifts = self.images.to(d) @ cells  # (n_atoms, K, 3)
+        d = d.unsqueeze(1) + shifts
+        w = torch.softmax(-(d**2).sum(-1) / (2.0 * sigma**2), dim=-1)
+        return self.schedule.sigma_max * (w.unsqueeze(-1) * d).sum(1) / sigma
+
+    def sampling_prior(self) -> Prior:
+        """Uniform in the cell: the wrapped Gaussian at sigma_max."""
+        return UniformCellPrior()
 
 
 class MaskNoising(ForwardNoising):

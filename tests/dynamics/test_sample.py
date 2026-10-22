@@ -24,19 +24,30 @@ from schnetpack.generative import (
     MASK,
     VE,
     VP,
+    CellParameters,
     EpsParametrization,
     FlowMatching,
     GaussianInterpolant,
     GaussianPrior,
     Interpolant,
+    KeyView,
     LogitsParametrization,
     MaskedTypeWeight,
     MaskNoising,
     ParametrizedModel,
+    PeriodicGaussianInterpolant,
+    PeriodicPositions,
     Variable,
     VelocityParametrization,
+    VPCosine,
 )
 from schnetpack.generative.noising import ForwardNoising
+from schnetpack.utils.cell import (
+    atom_cells,
+    minimum_image,
+    to_cart,
+    to_frac,
+)
 
 N_ATOMS = (3, 4)
 
@@ -76,7 +87,7 @@ def positions(schedule=None, centered=False):
     schedule = schedule or VP()
     return Variable(
         name="positions",
-        key=properties.R,
+        view=properties.R,
         per="atom",
         noising=GaussianInterpolant(
             schedule, prior=GaussianPrior(std=schedule.sigma_max, centered=centered)
@@ -90,7 +101,7 @@ def y_variable():
     """A per-structure variable of width 2 on VP."""
     return Variable(
         name="y",
-        key="y",
+        view="y",
         per="structure",
         noising=GaussianInterpolant(
             VP(), prior=GaussianPrior(centered=False, key="y", per="structure", dim=2)
@@ -107,7 +118,7 @@ def fields(model, variable, **field_keys):
         variable.parametrization,
         variable.noising.schedule,
         output_key=variable.output_key,
-        key=variable.key,
+        key=variable.view,
         time_key=variable.time_key,
         **field_keys,
     )
@@ -189,11 +200,23 @@ def test_heun_next_to_an_ancestral_update_calls_twice_and_sees_its_draw():
     assert not torch.equal(seen[0]["y"], out["y"])
 
 
-def test_updates_write_in_list_order_and_decode():
+class Recording(KeyView):
+    """A key view that notes every write."""
+
+    def __init__(self, key, order):
+        super().__init__(key)
+        self.order = order
+
+    def write(self, batch, x):
+        self.order.append(self.key)
+        return super().write(batch, x)
+
+
+def test_updates_write_in_list_order():
     order = []
     pos, y, model = two_variable_model()
-    pos.decode = lambda batch: order.append("positions") or batch
-    y.decode = lambda batch: order.append("y") or batch
+    pos.view = Recording(properties.R, order)
+    y.view = Recording("y", order)
     sampler = Sampler(
         JointCalculator(model),
         [AncestralUpdate(y, "x0_y"), SDEUpdate(pos, "score_R")],
@@ -202,7 +225,7 @@ def test_updates_write_in_list_order_and_decode():
     t, t_next = torch.tensor(0.5), torch.tensor(0.4)
     sampler.step(sampler.calculator.with_time(structures(y=True), t), t, t_next)
     # one write per stage point, then combine writes in list order
-    assert order[-2:] == ["y", "positions"]
+    assert order[-2:] == ["y", properties.R]
 
 
 def test_sample_draws_every_prior_in_order():
@@ -282,7 +305,7 @@ N_CLASSES = 10
 def types(t_min=1e-2):
     return Variable(
         name="types",
-        key=properties.Z,
+        view=properties.Z,
         per="atom",
         noising=MaskNoising(FlowMatching(t_min=t_min, t_max=1.0)),
         parametrization=LogitsParametrization(N_CLASSES),
@@ -390,6 +413,168 @@ def test_only_the_ancestral_update_steps_types_and_without_gaussian_options():
     pos = positions()
     with pytest.raises(ValueError, match="excluded classes"):
         Sampler(calculator, [AncestralUpdate(pos, excluded=[1])], [pos])
+
+
+# --- crystals ------------------------------------------------------------------ #
+
+CELL = CellParameters(length=2.94, angle=99.7, var_length=2.52, var_angle=297.0)
+
+
+def crystal_variables():
+    cell = Variable(
+        name="cell",
+        view=CELL,
+        per="structure",
+        noising=GaussianInterpolant(
+            VPCosine(t_min=1e-2),
+            prior=GaussianPrior(
+                std=1.0, centered=False, key="cell_y", per="structure", dim=6
+            ),
+        ),
+        parametrization=EpsParametrization(),
+        output_key="eps_cell",
+    )
+    pos = Variable(
+        name="positions",
+        view=PeriodicPositions(),
+        per="atom",
+        noising=PeriodicGaussianInterpolant(VE(sigma_min=0.01, sigma_max=10.0)),
+        parametrization=EpsParametrization(),
+        output_key="eps_R",
+    )
+    return cell, types(), pos
+
+
+Y_TARGET = torch.tensor([1.0, -2.0, 0.5, 3.0, -1.0, 0.0], dtype=torch.float64)
+
+
+def crystal_network(schedule):
+    """
+    No noise predicted on the positions, the noise that leads the cell's
+    parameters from Y_TARGET to the noisy cell, types 6.
+    """
+
+    def network(batch):
+        y_t, t = CELL.read(batch), batch["t_structure"][:, None]
+        logits = torch.zeros(
+            batch[properties.Z].shape[0], N_CLASSES, dtype=torch.float64
+        )
+        logits[:, 6] = 50.0
+        return {
+            "eps_R": torch.zeros_like(batch[properties.R]),
+            "eps_cell": (y_t - schedule.a(t) * Y_TARGET) / schedule.sigma(t),
+            "type_logits": logits,
+        }
+
+    return network
+
+
+def test_a_cell_update_moves_the_atoms_at_fixed_fractional_coordinates():
+    torch.manual_seed(0)
+    cell, _, _ = crystal_variables()
+    cells = torch.tensor([[4.0, 0.5, 0.0], [0.0, 4.5, 0.3], [0.2, 0.0, 5.0]])
+    n_atoms = torch.tensor([2, 3])
+    batch = {
+        properties.n_atoms: n_atoms,
+        properties.idx_m: torch.tensor([0, 0, 1, 1, 1]),
+        properties.cell: cells.double().expand(2, 3, 3).clone(),
+    }
+    frac = torch.rand(5, 3, dtype=torch.float64)
+    batch[properties.R] = to_cart(frac, atom_cells(batch))
+    fields = {"x0_cell": Y_TARGET.expand(2, 6)}
+    t, s = (
+        torch.tensor(0.5, dtype=torch.float64),
+        torch.tensor(0.4, dtype=torch.float64),
+    )
+    out, y = AncestralUpdate(cell, "x0_cell").stage(
+        0, batch, fields, t, batch, t, s, []
+    )
+    torch.testing.assert_close(CELL.read(out), y)
+    torch.testing.assert_close(to_frac(out[properties.R], atom_cells(out)), frac)
+
+
+def test_sampling_a_crystal_keeps_its_atoms_in_the_cell_and_reaches_its_x0():
+    torch.manual_seed(0)
+    cell, z, pos = crystal_variables()
+    model = fields(crystal_network(cell.noising.schedule), pos, x0_key="x0_R")
+    model = fields(model, cell, x0_key="x0_cell")  # x_t read through the view
+    model = fields(model, z, x0_key="x0_Z")
+    sampler = Sampler(
+        JointCalculator(model, dtype=torch.float64),
+        [
+            AncestralUpdate(pos, "x0_R", noise="reverse_diffusion"),
+            AncestralUpdate(cell, "x0_cell"),
+            AncestralUpdate(z, "x0_Z"),
+        ],
+        [cell, z, pos],
+        structures=StatisticsStructures(torch.tensor([0, 0, 1, 1]), None, pbc=True),
+    )
+    out = sampler.sample(6, 50)
+    assert out[properties.pbc].all()
+    assert (out[properties.Z] == 6).all()
+    frac = to_frac(out[properties.R], atom_cells(out))
+    assert frac.min() >= 0 and frac.max() < 1
+    # an exact x0 is reached up to the cell's last noise, sigma(t_min) = 0.026
+    torch.testing.assert_close(CELL.read(out), Y_TARGET.expand(6, 6), atol=0.15, rtol=0)
+
+
+PAIR_CELL = torch.tensor(
+    [[5.0, 0.0, 0.0], [1.0, 5.5, 0.0], [0.5, -0.7, 6.0]], dtype=torch.float64
+)
+PAIR = torch.tensor([1.2, 1.9, -1.4], dtype=torch.float64)
+
+
+def exact_pair_denoiser(schedule):
+    """
+    x0_hat of two atoms in PAIR_CELL whose separation is +-PAIR: the
+    translation and the swap integrate out, and the separation r is wrapped
+    N(+-PAIR, 2 sigma^2).
+    """
+    r = torch.arange(-2, 3, dtype=torch.float64)
+    images = torch.cartesian_prod(r, r, r) @ PAIR_CELL
+
+    def model(batch):
+        x = batch[properties.R].view(-1, 2, 3)
+        sigma = schedule.sigma(batch[properties.t].view(-1, 2)[:, 0])[:, None]
+        rel = minimum_image(x[:, 1] - x[:, 0], PAIR_CELL)
+        d = torch.stack([rel - PAIR, rel + PAIR], 1)[:, :, None, :] + images
+        w = torch.softmax(
+            (-(d**2).sum(-1) / (4 * sigma[:, :, None] ** 2)).flatten(1), -1
+        ).view(d.shape[:-1])
+        grad = -(w[..., None] * d).sum((1, 2)) / (2 * sigma**2)  # d/dr log p
+        x0 = x + sigma[:, :, None] ** 2 * torch.stack([-grad, grad], 1)
+        return {"x0_R": x0.view(-1, 3)}
+
+    return model
+
+
+@pytest.mark.parametrize("noise", ["posterior", "reverse_diffusion"])
+def test_the_exact_periodic_denoiser_recovers_a_pair_from_the_uniform_start(noise):
+    torch.manual_seed(0)
+    _, _, pos = crystal_variables()
+    n = 100
+
+    def pairs(n_samples):
+        return {
+            properties.n_atoms: torch.full((n_samples,), 2),
+            properties.idx_m: torch.repeat_interleave(torch.arange(n_samples), 2),
+            properties.Z: torch.full((2 * n_samples,), 14),
+            properties.cell: PAIR_CELL.expand(n_samples, 3, 3).clone(),
+            properties.pbc: torch.ones(3 * n_samples, dtype=torch.bool),
+        }
+
+    sampler = Sampler(
+        JointCalculator(exact_pair_denoiser(pos.noising.schedule), dtype=torch.float64),
+        [AncestralUpdate(pos, "x0_R", noise=noise)],
+        [pos],
+        grid=UniformGrid(1.0, 1e-3),
+        structures=pairs,
+    )
+    out = sampler.sample(n, 200)
+    x = out[properties.R].view(n, 2, 3)
+    rel = minimum_image(x[:, 1] - x[:, 0], PAIR_CELL)
+    error = torch.minimum((rel - PAIR).norm(dim=-1), (rel + PAIR).norm(dim=-1))
+    assert error.max() < 0.1  # sigma(t_min) = 0.01 per atom remains
 
 
 # --- hooks and guidance --------------------------------------------------------- #
@@ -543,10 +728,3 @@ def test_sampler_needs_a_joint_calculator():
     v = positions()
     with pytest.raises(TypeError, match="JointCalculator"):
         Sampler(ScoreCalculator(network), [SDEUpdate(v)], [v])
-
-
-def test_a_variable_and_its_prior_share_the_key():
-    with pytest.raises(ValueError, match="give the prior key='y'"):
-        Variable(
-            "y", "y", "structure", GaussianInterpolant(VP()), EpsParametrization(), "e"
-        )

@@ -48,7 +48,7 @@ def variable(process, parametrization=None, key=properties.R):
     """``process`` as the one generated variable, a raw head read as a score by default."""
     return Variable(
         name="x",
-        key=key,
+        view=key,
         per="atom",
         noising=process,
         parametrization=parametrization or ScoreParametrization(),
@@ -64,7 +64,7 @@ def joint_calculator(model, v, guidance=(), guided_fields=(), **field_keys):
             v.parametrization,
             v.noising.schedule,
             output_key=v.output_key,
-            key=v.key,
+            key=v.view,
             time_key=v.time_key,
             **field_keys,
         ),

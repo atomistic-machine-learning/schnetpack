@@ -17,6 +17,8 @@ Atomistic
     RemoveOffsets
     SubtractCenterOfMass
     SubtractCenterOfGeometry
+    NiggliReduce
+    WrapPositions
 
 Casting
 -------
@@ -47,5 +49,4 @@ Neighbor lists
     DistillationNeighborList
     CountNeighbors
     FilterNeighbors
-    WrapPositions
     CollectAtomTriples

@@ -4,10 +4,12 @@ Priors: the distribution of the x1 endpoint.
 One object serves both sides of a generative model: training draws x1 for
 each data batch, and sampling starts from the same distribution. A prior
 maps a batch to a copy with its :attr:`Prior.keys` redrawn, the endpoint
-under :attr:`Prior.key`; the structures
+under :attr:`Prior.key`; :meth:`Prior.draw` returns the endpoint alone, for
+a variable to write into the structure through its view. The structures
 themselves (atom counts, types) come from a
 :class:`~schnetpack.dynamics.structures.StructureProvider`, unless the types
-are generated: then :class:`MaskPrior` writes them. A prior declares
+are generated: then :class:`MaskPrior` draws them. Periodic positions
+start from :class:`UniformCellPrior`. A prior declares
 whether its draws are isotropic Gaussian (:attr:`Prior.gaussian`) and their
 scale (:attr:`Prior.std`), which gate the score/noise targets and the SDE
 chart. A draw may read the batch's layout and atom types, never the data
@@ -21,8 +23,16 @@ from typing import Any, Literal
 import torch
 
 from schnetpack import properties
+from schnetpack.utils.cell import atom_cells, to_cart
 
-__all__ = ["MASK", "Prior", "GaussianPrior", "MaskPrior", "noise_like"]
+__all__ = [
+    "MASK",
+    "Prior",
+    "GaussianPrior",
+    "MaskPrior",
+    "UniformCellPrior",
+    "noise_like",
+]
 
 MASK = 0
 """Class of a masked atom type: no element has Z = 0."""
@@ -66,6 +76,21 @@ class Prior(abc.ABC):
         """
         raise NotImplementedError
 
+    def draw(
+        self, batch: Mapping[str, Any], like: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """
+        Draw x1 for a batch and return it, without writing it.
+
+        Args:
+            batch: the structures to draw for, as in :meth:`__call__`
+            like: stands in for ``batch[key]``: the draw takes its shape,
+                dtype and device. Without it, they come from ``batch[key]``
+                if present, else from the layout.
+        """
+        batch = batch if like is None else {**batch, self.key: like}
+        return self(batch)[self.key]
+
 
 class GaussianPrior(Prior):
     """
@@ -107,7 +132,10 @@ class GaussianPrior(Prior):
                 leading axis is independent samples rather than atoms
             segment_key: batch key holding the segment ids (default: the
                 molecule index)
-            key: batch key the draw is written to
+            key: batch key the draw is written to; for a state that is not
+                a batch entry, such as the cell's parameters, a key the
+                batch does not hold, so that :meth:`draw` takes the shape
+                from the layout
             per: one row per atom or one row per structure; read only when
                 the batch does not hold ``key`` yet
             dim: number of columns of a row; read only when the batch does
@@ -217,6 +245,23 @@ class MaskPrior(Prior):
             (int(n_atoms.sum()),), MASK, dtype=torch.long, device=n_atoms.device
         )
         return {**batch, properties.Z: z}
+
+
+class UniformCellPrior(Prior):
+    """
+    Positions uniform in each structure's cell: the start of periodic
+    positions, whose wrapped Gaussian is flat once sigma exceeds the cell.
+
+    Reads the cell, so the cell has to be drawn first.
+    """
+
+    keys = (properties.R,)
+    key = properties.R
+
+    def __call__(self, batch):
+        cells = atom_cells(batch)
+        frac = torch.rand(cells.shape[0], 3, dtype=cells.dtype, device=cells.device)
+        return {**batch, properties.R: to_cart(frac, cells)}
 
 
 def noise_like(prior: Prior, x: torch.Tensor, batch: Mapping[str, Any]) -> torch.Tensor:

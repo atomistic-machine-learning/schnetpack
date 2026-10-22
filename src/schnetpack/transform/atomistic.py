@@ -3,12 +3,21 @@ from ase.data import atomic_masses
 
 import schnetpack.properties as structure
 from schnetpack.nn import scatter_add
+from schnetpack.utils.cell import (
+    atom_cells,
+    niggli_reduce,
+    structure_index,
+    to_cart,
+    to_frac,
+)
 
 from .base import Transform
 
 __all__ = [
     "SubtractCenterOfMass",
     "SubtractCenterOfGeometry",
+    "NiggliReduce",
+    "WrapPositions",
     "AddOffsets",
     "RemoveOffsets",
     "ScaleProperty",
@@ -52,6 +61,59 @@ class SubtractCenterOfGeometry(Transform):
         inputs: dict[str, torch.Tensor],
     ) -> dict[str, torch.Tensor]:
         inputs[structure.position] -= inputs[structure.position].mean(0)
+        return inputs
+
+
+class NiggliReduce(Transform):
+    """
+    Replace the cell of a periodic structure by its Niggli cell, the unique
+    reduced basis of its lattice, in the cell's own orientation.
+
+    The crystal does not change and the atoms keep their positions; follow
+    with :class:`WrapPositions` to move them into the new cell.
+    """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
+
+    def forward(
+        self,
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
+        cell = inputs[structure.cell]
+        inputs[structure.cell] = niggli_reduce(cell.view(3, 3)).view(cell.shape)
+        return inputs
+
+
+class WrapPositions(Transform):
+    """
+    Wrap atom positions into their periodic cell, along the periodic
+    directions only. This routine requires a non-zero cell.
+
+    Works on one structure and on a collated batch.
+    """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = True
+
+    def __init__(self, eps: float = 1e-6):
+        """
+        Args:
+            eps (float): small offset for numerical stability; fractional
+                coordinates end up in [-eps, 1 - eps).
+        """
+        super().__init__()
+        self.eps = eps
+
+    def forward(
+        self,
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
+        cells = atom_cells(inputs)
+        frac = to_frac(inputs[structure.R], cells)
+        pbc = inputs[structure.pbc].view(-1, 3)[structure_index(inputs)]
+        wrapped = (frac + self.eps) % 1.0 - self.eps
+        inputs[structure.R] = to_cart(torch.where(pbc, wrapped, frac), cells)
         return inputs
 
 

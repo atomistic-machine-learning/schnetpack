@@ -148,7 +148,7 @@ class Update:
         raise NotImplementedError
 
     def combine(self, batch: Mapping[str, Any], data: Sequence[Any]) -> dict[str, Any]:
-        """Write the new value drawn at the last stage, then decode."""
+        """Write the new value drawn at the last stage."""
         return self.variable.write(batch, data[-1])
 
 
@@ -196,8 +196,7 @@ class DriftUpdate(Update):
         raise NotImplementedError
 
     def stage(self, stage, batch, fields, t_stage, start, t, t_next, data):
-        key = self.variable.key
-        x, x_start = batch[key], start[key]
+        x, x_start = self.variable.read(batch), self.variable.read(start)
         drifts = [*data, self.drift(x, t_stage, self.field(fields))]
         if stage + 1 < self.n_stages:
             x_next, _ = self.integrator.point(stage + 1, x_start, t, t_next, drifts)
@@ -351,8 +350,8 @@ class AncestralUpdate(Update):
         t: torch.Tensor,
         s: torch.Tensor,
     ) -> torch.Tensor:
-        """Draw x_s given x_t = ``batch[key]`` and x0_hat."""
-        x = batch[self.variable.key]
+        """Draw x_s given x_t, the variable's state in ``batch``, and x0_hat."""
+        x = self.variable.read(batch)
         if isinstance(self.variable.noising, MaskNoising):
             return self.unmask(x, x0, t, s)
         schedule = self.variable.noising.schedule
@@ -450,7 +449,7 @@ class Sampler(Dynamics):
     time on the current stage point, then each update that has this stage
     reads its field and writes its variable's next stage point. After the
     last stage, every update writes its new value in list order, starting
-    from the batch at t, with each variable's decode. An update that has
+    from the batch at t, through its variable's view. An update that has
     run out of stages sits at its value at t_next for the later model calls.
 
     Hooks run between steps; the batch they see carries the grid time per
@@ -503,15 +502,13 @@ class Sampler(Dynamics):
                     f"{v.noising.schedule.t_min} of {v.name!r}: some of its "
                     "atoms would stay masked"
                 )
-        super().__init__(
-            calculator, structures=structures, hooks=hooks, key=self.start[0].key
-        )
+        super().__init__(calculator, structures=structures, hooks=hooks)
         self.grid = grid
 
     def sample(self, n_samples: int, n_steps: int) -> dict[str, Any]:
         """
         Draw ``n_samples`` structures, then every variable from its prior in
-        the order of ``start``, and run on them.
+        the order of ``start``, written through its view, and run on them.
         """
         if self.structures is None:
             raise ValueError(
@@ -520,9 +517,7 @@ class Sampler(Dynamics):
             )
         batch = self.structures(n_samples)
         for v in self.start:
-            batch = v.noising.sampling_prior()(batch)
-            if v.decode is not None:
-                batch = v.decode(batch)
+            batch = v.write(batch, v.noising.sampling_prior().draw(batch))
         return self.run(batch, n_steps)
 
     def run(self, batch: Mapping[str, Any], n_steps: int) -> dict[str, Any]:
@@ -538,15 +533,9 @@ class Sampler(Dynamics):
         """
         self.calculator.reset()
         batch = self.calculator.prepare(batch)
-        dtype = next(
-            (
-                batch[v.key].dtype
-                for v in self.start
-                if batch[v.key].is_floating_point()
-            ),
-            None,
-        )
-        device = batch[self.start[0].key].device
+        states = [v.read(batch) for v in self.start]
+        dtype = next((x.dtype for x in states if x.is_floating_point()), None)
+        device = states[0].device
         ts = self.grid(n_steps, dtype=dtype, device=device)
         n_steps = ts.shape[0] - 1
 

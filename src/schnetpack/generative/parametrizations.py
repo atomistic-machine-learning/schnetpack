@@ -22,6 +22,7 @@ from schnetpack.generative.differential_equations import SDE
 from schnetpack.generative.noising import expand_t
 from schnetpack.generative.priors import MASK
 from schnetpack.generative.schedules import GaussianSchedule, Schedule
+from schnetpack.generative.views import KeyView, View
 
 __all__ = [
     "Parametrization",
@@ -32,6 +33,7 @@ __all__ = [
     "PseudoForceParametrization",
     "LogitsParametrization",
     "MaskedTypeWeight",
+    "SNRWeight",
     "ParametrizedModel",
 ]
 
@@ -365,6 +367,31 @@ class MaskedTypeWeight:
         return torch.where(z_t == MASK, reveal + self.lambda_ce, torch.zeros_like(t))
 
 
+class SNRWeight:
+    """
+    Loss weight a(t)^2 / sigma(t)^2, the signal-to-noise ratio.
+
+    An x0 head on a Gaussian interpolant trained with it has the loss of an
+    eps head, ||eps_hat - eps||^2 = (a / sigma)^2 ||x0_hat - x0||^2, with
+    eps_hat the noise its x0_hat implies. GEODE trains its cell this way
+    (its Eq. 8 and 9). Use as a
+    :class:`~schnetpack.generative.variables.Variable` weight. Theory:
+    ``docs_new/generation/new_variables.md`` §5.3.
+    """
+
+    def __call__(self, schedule, t, x_t):
+        """
+        Args:
+            schedule: a Gaussian schedule
+            t: times per row, shape (n_rows,)
+            x_t: noisy rows; unused
+
+        Returns:
+            Weight per row, shaped like t.
+        """
+        return (schedule.a(t) / schedule.sigma(t)) ** 2
+
+
 class ParametrizedModel(nn.Module):
     """
     A model with a raw head, read as the fields a calculator expects.
@@ -383,7 +410,7 @@ class ParametrizedModel(nn.Module):
         parametrization: Parametrization,
         schedule: Schedule,
         output_key: str = "prediction",
-        key: str = properties.R,
+        key: str | View = properties.R,
         time_key: str = properties.t,
         score_key: str | None = None,
         noise_key: str | None = None,
@@ -397,7 +424,9 @@ class ParametrizedModel(nn.Module):
             parametrization: contract the model was trained under
             schedule: schedule the model was trained on
             output_key: model output holding the raw head
-            key: batch key holding x_t
+            key: batch key holding x_t, or the view that reads it from the
+                structure, e.g. a variable's
+                :attr:`~schnetpack.generative.variables.Variable.view`
             time_key: batch key holding the path time
             score_key: output key for the score, or None
             noise_key: output key for the expected unit noise, or None
@@ -424,14 +453,14 @@ class ParametrizedModel(nn.Module):
         self.parametrization = parametrization
         self.schedule = schedule
         self.output_key = output_key
-        self.key = key
+        self.view = KeyView(key) if isinstance(key, str) else key
         self.time_key = time_key
         self.conversions = conversions
 
     def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         outputs = dict(self.model(inputs))
         raw = outputs[self.output_key]
-        x_t, t = inputs[self.key], inputs[self.time_key]
+        x_t, t = self.view.read(inputs), inputs[self.time_key]
         for field_key, convert in self.conversions.items():
             outputs[field_key] = convert(self.schedule, raw, x_t, t)
         return outputs

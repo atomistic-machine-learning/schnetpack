@@ -1,6 +1,6 @@
 # Several variables
 
-The other pages treat one generated quantity $x\in\mathbb R^d$, the positions. A structure can carry several: positions, atom types, a cell. Each is a **variable** with its own noising, parametrization and head, and all of them share one time $t$ and one network. This page describes what changes when there is more than one: how training noises them together, and how sampling steps them together. §4 adds the atom types, the first discrete variable. The notation follows the [[overview#Notation|overview]]; one variable is the special case of everything below.
+The other pages treat one generated quantity $x\in\mathbb R^d$, the positions. A structure can carry several: positions, atom types, a cell. Each is a **variable** with its own noising, parametrization and head, and all of them share one time $t$ and one network. This page describes what changes when there is more than one: how training noises them together, and how sampling steps them together. §4 adds the atom types, the first discrete variable, and §5 the cell, which moves the atoms with it. The notation follows the [[overview#Notation|overview]]; one variable is the special case of everything below.
 
 ---
 
@@ -157,6 +157,100 @@ Both variables run on one $t$, so their schedules fix when the types are decided
 
 ---
 
+## 5 Cell
+
+A crystal has a cell, and its positions are periodic. The cell is the first variable with one row per structure, and the only one whose decode moves another variable. This section follows the diffusion part of GEODE [1] without its symmetry, in space group P1: its template, its symmetrized noise and fields, and its orbit-shared types all reduce to the identity there. The lattice vectors are the rows of the cell $L$, so a position is $x=f\,L$ with fractional coordinates $f\in[0,1)^3$.
+
+### 5.1 Cell parameters
+
+The cell is generated as its six parameters $\ell=(a,b,c,\alpha,\beta,\gamma)$, three lengths and three angles. A cell matrix has nine entries, and three of them only rotate the crystal. Parameters are rotation invariant, and every set of them gives a valid cell, as long as the angles are possible for a cell.
+
+**Reduce.** Before noising, the cell of each training structure is Niggli-reduced [6], once. That gives a unique, compact basis of the same lattice, and the atoms stay where they are. This is a data transform of its own, not part of the cell variable. The orientation does not matter, since the decode builds every cell in standard orientation.
+
+**Whitening.** The cell variable is the whitened parameter vector
+
+$$
+y=\frac{\ell-\mu(N)}{s},\qquad \mu(N)=\big(\bar\ell N^{1/3}\cdot\mathbf 1_3,\ \bar\theta\cdot\mathbf 1_3\big),\qquad s^2=\tfrac1{64}\big(v_{\mathrm{len}}\cdot\mathbf 1_3,\ v_{\mathrm{ang}}\cdot\mathbf 1_3\big),
+$$
+
+with the mean and variance of the lengths over $N^{1/3}$ and of the angles in the training set. GEODE's MP-20 values are $\bar\ell=2.94$ Å, $\bar\theta=99.7°$, $v_{\mathrm{len}}=2.52$ Å² and $v_{\mathrm{ang}}=297$ deg² [1, App. D.1]. The mean length grows with $N^{1/3}$, so the prior fixes the volume per atom rather than the cell's size. The factor $1/64$ narrows the prior to 0.2 Å and 2.2°, so a noisy cell never has a length near zero or a degenerate angle. In P1 all six parameters are free; GEODE fixes some by crystal system.
+
+**Decode.** After every change of $y$, its cell $L(\mu+s\,y)$ in standard orientation replaces the old one, with $a$ along $x$ and $b$ in the $xy$-plane, and every atom keeps its fractional coordinates. That is the cell variable's decode (§1). It runs in training, where it moves the clean atoms into the noisy cell, and after every sampling step of the cell. Parameters do not record handedness, so a left-handed cell is replaced by a right-handed one and the crystal by its mirror image. A mirror image is a valid crystal, of the opposite chirality.
+
+### 5.2 Noising
+
+In $y$, GEODE's lattice process [1, Eq. 10] is an ordinary variance-preserving interpolant with a unit prior,
+
+$$
+y_t=a(t)\,y_0+\sigma(t)\,\varepsilon,\qquad a(t)=\frac{\cos\big(\tfrac\pi2\,\tfrac{t+\kappa}{1+\kappa}\big)}{\cos\big(\tfrac\pi2\,\tfrac{\kappa}{1+\kappa}\big)},\qquad \sigma=\sqrt{1-a^2},
+$$
+
+the cosine schedule [7] with $\kappa=0.008$. $a(1)=0$, so at $t=1$ the cell is drawn from the prior, $\ell\sim\mathcal N(\mu(N),\operatorname{diag}s^2)$. At $t=1/1000$, $1-a^2=4.1\cdot10^{-5}$, GEODE's first step. Training data sit 8 to 16 prior widths from $\mu$, and the head has to cover that distance.
+
+### 5.3 Head and loss
+
+**Deformation head.** The head deforms the noisy cell into the clean one [1, Eq. 5],
+
+$$
+\hat L_0=L_t\,(I-S)^{\top},
+$$
+
+with a symmetric $3\times3$ tensor $S$ per structure, and returns the whitened parameters $\hat y_0$ of $\hat L_0$. Under a rotation $Q$ of the crystal, $L_t\to L_tQ^\top$ and $S\to QSQ^\top$, so $\hat L_0\to\hat L_0Q^\top$ and $\hat y_0$ is unchanged. $S$ transforms like a stress tensor. GEODE reads it out of $l=2$ features. PaiNN has only scalars $s_i$ and vectors, so $S$ is the mean over atoms of $s_i I+\tfrac12(u_iv_i^\top+v_iu_i^\top)$, from two vectors $u_i,v_i$ of each atom.
+
+**Loss.** GEODE regresses the noise implied by $\hat y_0$, $\hat\varepsilon=(y_t-a\hat y_0)/\sigma$ [1, Eq. 8, 9]. Since
+
+$$
+\lVert\hat\varepsilon-\varepsilon\rVert^2=\frac{a^2}{\sigma^2}\,\lVert\hat y_0-y_0\rVert^2,
+$$
+
+that is an $x_0$ loss with the SNR weight $w_L=a^2/\sigma^2$ per structure (§2). The head stays an $x_0$ head, and the sampler reads $\hat y_0$ directly. The training loss gains the term $\lambda_L\mathcal L_L$ with GEODE's $\lambda_L=0.9$.
+
+### 5.4 Periodic positions
+
+**Noising.** The cell is noised first, so its decode has placed the clean fractional coordinates $f_0$ in the noisy cell. The positions are then noised in that cell on the VE schedule of the molecules, $\sigma$ from 0.01 to 10 Å, and wrapped back into it [1, Eq. 13]:
+
+$$
+x_t=\operatorname{wrap}_{L_t}\big(f_0L_t+\sigma(t)\,\varepsilon\big).
+$$
+
+The order of the variables is the cell, the types, then the positions. The types do not interact with the others in training, so their place does not matter.
+
+**Target.** A wrapped $x_t$ can be reached from $x_0$ through any lattice image. With $d$ the shortest displacement from $x_0$ to $x_t$, the expected noise given both is
+
+$$
+\varepsilon^\star=\frac1\sigma\sum_{n\in\mathbb Z^3}w_n\,(d+nL_t),\qquad w_n\propto\exp\Big(-\frac{\lVert d+nL_t\rVert^2}{2\sigma^2}\Big),
+$$
+
+GEODE's wrapped-normal target [1, Eq. 6] up to its sign, $\varepsilon^\star=-\sigma s^\star$. It is the noise target of the interpolant with the endpoint $x_1$ replaced by its expectation over the images, $\sigma_{\max}\,\varepsilon^\star$. Every field is linear in $x_1$, so the eps head, its score and its $\hat x_0$ all become the wrapped ones, and the parametrization stays as it is.
+
+**Image box.** The sum runs over $n\in\{-3,\dots,3\}^3$, 343 images. The box has to grow with $\sigma$: on a 6–7 Å triclinic cell at $\sigma=10$ Å, the rms error of the target against a brute-force sum is 0.13 with $\pm2$ images, 0.05 with $\pm3$ and 0.02 with $\pm4$. For scale, the target's rms is 1.7 at small $\sigma$ and close to 0 above $\sigma\approx5$ Å. The error mostly adds variance, since its mean is close to zero. Above about the cell height, a sum over the reciprocal lattice converges in a few terms.
+
+**No center.** A crystal has no origin, so neither the positions nor their noise are centered. A shift of every atom by the same vector gives the same crystal, which the network cannot see; the mean of the noise over a structure is a part of the loss no head can fit.
+
+### 5.5 Sampling
+
+**Start.** $N$ is drawn from the training set's histogram, $y$ from $\mathcal N(0,I)$ and decoded into a cell, every type is masked, and the positions are uniform in the cell. At $\sigma_{\max}=10$ Å the wrapped Gaussian is flat on every MP-20 cell, so this is the $t=1$ marginal of training. The cell is drawn first, since the positions are drawn in it.
+
+**Updates.** GEODE's Algorithm 1 [1, App. B] is three ancestral updates, in the order positions, cell, types:
+
+- positions: the VE posterior mean $x_t+(\sigma_t^2-\sigma_s^2)\,\hat s$, Algorithm 1's line 7, plus noise of std $\sqrt{\sigma_t^2-\sigma_s^2}$ (line 16), wrapped into the cell. That noise exceeds the posterior's by $\sigma_t/\sigma_s$, 1.007 on 1000 geometric steps;
+- cell: the VP posterior given $\hat y_0$ (lines 8, 9 and 15); the atoms follow at fixed fractional coordinates;
+- types: unmasking, §4.4 (lines 10 to 13).
+
+**Noise order.** Each update draws its whole step, and the new values are written in list order (§3.2): the positions first, then the cell, whose decode carries them along. The position noise is therefore drawn in the old cell and moved with the cell, where Algorithm 1 adds it after the cell has moved. The difference is the noise deformed by one cell step, a relative change of the size of that step.
+
+**Heun with a moving cell.** With Heun on the positions, the second drift is taken in the cell at $t'$ but added in the cell at $t$. Unless it is mapped back to the start cell, the step is first order. Ancestral types make the joint step first order anyway (§3.5), so this matters only for smooth updates on positions and cell without types.
+
+**Neighbor list.** The cell changes at every step, so every structure's neighbor list is rebuilt at every step.
+
+**End.** The last positions still carry $\sigma(t_{\min})\approx0.01$ Å of noise, and the last cell $\sigma(t_{\min})\approx0.006$ prior widths. Reading the model's $\hat x_0$ at the end removes the first.
+
+### 5.6 Left out
+
+Besides the symmetry, GEODE remaps equivalent atoms to the closest reference sites before it forms the target, and conditions the types on their last prediction (self-conditioning). Neither is part of this section: without remapping each atom is pulled back to its own site, and the types see only the noisy structure.
+
+---
+
 ## References
 
 1. Lou, Ganose (2026). *Symmetry-Preserving Cartesian Diffusion for Crystal Generation.* arXiv:2610.01898.
@@ -164,3 +258,5 @@ Both variables run on one $t$, so their schedules fix when the types are decided
 3. Sahoo, Arriola, Schiff, Gokaslan, Marroquin, Chiu, Rush, Kuleshov (2024). *Simple and Effective Masked Diffusion Language Models.* NeurIPS. arXiv:2406.07524.
 4. Shi, Han, Wang, Doucet, Titsias (2024). *Simplified and Generalized Masked Diffusion for Discrete Data.* NeurIPS. arXiv:2406.04329.
 5. Hoogeboom, Satorras, Vignac, Welling (2022). *Equivariant Diffusion for Molecule Generation in 3D.* ICML. arXiv:2203.17003.
+6. Křivý, Gruber (1976). *A unified algorithm for determining the reduced (Niggli) cell.* Acta Cryst. A32, 297–298.
+7. Nichol, Dhariwal (2021). *Improved Denoising Diffusion Probabilistic Models.* ICML. arXiv:2102.09672.
