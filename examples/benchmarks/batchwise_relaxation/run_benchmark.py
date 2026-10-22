@@ -13,6 +13,7 @@ batch in each repeat (paired samples).
 import argparse
 import json
 import os
+import socket
 import time
 from copy import deepcopy
 
@@ -213,6 +214,15 @@ def main():
         model=os.path.abspath(args.model),
         structures=os.path.abspath(args.structures),
         device=benchmark.device.type,
+        # the hardware, so runs on different nodes can be told apart
+        gpu=(
+            torch.cuda.get_device_name(benchmark.device)
+            if benchmark.device.type == "cuda"
+            else None
+        ),
+        hostname=socket.gethostname(),
+        slurm_job_id=os.environ.get("SLURM_JOB_ID"),
+        slurm_partition=os.environ.get("SLURM_JOB_PARTITION"),
         batch_sizes=args.batch_sizes,
         repeats=args.repeats,
         fmax=args.fmax,
