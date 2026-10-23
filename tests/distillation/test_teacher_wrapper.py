@@ -11,7 +11,7 @@ from torch.autograd import grad
 
 from schnetpack import properties
 from schnetpack.dynamics import BatchNeighborList
-from schnetpack.train.teacher import TeacherWrapper, teacher_key
+from schnetpack.train.teacher import TARGET_KEYS, TeacherWrapper
 from schnetpack.transform import CollectAtomTriples, MatScipyNeighborList
 from schnetpack.units import convert_units
 
@@ -42,7 +42,7 @@ class ForeignHarmonic(nn.Module):
 
 
 class ForeignTeacher(TeacherWrapper):
-    """The hooks a third-party family implements."""
+    """The hooks a subclass for a third-party model implements."""
 
     def __init__(self, detach_forces=False, **kwargs):
         self.detach_forces = detach_forces
@@ -71,7 +71,7 @@ class RecordingTeacher(ForeignTeacher):
 
 
 class CachingTeacher(ForeignTeacher):
-    """Builds runtime state in load(), as a family keeping a lookup table does."""
+    """Builds runtime state in load(), as a subclass keeping a lookup table does."""
 
     def load(self):
         self._table = torch.arange(3.0)
@@ -108,31 +108,29 @@ def test_targets_are_converted_to_the_student_units(batch):
 
     targets = ForeignTeacher(**STUDENT_UNITS)(batch, probe)
 
-    energy, forces, hvp = analytic(batch, probe)
+    energy, forces, curvature = analytic(batch, probe)
     tolerance = dict(rtol=1e-5, atol=1e-4)
     torch.testing.assert_close(
-        targets[teacher_key(properties.energy)], energy, **tolerance
+        targets[properties.teacher_energy].double(), energy, **tolerance
     )
     torch.testing.assert_close(
-        targets[teacher_key(properties.forces)].double(), forces, **tolerance
+        targets[properties.teacher_forces].double(), forces, **tolerance
     )
     torch.testing.assert_close(
-        targets[properties.teacher_hvp].double(), hvp, **tolerance
+        targets[properties.teacher_curvature].double(), curvature, **tolerance
     )
 
 
-def test_energy_and_forces_only_without_a_probe(batch):
-    targets = ForeignTeacher(**STUDENT_UNITS)(batch)
+def test_the_targets_are_the_fixed_teacher_keys(batch):
+    teacher = ForeignTeacher(**STUDENT_UNITS)
 
-    assert set(targets) == {
-        teacher_key(properties.energy),
-        teacher_key(properties.forces),
-    }
+    assert tuple(teacher(batch, torch.randn_like(batch[properties.R]))) == TARGET_KEYS
+    assert tuple(teacher(batch)) == TARGET_KEYS[:2]  # no curvature without a probe
 
 
 @pytest.mark.parametrize("with_probe", [True, False])
 def test_teacher_output_is_told_whether_a_graph_is_needed(batch, with_probe):
-    """Families whose forces keep their graph through an argument read it here."""
+    """Subclasses whose forces keep their graph through an argument read it here."""
     teacher = RecordingTeacher(**STUDENT_UNITS)
     probe = torch.randn_like(batch[properties.R]) if with_probe else None
 
@@ -141,36 +139,15 @@ def test_teacher_output_is_told_whether_a_graph_is_needed(batch, with_probe):
     assert teacher.create_graph is with_probe
 
 
-def test_target_keys_are_named_after_the_students_keys(batch):
-    teacher = ForeignTeacher(
-        student_energy_key="E", student_force_key="F", **STUDENT_UNITS
-    )
-
-    targets = teacher(batch, torch.randn_like(batch[properties.R]))
-
-    assert teacher.target_keys == ("teacher_E", "teacher_F", properties.teacher_hvp)
-    assert set(targets) == set(teacher.target_keys)
-
-
-def test_energy_is_float64_and_the_rest_follows_the_batch(batch):
-    targets = ForeignTeacher(**STUDENT_UNITS)(
-        batch, torch.randn_like(batch[properties.R])
-    )
-
-    assert targets[teacher_key(properties.energy)].dtype == torch.float64
-    assert targets[teacher_key(properties.forces)].dtype == torch.float32
-    assert targets[properties.teacher_hvp].dtype == torch.float32
-
-
-def test_targets_follow_a_float64_batch():
-    batch = molecules_batch(dtype=torch.float64)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_targets_follow_the_batch_dtype(dtype):
+    batch = molecules_batch(dtype=dtype)
 
     targets = ForeignTeacher(**STUDENT_UNITS)(
         batch, torch.randn_like(batch[properties.R])
     )
 
-    assert targets[teacher_key(properties.forces)].dtype == torch.float64
-    assert targets[properties.teacher_hvp].dtype == torch.float64
+    assert all(target.dtype == dtype for target in targets.values())
 
 
 def test_targets_are_detached(batch):
@@ -265,17 +242,8 @@ def test_reused_neighbor_list_has_its_offsets_in_teacher_units(batch):
 
 
 def test_pickles_as_its_configuration(batch):
-    teacher = ForeignTeacher(**STUDENT_UNITS)
-    assert "model" not in teacher.__getstate__()
-
-    restored = pickle.loads(pickle.dumps(teacher))
-
-    probe = torch.randn_like(batch[properties.R])
-    torch.testing.assert_close(restored(batch, probe), teacher(batch, probe))
-
-
-def test_runtime_state_built_by_load_is_not_pickled():
-    """Private attributes are rebuilt by load() on unpickling, never stored."""
+    """The model and private attributes are rebuilt by load() on unpickling,
+    never stored."""
     teacher = CachingTeacher(**STUDENT_UNITS)
 
     state = teacher.__getstate__()
@@ -283,6 +251,8 @@ def test_runtime_state_built_by_load_is_not_pickled():
 
     assert "_table" not in state and "model" not in state
     assert torch.equal(restored._table, torch.arange(3.0))
+    probe = torch.randn_like(batch[properties.R])
+    torch.testing.assert_close(restored(batch, probe), teacher(batch, probe))
 
 
 def test_deepcopy_shares_the_frozen_teacher():

@@ -11,10 +11,9 @@ from omegaconf.errors import MissingMandatoryValue
 import schnetpack.cli  # noqa: F401 -- registers the config's resolvers
 from schnetpack import properties
 from schnetpack.model import FilterShortRange
-from schnetpack.train import MaceTeacher, SchNetPackTeacher, teacher_key
-from schnetpack.transform import AddOffsets
+from schnetpack.train import MaceTeacher, SchNetPackTeacher
 
-from .test_mace_teacher import FakeMace
+from ..mace.fakes import FakeMace
 
 
 def compose_experiment(overrides):
@@ -55,23 +54,14 @@ def test_targets_match_the_property_keys(experiment_config):
     targets = [output.target_property for output in experiment_config.task.outputs]
 
     assert targets == [
-        teacher_key(properties.energy),
-        teacher_key(properties.forces),
-        properties.teacher_hvp,
+        properties.teacher_energy,
+        properties.teacher_forces,
+        properties.teacher_curvature,
     ]
-    assert experiment_config.task.outputs[2].name == properties.hvp
+    assert experiment_config.task.outputs[2].name == properties.curvature
 
 
-def test_the_students_energy_offsets_include_atomrefs(experiment_config):
-    """Fitted to the teacher's energies, since the data has no labels."""
-    model = instantiate(experiment_config.model)
-
-    (offsets,) = [m for m in model.postprocessors if isinstance(m, AddOffsets)]
-    assert offsets._property == experiment_config.globals.energy_key
-    assert offsets.add_mean and offsets.add_atomrefs and offsets.estimate_atomref
-
-
-def test_target_keys_follow_the_students_keys(teacher_path, batch):
+def test_the_student_may_use_its_own_keys(teacher_path, batch):
     config = compose_experiment(
         [
             f"task.teacher.model_path={teacher_path}",
@@ -84,10 +74,7 @@ def test_target_keys_follow_the_students_keys(teacher_path, batch):
     model = instantiate(config.model)
     task = instantiate(config.task, model=model, _convert_="partial")
 
-    targets = tuple(output.target_property for output in task.outputs)
-    assert (
-        targets == task.teacher.target_keys == ("teacher_E", "teacher_F", "teacher_hvp")
-    )
+    assert (task.distillation.energy_key, task.distillation.force_key) == ("E", "F")
     assert torch.isfinite(task.training_step(batch, 0))
 
 

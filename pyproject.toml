@@ -47,6 +47,9 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest", "pytest-datadir", "pytest-benchmark"]
 dev = ["pre-commit"]
+# compiling MACE models to TorchScript (schnetpack.interfaces.mace_interface);
+# the archives load without
+mace = ["mace-torch>=0.3.16,<0.4"]
 
 [tool.ruff]
 line-length = 88

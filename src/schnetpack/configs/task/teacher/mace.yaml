@@ -1,10 +1,9 @@
 # @package _global_
 #
-# A MACE model as teacher (e.g. MACE-OFF23), from a TorchScript archive made in
-# an environment with mace-torch installed; see schnetpack.train.MaceTeacher.
+# A MACE model as teacher (e.g. MACE-OFF23), from a TorchScript archive, made by
+# schnetpack.interfaces.mace_interface.compile_mace_off (needs schnetpack[mace]);
+# see schnetpack.train.MaceTeacher.
 
-# The cutoff and length unit are globals: the data pipeline's shared neighbor
-# list is sized from them as well.
 globals:
   teacher_distance_unit: Ang
   teacher_cutoff: 5.    # not below the model's r_max, in teacher_distance_unit
@@ -19,5 +18,3 @@ task:
     student_distance_unit: ${globals.distance_unit}
     cutoff: ${globals.teacher_cutoff}
     dtype: float32
-    student_energy_key: ${globals.energy_key}
-    student_force_key: ${globals.forces_key}

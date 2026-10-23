@@ -37,7 +37,7 @@ trainer:
   inference_mode: false
 callbacks:
   model_checkpoint:
-    _target_: schnetpack.train.ModelCheckpoint
+    _target_: schnetpack.lightning.ModelCheckpoint
     monitor: val_loss
     save_top_k: 1
     save_last: true
@@ -57,10 +57,10 @@ callbacks:
     _target_: pytorch_lightning.callbacks.LearningRateMonitor
     logging_interval: epoch
   ema:
-    _target_: schnetpack.train.ExponentialMovingAverage
+    _target_: schnetpack.lightning.ExponentialMovingAverage
     decay: 0.995
 task:
-  _target_: schnetpack.AtomisticTask
+  _target_: schnetpack.lightning.AtomisticTask
   outputs:
   - _target_: schnetpack.task.ModelOutput
     name: ${globals.energy_key}
@@ -106,7 +106,7 @@ model:
       _target_: schnetpack.nn.radial.GaussianRBF
       n_rbf: 20
       cutoff: ${globals.cutoff}
-    _target_: schnetpack.representation.PaiNN
+    _target_: schnetpack.model.PaiNN
     n_atom_basis: 128
     n_interactions: 3
     shared_interactions: false
@@ -116,13 +116,13 @@ model:
       cutoff: ${globals.cutoff}
   _target_: schnetpack.model.NeuralNetworkPotential
   input_modules:
-  - _target_: schnetpack.atomistic.PairwiseDistances
+  - _target_: schnetpack.model.PairwiseDistances
   output_modules:
-  - _target_: schnetpack.atomistic.Atomwise
+  - _target_: schnetpack.model.Atomwise
     output_key: ${globals.energy_key}
     n_in: ${model.representation.n_atom_basis}
     aggregation_mode: sum
-  - _target_: schnetpack.atomistic.Forces
+  - _target_: schnetpack.model.Forces
     energy_key: ${globals.energy_key}
     force_key: ${globals.forces_key}
   postprocessors:

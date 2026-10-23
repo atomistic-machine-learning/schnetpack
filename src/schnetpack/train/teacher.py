@@ -4,11 +4,13 @@ A teacher is the frozen model a student is distilled from. It may work in other
 units than the student, with another cutoff and -- if it is not a SchNetPack
 model -- with another input and output format. :class:`TeacherWrapper` is the
 boundary between a teacher and training: it takes a student batch in the
-student's units and returns the teacher targets in the student's units,
-named after the student's keys.
+student's units and returns the teacher targets in the student's units, under
+the fixed keys ``properties.teacher_energy``, ``teacher_forces`` and
+``teacher_curvature``. It knows nothing of the student: which student output
+each target trains is stated by the loss terms.
 
-Each teacher family is a subclass that says how the teacher is loaded and how
-its output for a batch is computed.
+Each kind of teacher model is a subclass that says how the teacher is loaded
+and how its output for a batch is computed.
 """
 
 import contextlib
@@ -22,42 +24,96 @@ from torch.autograd import grad
 
 from schnetpack import properties
 from schnetpack.data import prune_neighbors
-from schnetpack.model.utils import train_mode, train_mode_sensitive_modules
+from schnetpack.model.mace import MaceModel, energy_shift, load_mace
+from schnetpack.model.utils import (
+    forces_need_train_mode,
+    train_mode,
+    train_mode_sensitive_modules,
+)
+from schnetpack.transform import AddOffsets
 from schnetpack.units import convert_units
 from schnetpack.utils import as_dtype
 from schnetpack.utils.compatibility import load_model
 
 __all__ = [
-    "teacher_key",
     "TeacherWrapper",
     "SchNetPackTeacher",
     "MaceTeacher",
 ]
 
-#: reserved for teacher targets; no label or model output starts with it
-TEACHER_PREFIX = "teacher_"
+#: the targets a teacher supplies: energy, forces, curvature
+TARGET_KEYS = (
+    properties.teacher_energy,
+    properties.teacher_forces,
+    properties.teacher_curvature,
+)
 
 
-def teacher_key(student_key: str) -> str:
-    """The key of the teacher target for the student's ``student_key``."""
-    return TEACHER_PREFIX + student_key
+def curvature_product(
+    forces: torch.Tensor,
+    positions: torch.Tensor,
+    probe: torch.Tensor,
+    create_graph: bool = False,
+    model: str = "model",
+) -> torch.Tensor:
+    """The curvature of a model along ``probe``: ``-(dF/dR)^T v``, a negated
+    vector-Jacobian product, taken in one reverse-mode pass.
+
+    For forces ``F = -dE/dR`` the Jacobian is the negative Hessian, which is
+    symmetric, so this is the Hessian-vector product ``H v``. For forces
+    predicted directly the Jacobian is not symmetric, and this is neither a
+    Hessian product nor the Jacobian-vector product ``-(dF/dR) v``; the loss
+    does not mind, since ``E|(J_s - J_t)^T v|^2 = |J_s - J_t|_F^2`` as well.
+    Teacher and student both take their curvature here, so that the loss
+    compares like with like.
+
+    Args:
+        forces: forces computed from ``positions``, with a graph.
+        positions: the positions the forces were computed from.
+        probe: the probe, shaped like the positions.
+        create_graph: keep the graph of the product, so that a loss on it can
+            be backpropagated.
+        model: which model the forces are from, for the error message.
+    """
+    if forces.grad_fn is None:
+        raise RuntimeError(
+            f"the {model}'s forces are not differentiable with respect to the "
+            "positions, so its curvature cannot be taken. This happens when they "
+            "were computed without a graph (SchNetPack's Forces build one only "
+            "in train mode), when the model was exported for inference, or when "
+            "they do not depend on the positions."
+        )
+    (vjp,) = grad(
+        forces,
+        positions,
+        grad_outputs=probe,
+        create_graph=create_graph,
+        retain_graph=True,
+    )
+    return -vjp
 
 
 #: accepted values of ``SchNetPackTeacher(model_format=...)``; ``"auto"`` tries
 #: TorchScript first and falls back to a pickled model
 MODEL_FORMATS = ("auto", "torch", "torchscript")
 
+#: largest atomic number the offset table covers
+MAX_Z = 118
+
 
 class TeacherWrapper:
     """A frozen teacher, presented to training in the student's units.
 
-    ``teacher(batch, probe)`` returns the teacher's energy per structure in
-    float64 -- teacher energies are absolute and would lose digits in float32 --
-    and its forces and, given a probe, ``teacher_hvp`` in the batch's dtype.
-    Each target is named after the student's key it is compared with:
-    ``teacher_<student_energy_key>``, ``teacher_<student_force_key>`` (see
-    :func:`teacher_key` and :attr:`target_keys`). All of them are detached, and
-    the batch is never written to.
+    ``teacher(batch, probe)`` returns ``teacher_energy``, ``teacher_forces`` and,
+    given a probe, ``teacher_curvature`` (see :data:`TARGET_KEYS`), all in the
+    batch's dtype, detached; the batch is never written to.
+
+    The energy is relative to the teacher's own offsets per element
+    (:meth:`teacher_offsets`): ``E - sum_i offset[Z_i]``, taken in float64 before
+    the cast, so that absolute energies do not cost it digits. A student trained
+    on it adds the same offsets, :meth:`energy_offsets`, in its ``AddOffsets``
+    (see :class:`~schnetpack.train.Distillation`), so both are compared in one
+    frame.
 
     The wrapper is a plain object rather than an ``nn.Module``, so a task
     holding it does not register it: the teacher stays out of ``state_dict()``,
@@ -66,7 +122,8 @@ class TeacherWrapper:
     rebuilds -- and loads the teacher again when unpickled, so checkpoints stay
     small. Being frozen, it is shared rather than copied by ``copy.deepcopy``.
 
-    Subclasses implement :meth:`load` and :meth:`teacher_output`.
+    Subclasses implement :meth:`load` and :meth:`teacher_output`, and
+    :meth:`teacher_offsets` if the model's energy offsets are known.
 
     Args:
         teacher_energy_unit: energy unit the teacher works in.
@@ -82,10 +139,6 @@ class TeacherWrapper:
             None passes the list through as it is -- right for a list
             built at the teacher's own cutoff.
         dtype: floating dtype the teacher runs in.
-        student_energy_key: the student's energy output: the teacher's energy
-            is its target, and the student's offsets are those of this key.
-        student_force_key: the student's force output: the teacher's forces are
-            its target, and the student's curvature is taken through it.
     """
 
     def __init__(
@@ -96,17 +149,7 @@ class TeacherWrapper:
         student_distance_unit: str | float = "Ang",
         cutoff: float | None = None,
         dtype: torch.dtype | str = torch.float32,
-        student_energy_key: str = properties.energy,
-        student_force_key: str = properties.forces,
     ):
-        self.student_energy_key = student_energy_key
-        self.student_force_key = student_force_key
-        #: the targets this teacher supplies: energy, forces, curvature
-        self.target_keys = (
-            teacher_key(student_energy_key),
-            teacher_key(student_force_key),
-            properties.teacher_hvp,
-        )
         self.teacher_energy_unit = teacher_energy_unit
         self.teacher_distance_unit = teacher_distance_unit
         self.student_energy_unit = student_energy_unit
@@ -122,7 +165,7 @@ class TeacherWrapper:
         self.hessian_conversion = self.force_conversion / self.position_conversion
         self._setup()
 
-    # ------------------------------------------------------------ family hooks
+    # --------------------------------------------------------- subclass hooks
 
     def load(self) -> Any:
         """Load the teacher. Called at construction and after unpickling."""
@@ -132,16 +175,30 @@ class TeacherWrapper:
         self, inputs: dict[str, torch.Tensor], create_graph: bool
     ) -> dict[str, torch.Tensor]:
         """The teacher's ``{"energy": (n_structures,), "forces": (n_atoms, 3)}``
-        in teacher units.
+        in teacher units, the energy absolute.
 
         ``inputs`` is a SchNetPack batch in the teacher's units and dtype, with
         the teacher's neighbor list. Its positions are the tensor the forces are
         differentiated by: a translation must build on them, not copy them.
         ``create_graph`` is True when a curvature target is asked for; the
         forces must then come back differentiable with respect to those
-        positions, however the family achieves that.
+        positions, however the subclass achieves that.
         """
         raise NotImplementedError
+
+    def teacher_offsets(self) -> torch.Tensor:
+        """The energy the teacher adds per atom of each element, indexed by
+        atomic number, in float64 and the teacher's energy unit; zeros if the
+        subclass cannot tell. A mean per atom is folded in: it is added to every
+        element. Called once, when first needed."""
+        return torch.zeros(1, dtype=torch.float64)
+
+    # ----------------------------------------------------------------- targets
+
+    def energy_offsets(self) -> torch.Tensor:
+        """The teacher's offsets per element, in float64 and the student's
+        energy unit: the atomrefs a student trained on ``teacher_energy`` adds."""
+        return self._offsets_table() * self.energy_conversion
 
     def __call__(
         self, batch: dict[str, torch.Tensor], probe: torch.Tensor | None = None
@@ -151,31 +208,54 @@ class TeacherWrapper:
         Args:
             batch: student batch, in the student's units.
             probe: ``(n_atoms, 3)`` vector along which to take the teacher's
-                Hessian-vector product; None for energy and forces only.
+                curvature; None for energy and forces only.
         """
         student_dtype = batch[properties.R].dtype
         inputs = self._teacher_inputs(batch)
         positions = inputs[properties.R]
 
         create_graph = probe is not None
-        hessian_probe = None
+        curvature = None
         with torch.enable_grad():
             output = self.teacher_output(inputs, create_graph)
             energy = output[properties.energy]
             forces = output[properties.forces]
             if probe is not None:
-                hessian_probe = self._hvp(forces, positions, probe)
+                curvature = curvature_product(
+                    forces, positions, probe.to(forces.dtype), model="teacher"
+                )
 
-        energy_key, force_key, hvp_key = self.target_keys
+        energy = energy.detach().to(torch.float64) - self._offsets_of(batch)
         targets = {
-            energy_key: energy.detach().to(torch.float64) * self.energy_conversion,
-            force_key: (forces.detach() * self.force_conversion).to(student_dtype),
-        }
-        if hessian_probe is not None:
-            targets[hvp_key] = (hessian_probe * self.hessian_conversion).to(
+            properties.teacher_energy: (energy * self.energy_conversion).to(
                 student_dtype
-            )
+            ),
+            properties.teacher_forces: (forces.detach() * self.force_conversion).to(
+                student_dtype
+            ),
+        }
+        if curvature is not None:
+            targets[properties.teacher_curvature] = (
+                curvature * self.hessian_conversion
+            ).to(student_dtype)
         return targets
+
+    def _offsets_of(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
+        """The teacher's offsets summed per structure, in its energy unit."""
+        table = self._offsets_table().to(batch[properties.Z].device)
+        idx_m = batch[properties.idx_m]
+        per_structure = torch.zeros(
+            len(batch[properties.n_atoms]), dtype=torch.float64, device=idx_m.device
+        )
+        return per_structure.index_add(0, idx_m, table[batch[properties.Z]])
+
+    def _offsets_table(self) -> torch.Tensor:
+        if self._offsets is None:
+            offsets = self.teacher_offsets()
+            # index safety: every element has an entry, zero if the subclass has none
+            size = max(len(offsets), MAX_Z + 1)
+            self._offsets = nn.functional.pad(offsets, (0, size - len(offsets)))
+        return self._offsets
 
     def _teacher_inputs(
         self, batch: dict[str, torch.Tensor]
@@ -200,28 +280,12 @@ class TeacherWrapper:
         inputs[properties.R] = inputs[properties.R].detach().requires_grad_()
         return inputs
 
-    @staticmethod
-    def _hvp(
-        forces: torch.Tensor, positions: torch.Tensor, probe: torch.Tensor
-    ) -> torch.Tensor:
-        if forces.grad_fn is None:
-            raise RuntimeError(
-                "the teacher's forces are not differentiable with respect to the "
-                "positions, so no curvature target can be taken. This happens "
-                "when the teacher was exported for inference (frozen, or "
-                "optimized for inference), when it predicts forces directly "
-                "instead of as -dE/dR, or when its teacher_output() does not "
-                "keep the graph of its forces when asked to."
-            )
-        # F = -dE/dR, so the vector-Jacobian product of F with v is -H v
-        (minus_hvp,) = grad(forces, positions, grad_outputs=probe.to(forces.dtype))
-        return -minus_hvp
-
     # ------------------------------------------------------ state and devices
 
     def _setup(self) -> None:
         self.model = self.load()
         self._device: torch.device | None = None
+        self._offsets: torch.Tensor | None = None
 
     def _to_device(self, device: torch.device) -> None:
         if device != self._device:
@@ -253,7 +317,9 @@ class SchNetPackTeacher(TeacherWrapper):
 
     The model runs as it predicts: its postprocessing stays on, so its energies
     are absolute. It is kept in eval mode, and switched to train mode while a
-    curvature target is taken so that its ``Forces`` keep their graph.
+    curvature target is taken so that its ``Forces`` keep their graph. A model
+    that predicts its forces directly needs no switch and stays in eval mode
+    (see :func:`~schnetpack.model.utils.forces_need_train_mode`).
 
     Args:
         model_path: path to the saved model.
@@ -262,14 +328,7 @@ class SchNetPackTeacher(TeacherWrapper):
             ``"auto"`` to try TorchScript first.
         teacher_energy_key: the model's energy output.
         teacher_force_key: the model's force output.
-        teacher_energy_unit: energy unit the model works in.
-        teacher_distance_unit: length unit the model works in.
-        student_energy_unit: energy unit of the student.
-        student_distance_unit: length unit of the student's batches.
-        cutoff: see :class:`TeacherWrapper`.
-        dtype: floating dtype the model runs in.
-        student_energy_key: see :class:`TeacherWrapper`.
-        student_force_key: see :class:`TeacherWrapper`.
+        **kwargs: units, cutoff and dtype; see :class:`TeacherWrapper`.
     """
 
     def __init__(
@@ -278,14 +337,7 @@ class SchNetPackTeacher(TeacherWrapper):
         model_format: str = "auto",
         teacher_energy_key: str = properties.energy,
         teacher_force_key: str = properties.forces,
-        teacher_energy_unit: str | float = "eV",
-        teacher_distance_unit: str | float = "Ang",
-        student_energy_unit: str | float = "eV",
-        student_distance_unit: str | float = "Ang",
-        cutoff: float | None = None,
-        dtype: torch.dtype | str = torch.float32,
-        student_energy_key: str = properties.energy,
-        student_force_key: str = properties.forces,
+        **kwargs,
     ):
         if model_format not in MODEL_FORMATS:
             raise ValueError(
@@ -296,16 +348,7 @@ class SchNetPackTeacher(TeacherWrapper):
         self.model_format = model_format
         self.teacher_energy_key = teacher_energy_key
         self.teacher_force_key = teacher_force_key
-        super().__init__(
-            teacher_energy_unit=teacher_energy_unit,
-            teacher_distance_unit=teacher_distance_unit,
-            student_energy_unit=student_energy_unit,
-            student_distance_unit=student_distance_unit,
-            cutoff=cutoff,
-            dtype=dtype,
-            student_energy_key=student_energy_key,
-            student_force_key=student_force_key,
-        )
+        super().__init__(**kwargs)
 
     def load(self) -> nn.Module:
         if not os.path.exists(self.model_path):
@@ -336,7 +379,7 @@ class SchNetPackTeacher(TeacherWrapper):
             )
 
         sensitive = train_mode_sensitive_modules(model)
-        if sensitive:
+        if sensitive and forces_need_train_mode(model):
             warnings.warn(
                 f"the teacher contains train/eval-sensitive modules {sensitive}. "
                 "It runs in train mode while curvature targets are taken, so "
@@ -348,8 +391,12 @@ class SchNetPackTeacher(TeacherWrapper):
     def teacher_output(
         self, inputs: dict[str, torch.Tensor], create_graph: bool
     ) -> dict[str, torch.Tensor]:
-        # its Forces keep their graph only in train mode
-        mode = train_mode(self.model) if create_graph else contextlib.nullcontext()
+        # its Forces keep their graph only in train mode; direct forces need none
+        mode = (
+            train_mode(self.model)
+            if create_graph and forces_need_train_mode(self.model)
+            else contextlib.nullcontext()
+        )
         with mode:
             output = self.model(inputs)
         return {
@@ -357,156 +404,87 @@ class SchNetPackTeacher(TeacherWrapper):
             properties.forces: output[self.teacher_force_key],
         }
 
+    def teacher_offsets(self) -> torch.Tensor:
+        """The atomrefs plus the mean per atom of the model's ``AddOffsets`` on
+        its energy, pickled or scripted. A model without one adds nothing, and
+        gets a warning: the student then learns the absolute energies the
+        teacher's network predicts."""
+        offsets = torch.zeros(1, dtype=torch.float64)
+        found = False
+        postprocessors = getattr(self.model, "postprocessors", None)
+        for module in postprocessors.children() if postprocessors is not None else ():
+            is_offsets = isinstance(module, AddOffsets) or (
+                getattr(module, "original_name", None) == "AddOffsets"
+            )
+            if not is_offsets or module._property != self.teacher_energy_key:
+                continue
+            if not module.is_extensive:
+                raise ValueError(
+                    f"the teacher's offsets on {self.teacher_energy_key!r} are "
+                    "intensive; an energy's are extensive"
+                )
+            found = True
+            atomref = module.atomref.detach().to(torch.float64).cpu()
+            mean = module.mean.detach().to(torch.float64).cpu().reshape(-1)[0]
+            per_element = torch.zeros_like(atomref)
+            if module.add_atomrefs:
+                per_element += atomref
+            if module.add_mean:
+                per_element += mean
+            size = max(len(offsets), len(per_element))
+            offsets = nn.functional.pad(offsets, (0, size - len(offsets)))
+            offsets[: len(per_element)] += per_element
+        if not found:
+            warnings.warn(
+                f"the teacher has no AddOffsets on {self.teacher_energy_key!r}, so "
+                "the student starts from zero offsets and learns the absolute "
+                "energies the teacher's network predicts",
+                stacklevel=2,
+            )
+        return offsets
 
-class MaceTeacher(TeacherWrapper):
-    """A MACE model as teacher, from a TorchScript archive (e.g. MACE-OFF).
 
-    The archive is made in an environment with ``mace-torch`` installed, so
-    SchNetPack itself does not depend on it::
+class MaceTeacher(SchNetPackTeacher):
+    """A MACE model as teacher (e.g. MACE-OFF), run through
+    :class:`~schnetpack.model.MaceModel`.
 
-        from e3nn.util import jit
-        from mace.calculators import mace_off
+    The teacher reads TorchScript archives, which load without ``mace-torch``
+    and run compiled. Building one needs ``schnetpack[mace]`` installed::
 
-        calc = mace_off(model="medium", default_dtype="float64")
-        torch.jit.save(jit.compile(calc.models[0]), "MACE-OFF23_medium.pt")
+        from schnetpack.interfaces.mace_interface import compile_mace_off
 
-    The teacher works in eV and Å. Its energies are absolute: they include its
-    per-element reference energies (E0s). These are summed in float64, read
-    from the archive before it is cast to ``dtype``, and added to MACE's
-    ``interaction_energy``, so a float32 teacher keeps the digits of its
-    energies. Its forces keep their graph when MACE is called with
-    ``training=True``, which is passed whenever a curvature target is asked
-    for. MACE-OFF is licensed for academic use only (ASL).
+        path = compile_mace_off("medium")
+
+    The teacher works in eV and Å. Its energies are absolute: its per-element
+    reference energies (E0s) are added in float64, read from the model before
+    it is cast to ``dtype``, so a float32 teacher keeps the digits of its
+    energies. Its forces keep their graph in train mode, which a curvature
+    target switches on. MACE-OFF is licensed for academic use only (ASL).
 
     Args:
-        model_path: path to the archive written by ``torch.jit.save``.
-        teacher_energy_unit: energy unit the model works in.
-        teacher_distance_unit: length unit the model works in.
-        student_energy_unit: energy unit of the student.
-        student_distance_unit: length unit of the student's batches.
-        cutoff: see :class:`TeacherWrapper`. Must not be smaller than the
-            model's ``r_max`` (5 Å for MACE-OFF23), or pairs the model sees
-            would be pruned away.
-        dtype: floating dtype the model runs in.
-        student_energy_key: see :class:`TeacherWrapper`.
-        student_force_key: see :class:`TeacherWrapper`.
+        model_path: path to the TorchScript archive.
+        **kwargs: units, cutoff and dtype; see :class:`TeacherWrapper`. The
+            cutoff must not be smaller than the model's ``r_max`` (5 Å for
+            MACE-OFF23), or pairs the model sees would be pruned away.
     """
 
-    def __init__(
-        self,
-        model_path: str,
-        teacher_energy_unit: str | float = "eV",
-        teacher_distance_unit: str | float = "Ang",
-        student_energy_unit: str | float = "eV",
-        student_distance_unit: str | float = "Ang",
-        cutoff: float | None = None,
-        dtype: torch.dtype | str = torch.float32,
-        student_energy_key: str = properties.energy,
-        student_force_key: str = properties.forces,
-    ):
-        self.model_path = model_path
-        super().__init__(
-            teacher_energy_unit=teacher_energy_unit,
-            teacher_distance_unit=teacher_distance_unit,
-            student_energy_unit=student_energy_unit,
-            student_distance_unit=student_distance_unit,
-            cutoff=cutoff,
-            dtype=dtype,
-            student_energy_key=student_energy_key,
-            student_force_key=student_force_key,
-        )
+    def __init__(self, model_path: str, **kwargs):
+        super().__init__(model_path=model_path, **kwargs)
 
-    def load(self) -> nn.Module:
-        if not os.path.exists(self.model_path):
-            raise FileNotFoundError(f"no teacher model at {self.model_path!r}")
-        model = torch.jit.load(self.model_path, map_location="cpu")
-        self._e0 = self._reference_energies(model)
-        model = model.to(self.dtype)
+    def load(self) -> MaceModel:
+        model = MaceModel(load_mace(self.model_path), dtype=self.dtype)
         model.eval()
         for parameter in model.parameters():
             parameter.requires_grad_(False)
 
-        r_max = float(model.r_max)
-        if self.cutoff is not None and self.cutoff < r_max:
+        if self.cutoff is not None and self.cutoff < model.r_max:
             raise ValueError(
                 f"the teacher's cutoff {self.cutoff} is below the model's r_max "
-                f"{r_max}; pruning would drop pairs the model sees"
+                f"{model.r_max}; pruning would drop pairs the model sees"
             )
         return model
 
-    @staticmethod
-    def _reference_energies(model: nn.Module) -> torch.Tensor | None:
-        """The model's E0 table in float64, or None if it has none. Newer MACE
-        versions keep one row per head; without a head in its input MACE
-        evaluates the first."""
-        try:
-            table = model.atomic_energies_fn.atomic_energies
-        except AttributeError:
-            return None
-        table = table.detach().to(torch.float64)
-        return table[0] if table.dim() == 2 else table
-
-    def teacher_output(
-        self, inputs: dict[str, torch.Tensor], create_graph: bool
-    ) -> dict[str, torch.Tensor]:
-        data = self._mace_input(inputs)
-        # MACE keeps its forces' graph through its training argument
-        output = self.model(data, training=create_graph)
-        return {
-            properties.energy: self._energy(output, data),
-            properties.forces: output["forces"],
-        }
-
-    def _energy(
-        self, output: dict[str, torch.Tensor], data: dict[str, torch.Tensor]
-    ) -> torch.Tensor:
-        """The E0s summed in float64 plus the interaction energy; MACE's own
-        total, summed in its dtype, for an archive without either."""
-        interaction = output.get("interaction_energy")
-        if self._e0 is None or interaction is None:
-            warnings.warn(
-                "the MACE archive provides no E0 table or no interaction_energy, "
-                "so its energies are summed in its own dtype and may lose digits "
-                "in float32",
-                stacklevel=2,
-            )
-            return output["energy"]
-        e0 = self._e0.to(interaction.device)[data["node_attrs"].argmax(-1)]
-        energy = torch.zeros(
-            interaction.shape[0], dtype=torch.float64, device=interaction.device
-        )
-        return energy.index_add(0, data["batch"], e0) + interaction.to(torch.float64)
-
-    def _mace_input(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-        """The dict MACE reads, built on the batch's positions and pruned list."""
-        atomic_numbers = inputs[properties.Z]
-        # MACE's one-hot columns follow the order of its own element table
-        node_attrs = atomic_numbers.unsqueeze(-1) == self.model.atomic_numbers
-        uncovered = ~node_attrs.any(-1)
-        if uncovered.any():
-            raise ValueError(
-                "the teacher does not cover the atomic numbers "
-                f"{atomic_numbers[uncovered].unique().tolist()}"
-            )
-        positions = inputs[properties.R]
-        n_atoms = inputs[properties.n_atoms]
-        cell = inputs.get(properties.cell)
-        data = {
-            "positions": positions,
-            "node_attrs": node_attrs.to(positions.dtype),
-            # MACE's edge vectors are positions[edge_index[1]] -
-            # positions[edge_index[0]] + shifts, SchNetPack's are R[idx_j] -
-            # R[idx_i] + offsets
-            "edge_index": torch.stack(
-                (inputs[properties.idx_i], inputs[properties.idx_j])
-            ),
-            "shifts": inputs[properties.offsets],
-            "batch": inputs[properties.idx_m],
-            "ptr": torch.cat((n_atoms.new_zeros(1), n_atoms.cumsum(0))),
-            "cell": (
-                positions.new_zeros(3 * n_atoms.shape[0], 3)
-                if cell is None
-                else cell.reshape(-1, 3)
-            ),
-        }
-        return data
+    def teacher_offsets(self) -> torch.Tensor:
+        """The E0s plus the shift of the model's ``ScaleShiftBlock``: the
+        energy MACE adds per atom of each element."""
+        return super().teacher_offsets() + energy_shift(self.model.core)

@@ -1,5 +1,5 @@
 """What the student side of distillation needs: probes, its own curvature, its
-energy offsets, and the checks that refuse an unworkable setup."""
+keys, and the checks that refuse an unworkable setup."""
 
 import pytest
 import torch
@@ -8,17 +8,22 @@ from torch import nn
 from schnetpack import properties
 from schnetpack.objectives import ModelOutput
 from schnetpack.train.distillation import (
-    check_distillation_setup,
+    Distillation,
     draw_probe,
     needs_curvature,
     needs_teacher,
-    student_energy_offsets,
-    student_hvp,
 )
-from schnetpack.train.teacher import SchNetPackTeacher, teacher_key
-from schnetpack.transform import AddOffsets, CastTo64
+from schnetpack.train.teacher import SchNetPackTeacher, curvature_product
+from schnetpack.transform import CastTo64
 
-from .conftest import CUTOFF, make_nnp, molecules_batch, with_neighbors
+from .conftest import (
+    CUTOFF,
+    make_direct_nnp,
+    make_nnp,
+    molecules_batch,
+    with_dropout,
+    with_neighbors,
+)
 
 
 def output(name, target_property=None):
@@ -45,115 +50,82 @@ def test_seeded_probes_repeat_and_are_standard_normal():
     assert abs(first.std().item() - 1.0) < 0.05  # not normalized per structure
 
 
-def test_student_hvp_matches_finite_differences_of_its_forces():
-    batch = molecules_batch(dtype=torch.float64)
-    model = make_nnp(seed=0).double().train()
-    probe = torch.randn_like(batch[properties.R])
-    eps = 1e-4
-
-    def forces_at(displacement):
-        displaced = {**batch, properties.R: batch[properties.R] + displacement}
-        return model(displaced)[properties.forces].detach()
-
-    inputs = {**batch, properties.R: batch[properties.R].clone()}
-    forces = model(inputs)[properties.forces]
-    hvp = student_hvp(forces, inputs[properties.R], probe, create_graph=False)
-
-    finite_difference = (forces_at(-eps * probe) - forces_at(eps * probe)) / (2 * eps)
-    torch.testing.assert_close(hvp, finite_difference, rtol=1e-4, atol=1e-5)
-
-
-def test_student_hvp_refuses_forces_without_a_graph(batch):
+def test_curvature_product_refuses_forces_without_a_graph(batch):
     model = make_nnp().eval()
     inputs = {key: value.clone() for key, value in batch.items()}
     forces = model(inputs)[properties.forces]
 
-    with pytest.raises(RuntimeError, match="train mode"):
-        student_hvp(
+    with pytest.raises(RuntimeError, match="student's forces are not differentiable"):
+        curvature_product(
             forces,
             inputs[properties.R],
             torch.randn_like(inputs[properties.R]),
-            create_graph=False,
+            model="student",
         )
-
-
-def test_energy_offsets_are_what_add_offsets_adds(batch):
-    model = make_nnp(energy_mean=-3.0)
-
-    offsets = student_energy_offsets(model, batch)
-
-    assert offsets.dtype == torch.float64
-    torch.testing.assert_close(offsets, -3.0 * batch[properties.n_atoms].double())
-
-
-def test_energy_offsets_include_atomrefs(batch):
-    atomref = torch.zeros(100)
-    atomref[1], atomref[6], atomref[8] = -0.5, -38.0, -75.0
-    model = make_nnp()
-    model.postprocessors.append(
-        AddOffsets(properties.energy, add_atomrefs=True, atomrefs=atomref)
-    )
-
-    offsets = student_energy_offsets(model, batch)
-
-    expected = torch.zeros(3, dtype=torch.float64).index_add(
-        0, batch[properties.idx_m], atomref[batch[properties.Z]].double()
-    )
-    torch.testing.assert_close(offsets, expected)
-
-
-def test_no_offsets_without_add_offsets(batch):
-    model = make_nnp()
-    model.postprocessors = nn.ModuleList([CastTo64()])
-
-    assert torch.equal(
-        student_energy_offsets(model, batch), torch.zeros(3, dtype=torch.float64)
-    )
 
 
 def test_what_the_outputs_need():
     plain = [output(properties.energy), output(properties.forces)]
     distilled = [
-        output(properties.energy, teacher_key(properties.energy)),
-        output(properties.hvp, properties.teacher_hvp),
+        output(properties.energy, properties.teacher_energy),
+        output(properties.curvature, properties.teacher_curvature),
     ]
 
     assert not needs_teacher(plain) and not needs_curvature(plain)
     assert needs_teacher(distilled) and needs_curvature(distilled)
 
 
-def test_teacher_targets_without_a_teacher_are_refused():
-    with pytest.raises(ValueError, match="no teacher"):
-        check_distillation_setup(
-            [output(properties.forces, teacher_key(properties.forces))],
+def test_two_student_outputs_on_one_teacher_target_are_refused(teacher_path):
+    outputs = [
+        output(properties.forces, properties.teacher_forces),
+        output("other_forces", properties.teacher_forces),
+    ]
+
+    with pytest.raises(ValueError, match="one student output per teacher target"):
+        Distillation(outputs, make_nnp(), SchNetPackTeacher(teacher_path))
+
+
+def test_curvature_without_a_force_term_is_refused(teacher_path):
+    with pytest.raises(ValueError, match="teacher_forces"):
+        Distillation(
+            [output(properties.curvature, properties.teacher_curvature)],
             make_nnp(),
-            teacher=None,
+            SchNetPackTeacher(teacher_path),
         )
-
-
-def test_a_teacher_target_the_teacher_does_not_supply_is_refused(teacher_path):
-    """The outputs name ``teacher_<student key>``; a stale default is caught."""
-    model = make_nnp(energy_key="E", force_key="F")
-    teacher = SchNetPackTeacher(
-        teacher_path, student_energy_key="E", student_force_key="F"
-    )
-
-    with pytest.raises(ValueError, match="teacher_E"):
-        check_distillation_setup(
-            [output("E", teacher_key(properties.energy))], model, teacher
-        )
-    check_distillation_setup([output("E", teacher_key("E"))], model, teacher)
 
 
 def test_student_keys_the_student_does_not_produce_are_refused(teacher_path):
-    teacher = SchNetPackTeacher(teacher_path, student_force_key="F")
-
     with pytest.raises(ValueError, match="'F'"):
-        check_distillation_setup(
-            [output(properties.energy, teacher_key(properties.energy))],
+        Distillation(
+            [output("F", properties.teacher_forces)],
             make_nnp(),
-            teacher,
+            SchNetPackTeacher(teacher_path),
         )
+
+
+def test_labels_and_teacher_on_one_energy_are_refused(teacher_path):
+    outputs = [
+        output(properties.energy),
+        output(properties.energy, properties.teacher_energy),
+    ]
+
+    with pytest.raises(ValueError, match="at once"):
+        Distillation(outputs, make_nnp(atomrefs=True), SchNetPackTeacher(teacher_path))
+
+
+def test_a_teacher_energy_needs_add_offsets_with_atomrefs(teacher_path):
+    """The teacher's energy is relative to its offsets per element; a mean
+    cannot hold them."""
+    teacher = SchNetPackTeacher(teacher_path)
+    outputs = [output(properties.energy, properties.teacher_energy)]
+    without = make_nnp()
+    without.postprocessors = nn.ModuleList([CastTo64()])
+
+    with pytest.raises(ValueError, match="add_atomrefs=True"):
+        Distillation(outputs, make_nnp(atomrefs=False), teacher)
+    with pytest.raises(ValueError, match="add_atomrefs=True"):
+        Distillation(outputs, without, teacher)
+    Distillation(outputs, make_nnp(atomrefs=True), teacher)
 
 
 def test_a_student_with_dropout_cannot_take_curvature(teacher_path):
@@ -162,13 +134,74 @@ def test_a_student_with_dropout_cannot_take_curvature(teacher_path):
     teacher = SchNetPackTeacher(teacher_path)
 
     with pytest.raises(ValueError, match="Dropout"):
-        check_distillation_setup(
-            [output(properties.hvp, properties.teacher_hvp)], model, teacher
+        Distillation(
+            [
+                output(properties.forces, properties.teacher_forces),
+                output(properties.curvature, properties.teacher_curvature),
+            ],
+            model,
+            teacher,
         )
     # without curvature the student never has to run in train mode
-    check_distillation_setup(
-        [output(properties.forces, teacher_key(properties.forces))], model, teacher
+    Distillation([output(properties.forces, properties.teacher_forces)], model, teacher)
+
+
+def test_curvature_product_is_the_hessian_product_for_conservative_forces():
+    """F = -dE/dR with E = R^T A R / 2 for symmetric A: the product is A v."""
+    a = torch.randn(6, 6, dtype=torch.float64)
+    a = a + a.T
+    positions = torch.randn(6, dtype=torch.float64, requires_grad=True)
+    probe = torch.randn(6, dtype=torch.float64)
+    forces = -(a @ positions)
+
+    torch.testing.assert_close(curvature_product(forces, positions, probe), a @ probe)
+
+
+def test_curvature_product_is_the_transposed_jacobian_product_for_direct_forces():
+    """For F = B R with any B, the product is -B^T v."""
+    b = torch.randn(6, 6, dtype=torch.float64)
+    positions = torch.randn(6, dtype=torch.float64, requires_grad=True)
+    probe = torch.randn(6, dtype=torch.float64)
+
+    torch.testing.assert_close(
+        curvature_product(b @ positions, positions, probe), -(b.T @ probe)
     )
+
+
+def test_without_a_teacher_plain_outputs_need_no_distillation():
+    plain = [output(properties.energy), output(properties.forces)]
+
+    assert Distillation.optional(plain, make_nnp(), teacher=None) is None
+
+
+def test_needs_grad_covers_the_students_derivatives_and_curvature(teacher_path):
+    teacher = SchNetPackTeacher(teacher_path)
+    forces = [output(properties.forces, properties.teacher_forces)]
+    curvature = forces + [output(properties.curvature, properties.teacher_curvature)]
+
+    assert Distillation(forces, make_nnp(), teacher).needs_grad
+    assert Distillation(curvature, make_direct_nnp(), teacher).needs_grad
+    assert not Distillation(forces, make_direct_nnp(), teacher).needs_grad
+
+
+def test_a_direct_force_student_with_dropout_takes_curvature_in_eval_mode(
+    batch, teacher_path
+):
+    """Its forces keep their graph in eval mode, so it is not switched to train
+    mode, and its dropout stays off."""
+    student = with_dropout(make_direct_nnp()).eval()
+    outputs = [
+        output(properties.forces, properties.teacher_forces),
+        output(properties.curvature, properties.teacher_curvature),
+    ]
+    distillation = Distillation(outputs, student, SchNetPackTeacher(teacher_path))
+
+    first, _ = distillation.step(dict(batch), train=False)
+    second, _ = distillation.step(dict(batch), train=False)
+
+    assert not student.training
+    torch.testing.assert_close(first[properties.energy], second[properties.energy])
+    assert first[properties.curvature].shape == batch[properties.R].shape
 
 
 def test_a_student_pruning_a_longer_list_predicts_as_on_its_own_list():
@@ -181,10 +214,10 @@ def test_a_student_pruning_a_longer_list_predicts_as_on_its_own_list():
     def predict(model, batch):
         inputs = {**batch, properties.R: batch[properties.R].clone()}
         out = model.double().train()(inputs)
-        hvp = student_hvp(
-            out[properties.forces], inputs[properties.R], probe, create_graph=False
+        curvature = curvature_product(
+            out[properties.forces], inputs[properties.R], probe
         )
-        return out[properties.energy], out[properties.forces], hvp
+        return out[properties.energy], out[properties.forces], curvature
 
     pruned = predict(make_nnp(seed=0, filter_cutoff=CUTOFF), wide)
     reference = predict(make_nnp(seed=0), exact)

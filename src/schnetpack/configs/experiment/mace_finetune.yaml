@@ -1,0 +1,84 @@
+# @package _global_
+#
+# Fine-tunes a pretrained MACE model on energies and forces in eV and Å:
+#
+#   spktrain experiment=mace_finetune globals.mace_path=/path/to/MACE-OFF23_medium.pt \
+#       data.dataset.datapath=/path/to/data.db data.num_train=... data.num_val=...
+#
+# The model trains on MACE's interaction energy, so the data pipeline removes
+# the same per-element reference energies (E0s) that the model adds back.
+# globals.mace_e0s names them:
+#   model    the archive's own E0s, for data at the pretraining level of theory
+#            (MACE-OFF: wB97M-D3(BJ)/def2-TZVPPD)
+#   dataset  the dataset's atomrefs (e.g. isolated-atom energies), for another
+#            level; the dataset must provide them
+# For another level without atomrefs, globals.fit_e0_correction=True fits a
+# correction per element to the pretrained model's errors on the training split
+# before training.
+#
+# Fine-tuning has no replay of the pretraining data: the model may forget what
+# the new data does not cover. MACE-OFF is licensed for academic use only (ASL),
+# and so are models fine-tuned from it.
+
+defaults:
+  - override /model: mace
+  - override /data: custom
+
+run:
+  experiment: mace_finetune
+
+globals:
+  mace_path: ???
+  mace_e0s: model
+  fit_e0_correction: False
+  # at least the model's r_max (MACE-OFF23: 5 Å)
+  cutoff: 5.
+  lr: 1e-4
+  energy_key: energy
+  forces_key: forces
+
+data:
+  dataset:
+    load_properties:
+      - ${globals.energy_key}
+      - ${globals.forces_key}
+    distance_unit: Ang
+    property_units:
+      energy: eV
+      forces: eV/Ang
+    transforms:
+      - _target_: schnetpack.transform.RemoveOffsets
+        property: ${globals.energy_key}
+        remove_atomrefs: True
+        atomrefs:
+          _target_: schnetpack.model.mace.mace_atomrefs
+          path: ${globals.mace_path}
+          e0s: ${globals.mace_e0s}
+      - _target_: schnetpack.transform.MatScipyNeighborList
+        cutoff: ${globals.cutoff}
+      - _target_: schnetpack.transform.CastTo32
+
+task:
+  outputs:
+    - _target_: schnetpack.ModelOutput
+      name: ${globals.energy_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 0.01
+    - _target_: schnetpack.ModelOutput
+      name: ${globals.forces_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 0.99
