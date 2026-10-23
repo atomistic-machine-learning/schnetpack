@@ -12,9 +12,9 @@ import torch
 from schnetpack import properties
 from schnetpack.interfaces.ase_interface import atoms_to_batch
 from schnetpack.interfaces.mace_interface import CACHE_DIR, compile_mace_off
-from schnetpack.train.teacher import MaceTeacher, teacher_key
+from schnetpack.train.teacher import MaceTeacher
 
-from ..distillation.conftest import with_neighbors
+from ..distillation.conftest import absolute_energy, with_neighbors
 
 NO_WEIGHTS_ONLY = "TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"
 
@@ -66,14 +66,14 @@ def test_the_compiled_archive_reproduces_mace(mace_off_archive, mace_off_referen
         targets = teacher(batch)
 
         torch.testing.assert_close(
-            targets[teacher_key(properties.energy)],
+            absolute_energy(teacher, batch, targets),
             torch.tensor([float(energy)], dtype=torch.float64),
             rtol=0,
             atol=1e-6,
             msg=name,
         )
         torch.testing.assert_close(
-            targets[teacher_key(properties.forces)],
+            targets[properties.teacher_forces],
             torch.from_numpy(forces),
             rtol=0,
             atol=1e-6,

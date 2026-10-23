@@ -1,6 +1,7 @@
 """SchNetPack models as teachers: loading, postprocessing, curvature, pickling."""
 
 import pickle
+import warnings
 
 import pytest
 import torch
@@ -9,10 +10,18 @@ from torch import nn
 
 from schnetpack import properties
 from schnetpack.interfaces.ase_interface import atoms_to_batch
-from schnetpack.train.teacher import SchNetPackTeacher, teacher_key
+from schnetpack.train.teacher import SchNetPackTeacher
 from schnetpack.units import convert_units
 
-from .conftest import CUTOFF, make_nnp, molecules_batch, with_neighbors
+from .conftest import (
+    CUTOFF,
+    absolute_energy,
+    make_direct_nnp,
+    make_nnp,
+    molecules_batch,
+    with_dropout,
+    with_neighbors,
+)
 
 LOOSE = dict(rtol=1e-4, atol=1e-4)
 
@@ -39,14 +48,15 @@ def test_loads_a_pickled_model_frozen_in_eval_mode_and_float32(teacher_path):
 def test_predicts_as_the_model_does_postprocessing_included(
     batch, teacher_model, teacher_path
 ):
-    targets = SchNetPackTeacher(teacher_path)(batch)  # auto falls back to torch
+    teacher = SchNetPackTeacher(teacher_path)  # auto falls back to torch
+    targets = teacher(batch)
 
     expected = teacher_model.eval()(fresh(batch))
     torch.testing.assert_close(
-        targets[teacher_key(properties.energy)], expected[properties.energy], **LOOSE
+        absolute_energy(teacher, batch, targets), expected[properties.energy], **LOOSE
     )
     torch.testing.assert_close(
-        targets[teacher_key(properties.forces)],
+        targets[properties.teacher_forces],
         expected[properties.forces].float(),
         **LOOSE,
     )
@@ -60,11 +70,11 @@ def test_curvature_target_matches_finite_differences_of_the_forces(teacher_path)
 
     def forces_at(displacement):
         displaced = {**batch, properties.R: batch[properties.R] + displacement}
-        return teacher(displaced)[teacher_key(properties.forces)]
+        return teacher(displaced)[properties.teacher_forces]
 
     finite_difference = (forces_at(-eps * probe) - forces_at(eps * probe)) / (2 * eps)
     torch.testing.assert_close(
-        teacher(batch, probe)[properties.teacher_hvp],
+        teacher(batch, probe)[properties.teacher_curvature],
         finite_difference,
         rtol=1e-4,
         atol=1e-5,
@@ -114,6 +124,23 @@ def test_warns_about_train_mode_sensitive_modules(tmp_path):
         SchNetPackTeacher(path)
 
 
+def test_a_direct_force_teacher_with_dropout_stays_in_eval_mode(tmp_path, batch):
+    """Its forces keep their graph in eval mode: no warning, and its curvature
+    targets are deterministic."""
+    path = tmp_path / "direct.pt"
+    torch.save(with_dropout(make_direct_nnp(seed=1)), path)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        teacher = SchNetPackTeacher(str(path))
+    probe = torch.randn_like(batch[properties.R])
+
+    first = teacher(batch, probe)
+    second = teacher(batch, probe)
+
+    for key in first:
+        torch.testing.assert_close(first[key], second[key])
+
+
 def test_pickles_as_its_path(batch, teacher_path):
     teacher = SchNetPackTeacher(teacher_path, cutoff=CUTOFF)
 
@@ -158,17 +185,17 @@ def test_periodic_batch_in_other_units_gives_converted_targets(teacher_path):
 
     angstrom_per_bohr = convert_units("Bohr", "Ang")
     torch.testing.assert_close(
-        converted[teacher_key(properties.energy)],
-        reference[teacher_key(properties.energy)],
+        converted[properties.teacher_energy],
+        reference[properties.teacher_energy],
         **LOOSE,
     )
     torch.testing.assert_close(
-        converted[teacher_key(properties.forces)],
-        reference[teacher_key(properties.forces)] * angstrom_per_bohr,
+        converted[properties.teacher_forces],
+        reference[properties.teacher_forces] * angstrom_per_bohr,
         **LOOSE,
     )
     torch.testing.assert_close(
-        converted[properties.teacher_hvp],
-        reference[properties.teacher_hvp] * angstrom_per_bohr**2,
+        converted[properties.teacher_curvature],
+        reference[properties.teacher_curvature] * angstrom_per_bohr**2,
         **LOOSE,
     )

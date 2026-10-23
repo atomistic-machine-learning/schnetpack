@@ -293,6 +293,14 @@ class AddOffsets(Transform):
             )
             self.mean = mean.detach()
 
+    def set_offsets(self, atomrefs: torch.Tensor, mean: torch.Tensor) -> None:
+        """Set atomrefs and mean, as if given to the constructor: ``initialize``
+        then leaves them alone."""
+        self.atomref = atomrefs.detach().to(self.atomref.device)
+        self.mean = mean.detach().reshape(1).to(self.mean.device)
+        self._atomrefs_initialized = True
+        self._mean_initialized = True
+
     def forward(
         self,
         inputs: dict[str, torch.Tensor],

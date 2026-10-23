@@ -16,13 +16,14 @@ Scheduler
 Knowledge distillation
 ----------------------
 
-A frozen teacher's energies, forces and Hessian-vector products, distilled into
-a student. :class:`~schnetpack.lightning.AtomisticTask` takes the teacher as
-``teacher``; a hand-written loop uses :func:`distillation_predictions` and
+A frozen teacher's energies, forces and curvatures (energy Hessian-vector products),
+distilled into a student. :class:`~schnetpack.lightning.AtomisticTask` takes the teacher as
+``teacher``; a hand-written loop uses a :class:`Distillation` and
 :func:`~schnetpack.objectives.calculate_loss` (see
-:mod:`schnetpack.train.distillation`).
+:mod:`schnetpack.train.distillation`). The teacher's targets are
+``properties.teacher_energy``, ``teacher_forces`` and ``teacher_curvature``.
 
-.. rubric:: Teacher families
+.. rubric:: Teachers
 
 .. autosummary::
     :toctree: generated
@@ -33,22 +34,11 @@ a student. :class:`~schnetpack.lightning.AtomisticTask` takes the teacher as
     SchNetPackTeacher
     MaceTeacher
 
-.. rubric:: Student statistics
+.. rubric:: Distilling
 
 .. autosummary::
     :toctree: generated
     :nosignatures:
     :template: classtemplate.rst
 
-    TeacherStats
-
-.. rubric:: Functions
-
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
-
-    teacher_key
-    distillation_predictions
-    check_distillation_setup
-    student_stats_source
+    Distillation

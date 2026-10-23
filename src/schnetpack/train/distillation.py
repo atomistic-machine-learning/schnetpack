@@ -1,61 +1,74 @@
 """Knowledge distillation: a student trained on its teacher's energy, forces
 and curvature.
 
-The teacher runs online, on the batch the student sees. For the
-curvature term both models are probed along the same random vector v: the
-teacher supplies the curvature target ``H_t v``, the student its own
-``H_s v``, both exact second derivatives. With v ~ N(0, 1) per component,
-``E|(H_s - H_t) v|^2`` is the squared Frobenius distance of the two Hessians.
+The teacher runs online, on the batch the student sees. The curvature term
+follows the Hessian distillation of [#hessian_distillation1]_, which matches
+randomly sampled rows of the two Hessians; here both models are instead probed
+along the same random vector v: the teacher supplies the curvature target
+``H_t v``, the student its own ``H_s v``, both exact second derivatives. With
+v ~ N(0, 1) per component, ``E|(H_s - H_t) v|^2`` is the squared Frobenius
+distance of the two Hessians.
 
-Everything here is pure PyTorch. :class:`~schnetpack.lightning.AtomisticTask`
-distills through :func:`distillation_predictions`, and so does a hand-written
-loop, which checks the setup once and assembles the loss with
+Both products are taken through the forces, as ``-(dF/dR)^T v`` (see
+:func:`~schnetpack.train.teacher.curvature_product`), so a model that predicts its
+forces directly, not as -dE/dR, works as student and as teacher alike: its
+force Jacobian stands in for the negative Hessian, and the term is the squared
+Frobenius distance of the two force Jacobians.
+
+The loss terms say which student output each teacher target trains::
+
+    ModelOutput(name="energy", target_property=properties.teacher_energy, ...)
+
+The teacher's energy is relative to its own offsets per element, and a student
+trained on it adds the same offsets: :meth:`Distillation.setup` writes them
+into the student's ``AddOffsets``. Both are then compared in one frame.
+
+Everything here is pure PyTorch. A :class:`Distillation` checks the setup once,
+when it is built; :class:`~schnetpack.lightning.AtomisticTask` distills through
+one, and so does a hand-written loop, which assembles the loss with
 :func:`~schnetpack.objectives.calculate_loss`::
 
-    check_distillation_setup(outputs, model, teacher)
+    distillation = Distillation(outputs, model, teacher)
+    distillation.setup(datamodule)
     for batch in loader:
-        pred, targets = distillation_predictions(outputs, model, teacher, batch)
+        pred, targets = distillation.step(batch)
         loss = calculate_loss(outputs, pred, targets)
         ...
 
-Evaluation needs gradients enabled too, since curvature is a derivative.
+Evaluation needs gradients enabled too (see :attr:`Distillation.needs_grad`),
+since curvature is a derivative.
+
+References
+----------
+.. [#hessian_distillation1] Amin, Raja, Krishnapriyan:
+   Towards fast, specialized machine learning force fields: Distilling
+   foundation models via energy hessians.
+   International Conference on Learning Representations. 2025.
 """
 
 import contextlib
-import hashlib
-import json
-import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 
-import numpy as np
 import torch
 from torch import nn
-from torch.autograd import grad
 
 from schnetpack import properties
-from schnetpack.data.loader import AtomsLoader
 from schnetpack.model.base import AtomisticModel
-from schnetpack.model.utils import train_mode, train_mode_sensitive_modules
+from schnetpack.model.utils import (
+    forces_need_train_mode,
+    train_mode,
+    train_mode_sensitive_modules,
+)
 from schnetpack.objectives import (
     ModelOutput,
     UnsupervisedModelOutput,
     extract_targets,
     predict_without_postprocessing,
 )
-from schnetpack.train.teacher import TEACHER_PREFIX, TeacherWrapper
+from schnetpack.train.teacher import TARGET_KEYS, TeacherWrapper, curvature_product
 from schnetpack.transform import AddOffsets
 
-__all__ = [
-    "check_distillation_setup",
-    "distillation_predictions",
-    "student_stats_source",
-    "TeacherStats",
-]
-
-log = logging.getLogger(__name__)
-
-#: training structures the teacher runs on to fit the student's offsets, by
-TEACHER_STATS_SIZE = 10_000
+__all__ = ["Distillation"]
 
 
 def draw_probe(
@@ -75,384 +88,244 @@ def draw_probe(
     return probe.to(positions.device)
 
 
-def student_hvp(
-    forces: torch.Tensor,
-    positions: torch.Tensor,
-    probe: torch.Tensor,
-    create_graph: bool,
-) -> torch.Tensor:
-    """The student's Hessian-vector product ``H_s v`` along ``probe``.
-
-    Args:
-        forces: the student's forces, computed from ``positions`` with a graph.
-        positions: the positions the forces were differentiated by.
-        probe: the probe, shaped like the positions.
-        create_graph: keep the graph, so that a loss on the product can be
-            backpropagated to the student's parameters. Needed in training only.
-    """
-    if forces.grad_fn is None:
-        raise RuntimeError(
-            "the student's forces carry no graph, so its curvature cannot be "
-            "taken. SchNetPack's Forces build one only in train mode: run the "
-            "student in train mode (see schnetpack.model.train_mode)."
-        )
-    # F = -dE/dR, so the vector-Jacobian product of F with v is -H v
-    (minus_hvp,) = grad(
-        forces,
-        positions,
-        grad_outputs=probe,
-        create_graph=create_graph,
-        retain_graph=True,
-    )
-    return -minus_hvp
-
-
-def student_energy_offsets(
-    model: nn.Module,
-    batch: dict[str, torch.Tensor],
-    energy_key: str = properties.energy,
-) -> torch.Tensor:
-    """The offsets the student's ``AddOffsets`` add to its energy, per structure.
-
-    The student is compared without postprocessing, so an absolute teacher
-    energy has to lose exactly these offsets first. Computed in float64: the
-    offsets are about as large as the absolute energies.
-    """
-    n_atoms = batch[properties.n_atoms]
-    inputs = {
-        energy_key: torch.zeros(
-            n_atoms.shape[0], dtype=torch.float64, device=n_atoms.device
-        ),
-        properties.n_atoms: n_atoms,
-        properties.Z: batch[properties.Z],
-        properties.idx_m: batch[properties.idx_m],
-    }
-    for module in getattr(model, "postprocessors", ()):
-        if isinstance(module, AddOffsets) and module._property == energy_key:
-            inputs = module(inputs)
-    return inputs[energy_key]
-
-
 def needs_teacher(outputs: Sequence[ModelOutput]) -> bool:
     """Whether any output is trained on a teacher target."""
-    return any(_is_teacher_target(output) for output in outputs)
-
-
-def _is_teacher_target(output: ModelOutput) -> bool:
-    return output.target_property.startswith(TEACHER_PREFIX)
+    return any(output.target_property in TARGET_KEYS for output in outputs)
 
 
 def needs_curvature(outputs: Sequence[ModelOutput]) -> bool:
-    """Whether any output reads the student's Hessian-vector product."""
-    return any(output.name == properties.hvp for output in outputs)
+    """Whether any output reads the student's curvature."""
+    return any(output.name == properties.curvature for output in outputs)
 
 
-def check_distillation_setup(
-    outputs: Sequence[ModelOutput],
-    model: nn.Module,
-    teacher: TeacherWrapper | None,
-) -> None:
-    """Refuse a setup that cannot distill, before any step runs."""
-    if (needs_teacher(outputs) or needs_curvature(outputs)) and teacher is None:
-        raise ValueError(
-            f"the outputs refer to teacher targets or to {properties.hvp!r}, but "
-            "no teacher was given"
-        )
-    if teacher is None:
-        return
-    unknown = sorted(
-        {
-            output.target_property
-            for output in outputs
-            if _is_teacher_target(output)
-            and output.target_property not in teacher.target_keys
-        }
+def student_key(outputs: Sequence[ModelOutput], target: str) -> str | None:
+    """The student output trained on the teacher target ``target``; None if no
+    output is.
+
+    Raises:
+        ValueError: if outputs of different names are trained on it.
+    """
+    names = sorted(
+        {output.name for output in outputs if output.target_property == target}
     )
-    if unknown:
+    if len(names) > 1:
         raise ValueError(
-            f"the outputs refer to teacher targets {unknown}, but the teacher "
-            f"supplies {list(teacher.target_keys)}: one target per student key "
-            "it was given"
+            f"outputs {names} are all trained on {target!r}; one student output "
+            "per teacher target"
         )
-    student_keys = (teacher.student_energy_key, teacher.student_force_key)
-    model_outputs = getattr(model, "model_outputs", None)
-    if model_outputs is not None:
-        missing = [key for key in student_keys if key not in model_outputs]
-        if missing:
-            raise ValueError(
-                f"the teacher was given student keys {missing}, but the student "
-                f"outputs {sorted(model_outputs)}"
-            )
-    if needs_curvature(outputs):
-        sensitive = train_mode_sensitive_modules(model)
-        if sensitive:
-            raise ValueError(
-                f"the student contains train/eval-sensitive modules {sensitive}. "
-                "It runs in train mode whenever its curvature is taken, "
-                "validation included, so these would be active there."
-            )
+    return names[0] if names else None
 
 
-def distillation_predictions(
-    outputs: Sequence[ModelOutput],
-    model: AtomisticModel,
-    teacher: TeacherWrapper,
-    batch: dict[str, torch.Tensor],
-    generator: torch.Generator | None = None,
-    create_graph: bool = True,
-) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
-    """Predictions and targets of one distillation step.
+class Distillation:
+    """A student distilled from a teacher, on a set of loss terms.
 
-    Labels are read off the batch first and the teacher runs next, both before
-    the student: a SchNetPack model writes its outputs into the batch it is
-    given. The teacher's energy loses the student's offsets, since the student
-    is compared without postprocessing. When an output reads ``hvp``, one probe
-    is drawn for teacher and student alike, and the student runs in train mode
-    so that its forces keep their graph.
+    Built once, before any step: it refuses a setup that cannot distill.
+    :meth:`setup` then initializes the student, and each step asks
+    :meth:`step` for its predictions and targets.
+
+    The student's keys are read off the loss terms: its energy is the output
+    trained on ``teacher_energy``, its forces the output trained on
+    ``teacher_forces``, and its curvature is taken through those forces.
+
+    A plain object rather than an ``nn.Module``: it holds the outputs, student
+    and teacher by reference, and registers none of them.
 
     Args:
         outputs: the loss terms.
         model: the student.
         teacher: the teacher.
-        batch: student batch.
-        generator: generator to draw the probe from; None for the global one.
-        create_graph: keep the graph of the student's curvature, as training
-            needs.
+        probe_seed: seed of the probes outside training; :meth:`reset_probes`
+            goes back to it, so that every evaluation sees the same probes.
+            Training draws from the global generator.
 
-    Returns:
-        ``(pred, targets)``, ready for the loss.
-    """
-    targets = extract_targets(outputs, batch, skip=teacher.target_keys)
-    curvature = needs_curvature(outputs)
-    probe = draw_probe(batch[properties.R], generator) if curvature else None
-
-    if needs_teacher(outputs):
-        teacher_targets = teacher(batch, probe)
-        energy_key = teacher.target_keys[0]
-        energy = teacher_targets[energy_key] - student_energy_offsets(
-            model, batch, teacher.student_energy_key
-        )
-        teacher_targets[energy_key] = energy.to(batch[properties.R].dtype)
-        targets.update(teacher_targets)
-
-    mode = train_mode(model) if curvature else contextlib.nullcontext()
-    with mode:
-        pred = predict_without_postprocessing(model, batch)
-    if curvature:
-        pred[properties.hvp] = student_hvp(
-            pred[teacher.student_force_key], batch[properties.R], probe, create_graph
-        )
-    return pred, targets
-
-
-def student_stats_source(
-    outputs: Sequence[ModelOutput],
-    datamodule,
-    teacher: TeacherWrapper,
-    device: torch.device | str | None = None,
-    max_structures: int | None = TEACHER_STATS_SIZE,
-):
-    """The stats source the student's offsets are fitted to.
-
-    A label term on the student's energy key means the data pipeline removes
-    offsets fitted to those labels from them. The student's offsets must be the
-    same ones, so the datamodule answers, and the teacher's energy loses them
-    too. Without such a term the teacher's energies stand in for labels: a
-    :class:`TeacherStats` on at most ``max_structures`` training structures.
-    """
-    energy_key = teacher.student_energy_key
-    if any(
-        not isinstance(output, UnsupervisedModelOutput)
-        and output.target_property == energy_key
-        for output in outputs
-    ):
-        return datamodule
-    return TeacherStats(
-        datamodule, teacher, device=device, max_structures=max_structures
-    )
-
-
-class TeacherStats:
-    """A stats source that reads the student's energy statistics off the teacher.
-
-    ``AddOffsets`` initializes from a stats source (``get_stats`` and
-    ``get_atomrefs``), normally the datamodule, which computes them from energy
-    labels. A distillation dataset may have none, so this source runs the
-    teacher instead: once, on the first query for the
-    student's energy, ``teacher.student_energy_key``, and on a seeded random
-    subset of at most ``max_structures`` training structures, the same on
-    every rank. Queries for any other property go to the datamodule.
-
-    The results are stored through the datamodule's stats provider, keyed by
-    :attr:`fingerprint`, so that reruns, resumes and other ranks read them
-    instead of running the teacher. Without a provider or a stats file,
-    nothing is stored.
-
-    ``remove_atomref`` removes the atomrefs this source handed out for the
-    property, or else ones estimated from the teacher.
-
-    Args:
-        datamodule: provides ``train_dataset``, ``batch_size`` and
-            ``num_workers``, answers queries for other properties, and stores
-            results through its ``provider``, if it has one.
-        teacher: the teacher.
-        device: device to run the teacher on for this pass; None for the
-            batches' own.
-        max_structures: training structures to run the teacher on; None for
-            the whole split.
-        seed: seed of the random subset.
-        z_max: size of the atomref tensor, as in ``AddOffsets``.
+    Raises:
+        ValueError: if several student outputs are trained on one teacher
+            target; if a curvature term has no term on ``teacher_forces`` to
+            name the student's forces; if the student lacks an output a term
+            names; if the student's energy is trained on labels and on the
+            teacher at once, or lacks an ``AddOffsets`` with atomrefs to hold
+            the teacher's offsets; or if the student must run in train mode
+            for its curvature but contains train/eval-sensitive modules.
     """
 
     def __init__(
         self,
-        datamodule,
+        outputs: Sequence[ModelOutput],
+        model: AtomisticModel,
         teacher: TeacherWrapper,
-        device: torch.device | str | None = None,
-        max_structures: int | None = TEACHER_STATS_SIZE,
-        seed: int = 0,
-        z_max: int = 100,
+        probe_seed: int = 0,
     ):
-        self.datamodule = datamodule
+        self.outputs = outputs
+        self.model = model
         self.teacher = teacher
-        self.energy_key = teacher.student_energy_key
-        self.device = device
-        self.max_structures = max_structures
-        self.seed = seed
-        self.z_max = z_max
-        self._energies: torch.Tensor | None = None
-        self._n_atoms: torch.Tensor | None = None
-        #: atoms of each element per structure; float32 is exact for counts
-        self._counts: torch.Tensor | None = None
-        #: atomrefs handed out per property, with where they came from
-        self._atomrefs: dict[str, tuple[torch.Tensor, str]] = {}
-        self._fingerprint: str | None = None
+        self.probe_seed = probe_seed
+        #: the student's outputs trained on the teacher's energy and forces
+        self.energy_key = student_key(outputs, properties.teacher_energy)
+        self.force_key = student_key(outputs, properties.teacher_forces)
+        self._generator = torch.Generator().manual_seed(probe_seed)
+        self._check()
+
+    @classmethod
+    def optional(
+        cls,
+        outputs: Sequence[ModelOutput],
+        model: AtomisticModel,
+        teacher: TeacherWrapper | None,
+        probe_seed: int = 0,
+    ) -> "Distillation | None":
+        """A distillation if there is a teacher, else None.
+
+        Raises:
+            ValueError: if there is no teacher, but the outputs need one.
+        """
+        if teacher is not None:
+            return cls(outputs, model, teacher, probe_seed)
+        if needs_teacher(outputs) or needs_curvature(outputs):
+            raise ValueError(
+                f"the outputs refer to teacher targets or to "
+                f"{properties.curvature!r}, but no teacher was given"
+            )
+        return None
 
     @property
-    def fingerprint(self) -> str:
-        """What the stored results are valid for: the contents of the
-        teacher's model file, its configuration and family, and the subset."""
-        if self._fingerprint is None:
-            config = self.teacher.__getstate__()
-            model_path = config.pop("model_path", None)
-            payload = {
-                "family": type(self.teacher).__qualname__,
-                "config": config,
-                "max_structures": self.max_structures,
-                "seed": self.seed,
-            }
-            if model_path is not None:
-                with open(model_path, "rb") as file:
-                    payload["model"] = hashlib.file_digest(file, "sha256").hexdigest()
-            text = json.dumps(payload, sort_keys=True, default=str)
-            self._fingerprint = hashlib.sha256(text.encode()).hexdigest()[:16]
-        return self._fingerprint
+    def needs_grad(self) -> bool:
+        """Whether evaluation needs gradients enabled: for the student's own
+        derivatives, such as forces taken as -dE/dR, or for its curvature."""
+        derivatives = getattr(self.model, "required_derivatives", None)
+        return bool(derivatives) or needs_curvature(self.outputs)
 
-    def _stored(self, entry: str, compute: Callable[[], np.ndarray]) -> np.ndarray:
-        provider = getattr(self.datamodule, "provider", None)
-        if provider is None:
-            return compute()
-        return provider.read_or_compute(f"teacher:{self.fingerprint}:{entry}", compute)
-
-    def _teacher_pass(self) -> None:
-        if self._energies is not None:
-            return
-        dataset = self.datamodule.train_dataset
-        if self.max_structures is not None and self.max_structures < len(dataset):
-            generator = torch.Generator().manual_seed(self.seed)
-            subset = torch.randperm(len(dataset), generator=generator)
-            subset = sorted(subset[: self.max_structures].tolist())
-            dataset = dataset.subset(subset, split=dataset.split)
-        log.info(
-            f"Running the teacher on {len(dataset)} training structures for the "
-            "student's energy offsets"
-        )
-        loader = AtomsLoader(
-            dataset,
-            batch_size=self.datamodule.batch_size,
-            shuffle=False,
-            num_workers=self.datamodule.num_workers,
-        )
-        energy_key = self.teacher.target_keys[0]
-        energies, n_atoms, counts = [], [], []
-        for batch in loader:
-            if self.device is not None:
-                batch = {key: value.to(self.device) for key, value in batch.items()}
-            energies.append(self.teacher(batch)[energy_key].cpu())
-            numbers = batch[properties.Z].cpu()
-            idx_m = batch[properties.idx_m].cpu()
-            count = torch.zeros(len(batch[properties.n_atoms]), self.z_max)
-            count.index_put_(
-                (idx_m, numbers),
-                torch.ones_like(numbers, dtype=count.dtype),
-                accumulate=True,
-            )
-            counts.append(count)
-            n_atoms.append(batch[properties.n_atoms].cpu())
-        self._energies = torch.cat(energies)
-        self._n_atoms = torch.cat(n_atoms).to(torch.float64)
-        self._counts = torch.cat(counts)
-
-    def _estimate_atomrefs(self) -> np.ndarray:
-        self._teacher_pass()
-        present = self._counts.sum(0) > 0
-        design = self._counts[:, present].to(torch.float64)
-        # lstsq copes with compositions that always occur in fixed ratios
-        solution = torch.linalg.lstsq(design, self._energies[:, None]).solution
-        atomref = torch.zeros(self.z_max, dtype=torch.float64)
-        atomref[present] = solution[:, 0]
-        return atomref.numpy()
-
-    def get_atomrefs(
-        self, property: str, is_extensive: bool, estimate: bool = True
-    ) -> dict[str, torch.Tensor]:
-        if property != self.energy_key:
-            return self.datamodule.get_atomrefs(property, is_extensive, estimate)
-        if not estimate:
-            atomrefs = self.datamodule.get_atomrefs(
-                property, is_extensive, estimate=False
-            )
-            self._atomrefs[property] = (
-                atomrefs[property].to(torch.float64),
-                "dataset",
-            )
-            return atomrefs
-        if not is_extensive:
+    def _check(self) -> None:
+        curvature = needs_curvature(self.outputs)
+        if curvature and self.force_key is None:
             raise ValueError(
-                "the teacher's energy is extensive; atomrefs for an intensive "
-                "energy cannot be estimated from it"
+                f"the student's curvature is taken through its forces, but no "
+                f"output is trained on {properties.teacher_forces!r} to name "
+                "them. Add one; a loss_weight of 0 keeps it out of the loss."
             )
+        model_outputs = getattr(self.model, "model_outputs", None)
+        if model_outputs is not None:
+            missing = [
+                key
+                for key in (self.energy_key, self.force_key)
+                if key is not None and key not in model_outputs
+            ]
+            if missing:
+                raise ValueError(
+                    f"the outputs train student outputs {missing} on the teacher, "
+                    f"but the student outputs {sorted(model_outputs)}"
+                )
+        if self.energy_key is not None:
+            labelled = [
+                output.target_property
+                for output in self.outputs
+                if output.name == self.energy_key
+                and not isinstance(output, UnsupervisedModelOutput)
+                and output.target_property not in TARGET_KEYS
+            ]
+            if labelled:
+                raise ValueError(
+                    f"{self.energy_key!r} is trained on the teacher and on labels "
+                    f"{labelled} at once. The teacher's energy is relative to its "
+                    "own offsets, the labels to those fitted by the data "
+                    "pipeline; train it on one of them."
+                )
+            self._energy_offsets()
+        if curvature and forces_need_train_mode(self.model):
+            sensitive = train_mode_sensitive_modules(self.model)
+            if sensitive:
+                raise ValueError(
+                    f"the student contains train/eval-sensitive modules "
+                    f"{sensitive}. It runs in train mode whenever its curvature "
+                    "is taken, validation included, so these would be active "
+                    "there."
+                )
 
-        stored = self._stored(
-            "atomrefs:" + json.dumps([property]), self._estimate_atomrefs
-        )
-        atomref = torch.from_numpy(stored).to(torch.float64)
-        self._atomrefs[property] = (atomref, "estimated")
-        return {property: atomref}
+    def _energy_offsets(self) -> AddOffsets:
+        """The student's ``AddOffsets`` on its energy, which takes the
+        teacher's offsets."""
+        modules = [
+            module
+            for module in getattr(self.model, "postprocessors", ())
+            if isinstance(module, AddOffsets) and module._property == self.energy_key
+        ]
+        if len(modules) != 1 or not modules[0].add_atomrefs:
+            raise ValueError(
+                f"the student's {self.energy_key!r} is trained on the teacher's "
+                "energy, which is relative to the teacher's offsets per element. "
+                "The student adds the same offsets, so it needs exactly one "
+                f"AddOffsets on {self.energy_key!r}, with add_atomrefs=True."
+            )
+        return modules[0]
 
-    def get_stats(
-        self, property: str, divide_by_atoms: bool, remove_atomref: bool
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        if property != self.energy_key:
-            return self.datamodule.get_stats(property, divide_by_atoms, remove_atomref)
+    def setup(self, datamodule) -> None:
+        """Initialize the student: the teacher's offsets into the
+        ``AddOffsets`` on its energy, if a term trains it on the teacher's,
+        and the rest from ``datamodule`` (see
+        :meth:`~schnetpack.model.AtomisticModel.initialize_transforms`)."""
+        if self.energy_key is not None:
+            module = self._energy_offsets()
+            size = len(module.atomref)
+            offsets = self.teacher.energy_offsets()
+            if offsets[size:].any():
+                raise ValueError(
+                    f"the teacher has offsets for atomic numbers from {size} on, "
+                    f"beyond the student's AddOffsets (zmax={size})"
+                )
+            offsets = offsets[:size]
+            offsets = nn.functional.pad(offsets, (0, size - len(offsets)))
+            module.set_offsets(offsets, torch.zeros(1, dtype=offsets.dtype))
+        self.model.initialize_transforms(datamodule)
 
-        if remove_atomref and property not in self._atomrefs:
-            self.get_atomrefs(property, is_extensive=True)
-        source = self._atomrefs[property][1] if remove_atomref else None
+    def reset_probes(self) -> None:
+        """Reseed the probes drawn outside training."""
+        self._generator.manual_seed(self.probe_seed)
 
-        def compute() -> np.ndarray:
-            self._teacher_pass()
-            values = self._energies
-            if remove_atomref:
-                atomref = self._atomrefs[property][0]
-                values = values - self._counts.to(torch.float64) @ atomref
-            if divide_by_atoms:
-                values = values / self._n_atoms
-            return np.array([values.mean().item(), values.std(correction=0).item()])
+    def step(
+        self, batch: dict[str, torch.Tensor], train: bool = True
+    ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+        """Predictions and targets of one distillation step.
 
-        entry = json.dumps([property, divide_by_atoms, remove_atomref, source])
-        mean, std = self._stored("stats:" + entry, compute)
-        return (
-            torch.tensor(mean, dtype=torch.float64),
-            torch.tensor(std, dtype=torch.float64),
-        )
+        Labels are read off the batch first and the teacher runs next, both
+        before the student: a SchNetPack model writes its outputs into the
+        batch it is given. When an output reads ``curvature``, one probe is
+        drawn for teacher and student alike, and the student's positions are
+        made to require grad (False by default for directly predicted forces).
+        A student whose forces are a position derivative runs in train mode
+        then, so that they keep their graph.
+
+        Args:
+            batch: student batch.
+            train: a training step: the probe comes from the global generator
+                and the graph of the student's curvature is kept. Otherwise
+                the probe comes from the seeded generator (see
+                :meth:`reset_probes`), and no graph is kept.
+
+        Returns:
+            ``(pred, targets)``, ready for the loss.
+        """
+        model = self.model
+        targets = extract_targets(self.outputs, batch, skip=TARGET_KEYS)
+        curvature = needs_curvature(self.outputs)
+        probe = None
+        if curvature:
+            generator = None if train else self._generator
+            probe = draw_probe(batch[properties.R], generator)
+
+        if needs_teacher(self.outputs):
+            targets.update(self.teacher(batch, probe))
+
+        switch = curvature and forces_need_train_mode(model)
+        mode = train_mode(model) if switch else contextlib.nullcontext()
+        with mode:
+            if curvature:
+                batch[properties.R].requires_grad_()
+            pred = predict_without_postprocessing(model, batch)
+        if curvature:
+            pred[properties.curvature] = curvature_product(
+                pred[self.force_key],
+                batch[properties.R],
+                probe,
+                create_graph=train,
+                model="student",
+            )
+        return pred, targets

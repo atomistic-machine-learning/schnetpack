@@ -76,11 +76,13 @@ magnetic_field: Final[str] = "magnetic_field"
 nuclear_magnetic_moments: Final[str] = "nuclear_magnetic_moments"
 shielding: Final[str] = "shielding"
 nuclear_spin_coupling: Final[str] = "nuclear_spin_coupling"
+#: curvature along a probe v, ``-(dF/dR)^T v``, shaped like the positions.
+curvature: Final[str] = "curvature"
 
 ## knowledge distillation
-#: Hessian-vector product ``H v`` along a probe
-hvp: Final[str] = "hvp"
-teacher_hvp: Final[str] = "teacher_hvp"
+teacher_energy: Final[str] = "teacher_energy"
+teacher_forces: Final[str] = "teacher_forces"
+teacher_curvature: Final[str] = "teacher_curvature"
 
 ## external fields needed for different response properties
 required_external_fields = {
