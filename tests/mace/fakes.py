@@ -1,4 +1,4 @@
-"""A scripted stand-in with MACE's interface, shared by the MACE tests."""
+"""A stand-in with MACE's interface, shared by the MACE tests."""
 
 import numpy as np
 import torch
@@ -34,7 +34,8 @@ class FakeMace(nn.Module):
     ``positions[edge_index[1]] - positions[edge_index[0]] + shifts``, adds the
     per-element reference energies of ``atomic_energies_fn`` (its first head)
     to the interaction energy in its own dtype, returns both, and keeps the
-    graph of its forces only when called with ``training=True``. Its pair term
+    graph of its forces only when called with ``training=True`` (none with
+    ``compute_force=False``). Its pair term
     depends on the direction of each edge, so a list handed in the wrong way
     round gives other energies. With ``trainable``, the pair strengths per
     element are its parameters.
@@ -59,7 +60,10 @@ class FakeMace(nn.Module):
         self.register_buffer("direction", torch.tensor(DIRECTION, dtype=torch.float64))
 
     def forward(
-        self, data: dict[str, torch.Tensor], training: bool = False
+        self,
+        data: dict[str, torch.Tensor],
+        training: bool = False,
+        compute_force: bool = True,
     ) -> dict[str, torch.Tensor | None]:
         positions = data["positions"]
         node_attrs = data["node_attrs"]
@@ -81,15 +85,20 @@ class FakeMace(nn.Module):
         e0 = zeros.index_add(0, data["batch"], node_e0)
         interaction = zeros.index_add(0, data["batch"], node_interaction)
         energy = e0 + interaction
-        forces = grad(
-            [energy.sum()], [positions], create_graph=training, retain_graph=training
-        )[0]
-        assert forces is not None
         output: dict[str, torch.Tensor | None] = {
             "energy": energy,
-            "forces": -forces,
+            "forces": None,
             "node_energy": node_e0 + node_interaction,
         }
+        if compute_force:
+            forces = grad(
+                [energy.sum()],
+                [positions],
+                create_graph=training,
+                retain_graph=training,
+            )[0]
+            assert forces is not None
+            output["forces"] = -forces
         if self.with_interaction_energy:
             output["interaction_energy"] = interaction
         return output
@@ -135,8 +144,9 @@ class RecordingMace(nn.Module):
         super().__init__()
         self.model = model
         self.atomic_numbers = model.atomic_numbers
-        self.atomic_energies_fn = model.atomic_energies_fn
         self.r_max = model.r_max
+        if hasattr(model, "atomic_energies_fn"):
+            self.atomic_energies_fn = model.atomic_energies_fn
 
     def forward(self, data, training=False):
         self.training_argument = training

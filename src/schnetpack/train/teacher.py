@@ -93,10 +93,6 @@ def curvature_product(
     return -vjp
 
 
-#: accepted values of ``SchNetPackTeacher(model_format=...)``; ``"auto"`` tries
-#: TorchScript first and falls back to a pickled model
-MODEL_FORMATS = ("auto", "torch", "torchscript")
-
 #: largest atomic number the offset table covers
 MAX_Z = 118
 
@@ -313,7 +309,7 @@ class TeacherWrapper:
 
 
 class SchNetPackTeacher(TeacherWrapper):
-    """A SchNetPack model as teacher, saved with ``torch.save`` or as TorchScript.
+    """A SchNetPack model as teacher, saved with ``torch.save``.
 
     The model runs as it predicts: its postprocessing stays on, so its energies
     are absolute. It is kept in eval mode, and switched to train mode while a
@@ -322,10 +318,7 @@ class SchNetPackTeacher(TeacherWrapper):
     (see :func:`~schnetpack.model.utils.forces_need_train_mode`).
 
     Args:
-        model_path: path to the saved model.
-        model_format: ``"torch"`` for a pickled model (SchNetPack 2.x included),
-            ``"torchscript"`` for an archive from ``torch.jit.save``, or
-            ``"auto"`` to try TorchScript first.
+        model_path: path to the saved model (SchNetPack 2.x included).
         teacher_energy_key: the model's energy output.
         teacher_force_key: the model's force output.
         **kwargs: units, cutoff and dtype; see :class:`TeacherWrapper`.
@@ -334,18 +327,11 @@ class SchNetPackTeacher(TeacherWrapper):
     def __init__(
         self,
         model_path: str,
-        model_format: str = "auto",
         teacher_energy_key: str = properties.energy,
         teacher_force_key: str = properties.forces,
         **kwargs,
     ):
-        if model_format not in MODEL_FORMATS:
-            raise ValueError(
-                f"unknown model_format {model_format!r}, expected one of "
-                f"{MODEL_FORMATS}"
-            )
         self.model_path = model_path
-        self.model_format = model_format
         self.teacher_energy_key = teacher_energy_key
         self.teacher_force_key = teacher_force_key
         super().__init__(**kwargs)
@@ -354,29 +340,12 @@ class SchNetPackTeacher(TeacherWrapper):
         if not os.path.exists(self.model_path):
             raise FileNotFoundError(f"no teacher model at {self.model_path!r}")
 
-        if self.model_format == "torchscript":
-            model = torch.jit.load(self.model_path, map_location="cpu")
-        elif self.model_format == "torch":
-            model = load_model(self.model_path, device="cpu")
-        else:
-            try:
-                model = torch.jit.load(self.model_path, map_location="cpu")
-            except RuntimeError:
-                model = load_model(self.model_path, device="cpu")
-
+        model = load_model(self.model_path, device="cpu")
         model = model.to(self.dtype)
         model.eval()
         for parameter in model.parameters():
             parameter.requires_grad_(False)
-
-        try:
-            model.do_postprocessing = True
-        except (AttributeError, RuntimeError) as err:
-            warnings.warn(
-                f"could not turn on the teacher's postprocessing ({err}); its "
-                "energies may lack its offsets.",
-                stacklevel=2,
-            )
+        model.do_postprocessing = True
 
         sensitive = train_mode_sensitive_modules(model)
         if sensitive and forces_need_train_mode(model):
@@ -406,17 +375,17 @@ class SchNetPackTeacher(TeacherWrapper):
 
     def teacher_offsets(self) -> torch.Tensor:
         """The atomrefs plus the mean per atom of the model's ``AddOffsets`` on
-        its energy, pickled or scripted. A model without one adds nothing, and
+        its energy. A model without one adds nothing, and
         gets a warning: the student then learns the absolute energies the
         teacher's network predicts."""
         offsets = torch.zeros(1, dtype=torch.float64)
         found = False
         postprocessors = getattr(self.model, "postprocessors", None)
         for module in postprocessors.children() if postprocessors is not None else ():
-            is_offsets = isinstance(module, AddOffsets) or (
-                getattr(module, "original_name", None) == "AddOffsets"
-            )
-            if not is_offsets or module._property != self.teacher_energy_key:
+            if (
+                not isinstance(module, AddOffsets)
+                or module._property != self.teacher_energy_key
+            ):
                 continue
             if not module.is_extensive:
                 raise ValueError(
@@ -448,12 +417,13 @@ class MaceTeacher(SchNetPackTeacher):
     """A MACE model as teacher (e.g. MACE-OFF), run through
     :class:`~schnetpack.model.MaceModel`.
 
-    The teacher reads TorchScript archives, which load without ``mace-torch``
-    and run compiled. Building one needs ``schnetpack[mace]`` installed::
+    The teacher reads ``torch.export`` archives (see
+    :func:`~schnetpack.model.load_mace`), which load without ``mace-torch``.
+    Exporting one needs ``schnetpack[mace]`` installed::
 
-        from schnetpack.interfaces.mace_interface import compile_mace_off
+        from schnetpack.interfaces.mace_interface import export_mace_off
 
-        path = compile_mace_off("medium")
+        path = export_mace_off("medium")
 
     The teacher works in eV and Å. Its energies are absolute: its per-element
     reference energies (E0s) are added in float64, read from the model before
@@ -462,7 +432,7 @@ class MaceTeacher(SchNetPackTeacher):
     target switches on. MACE-OFF is licensed for academic use only (ASL).
 
     Args:
-        model_path: path to the TorchScript archive.
+        model_path: path to the archive.
         **kwargs: units, cutoff and dtype; see :class:`TeacherWrapper`. The
             cutoff must not be smaller than the model's ``r_max`` (5 Å for
             MACE-OFF23), or pairs the model sees would be pruned away.

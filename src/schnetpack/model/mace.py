@@ -3,9 +3,9 @@
 :class:`MaceModel` puts a MACE model -- the *core* -- behind SchNetPack's batch
 format, so that one object serves as the potential of a
 :mod:`~schnetpack.dynamics` driver and as distillation teacher
-(:class:`~schnetpack.train.MaceTeacher`). The core is a TorchScript archive,
-read by :func:`load_mace`, as
-:func:`~schnetpack.interfaces.mace_interface.compile_mace_off` writes them;
+(:class:`~schnetpack.train.MaceTeacher`). The core is a ``torch.export``
+archive (``.pt2``), read by :func:`load_mace` into an :class:`ExportedMace`, as
+:func:`~schnetpack.interfaces.mace_interface.export_mace_off` writes them;
 loading it needs no ``mace-torch``.
 
 MACE works in eV and Å, the defaults of
@@ -22,7 +22,7 @@ Cast with ``MaceModel(dtype=...)`` rather than ``ForceCalculator(dtype=...)``:
 the latter casts the whole model, and rounds the float64 E0s with it.
 
 A ``MaceModel`` trains like any SchNetPack model (``experiment=mace_finetune``)
-and pickles with ``torch.save``, the core as an embedded TorchScript archive.
+and pickles with ``torch.save``, the core as its embedded archive.
 Training compares MACE's interaction energy with labels from which the data
 pipeline removed the same E0s the postprocessors add: see ``e0s`` and
 :func:`mace_atomrefs`.
@@ -30,6 +30,7 @@ pipeline removed the same E0s the postprocessors add: see ``e0s`` and
 
 import hashlib
 import io
+import json
 import os
 import warnings
 from collections.abc import Sequence
@@ -37,16 +38,33 @@ from collections.abc import Sequence
 import numpy as np
 import torch
 from torch import nn
+from torch.autograd import grad
 
 from schnetpack import properties
 from schnetpack.model.base import AtomisticModel
 from schnetpack.transform import AddOffsets, CastTo64, Transform
 from schnetpack.utils import as_dtype
 
-__all__ = ["MaceModel", "load_mace", "mace_atomrefs"]
+__all__ = ["MaceModel", "ExportedMace", "load_mace", "mace_atomrefs"]
 
 #: where the E0s come from: the core's own table, or the dataset's atomrefs
 E0_SOURCES = ("model", "dataset")
+
+#: the arguments of an exported MACE energy, in order: the keys of MACE's
+#: input dict
+MACE_INPUTS = (
+    "positions",
+    "node_attrs",
+    "edge_index",
+    "shifts",
+    "batch",
+    "ptr",
+    "cell",
+)
+
+#: name of the extra file in which an exported archive keeps what MACE's
+#: interface reads off the model: elements, cutoff, E0s and energy shift
+METADATA = "mace.json"
 
 
 class MaceModel(AtomisticModel):
@@ -74,7 +92,7 @@ class MaceModel(AtomisticModel):
     ``training`` argument. Only the first head of a multi-head core is used.
 
     Args:
-        core: the MACE model, a TorchScript archive (see :func:`load_mace`).
+        core: the MACE model, as :func:`load_mace` returns it.
         energy_key: output key of the energy.
         force_key: output key of the forces.
         postprocessors: transforms applied to the outputs when
@@ -207,28 +225,121 @@ class MaceModel(AtomisticModel):
         correction[numbers.cpu()] += solution
         return correction.numpy()
 
-    def __getstate__(self):
-        # a ScriptModule does not pickle; its archive does
-        state = super().__getstate__().copy()
-        if not isinstance(self.core, torch.jit.ScriptModule):
-            return state
-        modules = dict(state["_modules"])
-        archive = io.BytesIO()
-        torch.jit.save(modules.pop("core"), archive)
-        state["_modules"] = modules
-        state["_core_archive"] = archive.getvalue()
-        return state
 
-    def __setstate__(self, state):
-        """The core is restored on the CPU, wherever it was saved; move the
-        model after loading."""
-        state = dict(state)
-        archive = state.pop("_core_archive", None)
-        super().__setstate__(state)
-        if archive is not None:
-            self._modules["core"] = torch.jit.load(
-                io.BytesIO(archive), map_location="cpu"
+class ExportedMace(nn.Module):
+    """A MACE model exported with ``torch.export``, behind the interface
+    :class:`MaceModel` reads off a MACE model: ``forward(data, training)``
+    returning ``interaction_energy`` and ``forces``, and ``atomic_numbers``,
+    ``r_max``, the E0 table ``atomic_energies`` and the energy ``shift``.
+
+    The archive holds the interaction energy as a function of MACE's inputs
+    (:data:`MACE_INPUTS`); the forces are its position derivative, taken
+    here, with their graph kept in train mode. Device and floating dtype are
+    written into the exported graph; moving or casting the module rewrites
+    them. It pickles as its archive and current weights, and is restored on
+    the CPU.
+
+    Args:
+        archive: the bytes of an archive as
+            :func:`~schnetpack.interfaces.mace_interface.export_mace` writes it.
+    """
+
+    def __init__(self, archive: bytes):
+        super().__init__()
+        extra_files = {METADATA: ""}
+        program = torch.export.load(io.BytesIO(archive), extra_files=extra_files)
+        metadata = json.loads(extra_files[METADATA])
+        self._archive = archive
+        self.module = program.module()
+        self.register_buffer("atomic_numbers", torch.tensor(metadata["atomic_numbers"]))
+        self.register_buffer(
+            "r_max", torch.tensor(metadata["r_max"], dtype=torch.float64)
+        )
+        self.register_buffer(
+            "atomic_energies",
+            torch.tensor(metadata["atomic_energies"], dtype=torch.float64),
+        )
+        self.register_buffer(
+            "shift", torch.tensor(metadata["shift"], dtype=torch.float64)
+        )
+        self._graph_target = self._target()
+
+    def forward(
+        self,
+        data: dict[str, torch.Tensor],
+        training: bool = False,
+        compute_force: bool = True,
+    ) -> dict[str, torch.Tensor | None]:
+        positions = data["positions"]
+        if compute_force and not positions.requires_grad:
+            positions.requires_grad_(True)
+        energy = self.module(*(data[name] for name in MACE_INPUTS))
+        forces = None
+        if compute_force:
+            (gradient,) = grad(
+                [energy.sum()],
+                [positions],
+                create_graph=training,
+                retain_graph=training,
             )
+            forces = -gradient
+        return {"interaction_energy": energy, "forces": forces}
+
+    def train(self, mode: bool = True) -> "ExportedMace":
+        # an exported graph refuses train()/eval(); it holds no layer whose
+        # forward depends on the mode
+        self.training = mode
+        return self
+
+    def _apply(self, fn, recurse=True):
+        super()._apply(fn, recurse)
+        target = self._target()
+        if target != self._graph_target:
+            _retarget(self.module, *target)
+            self._graph_target = target
+        return self
+
+    def _target(self) -> tuple[torch.device, torch.dtype]:
+        tensors = [*self.module.parameters(), *self.module.buffers()]
+        reference = next(t for t in tensors if t.is_floating_point())
+        return reference.device, reference.dtype
+
+    def __reduce__(self):
+        state = {k: v.detach().cpu() for k, v in self.state_dict().items()}
+        requires_grad = [p.requires_grad for p in self.parameters()]
+        return (
+            _restore_exported,
+            (self._archive, state, self._target()[1], requires_grad, self.training),
+        )
+
+    def __deepcopy__(self, memo):
+        restore, args = self.__reduce__()
+        return restore(*args).to(self._target()[0])
+
+
+def _restore_exported(archive, state, dtype, requires_grad, training) -> ExportedMace:
+    core = ExportedMace(archive).to(dtype)
+    core.load_state_dict(state)
+    for parameter, flag in zip(core.parameters(), requires_grad):
+        parameter.requires_grad_(flag)
+    return core.train(training)
+
+
+def _retarget(module: torch.fx.GraphModule, device, dtype) -> None:
+    """Rewrite the devices and floating dtypes written into ``module``'s
+    graph, as ``torch.export`` does not let ``.to`` reach them."""
+
+    def swap(value):
+        if isinstance(value, torch.device):
+            return device
+        if isinstance(value, torch.dtype) and value.is_floating_point:
+            return dtype
+        return value
+
+    for node in module.graph.nodes:
+        node.args = tuple(swap(value) for value in node.args)
+        node.kwargs = {key: swap(value) for key, value in node.kwargs.items()}
+    module.recompile()
 
 
 def mace_input(
@@ -288,6 +399,8 @@ def reference_energies(core: nn.Module) -> torch.Tensor:
 def energy_shift(core: nn.Module) -> float:
     """The energy the core's ``ScaleShiftBlock`` adds to every atom, of its
     first head; 0 for a core without one."""
+    if isinstance(core, ExportedMace):
+        return float(core.shift.detach().reshape(-1)[0])
     block = getattr(core, "scale_shift", None)
     if block is None:
         return 0.0
@@ -295,6 +408,8 @@ def energy_shift(core: nn.Module) -> float:
 
 
 def _e0_table(core: nn.Module) -> torch.Tensor:
+    if isinstance(core, ExportedMace):
+        return core.atomic_energies
     try:
         return core.atomic_energies_fn.atomic_energies
     except AttributeError:
@@ -318,23 +433,24 @@ def _check_e0s(e0s: str) -> None:
 
 
 def load_mace(path: str) -> nn.Module:
-    """Load a MACE model from a TorchScript archive, to be wrapped in
-    :class:`MaceModel`. Needs no ``mace-torch``.
+    """Load a MACE model, to be wrapped in :class:`MaceModel`. Needs no
+    ``mace-torch``.
 
-    The parameters come back trainable: MACE's calculator freezes them before
-    compiling, so archives store them frozen.
+    The model comes back trainable, on the CPU.
 
     Args:
-        path: the archive, as ``torch.jit.save`` writes it (e.g.
-            :func:`~schnetpack.interfaces.mace_interface.compile_mace_off`).
+        path: a ``torch.export`` archive as
+            :func:`~schnetpack.interfaces.mace_interface.export_mace` writes
+            it (e.g. :func:`~schnetpack.interfaces.mace_interface.export_mace_off`),
+            loaded into an :class:`ExportedMace`.
     """
     if not os.path.exists(path):
         raise FileNotFoundError(f"no MACE model at {path!r}")
-    core = torch.jit.load(path, map_location="cpu")
-    # ScriptModules have no requires_grad_
-    for parameter in core.parameters():
-        parameter.requires_grad_(True)
-    return core
+    with open(path, "rb") as file:
+        core = ExportedMace(file.read())
+    # MACE's calculator freezes the parameters, so models made from it store
+    # them frozen
+    return core.requires_grad_(True)
 
 
 def mace_atomrefs(path: str, e0s: str = "model") -> torch.Tensor | None:
@@ -344,7 +460,7 @@ def mace_atomrefs(path: str, e0s: str = "model") -> torch.Tensor | None:
     atomrefs as the model's ``AddOffsets`` does.
 
     Args:
-        path: the MACE archive.
+        path: the MACE archive (see :func:`load_mace`).
         e0s: ``"model"`` or ``"dataset"``, as for :class:`MaceModel`.
     """
     _check_e0s(e0s)
