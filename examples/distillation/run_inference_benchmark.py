@@ -233,6 +233,14 @@ def main():
     ]
     conformers = read(args.structures, index=":")
 
+    # The first model call pays for lazy CUDA initialisation (cuBLAS workspace and
+    # the like), which stays allocated: it would land on the first model measured,
+    # in both its time and its memory.
+    warmup = make_structures(conformers, 2, args.noise, seed=999)
+    for model in models:
+        model.calculator(model.converter(warmup))
+    synchronize(device)
+
     meta = dict(
         models={model.label: model.meta() for model in models},
         structures=os.path.abspath(args.structures),
