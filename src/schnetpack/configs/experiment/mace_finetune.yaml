@@ -2,7 +2,7 @@
 #
 # Fine-tunes a pretrained MACE model on energies and forces in eV and Å:
 #
-#   spktrain experiment=mace_finetune globals.mace_path=/path/to/MACE-OFF23_medium.pt \
+#   spktrain experiment=mace_finetune globals.mace_path=/path/to/MACE-OFF23_medium.pt2 \
 #       data.dataset.datapath=/path/to/data.db data.num_train=... data.num_val=...
 #
 # The model trains on MACE's interaction energy, so the data pipeline removes

@@ -29,6 +29,7 @@ Models
     :nosignatures:
 
     load_mace
+    ExportedMace
     mace.mace_atomrefs
 
 Representations

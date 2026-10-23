@@ -15,11 +15,8 @@ _TRAIN_MODE_SENSITIVE = ("Dropout", "BatchNorm", "InstanceNorm")
 
 def train_mode_sensitive_modules(model: nn.Module) -> list[str]:
     """Class names of the submodules whose forward differs between train and
-    eval mode, seeing through TorchScript wrappers."""
-    names = {
-        getattr(module, "original_name", type(module).__name__)
-        for module in model.modules()
-    }
+    eval mode."""
+    names = {type(module).__name__ for module in model.modules()}
     return sorted(
         name
         for name in names
