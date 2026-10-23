@@ -13,10 +13,8 @@ def test_qm9_path():
     return path
 
 
-@pytest.mark.skip(
-    "Run only local, not in CI. Otherwise takes too long and requires downloading "
-    + "the data"
-)
+@pytest.mark.download
+@pytest.mark.slow
 def test_qm9(test_qm9_path, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     dataset = QM9(test_qm9_path, remove_uncharacterized=True)
@@ -46,10 +44,8 @@ def test_md17_path():
     return path
 
 
-@pytest.mark.skip(
-    "Run only local, not in CI. Otherwise takes too long and requires downloading "
-    + "the data"
-)
+@pytest.mark.download
+@pytest.mark.slow
 def test_md17(test_md17_path, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     dataset = MD17(test_md17_path, molecule="uracil")
@@ -80,10 +76,8 @@ def test_rmd17_path():
     return path
 
 
-@pytest.mark.skip(
-    "Run only local, not in CI. Otherwise takes too long and requires downloading "
-    + "the data"
-)
+@pytest.mark.download
+@pytest.mark.slow
 def test_rmd17(test_rmd17_path, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     dataset = rMD17(test_rmd17_path, molecule="uracil")
