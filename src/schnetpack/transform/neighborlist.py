@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 
@@ -31,6 +32,8 @@ __all__ = [
 import schnetpack as spk
 from schnetpack import properties
 from schnetpack.units import convert_units
+
+log = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------------ neighbor lists
 
@@ -467,27 +470,38 @@ class CachedNeighborList(NeighborListWrapper):
                     }
                     torch.save(data, cache_file)
                 except Exception as e:
-                    print(e)
+                    log.warning(
+                        "could not read neighbor list cache %s: %s",
+                        cache_file,
+                        e,
+                        exc_info=True,
+                    )
         return inputs
 
     def teardown(self):
+        # Cache cleanup is best-effort, but scope the suppression to filesystem
+        # errors: catching everything here also hides real failures and makes
+        # problems during teardown hard to diagnose.
         if not self.keep_cache and not self.preexisting_cache:
             try:
                 shutil.rmtree(self.cache_path)
-            except Exception:
-                pass
+            except OSError as e:
+                log.debug("could not remove cache dir %s: %s", self.cache_path, e)
 
         if self.cache_workdir is not None:
             if self.keep_cache:
+                # dirsync raises ValueError if the workdir is already gone
                 try:
                     sync(self.cache_workdir, self.cache_path, "sync")
-                except Exception:
-                    pass
+                except (OSError, ValueError) as e:
+                    log.debug("could not sync cache workdir back: %s", e)
 
             try:
                 shutil.rmtree(self.cache_workdir)
-            except Exception:
-                pass
+            except OSError as e:
+                log.debug(
+                    "could not remove cache workdir %s: %s", self.cache_workdir, e
+                )
 
 
 class SkinNeighborList(NeighborListWrapper):
