@@ -497,9 +497,9 @@ class CachedNeighborList(NeighborListWrapper):
         return inputs
 
     def teardown(self):
-        # Cache cleanup is best-effort, but scope the suppression to filesystem
-        # errors: catching everything here also hides real failures and makes
-        # problems during teardown hard to diagnose.
+        # Deleting the cache is only cleanup: if it fails (e.g. the folder is already
+        # gone or not writable), training should still finish, so file system errors
+        # are only logged. Any other error points to a bug and is not suppressed.
         if not self.keep_cache and not self.preexisting_cache:
             try:
                 shutil.rmtree(self.cache_path)
