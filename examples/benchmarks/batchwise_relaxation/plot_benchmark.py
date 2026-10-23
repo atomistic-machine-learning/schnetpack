@@ -21,7 +21,6 @@ INK = "#0b0b0b"
 INK_SECONDARY = "#52514e"
 MUTED = "#898781"
 GRID = "#e1e0d9"
-AXIS = "#c3c2b7"
 SERIES = {"batch-wise": "#2a78d6", "sequential": "#eb6834"}
 
 # "screen" to inspect a run, "paper" for a single column of a two-column journal: no
@@ -271,24 +270,24 @@ def plot(meta, summary, confidence, extrapolation=None, layout="screen"):
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
     for side in ("left", "bottom"):
-        ax.spines[side].set_color(AXIS)
-    ax.tick_params(colors=MUTED, labelsize=style["tick_font"], length=0)
+        ax.spines[side].set_color(INK)
+    ax.tick_params(colors=INK, labelsize=style["tick_font"], length=0)
 
     ax.set_xlabel(
         "batch size (number of structures)",
-        color=INK_SECONDARY,
+        color=INK,
         fontsize=style["font"],
         labelpad=style["pad"],
     )
     ax.set_ylabel(
         "relaxation time [s]",
-        color=INK_SECONDARY,
+        color=INK,
         fontsize=style["font"],
         labelpad=style["pad"],
     )
     legend = ax.legend(frameon=False, loc="upper left", fontsize=style["font"])
     for text in legend.get_texts():
-        text.set_color(INK_SECONDARY)
+        text.set_color(INK)
 
     if not style["title"]:
         fig.tight_layout(pad=0.3)

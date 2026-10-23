@@ -36,18 +36,26 @@ class FakeMace(nn.Module):
     to the interaction energy in its own dtype, returns both, and keeps the
     graph of its forces only when called with ``training=True``. Its pair term
     depends on the direction of each edge, so a list handed in the wrong way
-    round gives other energies.
+    round gives other energies. With ``trainable``, the pair strengths per
+    element are its parameters.
     """
 
-    def __init__(self, heads: int | None = None, interaction_energy: bool = True):
+    def __init__(
+        self,
+        heads: int | None = None,
+        interaction_energy: bool = True,
+        trainable: bool = False,
+    ):
         super().__init__()
         self.with_interaction_energy = interaction_energy
         self.atomic_energies_fn = AtomicEnergies(heads)
         self.register_buffer("atomic_numbers", torch.tensor([1, 6, 8]))
         self.register_buffer("r_max", torch.tensor(R_MAX, dtype=torch.float64))
-        self.register_buffer(
-            "strength", torch.tensor([0.5, 1.0, 1.5], dtype=torch.float64)
-        )
+        strength = torch.tensor([0.5, 1.0, 1.5], dtype=torch.float64)
+        if trainable:
+            self.strength = nn.Parameter(strength)
+        else:
+            self.register_buffer("strength", strength)
         self.register_buffer("direction", torch.tensor(DIRECTION, dtype=torch.float64))
 
     def forward(
