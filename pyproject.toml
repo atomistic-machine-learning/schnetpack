@@ -42,7 +42,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-datadir", "pytest-benchmark"]
+test = ["pytest>=9", "pytest-datadir", "pytest-benchmark"]
 dev = ["pre-commit"]
 # compiling MACE models to TorchScript (schnetpack.interfaces.mace_interface);
 # the archives load without
@@ -109,11 +109,26 @@ ignore = [
 known-first-party = ["schnetpack"]
 
 [tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+# Umbrella for strict_config + strict_markers + strict_xfail +
+# strict_parametrization_ids (pytest >= 9). Set as an ini option, NOT as
+# `--strict-markers` in addopts: those flags are OverrideIniAction, which only
+# fires when passed on the command line, so from addopts they are silently
+# inert and an unregistered marker stays a mere warning.
+strict = true
 markers = [
     "benchmark_sweep: batch-size scaling benchmarks; run with -m benchmark_sweep",
+    "slow: takes more than a few seconds; run with -m slow",
+    "download: needs network access to fetch a dataset; run with -m download",
 ]
-# the sweep takes far too long for an ordinary test run, so it is opt-in
-addopts = "-m 'not benchmark_sweep'"
+# The default selection for `pytest`, locally and in CI. Any `-m` on the command
+# line replaces this expression instead of narrowing it, so `-m slow` runs only
+# the slow tests and `-m ""` runs everything.
+addopts = "-m 'not benchmark_sweep and not slow and not download'"
+filterwarnings = [
+    "error::SyntaxWarning",
+]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
