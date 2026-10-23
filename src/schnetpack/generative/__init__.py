@@ -31,13 +31,13 @@ design: ``docs_new/README.md``.
 """
 
 from schnetpack.generative.couplings import *
+from schnetpack.generative.differential_equations import *
 from schnetpack.generative.losses import *
+from schnetpack.generative.noising import *
 from schnetpack.generative.parametrizations import *
 from schnetpack.generative.priors import *
 from schnetpack.generative.schedules import *
-from schnetpack.generative.noising import *
-from schnetpack.generative.differential_equations import *
 from schnetpack.generative.times import *
-from schnetpack.generative.views import *
-from schnetpack.generative.variables import *
 from schnetpack.generative.transforms import *
+from schnetpack.generative.variables import *
+from schnetpack.generative.views import *

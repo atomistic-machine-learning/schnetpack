@@ -1,7 +1,6 @@
+from .distillation import *
 from .lr_scheduler import *
 from .teacher import *
-from .distillation import *
-
 
 _MOVED_TO_LIGHTNING = (
     "ModelCheckpoint",

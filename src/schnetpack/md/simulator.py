@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from tqdm import trange
 
-from schnetpack.md import System
+from .system import System
 
 __all__ = ["Simulator"]
 
