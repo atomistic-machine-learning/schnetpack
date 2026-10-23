@@ -370,7 +370,7 @@ class AddOffsets(Transform):
         if self.add_atomrefs:
             idx_m = inputs[structure.idx_m]
             y0i = self.atomref[inputs[structure.Z]]
-            maxm = int(idx_m[-1]) + 1
+            maxm = inputs[structure.n_atoms].shape[0]
 
             y0 = scatter_add(y0i, idx_m, dim_size=maxm)
 

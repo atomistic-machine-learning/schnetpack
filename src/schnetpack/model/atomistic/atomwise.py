@@ -77,7 +77,7 @@ class Atomwise(nn.Module):
         # aggregate
         if self.aggregation_mode is not None:
             idx_m = inputs[properties.idx_m]
-            maxm = int(idx_m[-1]) + 1
+            maxm = inputs[properties.n_atoms].shape[0]
             y = snn.scatter_add(y, idx_m, dim_size=maxm)
             if self.aggregation_mode == "avg":
                 y = y / inputs[properties.n_atoms].unsqueeze(-1)
@@ -232,7 +232,7 @@ class DipoleMoment(nn.Module):
         l0 = inputs["scalar_representation"]
         natoms = inputs[properties.n_atoms]
         idx_m = inputs[properties.idx_m]
-        maxm = int(idx_m[-1]) + 1
+        maxm = inputs[properties.n_atoms].shape[0]
 
         if self.use_vector_representation:
             l1 = inputs["vector_representation"]
@@ -344,7 +344,7 @@ class Polarizability(nn.Module):
 
         # sum over atoms
         idx_m = inputs[properties.idx_m]
-        maxm = int(idx_m[-1]) + 1
+        maxm = inputs[properties.n_atoms].shape[0]
         alpha = snn.scatter_add(alpha, idx_m, dim_size=maxm)
 
         inputs[self.polarizability_key] = alpha
