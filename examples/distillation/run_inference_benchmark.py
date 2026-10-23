@@ -287,10 +287,15 @@ def main():
                 )
             )
             median = np.median(result["times_s"])
-            summary.append(
+            line = (
                 f"{model.label} {1e3 * median:8.2f} ms "
-                f"({n_structures / median:9.1f} structures/s)"
+                f"({n_structures / median:9.1f} structures/s"
             )
+            if result["peak_memory_mb"] is not None:
+                # the model's own share: the weights of all models are resident
+                own_memory_mb = result["peak_memory_mb"] - result["resident_memory_mb"]
+                line += f", {own_memory_mb:8.1f} MiB"
+            summary.append(line + ")")
 
         print(f"batch size {n_structures:>5}: " + ", ".join(summary), flush=True)
         # after every batch size, so a run that dies at a large batch keeps the rest
