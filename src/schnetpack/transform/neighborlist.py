@@ -451,11 +451,14 @@ class CachedNeighborList(NeighborListWrapper):
             self.cache_location, f"cache_{inputs[properties.idx][0]}.pt"
         )
 
-        # try to read cached NBL
+        # try to read cached NBL; a missing or unreadable file is checked again
+        # under the lock below, so failures here are not reported
         try:
             data = torch.load(cache_file, weights_only=True)
-            inputs.update(data)
-        except OSError:
+        except Exception:
+            data = None
+
+        if data is None:
             # acquire lock for caching
             lock = fasteners.InterProcessLock(
                 os.path.join(
@@ -466,23 +469,31 @@ class CachedNeighborList(NeighborListWrapper):
                 # retry reading, in case other process finished in the meantime
                 try:
                     data = torch.load(cache_file, weights_only=True)
-                    inputs.update(data)
-                except OSError:
-                    # now it is save to calculate and cache
+                except FileNotFoundError:
+                    pass
+                except Exception as e:
+                    log.warning(
+                        "could not read neighbor list cache %s, rebuilding it: %s",
+                        cache_file,
+                        e,
+                    )
+
+                if data is None:
+                    # now it is safe to calculate and cache
                     inputs = self._build_neighbors(inputs)
                     data = {
                         properties.idx_i: inputs[properties.idx_i],
                         properties.idx_j: inputs[properties.idx_j],
                         properties.offsets: inputs[properties.offsets],
                     }
-                    torch.save(data, cache_file)
-                except Exception as e:
-                    log.warning(
-                        "could not read neighbor list cache %s: %s",
-                        cache_file,
-                        e,
-                        exc_info=True,
-                    )
+                    # write to a temporary file and rename, so that readers
+                    # outside the lock never see a partially written cache
+                    tmp_file = cache_file + ".tmp"
+                    torch.save(data, tmp_file)
+                    os.replace(tmp_file, cache_file)
+                    return inputs
+
+        inputs.update(data)
         return inputs
 
     def teardown(self):
