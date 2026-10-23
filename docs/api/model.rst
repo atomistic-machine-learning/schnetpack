@@ -20,6 +20,16 @@ Models
     AtomisticModel
     NeuralNetworkPotential
     NNEnsemble
+    MaceModel
+
+.. rubric:: Loading MACE models
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+
+    load_mace
+    mace.mace_atomrefs
 
 Representations
 ---------------

@@ -1,0 +1,13 @@
+# A MACE model from a TorchScript archive (e.g. MACE-OFF23), made by
+# schnetpack.interfaces.mace_interface.compile_mace_off (needs schnetpack[mace]);
+# see schnetpack.model.MaceModel. Its postprocessors add the E0s named by
+# globals.mace_e0s, which the data pipeline must remove from the energy labels
+# (schnetpack.model.mace.mace_atomrefs).
+_target_: schnetpack.model.MaceModel
+
+core:
+  _target_: schnetpack.model.load_mace
+  path: ${globals.mace_path}
+dtype: float32
+e0s: ${globals.mace_e0s}
+fit_e0_correction: ${globals.fit_e0_correction}

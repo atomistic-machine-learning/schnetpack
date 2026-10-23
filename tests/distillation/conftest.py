@@ -54,11 +54,12 @@ def make_datamodule(
     molecules=MOLECULES,
     transforms=None,
     forces=None,
+    atomrefs=None,
     **kwargs,
 ):
     """Twelve rattled molecules, ``molecules`` in turn, each with an energy label
     ``energy(atoms)`` in eV, loaded only if asked; with ``forces``, also force
-    labels ``forces(atoms)`` in eV/Å.
+    labels ``forces(atoms)`` in eV/Å. ``atomrefs`` are stored with the dataset.
 
     The first eight are the training split, the next two validation, the last
     two test. The pipeline builds one neighbor list, 1 Å beyond the cutoff both
@@ -67,7 +68,9 @@ def make_datamodule(
     """
     datapath = str(tmp_path / "structures.db")
     units = {"energy": "eV"} if forces is None else {"energy": "eV", "forces": "eV/Ang"}
-    db = ASEAtomsData.create(datapath, distance_unit="Ang", property_unit_dict=units)
+    db = ASEAtomsData.create(
+        datapath, distance_unit="Ang", property_unit_dict=units, atomrefs=atomrefs
+    )
     atoms_list = []
     for seed in range(12):
         structure = molecule(molecules[seed % len(molecules)])
