@@ -8,14 +8,17 @@ from schnetpack.generative import (
     Coupling,
     EpsParametrization,
     FlowMatching,
+    GaussianInterpolant,
     GaussianPrior,
     IdentityCoupling,
+    Interpolant,
     OTCoupling,
     Parametrization,
     PCVarianceCoupling,
     PermutationCoupling,
     PseudoForceParametrization,
     ScoreParametrization,
+    VELinear,
     VelocityParametrization,
     X0Parametrization,
     expand_t,
@@ -40,14 +43,15 @@ def parametrization(request):
     return request.param()
 
 
-@pytest.fixture(params=[VP, VE, FlowMatching], ids=lambda c: c.__name__)
+@pytest.fixture(params=[VP, VE, VELinear], ids=lambda c: c.__name__)
 def process_cls(request):
     return request.param
 
 
 @pytest.fixture
 def process(process_cls):
-    return VE(2e-4, 1.0) if process_cls is VE else process_cls()
+    schedule = VE(2e-4, 1.0) if process_cls is VE else process_cls()
+    return GaussianInterpolant(schedule)
 
 
 def endpoints(process, n=64):
@@ -55,7 +59,7 @@ def endpoints(process, n=64):
     torch.manual_seed(0)
     x0 = torch.randn(n, 3, dtype=torch.float64)
     x1 = torch.randn(n, 3, dtype=torch.float64)
-    lo, hi = process.t_min, process.t_max
+    lo, hi = process.schedule.t_min, process.schedule.t_max
     t = torch.linspace(
         lo + 0.2 * (hi - lo), hi - 0.2 * (hi - lo), n, dtype=torch.float64
     )
@@ -74,7 +78,7 @@ def test_priors_declare_their_endpoint_law():
 
 def test_gaussian_prior_draws_at_the_declared_scale():
     torch.manual_seed(0)
-    x1 = GaussianPrior(std=50.0).sample_positions({properties.R: torch.randn(4096, 3)})
+    x1 = GaussianPrior(std=50.0)({properties.R: torch.randn(4096, 3)})[properties.R]
     assert x1.shape == (4096, 3)
     assert x1.std().item() == pytest.approx(50.0, rel=0.05)
 
@@ -197,32 +201,19 @@ def test_unimplemented_couplings_raise():
 
 def test_score_and_noise_parametrizations_require_the_gaussian_kernel():
     # The score/noise targets are statements about a Gaussian kernel; a
-    # configuration without one is refused by validate — which every consumer
+    # schedule without sigma is refused by validate — which every consumer
     # calls at its own construction.
-    reshaped = VP(coupling=PCVarianceCoupling())
     for cls in GAUSSIAN_ONLY:
         with pytest.raises(TypeError, match="Gaussian kernel"):
-            cls().validate(reshaped)
-        # the same head on a Gaussian configuration is fine
+            cls().validate(FlowMatching())
+        # the same head on a Gaussian schedule is fine
         cls().validate(VP())
 
 
-def test_the_configuration_is_judged_not_the_class():
-    # The same VP class is accepted or refused by its *configuration*: under
-    # the identity coupling the kernel holds and the score/noise heads
-    # validate; under an optimal-assignment coupling the marginal survives
-    # but the conditional p(x1|x0) does not — each x0 gets its closest draw —
-    # and the same heads are refused, naming the value-dependence.
-    for cls in GAUSSIAN_ONLY:
-        cls().validate(VP(coupling=IdentityCoupling()))  # must not raise
-        with pytest.raises(TypeError, match="depending on the values"):
-            cls().validate(VP(coupling=PermutationCoupling()))
-
-
 def test_conditional_expectation_parametrizations_accept_any_process():
-    plain = VE(6e-3, 30.0, coupling=PCVarianceCoupling())
+    plain = Interpolant(VE(6e-3, 30.0), coupling=PCVarianceCoupling())
     for cls in ANY_PROCESS:
-        cls().validate(plain)  # must not raise
+        cls().validate(plain.schedule)  # must not raise
 
 
 def test_gpff_pseudo_force_runs_on_any_configuration():
@@ -230,9 +221,7 @@ def test_gpff_pseudo_force_runs_on_any_configuration():
     # process class. Plain GPFF is a Gaussian VE; shape-prior or aligned-noise
     # GPFF is the same parametrization on the same class, reconfigured.
     PseudoForceParametrization().validate(VE(0.3, 30.0))
-    PseudoForceParametrization().validate(
-        VE(6e-3, 30.0, coupling=PermutationCoupling())
-    )
+    PseudoForceParametrization().validate(FlowMatching())
 
 
 def test_parametrization_is_abstract():
@@ -249,10 +238,10 @@ def test_target_round_trips_to_the_score(process, parametrization):
     x0, x1, t = endpoints(process)
     x_t = process.interpolate(x0, x1, t)
 
-    target = parametrization.target(process, x0, x1, t)
-    score = parametrization.to_score(process, target, x_t, t)
+    target = parametrization.target(process.schedule, x0, x1, t)
+    score = parametrization.to_score(process.schedule, target, x_t, t)
 
-    expected = -x1 / expand_t(process.b(t), x1)
+    expected = -x1 / expand_t(process.schedule.b(t), x1)
     assert torch.allclose(score, expected, rtol=1e-6, atol=1e-8)
 
 
@@ -260,10 +249,10 @@ def test_target_round_trips_to_the_velocity(process, parametrization):
     x0, x1, t = endpoints(process)
     x_t = process.interpolate(x0, x1, t)
 
-    target = parametrization.target(process, x0, x1, t)
-    velocity = parametrization.to_velocity(process, target, x_t, t)
+    target = parametrization.target(process.schedule, x0, x1, t)
+    velocity = parametrization.to_velocity(process.schedule, target, x_t, t)
 
-    expected = VelocityParametrization().target(process, x0, x1, t)
+    expected = VelocityParametrization().target(process.schedule, x0, x1, t)
     assert torch.allclose(velocity, expected, rtol=1e-6, atol=1e-8)
 
 
@@ -271,8 +260,8 @@ def test_target_round_trips_to_x0(process, parametrization):
     x0, x1, t = endpoints(process)
     x_t = process.interpolate(x0, x1, t)
 
-    target = parametrization.target(process, x0, x1, t)
-    x0_hat = parametrization.to_x0(process, target, x_t, t)
+    target = parametrization.target(process.schedule, x0, x1, t)
+    x0_hat = parametrization.to_x0(process.schedule, target, x_t, t)
 
     assert torch.allclose(x0_hat, x0, rtol=1e-5, atol=1e-7)
 
@@ -286,11 +275,11 @@ def test_parametrizations_agree_on_every_field(process):
     fields = {}
     for cls in PARAM_CLASSES:
         p = cls()
-        target = p.target(process, x0, x1, t)
+        target = p.target(process.schedule, x0, x1, t)
         fields[cls.__name__] = (
-            p.to_score(process, target, x_t, t),
-            p.to_velocity(process, target, x_t, t),
-            p.to_x0(process, target, x_t, t),
+            p.to_score(process.schedule, target, x_t, t),
+            p.to_velocity(process.schedule, target, x_t, t),
+            p.to_x0(process.schedule, target, x_t, t),
         )
 
     ref_score, ref_velocity, ref_x0 = fields["ScoreParametrization"]
@@ -309,13 +298,13 @@ def test_scaled_endpoint_keeps_all_fields_consistent(process_cls):
     if process_cls is VP:
         pytest.skip("VP's endpoint is a fixed unit Gaussian")
     if process_cls is VE:
-        process = VE(2e-4 * s, s)
+        process = GaussianInterpolant(VE(2e-4 * s, s))
     else:
-        process = process_cls(prior=GaussianPrior(s))
+        process = GaussianInterpolant(process_cls(sigma_max=s), prior=GaussianPrior(s))
     torch.manual_seed(0)
     x0 = torch.randn(64, 3, dtype=torch.float64)
     x1 = s * torch.randn(64, 3, dtype=torch.float64)
-    lo, hi = process.t_min, process.t_max
+    lo, hi = process.schedule.t_min, process.schedule.t_max
     t = torch.linspace(
         lo + 0.2 * (hi - lo), hi - 0.2 * (hi - lo), 64, dtype=torch.float64
     )
@@ -324,11 +313,11 @@ def test_scaled_endpoint_keeps_all_fields_consistent(process_cls):
     fields = {}
     for cls in PARAM_CLASSES:
         p = cls()
-        target = p.target(process, x0, x1, t)
+        target = p.target(process.schedule, x0, x1, t)
         fields[cls.__name__] = (
-            p.to_score(process, target, x_t, t),
-            p.to_velocity(process, target, x_t, t),
-            p.to_x0(process, target, x_t, t),
+            p.to_score(process.schedule, target, x_t, t),
+            p.to_velocity(process.schedule, target, x_t, t),
+            p.to_x0(process.schedule, target, x_t, t),
         )
 
     ref_score, ref_velocity, ref_x0 = fields["ScoreParametrization"]
@@ -337,13 +326,13 @@ def test_scaled_endpoint_keeps_all_fields_consistent(process_cls):
         assert torch.allclose(velocity, ref_velocity, rtol=1e-5, atol=1e-7), name
         assert torch.allclose(x0_hat, ref_x0, rtol=1e-5, atol=1e-7), name
 
-    a = expand_t(process.a(t), x0)
-    sigma = expand_t(process.b(t) * s, x0)
+    a = expand_t(process.schedule.a(t), x0)
+    sigma = expand_t(process.schedule.b(t) * s, x0)
     assert torch.allclose(ref_score, -(x_t - a * x0) / sigma**2, rtol=1e-6)
     assert torch.allclose(ref_x0, x0, rtol=1e-5, atol=1e-6)
 
     # the eps head regresses unit noise at any endpoint scale
-    eps_target = EpsParametrization().target(process, x0, x1, t)
+    eps_target = EpsParametrization().target(process.schedule, x0, x1, t)
     assert torch.allclose(eps_target, x1 / s)
 
 
@@ -352,28 +341,64 @@ def test_scaled_endpoint_keeps_all_fields_consistent(process_cls):
 
 def test_velocity_parametrization_returns_its_output_untouched():
     # The whole point: no conversion, hence nothing to go singular.
-    process = FlowMatching()
+    process = Interpolant(FlowMatching())
     p = VelocityParametrization()
     output = torch.randn(8, 3)
     x_t = torch.randn(8, 3)
     t = torch.full((8,), 0.5)
-    assert torch.equal(p.to_velocity(process, output, x_t, t), output)
+    assert torch.equal(p.to_velocity(process.schedule, output, x_t, t), output)
 
 
 def test_x0_parametrization_returns_its_output_untouched():
-    process = VP()
+    process = GaussianInterpolant(VP())
     p = X0Parametrization()
     output = torch.randn(8, 3)
     x_t = torch.randn(8, 3)
     t = torch.full((8,), 0.5)
-    assert torch.equal(p.to_x0(process, output, x_t, t), output)
+    assert torch.equal(p.to_x0(process.schedule, output, x_t, t), output)
+
+
+def test_eps_parametrization_returns_its_noise_untouched():
+    p = EpsParametrization()
+    output = torch.randn(8, 3)
+    x_t = torch.randn(8, 3)
+    t = torch.full((8,), 0.5)
+    assert torch.equal(p.to_noise(VP(), output, x_t, t), output)
+
+
+def test_pseudo_force_parametrization_returns_its_output_untouched():
+    p = PseudoForceParametrization()
+    output = torch.randn(8, 3)
+    x_t = torch.randn(8, 3)
+    t = torch.full((8,), 0.5)
+    assert torch.equal(p.to_pseudo_force(VP(), output, x_t, t), output)
+
+
+@pytest.mark.parametrize("cls", PARAM_CLASSES, ids=lambda c: c.__name__)
+def test_noise_and_pseudo_force_follow_from_score_and_x0(cls):
+    # eps = -sigma score and F = 2 (x0 - x_t), whichever route computes them
+    schedule = VP()
+    p = cls()
+    torch.manual_seed(0)
+    output = torch.randn(8, 3, dtype=torch.float64)
+    x_t = torch.randn(8, 3, dtype=torch.float64)
+    t = torch.linspace(0.2, 0.8, 8, dtype=torch.float64)
+    sigma = expand_t(schedule.sigma(t), x_t)
+    torch.testing.assert_close(
+        p.to_noise(schedule, output, x_t, t),
+        -sigma * p.to_score(schedule, output, x_t, t),
+    )
+    torch.testing.assert_close(
+        p.to_pseudo_force(schedule, output, x_t, t),
+        2.0 * (p.to_x0(schedule, output, x_t, t) - x_t),
+    )
 
 
 def test_pseudo_force_magnitude_carries_b_on_a_ve_schedule():
     # The claim the parametrization exists for: on VE a = 1, so the target
     # collapses to -2 b x1 and the spread of F/2 estimates b. This is what
     # lets a GPFF head do without a time input.
-    process = VE(2e-4, 1.0)
+    process = GaussianInterpolant(VE(2e-4, 1.0))
     p = PseudoForceParametrization()
     torch.manual_seed(0)
     x0 = torch.randn(4096, 3, dtype=torch.float64)
@@ -381,9 +406,9 @@ def test_pseudo_force_magnitude_carries_b_on_a_ve_schedule():
 
     for t_val in [0.1, 0.5, 0.9]:
         t = torch.full((4096,), t_val, dtype=torch.float64)
-        b = process.b(t)[0].item()
+        b = process.schedule.b(t)[0].item()
 
-        target = p.target(process, x0, x1, t)
+        target = p.target(process.schedule, x0, x1, t)
         assert torch.allclose(target, -2.0 * b * x1, rtol=1e-9, atol=1e-9)
         # b read back off the prediction alone, told nothing about t
         assert (0.5 * target).std().item() == pytest.approx(b, rel=0.05)
@@ -392,32 +417,32 @@ def test_pseudo_force_magnitude_carries_b_on_a_ve_schedule():
 def test_pseudo_force_recovers_x0_where_a_b_division_would_not():
     # x0 = x_t + F/2 never divides, so unlike the score route it is exact as
     # b -> 0 rather than 0/0.
-    process = VE(2e-4, 1.0)
+    process = GaussianInterpolant(VE(2e-4, 1.0))
     p = PseudoForceParametrization()
     torch.manual_seed(0)
     x_t = torch.randn(8, 3, dtype=torch.float64)
     output = torch.randn(8, 3, dtype=torch.float64)
     t = torch.zeros(8, dtype=torch.float64)  # b = b_min
 
-    x0_hat = p.to_x0(process, output, x_t, t)
+    x0_hat = p.to_x0(process.schedule, output, x_t, t)
     assert torch.allclose(x0_hat, x_t + 0.5 * output)
     assert torch.isfinite(x0_hat).all()
 
 
 def test_direct_routes_survive_where_the_generic_one_would_not():
-    # At t -> 0 on flow matching, g^2 -> 0: the velocity's route back through
+    # At t -> 0 on a linear-sigma schedule, g^2 -> 0: the velocity's route back through
     # the score is 2 (f x - v) / g^2 and blows up by 1/g^2, while the direct
     # routes stay O(1). Not a NaN — just a drift large enough to wreck a step,
     # which is why eta2 = 0 must never take that route.
-    process = FlowMatching()
+    process = GaussianInterpolant(VELinear())
     torch.manual_seed(0)
     x_t = torch.randn(8, 3)
     t = torch.full((8,), 1e-8)
     output = torch.randn(8, 3)
 
-    velocity = VelocityParametrization().to_velocity(process, output, x_t, t)
-    x0_hat = X0Parametrization().to_x0(process, output, x_t, t)
-    score = VelocityParametrization().to_score(process, output, x_t, t)
+    velocity = VelocityParametrization().to_velocity(process.schedule, output, x_t, t)
+    x0_hat = X0Parametrization().to_x0(process.schedule, output, x_t, t)
+    score = VelocityParametrization().to_score(process.schedule, output, x_t, t)
 
     assert velocity.abs().max().item() < 10.0
     assert x0_hat.abs().max().item() < 10.0
@@ -430,12 +455,14 @@ def test_direct_routes_survive_where_the_generic_one_would_not():
 def test_fields_broadcast_over_per_sample_times(process, parametrization):
     x0 = torch.randn(8, 5, 3)
     x1 = torch.randn(8, 5, 3)
-    lo, hi = process.t_min, process.t_max
+    lo, hi = process.schedule.t_min, process.schedule.t_max
     t = torch.linspace(lo + 0.2 * (hi - lo), hi - 0.2 * (hi - lo), 8)
     x_t = process.interpolate(x0, x1, t)
 
-    target = parametrization.target(process, x0, x1, t)
+    target = parametrization.target(process.schedule, x0, x1, t)
     assert target.shape == x0.shape
-    assert parametrization.to_score(process, target, x_t, t).shape == x0.shape
-    assert parametrization.to_velocity(process, target, x_t, t).shape == x0.shape
-    assert parametrization.to_x0(process, target, x_t, t).shape == x0.shape
+    assert parametrization.to_score(process.schedule, target, x_t, t).shape == x0.shape
+    assert (
+        parametrization.to_velocity(process.schedule, target, x_t, t).shape == x0.shape
+    )
+    assert parametrization.to_x0(process.schedule, target, x_t, t).shape == x0.shape

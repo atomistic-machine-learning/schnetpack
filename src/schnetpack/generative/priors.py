@@ -1,136 +1,51 @@
 """
 Priors: the distribution of the x1 endpoint.
 
-One object serves both sides of a generative model: training draws x1
-positions per data sample (:meth:`Prior.sample_positions`), and sampling
-starts from the same distribution (:meth:`Prior.sample_from_batch`,
-:meth:`Prior.sample`). A prior declares whether its draws are isotropic
-Gaussian (:attr:`Prior.gaussian`) and their scale (:attr:`Prior.std`), which
-gate the score/noise targets and the SDE chart. A draw may read the batch's
-layout and atom types, never the data positions. Design:
-``docs_new/priors.md``.
+One object serves both sides of a generative model: training draws x1 for
+each data batch, and sampling starts from the same distribution. A prior
+maps a batch to a copy with its :attr:`Prior.keys` redrawn, the endpoint
+under :attr:`Prior.key`; :meth:`Prior.draw` returns the endpoint alone, for
+a variable to write into the structure through its view. The structures
+themselves (atom counts, types) come from a
+:class:`~schnetpack.dynamics.structures.StructureProvider`, unless the types
+are generated: then :class:`MaskPrior` draws them. Periodic positions
+start from :class:`UniformCellPrior`. A prior declares
+whether its draws are isotropic Gaussian (:attr:`Prior.gaussian`) and their
+scale (:attr:`Prior.std`), which gate the score/noise targets and the SDE
+chart. A draw may read the batch's layout and atom types, never the data
+values of the keys it draws.
 """
 
 import abc
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal
 
 import torch
-from torch.utils.data import Dataset
 
 from schnetpack import properties
-from schnetpack.data.loader import _atoms_collate_fn
+from schnetpack.utils.cell import atom_cells, to_cart
 
 __all__ = [
+    "MASK",
     "Prior",
     "GaussianPrior",
-    "DatasetPrior",
-    "DatasetStructures",
-    "StatisticsStructures",
+    "MaskPrior",
+    "UniformCellPrior",
+    "noise_like",
 ]
 
-
-class DatasetStructures:
-    """
-    Structures from a dataset, collated as the dataloader would.
-
-    Successive :meth:`sample` calls walk through the dataset without
-    repeating a structure until all were drawn, then start the next pass.
-    Note that ``dataset[i]`` applies the dataset's transforms.
-    """
-
-    def __init__(self, dataset: Dataset, shuffle: bool = True):
-        """
-        Args:
-            dataset: dataset of structures, e.g. an
-                :class:`~schnetpack.data.ASEAtomsData` or a subset of it
-            shuffle: walk the dataset in a random order, reshuffled every
-                pass; False walks it in order
-        """
-        if len(dataset) == 0:
-            raise ValueError("DatasetStructures needs a non-empty dataset.")
-        self.dataset = dataset
-        self.shuffle = shuffle
-        self._pending: list[int] = []
-
-    def _next_indices(self, n_samples: int) -> list[int]:
-        indices: list[int] = []
-        while len(indices) < n_samples:
-            if not self._pending:
-                n = len(self.dataset)
-                order = torch.randperm(n) if self.shuffle else torch.arange(n)
-                self._pending = order.tolist()
-            k = n_samples - len(indices)
-            indices += self._pending[:k]
-            self._pending = self._pending[k:]
-        return indices
-
-    def sample(self, n_samples: int) -> dict[str, torch.Tensor]:
-        """Collate the next ``n_samples`` structures of the dataset."""
-        return _atoms_collate_fn(
-            [self.dataset[i] for i in self._next_indices(n_samples)]
-        )
-
-
-class StatisticsStructures:
-    """
-    Structures built from composition statistics: atom counts and atom types.
-
-    Each structure draws its atom count from the ``n_atoms`` histogram, then
-    each atom its type independently from ``atom_types``; a draw may be a
-    composition the dataset does not contain.
-    """
-
-    def __init__(self, n_atoms: torch.Tensor, atom_types: torch.Tensor):
-        """
-        Args:
-            n_atoms: histogram of atom counts; entry k weighs structures of k
-                atoms. Need not be normalized.
-            atom_types: weights of the atom types; entry z weighs atomic
-                number z. Need not be normalized.
-        """
-        n_atoms = torch.as_tensor(n_atoms, dtype=torch.float)
-        atom_types = torch.as_tensor(atom_types, dtype=torch.float)
-        for name, weights in (("n_atoms", n_atoms), ("atom_types", atom_types)):
-            if weights.ndim != 1 or (weights < 0).any() or weights.sum() <= 0:
-                raise ValueError(
-                    f"{name} must be a 1-D tensor of non-negative weights "
-                    "with a positive sum."
-                )
-        if n_atoms[0] > 0:
-            raise ValueError("n_atoms puts weight on structures of zero atoms.")
-        self.n_atoms = n_atoms
-        self.atom_types = atom_types
-
-    @classmethod
-    def from_dataset(cls, dataset: Dataset) -> "StatisticsStructures":
-        """Count atom numbers and atom types over all structures of a dataset."""
-        zs = [dataset[i][properties.Z] for i in range(len(dataset))]
-        return cls(
-            n_atoms=torch.bincount(torch.tensor([z.shape[0] for z in zs])),
-            atom_types=torch.bincount(torch.cat(zs).long()),
-        )
-
-    def sample(self, n_samples: int) -> dict[str, torch.Tensor]:
-        """
-        Draw ``n_samples`` compositions.
-
-        Returns:
-            A batch with ``Z``, ``n_atoms``, ``idx_m`` and ``idx``; the
-            positions are the prior's to draw.
-        """
-        n_atoms = torch.multinomial(self.n_atoms, n_samples, replacement=True)
-        z = torch.multinomial(self.atom_types, int(n_atoms.sum()), replacement=True)
-        return {
-            properties.idx: torch.arange(n_samples),
-            properties.Z: z,
-            properties.n_atoms: n_atoms,
-            properties.idx_m: torch.repeat_interleave(torch.arange(n_samples), n_atoms),
-        }
+MASK = 0
+"""Class of a masked atom type: no element has Z = 0."""
 
 
 class Prior(abc.ABC):
     """Distribution of the x1 endpoint: training draws and sampling starts."""
+
+    keys: tuple[str, ...] = (properties.R,)
+    """Batch keys a draw overwrites."""
+
+    key: str = properties.R
+    """Batch key holding the endpoint x1 an interpolant reads back."""
 
     gaussian: bool = False
     """Whether draws are independent isotropic Gaussian of scale :attr:`std`.
@@ -146,65 +61,41 @@ class Prior(abc.ABC):
     consumer that needs sigma raises.
     """
 
-    def __init__(
-        self, structures: DatasetStructures | StatisticsStructures | None = None
-    ):
-        """
-        Args:
-            structures: source of the structures :meth:`sample` draws; any
-                object with ``sample(n_samples) -> batch``. Without one only
-                :meth:`sample_from_batch` is available.
-        """
-        self.structures = structures
-
     @abc.abstractmethod
-    def sample_positions(self, batch: Mapping[str, Any]) -> torch.Tensor:
+    def __call__(self, batch: Mapping[str, Any]) -> dict[str, Any]:
         """
-        Draw x1 positions for a batch: the only draw training makes.
+        Draw x1 for a batch.
 
         Args:
-            batch: the structures to draw for. Positions, when present, give
-                shape, dtype and device (their values are never read);
-                otherwise the shape is ``(len(Z), 3)``. The layout
-                (``idx_m``) and atom types may be read.
+            batch: the structures to draw for. Values under :attr:`keys`,
+                when present, give shape, dtype and device but are never
+                read; the layout (``idx_m``) and atom types may be read.
 
         Returns:
-            The positions, shaped like the batch's.
+            A copy of ``batch`` with :attr:`keys` redrawn.
         """
         raise NotImplementedError
 
-    def sample_from_batch(self, batch: Mapping[str, Any]) -> dict[str, Any]:
-        """Copy of ``batch`` with its positions redrawn from the prior."""
-        return {**batch, properties.R: self.sample_positions(batch)}
+    def draw(
+        self, batch: Mapping[str, Any], like: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """
+        Draw x1 for a batch and return it, without writing it.
 
-    def sample(self, n_samples: int) -> dict[str, Any]:
-        """Draw ``n_samples`` structures from :attr:`structures` with positions from the prior."""
-        if self.structures is None:
-            raise ValueError(
-                f"{type(self).__name__} has no structures to sample from; pass "
-                "structures=DatasetStructures(...) or StatisticsStructures(...), "
-                "or redraw a given batch with sample_from_batch"
-            )
-        return self.sample_from_batch(self.structures.sample(n_samples))
-
-
-def _positions_like(batch: Mapping[str, Any]):
-    """Shape, dtype and device of the positions a draw for ``batch`` needs."""
-    if properties.R in batch:
-        r = batch[properties.R]
-        return r.shape, r.dtype, r.device
-    if properties.Z in batch:
-        z = batch[properties.Z]
-        return (z.shape[0], 3), None, z.device
-    raise KeyError(
-        f"cannot infer the positions' shape: the batch holds neither "
-        f"{properties.R!r} nor {properties.Z!r}"
-    )
+        Args:
+            batch: the structures to draw for, as in :meth:`__call__`
+            like: stands in for ``batch[key]``: the draw takes its shape,
+                dtype and device. Without it, they come from ``batch[key]``
+                if present, else from the layout.
+        """
+        batch = batch if like is None else {**batch, self.key: like}
+        return self(batch)[self.key]
 
 
 class GaussianPrior(Prior):
     """
-    Isotropic zero-mean Gaussian N(0, std^2 I), centered per molecule.
+    Isotropic zero-mean Gaussian N(0, std^2 I) on one block of the batch,
+    centered per molecule.
 
     The endpoint of plain diffusion and flow matching: std = 1 for the
     variance-preserving family, sigma_max for VE. With ``centered=True``
@@ -215,6 +106,11 @@ class GaussianPrior(Prior):
     keeps the draw Gaussian on that subspace, so :attr:`gaussian` stays True,
     but x0 must be centered too. Segments come from ``batch[segment_key]``;
     without it the batch is one group.
+
+    The block is ``batch[key]``, one row per atom or per structure with
+    ``dim`` columns; the defaults are the positions. The prior also draws the
+    unit noise of a reverse step (:meth:`noise_like`), so a centered variable
+    stays centered while it is sampled.
     """
 
     gaussian = True
@@ -224,7 +120,9 @@ class GaussianPrior(Prior):
         std: float = 1.0,
         centered: bool = True,
         segment_key: str = properties.idx_m,
-        structures: DatasetStructures | StatisticsStructures | None = None,
+        key: str = properties.R,
+        per: Literal["atom", "structure"] = "atom",
+        dim: int = 3,
     ):
         """
         Args:
@@ -234,19 +132,64 @@ class GaussianPrior(Prior):
                 leading axis is independent samples rather than atoms
             segment_key: batch key holding the segment ids (default: the
                 molecule index)
-            structures: source of the structures :meth:`sample` draws
+            key: batch key the draw is written to; for a state that is not
+                a batch entry, such as the cell's parameters, a key the
+                batch does not hold, so that :meth:`draw` takes the shape
+                from the layout
+            per: one row per atom or one row per structure; read only when
+                the batch does not hold ``key`` yet
+            dim: number of columns of a row; read only when the batch does
+                not hold ``key`` yet
         """
-        super().__init__(structures)
+        if per not in ("atom", "structure"):
+            raise ValueError(f"per must be 'atom' or 'structure', got {per!r}")
         self.std = std
         self.centered = centered
         self.segment_key = segment_key
+        self.key = key
+        self.keys = (key,)
+        self.per = per
+        self.dim = dim
 
-    def sample_positions(self, batch):
-        shape, dtype, device = _positions_like(batch)
+    def __call__(self, batch):
+        shape, dtype, device = self._like(batch)
         x = self.std * torch.randn(*shape, dtype=dtype, device=device)
+        return {**batch, self.key: self._center(x, batch)}
+
+    def noise_like(self, x: torch.Tensor, batch: Mapping[str, Any]) -> torch.Tensor:
+        """
+        Unit noise for a reverse step of ``x``, in the prior's subspace.
+
+        Args:
+            x: current value of the block, shape (n_rows, ...)
+            batch: the batch x belongs to, for the segment ids
+
+        Returns:
+            N(0, I) noise shaped like x, centered per segment if the prior is.
+        """
+        return self._center(torch.randn_like(x), batch)
+
+    def _center(self, x: torch.Tensor, batch: Mapping[str, Any]) -> torch.Tensor:
         if not self.centered:
             return x
         return self.center(x, batch.get(self.segment_key))
+
+    def _like(self, batch: Mapping[str, Any]):
+        """Shape, dtype and device: from ``batch[key]`` if present, else the layout."""
+        if self.key in batch:
+            x = batch[self.key]
+            return x.shape, x.dtype, x.device
+        if properties.n_atoms in batch:
+            n_atoms = batch[properties.n_atoms]
+            rows = int(n_atoms.sum()) if self.per == "atom" else n_atoms.shape[0]
+            return (rows, self.dim), None, n_atoms.device
+        if self.per == "atom" and properties.Z in batch:
+            z = batch[properties.Z]
+            return (z.shape[0], self.dim), None, z.device
+        raise KeyError(
+            f"cannot infer the shape of {self.key!r}: the batch holds neither "
+            f"it, {properties.n_atoms!r} nor {properties.Z!r}"
+        )
 
     @staticmethod
     def center(x: torch.Tensor, segments: torch.Tensor | None) -> torch.Tensor:
@@ -277,27 +220,55 @@ class GaussianPrior(Prior):
         return x - means[segments]
 
 
-class DatasetPrior(Prior):
+class MaskPrior(Prior):
     """
-    Stored structures returned unchanged, positions included: the start of a
-    relaxation (e.g. :class:`~schnetpack.dynamics.optimize.DirectDenoising`).
+    Every atom type masked: the prior of absorbing-state type diffusion.
 
-    Has no positions law, so it cannot serve as a training endpoint.
+    Writes :data:`MASK` for every atom, shaped like ``batch[Z]`` if present,
+    else one per atom of ``batch[n_atoms]``.
     """
 
-    def __init__(self, dataset: Dataset, shuffle: bool = True):
-        """
-        Args:
-            dataset: dataset of the structures to start from
-            shuffle: draw them in a random order; False draws them in order
-        """
-        super().__init__(DatasetStructures(dataset, shuffle=shuffle))
+    keys = (properties.Z,)
+    key = properties.Z
 
-    def sample_positions(self, batch):
-        raise TypeError(
-            "DatasetPrior has no positions law: it returns stored structures "
-            "and serves as a sampling start only, not as a training endpoint."
+    def __call__(self, batch):
+        if properties.Z in batch:
+            z = batch[properties.Z]
+            return {**batch, properties.Z: torch.full_like(z, MASK)}
+        if properties.n_atoms not in batch:
+            raise KeyError(
+                f"cannot infer the number of atoms: the batch holds neither "
+                f"{properties.Z!r} nor {properties.n_atoms!r}"
+            )
+        n_atoms = batch[properties.n_atoms]
+        z = torch.full(
+            (int(n_atoms.sum()),), MASK, dtype=torch.long, device=n_atoms.device
         )
+        return {**batch, properties.Z: z}
 
-    def sample_from_batch(self, batch):
-        return dict(batch)
+
+class UniformCellPrior(Prior):
+    """
+    Positions uniform in each structure's cell: the start of periodic
+    positions, whose wrapped Gaussian is flat once sigma exceeds the cell.
+
+    Reads the cell, so the cell has to be drawn first.
+    """
+
+    keys = (properties.R,)
+    key = properties.R
+
+    def __call__(self, batch):
+        cells = atom_cells(batch)
+        frac = torch.rand(cells.shape[0], 3, dtype=cells.dtype, device=cells.device)
+        return {**batch, properties.R: to_cart(frac, cells)}
+
+
+def noise_like(prior: Prior, x: torch.Tensor, batch: Mapping[str, Any]) -> torch.Tensor:
+    """
+    Unit noise for a reverse step of ``x``: the prior's own
+    (:meth:`GaussianPrior.noise_like`) if it draws one, else
+    ``torch.randn_like``.
+    """
+    draw = getattr(prior, "noise_like", None)
+    return draw(x, batch) if draw is not None else torch.randn_like(x)

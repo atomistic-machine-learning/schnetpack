@@ -12,7 +12,7 @@ import abc
 
 import torch
 
-from schnetpack.generative.processes import Process
+from schnetpack.generative.noising import GaussianInterpolant, Interpolant
 
 __all__ = ["TimeSampler", "UniformTimes", "LogNormalSigmaTimes"]
 
@@ -45,7 +45,7 @@ class UniformTimes(TimeSampler):
 
     def __init__(
         self,
-        process: Process,
+        process: Interpolant,
         t_min: float | None = None,
         t_max: float | None = None,
     ):
@@ -55,8 +55,8 @@ class UniformTimes(TimeSampler):
             t_min: override the process's own lower end
             t_max: override the process's own upper end
         """
-        self.t_min = process.t_min if t_min is None else t_min
-        self.t_max = process.t_max if t_max is None else t_max
+        self.t_min = process.schedule.t_min if t_min is None else t_min
+        self.t_max = process.schedule.t_max if t_max is None else t_max
 
     def __call__(self, n, device=None):
         return self.t_min + (self.t_max - self.t_min) * torch.rand(n, device=device)
@@ -65,7 +65,7 @@ class UniformTimes(TimeSampler):
 class LogNormalSigmaTimes(TimeSampler):
     """
     Log-normal in the noise level, log sigma ~ N(mean, std), mapped to t
-    through :meth:`~schnetpack.generative.processes.Process.t_of_sigma`
+    through :meth:`~schnetpack.generative.schedules.GaussianSchedule.t_of_sigma`
     (the EDM / GPFF training density).
 
     Defaults are GPFF's (``mean=-0.7, std=1.2``): median sigma ~0.5 A. The
@@ -76,7 +76,7 @@ class LogNormalSigmaTimes(TimeSampler):
 
     def __init__(
         self,
-        process: Process,
+        process: GaussianInterpolant,
         mean: float = -0.7,
         std: float = 1.2,
         sigma_min: float | None = None,
@@ -85,8 +85,8 @@ class LogNormalSigmaTimes(TimeSampler):
     ):
         """
         Args:
-            process: process whose sigma(t) defines the map to times; needs
-                a prior with a declared ``std``
+            process: Gaussian interpolant whose sigma(t) defines the map
+                to times
             mean: mean of log sigma, in the data's length units
             std: standard deviation of log sigma
             sigma_min: lower bound on the draws (default: sigma(t_min))
@@ -96,14 +96,19 @@ class LogNormalSigmaTimes(TimeSampler):
         """
         if std <= 0.0:
             raise ValueError(f"std must be positive, got {std}")
-        _ = process.std  # raises with the useful message if the prior has no scale
+        if not isinstance(process, GaussianInterpolant):
+            raise TypeError(
+                f"{type(self).__name__} needs a GaussianInterpolant, which "
+                f"defines sigma(t); got {type(process).__name__}"
+            )
         self.process = process
         self.mean = mean
         self.std = std
         self.truncate = truncate
 
-        ends = torch.tensor([process.t_min, process.t_max])
-        s_low, s_high = torch.sort(process.sigma(ends)).values.tolist()
+        schedule = process.schedule
+        ends = torch.tensor([schedule.t_min, schedule.t_max])
+        s_low, s_high = torch.sort(schedule.sigma(ends)).values.tolist()
         self.sigma_min = s_low if sigma_min is None else sigma_min
         self.sigma_max = s_high if sigma_max is None else sigma_max
         if self.sigma_min >= self.sigma_max:
@@ -136,4 +141,4 @@ class LogNormalSigmaTimes(TimeSampler):
                 )
         else:
             sigma = sigma.clamp(self.sigma_min, self.sigma_max)
-        return self.process.t_of_sigma(sigma.to(torch.get_default_dtype()))
+        return self.process.schedule.t_of_sigma(sigma.to(torch.get_default_dtype()))

@@ -1,4 +1,4 @@
-"""Schedule geometry of the Process subclasses, at the default unit scale."""
+"""Schedule geometry of the schedules, at the default unit scale."""
 
 import copy
 import math
@@ -7,42 +7,59 @@ import pytest
 import torch
 
 from schnetpack.generative import (
+    SDE,
     VE,
     VP,
-    VPISSNR,
     FlowMatching,
-    Process,
+    GaussianInterpolant,
+    GaussianSchedule,
+    Interpolant,
+    Schedule,
     VELinear,
     expand_t,
 )
 
 
+def gaussian_schedules():
+    return [VP(), VE(2e-4, 1.0), VELinear()]
+
+
 def all_schedules():
-    return [VP(), VE(2e-4, 1.0), VELinear(), FlowMatching(), VPISSNR()]
+    return gaussian_schedules() + [FlowMatching()]
 
 
-def schedule_ids():
-    return [type(p).__name__ for p in all_schedules()]
+def schedule_ids(schedules):
+    return [type(s).__name__ for s in schedules]
 
 
-@pytest.fixture(params=all_schedules(), ids=schedule_ids())
-def process(request):
+@pytest.fixture(params=all_schedules(), ids=schedule_ids(all_schedules()))
+def schedule(request):
+    return request.param
+
+
+@pytest.fixture(params=gaussian_schedules(), ids=schedule_ids(gaussian_schedules()))
+def gaussian(request):
     return request.param
 
 
 @pytest.fixture
+def process(schedule):
+    return Interpolant(schedule)
+
+
+@pytest.fixture
 def vp():
-    return VP()
+    return GaussianInterpolant(VP())
 
 
 @pytest.fixture
 def ve():
-    return VE(2e-4, 1.0)
+    return GaussianInterpolant(VE(2e-4, 1.0))
 
 
-def interior_times(process, n=5):
+def interior_times(schedule, n=5):
     """Times strictly inside [t_min, t_max], safe for finite differences."""
-    lo, hi = process.t_min, process.t_max
+    lo, hi = schedule.t_min, schedule.t_max
     pad = 0.05 * (hi - lo)
     return torch.linspace(lo + pad, hi - pad, n, dtype=torch.float64)
 
@@ -50,69 +67,58 @@ def interior_times(process, n=5):
 # --- schedules and their derivatives ------------------------------------- #
 
 
-def test_derivatives_match_finite_differences(process):
-    t = interior_times(process)
-    eps = 1e-6 * (process.t_max - process.t_min)
+def test_derivatives_match_finite_differences(schedule):
+    t = interior_times(schedule)
+    eps = 1e-6 * (schedule.t_max - schedule.t_min)
 
-    d_a = (process.a(t + eps) - process.a(t - eps)) / (2 * eps)
-    d_b = (process.b(t + eps) - process.b(t - eps)) / (2 * eps)
+    d_a = (schedule.a(t + eps) - schedule.a(t - eps)) / (2 * eps)
+    d_b = (schedule.b(t + eps) - schedule.b(t - eps)) / (2 * eps)
 
-    assert torch.allclose(process.a_dot(t), d_a, rtol=1e-4, atol=1e-6)
-    assert torch.allclose(process.b_dot(t), d_b, rtol=1e-4, atol=1e-6)
+    assert torch.allclose(schedule.a_dot(t), d_a, rtol=1e-4, atol=1e-6)
+    assert torch.allclose(schedule.b_dot(t), d_b, rtol=1e-4, atol=1e-6)
 
 
-def test_g2_matches_db2_dt_minus_2_f_b2(process):
+def test_g2_matches_db2_dt_minus_2_f_b2(gaussian):
     # The general identity g^2 = d b^2/dt - 2 f b^2, by finite
     # differences. Reduces to g^2 = d b^2/dt only where f = 0. At the
-    # default unit scale sigma = b, so the process g^2 is the identity's.
-    t = interior_times(process)
-    eps = 1e-6 * (process.t_max - process.t_min)
+    # default unit scale sigma = b, so the chart's g^2 is the identity's.
+    t = interior_times(gaussian)
+    eps = 1e-6 * (gaussian.t_max - gaussian.t_min)
 
-    db2 = (process.b(t + eps) ** 2 - process.b(t - eps) ** 2) / (2 * eps)
-    expected = db2 - 2.0 * process.sde().f(t) * process.b(t) ** 2
+    db2 = (gaussian.b(t + eps) ** 2 - gaussian.b(t - eps) ** 2) / (2 * eps)
+    expected = db2 - 2.0 * SDE(gaussian).f(t) * gaussian.b(t) ** 2
 
-    assert torch.allclose(process.sde().g2(t), expected, rtol=1e-4, atol=1e-6)
+    assert torch.allclose(SDE(gaussian).g2(t), expected, rtol=1e-4, atol=1e-6)
 
 
 def test_vp_derived_drift_and_diffusion_match_analytic(vp):
     # The VP process is defined in the literature by f = -beta/2 and g^2 = beta.
     # Deriving both from (a, b) must reproduce exactly that.
     t = torch.linspace(0.05, 1.0, 10, dtype=torch.float64)
-    assert torch.allclose(vp.sde().f(t), -0.5 * vp.beta(t), rtol=1e-6)
-    assert torch.allclose(vp.sde().g2(t), vp.beta(t), rtol=1e-6)
+    beta = vp.schedule.beta(t)
+    assert torch.allclose(SDE(vp.schedule).f(t), -0.5 * beta, rtol=1e-6)
+    assert torch.allclose(SDE(vp.schedule).g2(t), beta, rtol=1e-6)
 
 
 def test_ve_derived_diffusion_matches_analytic(ve):
     t = torch.linspace(0.0, 1.0, 10, dtype=torch.float64)
-    expected = 2.0 * math.log(1.0 / ve.b_min) * ve.b(t) ** 2
-    assert torch.allclose(ve.sde().g2(t), expected, rtol=1e-6)
-    assert torch.allclose(ve.sde().f(t), torch.zeros_like(t), atol=1e-12)
-
-
-def test_fm_diffusion_is_finite_on_usable_range():
-    # g^2 = 2 t / (1 - t) blows up at t = 1; the default t_max keeps the
-    # whole usable range finite.
-    fm = FlowMatching()
-    t = torch.linspace(fm.t_min, fm.t_max, 100, dtype=torch.float64)
-    g2 = fm.sde().g2(t)
-    assert torch.isfinite(g2).all()
-    assert (g2 >= 0).all()
-
-    expected = 2.0 * t / (1.0 - t)
-    assert torch.allclose(g2, expected, rtol=1e-6)
+    b_min = ve.schedule.sigma_min / ve.schedule.sigma_max
+    expected = 2.0 * math.log(1.0 / b_min) * ve.schedule.b(t) ** 2
+    assert torch.allclose(SDE(ve.schedule).g2(t), expected, rtol=1e-6)
+    assert torch.allclose(SDE(ve.schedule).f(t), torch.zeros_like(t), atol=1e-12)
 
 
 # --- marginals ------------------------------------------------------------ #
 
 
 def test_vp_marginals_variance_preserving(vp):
-    t = torch.rand(1000) * vp.t_max
-    a, b = vp.a(t), vp.b(t)
+    t = torch.rand(1000) * vp.schedule.t_max
+    a, b = vp.schedule.a(t), vp.schedule.b(t)
     assert torch.allclose(a**2 + b**2, torch.ones_like(t), atol=1e-5)
 
-    t0, tT = torch.tensor([0.0]), torch.tensor([vp.t_max])
-    a0, s0 = vp.a(t0), vp.b(t0)
-    aT, sT = vp.a(tT), vp.b(tT)
+    t0, tT = torch.tensor([0.0]), torch.tensor([vp.schedule.t_max])
+    a0, s0 = vp.schedule.a(t0), vp.schedule.b(t0)
+    aT, sT = vp.schedule.a(tT), vp.schedule.b(tT)
     assert a0.item() == pytest.approx(1.0)
     assert s0.item() == pytest.approx(0.0, abs=1e-4)
     assert aT.item() < 1e-2
@@ -120,23 +126,23 @@ def test_vp_marginals_variance_preserving(vp):
 
 
 def test_ve_marginals(ve):
-    t = torch.tensor([0.0, ve.t_max])
-    a, b = ve.a(t), ve.b(t)
+    t = torch.tensor([0.0, ve.schedule.t_max])
+    a, b = ve.schedule.a(t), ve.schedule.b(t)
     assert torch.allclose(a, torch.ones_like(t))
-    assert b[0].item() == pytest.approx(ve.b_min)
+    assert b[0].item() == pytest.approx(ve.schedule.sigma_min / ve.schedule.sigma_max)
     assert b[1].item() == pytest.approx(1.0, rel=1e-6)
 
 
-def test_b_is_normalized_to_one_at_t_max(process):
+def test_b_is_normalized_to_one_at_t_max(schedule):
     # The convention the whole subpackage relies on: b(t_max) = 1 (within the
     # t_max approximation), so x_{t_max} is exactly the prior's endpoint and
-    # the scale of the process lives on the prior alone.
-    b_end = process.b(torch.tensor([process.t_max], dtype=torch.float64)).item()
+    # the scale of the interpolant lives on the prior alone.
+    b_end = schedule.b(torch.tensor([schedule.t_max], dtype=torch.float64)).item()
     assert b_end == pytest.approx(1.0, abs=2e-3)
 
-    t = torch.linspace(process.t_min, process.t_max, 50, dtype=torch.float64)
-    assert (process.b(t) >= 0).all()
-    assert (process.b(t) <= 1.0 + 1e-9).all()
+    t = torch.linspace(schedule.t_min, schedule.t_max, 50, dtype=torch.float64)
+    assert (schedule.b(t) >= 0).all()
+    assert (schedule.b(t) <= 1.0 + 1e-9).all()
 
 
 def test_interpolate_matches_marginal_stats(vp):
@@ -147,7 +153,7 @@ def test_interpolate_matches_marginal_stats(vp):
     x1 = torch.randn_like(x0)
     t = torch.full((20000,), 0.5)
     x_t = vp.interpolate(x0, x1, t)
-    a, b = vp.a(t[:1]), vp.b(t[:1])
+    a, b = vp.schedule.a(t[:1]), vp.schedule.b(t[:1])
     expected_std = math.sqrt(a.item() ** 2 + b.item() ** 2)
     assert x_t.std().item() == pytest.approx(expected_std, abs=0.02)
 
@@ -158,103 +164,34 @@ def test_per_sample_times_broadcast(vp):
 
     x_t = vp.interpolate(x0, torch.randn_like(x0), t)
     assert x_t.shape == x0.shape
-    assert vp.sde().g2(t).shape == t.shape
-    assert vp.sde().f(t).shape == t.shape
-
-
-# --- the two schedule routes ---------------------------------------------- #
-
-
-def test_tv_and_snr_agree_with_a_b(process):
-    # The TV/SNR pair, whichever way round the schedule defined itself.
-    t = interior_times(process)
-    a, b = process.a(t), process.b(t)
-    assert torch.allclose(process.tv(t), a**2 + b**2, rtol=1e-6)
-    assert torch.allclose(process.log_snr(t), torch.log(a**2 / b**2), rtol=1e-6)
-
-
-def test_a_schedule_redefined_through_tv_snr_is_the_same_schedule(process):
-    # The heart of it: read TV and log-SNR off a schedule defined by a/b,
-    # feed them back through the other route, and the coefficients must return.
-    # If the inversion were wrong this is what would catch it.
-    class Mirror(Process):
-        def tv(self, t):
-            return process.tv(t)
-
-        def log_snr(self, t):
-            return process.log_snr(t)
-
-    mirror = Mirror(t_min=process.t_min, t_max=process.t_max)
-    t = interior_times(process)
-
-    assert torch.allclose(mirror.a(t), process.a(t), rtol=1e-6, atol=1e-9)
-    assert torch.allclose(mirror.b(t), process.b(t), rtol=1e-6, atol=1e-9)
-    # and so must everything derived from them
-    assert torch.allclose(mirror.sde().g2(t), process.sde().g2(t), rtol=1e-4, atol=1e-7)
-
-
-def test_vp_issnr_is_variance_preserving():
-    p = VPISSNR()
-    t = interior_times(p, n=9)
-    assert torch.allclose(p.tv(t), torch.ones_like(t))
-    assert torch.allclose(p.a(t) ** 2 + p.b(t) ** 2, torch.ones_like(t))
-
-
-def test_vp_issnr_recovers_flow_matching_a_b_up_to_the_tv_factor():
-    # eta=2, kappa=0 gives log SNR = 2 log((1-t)/t), the SNR of the linear
-    # interpolant. VP-ISSNR shares that SNR but flattens TV to 1, so its
-    # coefficients are FlowMatching's divided by FlowMatching's total variance.
-    p = VPISSNR(eta=2.0, kappa=0.0)
-    fm = FlowMatching()
-    t = interior_times(p, n=7)
-
-    assert torch.allclose(p.log_snr(t), fm.log_snr(t), rtol=1e-6)
-
-    tv = torch.sqrt(fm.tv(t))
-    assert torch.allclose(p.a(t), fm.a(t) / tv, rtol=1e-6)
-    assert torch.allclose(p.b(t), fm.b(t) / tv, rtol=1e-6)
-
-
-def test_defining_neither_schedule_pair_is_a_type_error():
-    # Both routes derive the other, so a process with neither would recurse.
-    # That has to fail at class definition, naming the class, not at first call.
-    with pytest.raises(TypeError, match="defines no schedule"):
-
-        class Halfway(Process):
-            def a(self, t):  # b missing -> neither pair is complete
-                return torch.ones_like(t)
+    assert SDE(vp.schedule).g2(t).shape == t.shape
+    assert SDE(vp.schedule).f(t).shape == t.shape
 
 
 # --- the log-derivative identity ------------------------------------------ #
 
 
-def test_log_derivatives_equal_the_quotients_they_replace(process):
+def test_log_derivatives_equal_the_quotients_they_replace(schedule):
     # d/dt log x = x_dot / x. Away from the endpoints both forms are fine and
     # must agree; the identity earns its keep where they are not.
-    t = interior_times(process)
+    t = interior_times(schedule)
     assert torch.allclose(
-        process.log_a_dot(t), process.a_dot(t) / process.a(t), rtol=1e-6
-    )
-    assert torch.allclose(
-        process.log_snr_dot(t),
-        2.0 * (process.log_a_dot(t) - process.b_dot(t) / process.b(t)),
-        rtol=1e-6,
+        schedule.log_a_dot(t), schedule.a_dot(t) / schedule.a(t), rtol=1e-6
     )
 
 
-def test_g2_equals_the_quotient_free_form(process):
-    # g^2 = -sigma^2 d/dt log SNR is (at unit scale) the same number as
-    # 2 b b' - 2 f b^2, which is what g2 no longer computes.
-    t = interior_times(process)
-    b = process.b(t)
-    old_form = 2.0 * b * process.b_dot(t) - 2.0 * process.sde().f(t) * b**2
-    assert torch.allclose(process.sde().g2(t), old_form, rtol=1e-6, atol=1e-9)
+def test_g2_equals_the_quotient_free_form(gaussian):
+    # g^2 = 2 sigma (sigma' - f sigma) is (at unit scale) the same number as
+    # 2 b b' - 2 f b^2.
+    t = interior_times(gaussian)
+    b = gaussian.b(t)
+    old_form = 2.0 * b * gaussian.b_dot(t) - 2.0 * SDE(gaussian).f(t) * b**2
+    assert torch.allclose(SDE(gaussian).g2(t), old_form, rtol=1e-6, atol=1e-9)
 
 
-def test_log_snr_decreases_so_g2_is_non_negative(process):
-    t = interior_times(process, n=9)
-    assert (process.log_snr_dot(t) <= 0).all()
-    assert (process.sde().g2(t) >= 0).all()
+def test_g2_is_non_negative(gaussian):
+    t = interior_times(gaussian, n=9)
+    assert (SDE(gaussian).g2(t) >= 0).all()
 
 
 def test_a_closed_form_log_derivative_survives_a_0_over_0_quotient():
@@ -266,64 +203,54 @@ def test_a_closed_form_log_derivative_survives_a_0_over_0_quotient():
     # Note the autograd *default* would not save you here: it applies the chain
     # rule as (1/a) * a_dot, which is the same 0/0. The identity buys
     # the override, not magic.
-    class DoubleZero(Process):
+    class DoubleZero(GaussianSchedule):
         def a(self, t):
             return (1.0 - t) ** 2
 
-        def b(self, t):
+        def sigma(self, t):
             return t
 
         def log_a_dot(self, t):
             return -2.0 / (1.0 - t)  # closed form: a never appears
 
-    p = DoubleZero(t_min=0.0, t_max=1.0)
+    p = DoubleZero(sigma_max=1.0, t_min=0.0, t_max=1.0)
 
     t = torch.tensor([0.5], dtype=torch.float64)
-    assert torch.allclose(p.sde().f(t), torch.full_like(t, -4.0))  # agrees away from 0
+    # agrees away from 0
+    assert torch.allclose(SDE(p).f(t), torch.full_like(t, -4.0))
 
     at_zero = torch.ones(1, dtype=torch.float64)  # a(1) == a_dot(1) == 0
     assert torch.isnan(p.a_dot(at_zero) / p.a(at_zero)).all()
-    assert torch.isneginf(p.sde().f(at_zero)).all()
-
-
-def test_g2_is_finite_where_the_old_form_needed_a_singular_f():
-    # The TV/SNR payoff. VPISSNR(eta=4) has a ~ (1-t)^2 near t=1, so the
-    # old g^2 = 2 b b' - 2 f b^2 needs f = a'/a -> 0/0 there.
-    # Routing through log_snr_dot differentiates the schedule as written, so no
-    # a is ever formed and g^2 stays finite.
-    p = VPISSNR(eta=4.0)
-    t = torch.tensor([1.0 - 1e-12], dtype=torch.float64)
-    assert torch.isfinite(p.sde().g2(t)).all()
-    assert (p.sde().g2(t) >= 0).all()
+    assert torch.isneginf(SDE(p).f(at_zero)).all()
 
 
 # --- autograd derivatives ------------------------------------------------- #
 
 
-def test_autograd_derivatives_match_the_analytic_ones(process):
+def test_autograd_derivatives_match_the_analytic_ones(schedule):
     # Every schedule here overrides a_dot/b_dot for speed. Strip the
     # overrides and the base class's autograd must reproduce them, which is what
     # makes those overrides an optimization rather than a second source of truth.
     Auto = type(
-        f"Auto{type(process).__name__}",
-        (type(process),),
-        {"a_dot": Process.a_dot, "b_dot": Process.b_dot},
+        f"Auto{type(schedule).__name__}",
+        (type(schedule),),
+        {"a_dot": Schedule.a_dot, "b_dot": Schedule.b_dot},
     )
-    auto = copy.copy(process)
+    auto = copy.copy(schedule)
     auto.__class__ = Auto
 
-    t = interior_times(process)
-    assert torch.allclose(auto.a_dot(t), process.a_dot(t), rtol=1e-6, atol=1e-9)
-    assert torch.allclose(auto.b_dot(t), process.b_dot(t), rtol=1e-6, atol=1e-9)
+    t = interior_times(schedule)
+    assert torch.allclose(auto.a_dot(t), schedule.a_dot(t), rtol=1e-6, atol=1e-9)
+    assert torch.allclose(auto.b_dot(t), schedule.b_dot(t), rtol=1e-6, atol=1e-9)
 
 
-def test_autograd_derivatives_survive_no_grad(process):
+def test_autograd_derivatives_survive_no_grad(schedule):
     # Sampling runs under torch.no_grad(); the derivative still has to build its
     # own graph there or every reverse step would fail.
-    t = interior_times(process)
+    t = interior_times(schedule)
     with torch.no_grad():
-        assert torch.isfinite(Process.a_dot(process, t)).all()
-        assert torch.isfinite(Process.b_dot(process, t)).all()
+        assert torch.isfinite(Schedule.a_dot(schedule, t)).all()
+        assert torch.isfinite(Schedule.b_dot(schedule, t)).all()
 
 
 def test_autograd_derivative_of_a_constant_schedule_is_zero():
@@ -331,15 +258,15 @@ def test_autograd_derivative_of_a_constant_schedule_is_zero():
     # zero. VE-type schedules would crash on their own a without the fallback.
     ve = VE(2e-4, 1.0)
     t = interior_times(ve)
-    assert torch.allclose(Process.a_dot(ve, t), torch.zeros_like(t))
+    assert torch.allclose(Schedule.a_dot(ve, t), torch.zeros_like(t))
 
 
-def test_autograd_derivatives_return_a_plain_tensor(process):
+def test_autograd_derivatives_return_a_plain_tensor(schedule):
     # No graph comes back out, even when the caller's t carries one. Diffuse
     # builds targets in the dataloader, and a target with a grad_fn cannot be
     # pickled to a worker process.
-    t = interior_times(process).requires_grad_(True)
-    for dot in (Process.a_dot(process, t), Process.b_dot(process, t)):
+    t = interior_times(schedule).requires_grad_(True)
+    for dot in (Schedule.a_dot(schedule, t), Schedule.b_dot(schedule, t)):
         assert not dot.requires_grad
         assert dot.grad_fn is None
 
@@ -349,15 +276,18 @@ def test_autograd_derivatives_return_a_plain_tensor(process):
 
 def test_interpolate_is_exactly_two_term(process):
     x0, x1 = torch.randn(6, 3), torch.randn(6, 3)
-    t = torch.full((6,), 0.5 * (process.t_min + process.t_max))
+    t = torch.full((6,), 0.5 * (process.schedule.t_min + process.schedule.t_max))
 
-    expected = expand_t(process.a(t), x0) * x0 + expand_t(process.b(t), x1) * x1
+    expected = (
+        expand_t(process.schedule.a(t), x0) * x0
+        + expand_t(process.schedule.b(t), x1) * x1
+    )
     assert torch.equal(process.interpolate(x0, x1, t), expected)
 
 
 def test_two_term_interpolate_consumes_no_rng(process):
     x0, x1 = torch.randn(6, 3), torch.randn(6, 3)
-    t = torch.full((6,), 0.5 * (process.t_min + process.t_max))
+    t = torch.full((6,), 0.5 * (process.schedule.t_min + process.schedule.t_max))
 
     state = torch.random.get_rng_state()
     process.interpolate(x0, x1, t)
@@ -367,18 +297,18 @@ def test_two_term_interpolate_consumes_no_rng(process):
 # --- structure ------------------------------------------------------------ #
 
 
-def test_schedules_expose_a_usable_time_range(process):
-    assert process.t_min < process.t_max
-    assert process.b(torch.tensor([process.t_min])).item() > 0.0
+def test_schedules_expose_a_usable_time_range(schedule):
+    assert schedule.t_min < schedule.t_max
+    assert schedule.b(torch.tensor([schedule.t_min])).item() > 0.0
 
 
-def test_process_is_abstract():
+def test_schedule_is_abstract():
     with pytest.raises(TypeError):
-        Process(t_min=0.0, t_max=1.0)
+        Schedule(t_min=0.0, t_max=1.0)
 
 
 def test_the_parametrization_axis_does_not_leak_into_the_process(process):
-    # The axis separation, pinned: a process knows its schedule, endpoint and
+    # The axis separation, pinned: an interpolant knows its schedule, endpoint and
     # pairing, and nothing about what a network predicts. Targets, field
     # conversions and reverse processes belong to the parametrization. If one
     # of these comes back, an axis has leaked.

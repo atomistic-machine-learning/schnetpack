@@ -1,211 +1,580 @@
 """
-The time-indexed family: drivers that solve a generative model's reverse
-process from t_max down to t_min.
+The time-indexed family: one sampler that solves the reverse process of
+every generated variable along a time grid.
 
-:class:`Sampler` owns the loop along the time grid and the reverse process's
-drift and diffusion; a subclass is one step rule on them —
-:class:`EulerMaruyama`, :class:`Heun`, :class:`Ancestral`. The model, the process and the parametrization come
-from one :class:`~schnetpack.dynamics.calculator.GenerativeCalculator`.
-Details: ``docs_new/sampling.md`` §4.
+- :class:`Sampler` steps a list of variables, one update each. A step is a
+  double loop: for every stage, one model call at the stage time, then each
+  update that has this stage reads its field and writes its next stage
+  point; after the last stage every update writes its new value, in list
+  order.
+- :class:`SDEUpdate` integrates the reverse SDE of a Gaussian interpolant on
+  the score, :class:`ODEUpdate` transports along a velocity; both take an
+  :class:`~schnetpack.dynamics.sample.integrators.Integrator`, which sets
+  their stages.
+- :class:`AncestralUpdate` takes the noising's own reverse transition given
+  the denoiser, in one stage: the exact Gaussian posterior, or unmasking for
+  masked atom types.
+
+Theory: ``docs_new/generation/generation.md`` (one variable) and
+``docs_new/generation/new_variables.md`` (several).
 """
 
-import abc
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 import torch
 
 from schnetpack.dynamics.base import Dynamics
-from schnetpack.dynamics.calculator import GenerativeCalculator
+from schnetpack.dynamics.calculator import JointCalculator
 from schnetpack.dynamics.sample.grids import TimeGrid, UniformGrid
-from schnetpack.generative.differential_equations import ReverseSDE
-from schnetpack.generative.priors import Prior
-from schnetpack.generative.processes import Process, expand_t
+from schnetpack.dynamics.sample.integrators import Euler, Integrator
+from schnetpack.dynamics.structures import StructureProvider
+from schnetpack.generative.differential_equations import SDE
+from schnetpack.generative.noising import (
+    GaussianInterpolant,
+    Interpolant,
+    MaskNoising,
+    expand_t,
+)
+from schnetpack.generative.priors import MASK, noise_like
+from schnetpack.generative.schedules import GaussianSchedule
+from schnetpack.generative.variables import Variable
 
-__all__ = ["Sampler", "EulerMaruyama", "Heun", "Ancestral"]
+__all__ = [
+    "Sampler",
+    "Update",
+    "DriftUpdate",
+    "SDEUpdate",
+    "ODEUpdate",
+    "AncestralUpdate",
+    "gaussian_posterior",
+]
 
 
-class Sampler(Dynamics):
+def gaussian_posterior(
+    schedule: GaussianSchedule,
+    x_t: torch.Tensor,
+    x0: torch.Tensor,
+    t: torch.Tensor,
+    s: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Base class of the samplers: prior -> reverse process -> step rule along a
-    time grid.
+    Mean and std of the exact Gaussian posterior p(x_s | x_t, x0), s < t.
 
-    The reverse process is the Anderson family
+    With r = a_t / a_s and var_ts = sigma_t^2 - r^2 sigma_s^2,
+    mean = (r sigma_s^2 / sigma_t^2) x_t + (a_s var_ts / sigma_t^2) x0 and
+    var = sigma_s^2 var_ts / sigma_t^2.
+
+    Returns:
+        (mean, std): mean shaped like x_t, std shaped like t.
+    """
+    a_t, sig_t = schedule.a(t), schedule.sigma(t)
+    a_s, sig_s = schedule.a(s), schedule.sigma(s)
+    r = a_t / a_s
+    var_ts = sig_t**2 - r**2 * sig_s**2
+    mean = (
+        expand_t(r * sig_s**2 / sig_t**2, x_t) * x_t
+        + expand_t(a_s * var_ts / sig_t**2, x0) * x0
+    )
+    std = torch.sqrt(torch.clamp(sig_s**2 * var_ts / sig_t**2, min=0.0))
+    return mean, std
+
+
+class Update:
+    """
+    Steps one variable on one field of the calculator's outputs.
+
+    An update has :attr:`n_stages` stages at :attr:`nodes` (fractions of the
+    step). At each of them, :meth:`stage` reads the field and writes the
+    variable's next stage point; at its last one it draws the variable's new
+    value, which later model calls of the step see at t_next.
+    :meth:`combine` only writes that value.
+    """
+
+    n_stages: int = 1
+    nodes: tuple[float, ...] = (0.0,)
+
+    def __init__(self, variable: Variable, field_key: str):
+        """
+        Args:
+            variable: the variable this update steps
+            field_key: the calculator output this update reads
+        """
+        self.variable = variable
+        self.field_key = field_key
+
+    def check(self) -> None:
+        """Raise unless this update can step its variable."""
+
+    def field(self, fields: Mapping[str, Any]) -> torch.Tensor:
+        """This update's field from the calculator's outputs."""
+        if self.field_key not in fields:
+            raise KeyError(
+                f"{type(self).__name__} of {self.variable.name!r} reads "
+                f"{self.field_key!r}; the model returned {sorted(fields)}"
+            )
+        return fields[self.field_key]
+
+    def stage(
+        self,
+        stage: int,
+        batch: Mapping[str, Any],
+        fields: Mapping[str, Any],
+        t_stage: torch.Tensor,
+        start: Mapping[str, Any],
+        t: torch.Tensor,
+        t_next: torch.Tensor,
+        data: Sequence[Any],
+    ) -> tuple[dict[str, Any], Any]:
+        """
+        Read the field of one stage and move the variable on.
+
+        Args:
+            stage: stage index, 0 <= stage < n_stages
+            batch: the current stage point of every variable
+            fields: the model's outputs at ``batch`` and ``t_stage``
+            t_stage: the time of this stage
+            start: the batch at t, the start of the step
+            t: time at the start of the step (0-dim)
+            t_next: time at the end of the step (0-dim)
+            data: what the earlier stages of this step returned
+
+        Returns:
+            (batch, data_stage): the batch with the variable at its next
+            stage point, and what this stage keeps for later stages. At the
+            last stage, data_stage is the new value.
+        """
+        raise NotImplementedError
+
+    def combine(self, batch: Mapping[str, Any], data: Sequence[Any]) -> dict[str, Any]:
+        """Write the new value drawn at the last stage."""
+        return self.variable.write(batch, data[-1])
+
+
+class DriftUpdate(Update):
+    """
+    An update integrated along a drift by an integrator, which sets its
+    stages. Subclasses give :meth:`drift` and :meth:`diffusion`.
+    """
+
+    def __init__(
+        self, variable: Variable, field_key: str, integrator: Integrator | None = None
+    ):
+        """
+        Args:
+            variable: the variable this update steps
+            field_key: the calculator output this update reads
+            integrator: step rule (default:
+                :class:`~schnetpack.dynamics.sample.integrators.Euler`)
+        """
+        super().__init__(variable, field_key)
+        integrator = Euler() if integrator is None else integrator
+        if not isinstance(integrator, Integrator):
+            raise TypeError(f"{type(integrator).__name__} is not an Integrator")
+        if len(integrator.nodes) != integrator.n_stages:
+            raise ValueError(
+                f"{type(integrator).__name__} has {integrator.n_stages} stages "
+                f"but {len(integrator.nodes)} nodes"
+            )
+        self.integrator = integrator
+        self.nodes = tuple(integrator.nodes)
+        self.n_stages = integrator.n_stages
+
+    def check(self):
+        if not isinstance(self.variable.noising, GaussianInterpolant):
+            raise TypeError(
+                f"{type(self).__name__} steps a Gaussian interpolant; "
+                f"{self.variable.name!r} is noised by "
+                f"{type(self.variable.noising).__name__}"
+            )
+
+    def drift(self, x, t, field) -> torch.Tensor:
+        raise NotImplementedError
+
+    def diffusion(self, t) -> torch.Tensor | None:
+        raise NotImplementedError
+
+    def stage(self, stage, batch, fields, t_stage, start, t, t_next, data):
+        x, x_start = self.variable.read(batch), self.variable.read(start)
+        drifts = [*data, self.drift(x, t_stage, self.field(fields))]
+        if stage + 1 < self.n_stages:
+            x_next, _ = self.integrator.point(stage + 1, x_start, t, t_next, drifts)
+            return self.variable.write(batch, x_next), drifts[-1]
+        # the last stage: the step itself, drawn once
+        x_new = self.integrator.combine(x_start, t, t_next, drifts)
+        g = self.diffusion(t)
+        if g is not None:
+            scale = expand_t(g * (t_next - t).abs().sqrt(), x_start)
+            x_new = x_new + scale * noise_like(
+                self.variable.noising.prior, x_start, start
+            )
+        return self.variable.write(batch, x_new), x_new
+
+
+class SDEUpdate(DriftUpdate):
+    """
+    The reverse SDE of a Gaussian interpolant on the score field,
 
         dx = [f x - 1/2 (1 + eta2) g^2 score] dt + sqrt(eta2) g dw,
 
     eta2 = 1 the reverse-time SDE and eta2 = 0 the probability-flow ODE.
-    Its coefficients are :attr:`reverse`, a
-    :class:`~schnetpack.generative.differential_equations.ReverseSDE` on the
-    calculator's process; a subclass implements :meth:`step` on it and the
-    calculator's score.
-
-    The starting distribution defaults to the process's sampling prior. One
-    step of the loop is one :meth:`step`; hooks run between steps
-    with ``batch[time_key]`` the grid time of the iterate they see.
-
-    The batch is in the model's units (see
-    :class:`~schnetpack.dynamics.calculator.GenerativeCalculator`). Guidance
-    belongs to the calculator too: the fields it returns are already guided.
     """
 
     def __init__(
         self,
-        calculator: GenerativeCalculator,
-        grid: TimeGrid | None = None,
-        prior: Prior | None = None,
+        variable: Variable,
+        field_key: str = "score",
         eta2: float = 1.0,
+        integrator: Integrator | None = None,
+    ):
+        """
+        Args:
+            variable: the variable this update steps
+            field_key: the calculator output holding its score
+            eta2: stochasticity; 1 = reverse SDE, 0 = probability-flow ODE
+            integrator: step rule (default: Euler)
+        """
+        super().__init__(variable, field_key, integrator)
+        self.eta2 = eta2
+        self.reverse_sde = SDE.reverse(variable.noising.schedule, eta2)
+
+    def drift(self, x, t, score):
+        return self.reverse_sde.drift(x, t, score)
+
+    def diffusion(self, t):
+        return self.reverse_sde.diffusion(t)
+
+
+class ODEUpdate(DriftUpdate):
+    """Deterministic transport along the velocity field, dx = v dt."""
+
+    def __init__(
+        self,
+        variable: Variable,
+        field_key: str = "velocity",
+        integrator: Integrator | None = None,
+    ):
+        """
+        Args:
+            variable: the variable this update steps
+            field_key: the calculator output holding its velocity
+            integrator: step rule (default: Euler)
+        """
+        super().__init__(variable, field_key, integrator)
+
+    def check(self):
+        """Any interpolant: the velocity needs no Gaussian chart."""
+        if not isinstance(self.variable.noising, Interpolant):
+            raise TypeError(
+                f"ODEUpdate steps an interpolant; {self.variable.name!r} is "
+                f"noised by {type(self.variable.noising).__name__}"
+            )
+
+    def drift(self, x, t, velocity):
+        return velocity
+
+    def diffusion(self, t):
+        return None
+
+
+class AncestralUpdate(Update):
+    """
+    The noising's own reverse transition given the denoiser, in one stage at
+    t.
+
+    On a Gaussian interpolant, the exact posterior p(x_s | x_t, x0_hat): the
+    DDPM step on VP, the NCSN step on VE. ``noise="reverse_diffusion"`` draws
+    the noise with the std sqrt(sigma_t^2 - sigma_s^2) of the reverse
+    diffusion instead, as GEODE does on its VE positions.
+
+    On a :class:`~schnetpack.generative.noising.MaskNoising`, unmasking: the
+    field is p(z0 | z_t), and each masked atom is revealed with probability
+    (a_s - a_t) / (1 - a_t), its type drawn from the field without the
+    ``excluded`` classes. Revealed types stay. The step that reaches the
+    schedule's t_min reveals every remaining atom.
+    """
+
+    def __init__(
+        self,
+        variable: Variable,
+        field_key: str = "x0",
+        noise: str = "posterior",
+        excluded: Sequence[int] = (),
+    ):
+        """
+        Args:
+            variable: the variable this update steps
+            field_key: the calculator output holding its x0_hat, or
+                p(z0 | z_t) for a masked variable
+            noise: "posterior" or "reverse_diffusion"; Gaussian only
+            excluded: classes never drawn, e.g. atomic numbers; masked only
+        """
+        if noise not in ("posterior", "reverse_diffusion"):
+            raise ValueError(
+                f"noise must be 'posterior' or 'reverse_diffusion', got {noise!r}"
+            )
+        super().__init__(variable, field_key)
+        self.noise = noise
+        self.excluded = sorted({int(z) for z in excluded})
+
+    def check(self):
+        noising = self.variable.noising
+        if isinstance(noising, MaskNoising):
+            if self.noise != "posterior":
+                raise ValueError(
+                    f"{self.variable.name!r} is unmasked, which draws no noise; "
+                    f"noise={self.noise!r} applies to a Gaussian interpolant"
+                )
+            return
+        if not isinstance(noising, GaussianInterpolant):
+            raise TypeError(
+                f"AncestralUpdate takes the posterior of a Gaussian interpolant "
+                f"or unmasks a MaskNoising; {self.variable.name!r} is noised by "
+                f"{type(noising).__name__}"
+            )
+        if self.excluded:
+            raise ValueError(
+                f"excluded classes apply to a masked variable; "
+                f"{self.variable.name!r} is Gaussian"
+            )
+
+    def stage(self, stage, batch, fields, t_stage, start, t, t_next, data):
+        x_new = self.transition(batch, self.field(fields), t, t_next)
+        return self.variable.write(batch, x_new), x_new
+
+    def transition(
+        self,
+        batch: Mapping[str, Any],
+        x0: torch.Tensor,
+        t: torch.Tensor,
+        s: torch.Tensor,
+    ) -> torch.Tensor:
+        """Draw x_s given x_t, the variable's state in ``batch``, and x0_hat."""
+        x = self.variable.read(batch)
+        if isinstance(self.variable.noising, MaskNoising):
+            return self.unmask(x, x0, t, s)
+        schedule = self.variable.noising.schedule
+        mean, std = gaussian_posterior(schedule, x, x0, t, s)
+        if self.noise == "reverse_diffusion":
+            std = torch.sqrt(
+                torch.clamp(schedule.sigma(t) ** 2 - schedule.sigma(s) ** 2, min=0.0)
+            )
+        noise = noise_like(self.variable.noising.prior, x, batch)
+        return mean + expand_t(std, x) * noise
+
+    def unmask(
+        self, z: torch.Tensor, probs: torch.Tensor, t: torch.Tensor, s: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Reveal masked types from t to s.
+
+        Args:
+            z: types at t, MASK for masked atoms, shape (n_atoms,)
+            probs: p(z0 | z_t), shape (n_atoms, n_classes)
+            t: time at the start of the step (0-dim)
+            s: time at the end of the step (0-dim)
+
+        Returns:
+            The types at s.
+        """
+        schedule = self.variable.noising.schedule
+        if reaches(s, schedule.t_min):
+            p = 1.0  # a grid ends at t_min, where a < 1: reveal the rest
+        else:
+            a_t, a_s = schedule.a(t), schedule.a(s)
+            p = (a_s - a_t) / (1.0 - a_t)
+        reveal = (z == MASK) & (torch.rand(z.shape, device=z.device) < p)
+        if not reveal.any():
+            return z
+        probs = probs[reveal]  # a copy: the field stays as it is
+        probs[:, [MASK, *self.excluded]] = 0.0
+        z = z.clone()
+        z[reveal] = torch.multinomial(probs, 1).squeeze(-1).to(z.dtype)
+        return z
+
+
+def reaches(t: torch.Tensor | float, t_min: float) -> bool:
+    """Whether a grid time t is at or below t_min, up to rounding of the grid."""
+    t = float(t)
+    return t <= t_min or math.isclose(t, t_min, rel_tol=1e-5)
+
+
+def check_updates(
+    updates: Sequence[Update], variables: Sequence[Variable]
+) -> tuple[float, ...]:
+    """
+    The stage times of a list of updates, after checking it.
+
+    Raises:
+        ValueError: unless every variable has exactly one update, or if the
+            updates disagree on the time of a stage.
+        TypeError: if an update cannot step its variable.
+    """
+    for u in updates:
+        if not isinstance(u, Update):
+            raise TypeError(f"{type(u).__name__} is not an Update")
+    stepped = [u.variable for u in updates]
+    names = [v.name for v in stepped]
+    if len(set(map(id, stepped))) != len(stepped):
+        raise ValueError(f"a variable has more than one update: {names}")
+    missing = [v.name for v in variables if all(v is not w for w in stepped)]
+    unknown = [w.name for w in stepped if all(w is not v for v in variables)]
+    if missing or unknown:
+        raise ValueError(
+            f"every variable needs exactly one update; without one: {missing}, "
+            f"not among the variables: {unknown}"
+        )
+    for u in updates:
+        u.check()
+    nodes = []
+    for stage in range(max(u.n_stages for u in updates)):
+        here = {u.nodes[stage] for u in updates if stage < u.n_stages}
+        if any(stage >= u.n_stages for u in updates):
+            here.add(1.0)  # a finished update sits at t_next
+        if len(here) != 1:
+            raise ValueError(
+                f"the updates disagree on the time of stage {stage}: "
+                f"{sorted(here)} (as fractions of the step)"
+            )
+        nodes.append(here.pop())
+    return tuple(nodes)
+
+
+class Sampler(Dynamics):
+    """
+    Steps several variables along one time grid, one update each.
+
+    A step from t to t_next: for every stage, one model call at the stage
+    time on the current stage point, then each update that has this stage
+    reads its field and writes its variable's next stage point. After the
+    last stage, every update writes its new value in list order, starting
+    from the batch at t, through its variable's view. An update that has
+    run out of stages sits at its value at t_next for the later model calls.
+
+    Hooks run between steps; the batch they see carries the grid time per
+    atom and per structure, as the model saw it.
+    """
+
+    def __init__(
+        self,
+        calculator: JointCalculator,
+        updates: Sequence[Update],
+        start: Sequence[Variable],
+        grid: TimeGrid | None = None,
+        structures: StructureProvider | None = None,
         hooks: Sequence = (),
     ):
         """
         Args:
-            calculator: the model with the process and parametrization it was
-                trained under
-            grid: where to place the steps (default: uniform)
-            prior: explicit starting distribution; overrides the process's
-                own. Required when the process's coupling changes x1's
-                marginal.
-            eta2: stochasticity of the reverse process; 1 = reverse SDE,
-                0 = probability-flow ODE
+            calculator: one model call at time t, with every field the
+                updates read
+            updates: one update per variable; the order in which the new
+                values are written
+            start: the variables in the order their priors are drawn by
+                :meth:`sample`
+            grid: where to place the steps (default: uniform from the
+                smallest t_max to the largest t_min of the schedules)
+            structures: source of the structures :meth:`sample` starts from
             hooks: run around every step, in order
         """
-        if not isinstance(calculator, GenerativeCalculator):
+        if not isinstance(calculator, JointCalculator):
             raise TypeError(
-                f"{type(self).__name__} runs on a GenerativeCalculator, which "
-                "knows the process and parametrization the model was trained "
-                f"under; got {type(calculator).__name__}"
+                f"Sampler needs a JointCalculator; got {type(calculator).__name__}"
             )
-        process = calculator.process
-        super().__init__(
-            calculator,
-            prior=prior if prior is not None else process.sampling_prior(),
-            hooks=hooks,
-            key=calculator.key,
-        )
-        self.grid = grid if grid is not None else UniformGrid()
-        self.eta2 = eta2
-        # Acquire the (f, g) chart now, so a configuration without it fails
-        # with the obstruction named instead of sampling garbage mid-run.
-        self.sde = process.sde()
-        self.reverse = ReverseSDE(self.sde, eta2=eta2)
+        self.updates = list(updates)
+        self.start = list(start)
+        if not self.updates:
+            raise ValueError("Sampler needs at least one update")
+        self.nodes = check_updates(self.updates, self.start)
+        self.n_stages = len(self.nodes)
+        if grid is None:
+            schedules = [v.noising.schedule for v in self.start]
+            grid = UniformGrid(
+                min(s.t_max for s in schedules), max(s.t_min for s in schedules)
+            )
+        for v in self.start:
+            if isinstance(v.noising, MaskNoising) and not reaches(
+                grid.t_end, v.noising.schedule.t_min
+            ):
+                raise ValueError(
+                    f"the grid ends at t = {grid.t_end}, above the t_min "
+                    f"{v.noising.schedule.t_min} of {v.name!r}: some of its "
+                    "atoms would stay masked"
+                )
+        super().__init__(calculator, structures=structures, hooks=hooks)
+        self.grid = grid
 
-    @property
-    def process(self) -> Process:
-        """The forward process, the calculator's."""
-        return self.calculator.process
-
-    @property
-    def time_key(self) -> str:
-        """Batch key the path time is written to, the calculator's."""
-        return self.calculator.time_key
-
-    # -- the loop --------------------------------------------------------- #
-
-    def run(
-        self,
-        batch: Mapping[str, Any],
-        n_steps: int,
-        t_start: float | None = None,
-    ) -> dict[str, Any]:
+    def sample(self, n_samples: int, n_steps: int) -> dict[str, Any]:
         """
-        Denoise the structures in ``batch`` from ``t_start`` down to the
-        process's ``t_min``.
+        Draw ``n_samples`` structures, then every variable from its prior in
+        the order of ``start``, written through its view, and run on them.
+        """
+        if self.structures is None:
+            raise ValueError(
+                "Sampler has no structures to sample from; pass structures=... "
+                "at construction, or call run on given structures"
+            )
+        batch = self.structures(n_samples)
+        for v in self.start:
+            batch = v.write(batch, v.noising.sampling_prior().draw(batch))
+        return self.run(batch, n_steps)
+
+    def run(self, batch: Mapping[str, Any], n_steps: int) -> dict[str, Any]:
+        """
+        Move the structures in ``batch`` along the grid.
 
         Args:
-            batch: structures to denoise
+            batch: structures with every variable at the grid's t_start
             n_steps: number of steps
-            t_start: path time the structures are assumed to sit at
-                (default: the process's ``t_max``); the partial-denoising
-                entry
 
         Returns:
             The final batch.
         """
         self.calculator.reset()
         batch = self.calculator.prepare(batch)
-        x = batch[self.key]
-        t_start = self.process.t_max if t_start is None else t_start
-        ts = self.grid(
-            t_start, self.process.t_min, n_steps, dtype=x.dtype, device=x.device
-        )
+        states = [v.read(batch) for v in self.start]
+        dtype = next((x.dtype for x in states if x.is_floating_point()), None)
+        device = states[0].device
+        ts = self.grid(n_steps, dtype=dtype, device=device)
         n_steps = ts.shape[0] - 1
-        n_rows = x.shape[0]
 
-        batch = {**batch, self.time_key: ts[0].expand(n_rows)}
+        batch = self.calculator.with_time(batch, ts[0])
         for i in range(n_steps):
             batch = self.before_step(batch, i, n_steps)
-            x = self.step(
-                batch, batch[self.key], batch[self.time_key], ts[i + 1] - ts[i]
-            )
-            batch = {**batch, self.key: x, self.time_key: ts[i + 1].expand(n_rows)}
+            batch = self.step(batch, ts[i], ts[i + 1])
+            batch = self.calculator.with_time(batch, ts[i + 1])
             batch = self.after_step(batch, i + 1, n_steps)
         return batch
 
-    @abc.abstractmethod
     def step(
-        self,
-        batch: Mapping[str, Any],
-        x: torch.Tensor,
-        t: torch.Tensor,
-        dt: torch.Tensor,
-    ) -> torch.Tensor:
+        self, batch: Mapping[str, Any], t: torch.Tensor, t_next: torch.Tensor
+    ) -> dict[str, Any]:
         """
-        Advance x from t to t + dt.
+        Advance every variable from t to t_next.
 
         Args:
-            batch: the current batch, carried along to every field evaluation
-            x: current state, shape (n_rows, ...)
-            t: current time, shape (n_rows,)
-            dt: time increment (0-dim tensor; negative when denoising)
+            batch: every variable at t
+            t: current time (0-dim)
+            t_next: time at the end of the step (0-dim)
 
         Returns:
-            The advanced state.
+            The batch with every variable at t_next.
         """
-        raise NotImplementedError
-
-
-class EulerMaruyama(Sampler):
-    """First-order step: x <- x + drift dt + g sqrt(|dt|) z; plain Euler at eta2 = 0."""
-
-    def step(self, batch, x, t, dt):
-        drift = self.reverse.drift(x, t, self.calculator.score(batch, x, t))
-        x_new = x + drift * dt
-        g = expand_t(self.reverse.diffusion(t), x)
-        return x_new + g * dt.abs().sqrt() * torch.randn_like(x)
-
-
-class Heun(Sampler):
-    """
-    Second-order Heun step on the drift, plus an Euler–Maruyama diffusion
-    increment. At eta2 = 0 this is the EDM (Karras et al. 2022) sampler.
-    """
-
-    def step(self, batch, x, t, dt):
-        f1 = self.reverse.drift(x, t, self.calculator.score(batch, x, t))
-        x_pred = x + f1 * dt
-        t_pred = t + dt
-        f2 = self.reverse.drift(
-            x_pred, t_pred, self.calculator.score(batch, x_pred, t_pred)
-        )
-        x_new = x + 0.5 * (f1 + f2) * dt
-        g = expand_t(self.reverse.diffusion(t), x)
-        return x_new + g * dt.abs().sqrt() * torch.randn_like(x)
-
-
-class Ancestral(Sampler):
-    """
-    Exact-posterior ancestral step: estimate x0 from the score
-    (:meth:`~schnetpack.generative.differential_equations.SDE.x0_from_score`),
-    then draw x_s ~ p(x_s | x_t, x0_hat)
-    (:meth:`~schnetpack.generative.differential_equations.SDE.posterior`).
-
-    One class for every process with a Gaussian kernel, which is checked at
-    construction: the textbook DDPM step on VP, the NCSN/GPFF ancestral
-    sampler on VE. Intrinsically stochastic, so it ignores ``eta2``.
-    """
-
-    def step(self, batch, x, t, dt):
-        sde = self.sde
-        x0_hat = sde.x0_from_score(x, self.calculator.score(batch, x, t), t)
-        mean, std = sde.posterior(x, x0_hat, t, t + dt)
-        return mean + expand_t(std, x) * torch.randn_like(x)
+        start = batch_stage = dict(batch)
+        data = [[] for _ in self.updates]
+        for stage, node in enumerate(self.nodes):
+            t_stage = (
+                t if node == 0.0 else t_next if node == 1.0 else t + node * (t_next - t)
+            )
+            fields = self.calculator.fields(batch_stage, t_stage)
+            for u, d in zip(self.updates, data):
+                if stage < u.n_stages:
+                    batch_stage, data_stage = u.stage(
+                        stage, batch_stage, fields, t_stage, start, t, t_next, d
+                    )
+                    d.append(data_stage)
+        batch = start
+        for u, d in zip(self.updates, data):
+            batch = u.combine(batch, d)
+        return batch

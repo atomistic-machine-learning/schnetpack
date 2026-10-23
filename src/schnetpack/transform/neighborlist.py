@@ -23,7 +23,6 @@ __all__ = [
     "CachedNeighborList",
     "NeighborListTransform",
     "NeighborListWrapper",
-    "WrapPositions",
     "SkinNeighborList",
     "DistillationNeighborList",
     "FilterNeighbors",
@@ -786,50 +785,4 @@ class CountNeighbors(Transform):
             _, n_nbh = torch.unique(idx_i, return_counts=True)
 
         inputs[properties.n_nbh] = n_nbh
-        return inputs
-
-
-class WrapPositions(Transform):
-    """
-    Wrap atom positions into periodic cell. This routine requires a non-zero cell.
-    The cell center of the inverse cell is set to (0.5, 0.5, 0.5).
-    """
-
-    is_preprocessor: bool = True
-    is_postprocessor: bool = False
-
-    def __init__(self, eps: float = 1e-6):
-        """
-        Args:
-            eps (float): small offset for numerical stability.
-        """
-        super().__init__()
-        self.eps = eps
-
-    def forward(
-        self,
-        inputs: dict[str, torch.Tensor],
-    ) -> dict[str, torch.Tensor]:
-        R = inputs[properties.R]
-        cell = inputs[properties.cell].view(3, 3)
-        pbc = inputs[properties.pbc]
-
-        inverse_cell = torch.inverse(cell)
-        inv_positions = torch.sum(R[..., None] * inverse_cell[None, ...], dim=1)
-
-        periodic = torch.masked_select(inv_positions, pbc[None, ...])
-
-        # Apply periodic boundary conditions (with small buffer)
-        periodic = periodic + self.eps
-        periodic = periodic % 1.0
-        periodic = periodic - self.eps
-
-        # Update fractional coordinates
-        inv_positions.masked_scatter_(pbc[None, ...], periodic)
-
-        # Convert to positions
-        R_wrapped = torch.sum(inv_positions[..., None] * cell[None, ...], dim=1)
-
-        inputs[properties.R] = R_wrapped
-
         return inputs

@@ -12,7 +12,8 @@ from ase import Atoms
 
 import schnetpack as spk
 from schnetpack import properties
-from schnetpack.data.loader import _atoms_collate_fn, split_batch
+from schnetpack.data.loader import _atoms_collate_fn
+from schnetpack.dynamics.neighborlist import split_batch
 from schnetpack.interfaces.ase_interface import AtomsConverter, atoms_to_batch
 
 CUTOFF = 3.0
@@ -317,6 +318,21 @@ def test_split_batch_handles_ragged_and_single_atom_structures():
         np.testing.assert_allclose(
             sample[properties.R].numpy(), structure.positions, atol=1e-6
         )
+
+
+def test_split_batch_reads_the_flat_pbc_of_a_dataset_batch():
+    """A dataloader collates pbc as (3 n,), not (n, 3); both split alike."""
+    structures = [
+        Atoms(numbers=[1, 1], positions=np.zeros((2, 3)), cell=np.eye(3), pbc=True),
+        Atoms(numbers=[8], positions=np.zeros((1, 3))),
+    ]
+    inputs = atoms_to_batch(structures, dtype=torch.float64)
+    inputs[properties.pbc] = inputs[properties.pbc].reshape(-1)
+
+    samples = split_batch(inputs)
+
+    assert samples[0][properties.pbc].tolist() == [[True, True, True]]
+    assert samples[1][properties.pbc].tolist() == [[False, False, False]]
 
 
 def test_split_batch_of_single_atom_structures_round_trips():

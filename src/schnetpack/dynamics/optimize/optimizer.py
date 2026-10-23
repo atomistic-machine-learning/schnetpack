@@ -19,6 +19,7 @@ import torch
 from schnetpack import properties
 from schnetpack.dynamics.base import Dynamics
 from schnetpack.dynamics.calculator import Calculator, ForceCalculator
+from schnetpack.dynamics.structures import StructureProvider
 from schnetpack.generative.priors import Prior
 
 __all__ = ["Optimizer", "GradientDescent"]
@@ -63,6 +64,7 @@ class Optimizer(Dynamics):
     def __init__(
         self,
         calculator,
+        structures: StructureProvider | None = None,
         prior: Prior | None = None,
         hooks: Sequence = (),
         key: str = properties.R,
@@ -73,7 +75,10 @@ class Optimizer(Dynamics):
             calculator: runs the model: a
                 :class:`~schnetpack.dynamics.calculator.ForceCalculator`,
                 or a bare callable batch -> outputs in eV and Angstrom
-            prior: starting distribution :meth:`sample` draws from
+            structures: source of the structures :meth:`sample` starts
+                from
+            prior: redraws the provided structures before :meth:`sample`
+                runs them; without one they are run as provided
             hooks: run around every step, in order
             key: batch key this driver moves
             fmax: stop criterion on the largest force, in the force's unit;
@@ -88,7 +93,9 @@ class Optimizer(Dynamics):
                 f"{type(calculator).__name__}"
             )
         calculator.cache_last = True
-        super().__init__(calculator, prior=prior, hooks=hooks, key=key)
+        super().__init__(
+            calculator, structures=structures, prior=prior, hooks=hooks, key=key
+        )
         self.fmax = fmax
 
     def forces(self, batch: Mapping[str, Any]) -> torch.Tensor:
@@ -217,6 +224,7 @@ class GradientDescent(Optimizer):
         calculator,
         step_size: float,
         fmax: float | None = None,
+        structures: StructureProvider | None = None,
         prior: Prior | None = None,
         hooks: Sequence = (),
         key: str = properties.R,
@@ -226,12 +234,14 @@ class GradientDescent(Optimizer):
             calculator: see :class:`Optimizer`
             step_size: eps, the factor on the force
             fmax: see :class:`Optimizer`
+            structures: see :class:`Optimizer`
             prior: see :class:`Optimizer`
             hooks: see :class:`Optimizer`
             key: see :class:`Optimizer`
         """
         super().__init__(
             calculator,
+            structures=structures,
             prior=prior,
             hooks=hooks,
             key=key,

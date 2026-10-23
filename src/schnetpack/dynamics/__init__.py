@@ -22,3 +22,4 @@ from schnetpack.dynamics.hooks import *
 from schnetpack.dynamics.neighborlist import *
 from schnetpack.dynamics.optimize import *
 from schnetpack.dynamics.sample import *
+from schnetpack.dynamics.structures import *

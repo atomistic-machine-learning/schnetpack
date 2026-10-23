@@ -2,16 +2,15 @@ import pytest
 import torch
 
 from schnetpack import properties
-from schnetpack.dynamics import EulerMaruyama, GenerativeCalculator
 from schnetpack.generative import (
     VE,
-    DatasetPrior,
-    DatasetStructures,
     EpsParametrization,
     FlowMatching,
+    GaussianInterpolant,
     GaussianPrior,
-    StatisticsStructures,
+    Interpolant,
 )
+from tests.dynamics.test_sampling import sde_sampler
 
 
 def positions(n, idx_m=None):
@@ -32,7 +31,7 @@ def test_an_uncentered_prior_is_off_the_zero_mean_subspace():
     torch.manual_seed(0)
     prior = GaussianPrior(10.0, centered=False)
     draws = torch.stack(
-        [prior.sample_positions(positions(12)).mean(0) for _ in range(200)]
+        [prior(positions(12))[properties.R].mean(0) for _ in range(200)]
     )
     assert draws.norm(dim=-1).mean().item() == pytest.approx(5.0, rel=0.2)
 
@@ -42,7 +41,7 @@ def test_an_uncentered_prior_is_off_the_zero_mean_subspace():
 
 def test_a_draw_without_segments_is_centered_as_one_group():
     torch.manual_seed(0)
-    x = GaussianPrior(10.0).sample_positions(positions(12))
+    x = GaussianPrior(10.0)(positions(12))[properties.R]
     assert x.mean(0).norm().item() == pytest.approx(0.0, abs=1e-5)
 
 
@@ -52,7 +51,7 @@ def test_each_segment_is_centered_on_its_own():
     # the per-segment means are what must vanish.
     torch.manual_seed(0)
     idx_m = torch.arange(8).repeat_interleave(12)
-    x = GaussianPrior(10.0).sample_positions(positions(96, idx_m))
+    x = GaussianPrior(10.0)(positions(96, idx_m))[properties.R]
     for m in range(8):
         assert x[idx_m == m].mean(0).norm().item() == pytest.approx(0.0, abs=1e-5)
 
@@ -62,7 +61,7 @@ def test_a_batch_without_positions_takes_its_shape_from_the_atom_types():
     torch.manual_seed(0)
     idx_m = torch.arange(4).repeat_interleave(5)
     batch = {properties.idx_m: idx_m, properties.Z: torch.ones(20, dtype=torch.long)}
-    x = GaussianPrior(3.0).sample_positions(batch)
+    x = GaussianPrior(3.0)(batch)[properties.R]
     assert x.shape == (20, 3)
     for m in range(4):
         assert x[idx_m == m].mean(0).norm().item() == pytest.approx(0.0, abs=1e-5)
@@ -70,26 +69,37 @@ def test_a_batch_without_positions_takes_its_shape_from_the_atom_types():
 
 def test_a_mapping_without_idx_m_is_one_group():
     torch.manual_seed(0)
-    x = GaussianPrior(3.0).sample_positions({properties.Z: torch.ones(20)})
+    x = GaussianPrior(3.0)({properties.Z: torch.ones(20)})[properties.R]
     assert x.mean(0).norm().item() == pytest.approx(0.0, abs=1e-5)
 
 
 def test_segments_of_unequal_size_are_each_centered():
     torch.manual_seed(0)
     idx_m = torch.tensor([0, 0, 0, 1, 1, 2, 2, 2, 2, 2])
-    x = GaussianPrior(5.0).sample_positions(positions(10, idx_m))
+    x = GaussianPrior(5.0)(positions(10, idx_m))[properties.R]
     for m in range(3):
         assert x[idx_m == m].mean(0).norm().item() == pytest.approx(0.0, abs=1e-5)
 
 
 def test_a_mismatched_segment_count_is_refused():
     with pytest.raises(ValueError, match="one per row"):
-        GaussianPrior(1.0).sample_positions(positions(10, torch.arange(4)))
+        GaussianPrior(1.0)(positions(10, torch.arange(4)))
 
 
 def test_a_batch_without_positions_or_types_is_refused():
     with pytest.raises(KeyError, match="shape"):
-        GaussianPrior(1.0).sample_positions({})
+        GaussianPrior(1.0)({})
+
+
+def test_a_draw_keeps_the_rest_of_the_batch():
+    # The prior owns only its keys; layout and types pass through untouched,
+    # and the input batch is not modified.
+    z = torch.tensor([1, 6, 8])
+    batch = {properties.Z: z, properties.R: torch.zeros(3, 3)}
+    out = GaussianPrior(1.0)(batch)
+    assert out[properties.Z] is z
+    assert torch.equal(batch[properties.R], torch.zeros(3, 3))
+    assert not torch.equal(out[properties.R], torch.zeros(3, 3))
 
 
 # --- still a Gaussian, on the subspace ------------------------------------- #
@@ -101,7 +111,7 @@ def test_the_scale_survives_centering_on_the_subspace():
     # the ambient basis the variance is std^2 (1 - 1/n) — the same statement.
     torch.manual_seed(0)
     n = 64
-    x = GaussianPrior(2.0).sample_positions(positions(n))
+    x = GaussianPrior(2.0)(positions(n))[properties.R]
     expected = 2.0 * (1.0 - 1.0 / n) ** 0.5
     assert x.std().item() == pytest.approx(expected, rel=0.1)
 
@@ -114,12 +124,12 @@ def test_it_declares_itself_gaussian_with_a_scale():
     assert prior.std == 10.0
 
 
-def test_the_kernel_is_not_obstructed():
-    assert VE(2e-3, 10.0).gaussian_kernel_obstruction() is None
+def test_a_gaussian_interpolant_accepts_it():
+    GaussianInterpolant(VE(2e-3, 10.0), prior=GaussianPrior(10.0))  # must not raise
 
 
 def test_the_noise_parametrization_accepts_it():
-    EpsParametrization().validate(VE(2e-3, 10.0))
+    EpsParametrization().validate(GaussianInterpolant(VE(2e-3, 10.0)).schedule)
 
 
 # --- the two entry points -------------------------------------------------- #
@@ -130,7 +140,7 @@ def test_a_training_draw_is_shaped_like_the_positions_and_centered():
     # axis is one molecule and no layout is needed.
     torch.manual_seed(0)
     x0 = torch.randn(12, 3, dtype=torch.float64)
-    x1 = GaussianPrior(10.0).sample_positions({properties.R: x0})
+    x1 = GaussianPrior(10.0)({properties.R: x0})[properties.R]
     assert x1.shape == x0.shape
     assert x1.dtype == x0.dtype
     assert x1.mean(0).norm().item() == pytest.approx(0.0, abs=1e-5)
@@ -140,7 +150,7 @@ def test_perturb_stays_on_the_subspace_for_centered_data():
     # The precondition made visible: centered x0 plus centered x1 keeps x_t
     # centered at every time, which is what makes the targets learnable.
     torch.manual_seed(0)
-    process = VE(0.05, 10.0)
+    process = GaussianInterpolant(VE(0.05, 10.0))
     x0 = torch.randn(12, 3)
     x0 = x0 - x0.mean(0)
     for t in (0.1, 0.5, 1.0):
@@ -154,7 +164,7 @@ def test_the_sampler_starts_a_batch_on_the_subspace():
     # start of a multi-molecule batch is centered per molecule.
     torch.manual_seed(0)
     idx_m = torch.arange(8).repeat_interleave(12)
-    process = VE(0.05, 10.0)
+    process = GaussianInterpolant(VE(0.05, 10.0))
 
     seen = {}
 
@@ -163,10 +173,14 @@ def test_the_sampler_starts_a_batch_on_the_subspace():
         seen.setdefault("x_init", x.clone())
         return {"prediction": torch.zeros_like(x)}
 
-    sampler = EulerMaruyama(GenerativeCalculator(model, process, EpsParametrization()))
+    sampler = sde_sampler(model, process, EpsParametrization())
 
-    template = {properties.idx_m: idx_m, properties.R: torch.empty(96, 3)}
-    sampler.run(sampler.prior.sample_from_batch(template), n_steps=2)
+    template = {
+        properties.idx_m: idx_m,
+        properties.n_atoms: torch.full((8,), 12),
+        properties.R: torch.empty(96, 3),
+    }
+    sampler.run(process.sampling_prior()(template), n_steps=2)
     for m in range(8):
         assert seen["x_init"][idx_m == m].mean(0).norm().item() == pytest.approx(
             0.0, abs=1e-4
@@ -175,7 +189,7 @@ def test_the_sampler_starts_a_batch_on_the_subspace():
 
 def test_given_positions_are_denoised_as_they_are():
     torch.manual_seed(0)
-    process = VE(0.05, 10.0)
+    process = GaussianInterpolant(VE(0.05, 10.0))
     x_init = torch.full((6, 3), 7.0)
 
     seen = {}
@@ -185,20 +199,24 @@ def test_given_positions_are_denoised_as_they_are():
         seen.setdefault("x_init", x.clone())
         return {"prediction": torch.zeros_like(x)}
 
-    sampler = EulerMaruyama(GenerativeCalculator(model, process, EpsParametrization()))
+    sampler = sde_sampler(model, process, EpsParametrization())
 
     # the prior is not consulted, so the layout does not re-center them
-    batch = {properties.R: x_init, properties.idx_m: torch.zeros(6, dtype=torch.long)}
+    batch = {
+        properties.R: x_init,
+        properties.idx_m: torch.zeros(6, dtype=torch.long),
+        properties.n_atoms: torch.tensor([6]),
+    }
     sampler.run(batch, n_steps=1)
     assert torch.allclose(seen["x_init"], x_init)
 
 
-# --- the process derives its start from it, unchanged ---------------------- #
+# --- the interpolant derives its start from it, unchanged ------------------ #
 
 
 def test_the_sampling_prior_is_the_training_prior():
     prior = GaussianPrior(10.0)
-    assert FlowMatching(prior=prior).sampling_prior() is prior
+    assert Interpolant(FlowMatching(), prior=prior).sampling_prior() is prior
 
 
 # --- the flag -------------------------------------------------------------- #
@@ -214,14 +232,15 @@ def test_centering_can_be_switched_off():
     # For data with no translation symmetry to quotient out, or a leading axis
     # of independent samples rather than the atoms of one structure.
     torch.manual_seed(0)
-    x = GaussianPrior(10.0, centered=False).sample_positions(positions(12))
+    x = GaussianPrior(10.0, centered=False)(positions(12))[properties.R]
     assert x.mean(0).norm().item() > 1.0
 
 
 def test_the_sugar_constructor_gets_a_centered_prior():
-    # VE(sigma_min, sigma_max) builds its own GaussianPrior(sigma_max); the
-    # default has to carry through, or the common path stays off-subspace.
-    process = VE(sigma_min=0.05, sigma_max=10.0)
+    # GaussianInterpolant(VE(sigma_min, sigma_max)) builds its own
+    # GaussianPrior(sigma_max); the default has to carry through, or the
+    # common path stays off-subspace.
+    process = GaussianInterpolant(VE(sigma_min=0.05, sigma_max=10.0))
     assert process.prior.centered is True
     assert process.prior.std == 10.0
 
@@ -232,12 +251,14 @@ def test_the_sugar_constructor_gets_a_centered_prior():
 def test_diffuse_centers_each_molecule_of_a_collated_batch():
     # Diffuse hands the batch to the prior as context, so a batch that carries
     # idx_m is centered per molecule and not as one cloud.
-    from schnetpack.generative import Diffuse, EpsParametrization
+    from schnetpack.generative import Diffuse, EpsParametrization, Variable
 
     torch.manual_seed(0)
     idx_m = torch.arange(4).repeat_interleave(6)
-    process = VE(0.05, 10.0)
-    transform = Diffuse(process, EpsParametrization(), label_key="eps", time_key="t")
+    process = GaussianInterpolant(VE(0.05, 10.0))
+    transform = Diffuse(
+        [Variable("eps", properties.R, "atom", process, EpsParametrization(), "y")]
+    )
 
     x0 = GaussianPrior.center(torch.randn(24, 3), idx_m)  # centered data, per molecule
     out = transform(
@@ -249,7 +270,7 @@ def test_diffuse_centers_each_molecule_of_a_collated_batch():
         }
     )
     for m in range(4):
-        assert out["eps"][idx_m == m].mean(0).norm().item() == pytest.approx(
+        assert out["label_eps"][idx_m == m].mean(0).norm().item() == pytest.approx(
             0.0, abs=1e-4
         )
         assert out[properties.R][idx_m == m].mean(0).norm().item() == pytest.approx(
@@ -260,99 +281,17 @@ def test_diffuse_centers_each_molecule_of_a_collated_batch():
 def test_diffuse_per_structure_centers_the_one_molecule():
     # The dataloader path: no idx_m before collation, and the whole leading
     # axis is the single structure being preprocessed.
-    from schnetpack.generative import Diffuse, EpsParametrization
+    from schnetpack.generative import Diffuse, EpsParametrization, Variable
 
     torch.manual_seed(0)
-    process = VE(0.05, 10.0)
-    transform = Diffuse(process, EpsParametrization(), label_key="eps", time_key="t")
+    process = GaussianInterpolant(VE(0.05, 10.0))
+    transform = Diffuse(
+        [Variable("eps", properties.R, "atom", process, EpsParametrization(), "y")]
+    )
 
     x0 = torch.randn(9, 3)
     out = transform(
         {properties.R: x0 - x0.mean(0), properties.Z: torch.ones(9, dtype=torch.long)}
     )
-    assert out["eps"].mean(0).norm().item() == pytest.approx(0.0, abs=1e-5)
+    assert out["label_eps"].mean(0).norm().item() == pytest.approx(0.0, abs=1e-5)
     assert out[properties.R].mean(0).norm().item() == pytest.approx(0.0, abs=1e-4)
-
-
-# --- where sampled structures come from ------------------------------------ #
-
-
-def molecule(z):
-    """One structure as a dataset item: atom types, positions, count."""
-    z = torch.tensor(z)
-    return {
-        properties.Z: z,
-        properties.R: torch.arange(3.0 * len(z)).reshape(-1, 3),
-        properties.n_atoms: torch.tensor([len(z)]),
-    }
-
-
-DATASET = [molecule([1, 6]), molecule([8, 1, 1]), molecule([6, 6, 1, 1])]
-
-
-def test_dataset_structures_collate_like_the_dataloader():
-    batch = DatasetStructures(DATASET, shuffle=False).sample(2)
-    assert torch.equal(batch[properties.Z], torch.tensor([1, 6, 8, 1, 1]))
-    assert torch.equal(batch[properties.n_atoms], torch.tensor([2, 3]))
-    assert torch.equal(batch[properties.idx_m], torch.tensor([0, 0, 1, 1, 1]))
-    assert batch[properties.R].shape == (5, 3)
-
-
-def test_dataset_structures_draw_every_structure_once_per_pass():
-    torch.manual_seed(0)
-    structures = DatasetStructures(DATASET)
-    first = structures.sample(2)[properties.n_atoms].tolist()
-    second = structures.sample(1)[properties.n_atoms].tolist()
-    assert sorted(first + second) == [2, 3, 4]
-    # the next pass starts over
-    assert structures.sample(3)[properties.n_atoms].shape == (3,)
-
-
-def test_dataset_structures_in_order_wrap_around():
-    batch = DatasetStructures(DATASET, shuffle=False).sample(5)
-    assert batch[properties.n_atoms].tolist() == [2, 3, 4, 2, 3]
-
-
-def test_statistics_structures_follow_the_histograms():
-    torch.manual_seed(0)
-    structures = StatisticsStructures(
-        n_atoms=torch.tensor([0, 0, 0, 1]),
-        atom_types=torch.tensor([0, 0, 0, 0, 0, 0, 1]),
-    )
-    batch = structures.sample(4)
-    assert batch[properties.n_atoms].tolist() == [3, 3, 3, 3]
-    assert set(batch[properties.Z].tolist()) == {6}
-    assert torch.equal(batch[properties.idx_m], torch.arange(4).repeat_interleave(3))
-    assert properties.R not in batch
-
-
-def test_statistics_structures_from_a_dataset():
-    structures = StatisticsStructures.from_dataset(DATASET)
-    assert structures.n_atoms.tolist() == [0, 0, 1, 1, 1]
-    assert structures.atom_types[[1, 6, 8]].tolist() == [5, 3, 1]
-
-
-def test_statistics_structures_refuse_empty_structures():
-    with pytest.raises(ValueError, match="zero atoms"):
-        StatisticsStructures(torch.tensor([1, 1]), torch.tensor([0, 1]))
-
-
-def test_sample_draws_centered_positions_for_the_structures():
-    torch.manual_seed(0)
-    prior = GaussianPrior(10.0, structures=DatasetStructures(DATASET))
-    batch = prior.sample(3)
-    assert batch[properties.R].shape == (9, 3)
-    for m in range(3):
-        x = batch[properties.R][batch[properties.idx_m] == m]
-        assert x.mean(0).norm().item() == pytest.approx(0.0, abs=1e-4)
-
-
-def test_the_dataset_prior_returns_the_stored_structures():
-    batch = DatasetPrior(DATASET, shuffle=False).sample(3)
-    expected = torch.cat([m[properties.R] for m in DATASET])
-    assert torch.equal(batch[properties.R], expected)
-
-
-def test_the_dataset_prior_is_no_training_endpoint():
-    with pytest.raises(TypeError, match="no positions law"):
-        FlowMatching(prior=DatasetPrior(DATASET)).perturb(torch.randn(4, 3))

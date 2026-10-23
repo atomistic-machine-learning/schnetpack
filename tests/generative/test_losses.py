@@ -7,10 +7,12 @@ from schnetpack.generative import (
     VP,
     EpsParametrization,
     FlowMatching,
+    GaussianInterpolant,
+    Interpolant,
     MatchingLoss,
-    PCVarianceCoupling,
     PermutationCoupling,
     ScoreParametrization,
+    VELinear,
     VelocityParametrization,
     X0Parametrization,
 )
@@ -42,7 +44,7 @@ class RecordingNet(nn.Module):
 # --- the generic matching loss -------------------------------------------- #
 
 
-@pytest.mark.parametrize("process_cls", [VP, VE, FlowMatching])
+@pytest.mark.parametrize("process_cls", [VP, VE, VELinear])
 @pytest.mark.parametrize(
     "param_cls",
     [
@@ -56,7 +58,8 @@ class RecordingNet(nn.Module):
 def test_loss_is_a_scalar_with_gradients(process_cls, param_cls):
     torch.manual_seed(0)
     net = LinearNet()
-    process = VE(2e-4, 1.0) if process_cls is VE else process_cls()
+    schedule = VE(2e-4, 1.0) if process_cls is VE else process_cls()
+    process = GaussianInterpolant(schedule)
     loss_fn = MatchingLoss(process, param_cls())
 
     loss = loss_fn(net, torch.randn(32, 3))
@@ -79,29 +82,29 @@ def test_perfect_prediction_gives_zero_loss():
         def forward(self, x, t, cond=None):
             return x0
 
-    loss = MatchingLoss(VP(), X0Parametrization())(Oracle(), x0)
+    loss = MatchingLoss(GaussianInterpolant(VP()), X0Parametrization())(Oracle(), x0)
     assert loss.item() == pytest.approx(0.0, abs=1e-12)
 
 
 def test_default_times_stay_inside_the_processs_usable_range():
     # Regression: sampling t ~ U[0, 1] would hit the score singularity at 0.
-    process = VP()
+    process = GaussianInterpolant(VP())
     net = RecordingNet()
     MatchingLoss(process, ScoreParametrization())(net, torch.randn(4096, 3))
 
     t = net.times[0]
     assert t.shape == (4096,)
-    assert t.min().item() >= process.t_min
-    assert t.max().item() <= process.t_max
+    assert t.min().item() >= process.schedule.t_min
+    assert t.max().item() <= process.schedule.t_max
     # and it really covers the range rather than sitting at one end
-    assert t.min().item() < process.t_min + 0.05
-    assert t.max().item() > process.t_max - 0.05
+    assert t.min().item() < process.schedule.t_min + 0.05
+    assert t.max().item() > process.schedule.t_max - 0.05
 
 
 def test_time_sampler_hook_is_used():
     net = RecordingNet()
     loss_fn = MatchingLoss(
-        VP(),
+        GaussianInterpolant(VP()),
         ScoreParametrization(),
         t_sampler=lambda n, device: torch.full((n,), 0.42, device=device),
     )
@@ -115,12 +118,12 @@ def test_weight_hook_scales_the_loss():
     net = LinearNet()
 
     plain = MatchingLoss(
-        VP(),
+        GaussianInterpolant(VP()),
         ScoreParametrization(),
         t_sampler=lambda n, device: torch.full((n,), 0.5, device=device),
     )
     weighted = MatchingLoss(
-        VP(),
+        GaussianInterpolant(VP()),
         ScoreParametrization(),
         weight=lambda t: torch.full_like(t, 3.0),
         t_sampler=lambda n, device: torch.full((n,), 0.5, device=device),
@@ -139,7 +142,7 @@ def test_process_supplies_the_endpoints():
     torch.manual_seed(0)
     x0 = torch.randn(64, 3)
     net = LinearNet()
-    loss_fn = MatchingLoss(VP(), EpsParametrization())
+    loss_fn = MatchingLoss(GaussianInterpolant(VP()), EpsParametrization())
 
     torch.manual_seed(1)
     a = loss_fn(net, x0)
@@ -151,20 +154,22 @@ def test_process_supplies_the_endpoints():
 def test_cond_reaches_the_model():
     net = RecordingNet()
     marker = object()
-    MatchingLoss(VP(), ScoreParametrization())(net, torch.randn(4, 3), cond=marker)
+    MatchingLoss(GaussianInterpolant(VP()), ScoreParametrization())(
+        net, torch.randn(4, 3), cond=marker
+    )
     assert net.conds[0] is marker
 
 
 def test_defaults_are_uniform_weight_and_the_process_t_sampler():
-    loss_fn = MatchingLoss(VP(), ScoreParametrization())
+    loss_fn = MatchingLoss(GaussianInterpolant(VP()), ScoreParametrization())
     assert torch.equal(loss_fn.weight(torch.rand(5)), torch.ones(5))
     assert loss_fn.t_sampler is None  # falls through to process.sample_t
 
 
 def test_loss_validates_the_pair():
     # The loss is where the (process, parametrization) pair meets at training
-    # time; a Gaussian-only head on a kernel-less configuration must fail here.
-    process = VP(coupling=PCVarianceCoupling())
+    # time; a Gaussian-only head on a schedule without sigma must fail here.
+    process = Interpolant(FlowMatching())
     with pytest.raises(TypeError, match="Gaussian kernel"):
         MatchingLoss(process, ScoreParametrization())
 
@@ -172,7 +177,7 @@ def test_loss_validates_the_pair():
 def test_the_process_carries_the_coupling():
     # The join no longer takes a coupling — it comes with the process, and the
     # pairing is validated at the loss's construction.
-    process = VP(coupling=PermutationCoupling())
+    process = Interpolant(VP(), coupling=PermutationCoupling())
     loss_fn = MatchingLoss(process, VelocityParametrization())
     assert loss_fn.process is process
     loss = loss_fn(LinearNet(), torch.randn(16, 3))
@@ -182,7 +187,7 @@ def test_the_process_carries_the_coupling():
 def test_endpoint_scale_flows_from_the_prior():
     # The prior owns sigma_max; the parametrization reads it through the
     # process. A VE assembly at scale 50 trains without a separate declaration.
-    process = VE(0.01, 50.0)
+    process = GaussianInterpolant(VE(0.01, 50.0))
     loss_fn = MatchingLoss(process, ScoreParametrization())
     loss = loss_fn(LinearNet(), torch.randn(32, 3))
     assert torch.isfinite(loss)
@@ -194,12 +199,12 @@ def test_ve_score_target_spans_orders_of_magnitude():
     # grows like 1/b, so an unweighted L2 is dominated by the low-noise end
     # and the model never learns the rest. Documented on VE.
     torch.manual_seed(0)
-    process = VE(2e-4, 1.0)
+    process = GaussianInterpolant(VE(2e-4, 1.0))
     x1 = torch.randn(4096, 1)
 
     score_param = ScoreParametrization()
-    lo = score_param.target(process, None, x1, torch.zeros(4096)).abs().mean()
-    hi = score_param.target(process, None, x1, torch.ones(4096)).abs().mean()
+    lo = score_param.target(process.schedule, None, x1, torch.zeros(4096)).abs().mean()
+    hi = score_param.target(process.schedule, None, x1, torch.ones(4096)).abs().mean()
     assert lo / hi > 1000
 
     # b^2 weighting flattens it: w * (s - (-x1/b))^2 == (b s + x1)^2,
@@ -207,7 +212,9 @@ def test_ve_score_target_spans_orders_of_magnitude():
     eps_param = EpsParametrization()
     for t_val in [0.0, 0.5, 1.0]:
         t = torch.full((4096,), t_val)
-        weight = process.b(t) ** 2
-        score_residual = weight * (score_param.target(process, None, x1, t)) ** 2
-        eps_residual = eps_param.target(process, None, x1, t) ** 2
+        weight = process.schedule.b(t) ** 2
+        score_residual = (
+            weight * (score_param.target(process.schedule, None, x1, t)) ** 2
+        )
+        eps_residual = eps_param.target(process.schedule, None, x1, t) ** 2
         assert torch.allclose(score_residual, eps_residual, rtol=1e-4)
