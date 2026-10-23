@@ -158,14 +158,41 @@ def synchronize(device):
         torch.cuda.synchronize(device)
 
 
+def memory_mb(device, *, peak=False, reserved=False):
+    """The GPU memory torch has allocated, or reserved in its caching allocator, now or
+    at its peak, in MiB; None on the cpu."""
+    if device.type != "cuda":
+        return None
+    if reserved:
+        memory = torch.cuda.max_memory_reserved if peak else torch.cuda.memory_reserved
+    else:
+        memory = (
+            torch.cuda.max_memory_allocated if peak else torch.cuda.memory_allocated
+        )
+    return memory(device) / 2**20
+
+
 def time_model(model, structures, args, device):
     """Wall times of ``args.repeats`` energy and force calls on one batch, after
     ``args.warmup`` untimed ones, together with the time the batch took to build and
-    the peak GPU memory of the calls."""
+    the GPU memory of the calls.
+
+    Every model stays on the device for the whole run, so all memory figures include
+    the weights of all of them: ``resident_memory_mb`` is what is allocated before the
+    batch is built, ``allocated_memory_mb`` what is allocated with the batch in place,
+    before the calls. ``peak_memory_mb`` is the most allocated during the timed calls,
+    and ``peak_reserved_memory_mb`` the most the caching allocator held then, which is
+    closer to what ``nvidia-smi`` shows.
+    """
+    if device.type == "cuda":
+        # the cache still holds the blocks of the previous model's batch
+        torch.cuda.empty_cache()
+    resident_memory_mb = memory_mb(device)
     start = time.perf_counter()
     batch = model.converter(structures)
     synchronize(device)
     neighbor_list_s = time.perf_counter() - start
+    allocated_memory_mb = memory_mb(device)
 
     for _ in range(args.warmup):
         model.calculator(batch)
@@ -182,13 +209,13 @@ def time_model(model, structures, args, device):
 
     # a call that is fast because it returned nonsense is not a faster call
     assert torch.isfinite(outputs["forces"]).all(), f"{model.label}: non-finite forces"
-    peak_memory_mb = (
-        torch.cuda.max_memory_allocated(device) / 2**20
-        if device.type == "cuda"
-        else None
-    )
     return dict(
-        times_s=times, neighbor_list_s=neighbor_list_s, peak_memory_mb=peak_memory_mb
+        times_s=times,
+        neighbor_list_s=neighbor_list_s,
+        resident_memory_mb=resident_memory_mb,
+        allocated_memory_mb=allocated_memory_mb,
+        peak_memory_mb=memory_mb(device, peak=True),
+        peak_reserved_memory_mb=memory_mb(device, peak=True, reserved=True),
     )
 
 
