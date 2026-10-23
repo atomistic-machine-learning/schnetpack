@@ -7,8 +7,9 @@ force-like field (:mod:`~schnetpack.dynamics.optimize`) are both a
 :class:`~schnetpack.dynamics.base.Dynamics` with its own step loop, with the
 its :mod:`~schnetpack.dynamics.hooks` run around every step and
 the model reached through a calculator
-(:mod:`~schnetpack.dynamics.calculator`), which adds the
-:mod:`~schnetpack.dynamics.guidance` to the field it returns. The step rules
+(:mod:`~schnetpack.dynamics.calculator`). The
+:mod:`~schnetpack.dynamics.guidance` goes to the force calculator of a
+relaxation and to the updates of a sampler. The step rules
 are subclasses of the two families' bases,
 :class:`~schnetpack.dynamics.sample.Sampler` and
 :class:`~schnetpack.dynamics.optimize.Optimizer`. What the model *is* stays in

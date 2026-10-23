@@ -7,13 +7,17 @@ every generated variable along a time grid.
   update that has this stage reads its field and writes its next stage
   point; after the last stage every update writes its new value, in list
   order.
+- An update reads its variable's raw head from the model's outputs,
+  converts it with the variable's parametrization into the field it steps
+  on, and adds its :mod:`~schnetpack.dynamics.guidance` terms to that
+  field.
 - :class:`SDEUpdate` integrates the reverse SDE of a Gaussian interpolant on
   the score, :class:`ODEUpdate` transports along a velocity; both take an
   :class:`~schnetpack.dynamics.sample.integrators.Integrator`, which sets
   their stages.
 - :class:`AncestralUpdate` takes the noising's own reverse transition given
-  the denoiser, in one stage: the exact Gaussian posterior, or unmasking for
-  masked atom types.
+  the denoiser x0, in one stage: the exact Gaussian posterior, or unmasking
+  for masked atom types.
 
 Theory: ``docs_new/generation/generation.md`` (one variable) and
 ``docs_new/generation/new_variables.md`` (several).
@@ -26,7 +30,8 @@ from typing import Any
 import torch
 
 from schnetpack.dynamics.base import Dynamics
-from schnetpack.dynamics.calculator import JointCalculator
+from schnetpack.dynamics.calculator import FieldCalculator
+from schnetpack.dynamics.guidance import Guidance, guidance_terms, weighted_sum
 from schnetpack.dynamics.sample.grids import TimeGrid, UniformGrid
 from schnetpack.dynamics.sample.integrators import Euler, Integrator
 from schnetpack.dynamics.structures import StructureProvider
@@ -83,44 +88,80 @@ def gaussian_posterior(
 
 class Update:
     """
-    Steps one variable on one field of the calculator's outputs.
+    Steps one variable on one field of it.
 
     An update has :attr:`n_stages` stages at :attr:`nodes` (fractions of the
     step). At each of them, :meth:`stage` reads the field and writes the
     variable's next stage point; at its last one it draws the variable's new
     value, which later model calls of the step see at t_next.
     :meth:`combine` only writes that value.
+
+    :meth:`field` reads the variable's raw head from the model's outputs,
+    converts it with the variable's parametrization, and :meth:`guide` adds
+    the guidance to the result as it is: field + sum_i w_i G_i, every term
+    evaluated at the stage point and time and shaped like the field.
     """
 
     n_stages: int = 1
     nodes: tuple[float, ...] = (0.0,)
 
-    def __init__(self, variable: Variable, field_key: str):
+    def __init__(self, variable: Variable, guidance: Sequence[Guidance] = ()):
         """
         Args:
             variable: the variable this update steps
-            field_key: the calculator output this update reads
+            guidance: terms added to the field this update steps on
         """
         self.variable = variable
-        self.field_key = field_key
+        self.guidance = guidance_terms(guidance)
 
     def check(self) -> None:
         """Raise unless this update can step its variable."""
 
-    def field(self, fields: Mapping[str, Any]) -> torch.Tensor:
-        """This update's field from the calculator's outputs."""
-        if self.field_key not in fields:
+    def head(self, outputs: Mapping[str, Any]) -> torch.Tensor:
+        """The variable's raw head in the model's outputs."""
+        key = self.variable.output_key
+        if key not in outputs:
             raise KeyError(
-                f"{type(self).__name__} of {self.variable.name!r} reads "
-                f"{self.field_key!r}; the model returned {sorted(fields)}"
+                f"{type(self).__name__} of {self.variable.name!r} reads the "
+                f"head {key!r}; the model returned {sorted(outputs)}"
             )
-        return fields[self.field_key]
+        return outputs[key]
+
+    def guide(self, batch: Mapping[str, Any], field: torch.Tensor) -> torch.Tensor:
+        """
+        ``field`` plus the weighted sum of the guidance terms at ``batch``.
+
+        Raises:
+            ValueError: if the terms are not shaped like ``field``.
+        """
+        if not self.guidance:
+            return field
+        term = weighted_sum(self.guidance, batch)
+        if term.shape != field.shape:
+            raise ValueError(
+                f"the guidance of {self.variable.name!r} is shaped "
+                f"{tuple(term.shape)}, its field {tuple(field.shape)}"
+            )
+        return field + term.to(field)
+
+    def field(
+        self, batch: Mapping[str, Any], outputs: Mapping[str, Any], t: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        The field this update steps on, guidance included.
+
+        Args:
+            batch: the stage point, with the time t
+            outputs: the model's outputs at ``batch``
+            t: the time of ``batch`` (0-dim)
+        """
+        raise NotImplementedError
 
     def stage(
         self,
         stage: int,
         batch: Mapping[str, Any],
-        fields: Mapping[str, Any],
+        outputs: Mapping[str, Any],
         t_stage: torch.Tensor,
         start: Mapping[str, Any],
         t: torch.Tensor,
@@ -132,8 +173,9 @@ class Update:
 
         Args:
             stage: stage index, 0 <= stage < n_stages
-            batch: the current stage point of every variable
-            fields: the model's outputs at ``batch`` and ``t_stage``
+            batch: the current stage point of every variable, with the time
+                ``t_stage``
+            outputs: the model's outputs at ``batch``
             t_stage: the time of this stage
             start: the batch at t, the start of the step
             t: time at the start of the step (0-dim)
@@ -159,16 +201,17 @@ class DriftUpdate(Update):
     """
 
     def __init__(
-        self, variable: Variable, field_key: str, integrator: Integrator | None = None
+        self, variable: Variable, integrator: Integrator | None = None, **kwargs
     ):
         """
         Args:
             variable: the variable this update steps
-            field_key: the calculator output this update reads
             integrator: step rule (default:
                 :class:`~schnetpack.dynamics.sample.integrators.Euler`)
+
+        Remaining keyword arguments are those of :class:`Update`.
         """
-        super().__init__(variable, field_key)
+        super().__init__(variable, **kwargs)
         integrator = Euler() if integrator is None else integrator
         if not isinstance(integrator, Integrator):
             raise TypeError(f"{type(integrator).__name__} is not an Integrator")
@@ -195,9 +238,9 @@ class DriftUpdate(Update):
     def diffusion(self, t) -> torch.Tensor | None:
         raise NotImplementedError
 
-    def stage(self, stage, batch, fields, t_stage, start, t, t_next, data):
+    def stage(self, stage, batch, outputs, t_stage, start, t, t_next, data):
         x, x_start = self.variable.read(batch), self.variable.read(start)
-        drifts = [*data, self.drift(x, t_stage, self.field(fields))]
+        drifts = [*data, self.drift(x, t_stage, self.field(batch, outputs, t_stage))]
         if stage + 1 < self.n_stages:
             x_next, _ = self.integrator.point(stage + 1, x_start, t, t_next, drifts)
             return self.variable.write(batch, x_next), drifts[-1]
@@ -219,25 +262,35 @@ class SDEUpdate(DriftUpdate):
         dx = [f x - 1/2 (1 + eta2) g^2 score] dt + sqrt(eta2) g dw,
 
     eta2 = 1 the reverse-time SDE and eta2 = 0 the probability-flow ODE.
+    Guidance is added to the score.
     """
 
     def __init__(
         self,
         variable: Variable,
-        field_key: str = "score",
         eta2: float = 1.0,
         integrator: Integrator | None = None,
+        **kwargs,
     ):
         """
         Args:
             variable: the variable this update steps
-            field_key: the calculator output holding its score
             eta2: stochasticity; 1 = reverse SDE, 0 = probability-flow ODE
             integrator: step rule (default: Euler)
+
+        Remaining keyword arguments are those of :class:`Update`.
         """
-        super().__init__(variable, field_key, integrator)
+        super().__init__(variable, integrator, **kwargs)
         self.eta2 = eta2
         self.reverse_sde = SDE.reverse(variable.noising.schedule, eta2)
+
+    def field(self, batch, outputs, t):
+        """The score, guidance added."""
+        v = self.variable
+        score = v.parametrization.to_score(
+            v.noising.schedule, self.head(outputs), v.read(batch), t
+        )
+        return self.guide(batch, score)
 
     def drift(self, x, t, score):
         return self.reverse_sde.drift(x, t, score)
@@ -247,29 +300,49 @@ class SDEUpdate(DriftUpdate):
 
 
 class ODEUpdate(DriftUpdate):
-    """Deterministic transport along the velocity field, dx = v dt."""
+    """
+    Deterministic transport along the velocity field, dx = v dt. Guidance
+    is added to the velocity.
+    """
 
     def __init__(
-        self,
-        variable: Variable,
-        field_key: str = "velocity",
-        integrator: Integrator | None = None,
+        self, variable: Variable, integrator: Integrator | None = None, **kwargs
     ):
         """
         Args:
             variable: the variable this update steps
-            field_key: the calculator output holding its velocity
             integrator: step rule (default: Euler)
+
+        Remaining keyword arguments are those of :class:`Update`.
         """
-        super().__init__(variable, field_key, integrator)
+        super().__init__(variable, integrator, **kwargs)
 
     def check(self):
-        """Any interpolant: the velocity needs no Gaussian chart."""
-        if not isinstance(self.variable.noising, Interpolant):
+        """
+        Any interpolant for a velocity head; any other head reaches the
+        velocity through the (f, g) chart of a Gaussian interpolant.
+        """
+        noising = self.variable.noising
+        if not isinstance(noising, Interpolant):
             raise TypeError(
                 f"ODEUpdate steps an interpolant; {self.variable.name!r} is "
-                f"noised by {type(self.variable.noising).__name__}"
+                f"noised by {type(noising).__name__}"
             )
+        chart = self.variable.parametrization.velocity_needs_chart
+        if chart and not isinstance(noising, GaussianInterpolant):
+            raise TypeError(
+                f"ODEUpdate reaches the velocity of {self.variable.name!r} "
+                "through the score, which needs a Gaussian interpolant; it is "
+                f"noised by {type(noising).__name__}"
+            )
+
+    def field(self, batch, outputs, t):
+        """The velocity, guidance added."""
+        v = self.variable
+        velocity = v.parametrization.to_velocity(
+            v.noising.schedule, self.head(outputs), v.read(batch), t
+        )
+        return self.guide(batch, velocity)
 
     def drift(self, x, t, velocity):
         return velocity
@@ -293,28 +366,31 @@ class AncestralUpdate(Update):
     (a_s - a_t) / (1 - a_t), its type drawn from the field without the
     ``excluded`` classes. Revealed types stay. The step that reaches the
     schedule's t_min reveals every remaining atom.
+
+    Guidance is added to the field: x0_hat, or p(z0 | z_t) of a masked
+    variable.
     """
 
     def __init__(
         self,
         variable: Variable,
-        field_key: str = "x0",
         noise: str = "posterior",
         excluded: Sequence[int] = (),
+        **kwargs,
     ):
         """
         Args:
             variable: the variable this update steps
-            field_key: the calculator output holding its x0_hat, or
-                p(z0 | z_t) for a masked variable
             noise: "posterior" or "reverse_diffusion"; Gaussian only
             excluded: classes never drawn, e.g. atomic numbers; masked only
+
+        Remaining keyword arguments are those of :class:`Update`.
         """
         if noise not in ("posterior", "reverse_diffusion"):
             raise ValueError(
                 f"noise must be 'posterior' or 'reverse_diffusion', got {noise!r}"
             )
-        super().__init__(variable, field_key)
+        super().__init__(variable, **kwargs)
         self.noise = noise
         self.excluded = sorted({int(z) for z in excluded})
 
@@ -339,8 +415,16 @@ class AncestralUpdate(Update):
                 f"{self.variable.name!r} is Gaussian"
             )
 
-    def stage(self, stage, batch, fields, t_stage, start, t, t_next, data):
-        x_new = self.transition(batch, self.field(fields), t, t_next)
+    def field(self, batch, outputs, t):
+        """x0_hat, guidance added; p(z0 | z_t) for a masked variable."""
+        v = self.variable
+        x0 = v.parametrization.to_x0(
+            v.noising.schedule, self.head(outputs), v.read(batch), t
+        )
+        return self.guide(batch, x0)
+
+    def stage(self, stage, batch, outputs, t_stage, start, t, t_next, data):
+        x_new = self.transition(batch, self.field(batch, outputs, t), t, t_next)
         return self.variable.write(batch, x_new), x_new
 
     def transition(
@@ -447,10 +531,11 @@ class Sampler(Dynamics):
 
     A step from t to t_next: for every stage, one model call at the stage
     time on the current stage point, then each update that has this stage
-    reads its field and writes its variable's next stage point. After the
-    last stage, every update writes its new value in list order, starting
-    from the batch at t, through its variable's view. An update that has
-    run out of stages sits at its value at t_next for the later model calls.
+    converts its variable's head into its field and writes the variable's
+    next stage point. After the last stage, every update writes its new
+    value in list order, starting from the batch at t, through its
+    variable's view. An update that has run out of stages sits at its value
+    at t_next for the later model calls.
 
     Hooks run between steps; the batch they see carries the grid time per
     atom and per structure, as the model saw it.
@@ -458,7 +543,7 @@ class Sampler(Dynamics):
 
     def __init__(
         self,
-        calculator: JointCalculator,
+        calculator: FieldCalculator,
         updates: Sequence[Update],
         start: Sequence[Variable],
         grid: TimeGrid | None = None,
@@ -467,8 +552,8 @@ class Sampler(Dynamics):
     ):
         """
         Args:
-            calculator: one model call at time t, with every field the
-                updates read
+            calculator: one model call at time t, with the head of every
+                variable
             updates: one update per variable; the order in which the new
                 values are written
             start: the variables in the order their priors are drawn by
@@ -478,9 +563,9 @@ class Sampler(Dynamics):
             structures: source of the structures :meth:`sample` starts from
             hooks: run around every step, in order
         """
-        if not isinstance(calculator, JointCalculator):
+        if not isinstance(calculator, FieldCalculator):
             raise TypeError(
-                f"Sampler needs a JointCalculator; got {type(calculator).__name__}"
+                f"Sampler needs a FieldCalculator; got {type(calculator).__name__}"
             )
         self.updates = list(updates)
         self.start = list(start)
@@ -567,11 +652,12 @@ class Sampler(Dynamics):
             t_stage = (
                 t if node == 0.0 else t_next if node == 1.0 else t + node * (t_next - t)
             )
-            fields = self.calculator.fields(batch_stage, t_stage)
+            batch_stage = self.calculator.with_time(batch_stage, t_stage)
+            outputs = self.calculator(batch_stage)
             for u, d in zip(self.updates, data):
                 if stage < u.n_stages:
                     batch_stage, data_stage = u.stage(
-                        stage, batch_stage, fields, t_stage, start, t, t_next, d
+                        stage, batch_stage, outputs, t_stage, start, t, t_next, d
                     )
                     d.append(data_stage)
         batch = start

@@ -7,6 +7,7 @@ import pytest
 import torch
 
 from schnetpack import properties
+from schnetpack.dynamics import AncestralUpdate
 from schnetpack.generative import (
     MASK,
     VE,
@@ -19,7 +20,6 @@ from schnetpack.generative import (
     MaskedTypeWeight,
     MaskNoising,
     MaskPrior,
-    ParametrizedModel,
     Variable,
 )
 
@@ -136,18 +136,11 @@ def test_a_masked_type_has_no_score():
         )
 
 
-def test_a_parametrized_model_reads_the_logits_as_x0():
-    v = types()
-    model = ParametrizedModel(
-        lambda batch: {"type_logits": torch.zeros(3, N_CLASSES)},
-        v.parametrization,
-        v.noising.schedule,
-        output_key="type_logits",
-        key=properties.Z,
-        x0_key="x0_Z",
-    )
-    batch = {properties.Z: torch.tensor([MASK, 5, MASK]), properties.t: torch.ones(3)}
-    probs = model(batch)["x0_Z"]
+def test_an_ancestral_update_reads_the_logits_as_x0():
+    update = AncestralUpdate(types())
+    batch = {properties.Z: torch.tensor([MASK, 5, MASK])}
+    outputs = {"type_logits": torch.zeros(3, N_CLASSES)}
+    probs = update.field(batch, outputs, torch.tensor(1.0))
     uniform = torch.full((N_CLASSES - 1,), 1.0 / (N_CLASSES - 1))
     assert torch.allclose(probs[0, 1:], uniform)
     assert probs[1, 5] == 1.0

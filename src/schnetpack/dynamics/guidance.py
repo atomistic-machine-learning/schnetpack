@@ -1,32 +1,34 @@
 """
-Guidance: terms a calculator adds to the field it returns.
+Guidance: terms added to the field a driver steps on.
 
 Where a :class:`~schnetpack.dynamics.hooks.Hook` edits the iterate between
-a driver's steps, guidance changes the field itself —
-restraint forces, classifier guidance — so it acts at every point the field is
-evaluated (Heun's predictor, an L-BFGS step alike), and the driver never sees
-it apart from the model's own field.
+a driver's steps, guidance changes the field itself — restraint forces,
+classifier guidance — so it acts at every point the field is evaluated
+(Heun's predictor, an L-BFGS step alike), and the driver never sees it apart
+from the model's own field.
 
-A guidance term returns one force-like term. It is a
-:class:`~torch.nn.Module` whose ``forward`` reads the positions in
-``batch[properties.R]``, in Angstrom, and returns a tensor ``(n_atoms, 3)`` in
-eV/Angstrom: the force of a restraint, or kT times the gradient of a
-log-density for guidance that is no energy (a classifier's
-kT ∇ log p(y|x)). No energy is returned, so a term need not be conservative.
-Its ``weight`` scales it, and the calculator applies that weight. How the
-weighted terms enter depends on the calculator's field:
+A guidance term is a :class:`~torch.nn.Module` whose ``forward`` reads what
+it needs from the batch and returns a tensor shaped like the field it is
+added to. Its ``weight`` scales it, and whoever holds the term adds the
+weighted term to its field:
 
-- :class:`~schnetpack.dynamics.calculator.ForceCalculator` — the term is
-  added to the model's forces. On a physical force the weight is a plain
-  factor; on a pseudo-force, minus the gradient of ||x - x0||^2 in
-  Angstrom^2, it is in Angstrom^2/eV and turns the term into a length.
-- :class:`~schnetpack.dynamics.calculator.GenerativeCalculator` — the
-  weighted term is added to the calculator's field (score, noise, velocity,
-  x0 or pseudo force) as it is; on the score the weight is 1/kT, in 1/eV.
-  The batch the term sees then
-  also holds the path time under the calculator's ``time_key``, for guidance
-  that depends on t.
+- :class:`~schnetpack.dynamics.calculator.ForceCalculator` — to the model's
+  forces.
+- an :class:`~schnetpack.dynamics.sample.sampler.Update` of a
+  :class:`~schnetpack.dynamics.sample.sampler.Sampler` — to the field the
+  update steps on, of whichever variable it steps: the score of an SDE
+  update, the velocity of an ODE update, the x0 of an ancestral one. The
+  batch the term sees holds the stage point and the path time per atom and
+  per structure, for guidance that depends on t.
+
+The weight carries a term into the unit of its field.
+:class:`HarmonicRestraint`, a force on the positions in eV/Angstrom, enters a
+physical force with a plain factor, a pseudo-force with Angstrom^2/eV, and a
+score with 1/kT, in 1/eV.
 """
+
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 import torch
 from torch import nn
@@ -48,30 +50,28 @@ class Guidance(nn.Module):
     def __init__(self, weight: float = 1.0):
         """
         Args:
-            weight: factor the calculator scales this term by: a plain
-                factor on a physical force, Angstrom^2/eV on a pseudo-force,
-                1/kT in 1/eV on a score
+            weight: factor this term is scaled by; carries it into the unit
+                of the field it is added to
         """
         super().__init__()
         self.weight = weight
 
     def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
         """
-        Evaluate the term at ``batch[properties.R]``.
+        Evaluate the term at ``batch``.
 
-        The positions are in Angstrom and are the step rule's evaluation
-        point, not necessarily the driver's iterate. On a score the batch
-        also holds the path time under the calculator's ``time_key``; a term
-        that needs it should raise if it is missing.
+        The batch is the step rule's evaluation point, not necessarily the
+        driver's iterate. In sampling it also holds the path time per atom
+        and per structure; a term that needs it should raise if it is
+        missing.
 
         Args:
-            batch: batch to evaluate on, for the positions, the structure
-                layout and the term's own inputs
+            batch: batch to evaluate on
 
         Returns:
-            The force-like term ``(n_atoms, 3)`` in eV/Angstrom, unweighted —
-            the calculator applies :attr:`weight`. ``batch`` is left
-            unchanged.
+            The term, unweighted and shaped like the field it is added to —
+            the calculator or the update applies :attr:`weight`. ``batch``
+            is left unchanged.
         """
         raise NotImplementedError
 
@@ -96,7 +96,9 @@ class HarmonicRestraint(Guidance):
     - ``batch[HarmonicRestraint.restraint_constants]`` — ``(n_pairs,)`` force
       constants k in eV/Angstrom^2
 
-    :meth:`forward` returns the forces -dE/dR; :meth:`energy` gives E itself.
+    :meth:`forward` returns the forces -dE/dR ``(n_atoms, 3)`` in
+    eV/Angstrom, at the positions ``batch[properties.R]`` in Angstrom;
+    :meth:`energy` gives E itself.
     """
 
     restraint_pairs = "_restraint_pairs"  #: default key of the restrained pairs
@@ -118,9 +120,9 @@ class HarmonicRestraint(Guidance):
             count_key: batch key of the number of pairs per structure
             lengths_key: batch key of the target distances, in Angstrom
             constants_key: batch key of the force constants, in eV/Angstrom^2
-            weight: factor the calculator scales the forces by: a plain
-                factor on a physical force, Angstrom^2/eV on a pseudo-force,
-                1/kT in 1/eV on a score
+            weight: factor the forces are scaled by: a plain factor on a
+                physical force, Angstrom^2/eV on a pseudo-force, 1/kT in
+                1/eV on a score
         """
         super().__init__(weight=weight)
         self.pairs_key = pairs_key
@@ -194,3 +196,17 @@ class HarmonicRestraint(Guidance):
         forces.index_add_(0, idx[:, 1], f_j)
         forces.index_add_(0, idx[:, 0], -f_j)
         return forces
+
+
+def guidance_terms(terms: Sequence) -> list[Guidance]:
+    """``terms`` as a list, after checking that each is a :class:`Guidance`."""
+    terms = list(terms)
+    for term in terms:
+        if not isinstance(term, Guidance):
+            raise TypeError(f"{type(term).__name__} is not a Guidance")
+    return terms
+
+
+def weighted_sum(terms: Sequence[Guidance], batch: Mapping[str, Any]) -> torch.Tensor:
+    """The sum of at least one term at ``batch``, each scaled by its ``weight``."""
+    return sum(term.weight * term(batch) for term in terms)

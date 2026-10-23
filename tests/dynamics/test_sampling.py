@@ -5,8 +5,8 @@ from schnetpack import properties
 from schnetpack.dynamics import (
     AncestralUpdate,
     Euler,
+    FieldCalculator,
     Heun,
-    JointCalculator,
     ODEUpdate,
     Sampler,
     SDEUpdate,
@@ -24,7 +24,6 @@ from schnetpack.generative import (
     GaussianPrior,
     Interpolant,
     MatchingLoss,
-    ParametrizedModel,
     PermutationCoupling,
     ReverseSDE,
     ScoreParametrization,
@@ -56,23 +55,6 @@ def variable(process, parametrization=None, key=properties.R):
     )
 
 
-def joint_calculator(model, v, guidance=(), guided_fields=(), **field_keys):
-    """A JointCalculator on ``model``'s raw head, converted into ``field_keys``."""
-    return JointCalculator(
-        ParametrizedModel(
-            model,
-            v.parametrization,
-            v.noising.schedule,
-            output_key=v.output_key,
-            key=v.view,
-            time_key=v.time_key,
-            **field_keys,
-        ),
-        guidance=guidance,
-        guided_fields=guided_fields,
-    )
-
-
 def sde_sampler(
     model,
     process,
@@ -85,26 +67,22 @@ def sde_sampler(
 ):
     """One SDE update on the score of a raw-head ``model`` trained on ``process``."""
     v = variable(process, parametrization, key)
-    calculator = joint_calculator(
-        model, v, guidance, ("score",) if guidance else (), score_key="score"
-    )
-    update = SDEUpdate(v, eta2=eta2, integrator=integrator)
-    return Sampler(calculator, [update], [v], **kwargs)
+    update = SDEUpdate(v, eta2=eta2, integrator=integrator, guidance=guidance)
+    return Sampler(FieldCalculator(model), [update], [v], **kwargs)
 
 
 def ancestral_sampler(model, process, parametrization=None, **kwargs):
     """One ancestral update on the x0 of a raw-head ``model`` trained on ``process``."""
     v = variable(process, parametrization)
-    calculator = joint_calculator(model, v, x0_key="x0")
-    return Sampler(calculator, [AncestralUpdate(v)], [v], **kwargs)
+    return Sampler(FieldCalculator(model), [AncestralUpdate(v)], [v], **kwargs)
 
 
 def ode_sampler(model, process=None, integrator=None, **kwargs):
-    """One ODE update on a ``model`` that returns the velocity itself."""
+    """One ODE update on a ``model`` whose head is the velocity itself."""
     process = process or Interpolant(FlowMatching(0.0, 1.0))
     v = variable(process, VelocityParametrization())
     update = ODEUpdate(v, integrator=integrator)
-    return Sampler(JointCalculator(model), [update], [v], **kwargs)
+    return Sampler(FieldCalculator(model), [update], [v], **kwargs)
 
 
 def toy_batch(shape, key=properties.R):
@@ -212,7 +190,6 @@ def test_sde_update_exposes_its_reverse_sde(vp):
     assert update.diffusion(torch.rand(3)) is not None
     assert update.reverse_sde.eta2 == 0.25
     assert update.reverse_sde.sde.schedule is vp.schedule
-    assert update.field_key == "score"
 
 
 def test_sde_update_is_deterministic_at_eta2_zero(vp):
@@ -222,13 +199,12 @@ def test_sde_update_is_deterministic_at_eta2_zero(vp):
 def test_update_defaults():
     process = GaussianInterpolant(VE(0.01, 3.0))
     ancestral = AncestralUpdate(variable(process))
-    assert (ancestral.field_key, ancestral.noise, ancestral.n_stages) == (
-        "x0",
+    assert (ancestral.noise, ancestral.n_stages, ancestral.guidance) == (
         "posterior",
         1,
+        [],
     )
     ode = ODEUpdate(variable(Interpolant(FlowMatching()), VelocityParametrization()))
-    assert ode.field_key == "velocity"
     assert isinstance(ode.integrator, Euler)
     assert ode.diffusion(torch.rand(3)) is None
 
@@ -314,24 +290,24 @@ def test_non_gaussian_interpolant_fails_at_assembly_not_silently(process):
             for eta2 in (0.0, 1.0):
                 with pytest.raises(TypeError, match="chart|Gaussian interpolant"):
                     update = SDEUpdate(v, eta2=eta2, integrator=integrator)
-                    Sampler(JointCalculator(IDLE), [update], [v])
+                    Sampler(FieldCalculator(IDLE), [update], [v])
         with pytest.raises(TypeError, match="Gaussian interpolant"):
-            Sampler(JointCalculator(IDLE), [AncestralUpdate(v)], [v])
+            Sampler(FieldCalculator(IDLE), [AncestralUpdate(v)], [v])
 
 
 @pytest.mark.parametrize(
-    "update, field",
-    [
-        (lambda v: SDEUpdate(v), "score"),
-        (lambda v: AncestralUpdate(v), "x0"),
-        (lambda v: ODEUpdate(v), "velocity"),
-    ],
+    "update",
+    [SDEUpdate, AncestralUpdate, ODEUpdate],
     ids=["sde", "ancestral", "ode"],
 )
-def test_an_update_names_the_field_the_model_does_not_return(vp, update, field):
+def test_an_update_names_the_head_the_model_does_not_return(vp, update):
     v = variable(vp)
-    sampler = Sampler(JointCalculator(IDLE), [update(v)], [v])
-    with pytest.raises(KeyError, match=f"reads '{field}'"):
+
+    def model(batch):
+        return {"score": torch.zeros_like(batch[properties.R])}
+
+    sampler = Sampler(FieldCalculator(model), [update(v)], [v])
+    with pytest.raises(KeyError, match="reads the head 'prediction'.*\\['score'\\]"):
         sampler.run({**toy_batch((4, 3)), properties.R: torch.zeros(4, 3)}, 1)
 
 
@@ -410,7 +386,7 @@ def analytic_velocity(mu, s):
         mean = (1 - t) * mu
         var = (1 - t) ** 2 * s**2 + t**2
         dvar = -2 * (1 - t) * s**2 + 2 * t
-        return {"velocity": -mu + dvar / (2 * var) * (x - mean)}
+        return {"prediction": -mu + dvar / (2 * var) * (x - mean)}
 
     return velocity
 
@@ -485,18 +461,17 @@ def test_ancestral_on_ve_matches_the_score_form_update():
         VE(0.01, 3.0), prior=GaussianPrior(std=3.0, centered=False)
     )
     score_fn = analytic_score(process, 0.5, 0.7, x1_std=process.schedule.sigma_max)
-    v = variable(process)
-    calculator = joint_calculator(batch_model(score_fn), v, x0_key="x0")
+    update = AncestralUpdate(variable(process))
+    calculator = FieldCalculator(batch_model(score_fn))
 
     x = torch.randn(32, 2, dtype=torch.float64)
-    batch = {**toy_batch(x.shape), properties.R: x}
     t = torch.tensor(0.8, dtype=torch.float64)
     s = torch.tensor(0.7, dtype=torch.float64)
+    batch = calculator.with_time({**toy_batch(x.shape), properties.R: x}, t)
 
     torch.manual_seed(1)
-    stepped = AncestralUpdate(v).transition(
-        batch, calculator.fields(batch, t)["x0"], t, s
-    )
+    x0 = update.field(batch, calculator(batch), t)
+    stepped = update.transition(batch, x0, t, s)
 
     sig_t, sig_s = process.schedule.sigma(t), process.schedule.sigma(s)
     torch.manual_seed(1)

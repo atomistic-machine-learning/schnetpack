@@ -66,7 +66,7 @@ Calculators
 
     Calculator
     ForceCalculator
-    GenerativeCalculator
+    FieldCalculator
     EnsembleCalculator
     BatchNeighborList
 

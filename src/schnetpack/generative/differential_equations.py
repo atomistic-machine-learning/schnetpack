@@ -82,9 +82,10 @@ class ReverseSDE:
     eta2 in [0, 1]: 1 is the Anderson (1982) reverse-time SDE, 0 the
     probability-flow ODE, and every member shares the forward marginals.
     eta2 is the square of the eta knob of DDIM. Takes the :class:`SDE` chart
-    only; the score is an input to :meth:`drift`, and composing model,
-    parametrization and conditioning into it is the caller's job
-    (:class:`~schnetpack.generative.parametrizations.ParametrizedModel`).
+    only; the score is an input to :meth:`drift`, and converting a model's
+    head into it is the caller's job
+    (:class:`~schnetpack.dynamics.sample.sampler.SDEUpdate`, with its
+    variable's parametrization).
     """
 
     def __init__(self, sde: SDE, eta2: float = 1.0):

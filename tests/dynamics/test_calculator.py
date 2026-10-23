@@ -6,25 +6,16 @@ from schnetpack.dynamics import (
     LBFGS,
     Calculator,
     DirectDenoising,
+    FieldCalculator,
     ForceCalculator,
     Heun,
-    JointCalculator,
-    NoiseCalculator,
-    PseudoForceCalculator,
     Sampler,
-    ScoreCalculator,
     SDEUpdate,
-    VelocityCalculator,
-    X0Calculator,
 )
 from schnetpack.generative import (
     VP,
     EpsParametrization,
-    FlowMatching,
     GaussianInterpolant,
-    ParametrizedModel,
-    PseudoForceParametrization,
-    ScoreParametrization,
     Variable,
     VelocityParametrization,
 )
@@ -59,12 +50,7 @@ def test_neighbor_list_runs_on_every_model_call_and_never_reaches_the_loop():
     v = Variable(
         "x", properties.R, "atom", process, VelocityParametrization(), "prediction"
     )
-    calculator = JointCalculator(
-        ParametrizedModel(
-            zero_model, VelocityParametrization(), process.schedule, score_key="score"
-        ),
-        neighbor_list=nbl,
-    )
+    calculator = FieldCalculator(zero_model, neighbor_list=nbl)
     sampler = Sampler(calculator, [SDEUpdate(v, eta2=0.0, integrator=Heun())], [v])
     batch = {
         properties.R: torch.randn(5, 3),
@@ -328,24 +314,19 @@ def test_the_cache_answers_an_unchanged_angstrom_batch():
     torch.testing.assert_close(first["forces"], second["forces"])
 
 
-@pytest.mark.parametrize(
-    "calculator",
-    [ForceCalculator(zero_model), VelocityCalculator(zero_model)],
-    ids=["force", "velocity"],
-)
-def test_the_sampler_refuses_a_single_field_calculator(calculator):
-    # it reads every field of every variable from one model call
+def test_the_sampler_refuses_a_force_calculator():
+    # it reads the head of every variable from one model call at time t
     v = Variable(
         "x", properties.R, "atom", GaussianInterpolant(VP()), EpsParametrization(), "y"
     )
-    with pytest.raises(TypeError, match="JointCalculator"):
-        Sampler(calculator, [SDEUpdate(v)], [v])
+    with pytest.raises(TypeError, match="FieldCalculator"):
+        Sampler(ForceCalculator(zero_model), [SDEUpdate(v)], [v])
 
 
 @pytest.mark.parametrize("build", [LBFGS, DirectDenoising], ids=["LBFGS", "DD"])
-def test_time_free_drivers_refuse_a_generative_calculator(build):
-    # its fields need a time, and it names no units
-    calculator = PseudoForceCalculator(zero_model)
+def test_time_free_drivers_refuse_a_field_calculator(build):
+    # its heads need a time, and it names no units
+    calculator = FieldCalculator(zero_model)
     with pytest.raises(TypeError, match="ForceCalculator"):
         build(calculator)
 
@@ -380,116 +361,3 @@ def test_a_pseudo_force_has_no_energy_and_no_stress():
         ForceCalculator(zero_model, kind="pseudo", stress_key="stress")
     with pytest.raises(ValueError, match="kind"):
         ForceCalculator(zero_model, kind="virtual")
-
-
-# ------------------------------------------------------------- generative fields
-
-
-def toy_head(batch):
-    x, t = batch[properties.R], batch[properties.t]
-    return {"prediction": torch.tanh(x) * (1.0 + t[:, None])}
-
-
-FIELD_CALCULATORS = [
-    (ScoreCalculator, "score"),
-    (NoiseCalculator, "noise"),
-    (VelocityCalculator, "velocity"),
-    (X0Calculator, "x0"),
-    (PseudoForceCalculator, "pseudo_force"),
-]
-
-
-@pytest.mark.parametrize(
-    "build, field", FIELD_CALCULATORS, ids=[f for _, f in FIELD_CALCULATORS]
-)
-def test_each_generative_calculator_reads_its_default_key(build, field):
-    def model(batch):
-        x, t = batch[properties.R], batch[properties.t]
-        return {
-            name: x * (i + t[:, None]) for i, (_, name) in enumerate(FIELD_CALCULATORS)
-        }
-
-    calculator = build(model)
-    assert calculator.output_key == field
-    x = torch.randn(4, 3, dtype=torch.float64)
-    t = torch.full((4,), 0.4, dtype=torch.float64)
-    torch.testing.assert_close(
-        calculator.field({}, x, t), model({properties.R: x, properties.t: t})[field]
-    )
-    # a scalar time is spread over the rows
-    torch.testing.assert_close(
-        calculator.field({}, x, t[0]), calculator.field({}, x, t)
-    )
-
-
-@pytest.mark.parametrize(
-    "build, field", FIELD_CALCULATORS, ids=[f for _, f in FIELD_CALCULATORS]
-)
-def test_a_generative_calculator_needs_its_key_in_the_outputs(build, field):
-    calculator = build(toy_head)
-    x = torch.randn(4, 3)
-    with pytest.raises(KeyError, match=field):
-        calculator.field({}, x, torch.tensor(0.4))
-
-
-def test_the_output_key_can_be_overridden():
-    calculator = ScoreCalculator(toy_head, output_key="prediction")
-    x = torch.randn(4, 3)
-    t = torch.full((4,), 0.4)
-    torch.testing.assert_close(
-        calculator.field({}, x, t),
-        toy_head({properties.R: x, properties.t: t})["prediction"],
-    )
-
-
-@pytest.mark.parametrize(
-    "parametrization",
-    [EpsParametrization(), VelocityParametrization(), PseudoForceParametrization()],
-)
-def test_parametrized_model_writes_the_parametrizations_conversions(parametrization):
-    schedule = VP()
-    model = ParametrizedModel(
-        toy_head,
-        parametrization,
-        schedule,
-        score_key="score",
-        noise_key="noise",
-        velocity_key="velocity",
-        x0_key="x0",
-        pseudo_force_key="pseudo_force",
-    )
-    x = torch.randn(4, 3, dtype=torch.float64)
-    t = torch.full((4,), 0.4, dtype=torch.float64)
-    raw = toy_head({properties.R: x, properties.t: t})["prediction"]
-    for build, field in FIELD_CALCULATORS:
-        convert = getattr(parametrization, f"to_{field}")
-        torch.testing.assert_close(
-            build(model).field({}, x, t), convert(schedule, raw, x, t)
-        )
-
-
-def test_parametrized_model_writes_only_the_requested_fields():
-    model = ParametrizedModel(
-        toy_head, EpsParametrization(), VP(), score_key="s", x0_key="clean"
-    )
-    x = torch.randn(4, 3)
-    t = torch.full((4,), 0.4)
-    outputs = model({properties.R: x, properties.t: t})
-    assert set(outputs) == {"prediction", "s", "clean"}
-    # the model's own outputs are kept as they were
-    torch.testing.assert_close(
-        outputs["prediction"],
-        toy_head({properties.R: x, properties.t: t})["prediction"],
-    )
-
-
-def test_parametrized_model_needs_a_field_key():
-    with pytest.raises(ValueError, match="field key"):
-        ParametrizedModel(toy_head, EpsParametrization(), VP())
-
-
-def test_parametrized_model_validates_the_pair():
-    with pytest.raises(TypeError, match="Gaussian kernel"):
-        ParametrizedModel(
-            toy_head, ScoreParametrization(), FlowMatching(), score_key="score"
-        )

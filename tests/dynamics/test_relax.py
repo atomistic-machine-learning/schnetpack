@@ -5,8 +5,8 @@ from schnetpack import properties
 from schnetpack.dynamics import (
     DatasetStructures,
     DirectDenoising,
+    FieldCalculator,
     ForceCalculator,
-    PseudoForceCalculator,
 )
 from schnetpack.generative import (
     VE,
@@ -101,7 +101,7 @@ def test_direct_denoising_runs_on_a_pseudo_force_only():
     with pytest.raises(TypeError, match="physical"):
         DirectDenoising(ForceCalculator(IDLE))
     with pytest.raises(TypeError, match="ForceCalculator"):
-        DirectDenoising(PseudoForceCalculator(IDLE))
+        DirectDenoising(FieldCalculator(IDLE))
 
 
 def test_direct_denoising_stops_on_fmax():
