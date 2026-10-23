@@ -6,7 +6,8 @@ This entails sampling the momenta from random distributions corresponding to cer
 import torch
 
 from schnetpack import units as spk_units
-from schnetpack.md import System
+
+from .system import System
 
 __all__ = ["Initializer", "MaxwellBoltzmannInit", "UniformInit"]
 

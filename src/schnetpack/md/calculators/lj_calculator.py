@@ -10,8 +10,9 @@ import torch.nn as nn
 
 import schnetpack.nn as snn
 from schnetpack import properties
-from schnetpack.md.calculators import SchNetPackCalculator
 from schnetpack.model import Forces, PairwiseDistances, Strain
+
+from .schnetpack_calculator import SchNetPackCalculator
 
 __all__ = ["LJCalculator", "LJModel"]
 

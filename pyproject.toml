@@ -87,7 +87,7 @@ ignore = [
 # ARE the public API surface: schnetpack.SchNet et al. resolve through them, and
 # mypy honours them even under --no-implicit-reexport because each source module
 # declares __all__.
-"__init__.py" = ["F401", "F403", "F405", "E402", "I001"]
+"__init__.py" = ["F401", "F403", "F405", "E402"]
 # tests/data/test_transforms.py deliberately star-imports schnetpack.transform
 # to exercise the public surface the same way a user would.
 "tests/**" = ["F841", "F403", "F405"]

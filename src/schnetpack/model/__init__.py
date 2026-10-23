@@ -28,12 +28,10 @@ aids the reader. The sub-modules stay importable under their own names for that:
     from schnetpack.model.representation import PaiNN      # equivalent
 """
 
-from schnetpack.model import atomistic
-from schnetpack.model import representation
-
-from schnetpack.model.base import *
-from schnetpack.model.utils import *
+from schnetpack.model import atomistic, representation
 from schnetpack.model.atomistic import *
-from schnetpack.model.representation import *
-from schnetpack.model.mace import *
+from schnetpack.model.base import *
 from schnetpack.model.ensemble import *
+from schnetpack.model.mace import *
+from schnetpack.model.representation import *
+from schnetpack.model.utils import *

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from schnetpack.md.calculators import MDCalculator
+from .base_calculator import MDCalculator
 
 if TYPE_CHECKING:
     from schnetpack.md import System
