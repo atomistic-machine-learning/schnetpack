@@ -35,7 +35,6 @@ from schnetpack.dynamics.guidance import Guidance, guidance_terms, weighted_sum
 from schnetpack.dynamics.sample.grids import TimeGrid, UniformGrid
 from schnetpack.dynamics.sample.integrators import Euler, Integrator
 from schnetpack.dynamics.structures import StructureProvider
-from schnetpack.generative.differential_equations import SDE
 from schnetpack.generative.noising import (
     GaussianInterpolant,
     Interpolant,
@@ -44,6 +43,7 @@ from schnetpack.generative.noising import (
 )
 from schnetpack.generative.priors import MASK, noise_like
 from schnetpack.generative.schedules import GaussianSchedule
+from schnetpack.generative.sde import SDE
 from schnetpack.generative.variables import Variable
 
 __all__ = [

@@ -12,8 +12,8 @@ A model is a configuration of four independent axes plus its training:
 - :mod:`~schnetpack.generative.couplings`: how (x0, x1) batches are paired.
 - :mod:`~schnetpack.generative.parametrizations`: what the network predicts,
   with the training target and the conversions between fields.
-- :mod:`~schnetpack.generative.differential_equations`: the (f, g) SDE chart
-  of a process and its reversal.
+- :mod:`~schnetpack.generative.sde`: the (f, g) SDE chart of a Gaussian
+  schedule and its reversal.
 - :mod:`~schnetpack.generative.times`: which times training draws.
 - :mod:`~schnetpack.generative.variables`: a generated quantity (positions,
   types, a cell) with its noising, parametrization, head and loss; several
@@ -36,7 +36,7 @@ from schnetpack.generative.parametrizations import *
 from schnetpack.generative.priors import *
 from schnetpack.generative.schedules import *
 from schnetpack.generative.noising import *
-from schnetpack.generative.differential_equations import *
+from schnetpack.generative.sde import *
 from schnetpack.generative.times import *
 from schnetpack.generative.views import *
 from schnetpack.generative.variables import *

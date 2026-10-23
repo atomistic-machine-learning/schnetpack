@@ -17,10 +17,10 @@ import abc
 import torch
 import torch.nn.functional as F
 
-from schnetpack.generative.differential_equations import SDE
 from schnetpack.generative.noising import expand_t
 from schnetpack.generative.priors import MASK
 from schnetpack.generative.schedules import GaussianSchedule, Schedule
+from schnetpack.generative.sde import SDE
 
 __all__ = [
     "Parametrization",
