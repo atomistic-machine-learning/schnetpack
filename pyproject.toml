@@ -39,9 +39,6 @@ dependencies = [
     "tqdm",
     "petname",
     "vesin",
-    "protobuf",
-    "progressbar",
-    "pytest",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +47,17 @@ dev = ["pre-commit"]
 # compiling MACE models to TorchScript (schnetpack.interfaces.mace_interface);
 # the archives load without
 mace = ["mace-torch>=0.3.16,<0.4"]
+
+[project.urls]
+Repository = "https://github.com/atomistic-machine-learning/schnetpack"
+Documentation = "https://schnetpack.readthedocs.io"
+
+[project.scripts]
+spktrain = "schnetpack.cli:train"
+spkpredict = "schnetpack.cli:predict"
+spkmd = "schnetpack.md.cli:simulate"
+spkconvert = "schnetpack.cli_scripts.convert:main"
+spkdeploy = "schnetpack.cli_scripts.deploy:main"
 
 [tool.ruff]
 line-length = 88
@@ -109,13 +117,6 @@ addopts = "-m 'not benchmark_sweep'"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-script-files = [
-    "src/scripts/spkconvert",
-    "src/scripts/spktrain",
-    "src/scripts/spkpredict",
-    "src/scripts/spkmd",
-    "src/scripts/spkdeploy",
-]
 
 [tool.setuptools.dynamic]
 version = {attr = "schnetpack.__version__"}
