@@ -115,7 +115,9 @@ jobs:
       # nbsphinx shells out to pandoc for markdown cells; the Read the Docs
       # image ships it, GitHub's runner image does not guarantee it.
       - run: sudo apt-get update && sudo apt-get install -y pandoc
-      - run: pip install -e .[doc]
+      - run: pip install -e ".[doc]"
+      - if: github.event_name == 'schedule'
+        run: pip install -e ".[mace]"
       # Pull requests (and Read the Docs) only render the notebooks. The Monday
       # schedule executes them, so that an example broken by an API change or a
       # dependency release fails here. Notebooks with an `nbsphinx: execute:
