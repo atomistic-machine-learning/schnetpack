@@ -64,12 +64,18 @@ def export_mace(model: nn.Module, path: str) -> str:
     """
     energy = _Energy(model)
     example = _example(model, n_structures=2, seed=0)
-    program = torch.export.export(
-        energy,
-        tuple(example[name] for name in MACE_INPUTS),
-        dynamic_shapes=tuple({_DYNAMIC[name]: Dim.DYNAMIC} for name in MACE_INPUTS),
-        strict=True,
-    )
+    # recent torch (2.14, not 2.7) guards on whether a dynamic size is 1, e.g.
+    # in the contiguity check of index_add's decomposition, which would bound
+    # the export to batches of at least 2 structures; size-oblivious tracing
+    # assumes such a size is not 1 instead, and the checks below hold the
+    # export to a single structure too
+    with torch.fx.experimental._config.patch(backed_size_oblivious=True):
+        program = torch.export.export(
+            energy,
+            tuple(example[name] for name in MACE_INPUTS),
+            dynamic_shapes=tuple({_DYNAMIC[name]: Dim.DYNAMIC} for name in MACE_INPUTS),
+            strict=True,
+        )
 
     table = model.atomic_energies_fn.atomic_energies
     block = getattr(model, "scale_shift", None)
