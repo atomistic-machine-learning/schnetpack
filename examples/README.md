@@ -2,7 +2,7 @@
 
 In this directory, you find code examples and tutorials to demonstrate the functionality of SchNetPack
 
-## Running them as notebooks
+## Running them as notebookss
 
 The tutorials and how-tos are stored as [jupytext](https://jupytext.readthedocs.io)
 `py:percent` files instead of `.ipynb`, so that they diff and merge like normal source
