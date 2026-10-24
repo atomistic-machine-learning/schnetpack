@@ -1,5 +1,6 @@
 schnetpack
 ==========
+.. currentmodule:: schnetpack
 
 Structure attributes
 --------------------
