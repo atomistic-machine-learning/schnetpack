@@ -44,6 +44,16 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest>=9", "pytest-datadir", "pytest-benchmark"]
 dev = ["pre-commit"]
+doc = [
+    "ipykernel",
+    # The tutorials are jupytext py:percent files; nbsphinx reads them through
+    # jupytext (see nbsphinx_custom_formats in docs/conf.py), so the docs build
+    # cannot parse them without it.
+    "jupytext",
+    "nbsphinx",
+    "sphinx",
+    "sphinx_rtd_theme",
+]
 # compiling MACE models to TorchScript (schnetpack.interfaces.mace_interface);
 # the archives load without
 mace = ["mace-torch>=0.3.16,<0.4"]
@@ -100,8 +110,9 @@ ignore = [
 # to exercise the public surface the same way a user would.
 "tests/**" = ["F841", "F403", "F405"]
 # The tutorials are teaching material: `for step in tqdm(...)` reads better than
-# `for _step in ...` even when the variable is unused.
-"examples/**" = ["B007"]
+# `for _step in ...` even when the variable is unused, and imports belong in the
+# notebook cell that first needs them (E402).
+"examples/**" = ["B007", "E402"]
 # ignore batchwise optimizer until refactor is done
 "src/schnetpack/interfaces/batchwise_optimization.py" = ["ALL"]
 

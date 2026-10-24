@@ -1,6 +1,6 @@
 schnetpack.dynamics
 ===================
-.. currentmodule:: dynamics
+.. currentmodule:: schnetpack.dynamics
 
 Loops that move structures with a model: sampling a generative model down its reverse
 process and relaxing structures on a force field. Every driver shares the calculators and
@@ -49,9 +49,12 @@ diffusion, and the grids its steps land on.
     :template: classtemplate.rst
 
     Sampler
-    EulerMaruyama
+    Update
+    SDEUpdate
+    ODEUpdate
+    AncestralUpdate
+    Euler
     Heun
-    Ancestral
     TimeGrid
     UniformGrid
 
@@ -102,7 +105,7 @@ Terms a calculator adds to the field it returns: to the forces, or to the score.
 Uncertainty
 -----------
 
-.. currentmodule:: uncertainty
+.. currentmodule:: schnetpack.uncertainty
 
 How far the models of an ensemble disagree, one value per structure. Shared with
 :class:`~schnetpack.interfaces.ase_interface.SpkEnsembleCalculator`. The predictions of

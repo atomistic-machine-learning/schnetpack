@@ -1,6 +1,6 @@
 schnetpack.objectives
 =====================
-.. currentmodule:: objectives
+.. currentmodule:: schnetpack.objectives
 
 .. autosummary::
     :toctree: generated

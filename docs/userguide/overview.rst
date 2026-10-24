@@ -14,33 +14,34 @@ which will be described in the next chapter.
 
 Data
 ====
-.. currentmodule:: data
+.. currentmodule:: schnetpack.data
 
-SchNetPack currently supports data sets stored in ASE format using
-:class:`ASEAtomsData`, but other formats can be added by implementing
-:class:`BaseAtomsData`. These classes are compatible with PyTorch dataloaders and
-provide an additional interface to store metadata, e.g. property units and
-single-atom reference values.
+SchNetPack stores data sets in ASE format using :class:`ASEAtomsData`. Data sets
+that fetch their raw data from a remote source subclass
+:class:`DownloadableASEAtomsData`. These classes are compatible with PyTorch
+dataloaders and provide an additional interface to store metadata, e.g. property
+units and single-atom reference values.
 
 An important aspect are the transforms that can be passed to the data classes. Those
 are PyTorch modules that perform preprocessing task on the data *before* batching.
 Typically, this is performed on the CPU as part of the multi-processing of PyTorch
 dataloaders.
-Important preprocessing :class:`Transform`s include removing of offsets from target properties
+Important preprocessing :class:`Transform` modules include removing of offsets from
+target properties
 and calculation of neighbor lists.
 
-Furthermore, we support PyTorch Lightning datamodules through :class:`lightning.AtomsDataModule`,
+Furthermore, we support PyTorch Lightning datamodules through :class:`~schnetpack.lightning.AtomsDataModule`,
 which combines :class:`ASEAtomsData` with code for preparation, setup and partitioning
 into train/validation/test splits. The datamodule also owns the training statistics
 (per-property mean/std and atom references): it exposes them via ``get_stats`` and
 ``get_atomrefs``, initializes all transforms that require them, and persists computed
 values next to the split file so reruns read instead of recompute. We provide specific
-implementations of :class:`lightning.AtomsDataModule` for several benchmark datasets.
+implementations of :class:`~schnetpack.lightning.AtomsDataModule` for several benchmark datasets.
 
 
 Model
 =====
-.. currentmodule:: model
+.. currentmodule:: schnetpack.model
 
 A core component of SchNetPack is the :class:`AtomisticModel`, which is the base
 class for all models implemented in SchNetPack. It is essentially a PyTorch module with
@@ -57,16 +58,18 @@ The particular features and requirements are:
    in `layer.required_derivatives = ["input_key"]`. The `requires_grad` of the input
    tensor is then set automatically.
 
-.. currentmodule::transform
+.. currentmodule:: schnetpack.transform
+
 * **Post-processing:**
-   The atomistic model can take a list of non-trainable :class:`Transform`s that are
+   The atomistic model can take a list of non-trainable :class:`Transform` modules that are
    used to post-process the output dictionary. These are not applied during training.
    A common use case are energy values that a large offsets and require double
    precision. To be able to still run a single precision model on GPU, one can substract
    the offset from the reference data during a preprocessing stage and then add it
    to the model prediction in post-processing after casting to double.
 
-.. currentmodule:: model
+.. currentmodule:: schnetpack.model
+
 While :class:`AtomisticModel` is a fairly general class, the models provided in
 SchNetPack follow a structure defined in the subclass :class:`NeuralNetworkPotential`:
 
@@ -86,14 +89,14 @@ possible.
 
 Task
 ====
-.. currentmodule:: task
+.. currentmodule:: schnetpack.objectives
 
-The :class:`lightning.AtomisticTask` ties the model, outputs, loss and optimizers together and defines
+The :class:`~schnetpack.lightning.AtomisticTask` ties the model, outputs, loss and optimizers together and defines
 how the neural network will be trained. While the model is a vanilla PyTorch module,
 the task is a :class:`LightningModule` that can be directly passed to the
 PyTorch Lightning :class:`Trainer`.
 
-To define an :class:`lightning.AtomisticTask`, you need to provide:
+To define an :class:`~schnetpack.lightning.AtomisticTask`, you need to provide:
 
 * a model as described above
 
