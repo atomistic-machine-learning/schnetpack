@@ -104,6 +104,7 @@ def test_warns_about_train_mode_sensitive_modules(tmp_path):
         SchNetPackTeacher(path)
 
 
+@pytest.mark.filterwarnings("ignore:the teacher has no AddOffsets")
 def test_a_direct_force_teacher_with_dropout_stays_in_eval_mode(tmp_path, batch):
     """Its forces keep their graph in eval mode: no warning, and its curvature
     targets are deterministic."""

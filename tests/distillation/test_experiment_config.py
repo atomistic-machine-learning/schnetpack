@@ -16,6 +16,11 @@ from schnetpack.train import MaceTeacher, SchNetPackTeacher
 
 from ..mace.fakes import FakeMace
 
+# train.yaml searches ./configs of the run directory, which tests have none of
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:provider=hydra.searchpath in main, path=./configs is not available"
+)
+
 
 def compose_experiment(overrides):
     with initialize_config_module(
