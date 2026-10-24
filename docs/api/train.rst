@@ -13,8 +13,18 @@ Scheduler
 
     ReduceLROnPlateau
 
-Knowledge distillation
-----------------------
+Foundation models
+-----------------
+
+Fine tuning
+~~~~~~~~~~~
+
+A pretrained MACE model, wrapped in a :class:`~schnetpack.model.MaceModel`, trains like
+any SchNetPack model: ``spktrain experiment=mace_finetune``. See
+:mod:`schnetpack.model.mace` for the reference energies (E0s) the data pipeline removes.
+
+Distillation
+~~~~~~~~~~~~
 
 A frozen teacher's energies, forces and curvatures (energy Hessian-vector products),
 distilled into a student. :class:`~schnetpack.lightning.AtomisticTask` takes the teacher as
