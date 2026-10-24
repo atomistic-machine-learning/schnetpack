@@ -1,5 +1,6 @@
 # SchNetPack - Deep Neural Networks for Atomistic Systems
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/python/black)
+[![CI](https://github.com/atomistic-machine-learning/schnetpack/actions/workflows/ci.yml/badge.svg)](https://github.com/atomistic-machine-learning/schnetpack/actions/workflows/ci.yml)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![](https://shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=303030)](https://github.com/hobogalaxy/lightning-hydra-template)
 
 
