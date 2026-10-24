@@ -92,9 +92,12 @@ jobs:
           assert "schnetpack/py.typed" in names, "py.typed missing from wheel"
           EOF
       - name: Smoke-test console entry points from the installed wheel
+        # CPU-only torch: the default PyPI torch pulls ~3 GB of CUDA wheels,
+        # which exhausts the runner's disk and is not needed for `--help`.
         run: |
           python -m venv /tmp/v
-          /tmp/v/bin/pip install dist/*.whl
+          /tmp/v/bin/pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+          /tmp/v/bin/pip install --no-cache-dir dist/*.whl
           for c in spkconvert spkdeploy spktrain spkpredict spkmd; do
             echo "--- $c ---"
             /tmp/v/bin/$c --help > /dev/null
