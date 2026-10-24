@@ -86,7 +86,8 @@ def build_gated_equivariant_mlp(
     sactivation: Callable = F.silu,
 ):
     """
-    Build neural network analog to MLP with `GatedEquivariantBlock`s instead of dense layers.
+    Build neural network analog to MLP with :class:`GatedEquivariantBlock` layers
+    instead of dense layers.
 
     Args:
         n_in: number of input nodes.

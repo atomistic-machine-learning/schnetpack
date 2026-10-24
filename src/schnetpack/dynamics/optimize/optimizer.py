@@ -216,7 +216,7 @@ class GradientDescent(Optimizer):
     Gradient descent, x <- x + eps F.
 
     With a physical force ``step_size`` is in Angstrom^2/eV; with a
-    pseudo-force F = -grad |x - x0|^2 it is unitless.
+    pseudo-force ``F = -grad |x - x0|^2`` it is unitless.
     """
 
     def __init__(

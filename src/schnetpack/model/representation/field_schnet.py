@@ -26,6 +26,7 @@ class FieldSchNetFieldInteraction(nn.Module):
         activation (Callable): Activation function for internal transformations.
 
     References:
+
     .. [#field2] Gastegger, Schütt, Müller:
        Machine learning of solvent effects on molecular spectra and reactions.
        Chemical Science, 12(34), 11473-11483. 2021.
@@ -147,6 +148,7 @@ class DipoleInteraction(nn.Module):
             activation (Callable): Activation function.
 
         References:
+
         .. [#field3] Gastegger, Schütt, Müller:
            Machine learning of solvent effects on molecular spectra and reactions.
            Chemical Science, 12(34), 11473-11483. 2021.
@@ -246,10 +248,13 @@ class NuclearMagneticMomentEmbedding(nn.Module):
 
 
 class FieldSchNet(nn.Module):
-    """FieldSchNet architecture for modeling interactions with external fields and response properties as described in
-    [#field4]_.
+    """FieldSchNet architecture for modeling interactions with external fields and
+    response properties.
+
+    Described in [#field4]_.
 
     References:
+
     .. [#field4] Gastegger, Schütt, Müller:
        Machine learning of solvent effects on molecular spectra and reactions.
        Chemical Science, 12(34), 11473-11483. 2021.
