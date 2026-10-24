@@ -182,6 +182,8 @@ LAMMPS with `spkdeploy` are unchanged.
 - Invalid escape sequences in the source, a future `SyntaxError`.
 - Mutable default arguments (`[]`, `{}`) in the MD calculators, simulator
   hooks and `StaticExternalFields` are replaced by `None`.
+- `schnetpack.utils.load_model(path, weights_only=...)` raised a `TypeError`.
+  `weights_only` still defaults to `False`.
 
 ### Removed
 
