@@ -73,7 +73,7 @@ spkdeploy = "schnetpack.cli_scripts.deploy:main"
 line-length = 88
 target-version = "py312"
 src = ["src", "tests"]
-extend-exclude = ["docs/_build", "src/schnetpack.egg-info"]
+extend-exclude = ["docs/_build", "src/schnetpack.egg-info", "docs_new/**/*.md"]
 
 [tool.ruff.lint]
 select = [
