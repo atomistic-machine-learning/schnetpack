@@ -128,6 +128,15 @@ markers = [
 addopts = "-m 'not benchmark_sweep and not slow and not download'"
 filterwarnings = [
     "error::SyntaxWarning",
+    # ase resizes arrays by assigning to .shape, deprecated since NumPy 2.5
+    'ignore:Setting the shape on a NumPy array:DeprecationWarning:ase\.',
+    # Lightning's advice on hardware and loader workers does not apply to tests
+    "ignore:GPU available but not used",
+    "ignore:The '.*' does not have many workers",
+    # tests call the task's steps directly, without a trainer to log to
+    'ignore:You are trying to .self\.log\(\). but the .self\.trainer. reference is not registered',
+    # the model stays in the hparams: load_from_checkpoint rebuilds the task from it
+    'ignore:Attribute .model. is an instance of .nn\.Module.',
 ]
 
 [tool.setuptools]

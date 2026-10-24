@@ -315,6 +315,7 @@ def test_the_ensemble_is_evaluated_once_per_step():
     assert len(calls) == 2, "moving the batch invalidates the cache"
 
 
+@pytest.mark.filterwarnings("ignore:Model was saved without version information")
 def test_models_are_loaded_from_a_directory(tmp_path):
     """The layout schnetpack training leaves behind: ``<dir>/<run>/best_model``."""
     trained = os.path.join(

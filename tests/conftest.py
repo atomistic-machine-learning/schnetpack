@@ -1,4 +1,5 @@
 import importlib.util
+import warnings
 
 import numpy as np
 import pytest
@@ -476,8 +477,11 @@ def mace_off_reference(mace_off_archive):
     from eager MACE-OFF23 medium, as ``(name, atoms, energy, forces)``."""
     # import mace sets this on its first import only, and the interface has
     # undone it; e3nn's constants and MACE's pickled models need it to load
-    with pytest.MonkeyPatch.context() as patch:
+    with pytest.MonkeyPatch.context() as patch, warnings.catch_warnings():
         patch.setenv("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", "1")
+        warnings.filterwarnings(
+            "ignore", "Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected"
+        )
         from mace.calculators import mace_off
 
         calc = mace_off(model="medium", default_dtype="float64", device="cpu")
