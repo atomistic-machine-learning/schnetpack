@@ -54,8 +54,8 @@ doc = [
     "sphinx",
     "sphinx_rtd_theme",
 ]
-# compiling MACE models to TorchScript (schnetpack.interfaces.mace_interface);
-# the archives load without
+# exporting MACE models with torch.export and building MACE models to train
+# from scratch (schnetpack.interfaces.mace_interface); the archives load without
 mace = ["mace-torch>=0.3.16,<0.4"]
 
 [project.urls]
