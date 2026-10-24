@@ -4,8 +4,10 @@
 :func:`export_mace` exports a MACE model -- any module with MACE's interface --
 to an archive that :func:`~schnetpack.model.load_mace` reads without
 ``mace-torch``. :func:`export_mace_off` builds MACE-OFF23 and writes
-``MACE-OFF23_<size>_mace-<version>.pt2`` to :data:`CACHE_DIR`; it is a
-developer tool and needs ``mace-torch``, which SchNetPack does not depend on::
+``MACE-OFF23_<size>_mace-<version>.pt2`` to :data:`CACHE_DIR`;
+:func:`build_mace` writes a MACE model with random weights, to be trained from
+scratch (``experiment=mace_scratch``). Both are developer tools and need
+``mace-torch``, which SchNetPack does not depend on::
 
     pip install "schnetpack[mace]"
 """
@@ -14,14 +16,25 @@ import contextlib
 import io
 import json
 import os
+from collections.abc import Sequence
 
+import numpy as np
 import torch
 from torch import nn
 from torch.export import Dim
 
+from schnetpack import properties
+from schnetpack.data import ASEAtomsData
 from schnetpack.model.mace import MACE_INPUTS, METADATA, ExportedMace
+from schnetpack.transform import MatScipyNeighborList
 
-__all__ = ["CACHE_DIR", "MACE_OFF_SIZES", "export_mace", "export_mace_off"]
+__all__ = [
+    "CACHE_DIR",
+    "MACE_OFF_SIZES",
+    "build_mace",
+    "export_mace",
+    "export_mace_off",
+]
 
 #: where :func:`export_mace_off` writes by default; ignored by git
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
@@ -177,14 +190,7 @@ def export_mace_off(size: str = "medium", cache_dir: str = CACHE_DIR) -> str:
         )
 
     with _mace_environment():
-        try:
-            import mace
-        except ImportError as err:
-            raise ImportError(
-                "mace-torch is needed to export a MACE model; install it with "
-                "pip install 'schnetpack[mace]'"
-            ) from err
-
+        mace = _import_mace()
         path = os.path.join(cache_dir, f"MACE-OFF23_{size}_mace-{mace.__version__}.pt2")
         if not os.path.exists(path):
             os.makedirs(cache_dir, exist_ok=True)
@@ -201,13 +207,10 @@ def _mace_off(size: str) -> nn.Module:
     generation off: the pickled model holds TorchScript, which
     ``torch.export`` cannot trace."""
     from mace.calculators import mace_off
-    from mace.tools.compile import disable_e3nn_codegen, simplify
     from mace.tools.scripts_utils import extract_config_mace_model
 
     pickled = mace_off(model=size, default_dtype="float64", device="cpu").models[0]
-    with disable_e3nn_codegen():
-        model = type(pickled)(**extract_config_mace_model(pickled))
-    model = simplify(model).to(torch.float64)
+    model = _traceable(type(pickled), extract_config_mace_model(pickled))
     missing, unexpected = model.load_state_dict(pickled.state_dict(), strict=False)
     # buffers of newer MACE versions than the one that pickled the model keep
     # the values they are built with
@@ -217,6 +220,171 @@ def _mace_off(size: str) -> nn.Module:
             f"unexpected {unexpected}"
         )
     return model.eval()
+
+
+def build_mace(
+    path: str,
+    dataset: ASEAtomsData,
+    indices: Sequence[int] | None = None,
+    *,
+    forces_key: str = properties.forces,
+    r_max: float = 5.0,
+    num_channels: int = 128,
+    max_L: int = 1,
+    correlation: int = 3,
+    num_interactions: int = 2,
+    max_ell: int = 3,
+    num_bessel: int = 8,
+    num_polynomial_cutoff: int = 5,
+    radial_MLP: Sequence[int] = (64, 64, 64),
+    MLP_irreps: str = "16x0e",
+    scale: float | None = None,
+    seed: int = 0,
+) -> str:
+    """Build a MACE model with random weights for ``dataset``, export it (see
+    :func:`export_mace`) to ``path`` in float64 and return the path.
+
+    The model is MACE's default ``ScaleShiftMACE``, and the keywords and their
+    defaults are those of MACE's training script. What MACE reads off the
+    training data when it builds a model is taken from ``dataset``:
+
+    - the elements, from all of ``dataset``, so that no validation or test
+      structure has an element the model does not cover;
+    - the average number of neighbors within ``r_max``, the normalization of
+      MACE's message passing, from ``indices``;
+    - the scale of the atomic energies, as the RMS of the force components
+      over ``indices`` (MACE's ``rms_forces_scaling``), unless ``scale`` is
+      given.
+
+    The scale comes from force labels, so ``indices`` should be the
+    training split. Positions must be in Å and forces in eV/Å: open
+    ``dataset`` in these units. The model's E0s and energy shift are zero:
+    train it with ``e0s="estimated"`` (see :class:`~schnetpack.model.MaceModel`).
+    Any per-atom energy shift goes into the E0s, which are fitted per element.
+
+    Args:
+        path: where the archive is written.
+        dataset: the data the model is trained on.
+        indices: the structures of ``dataset`` the statistics are taken over;
+            None for all.
+        forces_key: the property of ``dataset`` that holds the forces.
+        r_max: cutoff radius, in Å.
+        num_channels: number of channels of the hidden features.
+        max_L: highest symmetry order of the hidden features.
+        correlation: correlation order of each interaction.
+        num_interactions: number of interactions.
+        max_ell: highest degree of the spherical harmonics.
+        num_bessel: number of radial Bessel functions.
+        num_polynomial_cutoff: order of the polynomial cutoff.
+        radial_MLP: hidden layer widths of the radial MLP.
+        MLP_irreps: hidden irreps of the readout MLP.
+        scale: scale of the atomic energies; None for the RMS of the forces.
+        seed: seed of the random weights.
+    """
+    with _mace_environment():
+        _import_mace()
+        from e3nn import o3
+
+        from mace import modules
+
+        numbers = _elements(dataset)
+        if scale is None:
+            scale = _force_rms(dataset, indices, forces_key)
+        config = {
+            "r_max": r_max,
+            "num_bessel": num_bessel,
+            "num_polynomial_cutoff": num_polynomial_cutoff,
+            "max_ell": max_ell,
+            "interaction_cls": modules.interaction_classes[
+                "RealAgnosticResidualInteractionBlock"
+            ],
+            # MACE's training script swaps the residual block out of the first
+            # layer
+            "interaction_cls_first": modules.interaction_classes[
+                "RealAgnosticInteractionBlock"
+            ],
+            "num_interactions": num_interactions,
+            "num_elements": len(numbers),
+            "hidden_irreps": o3.Irreps(
+                (num_channels * o3.Irreps.spherical_harmonics(max_L))
+                .sort()
+                .irreps.simplify()
+            ),
+            "MLP_irreps": o3.Irreps(MLP_irreps),
+            "atomic_energies": np.zeros(len(numbers)),
+            "avg_num_neighbors": _avg_num_neighbors(dataset, indices, r_max),
+            "atomic_numbers": numbers,
+            "correlation": correlation,
+            "gate": modules.gate_dict["silu"],
+            "radial_MLP": list(radial_MLP),
+            "atomic_inter_scale": scale,
+            "atomic_inter_shift": 0.0,
+        }
+        with torch.random.fork_rng(devices=[]):
+            torch.manual_seed(seed)
+            model = _traceable(modules.ScaleShiftMACE, config)
+        return export_mace(model.eval(), path)
+
+
+def _elements(dataset: ASEAtomsData) -> list[int]:
+    """The atomic numbers in ``dataset``, in ascending order."""
+    numbers = set()
+    for structure in dataset.iter_properties(load_properties=[]):
+        numbers.update(structure[properties.Z].tolist())
+    return sorted(numbers)
+
+
+def _avg_num_neighbors(
+    dataset: ASEAtomsData, indices: Sequence[int] | None, r_max: float
+) -> float:
+    """The mean number of neighbors within ``r_max`` of the atoms that have
+    any, as MACE counts them."""
+    neighbor_list = MatScipyNeighborList(cutoff=r_max)
+    counts = []
+    for structure in dataset.iter_properties(indices, load_properties=[]):
+        idx_i = neighbor_list(structure)[properties.idx_i]
+        counts.append(torch.unique(idx_i, return_counts=True)[1])
+    return torch.cat(counts).double().mean().item()
+
+
+def _force_rms(
+    dataset: ASEAtomsData, indices: Sequence[int] | None, forces_key: str
+) -> float:
+    """The RMS of the force components in ``dataset``."""
+    squares = [
+        structure[forces_key].double().square().reshape(-1)
+        for structure in dataset.iter_properties(
+            indices, load_properties=[forces_key], load_structure=False
+        )
+    ]
+    return torch.cat(squares).mean().sqrt().item()
+
+
+def _traceable(cls: type, config: dict) -> nn.Module:
+    """``cls(**config)`` in float64, built with e3nn's code generation off: it
+    would hold TorchScript, which ``torch.export`` cannot trace. The constants
+    of the tensor products are computed in float64 too."""
+    from mace.tools.compile import disable_e3nn_codegen, simplify
+
+    default = torch.get_default_dtype()
+    torch.set_default_dtype(torch.float64)
+    try:
+        with disable_e3nn_codegen():
+            model = cls(**config)
+    finally:
+        torch.set_default_dtype(default)
+    return simplify(model).to(torch.float64)
+
+
+def _import_mace():
+    try:
+        import mace
+    except ImportError as err:
+        raise ImportError(
+            "mace-torch is needed to export a MACE model; install it with "
+            "pip install 'schnetpack[mace]'"
+        ) from err
+    return mace
 
 
 @contextlib.contextmanager

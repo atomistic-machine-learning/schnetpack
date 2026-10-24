@@ -1,0 +1,84 @@
+# @package _global_
+#
+# Trains a MACE model from random weights on energies and forces in eV and Å.
+# First build the model for the data, in Python (needs schnetpack[mace]):
+#
+#   from schnetpack.data import ASEAtomsData
+#   from schnetpack.interfaces.mace_interface import build_mace
+#
+#   data = ASEAtomsData("/path/to/data.db", distance_unit="Ang",
+#                       property_units={"forces": "eV/Ang"})
+#   build_mace("/path/to/mace.pt2", data, indices=train_idx, r_max=5.0)
+#
+# which takes the elements, the average number of neighbors and the energy
+# scale (the RMS of the forces over indices: pass the training split) from the
+# data. Then train it:
+#
+#   spktrain experiment=mace_scratch globals.mace_path=/path/to/mace.pt2 \
+#       data.dataset.datapath=/path/to/data.db data.num_train=... data.num_val=...
+#
+# The model trains on MACE's interaction energy. The per-element reference
+# energies (E0s) are fitted to the energies of the training split by least
+# squares (MACE's E0s="average"); the data pipeline removes them and the model
+# adds them back. Atomrefs stored with the dataset are taken instead.
+
+defaults:
+  - override /model: mace
+  - override /data: custom
+
+run:
+  experiment: mace_scratch
+
+globals:
+  mace_path: ???
+  mace_e0s: estimated
+  fit_e0_correction: False
+  # at least the r_max the model was built with
+  cutoff: 5.
+  # MACE's default
+  lr: 1e-2
+  energy_key: energy
+  forces_key: forces
+
+data:
+  dataset:
+    load_properties:
+      - ${globals.energy_key}
+      - ${globals.forces_key}
+    distance_unit: Ang
+    property_units:
+      energy: eV
+      forces: eV/Ang
+    transforms:
+      - _target_: schnetpack.transform.RemoveOffsets
+        property: ${globals.energy_key}
+        remove_atomrefs: True
+        estimate_atomref: True
+      - _target_: schnetpack.transform.MatScipyNeighborList
+        cutoff: ${globals.cutoff}
+      - _target_: schnetpack.transform.CastTo32
+
+task:
+  outputs:
+    - _target_: schnetpack.ModelOutput
+      name: ${globals.energy_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 0.01
+    - _target_: schnetpack.ModelOutput
+      name: ${globals.forces_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 0.99

@@ -11,6 +11,7 @@ import torch
 from torch.autograd import grad
 
 from schnetpack import properties
+from schnetpack.data.stats import estimate_atomrefs
 from schnetpack.dynamics import BatchNeighborList, ForceCalculator
 from schnetpack.interfaces.ase_interface import atoms_to_batch
 from schnetpack.interfaces.mace_interface import export_mace
@@ -129,6 +130,36 @@ def test_dataset_e0s_are_the_datasets_atomrefs(archive, tmp_path):
     offsets = model.postprocessors[1].atomref
     torch.testing.assert_close(offsets[:9].double(), torch.tensor(atomrefs))
     assert not offsets[9:].any()
+
+
+def test_estimated_e0s_are_the_ones_the_pipeline_removes(archive, tmp_path):
+    """Both estimate them on the training split, through the provider."""
+    assert mace_atomrefs(archive, "estimated") is None
+    datamodule = make_datamodule(
+        tmp_path,
+        load_properties=[properties.energy],
+        energy=shifted_energy,
+        molecules=MOLECULES,
+        transforms=[
+            RemoveOffsets(
+                properties.energy, remove_atomrefs=True, estimate_atomref=True
+            ),
+            MatScipyNeighborList(cutoff=R_MAX),
+            CastTo32(),
+        ],
+    )
+    datamodule.setup()
+    model = MaceModel(load_mace(archive), e0s="estimated")
+
+    model.initialize_transforms(datamodule)
+
+    added = model.postprocessors[1].atomref
+    expected = estimate_atomrefs(
+        datamodule.dataset, {properties.energy: True}, indices=list(range(8))
+    )[properties.energy]
+    torch.testing.assert_close(added, expected)
+    removed = datamodule.train_dataset.transforms[0].atomref
+    torch.testing.assert_close(removed, added)
 
 
 def test_dataset_e0s_need_atomrefs_in_the_dataset(archive, tmp_path):
