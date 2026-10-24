@@ -39,23 +39,43 @@ dependencies = [
     "tqdm",
     "petname",
     "vesin",
-    "protobuf",
-    "progressbar",
-    "pytest",
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-datadir", "pytest-benchmark"]
+test = ["pytest>=9", "pytest-datadir", "pytest-benchmark"]
 dev = ["pre-commit"]
-# compiling MACE models to TorchScript (schnetpack.interfaces.mace_interface);
-# the archives load without
+doc = [
+    "ipykernel",
+    # The tutorials are jupytext py:percent files; nbsphinx reads them through
+    # jupytext (see nbsphinx_custom_formats in docs/conf.py), so the docs build
+    # cannot parse them without it.
+    "jupytext",
+    "nbsphinx",
+    "sphinx",
+    "sphinx_rtd_theme",
+]
+# exporting MACE models with torch.export and building MACE models to train
+# from scratch (schnetpack.interfaces.mace_interface); the archives load without
 mace = ["mace-torch>=0.3.16,<0.4"]
+# every extra above
+all = ["schnetpack[test,dev,doc,mace]"]
+
+[project.urls]
+Repository = "https://github.com/atomistic-machine-learning/schnetpack"
+Documentation = "https://schnetpack.readthedocs.io"
+
+[project.scripts]
+spktrain = "schnetpack.cli:train"
+spkpredict = "schnetpack.cli:predict"
+spkmd = "schnetpack.md.cli:simulate"
+spkconvert = "schnetpack.cli_scripts.convert:main"
+spkdeploy = "schnetpack.cli_scripts.deploy:main"
 
 [tool.ruff]
 line-length = 88
 target-version = "py312"
 src = ["src", "tests"]
-extend-exclude = ["docs/_build", "src/schnetpack.egg-info"]
+extend-exclude = ["docs/_build", "src/schnetpack.egg-info", "docs_new/**/*.md"]
 
 [tool.ruff.lint]
 select = [
@@ -87,35 +107,51 @@ ignore = [
 # ARE the public API surface: schnetpack.SchNet et al. resolve through them, and
 # mypy honours them even under --no-implicit-reexport because each source module
 # declares __all__.
-"__init__.py" = ["F401", "F403", "F405", "E402", "I001"]
+"__init__.py" = ["F401", "F403", "F405", "E402"]
 # tests/data/test_transforms.py deliberately star-imports schnetpack.transform
 # to exercise the public surface the same way a user would.
 "tests/**" = ["F841", "F403", "F405"]
 # The tutorials are teaching material: `for step in tqdm(...)` reads better than
-# `for _step in ...` even when the variable is unused.
-"examples/**" = ["B007"]
-# ignore batchwise optimizer until refactor is done
-"src/schnetpack/interfaces/batchwise_optimization.py" = ["ALL"]
+# `for _step in ...` even when the variable is unused, and imports belong in the
+# notebook cell that first needs them (E402).
+"examples/**" = ["B007", "E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["schnetpack"]
 
 [tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+# Umbrella for strict_config + strict_markers + strict_xfail +
+# strict_parametrization_ids (pytest >= 9). Set as an ini option, NOT as
+# `--strict-markers` in addopts: those flags are OverrideIniAction, which only
+# fires when passed on the command line, so from addopts they are silently
+# inert and an unregistered marker stays a mere warning.
+strict = true
 markers = [
     "benchmark_sweep: batch-size scaling benchmarks; run with -m benchmark_sweep",
+    "slow: takes more than a few seconds; run with -m slow",
+    "download: needs network access to fetch a dataset; run with -m download",
 ]
-# the sweep takes far too long for an ordinary test run, so it is opt-in
-addopts = "-m 'not benchmark_sweep'"
+# The default selection for `pytest`, locally and in CI. Any `-m` on the command
+# line replaces this expression instead of narrowing it, so `-m slow` runs only
+# the slow tests and `-m ""` runs everything.
+addopts = "-m 'not benchmark_sweep and not slow and not download'"
+filterwarnings = [
+    "error::SyntaxWarning",
+    # ase resizes arrays by assigning to .shape, deprecated since NumPy 2.5
+    'ignore:Setting the shape on a NumPy array:DeprecationWarning:ase\.',
+    # Lightning's advice on hardware and loader workers does not apply to tests
+    "ignore:GPU available but not used",
+    "ignore:The '.*' does not have many workers",
+    # tests call the task's steps directly, without a trainer to log to
+    'ignore:You are trying to .self\.log\(\). but the .self\.trainer. reference is not registered',
+    # the model stays in the hparams: load_from_checkpoint rebuilds the task from it
+    'ignore:Attribute .model. is an instance of .nn\.Module.',
+]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-script-files = [
-    "src/scripts/spkconvert",
-    "src/scripts/spktrain",
-    "src/scripts/spkpredict",
-    "src/scripts/spkmd",
-    "src/scripts/spkdeploy",
-]
 
 [tool.setuptools.dynamic]
 version = {attr = "schnetpack.__version__"}

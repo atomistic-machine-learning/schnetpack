@@ -1,6 +1,6 @@
 schnetpack.lightning
 ====================
-.. currentmodule:: lightning
+.. currentmodule:: schnetpack.lightning
 
 PyTorch Lightning integration used by ``spktrain``. Custom PyTorch training
 loops do not need this module; see :mod:`schnetpack.objectives` instead.

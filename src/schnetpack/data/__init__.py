@@ -1,9 +1,9 @@
 from .atoms import *
 from .loader import *
-from .stats import *
-from .splitting import *
-from .sampler import *
 from .provider import *
+from .sampler import *
+from .splitting import *
+from .stats import *
 
 
 def __getattr__(name):

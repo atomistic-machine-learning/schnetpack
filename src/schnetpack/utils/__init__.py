@@ -1,8 +1,10 @@
-from .compatibility import *
 import importlib
+
 import torch
 
 from schnetpack import properties as spk_properties
+
+from .compatibility import *
 
 TORCH_DTYPES = {
     "float32": torch.float32,

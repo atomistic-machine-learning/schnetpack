@@ -10,15 +10,12 @@
 #   spktrain experiment=distillation data.dataset.datapath=/path/to/structures.db \
 #       task.teacher.model_path=/path/to/teacher/best_model
 #
-# A TorchScript archive loads as well, without the classes it was built from
-# having to be importable (auto-detected, or task.teacher.model_format=torchscript).
-#
 # The teacher is chosen from task/teacher: schnetpack (the default) or
 # mace. Each sets its cutoff and length unit in globals.teacher_*, which the
 # shared neighbor list needs too, and everything else under task.teacher:
 #
 #   spktrain experiment=distillation task/teacher=mace \
-#       task.teacher.model_path=/path/to/MACE-OFF23_medium.pt ...
+#       task.teacher.model_path=/path/to/MACE-OFF23_medium.pt2 ...
 #
 # Teacher and student share one neighbor list, built by the data pipeline at
 # the larger of their cutoffs, compared in distance_unit

@@ -1,15 +1,14 @@
+from typing import Optional
+
 import torch
 import torch.nn as nn
+
+from schnetpack import properties
+from schnetpack.model import AtomisticModel, Forces, Response, Strain
 
 from .md_config import *
 from .normal_model_transformation import *
 from .thermostat_utils import *
-
-from typing import Optional
-
-from schnetpack import properties
-from schnetpack.model import AtomisticModel
-from schnetpack.model import Response, Forces, Strain
 
 
 class CalculatorError(Exception):

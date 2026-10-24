@@ -1,4 +1,5 @@
 import importlib.util
+import warnings
 
 import numpy as np
 import pytest
@@ -445,16 +446,16 @@ def environment(request, environment_nonperiodic, environment_periodic):
     return environments[request.param]
 
 
-# MACE-OFF, compiled by schnetpack.interfaces.mace_interface
+# MACE-OFF, exported by schnetpack.interfaces.mace_interface
 @pytest.fixture(scope="session")
 def mace_off_archive():
-    """MACE-OFF23 medium as a TorchScript archive in the interface's cache; the
-    first run downloads the weights. Skipped without mace-torch."""
+    """MACE-OFF23 medium as a torch.export archive in the interface's cache;
+    the first run downloads the weights. Skipped without mace-torch."""
     if importlib.util.find_spec("mace") is None:
         pytest.skip("needs mace-torch: pip install 'schnetpack[mace]'")
-    from schnetpack.interfaces.mace_interface import compile_mace_off
+    from schnetpack.interfaces.mace_interface import export_mace_off
 
-    return compile_mace_off("medium")
+    return export_mace_off("medium")
 
 
 def mace_off_structures():
@@ -476,8 +477,11 @@ def mace_off_reference(mace_off_archive):
     from eager MACE-OFF23 medium, as ``(name, atoms, energy, forces)``."""
     # import mace sets this on its first import only, and the interface has
     # undone it; e3nn's constants and MACE's pickled models need it to load
-    with pytest.MonkeyPatch.context() as patch:
+    with pytest.MonkeyPatch.context() as patch, warnings.catch_warnings():
         patch.setenv("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", "1")
+        warnings.filterwarnings(
+            "ignore", "Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected"
+        )
         from mace.calculators import mace_off
 
         calc = mace_off(model="medium", default_dtype="float64", device="cpu")

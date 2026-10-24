@@ -95,12 +95,9 @@ def test_datamodule_get_atomrefs_passes_estimate_through(
         dm.get_atomrefs(ENERGY, True, estimate=False)
 
 
-def test_other_stats_sources_store_entries_through_the_provider(
-    stats_dbpath, tmp_path, monkeypatch
-):
+def test_other_stats_sources_store_entries_through_the_provider(stats_dbpath, tmp_path):
     """An entry is computed once per train partition and then read back, also
     by another provider on the same stats file (a rerun, another rank)."""
-    monkeypatch.chdir(tmp_path)  # the provider's lock lives in the working dir
     stats_file = str(tmp_path / "split_stats.npz")
     calls = []
 

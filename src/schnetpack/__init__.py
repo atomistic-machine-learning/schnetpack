@@ -3,26 +3,28 @@ import warnings
 
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorboard")
 
-from schnetpack import transform
-from schnetpack import properties
-from schnetpack import data
-from schnetpack import datasets
-from schnetpack import interfaces
-from schnetpack import nn
-from schnetpack import train
-from schnetpack import model
-from schnetpack import objectives
-from schnetpack import generative
-from schnetpack import dynamics
-from schnetpack.units import *
-from schnetpack import uncertainty
+from schnetpack import (
+    data,
+    datasets,
+    dynamics,
+    generative,
+    interfaces,
+    md,
+    model,
+    nn,
+    objectives,
+    properties,
+    train,
+    transform,
+    uncertainty,
+)
 from schnetpack.objectives import (
     AtomMask,
     LossMask,
     ModelOutput,
     UnsupervisedModelOutput,
 )
-from schnetpack import md
+from schnetpack.units import *
 
 __version__ = "3.0.0"
 

@@ -1,6 +1,6 @@
-"""The MACE teacher, checked against a scripted stand-in with MACE's interface
-and, if mace-torch is installed, against MACE-OFF compiled by the MACE
-interface. What MaceModel does by itself (periodic images, E0s in float64,
+"""The MACE teacher, checked against an exported stand-in with MACE's
+interface and, if mace-torch is installed, against MACE-OFF exported by the
+MACE interface. What MaceModel does by itself (periodic images, E0s in float64,
 heads, refused inputs) is tested with it; pickling with SchNetPackTeacher."""
 
 import pytest
@@ -9,6 +9,7 @@ from torch.autograd import grad
 
 from schnetpack import properties
 from schnetpack.interfaces.ase_interface import atoms_to_batch
+from schnetpack.interfaces.mace_interface import export_mace
 from schnetpack.train.teacher import MaceTeacher
 
 from ..mace.fakes import R_MAX, FakeMace, RecordingMace, rattled, reference
@@ -17,9 +18,7 @@ from .conftest import absolute_energy, molecules_batch, with_neighbors
 
 @pytest.fixture
 def fake_path(tmp_path):
-    path = str(tmp_path / "fake_mace.pt")
-    torch.jit.save(torch.jit.script(FakeMace()), path)
-    return path
+    return export_mace(FakeMace(), str(tmp_path / "fake_mace.pt2"))
 
 
 MOLECULES = ["CH4", "H2O", "C2H6"]

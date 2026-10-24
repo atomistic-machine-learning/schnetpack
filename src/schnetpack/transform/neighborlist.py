@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 
@@ -31,6 +32,8 @@ __all__ = [
 import schnetpack as spk
 from schnetpack import properties
 from schnetpack.units import convert_units
+
+log = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------------ neighbor lists
 
@@ -81,12 +84,13 @@ class NeighborListTransform(Transform):
         raise NotImplementedError
 
     def _convert_inputs_to_numpy(self, Z, positions, cell, pbc):
+        Z_np = Z.detach().cpu().numpy()
         pos_np = positions.detach().cpu().numpy()
         cell_np = cell.detach().cpu().numpy()
         pbc_np_bool = pbc.detach().cpu().numpy()
         pbc_np_int = pbc_np_bool.astype(int)
 
-        return pos_np, cell_np, pbc_np_bool, pbc_np_int
+        return Z_np, pos_np, cell_np, pbc_np_bool, pbc_np_int
 
 
 class ASENeighborList(NeighborListTransform):
@@ -95,7 +99,10 @@ class ASENeighborList(NeighborListTransform):
     """
 
     def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
-        at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
+        Z_np, pos_np, cell_np, pbc_np_bool, _ = self._convert_inputs_to_numpy(
+            Z, positions, cell, pbc
+        )
+        at = Atoms(numbers=Z_np, positions=pos_np, cell=cell_np, pbc=pbc_np_bool)
 
         idx_i, idx_j, S = ase_neighbor_list("ijS", at, cutoff, self_interaction=False)
         idx_i = torch.from_numpy(idx_i)
@@ -115,7 +122,7 @@ class VesinNeighborList(NeighborListTransform):
             raise ImportError(
                 "VesinNeighborList requires the 'vesin' package (pip install vesin)."
             )
-        pos_np, cell_np, pbc_np_bool, pbc_np_int = self._convert_inputs_to_numpy(
+        _, pos_np, cell_np, pbc_np_bool, _ = self._convert_inputs_to_numpy(
             Z, positions, cell, pbc
         )
 
@@ -149,7 +156,10 @@ class MatScipyNeighborList(NeighborListTransform):
     def _build_neighbor_list(
         self, Z, positions, cell, pbc, cutoff, eps=1e-6, buffer=1.0
     ):
-        at = Atoms(numbers=Z, positions=positions, cell=cell, pbc=pbc)
+        Z_np, pos_np, cell_np, pbc_np_bool, _ = self._convert_inputs_to_numpy(
+            Z, positions, cell, pbc
+        )
+        at = Atoms(numbers=Z_np, positions=pos_np, cell=cell_np, pbc=pbc_np_bool)
 
         # Add cell if none is present (volume = 0)
         if at.cell.volume < eps:
@@ -441,11 +451,14 @@ class CachedNeighborList(NeighborListWrapper):
             self.cache_location, f"cache_{inputs[properties.idx][0]}.pt"
         )
 
-        # try to read cached NBL
+        # try to read cached NBL; a missing or unreadable file is checked again
+        # under the lock below, so failures here are not reported
         try:
             data = torch.load(cache_file, weights_only=True)
-            inputs.update(data)
-        except OSError:
+        except Exception:
+            data = None
+
+        if data is None:
             # acquire lock for caching
             lock = fasteners.InterProcessLock(
                 os.path.join(
@@ -456,38 +469,57 @@ class CachedNeighborList(NeighborListWrapper):
                 # retry reading, in case other process finished in the meantime
                 try:
                     data = torch.load(cache_file, weights_only=True)
-                    inputs.update(data)
-                except OSError:
-                    # now it is save to calculate and cache
+                except FileNotFoundError:
+                    pass
+                except Exception as e:
+                    log.warning(
+                        "could not read neighbor list cache %s, rebuilding it: %s",
+                        cache_file,
+                        e,
+                    )
+
+                if data is None:
+                    # now it is safe to calculate and cache
                     inputs = self._build_neighbors(inputs)
                     data = {
                         properties.idx_i: inputs[properties.idx_i],
                         properties.idx_j: inputs[properties.idx_j],
                         properties.offsets: inputs[properties.offsets],
                     }
-                    torch.save(data, cache_file)
-                except Exception as e:
-                    print(e)
+                    # write to a temporary file and rename, so that readers
+                    # outside the lock never see a partially written cache
+                    tmp_file = cache_file + ".tmp"
+                    torch.save(data, tmp_file)
+                    os.replace(tmp_file, cache_file)
+                    return inputs
+
+        inputs.update(data)
         return inputs
 
     def teardown(self):
+        # Deleting the cache is only cleanup: if it fails (e.g. the folder is already
+        # gone or not writable), training should still finish, so file system errors
+        # are only logged. Any other error points to a bug and is not suppressed.
         if not self.keep_cache and not self.preexisting_cache:
             try:
                 shutil.rmtree(self.cache_path)
-            except Exception:
-                pass
+            except OSError as e:
+                log.debug("could not remove cache dir %s: %s", self.cache_path, e)
 
         if self.cache_workdir is not None:
             if self.keep_cache:
+                # dirsync raises ValueError if the workdir is already gone
                 try:
                     sync(self.cache_workdir, self.cache_path, "sync")
-                except Exception:
-                    pass
+                except (OSError, ValueError) as e:
+                    log.debug("could not sync cache workdir back: %s", e)
 
             try:
                 shutil.rmtree(self.cache_workdir)
-            except Exception:
-                pass
+            except OSError as e:
+                log.debug(
+                    "could not remove cache workdir %s: %s", self.cache_workdir, e
+                )
 
 
 class SkinNeighborList(NeighborListWrapper):

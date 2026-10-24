@@ -130,6 +130,7 @@ def test_the_curvature_term_trains_a_direct_force_student(batch, teacher_path):
     assert any(p.grad.abs().sum() > 0 for p in student.representation.parameters())
 
 
+@pytest.mark.filterwarnings("ignore:the teacher has no AddOffsets")
 def test_a_teacher_predicting_forces_directly_supplies_curvature(batch, tmp_path):
     """The identical student has zero loss, curvature included."""
     teacher_model = make_direct_nnp(seed=1)

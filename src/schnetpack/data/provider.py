@@ -6,12 +6,11 @@ import os
 import zipfile
 from collections.abc import Callable
 
-import fasteners
 import numpy as np
 import torch
 
 from schnetpack.data.atoms import ASEAtomsData
-from schnetpack.data.splitting import SPLITTING_LOCK
+from schnetpack.data.splitting import splitting_lock
 from schnetpack.data.stats import calculate_stats, estimate_atomrefs
 
 __all__ = ["StatsAtomrefProvider", "train_partition_fingerprint"]
@@ -104,7 +103,7 @@ class StatsAtomrefProvider:
         """
         if self.stats_file is None:
             return compute()
-        with fasteners.InterProcessLock(SPLITTING_LOCK):
+        with splitting_lock(self.stats_file):
             entries = self._load_valid_entries()
             stored = entries.get(entry_key)
             if stored is not None:

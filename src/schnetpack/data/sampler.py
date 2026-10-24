@@ -5,7 +5,8 @@ import torch
 from torch.utils.data import Sampler, WeightedRandomSampler
 
 from schnetpack import properties
-from schnetpack.data import ASEAtomsData
+
+from .atoms import ASEAtomsData
 
 __all__ = [
     "ChunkedRandomSampler",
