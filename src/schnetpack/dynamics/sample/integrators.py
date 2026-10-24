@@ -83,8 +83,8 @@ class Integrator(abc.ABC):
 
 class Euler(Integrator):
     """
-    One stage: x <- x + d0 dt. With the update's noise g sqrt(|dt|) z this
-    is Euler–Maruyama.
+    One stage: ``x <- x + d0 dt``. With the update's noise ``g sqrt(|dt|) z``
+    this is Euler–Maruyama.
     """
 
     n_stages = 1
