@@ -1,14 +1,32 @@
 import math
+import os
 
+import fasteners
 import numpy as np
 import torch
 
 __all__ = ["SplittingStrategy", "RandomSplit", "SubsamplePartitions", "GroupSplit"]
 
 # Inter-process lock file serializing split creation and the persisted-stats
-# read-modify-write. One shared constant: stats writes must take the *same*
-# lock as split creation.
+# read-modify-write. One shared name: stats writes must take the *same* lock as
+# split creation.
 SPLITTING_LOCK = "splitting.lock"
+
+
+def splitting_lock(path: str) -> fasteners.InterProcessLock:
+    """
+    Inter-process lock for writing the split or stats file at ``path``.
+
+    The lock file sits in the directory of ``path``, so all processes that
+    share a split file share the lock, and nothing is written to the working
+    directory. The stats file defaults to the directory of the split file, so
+    by default split creation and stats writes take the same lock.
+
+    Args:
+        path: split or stats file the lock protects
+    """
+    directory = os.path.dirname(os.path.abspath(path))
+    return fasteners.InterProcessLock(os.path.join(directory, SPLITTING_LOCK))
 
 
 def absolute_split_sizes(dsize: int, split_sizes: list[int]) -> list[int]:

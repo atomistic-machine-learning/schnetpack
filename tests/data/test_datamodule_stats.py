@@ -113,6 +113,20 @@ def test_stats_file_written_next_to_split_file(stats_dbpath, tmp_path, monkeypat
     assert os.path.exists(tmp_path / "split_stats.npz")
 
 
+def test_split_lock_is_written_next_to_split_file(stats_dbpath, tmp_path, monkeypatch):
+    workdir = tmp_path / "workdir"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    dm = _make_dm(stats_dbpath, data_dir / "split.npz")
+    dm.setup()
+    dm.get_stats(ENERGY, True, False)
+
+    assert os.path.exists(data_dir / "splitting.lock")
+    assert os.listdir(workdir) == []
+
+
 def test_fingerprint_mismatch_triggers_recompute(stats_dbpath, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     calls = _count_stats_calls(monkeypatch)

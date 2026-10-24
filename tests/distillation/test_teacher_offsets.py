@@ -33,7 +33,7 @@ class OpaqueTeacher(TeacherWrapper):
 
 @pytest.fixture(autouse=True)
 def in_tmp_path(tmp_path, monkeypatch):
-    """The datamodule writes its split lock to the working directory."""
+    """The datamodule writes its default split.npz to the working directory."""
     monkeypatch.chdir(tmp_path)
 
 
