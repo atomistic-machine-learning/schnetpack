@@ -21,8 +21,10 @@ core's :attr:`~MaceModel.r_max`::
 Cast with ``MaceModel(dtype=...)`` rather than ``ForceCalculator(dtype=...)``:
 the latter casts the whole model, and rounds the float64 E0s with it.
 
-A ``MaceModel`` trains like any SchNetPack model (``experiment=mace_finetune``)
-and pickles with ``torch.save``, the core as its embedded archive.
+A ``MaceModel`` trains like any SchNetPack model (``experiment=mace_finetune``),
+also from random weights (``experiment=mace_scratch``, on a core that
+:func:`~schnetpack.interfaces.mace_interface.build_mace` writes), and pickles
+with ``torch.save``, the core as its embedded archive.
 Training compares MACE's interaction energy with labels from which the data
 pipeline removed the same E0s the postprocessors add: see ``e0s`` and
 :func:`mace_atomrefs`.
@@ -47,8 +49,9 @@ from schnetpack.utils import as_dtype
 
 __all__ = ["MaceModel", "ExportedMace", "load_mace", "mace_atomrefs"]
 
-#: where the E0s come from: the core's own table, or the dataset's atomrefs
-E0_SOURCES = ("model", "dataset")
+#: where the E0s come from: the core's own table, the dataset's atomrefs, or
+#: atomrefs estimated on the training split
+E0_SOURCES = ("model", "dataset", "estimated")
 
 #: the arguments of an exported MACE energy, in order: the keys of MACE's
 #: input dict
@@ -88,6 +91,12 @@ class MaceModel(AtomisticModel):
     ``E0s="estimated"`` does; on data of one composition only its sum over
     the molecule is determined, and the minimum-norm solution is taken.
 
+    A core with random weights (:func:`~schnetpack.interfaces.mace_interface.build_mace`)
+    has no E0s of its own: ``e0s="estimated"`` fits them per element to the
+    energies of the training split, as MACE's ``E0s="average"`` does. The
+    pipeline's ``RemoveOffsets`` needs ``estimate_atomref=True`` to remove the
+    same ones. Atomrefs stored with the dataset take precedence.
+
     The core's forces keep their graph in train mode, through MACE's
     ``training`` argument. Only the first head of a multi-head core is used.
 
@@ -101,7 +110,8 @@ class MaceModel(AtomisticModel):
         dtype: floating dtype the core is cast to; None keeps its own. The
             default E0s are read before the cast, so they stay exact.
         e0s: ``"model"`` for the core's E0 table, ``"dataset"`` for the
-            atomrefs of the training data, taken at
+            atomrefs of the training data, ``"estimated"`` for atomrefs
+            estimated on the training split; the latter two are taken at
             :meth:`initialize_transforms`. Only read without
             ``postprocessors``.
         fit_e0_correction: fit the E0 correction at
@@ -124,7 +134,12 @@ class MaceModel(AtomisticModel):
             atomrefs = reference_energies(core) if e0s == "model" else None
             postprocessors = [
                 CastTo64(),
-                AddOffsets(energy_key, add_atomrefs=True, atomrefs=atomrefs),
+                AddOffsets(
+                    energy_key,
+                    add_atomrefs=True,
+                    atomrefs=atomrefs,
+                    estimate_atomref=e0s == "estimated",
+                ),
             ]
         if dtype is not None:
             core = core.to(as_dtype(dtype))
@@ -456,12 +471,13 @@ def load_mace(path: str) -> nn.Module:
 def mace_atomrefs(path: str, e0s: str = "model") -> torch.Tensor | None:
     """The atomrefs the data pipeline removes from the energy labels for
     training a :class:`MaceModel` with the same ``e0s``: the archive's E0s,
-    or None for ``"dataset"``, so that ``RemoveOffsets`` reads the dataset's
-    atomrefs as the model's ``AddOffsets`` does.
+    or None for ``"dataset"`` and ``"estimated"``, so that ``RemoveOffsets``
+    reads the atomrefs of the training data as the model's ``AddOffsets`` does
+    (for ``"estimated"``, with ``estimate_atomref=True``).
 
     Args:
         path: the MACE archive (see :func:`load_mace`).
-        e0s: ``"model"`` or ``"dataset"``, as for :class:`MaceModel`.
+        e0s: one of :data:`E0_SOURCES`, as for :class:`MaceModel`.
     """
     _check_e0s(e0s)
     return reference_energies(load_mace(path)) if e0s == "model" else None
