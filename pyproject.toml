@@ -113,8 +113,6 @@ ignore = [
 # `for _step in ...` even when the variable is unused, and imports belong in the
 # notebook cell that first needs them (E402).
 "examples/**" = ["B007", "E402"]
-# ignore batchwise optimizer until refactor is done
-"src/schnetpack/interfaces/batchwise_optimization.py" = ["ALL"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["schnetpack"]
