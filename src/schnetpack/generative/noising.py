@@ -252,7 +252,7 @@ class PeriodicGaussianInterpolant(GaussianInterpolant):
     over the lattice images that lead from x0 to the wrapped x_t,
 
         x1 = sigma_max / sigma sum_n w_n (d + n L),
-        w_n ~ exp(-|d + n L|^2 / (2 sigma^2)),
+        w_n ~ exp(-norm(d + n L)^2 / (2 sigma^2)),
 
     with d the shortest displacement, over n in [-n_images, n_images]^3. Every
     target is linear in x1, so the eps target becomes GEODE's wrapped-normal

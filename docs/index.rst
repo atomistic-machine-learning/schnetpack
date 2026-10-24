@@ -67,3 +67,4 @@ Contents
    api/transform
    api/md
    api/dynamics
+   api/generative
