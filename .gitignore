@@ -12,8 +12,6 @@ docs/trained_models/
 
 # hydra stuff
 outputs
-# inter-process lock next to split.npz (schnetpack.data.splitting)
-splitting.lock
 logs
 generated
 
