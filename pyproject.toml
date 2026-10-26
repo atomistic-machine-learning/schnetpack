@@ -69,7 +69,7 @@ spktrain = "schnetpack.cli:train"
 spkpredict = "schnetpack.cli:predict"
 spkmd = "schnetpack.md.cli:simulate"
 spkconvert = "schnetpack.cli:convert"
-spkdeploy = "schnetpack.cli_scripts.deploy:main"
+spkdeploy = "schnetpack.cli:deploy"
 
 [tool.ruff]
 line-length = 88

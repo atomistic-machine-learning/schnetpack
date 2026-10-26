@@ -106,30 +106,55 @@ class CompiledPotential:
         def forward(params, buffers, inputs):
             return functional_call(self.model, (params, buffers), (dict(inputs),))
 
-        # make_fx does not guard the graph it returns, so a size it specializes on holds
-        # for every later batch. Sizes 0 and 1 are part of the graph key; sizes that
-        # happen to be equal (duck shapes) must not share a symbol. Parameter and
-        # buffer shapes stay fixed.
-        fake_mode = FakeTensorMode(
-            allow_non_fake_inputs=True, shape_env=ShapeEnv(duck_shape=False)
-        )
-
-        def fixed(tensors):
-            return {
-                k: fake_mode.from_tensor(v, static_shapes=True)
-                for k, v in tensors.items()
-            }
-
-        # the response modules call autograd.grad, also when the caller is in no_grad
+        # sizes 0 and 1 are part of the graph key, as trace() specializes on them
         derivatives = self.model.required_derivatives or []
-        example = {
-            k: fake_mode.from_tensor(
-                v.detach().requires_grad_() if k in derivatives else v,
-                source=ConstantSource(f"inputs[{k!r}]"),
-            )
-            for k, v in inputs.items()
+        return trace(forward, params, buffers, inputs, derivatives)
+
+
+def trace(
+    fn,
+    params: dict[str, torch.Tensor],
+    buffers: dict[str, torch.Tensor],
+    inputs: dict[str, torch.Tensor],
+    requires_grad=(),
+) -> torch.fx.GraphModule:
+    """
+    Record ``fn(params, buffers, inputs)``, including the ``autograd.grad`` calls it
+    makes, as one graph of ordinary ops, with a symbolic size per input dimension.
+
+    ``make_fx`` does not guard the graph it returns, so a size it specializes on holds
+    for every later call: callers key their graphs on sizes 0 and 1, or trace under
+    ``backed_size_oblivious``. Sizes that happen to be equal (duck shapes) do not share
+    a symbol. Parameter and buffer shapes stay fixed.
+
+    Args:
+        fn: called as ``fn(params, buffers, inputs)``
+        params: parameters by name, traced with fixed shapes
+        buffers: buffers by name, traced with fixed shapes
+        inputs: inputs by name, traced with symbolic shapes
+        requires_grad: names of the inputs ``fn`` differentiates with respect to
+
+    Returns:
+        the graph, called like ``fn``
+    """
+    fake_mode = FakeTensorMode(
+        allow_non_fake_inputs=True, shape_env=ShapeEnv(duck_shape=False)
+    )
+
+    def fixed(tensors):
+        return {
+            k: fake_mode.from_tensor(v, static_shapes=True) for k, v in tensors.items()
         }
-        with torch.enable_grad():
-            return make_fx(
-                forward, tracing_mode="symbolic", _allow_non_fake_inputs=True
-            )(fixed(params), fixed(buffers), example)
+
+    example = {
+        k: fake_mode.from_tensor(
+            v.detach().requires_grad_() if k in requires_grad else v,
+            source=ConstantSource(f"inputs[{k!r}]"),
+        )
+        for k, v in inputs.items()
+    }
+    # fn calls autograd.grad, also when the caller is in no_grad
+    with torch.enable_grad():
+        return make_fx(fn, tracing_mode="symbolic", _allow_non_fake_inputs=True)(
+            fixed(params), fixed(buffers), example
+        )

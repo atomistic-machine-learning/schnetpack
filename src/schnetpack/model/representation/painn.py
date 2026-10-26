@@ -252,7 +252,7 @@ class PaiNN(nn.Module):
 
         # compute interaction blocks and update atomic embeddings
         qs = q.shape
-        mu = torch.zeros((qs[0], 3, qs[2]), device=q.device)
+        mu = torch.zeros((qs[0], 3, qs[2]), device=q.device, dtype=q.dtype)
         for i, (interaction, mixing) in enumerate(zip(self.interactions, self.mixing)):
             q, mu = interaction(q, mu, filter_list[i], dir_ij, idx_i, idx_j, n_atoms)
             q, mu = mixing(q, mu)
