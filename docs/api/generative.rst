@@ -172,13 +172,11 @@ time.
 Training
 --------
 
-The training step: at tensor level for one variable, and as a data-pipeline transform
-for a list of them.
+The training step, as a data-pipeline transform over a list of variables.
 
 .. autosummary::
     :toctree: generated
     :nosignatures:
     :template: classtemplate.rst
 
-    MatchingLoss
     Diffuse

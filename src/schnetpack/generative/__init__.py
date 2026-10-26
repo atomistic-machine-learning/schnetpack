@@ -21,9 +21,8 @@ A model is a configuration of four independent axes plus its training:
 - :mod:`~schnetpack.generative.views`: where a variable lives in the
   structure, which is all the batch holds: a batch entry, wrapped periodic
   positions, or the cell as standardized parameters.
-- :mod:`~schnetpack.generative.losses` and
-  :mod:`~schnetpack.generative.transforms`: the training step, at tensor
-  level for one variable and as a data-pipeline transform for a list.
+- :mod:`~schnetpack.generative.transforms`: the training step, as a
+  data-pipeline transform over a list of variables.
 
 Running a trained model lives in :mod:`schnetpack.dynamics`. Training and
 sampling must share the same variables. Theory and
@@ -31,7 +30,6 @@ design: ``docs_new/README.md``.
 """
 
 from schnetpack.generative.couplings import *
-from schnetpack.generative.losses import *
 from schnetpack.generative.noising import *
 from schnetpack.generative.parametrizations import *
 from schnetpack.generative.priors import *

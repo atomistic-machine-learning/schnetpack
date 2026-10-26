@@ -11,7 +11,6 @@ from schnetpack.dynamics import (
 from schnetpack.generative import (
     VE,
     GaussianInterpolant,
-    MatchingLoss,
     PseudoForceParametrization,
 )
 from tests.dynamics.test_sampling import IDLE, batch_model, draw, train_toy
@@ -145,13 +144,14 @@ def test_direct_denoising_trained_gpff_assembly():
     torch.manual_seed(0)
     mu, sd = 1.0, 0.5
     process = GaussianInterpolant(VE(0.01, 3.0))
-    parametrization = PseudoForceParametrization()
-    loss = MatchingLoss(
+    model = train_toy(
         process,
-        parametrization,
+        PseudoForceParametrization(),
+        TimeFreeToyNet(),
+        mu,
+        sd,
         weight=lambda t: (1.0 / process.schedule.b(t) ** 2).clamp(max=1.0),
     )
-    model = train_toy(loss, TimeFreeToyNet(), mu, sd)
 
     sampler = gpff(batch_model(model), process)
     samples = draw(sampler, (4096, 1), 50)

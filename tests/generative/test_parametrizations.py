@@ -466,3 +466,29 @@ def test_fields_broadcast_over_per_sample_times(process, parametrization):
         parametrization.to_velocity(process.schedule, target, x_t, t).shape == x0.shape
     )
     assert parametrization.to_x0(process.schedule, target, x_t, t).shape == x0.shape
+
+
+def test_ve_score_target_spans_orders_of_magnitude():
+    # Why VE + ScoreParametrization wants weight=b^2: the -x1/b target
+    # grows like 1/b, so an unweighted L2 is dominated by the low-noise end
+    # and the model never learns the rest. Documented on VE.
+    torch.manual_seed(0)
+    process = GaussianInterpolant(VE(2e-4, 1.0))
+    x1 = torch.randn(4096, 1)
+
+    score_param = ScoreParametrization()
+    lo = score_param.target(process.schedule, None, x1, torch.zeros(4096)).abs().mean()
+    hi = score_param.target(process.schedule, None, x1, torch.ones(4096)).abs().mean()
+    assert lo / hi > 1000
+
+    # b^2 weighting flattens it: w * (s - (-x1/b))^2 == (b s + x1)^2,
+    # i.e. exactly eps-matching, whose target is x1 at every noise level.
+    eps_param = EpsParametrization()
+    for t_val in [0.0, 0.5, 1.0]:
+        t = torch.full((4096,), t_val)
+        weight = process.schedule.b(t) ** 2
+        score_residual = (
+            weight * (score_param.target(process.schedule, None, x1, t)) ** 2
+        )
+        eps_residual = eps_param.target(process.schedule, None, x1, t) ** 2
+        assert torch.allclose(score_residual, eps_residual, rtol=1e-4)

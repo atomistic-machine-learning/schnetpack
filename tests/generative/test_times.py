@@ -185,19 +185,3 @@ def test_diffuse_accepts_a_time_sampler(ve):
 
     log_sigma = ve.schedule.sigma(torch.stack(times)).log()
     assert log_sigma.mean() == pytest.approx(-0.7, abs=0.2)
-
-
-def test_matching_loss_accepts_a_time_sampler(ve):
-    from schnetpack.generative import MatchingLoss
-
-    seen = {}
-
-    def spy(n, device=None):
-        t = LogNormalSigmaTimes(ve)(n, device)
-        seen["n"] = n
-        return t
-
-    loss_fn = MatchingLoss(ve, PseudoForceParametrization(), t_sampler=spy)
-    loss = loss_fn(lambda x, t, cond=None: torch.zeros_like(x), torch.randn(16, 3))
-    assert seen["n"] == 16  # one per sample, unlike Diffuse
-    assert torch.isfinite(loss)

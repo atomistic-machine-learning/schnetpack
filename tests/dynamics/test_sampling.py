@@ -23,7 +23,6 @@ from schnetpack.generative import (
     GaussianInterpolant,
     GaussianPrior,
     Interpolant,
-    MatchingLoss,
     PermutationCoupling,
     ReverseSDE,
     ScoreParametrization,
@@ -599,10 +598,14 @@ class ToyNet(torch.nn.Module):
         return self.layers(torch.cat([x, t], dim=-1))
 
 
-def train_toy(loss_fn, model, mu, sd, steps=1000):
+def train_toy(process, parametrization, model, mu, sd, weight=None, steps=1000):
+    """Regress ``parametrization``'s target along ``process`` on N(mu, sd^2) data."""
     opt = torch.optim.Adam(model.parameters(), lr=3e-3)
     for _ in range(steps):
-        loss = loss_fn(model, mu + sd * torch.randn(256, 1))
+        x_t, x0, x1, t = process.perturb(mu + sd * torch.randn(256, 1))
+        target = parametrization.target(process.schedule, x0, x1, t)
+        w = 1.0 if weight is None else expand_t(weight(t), x_t)
+        loss = (w * (model(x_t, t) - target) ** 2).mean()
         opt.zero_grad()
         loss.backward()
         opt.step()
@@ -638,7 +641,7 @@ def test_trained_model_recovers_data_stats(
     mu, sd = 1.0, 0.5
 
     parametrization = param_cls()
-    model = train_toy(MatchingLoss(process, parametrization), ToyNet(), mu, sd)
+    model = train_toy(process, parametrization, ToyNet(), mu, sd)
     samples = draw(
         sde_sampler(
             batch_model(model),

@@ -2,9 +2,8 @@
 Time samplers: where along the path training draws its times.
 
 The schedule fixes what sigma(t) is; the time sampler fixes where the model
-spends its capacity. Both :class:`~schnetpack.generative.losses.MatchingLoss`
-and :class:`~schnetpack.generative.transforms.Diffuse` take the density as a
-plain ``(n, device) -> (n,)`` hook, so any callable works. Details:
+spends its capacity. :class:`~schnetpack.generative.transforms.Diffuse` takes
+the density as a plain ``(n, device) -> (n,)`` hook, so any callable works. Details:
 ``docs_new/training.md``.
 """
 
@@ -24,8 +23,7 @@ class TimeSampler(abc.ABC):
     def __call__(self, n: int, device: torch.device | None = None) -> torch.Tensor:
         """
         Args:
-            n: number of times to draw (one per sample in ``MatchingLoss``,
-                one per structure in ``Diffuse``)
+            n: number of times to draw (one per structure in ``Diffuse``)
             device: device to draw on
 
         Returns:

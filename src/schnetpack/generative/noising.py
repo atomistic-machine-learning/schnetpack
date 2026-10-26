@@ -167,7 +167,6 @@ class Interpolant(ForwardNoising):
         Default training-time density: uniform on [t_min, t_max].
 
         Other densities enter through the ``t_sampler`` hook of
-        :class:`~schnetpack.generative.losses.MatchingLoss` and
         :class:`~schnetpack.generative.transforms.Diffuse`.
         """
         t_min, t_max = self.schedule.t_min, self.schedule.t_max
