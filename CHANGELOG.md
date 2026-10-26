@@ -153,8 +153,8 @@ LAMMPS with `spkdeploy` are unchanged.
 ### Changed
 
 - Console scripts (`spktrain`, `spkpredict`, `spkmd`, `spkconvert`,
-  `spkdeploy`) are `[project.scripts]` entry points. `spkconvert` and
-  `spkdeploy` moved into the package as `schnetpack.cli_scripts`.
+  `spkdeploy`) are `[project.scripts]` entry points. `spkconvert` moved into
+  `schnetpack.cli`, and `spkdeploy` into the package as `schnetpack.cli_scripts`.
 - Optional dependency extras: `test`, `dev`, `doc` and `mace`. `black`,
   `pytest`, `pre-commit`, `protobuf` and `progressbar` are no longer installed
   as runtime dependencies.
