@@ -17,7 +17,7 @@ import torch
 from schnetpack.md.calculators.base_calculator import MDCalculator, MDCalculatorError
 from schnetpack.md.calculators.ensemble_calculator import EnsembleCalculator
 from schnetpack.md.utils import activate_model_stress
-from schnetpack.model.compile import compile_potential
+from schnetpack.model.compile import CompiledPotential
 
 log = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class SchNetPackCalculator(MDCalculator):
                                            the model. Only changes the units used for logging the various outputs.
         script_model (bool): convert loaded model to torchscript.
         compile_model (bool): run the model as one compiled graph including its
-                              derivatives (see `schnetpack.model.compile_potential`).
+                              derivatives (see `schnetpack.model.CompiledPotential`).
     """
 
     compiled_model = None
@@ -84,7 +84,7 @@ class SchNetPackCalculator(MDCalculator):
         self.model = self._prepare_model(model_file)
         if compile_model:
             log.info("Compiling model...")
-            self.compiled_model = compile_potential(self.model)
+            self.compiled_model = CompiledPotential(self.model)
         self.neighbor_list = neighbor_list
 
     def _prepare_model(self, model_file: str) -> AtomisticModel:

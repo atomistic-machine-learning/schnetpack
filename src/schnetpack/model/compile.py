@@ -8,8 +8,6 @@ graph is compiled with dynamic shapes; training then needs only a single backwar
 through it, and inference runs it without autograd.
 """
 
-import warnings
-
 import torch
 from torch._dynamo.source import ConstantSource
 from torch._subclasses.fake_tensor import FakeTensorMode
@@ -19,7 +17,7 @@ from torch.fx.experimental.symbolic_shapes import ShapeEnv
 
 from schnetpack.model.base import AtomisticModel
 
-__all__ = ["CompiledPotential", "compile_potential", "compile_supported"]
+__all__ = ["CompiledPotential", "compile_supported"]
 
 # make_fx over autograd.grad drops the gradient through saved outputs (exp, tanh,
 # sigmoid, sqrt) on torch 2.7.1; 2.14.1 traces them correctly
@@ -54,13 +52,20 @@ class CompiledPotential:
         Args:
             model: the model to run, e.g. a ``NeuralNetworkPotential`` with ``Forces``
             compile_kwargs: passed on to ``torch.compile`` (``dynamic=True`` by default)
+
+        Raises:
+            TypeError: if ``model`` is not an ``AtomisticModel``
+            RuntimeError: on torch < 2.14, which can trace wrong gradients of a force
+                loss
         """
+        if not isinstance(model, AtomisticModel):
+            raise TypeError(
+                f"CompiledPotential needs an AtomisticModel, not {type(model).__name__}"
+            )
         if not compile_supported():
-            warnings.warn(
-                f"compile_potential needs torch >= {'.'.join(map(str, _MIN_TORCH))} to "
-                f"train correctly; torch {torch.__version__} can trace wrong parameter "
-                "gradients of a force loss.",
-                stacklevel=2,
+            raise RuntimeError(
+                f"CompiledPotential needs torch >= {'.'.join(map(str, _MIN_TORCH))}; "
+                f"torch {torch.__version__} can trace wrong gradients of a force loss."
             )
         self.model = model
         self.compile_kwargs = {"dynamic": True, **compile_kwargs}
@@ -128,17 +133,3 @@ class CompiledPotential:
             return make_fx(
                 forward, tracing_mode="symbolic", _allow_non_fake_inputs=True
             )(fixed(params), fixed(buffers), example)
-
-
-def compile_potential(model: AtomisticModel, **compile_kwargs) -> CompiledPotential:
-    """
-    Wrap ``model`` so that it runs as one compiled graph including its derivatives.
-
-    Args:
-        model: the model to run, e.g. a ``NeuralNetworkPotential`` with ``Forces``
-        compile_kwargs: passed on to ``torch.compile`` (``dynamic=True`` by default)
-
-    Returns:
-        a callable with the model's dict-in, dict-out interface
-    """
-    return CompiledPotential(model, **compile_kwargs)

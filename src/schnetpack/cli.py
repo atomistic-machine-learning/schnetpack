@@ -26,7 +26,7 @@ from schnetpack.lightning.utils import (
     log_hyperparameters,
     trainer_fit_kwargs_for_checkpoint,
 )
-from schnetpack.model.compile import compile_potential, compile_supported
+from schnetpack.model.compile import CompiledPotential
 from schnetpack.utils import load_model, str2class
 from schnetpack.utils.script import print_config
 
@@ -235,15 +235,7 @@ def predict(config: DictConfig):
 
     model = load_model("best_model")
 
-    model_fn = model
-    if config.get("compile", False):
-        if compile_supported():
-            model_fn = compile_potential(model)
-        else:
-            log.warning(
-                f"torch {torch.__version__} can trace wrong derivatives; "
-                "predicting without compilation."
-            )
+    model_fn = CompiledPotential(model) if config.get("compile", False) else model
 
     class WrapperLM(LightningModule):
         def __init__(self, model, enable_grad=config.enable_grad):

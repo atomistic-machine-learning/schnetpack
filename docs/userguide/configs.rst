@@ -454,7 +454,7 @@ Compiling the model
 ===================
 
 ``spktrain`` and ``spkpredict`` can run the model as one compiled graph
-(``schnetpack.model.compile_potential``), switched on with ``task.compile=True`` for
+(``schnetpack.model.CompiledPotential``), switched on with ``task.compile=True`` for
 ``spktrain`` and ``compile=True`` for ``spkpredict``. The forward pass is traced
 together with the derivatives of the response modules (e.g. forces and stress), so that
 training on forces needs only a single backward pass; the traced graph is then compiled
@@ -463,8 +463,8 @@ Tracing and compiling take some time at the first training and validation step, 
 again for a batch with a single molecule.
 
 Compilation requires torch 2.14 or newer, since earlier versions can trace wrong
-gradients of a force loss; with an older torch, the model runs without compilation and
-a warning is issued. Distillation runs the model without compilation. The stored models
+gradients of a force loss; with an older torch, switching it on raises an error.
+Distillation runs the model without compilation. The stored models
 are not affected: the best model is saved as a regular ``AtomisticModel``.
 
 Simulations compile the model the same way: ``spkmd`` with

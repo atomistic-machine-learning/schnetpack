@@ -35,7 +35,6 @@ Models
     :toctree: generated
     :nosignatures:
 
-    compile_potential
     compile_supported
 
 .. rubric:: Loading MACE models

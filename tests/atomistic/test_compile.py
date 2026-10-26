@@ -114,7 +114,7 @@ def assert_matches_eager(model, compiled, batches, keys):
 def test_compiled_potential_matches_eager(representation):
     torch.manual_seed(0)
     model = potential(representation)
-    compiled = spk.model.compile_potential(model)
+    compiled = spk.model.CompiledPotential(model)
     batches = [molecules((5, 7)), molecules((4, 6, 8), seed=1), molecules((3, 9), 2)]
 
     assert_matches_eager(
@@ -129,7 +129,7 @@ def test_compiled_potential_matches_eager(representation):
 def test_compiled_stress_of_periodic_cells_matches_eager(representation):
     torch.manual_seed(0)
     model = potential(representation, stress=True)
-    compiled = spk.model.compile_potential(model)
+    compiled = spk.model.CompiledPotential(model)
     batches = [
         crystals([(1, 1, 1), (1, 1, 2)]),
         crystals([(1, 2, 2), (1, 1, 1), (2, 1, 1)], seed=1),
@@ -149,7 +149,7 @@ def test_single_molecule_batch_gets_own_graph():
     """A graph traced on one molecule must not be reused for several, or vice versa."""
     torch.manual_seed(0)
     model = potential(spk.model.SchNet).eval()
-    compiled = spk.model.compile_potential(model)
+    compiled = spk.model.CompiledPotential(model)
     batches = [molecules((9,)), molecules((5, 7), 1), molecules((6,), 2)]
 
     for batch in batches:
@@ -216,12 +216,20 @@ def test_task_runs_compiled_model_and_pickles():
     assert len(task.compiled_model._graphs) == 1
 
 
-def test_task_without_compile_support_runs_eager(monkeypatch):
-    monkeypatch.setattr("schnetpack.lightning.task.compile_supported", lambda: False)
-    with pytest.warns(UserWarning, match="without compilation"):
-        task = atomistic_task(compile=True)
-    assert task.compiled_model is None
-    assert task.hparams.compile
+def test_compile_needs_torch_2_14(monkeypatch):
+    monkeypatch.setattr("schnetpack.model.compile.compile_supported", lambda: False)
+    with pytest.raises(RuntimeError, match="torch >= 2.14"):
+        spk.model.CompiledPotential(potential(spk.model.SchNet))
+    # the task, spkpredict and the calculators all compile through it
+    with pytest.raises(RuntimeError, match="torch >= 2.14"):
+        atomistic_task(compile=True)
+
+
+def test_compile_needs_an_atomistic_model():
+    with pytest.raises(TypeError, match="AtomisticModel"):
+        spk.model.CompiledPotential(torch.nn.Linear(2, 2))
+    with pytest.raises(TypeError, match="AtomisticModel"):
+        spk.dynamics.Calculator(lambda batch: batch, compile=True)
 
 
 @requires_compile
@@ -296,6 +304,3 @@ def test_dynamics_calculator_compiles_atomistic_models():
     expected = spk.dynamics.Calculator(model, enable_grad=True)(batch)
     for k in (properties.energy, properties.forces):
         torch.testing.assert_close(out[k], expected[k])
-
-    with pytest.raises(TypeError, match="AtomisticModel"):
-        spk.dynamics.Calculator(lambda batch: batch, compile=True)
