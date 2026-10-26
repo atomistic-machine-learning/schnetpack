@@ -11,8 +11,10 @@ import torch
 from torch.autograd import grad
 
 from schnetpack import properties
+from schnetpack.data.stats import estimate_atomrefs
 from schnetpack.dynamics import BatchNeighborList, ForceCalculator
 from schnetpack.interfaces.ase_interface import atoms_to_batch
+from schnetpack.interfaces.mace_interface import export_mace
 from schnetpack.model import MaceModel, load_mace
 from schnetpack.model.mace import mace_atomrefs
 from schnetpack.transform import CastTo32, MatScipyNeighborList, RemoveOffsets
@@ -48,12 +50,14 @@ def removing(atomrefs):
 @pytest.fixture
 def archive(tmp_path):
     """A trainable stand-in, saved frozen as MACE's calculator leaves it."""
-    core = torch.jit.script(FakeMace(trainable=True))
-    for parameter in core.parameters():
-        parameter.requires_grad_(False)
-    path = str(tmp_path / "mace.pt")
-    torch.jit.save(core, path)
-    return path
+    core = FakeMace(trainable=True).requires_grad_(False)
+    return export_mace(core, str(tmp_path / "mace.pt2"))
+
+
+def strength(model):
+    """The stand-in's one parameter."""
+    (parameter,) = model.core.parameters()
+    return parameter
 
 
 @pytest.fixture
@@ -62,8 +66,6 @@ def batch():
 
 
 def test_load_mace_makes_a_frozen_archive_trainable(archive):
-    assert not any(p.requires_grad for p in torch.jit.load(archive).parameters())
-
     parameters = list(load_mace(archive).parameters())
 
     assert parameters and all(p.requires_grad for p in parameters)
@@ -79,8 +81,8 @@ def test_pickles_with_its_core(archive, batch, tmp_path):
     torch.testing.assert_close(
         loaded(dict(batch))[properties.energy], model(dict(batch))[properties.energy]
     )
-    assert loaded.core.strength.dtype == torch.float32
-    assert loaded.core.strength.requires_grad
+    assert strength(loaded).dtype == torch.float32
+    assert strength(loaded).requires_grad
 
 
 def test_deep_copies_have_their_own_parameters(archive, batch):
@@ -88,10 +90,20 @@ def test_deep_copies_have_their_own_parameters(archive, batch):
 
     copied = copy.deepcopy(model)
 
-    assert copied.core.strength is not model.core.strength
+    assert strength(copied) is not strength(model)
     torch.testing.assert_close(
         copied(dict(batch))[properties.energy], model(dict(batch))[properties.energy]
     )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a GPU")
+def test_moves_to_the_gpu(archive, batch):
+    model = MaceModel(load_mace(archive), dtype="float32")
+    expected = model(dict(batch))[properties.energy]
+
+    output = model.cuda()({key: value.cuda() for key, value in batch.items()})
+
+    torch.testing.assert_close(output[properties.energy].cpu(), expected)
 
 
 def test_an_unknown_e0_source_is_refused(archive):
@@ -118,6 +130,36 @@ def test_dataset_e0s_are_the_datasets_atomrefs(archive, tmp_path):
     offsets = model.postprocessors[1].atomref
     torch.testing.assert_close(offsets[:9].double(), torch.tensor(atomrefs))
     assert not offsets[9:].any()
+
+
+def test_estimated_e0s_are_the_ones_the_pipeline_removes(archive, tmp_path):
+    """Both estimate them on the training split, through the provider."""
+    assert mace_atomrefs(archive, "estimated") is None
+    datamodule = make_datamodule(
+        tmp_path,
+        load_properties=[properties.energy],
+        energy=shifted_energy,
+        molecules=MOLECULES,
+        transforms=[
+            RemoveOffsets(
+                properties.energy, remove_atomrefs=True, estimate_atomref=True
+            ),
+            MatScipyNeighborList(cutoff=R_MAX),
+            CastTo32(),
+        ],
+    )
+    datamodule.setup()
+    model = MaceModel(load_mace(archive), e0s="estimated")
+
+    model.initialize_transforms(datamodule)
+
+    added = model.postprocessors[1].atomref
+    expected = estimate_atomrefs(
+        datamodule.dataset, {properties.energy: True}, indices=list(range(8))
+    )[properties.energy]
+    torch.testing.assert_close(added, expected)
+    removed = datamodule.train_dataset.transforms[0].atomref
+    torch.testing.assert_close(removed, added)
 
 
 def test_dataset_e0s_need_atomrefs_in_the_dataset(archive, tmp_path):
@@ -219,7 +261,7 @@ def test_spktrain_fine_tunes_and_stores_a_loadable_model(archive, tmp_path):
     model = load_model(str(runs / "finetune" / "best_model"))
     assert isinstance(model, MaceModel)
     assert model.do_postprocessing
-    assert not torch.equal(model.core.strength.double(), FakeMace().strength), (
+    assert not torch.equal(strength(model).double(), FakeMace().strength), (
         "the weights did not change"
     )
     torch.testing.assert_close(

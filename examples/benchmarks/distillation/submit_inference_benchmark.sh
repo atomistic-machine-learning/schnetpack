@@ -21,8 +21,8 @@
 CONTAINER=/home/Jonas/container/schnetpack/schnetpack_container.sif
 OUTPUT=$SLURM_SUBMIT_DIR/results_$SLURM_JOB_ID
 
-# a MACE TorchScript archive, from schnetpack.interfaces.mace_interface.compile_mace_off
-TEACHER=/path/to/MACE-OFF23_medium.pt
+# a MACE archive, from schnetpack.interfaces.mace_interface.export_mace_off
+TEACHER=/path/to/MACE-OFF23_medium.pt2
 # the best_model of each distillation run, as LABEL=PATH
 STUDENTS=(
   student=/path/to/runs/<run_id>/best_model

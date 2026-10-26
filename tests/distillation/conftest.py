@@ -110,7 +110,6 @@ def make_datamodule(
 def make_nnp(
     seed=0,
     energy_mean=None,
-    cast_to_64=True,
     n_atom_basis=16,
     filter_cutoff=None,
     energy_key=properties.energy,
@@ -121,8 +120,7 @@ def make_nnp(
 
     ``energy_mean`` (per atom) makes its ``AddOffsets`` add that offset; without
     it the offsets are left for ``initialize_transforms`` to fill in. With
-    ``atomrefs`` it adds atomrefs as well, to be estimated there. TorchScript
-    cannot script ``CastTo64`` in this version, hence ``cast_to_64``. With
+    ``atomrefs`` it adds atomrefs as well, to be estimated there. With
     ``filter_cutoff`` it prunes a longer neighbor list to that cutoff, as a
     student sharing its list with a teacher of larger cutoff does. The weights
     depend on ``seed`` alone, not on the output keys.
@@ -135,7 +133,7 @@ def make_nnp(
         cutoff_fn=spk.nn.CosineCutoff(CUTOFF),
     )
     property_mean = None if energy_mean is None else torch.tensor([energy_mean])
-    postprocessors = [CastTo64()] if cast_to_64 else []
+    postprocessors = [CastTo64()]
     postprocessors.append(
         AddOffsets(
             energy_key,

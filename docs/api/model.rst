@@ -1,6 +1,6 @@
 schnetpack.model
 ================
-.. currentmodule:: model
+.. currentmodule:: schnetpack.model
 
 Everything that maps a batch of atoms to predictions. A model is a
 :class:`NeuralNetworkPotential` wrapping one *representation*, which turns a
@@ -29,6 +29,7 @@ Models
     :nosignatures:
 
     load_mace
+    ExportedMace
     mace.mace_atomrefs
 
 Representations

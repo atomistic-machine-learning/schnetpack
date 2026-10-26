@@ -63,10 +63,10 @@ def load_model(
     """
     _register_legacy_modules()
 
+    # a whole pickled model only loads with weights_only=False
+    kwargs.setdefault("weights_only", False)
     try:
-        model = torch.load(
-            model_path, map_location=device, weights_only=False, **kwargs
-        )
+        model = torch.load(model_path, map_location=device, **kwargs)
     except (ModuleNotFoundError, AttributeError) as err:
         raise RuntimeError(
             f"Could not unpickle '{model_path}': {err}. The model refers to a class "

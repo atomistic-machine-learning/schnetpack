@@ -1,8 +1,8 @@
 import logging
 import os
+from contextlib import nullcontext
 from typing import Any
 
-import fasteners
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -11,7 +11,7 @@ from torch.utils.data import BatchSampler
 from schnetpack.data.atoms import ASEAtomsData
 from schnetpack.data.loader import AtomsLoader
 from schnetpack.data.provider import StatsAtomrefProvider, train_partition_fingerprint
-from schnetpack.data.splitting import SPLITTING_LOCK, RandomSplit, SplittingStrategy
+from schnetpack.data.splitting import RandomSplit, SplittingStrategy, splitting_lock
 
 __all__ = ["AtomsDataModule"]
 
@@ -233,8 +233,13 @@ class AtomsDataModule(pl.LightningDataModule):
     def _load_partitions(self) -> None:
         # Serialize split creation with an inter-process lock, so concurrent
         # DDP ranks / jobs cannot race on writing split.npz and end up with
-        # different partitions per rank.
-        lock = fasteners.InterProcessLock(SPLITTING_LOCK)
+        # different partitions per rank. Without a split file nothing is
+        # shared between processes, so there is nothing to lock.
+        lock = (
+            splitting_lock(self.split_file)
+            if self.split_file is not None
+            else nullcontext()
+        )
 
         with lock:
             total_size = len(self.dataset)

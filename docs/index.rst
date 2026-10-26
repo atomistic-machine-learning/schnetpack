@@ -48,6 +48,7 @@ Contents
 
    howtos/howto_batchwise_relaxations
    howtos/howto_ensemble_calculation
+   howtos/howto_guidance
    howtos/lammps
 
 .. toctree::
@@ -66,3 +67,4 @@ Contents
    api/transform
    api/md
    api/dynamics
+   api/generative

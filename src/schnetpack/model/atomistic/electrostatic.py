@@ -23,15 +23,18 @@ class CoulombPotential(nn.Module):
 
 class DampedCoulombPotential(nn.Module):
     """
-    Compute a damped Coulomb potential as described in [#physnet1]_ For use in `schnetpack.model.EnergyCoulomb`.
+    Compute a damped Coulomb potential, for use in `schnetpack.model.EnergyCoulomb`.
+
+    The damping follows [#physnet1]_.
 
     Args:
         switch_fn (torch.nn.Module): Switch function.
 
     References:
+
     .. [#physnet1] O.Unke, M.Meuwly
-        PhysNet: A Neural Network for Predicting Energies, Forces, Dipole Moments and Partial Charges
-        https://arxiv.org/abs/1902.08408
+       PhysNet: A Neural Network for Predicting Energies, Forces, Dipole Moments and Partial Charges
+       https://arxiv.org/abs/1902.08408
     """
 
     def __init__(self, switch_fn: nn.Module):

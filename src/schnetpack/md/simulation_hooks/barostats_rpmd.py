@@ -13,8 +13,9 @@ if TYPE_CHECKING:
 import torch
 
 from schnetpack import units as spk_units
-from schnetpack.md.simulation_hooks import BarostatHook
 from schnetpack.md.utils import StableSinhDiv
+
+from .barostats import BarostatHook
 
 __all__ = ["PILEBarostat"]
 

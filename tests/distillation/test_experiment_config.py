@@ -10,10 +10,16 @@ from omegaconf.errors import MissingMandatoryValue
 
 import schnetpack.cli  # noqa: F401 -- registers the config's resolvers
 from schnetpack import properties
+from schnetpack.interfaces.mace_interface import export_mace
 from schnetpack.model import FilterShortRange
 from schnetpack.train import MaceTeacher, SchNetPackTeacher
 
 from ..mace.fakes import FakeMace
+
+# train.yaml searches ./configs of the run directory, which tests have none of
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:provider=hydra.searchpath in main, path=./configs is not available"
+)
 
 
 def compose_experiment(overrides):
@@ -112,8 +118,7 @@ def test_the_teacher_cutoff_is_in_the_teachers_unit():
 
 
 def test_a_mace_teacher_is_chosen_from_the_teacher_group(tmp_path, batch):
-    archive = str(tmp_path / "mace.pt")
-    torch.jit.save(torch.jit.script(FakeMace()), archive)
+    archive = export_mace(FakeMace(), str(tmp_path / "mace.pt2"))
     config = compose_experiment(
         [
             "task/teacher=mace",

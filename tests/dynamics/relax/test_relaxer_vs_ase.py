@@ -46,6 +46,11 @@ CUTOFF_SKIN = 0.3  # Ang, reuse the neighbor list while atoms move less than hal
 ENERGY_UNIT = "kcal/mol"
 POSITION_UNIT = "Ang"
 
+# the ethanol model predates spk_version and is converted on every load
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:Model was saved without version information"
+)
+
 
 @dataclass
 class Relaxed:

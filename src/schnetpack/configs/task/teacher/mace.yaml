@@ -1,8 +1,8 @@
 # @package _global_
 #
-# A MACE model as teacher (e.g. MACE-OFF23), from a TorchScript archive, made by
-# schnetpack.interfaces.mace_interface.compile_mace_off (needs schnetpack[mace]);
-# see schnetpack.train.MaceTeacher.
+# A MACE model as teacher (e.g. MACE-OFF23), from a torch.export archive (.pt2)
+# made by schnetpack.interfaces.mace_interface.export_mace_off (needs
+# schnetpack[mace]); see schnetpack.train.MaceTeacher.
 
 globals:
   teacher_distance_unit: Ang

@@ -1,11 +1,11 @@
-#!/usr/bin/env python3
 import argparse
 
 import numpy as np
 from ase.db import connect
 from tqdm import tqdm
 
-if __name__ == "__main__":
+
+def main():
     parser = argparse.ArgumentParser(
         description="Set units of an ASE dataset, e.g. to convert from SchNetPack 1.0 to the new format."
     )
@@ -79,3 +79,7 @@ if __name__ == "__main__":
                     else:
                         data[p] = v
                 db.update(i + 1, data=data)
+
+
+if __name__ == "__main__":
+    main()

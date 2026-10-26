@@ -242,8 +242,8 @@ class PseudoForceParametrization(Parametrization):
 
     Recovering x0 = x_t + F/2 needs neither division nor sigma, which is what
     :class:`~schnetpack.dynamics.optimize.DirectDenoising` relies on. On a VE
-    path the target is -2 b x1, so |F| carries the noise level and the head
-    needs no time input; the target's scale then runs with b, so pass
+    path the target is -2 b x1, so the norm of F carries the noise level and
+    the head needs no time input; the target's scale then runs with b, so pass
     ``weight=lambda t: (1 / schedule.b(t)**2).clamp(max=1.0)`` to the loss.
     """
 

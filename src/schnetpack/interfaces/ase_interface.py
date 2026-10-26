@@ -1,7 +1,8 @@
 """
-This module provides a ASE calculator class [#ase1]_ for SchNetPack models, as
-well as a general Interface to all ASE calculation methods, such as geometry
-optimisation, normal mode computation and molecular dynamics simulations.
+This module provides an ASE calculator class for SchNetPack models.
+
+It also offers a general interface to all ASE [#ase1]_ calculation methods, such as
+geometry optimisation, normal mode computation and molecular dynamics simulations.
 
 References
 ----------

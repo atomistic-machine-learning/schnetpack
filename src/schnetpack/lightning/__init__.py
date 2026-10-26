@@ -6,6 +6,6 @@ models, data pipeline and :mod:`schnetpack.objectives` work without it, so
 custom PyTorch training loops only need this package if they opt in.
 """
 
-from .task import *
-from .datamodule import *
 from .callbacks import *
+from .datamodule import *
+from .task import *

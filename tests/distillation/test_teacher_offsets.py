@@ -7,6 +7,7 @@ import torch
 from torch import nn
 
 from schnetpack import properties
+from schnetpack.interfaces.mace_interface import export_mace
 from schnetpack.model.mace import reference_energies
 from schnetpack.objectives import ModelOutput, predict_without_postprocessing
 from schnetpack.train.distillation import Distillation
@@ -32,7 +33,7 @@ class OpaqueTeacher(TeacherWrapper):
 
 @pytest.fixture(autouse=True)
 def in_tmp_path(tmp_path, monkeypatch):
-    """The datamodule writes its split lock to the working directory."""
+    """The datamodule writes its default split.npz to the working directory."""
     monkeypatch.chdir(tmp_path)
 
 
@@ -43,10 +44,10 @@ def ready(tmp_path, **kwargs):
     return datamodule
 
 
-def offsets_model(cast_to_64=True, **offsets):
+def offsets_model(**offsets):
     """A teacher model whose ``AddOffsets`` adds ``offsets``: by default
     ATOMREFS and MEAN."""
-    model = make_nnp(seed=1, cast_to_64=cast_to_64)
+    model = make_nnp(seed=1)
     kwargs = dict(
         add_mean=True,
         add_atomrefs=True,
@@ -57,11 +58,8 @@ def offsets_model(cast_to_64=True, **offsets):
     return model
 
 
-def saved(model, path, scripted=False):
-    if scripted:
-        torch.jit.save(torch.jit.script(model), str(path))
-    else:
-        torch.save(model, str(path))
+def saved(model, path):
+    torch.save(model, str(path))
     return str(path)
 
 
@@ -74,9 +72,8 @@ def term(target_property=properties.teacher_energy, name=properties.energy):
 # ------------------------------------------------------------- the teachers
 
 
-@pytest.mark.parametrize("scripted", [False, True])
-def test_a_schnetpack_teacher_adds_its_atomrefs_and_mean(tmp_path, scripted):
-    path = saved(offsets_model(cast_to_64=not scripted), tmp_path / "t", scripted)
+def test_a_schnetpack_teacher_adds_its_atomrefs_and_mean(tmp_path):
+    path = saved(offsets_model(), tmp_path / "t")
 
     offsets = SchNetPackTeacher(path).teacher_offsets()
 
@@ -121,8 +118,7 @@ def test_a_mace_teacher_adds_its_e0s_and_shift(tmp_path, shift):
     core = FakeMace()
     if shift is not None:
         core.scale_shift = ScaleShift(shift)
-    path = str(tmp_path / "mace.pt")
-    torch.jit.save(torch.jit.script(core), path)
+    path = export_mace(core, str(tmp_path / "mace.pt2"))
 
     offsets = MaceTeacher(path, cutoff=R_MAX).teacher_offsets()
 
@@ -200,8 +196,7 @@ def test_a_student_identical_to_its_teacher_predicts_its_absolute_energies(
 
 
 def test_the_atomrefs_keep_the_students_size(tmp_path):
-    path = str(tmp_path / "fake.pt")
-    torch.jit.save(torch.jit.script(FakeMace()), path)
+    path = export_mace(FakeMace(), str(tmp_path / "fake.pt2"))
     student = make_nnp(atomrefs=True)
 
     Distillation([term()], student, MaceTeacher(path, cutoff=R_MAX)).setup(None)

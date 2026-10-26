@@ -38,7 +38,7 @@ def silicon_batch(cutoff=CUTOFF):
 
 
 def test_loads_a_pickled_model_frozen_in_eval_mode_and_float32(teacher_path):
-    teacher = SchNetPackTeacher(teacher_path, model_format="torch")
+    teacher = SchNetPackTeacher(teacher_path)
 
     assert not teacher.model.training
     assert not any(p.requires_grad for p in teacher.model.parameters())
@@ -89,26 +89,6 @@ def test_curvature_pass_leaves_the_teacher_in_eval_mode(batch, teacher_path):
     assert not teacher.model.training
 
 
-def test_torchscript_teacher_gives_the_same_targets(tmp_path, batch):
-    model = make_nnp(seed=1, energy_mean=-3.0, cast_to_64=False)
-    scripted_path = str(tmp_path / "teacher.jit")
-    torch.jit.save(torch.jit.script(model), scripted_path)
-    pickled_path = str(tmp_path / "teacher.pt")
-    torch.save(model, pickled_path)
-    probe = torch.randn_like(batch[properties.R])
-
-    scripted = SchNetPackTeacher(scripted_path)  # auto tries TorchScript first
-    pickled = SchNetPackTeacher(pickled_path, model_format="torch")
-
-    assert isinstance(scripted.model, torch.jit.ScriptModule)
-    torch.testing.assert_close(scripted(batch, probe), pickled(batch, probe), **LOOSE)
-
-
-def test_rejects_an_unknown_format(teacher_path):
-    with pytest.raises(ValueError, match="model_format"):
-        SchNetPackTeacher(teacher_path, model_format="onnx")
-
-
 def test_reports_a_missing_file(tmp_path):
     with pytest.raises(FileNotFoundError, match="teacher"):
         SchNetPackTeacher(str(tmp_path / "missing.pt"))
@@ -124,6 +104,7 @@ def test_warns_about_train_mode_sensitive_modules(tmp_path):
         SchNetPackTeacher(path)
 
 
+@pytest.mark.filterwarnings("ignore:the teacher has no AddOffsets")
 def test_a_direct_force_teacher_with_dropout_stays_in_eval_mode(tmp_path, batch):
     """Its forces keep their graph in eval mode: no warning, and its curvature
     targets are deterministic."""

@@ -1,6 +1,7 @@
-# A MACE model from a TorchScript archive (e.g. MACE-OFF23), made by
-# schnetpack.interfaces.mace_interface.compile_mace_off (needs schnetpack[mace]);
-# see schnetpack.model.MaceModel. Its postprocessors add the E0s named by
+# A MACE model from a torch.export archive (.pt2), made by
+# schnetpack.interfaces.mace_interface: export_mace_off for MACE-OFF23, or
+# build_mace for random weights (both need schnetpack[mace]); see
+# schnetpack.model.MaceModel. Its postprocessors add the E0s named by
 # globals.mace_e0s, which the data pipeline must remove from the energy labels
 # (schnetpack.model.mace.mace_atomrefs).
 _target_: schnetpack.model.MaceModel
