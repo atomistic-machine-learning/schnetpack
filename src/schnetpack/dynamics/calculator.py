@@ -36,6 +36,8 @@ from torch import nn
 from schnetpack import properties
 from schnetpack.dynamics.guidance import Guidance, guidance_terms, weighted_sum
 from schnetpack.generative.variables import STRUCTURE_TIME_KEY
+from schnetpack.model.base import AtomisticModel
+from schnetpack.model.compile import compile_potential
 from schnetpack.model.ensemble import NNEnsemble
 from schnetpack.uncertainty import AbsoluteUncertainty, Uncertainty
 from schnetpack.units import convert_units
@@ -78,6 +80,7 @@ class Calculator:
         dtype: torch.dtype | None = None,
         enable_grad: bool = False,
         cache_last: bool = False,
+        compile: bool = False,
     ):
         """
         Args:
@@ -96,11 +99,20 @@ class Calculator:
                 differentiate their outputs (forces from an energy)
             cache_last: remember the outputs of the last call and return them
                 again while the batch is unchanged.
+            compile: run an :class:`~schnetpack.model.AtomisticModel` as one
+                compiled graph including its derivatives (see
+                :func:`~schnetpack.model.compile_potential`)
         """
         if isinstance(model, str):
             model = _load_model(model)
         if isinstance(model, nn.Module) and (device is not None or dtype is not None):
             model = model.to(device=device, dtype=dtype)
+        if compile:
+            if not isinstance(model, AtomisticModel):
+                raise TypeError(
+                    f"compile needs an AtomisticModel, not {type(model).__name__}"
+                )
+            model = compile_potential(model)
         self.model = model
         self.neighbor_list = neighbor_list
         self.device = device

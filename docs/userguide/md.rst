@@ -61,6 +61,7 @@ Running the command will print out the full config used for the simulation::
     │       energy_key: energy
     │       stress_key: null
     │       script_model: false
+    │       compile_model: false
     ├── system
     │   └── initializer:
     │         _target_: schnetpack.md.UniformInit
@@ -199,6 +200,7 @@ The config file for the MD with the Langevin thermostat would look something lik
       energy_key: energy
       stress_key: null
       script_model: false
+      compile_model: false
     system:
       initializer:
         _target_: schnetpack.md.UniformInit

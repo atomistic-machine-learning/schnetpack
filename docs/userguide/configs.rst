@@ -449,3 +449,24 @@ in the config file or the argument ``+matmul_precision`` when using the CLI.
 It's important to note that this PyTorch variable applies only to NVIDIA GPUs with specific
 capabilities, like A100, that allow the adjustment of internal precision for matrix multiplications.
 Further details can be found in the PyTorch documentation for ``torch.set_float32_matmul_precision``.
+
+Compiling the model
+===================
+
+``spktrain`` and ``spkpredict`` can run the model as one compiled graph
+(``schnetpack.model.compile_potential``), switched on with ``task.compile=True`` for
+``spktrain`` and ``compile=True`` for ``spkpredict``. The forward pass is traced
+together with the derivatives of the response modules (e.g. forces and stress), so that
+training on forces needs only a single backward pass; the traced graph is then compiled
+with ``torch.compile`` and dynamic shapes, so batches of different size reuse it.
+Tracing and compiling take some time at the first training and validation step, and
+again for a batch with a single molecule.
+
+Compilation requires torch 2.14 or newer, since earlier versions can trace wrong
+gradients of a force loss; with an older torch, the model runs without compilation and
+a warning is issued. Distillation runs the model without compilation. The stored models
+are not affected: the best model is saved as a regular ``AtomisticModel``.
+
+Simulations compile the model the same way: ``spkmd`` with
+``calculator.compile_model=True``, the ASE ``SpkCalculator`` with ``compile_model=True``
+and ``schnetpack.dynamics.Calculator`` with ``compile=True``.

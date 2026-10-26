@@ -9,6 +9,7 @@ position_unit: Angstrom
 energy_key: energy
 stress_key: null
 script_model: false
+compile_model: false
 
 defaults:
   - neighbor_list: matscipy
