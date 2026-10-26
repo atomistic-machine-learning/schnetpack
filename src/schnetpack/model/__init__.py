@@ -31,6 +31,7 @@ aids the reader. The sub-modules stay importable under their own names for that:
 from schnetpack.model import atomistic, representation
 from schnetpack.model.atomistic import *
 from schnetpack.model.base import *
+from schnetpack.model.compile import *
 from schnetpack.model.ensemble import *
 from schnetpack.model.mace import *
 from schnetpack.model.representation import *

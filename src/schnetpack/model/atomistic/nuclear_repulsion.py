@@ -80,7 +80,7 @@ class ZBLRepulsionEnergy(nn.Module):
         idx_m = inputs[properties.idx_m]
 
         n_atoms = z.shape[0]
-        n_molecules = int(idx_m[-1]) + 1
+        n_molecules = inputs[properties.n_atoms].shape[0]
 
         # Construct screening function
         a = z ** F.softplus(self.a_pow)

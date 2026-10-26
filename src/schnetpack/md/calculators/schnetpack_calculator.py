@@ -14,9 +14,10 @@ import logging
 
 import torch
 
-from schnetpack.md.calculators.base_calculator import MDCalculator
+from schnetpack.md.calculators.base_calculator import MDCalculator, MDCalculatorError
 from schnetpack.md.calculators.ensemble_calculator import EnsembleCalculator
 from schnetpack.md.utils import activate_model_stress
+from schnetpack.model.compile import CompiledPotential
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +45,11 @@ class SchNetPackCalculator(MDCalculator):
         property_conversion (dict(float)): Optional dictionary of conversion factors for other properties predicted by
                                            the model. Only changes the units used for logging the various outputs.
         script_model (bool): convert loaded model to torchscript.
+        compile_model (bool): run the model as one compiled graph including its
+                              derivatives (see `schnetpack.model.CompiledPotential`).
     """
+
+    compiled_model = None
 
     def __init__(
         self,
@@ -58,7 +63,10 @@ class SchNetPackCalculator(MDCalculator):
         required_properties: list | None = None,
         property_conversion: dict[str, str | float] | None = None,
         script_model: bool = False,
+        compile_model: bool = False,
     ):
+        if script_model and compile_model:
+            raise MDCalculatorError("Choose either script_model or compile_model.")
         if property_conversion is None:
             property_conversion = {}
         if required_properties is None:
@@ -74,6 +82,9 @@ class SchNetPackCalculator(MDCalculator):
         )
         self.script_model = script_model
         self.model = self._prepare_model(model_file)
+        if compile_model:
+            log.info("Compiling model...")
+            self.compiled_model = CompiledPotential(self.model)
         self.neighbor_list = neighbor_list
 
     def _prepare_model(self, model_file: str) -> AtomisticModel:
@@ -138,7 +149,7 @@ class SchNetPackCalculator(MDCalculator):
             system (schnetpack.md.System): System object containing current state of the simulation.
         """
         inputs = self._generate_input(system)
-        self.results = self.model(inputs)
+        self.results = (self.compiled_model or self.model)(inputs)
         self._update_system(system)
 
     def _generate_input(self, system: System) -> dict[str, torch.Tensor]:

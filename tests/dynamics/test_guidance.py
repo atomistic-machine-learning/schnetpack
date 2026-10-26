@@ -4,18 +4,21 @@ import torch
 from schnetpack import properties
 from schnetpack.dynamics import (
     LBFGS,
+    AncestralUpdate,
     DirectDenoising,
     Euler,
+    FieldCalculator,
     ForceCalculator,
     Guidance,
     HarmonicRestraint,
     Heun,
-    ScoreCalculator,
-    VelocityCalculator,
+    ODEUpdate,
+    SDEUpdate,
 )
 from schnetpack.generative import (
     SDE,
     VP,
+    EpsParametrization,
     GaussianInterpolant,
     ScoreParametrization,
     VelocityParametrization,
@@ -25,6 +28,7 @@ from tests.dynamics.test_sampling import (
     analytic_score,
     batch_model,
     sde_sampler,
+    variable,
 )
 
 
@@ -211,13 +215,15 @@ def sampler_and_batch(parametrization, integrator, eta2, weight, model):
     return sampler, plain, batch, t
 
 
-def score(sampler, batch, t):
-    return sampler.calculator.fields(batch, t)["score"]
+def field(sampler, batch, t):
+    """The field the sampler's one update steps on, at ``batch`` and time t."""
+    batch = sampler.calculator.with_time(batch, t)
+    return sampler.updates[0].field(batch, sampler.calculator(batch), t)
 
 
 def drift(sampler, batch, t):
     x = batch[properties.R]
-    return sampler.updates[0].drift(x, t, score(sampler, batch, t))
+    return sampler.updates[0].drift(x, t, field(sampler, batch, t))
 
 
 def test_score_guidance_shifts_score_and_drift_by_the_weighted_forces():
@@ -227,7 +233,7 @@ def test_score_guidance_shifts_score_and_drift_by_the_weighted_forces():
     )
     _, forces = terms(batch, batch[properties.R])
 
-    shift = score(guided, batch, t) - score(unguided, batch, t)
+    shift = field(guided, batch, t) - field(unguided, batch, t)
     assert torch.allclose(shift, 2.5 * forces)
     g2 = SDE(VP()).g2(t)
     assert torch.allclose(
@@ -252,32 +258,32 @@ def test_score_guidance_scales_each_term_by_its_weight():
     sampler, plain, batch, t = sampler_and_batch(
         ScoreParametrization(), Euler(), 1.0, 2.5, model
     )
-    sampler.calculator.guidance = [
+    sampler.updates[0].guidance = [
         HarmonicRestraint(weight=3.0),
         HarmonicRestraint(weight=0.5),
     ]
     _, forces = terms(batch, batch[properties.R])
-    shift = score(sampler, batch, t) - score(plain, batch, t)
+    shift = field(sampler, batch, t) - field(plain, batch, t)
     assert torch.allclose(shift, 3.5 * forces)
 
 
-def test_guidance_is_added_to_any_field_as_it_is():
-    # no conversion: a velocity calculator adds the same weighted term a score
-    # calculator adds to the score
+def test_guidance_is_added_to_every_field_as_it_is():
+    # no conversion: the score, the velocity and x0 each move by the same w F
+    v = variable(GaussianInterpolant(VP()), EpsParametrization())
+    t = torch.tensor(0.4, dtype=torch.float64)
+    calculator = FieldCalculator(batch_model(lambda x, t: torch.tanh(x)))
     batch = restrained_batch([3, 2], [[(0, 2)], [(0, 1)]], [1.3, 0.9], [5.0, 5.0])
-    x = batch[properties.R]
-    t = torch.full((5,), 0.4, dtype=torch.float64)
-    _, forces = terms(batch, x)
+    batch = calculator.with_time(batch, t)
+    outputs = calculator(batch)
+    _, forces = terms(batch, batch[properties.R])
 
-    def model(batch):
-        x, t = batch[properties.R], batch[properties.t]
-        return {"score": -x * t[:, None], "velocity": torch.tanh(x)}
-
-    for build, field in ((ScoreCalculator, "score"), (VelocityCalculator, "velocity")):
-        guided = build(model, guidance=[HarmonicRestraint(weight=2.5)])
-        expected = model({properties.R: x, properties.t: t})[field] + 2.5 * forces
-        torch.testing.assert_close(guided.field(batch, x, t), expected)
-        torch.testing.assert_close(guided.guidance_term(batch, x, t), 2.5 * forces)
+    for build in (SDEUpdate, ODEUpdate, AncestralUpdate):
+        guided = build(v, guidance=[HarmonicRestraint(weight=2.5)])
+        plain = build(v)
+        torch.testing.assert_close(
+            guided.field(batch, outputs, t) - plain.field(batch, outputs, t),
+            2.5 * forces,
+        )
 
 
 class TimeGuidance(Guidance):
@@ -299,10 +305,10 @@ def test_guidance_sees_the_time_it_is_evaluated_at():
         ScoreParametrization(), Euler(), 1.0, 2.5, model
     )
     guidance = TimeGuidance()
-    sampler.calculator.guidance = [guidance]
+    sampler.updates[0].guidance = [guidance]
     # not the batch's own time: an integrator's evaluation point
     t = torch.tensor(0.7, dtype=torch.float64)
-    shift = score(sampler, batch, t) - score(plain, batch, t)
+    shift = field(sampler, batch, t) - field(plain, batch, t)
     assert torch.equal(guidance.seen[-1], t.expand(5))
     assert torch.allclose(shift, torch.full_like(shift, 0.7))
 
@@ -340,10 +346,10 @@ def test_direct_denoising_relaxes_onto_a_restraint():
     assert torch.norm(positions[4] - positions[3]) == pytest.approx(0.9, abs=1e-4)
 
 
-def test_guidance_passed_as_a_hook_is_redirected_to_the_calculator():
-    with pytest.raises(TypeError, match="calculator's guidance"):
+def test_guidance_passed_as_a_hook_is_redirected():
+    with pytest.raises(TypeError, match="as guidance"):
         LBFGS(ZeroModel(), hooks=[HarmonicRestraint()])
-    with pytest.raises(TypeError, match="calculator's guidance"):
+    with pytest.raises(TypeError, match="as guidance"):
         sde_sampler(IDLE, GaussianInterpolant(VP()), hooks=[HarmonicRestraint()])
 
 
@@ -352,3 +358,5 @@ def test_unknown_hooks_and_guidance_are_refused():
         LBFGS(ZeroModel(), hooks=[object()])
     with pytest.raises(TypeError, match="not a Guidance"):
         ForceCalculator(ZeroModel(), guidance=[object()])
+    with pytest.raises(TypeError, match="not a Guidance"):
+        SDEUpdate(variable(GaussianInterpolant(VP())), guidance=[object()])

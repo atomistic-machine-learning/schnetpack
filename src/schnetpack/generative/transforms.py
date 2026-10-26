@@ -5,9 +5,8 @@ inside the SchNetPack data pipeline.
 :class:`Diffuse` noises every :class:`~schnetpack.generative.variables.Variable`
 of a structure at one time in the dataloader and writes each variable's x_t,
 label and loss weight into the batch dict, so training is an ordinary
-supervised loss per variable. With one variable it is
-:class:`~schnetpack.generative.losses.MatchingLoss` minus the model call and
-the MSE. Theory: ``docs_new/generation/new_variables.md``.
+supervised loss per variable. Theory:
+``docs_new/generation/new_variables.md``.
 """
 
 from collections.abc import Callable, Sequence

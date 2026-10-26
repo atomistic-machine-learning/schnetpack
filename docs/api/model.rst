@@ -22,6 +22,21 @@ Models
     NNEnsemble
     MaceModel
 
+.. rubric:: Compiling a model
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+    :template: classtemplate.rst
+
+    CompiledPotential
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+
+    compile_supported
+
 .. rubric:: Loading MACE models
 
 .. autosummary::

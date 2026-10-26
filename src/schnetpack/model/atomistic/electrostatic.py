@@ -132,7 +132,7 @@ class EnergyCoulomb(nn.Module):
         d_ij = torch.norm(r_ij, dim=1)
 
         n_atoms = q.shape[0]
-        n_molecules = int(idx_m[-1]) + 1
+        n_molecules = inputs[properties.n_atoms].shape[0]
 
         q_ij = q[idx_i] * q[idx_j]
 
@@ -253,7 +253,7 @@ class EnergyEwald(torch.nn.Module):
         cell = inputs[properties.cell]
 
         n_atoms = q.shape[0]
-        n_molecules = int(idx_m[-1]) + 1
+        n_molecules = inputs[properties.n_atoms].shape[0]
 
         # Get real space and reciprocal space contributions
         y_real = self._real_space(q, d_ij, idx_i, idx_j, idx_m, n_atoms, n_molecules)

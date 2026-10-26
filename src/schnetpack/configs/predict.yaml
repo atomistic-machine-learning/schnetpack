@@ -11,6 +11,7 @@ ckpt_path: null
 batch_size: 100
 write_interval: epoch
 enable_grad: false
+compile: false
 write_idx_m: false
 
 data:

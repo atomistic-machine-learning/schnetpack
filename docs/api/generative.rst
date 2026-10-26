@@ -110,7 +110,6 @@ fields; and the loss weights along the path.
     VelocityParametrization
     PseudoForceParametrization
     LogitsParametrization
-    ParametrizedModel
     MaskedTypeWeight
     SNRWeight
 
@@ -127,7 +126,6 @@ The (f, g) SDE chart of a Gaussian schedule and its reversal.
 
     SDE
     ReverseSDE
-    ReverseODE
 
 
 Time samplers
@@ -174,13 +172,11 @@ time.
 Training
 --------
 
-The training step: at tensor level for one variable, and as a data-pipeline transform
-for a list of them.
+The training step, as a data-pipeline transform over a list of variables.
 
 .. autosummary::
     :toctree: generated
     :nosignatures:
     :template: classtemplate.rst
 
-    MatchingLoss
     Diffuse

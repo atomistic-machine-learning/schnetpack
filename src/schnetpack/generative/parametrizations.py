@@ -6,23 +6,21 @@ A parametrization is stateless field math; every method takes the
 training target (:meth:`Parametrization.target`) and the conversions of a raw
 output into the canonical fields (``to_score``, ``to_velocity``, ``to_x0``).
 Consumers that pair it with a schedule call :meth:`Parametrization.validate`
-at construction. The model stays a bare callable ``model(x, t, cond)``.
+at construction. The model stays a bare callable that returns the raw head;
+the sampler's updates convert it with the parametrization of its
+:class:`~schnetpack.generative.variables.Variable`.
 Theory and the catalog: ``docs_new/parametrizations.md``.
 """
 
 import abc
-from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
-from torch import nn
 
-from schnetpack import properties
-from schnetpack.generative.differential_equations import SDE
 from schnetpack.generative.noising import expand_t
 from schnetpack.generative.priors import MASK
 from schnetpack.generative.schedules import GaussianSchedule, Schedule
-from schnetpack.generative.views import KeyView, View
+from schnetpack.generative.sde import SDE
 
 __all__ = [
     "Parametrization",
@@ -34,7 +32,6 @@ __all__ = [
     "LogitsParametrization",
     "MaskedTypeWeight",
     "SNRWeight",
-    "ParametrizedModel",
 ]
 
 
@@ -64,10 +61,9 @@ class Parametrization(abc.ABC):
     velocity_needs_chart: bool = True
     """Whether :meth:`to_velocity` crosses the (f, g) chart.
 
-    False only for a head that predicts the velocity itself; the
-    :class:`~schnetpack.dynamics.sample.Sampler` then uses the
-    chart-free :class:`~schnetpack.generative.differential_equations.ReverseODE`
-    at eta2 = 0.
+    False only for a head that predicts the velocity itself; an
+    :class:`~schnetpack.dynamics.sample.sampler.ODEUpdate` then steps it on
+    any interpolant.
     """
 
     def validate(self, schedule: Schedule) -> None:  # noqa: B027 - optional hook
@@ -390,77 +386,3 @@ class SNRWeight:
             Weight per row, shaped like t.
         """
         return (schedule.a(t) / schedule.sigma(t)) ** 2
-
-
-class ParametrizedModel(nn.Module):
-    """
-    A model with a raw head, read as the fields a calculator expects.
-
-    Runs ``model`` and converts its raw head ``outputs[output_key]`` with the
-    parametrization it was trained under into every field whose key is set,
-    written next to the model's own outputs. Fields whose key is None are not
-    computed. This is where the conversions live, so the
-    :class:`~schnetpack.dynamics.calculator.GenerativeCalculator` subclasses
-    can read their field straight from the outputs.
-    """
-
-    def __init__(
-        self,
-        model: Callable[[dict[str, torch.Tensor]], dict[str, torch.Tensor]],
-        parametrization: Parametrization,
-        schedule: Schedule,
-        output_key: str = "prediction",
-        key: str | View = properties.R,
-        time_key: str = properties.t,
-        score_key: str | None = None,
-        noise_key: str | None = None,
-        velocity_key: str | None = None,
-        x0_key: str | None = None,
-        pseudo_force_key: str | None = None,
-    ):
-        """
-        Args:
-            model: batch -> outputs, with the raw head under ``output_key``
-            parametrization: contract the model was trained under
-            schedule: schedule the model was trained on
-            output_key: model output holding the raw head
-            key: batch key holding x_t, or the view that reads it from the
-                structure, e.g. a variable's
-                :attr:`~schnetpack.generative.variables.Variable.view`
-            time_key: batch key holding the path time
-            score_key: output key for the score, or None
-            noise_key: output key for the expected unit noise, or None
-            velocity_key: output key for the velocity, or None
-            x0_key: output key for the denoised sample, or None
-            pseudo_force_key: output key for the pseudo force, or None
-
-        Raises:
-            ValueError: if no field key is set.
-        """
-        super().__init__()
-        parametrization.validate(schedule)
-        conversions = {
-            score_key: parametrization.to_score,
-            noise_key: parametrization.to_noise,
-            velocity_key: parametrization.to_velocity,
-            x0_key: parametrization.to_x0,
-            pseudo_force_key: parametrization.to_pseudo_force,
-        }
-        conversions.pop(None, None)
-        if not conversions:
-            raise ValueError("ParametrizedModel needs at least one field key")
-        self.model = model
-        self.parametrization = parametrization
-        self.schedule = schedule
-        self.output_key = output_key
-        self.view = KeyView(key) if isinstance(key, str) else key
-        self.time_key = time_key
-        self.conversions = conversions
-
-    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-        outputs = dict(self.model(inputs))
-        raw = outputs[self.output_key]
-        x_t, t = self.view.read(inputs), inputs[self.time_key]
-        for field_key, convert in self.conversions.items():
-            outputs[field_key] = convert(self.schedule, raw, x_t, t)
-        return outputs

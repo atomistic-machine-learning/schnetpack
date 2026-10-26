@@ -1,18 +1,17 @@
 """
-Differential-equation representations of a schedule and their reversal.
+The SDE of a Gaussian schedule and its reversal.
 
 - :class:`SDE`: the (f, g) chart of a Gaussian schedule, the linear forward
   SDE dx = f x dt + g dw with the same marginals as the Gaussian
   interpolant.
 - :class:`ReverseSDE`: the Anderson family reversing that chart, from the
   reverse-time SDE (eta2 = 1) to the probability-flow ODE (eta2 = 0).
-- :class:`ReverseODE`: transport along a learned velocity, dx = v dt, valid
-  for any endpoint law and independent of the chart.
 
-Both reverse classes are coefficient math only: ``drift`` takes the field —
-the score for :class:`ReverseSDE`, the velocity for :class:`ReverseODE` — as
-an input, so evaluating the model stays with the driver. Both expose
+:class:`ReverseSDE` is coefficient math only: ``drift`` takes the score as
+an input, so evaluating the model stays with the driver. It exposes
 ``drift``/``diffusion`` for steppers that run backwards in time (dt < 0).
+Transport along a learned velocity, dx = v dt, needs no chart and is the
+:class:`~schnetpack.dynamics.sample.sampler.ODEUpdate`'s own.
 Theory: ``docs_new/generation/generation.md``.
 """
 
@@ -21,7 +20,7 @@ import torch
 from schnetpack.generative.noising import expand_t
 from schnetpack.generative.schedules import GaussianSchedule
 
-__all__ = ["SDE", "ReverseSDE", "ReverseODE"]
+__all__ = ["SDE", "ReverseSDE"]
 
 
 class SDE:
@@ -82,9 +81,10 @@ class ReverseSDE:
     eta2 in [0, 1]: 1 is the Anderson (1982) reverse-time SDE, 0 the
     probability-flow ODE, and every member shares the forward marginals.
     eta2 is the square of the eta knob of DDIM. Takes the :class:`SDE` chart
-    only; the score is an input to :meth:`drift`, and composing model,
-    parametrization and conditioning into it is the caller's job
-    (:class:`~schnetpack.generative.parametrizations.ParametrizedModel`).
+    only; the score is an input to :meth:`drift`, and converting a model's
+    head into it is the caller's job
+    (:class:`~schnetpack.dynamics.sample.sampler.SDEUpdate`, with its
+    variable's parametrization).
     """
 
     def __init__(self, sde: SDE, eta2: float = 1.0):
@@ -121,34 +121,3 @@ class ReverseSDE:
         if self.eta2 == 0.0:
             return None
         return torch.sqrt(self.eta2 * self.g2(t))
-
-
-class ReverseODE:
-    """
-    Deterministic reverse transport along a learned velocity: dx = v dt.
-
-    Valid for any endpoint law and never touches the :class:`SDE` chart, so
-    the velocity handed to :meth:`drift` must not cross it either (a velocity
-    head, see
-    :attr:`~schnetpack.generative.parametrizations.Parametrization.velocity_needs_chart`).
-    """
-
-    eta2 = 0.0
-    """Deterministic: the ODE is the eta2 = 0 member."""
-
-    def drift(
-        self, x: torch.Tensor, t: torch.Tensor, velocity: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        The drift is the velocity itself.
-
-        Args:
-            x: current state
-            t: current time, per-sample or scalar
-            velocity: probability-flow velocity at (x, t)
-        """
-        return velocity
-
-    def diffusion(self, t: torch.Tensor) -> None:
-        """None: this is the ODE."""
-        return None

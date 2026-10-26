@@ -37,6 +37,7 @@ from ase.vibrations import Vibrations
 from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.md.utils import activate_model_stress
+from schnetpack.model.compile import CompiledPotential
 from schnetpack.model.ensemble import NNEnsemble
 from schnetpack.transform import CastTo32, CastTo64, Transform
 from schnetpack.uncertainty import AbsoluteUncertainty, Uncertainty
@@ -244,6 +245,7 @@ class SpkCalculator(Calculator):
     forces = "forces"
     stress = "stress"
     implemented_properties = [energy, forces, stress]
+    compiled_model = None
 
     def __init__(
         self,
@@ -259,6 +261,7 @@ class SpkCalculator(Calculator):
         converter: Callable = AtomsConverter,
         transforms: Transform | list[Transform] | None = None,
         additional_inputs: dict[str, torch.Tensor] | None = None,
+        compile_model: bool = False,
         **kwargs,
     ):
         """
@@ -276,6 +279,8 @@ class SpkCalculator(Calculator):
             transforms: transforms for the converter. More information
                 can be found in the AtomsConverter docstring.
             additional_inputs: additional inputs required for some transforms in the converter.
+            compile_model: run the model as one compiled graph including its
+                derivatives (see `schnetpack.model.CompiledPotential`).
         """
         Calculator.__init__(self, **kwargs)
 
@@ -299,6 +304,8 @@ class SpkCalculator(Calculator):
         }
 
         self.model = self._load_model(model, device, dtype)
+        if compile_model:
+            self.compiled_model = CompiledPotential(self.model)
 
         # set up basic conversion factors
         self.energy_conversion = convert_units(energy_unit, "eV")
@@ -379,7 +386,7 @@ class SpkCalculator(Calculator):
         model_inputs = self.converter(atoms)
 
         # calculate properties
-        model_results = self.model(model_inputs)
+        model_results = (self.compiled_model or self.model)(model_inputs)
         results = {}
         # TODO: use index information to slice everything properly
 

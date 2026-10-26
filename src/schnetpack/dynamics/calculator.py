@@ -1,27 +1,23 @@
 """
 The two ways a dynamics driver consumes a model.
 
-A calculator turns a model into the field one family of drivers steps on:
+A calculator runs a model for one family of drivers:
 
 - :class:`ForceCalculator` hands the time-free drivers a force at the
   current structures. Its ``kind`` says which: a *physical* force, the
   negative gradient of an energy, in eV/Angstrom; or a *pseudo* force, a
   displacement such as GPFF's 2 (x0 - x), in Angstrom, with no energy
-  behind it.
-- :class:`GenerativeCalculator` hands out one field at (x, t) — score,
-  noise, velocity, x0 or pseudo force, one subclass each — read directly
-  from the model's outputs, without conversion.
-- :class:`JointCalculator` hands the
-  :class:`~schnetpack.dynamics.sample.sampler.Sampler` the model's outputs
-  at time t, every field of every generated variable at once.
+  behind it. It adds its :mod:`~schnetpack.dynamics.guidance` terms to the
+  forces, so a driver sees only the guided force.
+- :class:`FieldCalculator` hands the
+  :class:`~schnetpack.dynamics.sample.sampler.Sampler` the model's raw
+  outputs at time t. Each update of the sampler converts its variable's head
+  into the field it steps on and adds its own guidance.
 
 Both share the plumbing of :class:`Calculator`: the device and dtype, the
 neighbor list, the gradient policy, the optional cache of the last outputs,
 and the rule that the driver's batch is never written to — the neighbor list
-and the model get a shallow copy, so the keys they add never reach it. Both
-also take :mod:`~schnetpack.dynamics.guidance` terms, which they add to the
-field they return: to the forces, or to the generative field. A driver sees
-only the guided field.
+and the model get a shallow copy, so the keys they add never reach it.
 
 :class:`EnsembleCalculator` is a :class:`ForceCalculator` for an ensemble of
 force fields, run as one :class:`~schnetpack.model.NNEnsemble`: it reports
@@ -38,7 +34,9 @@ import torch
 from torch import nn
 
 from schnetpack import properties
-from schnetpack.dynamics.guidance import Guidance
+from schnetpack.dynamics.guidance import Guidance, guidance_terms, weighted_sum
+from schnetpack.generative.variables import STRUCTURE_TIME_KEY
+from schnetpack.model.compile import CompiledPotential
 from schnetpack.model.ensemble import NNEnsemble
 from schnetpack.uncertainty import AbsoluteUncertainty, Uncertainty
 from schnetpack.units import convert_units
@@ -46,13 +44,7 @@ from schnetpack.units import convert_units
 __all__ = [
     "Calculator",
     "ForceCalculator",
-    "GenerativeCalculator",
-    "ScoreCalculator",
-    "NoiseCalculator",
-    "VelocityCalculator",
-    "X0Calculator",
-    "PseudoForceCalculator",
-    "JointCalculator",
+    "FieldCalculator",
     "EnsembleCalculator",
 ]
 
@@ -69,7 +61,7 @@ class Calculator:
     Run a model on spk batches: ``calculator(batch) -> outputs``.
 
     The shared base of :class:`ForceCalculator` and
-    :class:`GenerativeCalculator`. It never touches units: the batch reaches
+    :class:`FieldCalculator`. It never touches units: the batch reaches
     the model as the driver holds it.
 
     Stateless between calls apart from what the neighbor list caches;
@@ -87,7 +79,7 @@ class Calculator:
         dtype: torch.dtype | None = None,
         enable_grad: bool = False,
         cache_last: bool = False,
-        guidance: Sequence[Guidance] = (),
+        compile: bool = False,
     ):
         """
         Args:
@@ -106,13 +98,16 @@ class Calculator:
                 differentiate their outputs (forces from an energy)
             cache_last: remember the outputs of the last call and return them
                 again while the batch is unchanged.
-            guidance: terms added to the field this calculator returns; the
-                subclass says how (:meth:`guidance_field`)
+            compile: run an :class:`~schnetpack.model.AtomisticModel` as one
+                compiled graph including its derivatives (see
+                :class:`~schnetpack.model.CompiledPotential`)
         """
         if isinstance(model, str):
             model = _load_model(model)
         if isinstance(model, nn.Module) and (device is not None or dtype is not None):
             model = model.to(device=device, dtype=dtype)
+        if compile:
+            model = CompiledPotential(model)
         self.model = model
         self.neighbor_list = neighbor_list
         self.device = device
@@ -121,10 +116,6 @@ class Calculator:
         self.cache_last = cache_last
         self._cached_key = None
         self._cached_outputs = None
-        self.guidance = list(guidance)
-        for term in self.guidance:
-            if not isinstance(term, Guidance):
-                raise TypeError(f"{type(term).__name__} is not a Guidance")
 
     def prepare(self, batch: Mapping[str, Any]) -> dict[str, Any]:
         """
@@ -185,32 +176,6 @@ class Calculator:
             self._cached_key = key
             return dict(self._cached_outputs)
         return outputs
-
-    def guidance_field(
-        self, batch: Mapping[str, Any], positions: torch.Tensor
-    ) -> torch.Tensor | None:
-        """
-        The sum of the guidance terms at ``positions``, each scaled by its
-        ``weight``.
-
-        Every term is called on a copy of ``batch`` with ``positions`` under
-        ``properties.R``.
-
-        Args:
-            batch: current batch
-            positions: positions in Angstrom to evaluate at
-
-        Returns:
-            The field ``(n_atoms, 3)`` in eV/Angstrom, or None without
-            guidance.
-        """
-        if not self.guidance:
-            return None
-        inputs = {**batch, properties.R: positions}
-        field = torch.zeros_like(positions)
-        for term in self.guidance:
-            field = field + term.weight * term(inputs)
-        return field
 
     def _evaluate(self, batch: Mapping[str, Any]) -> dict[str, torch.Tensor]:
         inputs = dict(batch)
@@ -273,6 +238,7 @@ class ForceCalculator(Calculator):
         stress_key: str | None = None,
         time_key: str = properties.t,
         enable_grad: bool | None = None,
+        guidance: Sequence[Guidance] = (),
         **kwargs,
     ):
         """
@@ -294,6 +260,7 @@ class ForceCalculator(Calculator):
                 pseudo-force model
             enable_grad: run the model with autograd enabled (default: for a
                 physical force only)
+            guidance: terms added to the model's forces by :meth:`forces`
 
         Remaining keyword arguments are those of :class:`Calculator`.
         """
@@ -306,6 +273,7 @@ class ForceCalculator(Calculator):
             enable_grad = physical
         super().__init__(model, enable_grad=enable_grad, **kwargs)
         self.kind = kind
+        self.guidance = guidance_terms(guidance)
         self.energy_key = energy_key if physical else None
         self.force_key = force_key or (properties.forces if physical else "prediction")
         self.stress_key = stress_key
@@ -338,9 +306,8 @@ class ForceCalculator(Calculator):
         # detached outputs from the cache: adding the terms below neither
         # reaches the cache nor keeps the model's graph alive
         forces = self(batch)[self.force_key]
-        field = self.guidance_field(batch, batch[properties.R])
-        if field is not None:
-            forces = forces + field.to(forces)
+        if self.guidance:
+            forces = forces + weighted_sum(self.guidance, batch).to(forces)
         return forces
 
     def energy(self, batch: Mapping[str, Any]) -> torch.Tensor:
@@ -381,184 +348,38 @@ class ForceCalculator(Calculator):
         }
 
 
-class GenerativeCalculator(Calculator):
-    """
-    Run a time-indexed generative model on spk batches and read one output.
-
-    :meth:`field` evaluates the model at (x, t) — ``batch`` with the moved
-    key replaced by ``x`` and the time by ``t`` — and returns
-    ``outputs[output_key]`` plus the guidance. There are no conversions: the
-    model must return the field the calculator stands for. A model that
-    returns a raw head under another parametrization is wrapped in
-    :class:`~schnetpack.generative.parametrizations.ParametrizedModel` first.
-
-    Guidance — restraints such as
-    :class:`~schnetpack.dynamics.guidance.HarmonicRestraint`, or terms
-    kT ∇ log p — is added to the field as it is: field + sum_i w_i F_i, so
-    the same terms tilt whichever field the calculator returns. The terms see
-    the batch with the path time under ``time_key``, so a term may depend on
-    t. The guidance is evaluated at the noisy iterate x_t, not at a clean
-    estimate.
-
-    The subclasses name the field: :class:`ScoreCalculator`,
-    :class:`NoiseCalculator`, :class:`VelocityCalculator`,
-    :class:`X0Calculator`, :class:`PseudoForceCalculator`.
-    """
-
-    default_output_key: str = ""
-    """Model output holding the field, unless overridden at construction."""
-
-    def __init__(
-        self,
-        model: str | Callable[[dict[str, torch.Tensor]], dict[str, torch.Tensor]],
-        output_key: str | None = None,
-        key: str = properties.R,
-        time_key: str = properties.t,
-        position_unit: str | float = "Ang",
-        **kwargs,
-    ):
-        """
-        Args:
-            model: batch -> outputs, or the path to a model saved on disk
-            output_key: model output holding the field (default: the
-                subclass's :attr:`default_output_key`)
-            key: batch key the field is taken with respect to
-            time_key: batch key the path time is written to, one value per
-                row of ``key``
-            position_unit: length unit of ``key``, the training data's. Used
-                only to evaluate the guidance in Angstrom.
-
-        Remaining keyword arguments are those of :class:`Calculator`.
-        """
-        super().__init__(model, **kwargs)
-        self.output_key = output_key or self.default_output_key
-        self.key = key
-        self.time_key = time_key
-        self.position_conversion = convert_units(position_unit, "Angstrom")
-
-    @staticmethod
-    def _rows(x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        """``t`` as one value per row of ``x``."""
-        return t.expand(x.shape[0]) if t.dim() == 0 else t
-
-    def guidance_term(
-        self, batch: Mapping[str, Any], x: torch.Tensor, t: torch.Tensor
-    ) -> torch.Tensor | None:
-        """
-        The weighted sum of the guidance terms at (x, t), in the moved key's
-        units, or None without guidance.
-        """
-        if not self.guidance:
-            return None
-        inputs = {**batch, self.key: x, self.time_key: self._rows(x, t)}
-        field = self.guidance_field(inputs, x * self.position_conversion)
-        return self.position_conversion * field.to(x)
-
-    def field(
-        self, batch: Mapping[str, Any], x: torch.Tensor, t: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        The model's ``output_key`` at (x, t) plus the guidance, with ``t`` a
-        scalar or one value per row of x.
-
-        Raises:
-            KeyError: if the model does not return ``output_key``.
-        """
-        inputs = {**batch, self.key: x, self.time_key: self._rows(x, t)}
-        outputs = self(inputs)
-        if self.output_key not in outputs:
-            raise KeyError(
-                f"{type(self).__name__} expects the model to return "
-                f"{self.output_key!r}; got {sorted(outputs)}"
-            )
-        field = outputs[self.output_key]
-        guidance = self.guidance_term(batch, x, t)
-        return field if guidance is None else field + guidance
-
-
-class ScoreCalculator(GenerativeCalculator):
-    """The score of the marginal p_t at (x, t)."""
-
-    default_output_key = "score"
-
-
-class NoiseCalculator(GenerativeCalculator):
-    """The expected unit noise E[eps | x_t = x] at (x, t)."""
-
-    default_output_key = "noise"
-
-
-class VelocityCalculator(GenerativeCalculator):
-    """The velocity E[d/dt x_t | x_t = x] at (x, t)."""
-
-    default_output_key = "velocity"
-
-
-class X0Calculator(GenerativeCalculator):
-    """The denoised sample E[x0 | x_t = x] at (x, t)."""
-
-    default_output_key = "x0"
-
-
-class PseudoForceCalculator(GenerativeCalculator):
-    """The pseudo force at (x, t), a displacement toward the clean structure."""
-
-    default_output_key = "pseudo_force"
-
-
-class JointCalculator(Calculator):
+class FieldCalculator(Calculator):
     """
     One model call at time t, read by every update of a
     :class:`~schnetpack.dynamics.sample.sampler.Sampler`.
 
-    Returns the model's outputs as they are: the fields the updates read
-    (``score``, ``x0_Z``, ...) are written by the model, one
-    :class:`~schnetpack.generative.parametrizations.ParametrizedModel` per
-    variable, stacked around one network. The time goes in twice, as
+    Returns the model's outputs as they are, raw heads included: each update
+    reads its variable's head and converts it into the field it steps on
+    with the variable's parametrization. The time goes in twice, as
     :class:`~schnetpack.generative.transforms.Diffuse` writes it in
     training: per atom under ``time_key`` and per structure under
     ``structure_time_key``.
-
-    Guidance is added to the outputs named in ``guided_fields``, as
-    field + sum_i w_i F_i, evaluated on the positions at the current
-    structures and time; see :class:`GenerativeCalculator`.
     """
 
     def __init__(
         self,
         model: str | Callable[[dict[str, torch.Tensor]], dict[str, torch.Tensor]],
         time_key: str = properties.t,
-        structure_time_key: str = "t_structure",
-        guided_fields: Sequence[str] = (),
-        position_unit: str | float = "Ang",
+        structure_time_key: str = STRUCTURE_TIME_KEY,
         **kwargs,
     ):
         """
         Args:
-            model: batch -> outputs with every field the updates read, or
-                the path to a model saved on disk
+            model: batch -> outputs with the head of every variable the
+                updates step, or the path to a model saved on disk
             time_key: batch key for the time per atom
             structure_time_key: batch key for the time per structure
-            guided_fields: outputs the guidance is added to, e.g.
-                ``("score",)``; needed when there is guidance
-            position_unit: length unit of the positions, the training
-                data's. Used only to evaluate the guidance in Angstrom.
 
         Remaining keyword arguments are those of :class:`Calculator`.
-
-        Raises:
-            ValueError: if there is guidance but no field to add it to.
         """
         super().__init__(model, **kwargs)
         self.time_key = time_key
         self.structure_time_key = structure_time_key
-        self.guided_fields = tuple(guided_fields)
-        if self.guidance and not self.guided_fields:
-            raise ValueError(
-                "JointCalculator adds guidance to the outputs named in "
-                "guided_fields, e.g. guided_fields=('score',); got none"
-            )
-        self.position_conversion = convert_units(position_unit, "Angstrom")
 
     def with_time(self, batch: Mapping[str, Any], t: torch.Tensor) -> dict[str, Any]:
         """
@@ -573,34 +394,6 @@ class JointCalculator(Calculator):
             self.time_key: t.expand(batch[properties.idx_m].shape[0]),
             self.structure_time_key: t.expand(batch[properties.n_atoms].shape[0]),
         }
-
-    def fields(self, batch: Mapping[str, Any], t: torch.Tensor) -> dict[str, Any]:
-        """
-        The model's outputs at the structures in ``batch`` and time t, with
-        the guidance added to the guided fields.
-
-        Args:
-            batch: structures with ``idx_m`` and ``n_atoms``
-            t: the time, 0-dim
-
-        Raises:
-            KeyError: if the model does not return a guided field.
-        """
-        inputs = self.with_time(batch, t)
-        outputs = dict(self(inputs))
-        if not self.guidance:
-            return outputs
-        positions = inputs[properties.R]
-        term = self.guidance_field(inputs, positions * self.position_conversion)
-        term = self.position_conversion * term.to(positions)
-        for key in self.guided_fields:
-            if key not in outputs:
-                raise KeyError(
-                    f"guidance is added to {key!r}, which the model does not "
-                    f"return; got {sorted(outputs)}"
-                )
-            outputs[key] = outputs[key] + term
-        return outputs
 
 
 class EnsembleCalculator(ForceCalculator):
@@ -657,7 +450,8 @@ class EnsembleCalculator(ForceCalculator):
             extra_properties: further outputs to average over the models,
                 returned unconverted
 
-        Remaining keyword arguments are those of :class:`Calculator`.
+        Remaining keyword arguments are ``guidance`` and those of
+        :class:`Calculator`.
         """
         loaded = nn.ModuleList(
             [

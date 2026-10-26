@@ -26,6 +26,7 @@ from schnetpack.lightning.utils import (
     log_hyperparameters,
     trainer_fit_kwargs_for_checkpoint,
 )
+from schnetpack.model.compile import CompiledPotential
 from schnetpack.utils import load_model, str2class
 from schnetpack.utils.script import print_config
 
@@ -234,6 +235,8 @@ def predict(config: DictConfig):
 
     model = load_model("best_model")
 
+    model_fn = CompiledPotential(model) if config.get("compile", False) else model
+
     class WrapperLM(LightningModule):
         def __init__(self, model, enable_grad=config.enable_grad):
             super().__init__()
@@ -241,7 +244,7 @@ def predict(config: DictConfig):
             self.enable_grad = enable_grad
 
         def forward(self, x):
-            return model(x)
+            return model_fn(x)
 
         def predict_step(self, batch, batch_idx: int, dataloader_idx: int = 0):
             torch.set_grad_enabled(self.enable_grad)

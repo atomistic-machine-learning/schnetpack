@@ -3,14 +3,16 @@ The Sampler over a list of updates: model calls per step, stage times,
 write order, centered noise and the checks at assembly.
 """
 
+import dataclasses
+
 import pytest
 import torch
 
 from schnetpack import properties
 from schnetpack.dynamics import (
     AncestralUpdate,
+    FieldCalculator,
     Heun,
-    JointCalculator,
     ODEUpdate,
     Sampler,
     SDEUpdate,
@@ -34,12 +36,12 @@ from schnetpack.generative import (
     LogitsParametrization,
     MaskedTypeWeight,
     MaskNoising,
-    ParametrizedModel,
     PeriodicGaussianInterpolant,
     PeriodicPositions,
     Variable,
     VelocityParametrization,
     VPCosine,
+    X0Parametrization,
 )
 from schnetpack.generative.noising import ForwardNoising
 from schnetpack.utils.cell import (
@@ -111,19 +113,6 @@ def y_variable():
     )
 
 
-def fields(model, variable, **field_keys):
-    """``model`` with ``variable``'s head read as the given fields."""
-    return ParametrizedModel(
-        model,
-        variable.parametrization,
-        variable.noising.schedule,
-        output_key=variable.output_key,
-        key=variable.view,
-        time_key=variable.time_key,
-        **field_keys,
-    )
-
-
 def counting(calls, model=network):
     def counted(batch):
         calls.append(batch)
@@ -157,10 +146,31 @@ def counting(calls, model=network):
 def test_model_calls_per_step(update, n_calls):
     calls = []
     v = positions()
-    model = fields(counting(calls), v, score_key="score", x0_key="x0")
-    sampler = Sampler(JointCalculator(model), [update(v)], [v])
+    sampler = Sampler(FieldCalculator(counting(calls)), [update(v)], [v])
     sampler.run(structures(), 3)
     assert len(calls) == 3 * n_calls
+
+
+# --- fields ------------------------------------------------------------------ #
+
+
+@pytest.mark.parametrize(
+    "update, convert",
+    [(SDEUpdate, "to_score"), (ODEUpdate, "to_velocity"), (AncestralUpdate, "to_x0")],
+    ids=["score", "velocity", "x0"],
+)
+def test_an_update_converts_the_head_with_its_variables_parametrization(
+    update, convert
+):
+    v = positions()
+    calculator = FieldCalculator(network)
+    t = torch.tensor(0.4, dtype=torch.float64)
+    batch = calculator.with_time(structures(), t)
+    outputs = calculator(batch)
+    expected = getattr(v.parametrization, convert)(
+        v.noising.schedule, outputs["eps_R"], batch[properties.R], t
+    )
+    torch.testing.assert_close(update(v).field(batch, outputs, t), expected)
 
 
 # --- several updates --------------------------------------------------------- #
@@ -176,17 +186,15 @@ def two_variable_model(seen=None):
             )
         return network(batch)
 
-    model = fields(recording, pos, score_key="score_R")
-    model = fields(model, y, x0_key="x0_y")
-    return pos, y, model
+    return pos, y, recording
 
 
 def test_heun_next_to_an_ancestral_update_calls_twice_and_sees_its_draw():
     seen = []
     pos, y, model = two_variable_model(seen)
     sampler = Sampler(
-        JointCalculator(model),
-        [SDEUpdate(pos, "score_R", integrator=Heun()), AncestralUpdate(y, "x0_y")],
+        FieldCalculator(model),
+        [SDEUpdate(pos, integrator=Heun()), AncestralUpdate(y)],
         [pos, y],
     )
     assert sampler.nodes == (0.0, 1.0)
@@ -218,8 +226,8 @@ def test_updates_write_in_list_order():
     pos.view = Recording(properties.R, order)
     y.view = Recording("y", order)
     sampler = Sampler(
-        JointCalculator(model),
-        [AncestralUpdate(y, "x0_y"), SDEUpdate(pos, "score_R")],
+        FieldCalculator(model),
+        [AncestralUpdate(y), SDEUpdate(pos)],
         [pos, y],
     )
     t, t_next = torch.tensor(0.5), torch.tensor(0.4)
@@ -234,8 +242,8 @@ def test_sample_draws_every_prior_in_order():
         n_atoms=torch.tensor([0, 0, 1, 1]), atom_types=torch.ones(3)
     )
     sampler = Sampler(
-        JointCalculator(model, dtype=torch.float64),
-        [SDEUpdate(pos, "score_R"), AncestralUpdate(y, "x0_y")],
+        FieldCalculator(model, dtype=torch.float64),
+        [SDEUpdate(pos), AncestralUpdate(y)],
         [pos, y],
         structures=provider,
     )
@@ -268,12 +276,11 @@ def test_centered_noise_keeps_every_center_at_zero(update):
     def linear(batch):  # a centered field keeps centered positions centered
         return {"eps_R": 0.3 * batch[properties.R]}
 
-    model = fields(linear, v, score_key="score", x0_key="x0")
     batch = structures()
     batch[properties.R] = GaussianPrior.center(
         batch[properties.R], batch[properties.idx_m]
     )
-    out = Sampler(JointCalculator(model), [update(v)], [v]).run(batch, 10)
+    out = Sampler(FieldCalculator(linear), [update(v)], [v]).run(batch, 10)
     assert torch.allclose(
         centers(out), torch.zeros(2, 3, dtype=torch.float64), atol=1e-12
     )
@@ -318,7 +325,7 @@ def unmask(z, t, s, excluded=()):
     """One unmasking step from t to s with uniform p(z0 | z_t)."""
     probs = torch.full((z.shape[0], N_CLASSES), 1.0 / (N_CLASSES - 1))
     probs[:, MASK] = 0.0
-    update = AncestralUpdate(types(), "x0_Z", excluded=excluded)
+    update = AncestralUpdate(types(), excluded=excluded)
     return update.transition({properties.Z: z}, probs, torch.tensor(t), torch.tensor(s))
 
 
@@ -361,9 +368,7 @@ def types_and_positions(seen=None):
             seen.append(batch[properties.Z].clone())
         return typed_network(batch)
 
-    model = fields(recording, pos, score_key="score_R")
-    model = fields(model, z, x0_key="x0_Z")
-    return pos, z, model
+    return pos, z, recording
 
 
 @pytest.mark.parametrize("integrator", [None, Heun()], ids=["euler", "heun"])
@@ -375,10 +380,10 @@ def test_sampling_types_and_positions_unmasks_every_atom(integrator):
         n_atoms=torch.tensor([0, 0, 0, 1, 1]), atom_types=None
     )
     sampler = Sampler(
-        JointCalculator(model, dtype=torch.float64),
+        FieldCalculator(model, dtype=torch.float64),
         [
-            SDEUpdate(pos, "score_R", integrator=integrator),
-            AncestralUpdate(z, "x0_Z", excluded=[9]),
+            SDEUpdate(pos, integrator=integrator),
+            AncestralUpdate(z, excluded=[9]),
         ],
         [z, pos],
         structures=provider,
@@ -394,16 +399,16 @@ def test_sampling_types_and_positions_unmasks_every_atom(integrator):
 
 def test_the_grid_has_to_reach_the_t_min_of_a_masked_variable():
     pos, z, model = types_and_positions()
-    updates = [SDEUpdate(pos, "score_R"), AncestralUpdate(z, "x0_Z")]
+    updates = [SDEUpdate(pos), AncestralUpdate(z)]
     with pytest.raises(ValueError, match="would stay masked"):
-        Sampler(JointCalculator(model), updates, [z, pos], grid=UniformGrid(1.0, 0.1))
+        Sampler(FieldCalculator(model), updates, [z, pos], grid=UniformGrid(1.0, 0.1))
     # the default grid ends at the largest t_min: the types'
-    assert Sampler(JointCalculator(model), updates, [z, pos]).grid.t_end == 1e-2
+    assert Sampler(FieldCalculator(model), updates, [z, pos]).grid.t_end == 1e-2
 
 
 def test_only_the_ancestral_update_steps_types_and_without_gaussian_options():
     z = types()
-    calculator = JointCalculator(typed_network)
+    calculator = FieldCalculator(typed_network)
     with pytest.raises(TypeError):
         SDEUpdate(z)
     with pytest.raises(TypeError, match="interpolant"):
@@ -481,14 +486,16 @@ def test_a_cell_update_moves_the_atoms_at_fixed_fractional_coordinates():
     }
     frac = torch.rand(5, 3, dtype=torch.float64)
     batch[properties.R] = to_cart(frac, atom_cells(batch))
-    fields = {"x0_cell": Y_TARGET.expand(2, 6)}
     t, s = (
         torch.tensor(0.5, dtype=torch.float64),
         torch.tensor(0.4, dtype=torch.float64),
     )
-    out, y = AncestralUpdate(cell, "x0_cell").stage(
-        0, batch, fields, t, batch, t, s, []
-    )
+    schedule = cell.noising.schedule
+    # the noise that leads from Y_TARGET to the cell: x0_hat = Y_TARGET
+    outputs = {
+        "eps_cell": (CELL.read(batch) - schedule.a(t) * Y_TARGET) / schedule.sigma(t)
+    }
+    out, y = AncestralUpdate(cell).stage(0, batch, outputs, t, batch, t, s, [])
     torch.testing.assert_close(CELL.read(out), y)
     torch.testing.assert_close(to_frac(out[properties.R], atom_cells(out)), frac)
 
@@ -496,15 +503,12 @@ def test_a_cell_update_moves_the_atoms_at_fixed_fractional_coordinates():
 def test_sampling_a_crystal_keeps_its_atoms_in_the_cell_and_reaches_its_x0():
     torch.manual_seed(0)
     cell, z, pos = crystal_variables()
-    model = fields(crystal_network(cell.noising.schedule), pos, x0_key="x0_R")
-    model = fields(model, cell, x0_key="x0_cell")  # x_t read through the view
-    model = fields(model, z, x0_key="x0_Z")
     sampler = Sampler(
-        JointCalculator(model, dtype=torch.float64),
+        FieldCalculator(crystal_network(cell.noising.schedule), dtype=torch.float64),
         [
-            AncestralUpdate(pos, "x0_R", noise="reverse_diffusion"),
-            AncestralUpdate(cell, "x0_cell"),
-            AncestralUpdate(z, "x0_Z"),
+            AncestralUpdate(pos, noise="reverse_diffusion"),
+            AncestralUpdate(cell),  # y_t read through the view
+            AncestralUpdate(z),
         ],
         [cell, z, pos],
         structures=StatisticsStructures(torch.tensor([0, 0, 1, 1]), None, pbc=True),
@@ -552,6 +556,10 @@ def exact_pair_denoiser(schedule):
 def test_the_exact_periodic_denoiser_recovers_a_pair_from_the_uniform_start(noise):
     torch.manual_seed(0)
     _, _, pos = crystal_variables()
+    # the denoiser is an x0 head
+    pos = dataclasses.replace(
+        pos, parametrization=X0Parametrization(), output_key="x0_R"
+    )
     n = 100
 
     def pairs(n_samples):
@@ -564,8 +572,8 @@ def test_the_exact_periodic_denoiser_recovers_a_pair_from_the_uniform_start(nois
         }
 
     sampler = Sampler(
-        JointCalculator(exact_pair_denoiser(pos.noising.schedule), dtype=torch.float64),
-        [AncestralUpdate(pos, "x0_R", noise=noise)],
+        FieldCalculator(exact_pair_denoiser(pos.noising.schedule), dtype=torch.float64),
+        [AncestralUpdate(pos, noise=noise)],
         [pos],
         grid=UniformGrid(1.0, 1e-3),
         structures=pairs,
@@ -590,7 +598,7 @@ def test_freeze_scaffold_holds_the_reference_on_a_sampler():
         properties.R_reference: torch.zeros_like(batch[properties.R]),
     }
     sampler = Sampler(
-        JointCalculator(fields(network, v, score_key="score")),
+        FieldCalculator(network),
         [SDEUpdate(v)],
         [v],
         hooks=[FreezeScaffold()],
@@ -601,35 +609,75 @@ def test_freeze_scaffold_holds_the_reference_on_a_sampler():
 
 
 class Pull(Guidance):
-    """A linear pull toward the origin, a guidance term that depends on t."""
+    """A linear pull toward the origin that depends on t; notes the times it sees."""
+
+    def __init__(self, weight=1.0):
+        super().__init__(weight)
+        self.seen = []
 
     def forward(self, batch):
-        return -batch[properties.R] * (1.0 + batch[properties.t][:, None])
+        t = batch[properties.t]
+        self.seen.append(t)
+        return -batch[properties.R] * (1.0 + t[:, None])
 
 
-def test_guidance_is_added_to_the_guided_fields_at_the_stage_time():
+def test_guidance_is_added_to_the_updates_field():
     v = positions()
-    model = fields(network, v, score_key="score", x0_key="x0")
-    plain = JointCalculator(model)
-    guided = JointCalculator(
-        model, guidance=[Pull(weight=2.0)], guided_fields=["score"]
-    )
-    batch, t = structures(), torch.tensor(0.7, dtype=torch.float64)
-    shift = guided.fields(batch, t)["score"] - plain.fields(batch, t)["score"]
+    calculator = FieldCalculator(network)
+    t = torch.tensor(0.7, dtype=torch.float64)
+    batch = calculator.with_time(structures(), t)
+    outputs = calculator(batch)
+    guided, plain = SDEUpdate(v, guidance=[Pull(weight=2.0)]), SDEUpdate(v)
+    shift = guided.field(batch, outputs, t) - plain.field(batch, outputs, t)
     assert torch.allclose(shift, -2.0 * 1.7 * batch[properties.R])
-    assert torch.equal(guided.fields(batch, t)["x0"], plain.fields(batch, t)["x0"])
 
 
-def test_guidance_needs_a_field_to_go_to():
-    with pytest.raises(ValueError, match="guided_fields"):
-        JointCalculator(network, guidance=[Pull()])
-    calculator = JointCalculator(network, guidance=[Pull()], guided_fields=["score"])
-    with pytest.raises(KeyError, match="'score'"):
-        calculator.fields(structures(), torch.tensor(0.5))
+def test_guidance_is_evaluated_at_every_stage_time():
+    v, pull = positions(), Pull()
+    sampler = Sampler(
+        FieldCalculator(network),
+        [SDEUpdate(v, integrator=Heun(), guidance=[pull])],
+        [v],
+    )
+    sampler.run(structures(), 1)
+    t, t_next = sampler.grid(1).double()
+    assert len(pull.seen) == 2
+    assert torch.allclose(pull.seen[0], t.expand(7))
+    assert torch.allclose(pull.seen[1], t_next.expand(7))
+
+
+class Lift(Guidance):
+    """A guidance term on the per-structure y: t on every component."""
+
+    def forward(self, batch):
+        return batch["t_structure"][:, None].expand_as(batch["y"]).clone()
+
+
+def test_guidance_is_added_to_the_field_of_any_variable():
+    y = y_variable()
+    calculator = FieldCalculator(network)
+    t = torch.tensor(0.5, dtype=torch.float64)
+    batch = calculator.with_time(structures(y=True), t)
+    outputs = calculator(batch)
+    guided, plain = AncestralUpdate(y, guidance=[Lift(weight=3.0)]), AncestralUpdate(y)
+    shift = guided.field(batch, outputs, t) - plain.field(batch, outputs, t)
+    assert torch.allclose(shift, torch.full((2, 2), 1.5, dtype=torch.float64))
+
+
+def test_guidance_has_to_be_shaped_like_the_field():
+    y = y_variable()
+    calculator = FieldCalculator(network)
+    t = torch.tensor(0.5, dtype=torch.float64)
+    batch = calculator.with_time(structures(y=True), t)
+    update = AncestralUpdate(y, guidance=[Pull()])  # a term on the positions
+    with pytest.raises(
+        ValueError, match="'y' is shaped \\(7, 3\\), its field \\(2, 2\\)"
+    ):
+        update.field(batch, calculator(batch), t)
 
 
 def test_calculator_writes_the_time_per_atom_and_per_structure():
-    batch = JointCalculator(network).with_time(structures(), torch.tensor(0.3))
+    batch = FieldCalculator(network).with_time(structures(), torch.tensor(0.3))
     assert batch[properties.t].shape == (7,)
     assert batch["t_structure"].shape == (2,)
 
@@ -639,9 +687,9 @@ def test_calculator_writes_the_time_per_atom_and_per_structure():
 
 def test_every_variable_needs_exactly_one_update():
     pos, y, model = two_variable_model()
-    calculator = JointCalculator(model)
+    calculator = FieldCalculator(model)
     with pytest.raises(ValueError, match="without one: \\['y'\\]"):
-        Sampler(calculator, [SDEUpdate(pos, "score_R")], [pos, y])
+        Sampler(calculator, [SDEUpdate(pos)], [pos, y])
     with pytest.raises(ValueError, match="more than one update"):
         Sampler(calculator, [SDEUpdate(pos), AncestralUpdate(pos)], [pos])
     with pytest.raises(ValueError, match="not among the variables"):
@@ -657,11 +705,15 @@ def test_updates_must_fit_the_noising():
         VelocityParametrization(),
         "eps_R",
     )
-    calculator = JointCalculator(network)
+    calculator = FieldCalculator(network)
     with pytest.raises(TypeError, match="SDE chart"):
         SDEUpdate(flow)
     with pytest.raises(TypeError, match="Gaussian interpolant"):
         Sampler(calculator, [AncestralUpdate(flow)], [flow])
+    # a head that is no velocity reaches it through the score
+    denoised = dataclasses.replace(flow, parametrization=X0Parametrization())
+    with pytest.raises(TypeError, match="through the score"):
+        Sampler(calculator, [ODEUpdate(denoised)], [denoised])
 
     class Swap(ForwardNoising):
         schedule = VP()
@@ -689,18 +741,13 @@ def test_updates_must_agree_on_stage_times():
     pos, y, model = two_variable_model()
     with pytest.raises(ValueError, match="disagree on the time of stage 1"):
         Sampler(
-            JointCalculator(model),
-            [
-                SDEUpdate(pos, "score_R", integrator=Midpoint()),
-                AncestralUpdate(y, "x0_y"),
-            ],
+            FieldCalculator(model),
+            [SDEUpdate(pos, integrator=Midpoint()), AncestralUpdate(y)],
             [pos, y],
         )
     # alone, a midpoint stage is fine
     sampler = Sampler(
-        JointCalculator(model),
-        [SDEUpdate(pos, "score_R", integrator=Midpoint())],
-        [pos],
+        FieldCalculator(model), [SDEUpdate(pos, integrator=Midpoint())], [pos]
     )
     assert sampler.nodes == (0.0, 0.5)
 
@@ -711,20 +758,3 @@ def test_an_integrator_needs_one_node_per_stage():
 
     with pytest.raises(ValueError, match="2 stages but 1 nodes"):
         SDEUpdate(positions(), integrator=Broken())
-
-
-def test_a_missing_field_names_what_the_model_returned():
-    v = positions()
-    sampler = Sampler(
-        JointCalculator(fields(network, v, x0_key="x0")), [SDEUpdate(v)], [v]
-    )
-    with pytest.raises(KeyError, match="reads 'score'"):
-        sampler.run(structures(), 1)
-
-
-def test_sampler_needs_a_joint_calculator():
-    from schnetpack.dynamics import ScoreCalculator
-
-    v = positions()
-    with pytest.raises(TypeError, match="JointCalculator"):
-        Sampler(ScoreCalculator(network), [SDEUpdate(v)], [v])

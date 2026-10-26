@@ -6,3 +6,4 @@ defaults:
 _target_: schnetpack.lightning.AtomisticTask
 outputs: ???
 warmup_steps: 0
+compile: false

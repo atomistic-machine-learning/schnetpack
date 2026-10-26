@@ -1,3 +1,4 @@
+import warnings
 from typing import Any, cast
 
 import pytorch_lightning as pl
@@ -10,6 +11,7 @@ from torch import nn as nn
 from torchmetrics import Metric
 
 from schnetpack.model.base import AtomisticModel
+from schnetpack.model.compile import CompiledPotential
 from schnetpack.objectives import (
     ModelOutput,
     calculate_loss,
@@ -45,6 +47,7 @@ class AtomisticTask(pl.LightningModule):
         warmup_steps: int = 0,
         teacher: TeacherWrapper | None = None,
         probe_seed: int = 0,
+        compile: bool = False,
     ):
         """
         Args:
@@ -63,6 +66,10 @@ class AtomisticTask(pl.LightningModule):
               of every validation and test epoch, so each epoch sees the same
               probes and validation losses are comparable across epochs. Training
               draws fresh probes every step.
+            compile: run the model as a compiled graph including its derivatives (see
+              `schnetpack.model.CompiledPotential`, which needs torch >= 2.14). With a
+              teacher, whose curvature needs derivatives of the forces, the model
+              runs without compilation.
         """
         super().__init__()
         self.model = model
@@ -88,6 +95,14 @@ class AtomisticTask(pl.LightningModule):
         )
         self.lr = self.optimizer_kwargs["lr"]
         self.warmup_steps = warmup_steps
+
+        self.compiled_model = None
+        if compile and self.distillation is not None:
+            warnings.warn(
+                "distillation runs the model without compilation.", stacklevel=2
+            )
+        elif compile:
+            self.compiled_model = CompiledPotential(model)
         self.save_hyperparameters()
 
     def setup(self, stage=None):
@@ -98,6 +113,8 @@ class AtomisticTask(pl.LightningModule):
                 self.distillation.setup(self.trainer.datamodule)
 
     def forward(self, inputs: dict[str, torch.Tensor]):
+        if self.compiled_model is not None:
+            return self.compiled_model(inputs)
         results = self.model(inputs)
         return results
 
@@ -124,7 +141,8 @@ class AtomisticTask(pl.LightningModule):
         validation epoch uses the same probes."""
         if self.distillation is None:
             targets = extract_targets(self.outputs, batch)
-            pred = predict_without_postprocessing(self.model, batch)
+            model = self.compiled_model or self.model
+            pred = predict_without_postprocessing(model, batch)
         else:
             pred, targets = self.distillation.step(batch, train=subset == "train")
         loss = calculate_loss(self.outputs, pred, targets)

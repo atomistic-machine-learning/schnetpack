@@ -37,7 +37,8 @@ class Dynamics(abc.ABC):
     so hooks run in the same order everywhere, between full steps
     only. Terms that change the field itself
     (:class:`~schnetpack.dynamics.guidance.Guidance`) belong to the
-    calculator, which returns the guided field. :meth:`sample` draws
+    force calculator, which returns the guided force, or to a sampler's
+    updates, which guide their own field. :meth:`sample` draws
     starting structures from the structure provider, redraws them from the
     prior, if any, and hands them to :meth:`run`, which also takes given
     structures.
@@ -55,7 +56,7 @@ class Dynamics(abc.ABC):
         Args:
             calculator: runs the model; each family asks for its own kind
                 (:class:`~schnetpack.dynamics.calculator.ForceCalculator` or
-                :class:`~schnetpack.dynamics.calculator.GenerativeCalculator`)
+                :class:`~schnetpack.dynamics.calculator.FieldCalculator`)
             structures: source of the structures :meth:`sample` starts
                 from; without one, only :meth:`run` on given structures is
                 available
@@ -72,7 +73,8 @@ class Dynamics(abc.ABC):
             if isinstance(hook, Guidance):
                 raise TypeError(
                     f"{type(hook).__name__} is guidance, which changes "
-                    "the field: pass it to the calculator's guidance"
+                    "the field: pass it as guidance to the ForceCalculator, "
+                    "or to an update of a Sampler"
                 )
             if not isinstance(hook, Hook):
                 raise TypeError(f"{type(hook).__name__} is not a Hook")
