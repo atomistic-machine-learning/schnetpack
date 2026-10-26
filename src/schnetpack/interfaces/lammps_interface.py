@@ -12,6 +12,7 @@ machine LAMMPS runs on, with ``spkdeploy``.
 
 import copy
 import os
+import tempfile
 
 import torch
 from torch import nn
@@ -321,15 +322,24 @@ def deploy_lammps(
         "inputs": ",".join(LAMMPS_INPUTS),
         "outputs": ",".join(LAMMPS_OUTPUTS),
     }
-    # written under another name first, so that a failed check leaves no package
-    partial = path.removesuffix(".pt2") + ".part.pt2"
-    torch._inductor.aoti_compile_and_package(
-        program,
-        package_path=partial,
-        inductor_configs={"aot_inductor.metadata": metadata},
-    )
+    # written into a temporary directory next to `path` first, so that a failed check
+    # leaves no package; the package's file name names its contents
+    directory = os.path.dirname(os.path.abspath(path))
+    with tempfile.TemporaryDirectory(dir=directory, prefix=".spkdeploy-") as tmp:
+        partial = os.path.join(tmp, os.path.basename(path))
+        torch._inductor.aoti_compile_and_package(
+            program,
+            package_path=partial,
+            inductor_configs={"aot_inductor.metadata": metadata},
+        )
+        _check(torch._inductor.aoti_load_package(partial), potential, dtype)
+        os.replace(partial, path)
+    return path
 
-    runner = torch._inductor.aoti_load_package(partial)
+
+def _check(runner, potential: LammpsPotential, dtype: torch.dtype) -> None:
+    """Compare a package to the eager potential on a single atom without edges and on
+    random systems with periodic shifts and ghost atoms."""
     for n_atoms, n_edges, seed in ((1, 0, 1), (12, 40, 2), (40, 300, 3)):
         inputs = _example(potential, n_atoms, n_edges, seed)
         expected = potential(**inputs)
@@ -340,8 +350,6 @@ def deploy_lammps(
             torch.testing.assert_close(
                 a, e, **_TOLERANCES[dtype], msg=lambda m, where=where: f"{where}: {m}"
             )
-    os.replace(partial, path)
-    return path
 
 
 def _example(

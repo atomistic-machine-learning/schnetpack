@@ -464,6 +464,7 @@ again for a batch with a single molecule.
 
 Compilation requires torch 2.14 or newer, since earlier versions can trace wrong
 gradients of a force loss; with an older torch, switching it on raises an error.
+``pip install schnetpack[compile]`` installs a recent enough torch.
 Distillation runs the model without compilation. The stored models
 are not affected: the best model is saved as a regular ``AtomisticModel``.
 

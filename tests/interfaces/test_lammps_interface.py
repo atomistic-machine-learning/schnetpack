@@ -2,10 +2,15 @@
 model it comes from, and the AOTInductor packages deploy_lammps writes. The domain
 test checks the contract the pair style relies on under MPI, without LAMMPS: the
 energies, forces and virials of domains with ghost atoms add up to those of the
-periodic system."""
+periodic system. The C++ test builds the part of the pair style that loads and runs a
+package (interfaces/lammps/schnetpack_model.cpp) against this torch and compares it to
+Python."""
 
 import itertools
+import shutil
+import subprocess
 import sys
+from pathlib import Path
 
 import ase.build
 import numpy as np
@@ -19,11 +24,14 @@ from schnetpack.interfaces.lammps_interface import (
     LAMMPS_INPUTS,
     LAMMPS_OUTPUTS,
     LammpsPotential,
+    _example,
     deploy_lammps,
 )
 
 CUTOFF = 3.0
 REPRESENTATIONS = [spk.model.SchNet, spk.model.PaiNN, spk.model.SO3net]
+
+PAIR_STYLE = Path(__file__).parents[2] / "interfaces" / "lammps"
 
 requires_compile = pytest.mark.skipif(
     not spk.model.compile_supported(),
@@ -264,7 +272,7 @@ def test_deployed_package_matches_model(representation, tmp_path):
     assert float(metadata["receptive_field"]) == 2 * CUTOFF
     assert metadata["dtype"] == "float64"
     assert metadata["torch_version"] == torch.__version__
-    assert not (tmp_path / "model.part.pt2").exists()
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["model.pt2"]
 
 
 @pytest.mark.slow
@@ -281,3 +289,96 @@ def test_spkdeploy_writes_a_package(tmp_path, monkeypatch):
     metadata = torch._inductor.aoti_load_package(str(path)).get_metadata()
     assert metadata["dtype"] == "float32"
     assert metadata["device"] == "cpu"
+
+
+def build_model_check(directory: Path) -> Path:
+    """Compile interfaces/lammps/tests/model_check.cpp against this torch."""
+    from torch.utils import cpp_extension
+
+    binary = directory / "model_check"
+    abi = int(torch._C._GLIBCXX_USE_CXX11_ABI)
+    subprocess.run(
+        ["g++", "-std=c++20", "-O1", f"-D_GLIBCXX_USE_CXX11_ABI={abi}"]
+        + [f"-I{p}" for p in [PAIR_STYLE, *cpp_extension.include_paths()]]
+        + [str(PAIR_STYLE / "schnetpack_model.cpp")]
+        + [str(PAIR_STYLE / "tests" / "model_check.cpp")]
+        + [f"-L{p}" for p in cpp_extension.library_paths()]
+        + [f"-Wl,-rpath,{p}" for p in cpp_extension.library_paths()]
+        + ["-ltorch", "-ltorch_cpu", "-lc10", "-o", str(binary)],
+        check=True,
+        capture_output=True,
+    )
+    return binary
+
+
+def run_model_check(binary, package, inputs, path, with_offsets=True):
+    n_atoms, n_edges = len(inputs["local"]), len(inputs["idx_i"])
+    arrays = ["positions", "atomic_numbers", "local", "idx_i", "idx_j"]
+    arrays += ["offsets"] if with_offsets else []
+    with open(path, "w") as file:
+        file.write(f"{n_atoms} {n_edges} {int(with_offsets)}\n")
+        for name in arrays:
+            values = inputs[name].reshape(-1).tolist()
+            file.write(" ".join(repr(v) for v in values) + "\n")
+    out = subprocess.run(
+        [str(binary), package, str(path)], check=True, capture_output=True, text=True
+    ).stdout.split()
+    values = torch.tensor([float(v) for v in out], dtype=torch.float64)
+    sizes = [1, n_atoms, 3 * n_atoms, 9]
+    energy, energy_atom, forces, virial = torch.split(values, sizes)
+    return energy[0], energy_atom, forces.reshape(-1, 3), virial.reshape(3, 3)
+
+
+@pytest.mark.slow
+@requires_compile
+@pytest.mark.skipif(shutil.which("g++") is None, reason="needs g++")
+def test_pair_style_model_runs_the_package_like_python(tmp_path):
+    lammps = LammpsPotential(potential(spk.model.PaiNN).eval())
+    package = deploy_lammps(
+        potential(spk.model.PaiNN).eval(),
+        str(tmp_path / "model.pt2"),
+        dtype=torch.float64,
+    )
+    binary = build_model_check(tmp_path)
+
+    cases = [
+        (_example(lammps, 1, 0, seed=1), True),
+        (_example(lammps, 30, 200, seed=2), True),
+        (flat(periodic(silicon(repeat=2))), True),
+    ]
+    # ghost atoms in domain decomposition have no shifts
+    no_shifts = _example(lammps, 20, 120, seed=3)
+    no_shifts["offsets"] = torch.zeros_like(no_shifts["offsets"])
+    cases.append((no_shifts, False))
+    for k, (inputs, with_offsets) in enumerate(cases):
+        actual = run_model_check(
+            binary, package, inputs, tmp_path / f"in{k}.txt", with_offsets
+        )
+        expected = lammps(**inputs)
+        for name, a, e in zip(LAMMPS_OUTPUTS, actual, expected):
+            torch.testing.assert_close(a, e, rtol=1e-9, atol=1e-10, msg=name)
+
+
+@pytest.mark.slow
+@requires_compile
+@pytest.mark.skipif(shutil.which("g++") is None, reason="needs g++")
+def test_pair_style_model_rejects_a_package_of_another_torch(tmp_path):
+    package = deploy_lammps(
+        potential(spk.model.SchNet).eval(), str(tmp_path / "model.pt2")
+    )
+    # rewrite the torch version in the package's metadata
+    import zipfile
+
+    tampered = tmp_path / "other.pt2"
+    with zipfile.ZipFile(package) as src, zipfile.ZipFile(tampered, "w") as dst:
+        for item in src.infolist():
+            data = src.read(item.filename)
+            if item.filename.endswith("_metadata.json"):
+                data = data.replace(torch.__version__.encode(), b"1.0.0")
+            dst.writestr(item, data)
+    binary = build_model_check(tmp_path)
+    inputs = _example(LammpsPotential(potential(spk.model.SchNet)), 3, 4, seed=0)
+
+    with pytest.raises(subprocess.CalledProcessError) as failure:
+        run_model_check(binary, str(tampered), inputs, tmp_path / "in.txt")
+    assert "compiled with torch 1.0.0" in failure.value.stderr

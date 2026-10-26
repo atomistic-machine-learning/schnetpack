@@ -65,7 +65,8 @@ class CompiledPotential:
         if not compile_supported():
             raise RuntimeError(
                 f"CompiledPotential needs torch >= {'.'.join(map(str, _MIN_TORCH))}; "
-                f"torch {torch.__version__} can trace wrong gradients of a force loss."
+                f"torch {torch.__version__} can trace wrong gradients of a force loss. "
+                "Install schnetpack[compile] for a recent enough torch."
             )
         self.model = model
         self.compile_kwargs = {"dynamic": True, **compile_kwargs}

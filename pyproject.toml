@@ -57,8 +57,11 @@ doc = [
 # exporting MACE models with torch.export and building MACE models to train
 # from scratch (schnetpack.interfaces.mace_interface); the archives load without
 mace = ["mace-torch>=0.3.16,<0.4"]
+# compiled potentials (schnetpack.model.CompiledPotential): older torch traces
+# wrong gradients of a force loss
+compile = ["torch>=2.14"]
 # every extra above
-all = ["schnetpack[test,dev,doc,mace]"]
+all = ["schnetpack[test,dev,doc,mace,compile]"]
 
 [project.urls]
 Repository = "https://github.com/atomistic-machine-learning/schnetpack"
