@@ -53,6 +53,10 @@ def load_model(
     ``schnetpack.atomistic.*``, now below ``schnetpack.model``) are remapped before
     unpickling, see `_LEGACY_MODULES`.
 
+    Warning:
+        Model files are pickled PyTorch objects. Loading one executes code contained in the file, so only load
+        models from sources you trust.
+
     Args:
         model_path (str): Path to the saved model file.
         device (torch.device or str): Device on which to load the model. Defaults to "cpu".
