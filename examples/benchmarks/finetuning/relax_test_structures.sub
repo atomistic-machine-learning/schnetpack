@@ -1,0 +1,48 @@
+#!/bin/bash -l
+#SBATCH --partition=gpu-2d
+#SBATCH --gres=gpu:1
+#SBATCH --time=02:00:00
+# head057's Blackwell GPU has no kernels in the container's torch
+#SBATCH --exclude=head057
+# Standard output and error:
+#SBATCH -o job_%j.out        # Standard output, %j = job ID
+#SBATCH -e job_%j.err        # Standard error, %j = job ID
+# Initial working directory (submit from this folder):
+#SBATCH -D ./
+# Job Name:
+#SBATCH -J relax_mace
+# Number of nodes
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=4
+
+# Relax 20 rMD17 ethanol test structures with the batch-wise dynamics.LBFGS on the
+# fine-tuned MACE, the MACE trained from scratch (both on 100 structures, replicate 0)
+# and MACE-OFF23 zero shot, and score them against the DFT conformers. The models are
+# torch.export archives written by the container's torch, so this runs in the container.
+# Submit from this folder: sbatch relax_test_structures.sub
+# Plot afterwards with plot_relaxation_rmsd.py.
+
+SIF=/home/Jonas/container/schnetpack/schnetpack_container.sif
+WORKDIR=/home/Jonas/schnetpack_debugging/finetuning
+MACE_OFF_PATH=/home/Jonas/schnetpack_debugging/teacher_models/MACE-OFF23_medium_mace-0.3.16.pt2
+
+DATA_DIR=/home/Jonas/datasets/schnetpack/rmd17/
+DATA_NAME=ethanol.db
+DATA_WORKDIR=/tmp/$SLURM_JOB_ID/data
+
+mkdir -p "$DATA_WORKDIR"
+cp "$DATA_DIR/$DATA_NAME" "$DATA_WORKDIR/$DATA_NAME"
+
+# pin the torch CPU threads to the allocated cores
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+
+apptainer exec --nv $SIF python $SLURM_SUBMIT_DIR/relax_test_structures.py \
+  --runs $WORKDIR/runs \
+  --datapath "$DATA_WORKDIR/$DATA_NAME" \
+  --mace-off $MACE_OFF_PATH \
+  --num-train 100 \
+  --rep 0 \
+  --n-structures 20 \
+  --device cuda
+
+rm -rf "/tmp/$SLURM_JOB_ID"
