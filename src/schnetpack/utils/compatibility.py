@@ -15,6 +15,10 @@ def load_model(
     SchNetPack version. To ensure proper functionality, the Torch model object must include a version tag, such as
     spk_version="2.0.4".
 
+    Warning:
+        Model files are pickled PyTorch objects. Loading one executes code contained in the file, so only load
+        models from sources you trust.
+
     Args:
         model_path (str): Path to the saved model file.
         device (torch.device or str): Device on which to load the model. Defaults to "cpu".
