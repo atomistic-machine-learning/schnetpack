@@ -1,12 +1,13 @@
 units		real
 atom_style	atomic
-newton off
 thermo 1
 dump mydmp all atom 10 dump.lammpstrj
 boundary s s s
 read_data aspirin.data
+# deployed with: spkdeploy best_model deployed_model.pt2
+# with the plugin build, set LAMMPS_PLUGIN_PATH or add: plugin load /path/to/schnetpackplugin.so
 pair_style	schnetpack
-pair_coeff	* * deployed_model 6 1 8
+pair_coeff	* * deployed_model.pt2 6 1 8
 mass 1 12.0
 mass 2 1.0
 mass 3 16.0

@@ -1,0 +1,81 @@
+name: LAMMPS
+
+# Builds LAMMPS with pair_style schnetpack -- as a plugin, and patched in as the
+# container does -- and runs interfaces/lammps/tests/lammps_check.py, which compares
+# LAMMPS on 1, 2 and 4 MPI ranks to SchNetPack in Python.
+#
+# Disabled: it runs only when started by hand (Actions -> LAMMPS -> Run workflow).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  LAMMPS_REF: stable_30Sep2026_update1
+
+jobs:
+  lammps:
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [plugin, in-tree]
+    name: lammps (${{ matrix.build }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install MPI and Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mpich libmpich-dev ninja-build
+      - name: Install SchNetPack with CPU torch
+        # CPU-only torch: cmake then needs no CUDA toolkit, and the runner's disk
+        # holds it. find_package(Torch) may look for MKL headers, which the torch
+        # wheels do not ship.
+        run: |
+          pip install "torch>=2.14" --index-url https://download.pytorch.org/whl/cpu
+          pip install -e . mkl-include
+          echo "TORCH_PREFIX=$(python -c 'import torch; print(torch.utils.cmake_prefix_path)')" >> "$GITHUB_ENV"
+          echo "MKL_INCLUDE_DIR=$(python -c 'import sys; print(sys.prefix)')/include" >> "$GITHUB_ENV"
+      - name: Download LAMMPS
+        run: |
+          git clone --depth 1 --branch "$LAMMPS_REF" \
+            https://github.com/lammps/lammps.git "$RUNNER_TEMP/lammps"
+      - name: Build LAMMPS and the plugin
+        if: matrix.build == 'plugin'
+        run: |
+          cmake -S "$RUNNER_TEMP/lammps/cmake" -B "$RUNNER_TEMP/lammps/build" -G Ninja \
+            -D CMAKE_BUILD_TYPE=Release -D BUILD_MPI=on -D PKG_PLUGIN=on
+          cmake --build "$RUNNER_TEMP/lammps/build"
+          cmake -S interfaces/lammps -B build-plugin -G Ninja -D CMAKE_BUILD_TYPE=Release \
+            -D LAMMPS_HEADER_DIR="$RUNNER_TEMP/lammps/src" \
+            -D CMAKE_PREFIX_PATH="$TORCH_PREFIX" -D MKL_INCLUDE_DIR="$MKL_INCLUDE_DIR"
+          cmake --build build-plugin
+          echo "LAMMPS_PLUGIN_PATH=$PWD/build-plugin" >> "$GITHUB_ENV"
+      - name: Build LAMMPS with the pair style patched in
+        if: matrix.build == 'in-tree'
+        run: |
+          (cd interfaces/lammps && ./patch_lammps.sh "$RUNNER_TEMP/lammps")
+          cmake -S "$RUNNER_TEMP/lammps/cmake" -B "$RUNNER_TEMP/lammps/build" -G Ninja \
+            -D CMAKE_BUILD_TYPE=Release -D BUILD_MPI=on -D CMAKE_CXX_STANDARD=20 \
+            -D CMAKE_PREFIX_PATH="$TORCH_PREFIX" -D MKL_INCLUDE_DIR="$MKL_INCLUDE_DIR"
+          cmake --build "$RUNNER_TEMP/lammps/build"
+      - name: Compare LAMMPS to Python
+        run: |
+          python interfaces/lammps/tests/lammps_check.py \
+            --lmp "$RUNNER_TEMP/lammps/build/lmp" --mpirun mpirun.mpich \
+            --ranks 1 2 4 --workdir lammps_check
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lammps-check-${{ matrix.build }}
+          path: lammps_check

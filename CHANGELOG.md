@@ -154,7 +154,13 @@ LAMMPS with `spkdeploy` are unchanged.
 
 - Console scripts (`spktrain`, `spkpredict`, `spkmd`, `spkconvert`,
   `spkdeploy`) are `[project.scripts]` entry points. `spkconvert` and
-  `spkdeploy` moved into the package as `schnetpack.cli_scripts`.
+  `spkdeploy` moved into `schnetpack.cli`.
+- `spkdeploy model package.pt2 [--device cuda] [--dtype float64]` compiles a
+  potential with AOTInductor (`schnetpack.interfaces.lammps_interface`) instead
+  of writing TorchScript. The package holds energy, per-atom energies, forces
+  and the virial, and runs only with the torch version and on the device it was
+  built for, so it is built on the machine LAMMPS runs on. The LAMMPS pair
+  style is being rewritten to load it.
 - Optional dependency extras: `test`, `dev`, `doc` and `mace`. `black`,
   `pytest`, `pre-commit`, `protobuf` and `progressbar` are no longer installed
   as runtime dependencies.
@@ -166,6 +172,8 @@ LAMMPS with `spkdeploy` are unchanged.
 
 ### Fixed
 
+- `SO3net` and `PaiNN` in float64 created some tensors in float32, so
+  `SO3net` used `sqrt(0.5)` rounded to float32 (a relative error of about 2e-8).
 - `spkmd` was broken in every installed wheel and sdist, because the
   `md_configs` YAML files were not packaged.
 - `spktrain` raises an error if the early-stopping metric becomes NaN or

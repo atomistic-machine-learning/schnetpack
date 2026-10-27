@@ -3,147 +3,135 @@ LAMMPS Interface
 ================
 .. _lammps:
 
-The interface is designed according to the custom pair style approach for
-LAMMPs https://docs.lammps.org/Modify_pair.html [1] and it is adapted from the
-pair_nequip github repository https://github.com/mir-group/pair_nequip [2].
+SchNetPack potentials run in LAMMPS [1] through the pair style :code:`schnetpack`.
+:code:`spkdeploy` compiles a trained model with PyTorch's AOTInductor into a package
+that holds the energy, the per-atom energies, the forces and the virial, and the pair
+style runs that package without Python. Since the virial is computed, NPT simulations
+work, and the pair style runs on any number of MPI ranks.
+
+The pair style lives in :code:`interfaces/lammps` in the SchNetPack repository. Its
+first version was adapted from pair_nequip [2].
 
 
 Requirements
 ============
-For the installation of the LAMMPS interface we need the following pre-requisites:
 
-* **python** >= 3.12 with **schnetpack** >= 2.0, **pytorch** >= 2.5 and **mkl-include**
-* a C++17 compiler (e.g. GCC >= 9), **cmake** >= 3.16 and **make** or **ninja**
-* for GPU runs: a **CUDA** toolkit and **cuDNN** whose version matches the CUDA version
-  that your PyTorch build was compiled against
+* **torch** >= 2.14, the **same version** for :code:`spkdeploy` and for building
+  the pair style: a package runs only with the libtorch version that compiled it.
+* A C++20 compiler (torch >= 2.14 needs C++20), e.g. GCC 13, and **cmake** >= 3.20.
+* LAMMPS with the PLUGIN package (:code:`-D PKG_PLUGIN=on`), built with the same
+  compiler and MPI as the pair style.
+* For GPU runs: a CUDA toolkit that matches the CUDA version of torch, and a GPU
+  with compute capability 7.0 or higher, which AOTInductor's Triton kernels need.
 
-Make sure that standalone CUDA toolkit and the CUDA version of pytorch match!
-A CPU-only PyTorch build works as well and needs neither CUDA nor cuDNN.
+A CPU-only torch works as well. One environment for SchNetPack and the build is
+simplest::
 
-Standalone CUDA can be installed according to https://developer.nvidia.com/cuda-downloads,
-cuDNN according to https://docs.nvidia.com/deeplearning/cudnn/installation/latest/.
-
-We recommend to create a new environment for the matching version of pytorch-CUDA together
-with schnetpack and all dependencies. The following commands set up a corresponding conda
-environment called :code:`spk_lammps` (replace the CUDA version with the one you need)::
-
-    conda create -n spk_lammps python=3.12 cuda-toolkit=12.4 pytorch pytorch-cuda=12.4 mkl-include numpy -c pytorch -c nvidia
+    conda create -n spk_lammps python=3.12
     conda activate spk_lammps
-    pip install schnetpack
+    pip install "schnetpack[compile]" cmake
 
-The interface is built against LAMMPS stable releases. The most recently reported combination is
 
-    LAMMPS ``stable_22Jul2025_update5`` / PyTorch 2.13 (CUDA 13.2) / GCC 15 / C++17
+Building LAMMPS and the plugin
+==============================
+Build LAMMPS from a stable release with the PLUGIN package, plus MPI and whatever
+other packages you need::
 
-Downloading LAMMPS
-==================
-Please download LAMMPS directly from Github. We recommend to check out a stable release
-rather than the development branch::
+    git clone --depth 1 --branch stable https://github.com/lammps/lammps.git
+    cmake -S lammps/cmake -B lammps/build -D CMAKE_BUILD_TYPE=Release \
+        -D PKG_PLUGIN=on -D BUILD_MPI=on
+    cmake --build lammps/build -j$(nproc)
 
-    git clone --depth 1 --branch stable_22Jul2025_update5 https://github.com/lammps/lammps.git
+Then build the pair style as a plugin, against the LAMMPS sources and the torch of
+your environment::
 
-Patching SchNetPack into LAMMPS
-===============================
-We provide a simple patching script for including our interface into LAMMPS.
+    cd <path/to/schnetpack>/interfaces/lammps
+    cmake -S . -B build -D CMAKE_BUILD_TYPE=Release \
+        -D LAMMPS_HEADER_DIR=<path/to/lammps>/src \
+        -D CMAKE_PREFIX_PATH="$(python -c 'import torch; print(torch.utils.cmake_prefix_path)')"
+    cmake --build build
 
-If you have downloaded the schnetpack repository from Github, move to::
+This writes :code:`build/schnetpackplugin.so`. LAMMPS loads every plugin in the
+directories of :code:`LAMMPS_PLUGIN_PATH` at startup::
 
-    cd <path/to/schnetpack/interfaces/lammps>
+    export LAMMPS_PLUGIN_PATH=<path/to/schnetpack>/interfaces/lammps/build
 
-**Or** if you do not know where the schnetpack repository is located, download the files directly::
+or load it in the input file with :code:`plugin load /path/to/schnetpackplugin.so`.
+After an update of torch, rebuild the plugin and deploy the models again.
 
-    mkdir spk_lammps
-    cd spk_lammps
-    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/pair_schnetpack.cpp
-    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/pair_schnetpack.h
-    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/patch_lammps.sh
-    chmod u+x patch_lammps.sh
+**Alternatively**, :code:`patch_lammps.sh` builds the pair style into LAMMPS itself,
+e.g. for static builds. It copies the sources into :code:`<path/to/lammps>/src` and
+links libtorch; configure LAMMPS with :code:`-D CMAKE_CXX_STANDARD=20` and
+:code:`-D CMAKE_PREFIX_PATH` as above::
 
-Now we can run the patching script::
-
+    cd <path/to/schnetpack>/interfaces/lammps
     ./patch_lammps.sh <path/to/lammps>
 
-Configure LAMMPS
-================
-In order to configure and build LAMMPS, we need to move to the location of our LAMMPS folder::
 
-    cd <path/to/lammps>
+Deploying a model
+=================
+:code:`spkdeploy` compiles a trained model for one device. The package runs only with
+the torch version it was compiled with and, on GPU, on the GPU architecture it was
+compiled for, so run it **on the machine that runs LAMMPS**::
 
-Next we create the build folder and :code:`cd` into it::
+    spkdeploy best_model deployed_model.pt2                  # CPU, float32
+    spkdeploy best_model deployed_model.pt2 --device cuda    # GPU
+    spkdeploy best_model deployed_model.pt2 --dtype float64
 
-    mkdir build
-    cd build
+Compiling takes a few tens of seconds. Before the package is written, it is checked
+against the model.
 
-Now the build-files can be created. libtorch requires C++17, so the standard is set explicitly.
-With conda (`recommended`)::
+Supported are :code:`NeuralNetworkPotential` models with a SchNet, PaiNN or SO3net
+representation, an :code:`Atomwise` energy head and :code:`Forces`, and with
+:code:`AddOffsets` postprocessing. Models whose energy has other terms (electrostatics,
+ZBL), that embed a total charge or spin, or that postprocess the energy otherwise are
+rejected with an error, as are ensembles.
 
-    cmake ../cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 \
-        -DCMAKE_PREFIX_PATH=`python -c 'import torch;print(torch.utils.cmake_prefix_path)'` \
-        -DMKL_INCLUDE_DIR="$CONDA_PREFIX/include"
 
-**Or** with pip::
+Running LAMMPS
+==============
+The pair style takes the package and the atomic number of each LAMMPS atom type, in
+the order of the types::
 
-    cmake ../cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 \
-        -DCMAKE_PREFIX_PATH=`python -c 'import torch;print(torch.utils.cmake_prefix_path)'` \
-        -DMKL_INCLUDE_DIR=`python -c 'import sysconfig;from pathlib import Path;print(Path(sysconfig.get_paths()["include"]).parent)'`
+    pair_style  schnetpack
+    pair_coeff  * * deployed_model.pt2 6 1 8
 
-Additional LAMMPS packages can be enabled as usual, they do not interfere with the interface,
-e.g.::
+The aspirin example in :code:`interfaces/lammps/examples/aspirin` runs a short MD
+simulation with a model trained on rMD17::
 
-    cmake ../cmake ... -DPKG_KOKKOS=yes -DPKG_MEAM=yes -DKokkos_ENABLE_SERIAL=yes -DKokkos_ENABLE_OPENMP=yes
+    cd <path/to/schnetpack>/interfaces/lammps/examples/aspirin
+    spkdeploy best_model deployed_model.pt2
+    <path/to/lmp> -in aspirin_md.in
 
-Build LAMMPS
-============
-Finally we can build our patched LAMMPS with::
+Per-atom energies are available through :code:`compute pe/atom`. With the virial,
+pressure and NPT work, e.g. for a periodic system::
 
-    cmake --build . -j$(nproc)
+    fix  1 all npt temp 300.0 300.0 $(100.0*dt) iso 1.0 1.0 $(1000.0*dt)
 
-This will create a runfile called `lmp` in the build folder. By calling this runfile we can now
-start experiments in LAMMPS.
+Per-atom virials (:code:`compute stress/atom`) are not supported.
 
-Creating a deployed Model
-=========================
-Since standard :code:`pytroch` models cannot directly be used within LAMMPS, we need to deploy our trained model first. For
-this purpose, we provide a script, that has already been installed with :code:`schnetpack`. A model trained on the rMD17 dataset
-for Aspirin can be found in the SchNetPack repository.
-If you have downloaded the schnetpack repository from Github, move to the Aspirin examples folder::
+Parallel runs
+-------------
+By default the pair style decomposes the domain like any LAMMPS potential and runs on
+any number of MPI ranks::
 
-        cd <path/to/schnetpack>/interfaces/lammps/examples/aspirin
+    mpirun -np 4 <path/to/lmp> -in input.in
 
-**Or** if you do not know where the SchNetPack folder is located, create an empty folder and download the example files
-with::
+The ghost atoms of each rank are part of its graph. A message-passing model reaches
+:code:`n_interactions` cutoffs, so the pair style raises the ghost cutoff to that
+receptive field plus the neighbor skin, and the energies and forces are those of the
+whole system on any number of ranks. This needs :code:`newton pair on`, the LAMMPS
+default.
 
-    mkdir aspirin-example
-    cd aspirin-example
-    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/examples/aspirin/aspirin_md.in
-    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/examples/aspirin/aspirin.data
-    wget https://raw.githubusercontent.com/atomistic-machine-learning/schnetpack/master/interfaces/lammps/examples/aspirin/best_model
+For small periodic boxes, the ghost shell can be larger than the box itself. Then the
+pair style can instead run on a single rank with only the atoms of the box and
+periodic shifts, which is cheaper::
 
-Next we can run the deploy script::
+    pair_style  schnetpack no_domain_decomposition
 
-    spkdeploy ./best_model ./deployed_model
+On GPU, the ranks on a node take turns over its GPUs. On CPU, each rank runs with
+:code:`OMP_NUM_THREADS` threads; set it so that the ranks do not oversubscribe the cores.
 
-:code:`./best_model` denotes the path to the trained SchNetPack model and :code:`./deployed_model` is the target path of the deployed model
-
-Running LAMMPS with SchNetPack Models
-=====================================
-After installing LAMMPS and deploying the trained model, we are ready to run some experiments. For this we have prepared
-an input file and an input structure in the examples folder. The input file is configured to run a small MD simulation
-starting with the aspirin structure, that is defined in `aspirin.data`. The new :code:`schnetpack` interface can be used
-by setting the :code:`pair_style` and the :code:`pair_coeff` in the input file::
-
-    pair_style	schnetpack
-    pair_coeff	* * deployed_model 6 1 8
-
-The :code:`pair_style` argument tells LAMMPS to use the new :code:`schnetpack` interface and with :code:`pair_coeff` we
-can define the settings for the interface. :code:`deployed_model` indicates the path to our deployed model. The
-arguments after the model path  indicate, in order, the atomic numbers corresponding to the LAMMPS atom types defined in
-`aspirin.data`. We need to provide exactly as many atomic numbers, as we have atom types in the structure input file.
-For the example of `aspirin.data` we match atom type 1 to carbon, atom type 2 to hydrogen and atom type 3 to oxygen.
-The order of atom types in the input file must be known by the user, that runs the experiment. Finally we can run our
-first MD simulation in LAMMPS with the use of the :code:`schnetpack` interface::
-
-    <path/to/lmp> -in ./aspirin_md.in
 
 References
 ==========

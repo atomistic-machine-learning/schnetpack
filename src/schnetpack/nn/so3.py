@@ -128,7 +128,10 @@ class RealSphericalHarmonics(nn.Module):
         ABm = torch.cat(
             [
                 torch.flip(Bm, (1,)),
-                math.sqrt(0.5) * torch.ones((Am.shape[0], 1), device=directions.device),
+                math.sqrt(0.5)
+                * torch.ones(
+                    (Am.shape[0], 1), device=directions.device, dtype=directions.dtype
+                ),
                 Am,
             ],
             dim=1,
