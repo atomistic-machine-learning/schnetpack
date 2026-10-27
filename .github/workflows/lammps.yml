@@ -2,27 +2,11 @@ name: LAMMPS
 
 # Builds LAMMPS with pair_style schnetpack -- as a plugin, and patched in as the
 # container does -- and runs interfaces/lammps/tests/lammps_check.py, which compares
-# LAMMPS on 1, 2 and 4 MPI ranks to SchNetPack in Python. Building LAMMPS takes
-# minutes, so this runs only when the pair style or the deploy code changes, weekly,
-# and on demand.
+# LAMMPS on 1, 2 and 4 MPI ranks to SchNetPack in Python.
+#
+# Disabled: it runs only when started by hand (Actions -> LAMMPS -> Run workflow).
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - "interfaces/lammps/**"
-      - "src/schnetpack/interfaces/lammps_interface.py"
-      - "src/schnetpack/model/compile.py"
-      - ".github/workflows/lammps.yml"
-  pull_request:
-    paths:
-      - "interfaces/lammps/**"
-      - "src/schnetpack/interfaces/lammps_interface.py"
-      - "src/schnetpack/model/compile.py"
-      - ".github/workflows/lammps.yml"
-  schedule:
-    # Monday 05:00 UTC, after the CI workflow
-    - cron: "0 5 * * 1"
   workflow_dispatch:
 
 permissions:

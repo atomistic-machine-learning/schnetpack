@@ -65,9 +65,9 @@ compute pea all pe/atom
 compute pesum all reduce sum c_pea
 compute pvir all pressure NULL virial
 # every compute that a print or dump reads after a run must be evaluated during
-# the run, which thermo output does
-thermo_style custom step pe c_pesum press vol c_pvir[1] c_pvir[2] c_pvir[3] &
-    c_pvir[4] c_pvir[5] c_pvir[6]
+# the run, which thermo output does; etotal needs the thermo temperature
+thermo_style custom step temp pe etotal c_pesum press vol c_pvir[1] c_pvir[2] &
+    c_pvir[3] c_pvir[4] c_pvir[5] c_pvir[6]
 thermo_modify norm no
 """
 
@@ -169,6 +169,8 @@ def reference(model, atoms):
 
 def cores():
     """Cores this process may use; under Slurm that is the job's share of the node."""
+    if "SLURM_CPUS_PER_TASK" in os.environ:
+        return int(os.environ["SLURM_CPUS_PER_TASK"])
     if hasattr(os, "sched_getaffinity"):
         return len(os.sched_getaffinity(0))
     return os.cpu_count() or 1
@@ -177,7 +179,8 @@ def cores():
 def run_lammps(args, workdir, name, script, ranks):
     """Run LAMMPS on `script` and return its exit code, output and RESULT values.
 
-    A run that takes longer than --timeout is killed and returns the exit code None.
+    A run that takes longer than --timeout is killed, and it returns the exit code None
+    like a run on another number of MPI ranks than `ranks`.
     """
     (workdir / f"in.{name}").write_text(script)
     command = [args.lmp, "-in", f"in.{name}", "-log", f"log.{name}"]
@@ -203,6 +206,15 @@ def run_lammps(args, workdir, name, script, ranks):
         os.killpg(process.pid, signal.SIGKILL)
         output, _ = process.communicate()
         output += f"\nkilled after {args.timeout:g} s, see log.{name}"
+        code = None
+    # if mpirun and the MPI library of LAMMPS do not match, each process runs LAMMPS
+    # on its own as rank 0 of 1
+    grids = re.findall(r"(\d+) by (\d+) by (\d+) MPI processor grid", output)
+    used = {math.prod(int(n) for n in grid) for grid in grids}
+    if used - {ranks}:
+        output += (
+            f"\nran on {', '.join(map(str, sorted(used)))} MPI rank(s), not {ranks}"
+        )
         code = None
     results = [line for line in output.splitlines() if line.startswith("RESULT")]
     values = [float(v) for v in results[-1].split()[1:]] if results else None
