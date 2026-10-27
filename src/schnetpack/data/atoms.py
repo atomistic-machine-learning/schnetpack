@@ -130,7 +130,10 @@ class ASEAtomsData(torch.utils.data.Dataset):
     @property
     def load_properties(self) -> list[str]:
         if self._load_properties is None:
-            return self.available_properties
+            # every property, as read with the units in __init__: __getitem__ asks
+            # for this on every sample, and available_properties reads the db
+            # metadata each time
+            return list(self._units)
         return self._load_properties
 
     @load_properties.setter

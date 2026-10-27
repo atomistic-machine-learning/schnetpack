@@ -70,6 +70,7 @@ class CompiledPotential:
         self.model = model
         self.compile_kwargs = {"dynamic": True, **compile_kwargs}
         self._graphs = {}
+        self._slots = None
 
     @property
     def do_postprocessing(self) -> bool:
@@ -80,12 +81,34 @@ class CompiledPotential:
         self.model.do_postprocessing = value
 
     def __getstate__(self):
-        return {**self.__dict__, "_graphs": {}}
+        return {**self.__dict__, "_graphs": {}, "_slots": None}
+
+    def _tensors(self):
+        """The model's parameters and buffers by name.
+
+        ``named_parameters()`` and ``named_buffers()`` walk the module tree, ~0.12 ms per
+        call for PaiNN, a fifth of a small call through CUDA graphs. So where each tensor
+        lives (module and attribute) is looked up once; the traced graphs assume a fixed
+        module structure anyway. The tensors are read from their modules on every call,
+        so a parameter replaced by another tensor is still picked up.
+        """
+        if self._slots is None:
+            self._slots = tuple(
+                tuple(
+                    (name, self.model.get_submodule(owner), attr)
+                    for name, _ in named()
+                    for owner, _, attr in [name.rpartition(".")]
+                )
+                for named in (self.model.named_parameters, self.model.named_buffers)
+            )
+        param_slots, buffer_slots = self._slots
+        params = {name: m._parameters[attr] for name, m, attr in param_slots}
+        buffers = {name: m._buffers[attr] for name, m, attr in buffer_slots}
+        return params, buffers
 
     def __call__(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         inputs = {k: v for k, v in inputs.items() if isinstance(v, torch.Tensor)}
-        params = dict(self.model.named_parameters())
-        buffers = dict(self.model.named_buffers())
+        params, buffers = self._tensors()
         key = (
             self.model.training,
             self.model.do_postprocessing,
