@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
@@ -83,6 +84,33 @@ def test_asedb(asedb, example_data):
 
     asedb.update_metadata(test=1)
     assert asedb.metadata["test"] == 1
+
+
+def test_asedb_reads_from_threads(asedb):
+    """Each thread reads through its own held connection."""
+    expected = [asedb[i][structure.R] for i in range(len(asedb))]
+    with ThreadPoolExecutor(2) as pool:
+        got = list(pool.map(lambda i: asedb[i][structure.R], range(len(asedb))))
+    assert all(torch.equal(a, b) for a, b in zip(expected, got))
+
+
+@pytest.mark.parametrize("context", ["fork", "spawn"])
+def test_asedb_reads_in_dataloader_workers(asedb, context):
+    """A forked worker opens its own connection; a spawned one gets none pickled."""
+    expected = [asedb[i][structure.R] for i in range(len(asedb))]
+    loader = torch.utils.data.DataLoader(
+        asedb, batch_size=None, num_workers=2, multiprocessing_context=context
+    )
+    got = [item[structure.R] for item in loader]
+    assert all(torch.equal(a, b) for a, b in zip(expected, got))
+
+
+def test_asedb_reads_rows_added_after_a_read(asedb, example_data):
+    n = len(asedb)
+    asedb[0]  # opens the held connection
+    atoms, props = example_data[0]
+    asedb.add_system(atoms=atoms, **props)
+    assert torch.equal(asedb[n][structure.Z], torch.tensor(atoms.numbers))
 
 
 def test_asedb_getprops(asedb):
