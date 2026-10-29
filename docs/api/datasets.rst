@@ -25,4 +25,5 @@ Materials
     :template: classtemplate.rst
 
     MaterialsProject
+    MPTraj
     OrganicMaterialsDatabase

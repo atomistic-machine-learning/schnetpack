@@ -1,0 +1,17 @@
+# @package data
+defaults:
+  - custom
+
+dataset:
+  _target_: schnetpack.datasets.MPTraj
+  datapath: ${run.data_dir}/mptraj.db  # data_dir is specified in train.yaml
+
+# GroupSplit on the material, so that frames of the same relaxation never leak
+# across train/val/test. Split sizes count materials (~146k), not frames.
+splitting:
+  _target_: schnetpack.data.GroupSplit
+  splitting_key: material_idx
+
+batch_size: 32
+num_train: 0.9
+num_val: 0.05

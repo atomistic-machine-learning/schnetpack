@@ -439,7 +439,8 @@ class ASEAtomsData(torch.utils.data.Dataset):
                 `available_properties` of the dataset.
 
         """
-        self._add_system(atoms, atoms_metadata, **properties)
+        with connect(self.datapath, use_lock_file=False) as conn:
+            self._add_system(conn, atoms, atoms_metadata, **properties)
 
     def add_systems(
         self,
@@ -468,19 +469,23 @@ class ASEAtomsData(torch.utils.data.Dataset):
         if atoms_metadata_list is None:
             atoms_metadata_list = [{}] * len(property_list)
 
-        for atoms, prop, atoms_metadata in zip(
-            atoms_list, property_list, atoms_metadata_list
-        ):
-            self._add_system(atoms, atoms_metadata, **prop)
+        # One connection for all systems: ASE then commits every 5000 writes
+        # instead of once per system, which is ~20x faster for large datasets.
+        with connect(self.datapath, use_lock_file=False) as conn:
+            for atoms, prop, atoms_metadata in zip(
+                atoms_list, property_list, atoms_metadata_list
+            ):
+                self._add_system(conn, atoms, atoms_metadata, **prop)
 
     def _add_system(
         self,
+        conn,
         atoms: Atoms | None = None,
         atoms_metadata: dict[str, Any] | None = None,
         **properties,
     ):
         """
-        Add systems to DB.
+        Add systems to DB through the open connection `conn`.
         """
         if atoms is None:
             try:
@@ -495,25 +500,24 @@ class ASEAtomsData(torch.utils.data.Dataset):
         if atoms_metadata is None:
             atoms_metadata = {}
 
-        with connect(self.datapath, use_lock_file=False) as conn:
-            prop_keys = conn.metadata["_property_unit_dict"].keys()
+        prop_keys = conn.metadata["_property_unit_dict"].keys()
 
-            valid_props = set(prop_keys).union(
-                {structure.Z, structure.R, structure.cell, structure.pbc}
-            )
-            for pname in properties:
-                if pname not in valid_props:
-                    logger.warning(
-                        f"Property `{pname}` is not defined for this dataset and will be ignored."
-                    )
+        valid_props = set(prop_keys).union(
+            {structure.Z, structure.R, structure.cell, structure.pbc}
+        )
+        for pname in properties:
+            if pname not in valid_props:
+                logger.warning(
+                    f"Property `{pname}` is not defined for this dataset and will be ignored."
+                )
 
-            data = {}
-            for pname in prop_keys:
-                if pname not in properties:
-                    raise AtomsDataError("Required property missing: " + pname)
-                data[pname] = properties[pname]
+        data = {}
+        for pname in prop_keys:
+            if pname not in properties:
+                raise AtomsDataError("Required property missing: " + pname)
+            data[pname] = properties[pname]
 
-            conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
+        conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
 
 
 class DownloadableASEAtomsData(ASEAtomsData, ABC):
