@@ -321,6 +321,10 @@ class AllToAllNeighborList(Transform):
 
     Periodic systems need a real neighbor list — cells are ignored here and
     offsets are zero.
+
+    On a collated batch (with ``idx_m``) it builds the pairs within every
+    structure at once, on the batch's device, in the order and with the keys
+    that collating per-structure lists gives.
     """
 
     is_preprocessor: bool = True
@@ -330,6 +334,8 @@ class AllToAllNeighborList(Transform):
         self,
         inputs: dict[str, torch.Tensor],
     ) -> dict[str, torch.Tensor]:
+        if properties.idx_m in inputs:
+            return self._batch(inputs)
         n_atoms = inputs[properties.Z].shape[0]
         idx = torch.arange(n_atoms)
         idx_i = idx.repeat_interleave(n_atoms)
@@ -339,6 +345,28 @@ class AllToAllNeighborList(Transform):
         inputs[properties.idx_j] = idx_j[keep]
         inputs[properties.offsets] = torch.zeros(
             (n_atoms * (n_atoms - 1), 3), dtype=inputs[properties.R].dtype
+        )
+        return inputs
+
+    @staticmethod
+    def _batch(inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        n = inputs[properties.n_atoms]
+        pairs = n * (n - 1)
+        # the structure of every pair, and its place among the structure's pairs
+        s = torch.repeat_interleave(torch.arange(n.shape[0], device=n.device), pairs)
+        k = torch.arange(s.shape[0], device=n.device) - (pairs.cumsum(0) - pairs)[s]
+        # pair k of an n-atom structure: i = k // (n - 1), j the (k % (n - 1))-th
+        # atom other than i
+        i = torch.div(k, n[s] - 1, rounding_mode="floor")
+        j = k - i * (n[s] - 1)
+        j = j + (j >= i).to(j.dtype)
+        first = (n.cumsum(0) - n)[s]
+        inputs[properties.idx_i] = first + i
+        inputs[properties.idx_j] = first + j
+        inputs[properties.lidx_i] = i
+        inputs[properties.lidx_j] = j
+        inputs[properties.offsets] = torch.zeros(
+            (s.shape[0], 3), dtype=inputs[properties.R].dtype, device=n.device
         )
         return inputs
 

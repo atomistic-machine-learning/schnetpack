@@ -4,6 +4,7 @@ import torch
 from schnetpack import properties
 from schnetpack.dynamics import DatasetStructures, StatisticsStructures
 from schnetpack.generative import MASK, GaussianPrior, MaskPrior
+from schnetpack.transform import AllToAllNeighborList
 
 
 def molecule(z):
@@ -35,6 +36,22 @@ def test_dataset_structures_draw_every_structure_once_per_pass():
     assert sorted(first + second) == [2, 3, 4]
     # the next pass starts over
     assert structures(3)[properties.n_atoms].shape == (3,)
+
+
+def test_all_to_all_on_the_batch_matches_the_collated_per_structure_lists():
+    data = [*DATASET, molecule([1]), molecule([7, 1])]  # one without pairs
+    nl = AllToAllNeighborList()
+    per_structure = DatasetStructures([nl(dict(m)) for m in data], shuffle=False)
+    on_batch = DatasetStructures(data, shuffle=False, transforms=[nl])
+    expected, batch = per_structure(len(data)), on_batch(len(data))
+    for key in (
+        properties.idx_i,
+        properties.idx_j,
+        properties.lidx_i,
+        properties.lidx_j,
+        properties.offsets,
+    ):
+        assert torch.equal(batch[key], expected[key]), key
 
 
 def test_dataset_structures_in_order_wrap_around():
