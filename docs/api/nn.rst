@@ -96,6 +96,8 @@ Ops
     :nosignatures:
 
     scatter_add
+    message_sum
+    pair_product
 
 Factory functions
 -----------------
