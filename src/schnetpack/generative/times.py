@@ -8,6 +8,7 @@ the density as a plain ``(n, device) -> (n,)`` hook, so any callable works. Deta
 """
 
 import abc
+import math
 
 import torch
 
@@ -68,8 +69,9 @@ class LogNormalSigmaTimes(TimeSampler):
 
     Defaults are GPFF's (``mean=-0.7, std=1.2``): median sigma ~0.5 A. The
     right mean for a dataset is set by its length scale. Draws outside
-    [sigma_min, sigma_max] are clamped onto the bounds, or rejected and
-    redrawn with ``truncate=True`` (GPFF's choice at its upper end).
+    [sigma_min, sigma_max] are clamped onto the bounds, or, with ``truncate=True``
+    (GPFF's choice at its upper end), never drawn: the law is truncated (sampled
+    by its inverse CDF, the distribution that redrawing every miss gives).
     """
 
     def __init__(
@@ -89,7 +91,7 @@ class LogNormalSigmaTimes(TimeSampler):
             std: standard deviation of log sigma
             sigma_min: lower bound on the draws (default: sigma(t_min))
             sigma_max: upper bound on the draws (default: sigma(t_max))
-            truncate: reject and redraw outside [sigma_min, sigma_max]
+            truncate: truncate the law to [sigma_min, sigma_max]
                 rather than clamping onto it
         """
         if std <= 0.0:
@@ -117,26 +119,28 @@ class LogNormalSigmaTimes(TimeSampler):
             self.mean + self.std * torch.randn(n, device=device, dtype=torch.float64)
         )
 
+    def _cdf(self, sigma: float) -> float:
+        """CDF of the untruncated log-normal at sigma."""
+        if sigma <= 0.0:
+            return 0.0
+        z = (math.log(sigma) - self.mean) / self.std
+        return 0.5 * math.erfc(-z / math.sqrt(2.0))
+
     def __call__(self, n, device=None):
-        sigma = self._draw_sigma(n, device)
         if self.truncate:
-            # Resample only the rows that missed, so every draw stays an
-            # independent sample of the truncated law. Bounded because each
-            # round keeps a fixed fraction; the cap is a guard against a
-            # range so far into the tail that acceptance is ~0.
-            for _ in range(100):
-                bad = (sigma < self.sigma_min) | (sigma > self.sigma_max)
-                if not bool(bad.any()):
-                    break
-                sigma = torch.where(
-                    bad, self._draw_sigma(n, device).to(sigma.dtype), sigma
-                )
-            else:
+            # The truncated law by its inverse CDF: the distribution that
+            # redrawing every miss gives, with a fixed number of operations
+            # and no host sync (so it can run inside a CUDA graph).
+            lo, hi = self._cdf(self.sigma_min), self._cdf(self.sigma_max)
+            if hi - lo < 1e-6:
                 raise RuntimeError(
                     f"log-normal sigma (mean={self.mean}, std={self.std}) almost "
                     f"never lands in [{self.sigma_min:g}, {self.sigma_max:g}] — "
                     "check the mean against the data's length scale"
                 )
+            u = lo + (hi - lo) * torch.rand(n, device=device, dtype=torch.float64)
+            sigma = torch.exp(self.mean + self.std * torch.special.ndtri(u))
+            sigma = sigma.clamp(self.sigma_min, self.sigma_max)  # rounding at the ends
         else:
-            sigma = sigma.clamp(self.sigma_min, self.sigma_max)
+            sigma = self._draw_sigma(n, device).clamp(self.sigma_min, self.sigma_max)
         return self.process.schedule.t_of_sigma(sigma.to(torch.get_default_dtype()))
