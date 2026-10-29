@@ -141,6 +141,12 @@ class ModelOutput(nn.Module):
             )
         return prediction[keep], reference[keep]
 
+    @property
+    def loss_keys(self) -> tuple[str, ...]:
+        """Batch keys the loss reads besides the target (e.g. a per-row weight);
+        :func:`extract_targets` copies those the batch has."""
+        return ()
+
     def calculate_loss(self, pred, target):
         if self.loss_weight == 0 or self.loss_fn is None:
             return 0.0
@@ -207,6 +213,9 @@ def extract_targets(
                         f"{type(mask).__name__} of output {output.name!r} reads "
                         f"{key!r}, which the batch lacks"
                     )
+                targets[key] = batch[key]
+        for key in output.loss_keys:  # e.g. a loss weight; taken if the batch has it
+            if key in batch:
                 targets[key] = batch[key]
     return targets
 

@@ -24,10 +24,24 @@ __all__ = [
 ]
 
 
+def _segment_mean(
+    x: torch.Tensor, weight: torch.Tensor, idx_m: torch.Tensor, n_structures: int
+) -> torch.Tensor:
+    """Weighted mean of the rows of x per structure (idx_m), no host sync."""
+    total = weight.new_zeros(n_structures).index_add_(0, idx_m, weight)
+    sums = x.new_zeros(n_structures, x.shape[1]).index_add_(
+        0, idx_m, weight[:, None] * x
+    )
+    return sums / total.clamp(min=torch.finfo(total.dtype).tiny)[:, None]
+
+
 class SubtractCenterOfMass(Transform):
     """
     Subtract center of mass from positions.
 
+    Works on one structure, or on a collated batch (``idx_m`` present, e.g. the
+    padded batches of :class:`~schnetpack.lightning.DeviceAtomsDataModule`), structure by
+    structure on the batch's device.
     """
 
     is_preprocessor: bool = True
@@ -35,15 +49,26 @@ class SubtractCenterOfMass(Transform):
 
     def __init__(self):
         super().__init__()
+        self._masses: dict[tuple, torch.Tensor] = {}
 
     def forward(
         self,
         inputs: dict[str, torch.Tensor],
     ) -> dict[str, torch.Tensor]:
-        masses = torch.tensor(atomic_masses[inputs[structure.Z]])
-        inputs[structure.position] -= (
-            masses.unsqueeze(-1) * inputs[structure.position]
-        ).sum(0) / masses.sum()
+        R = inputs[structure.position]
+        if structure.idx_m not in inputs:
+            masses = torch.tensor(atomic_masses[inputs[structure.Z]])
+            inputs[structure.position] -= (masses.unsqueeze(-1) * R).sum(
+                0
+            ) / masses.sum()
+            return inputs
+        key = (R.device, R.dtype)  # the mass table on the batch's device, once
+        if key not in self._masses:
+            self._masses[key] = torch.tensor(atomic_masses, dtype=R.dtype).to(R.device)
+        masses = self._masses[key][inputs[structure.Z]]
+        idx_m = inputs[structure.idx_m]
+        center = _segment_mean(R, masses, idx_m, inputs[structure.n_atoms].shape[0])
+        inputs[structure.position] = R - center[idx_m]
         return inputs
 
 
@@ -51,6 +76,8 @@ class SubtractCenterOfGeometry(Transform):
     """
     Subtract center of geometry from positions.
 
+    Works on one structure, or on a collated batch (``idx_m`` present), structure
+    by structure.
     """
 
     is_preprocessor: bool = True
@@ -60,7 +87,14 @@ class SubtractCenterOfGeometry(Transform):
         self,
         inputs: dict[str, torch.Tensor],
     ) -> dict[str, torch.Tensor]:
-        inputs[structure.position] -= inputs[structure.position].mean(0)
+        R = inputs[structure.position]
+        if structure.idx_m not in inputs:
+            inputs[structure.position] -= R.mean(0)
+            return inputs
+        idx_m = inputs[structure.idx_m]
+        ones = torch.ones(R.shape[0], dtype=R.dtype, device=R.device)
+        center = _segment_mean(R, ones, idx_m, inputs[structure.n_atoms].shape[0])
+        inputs[structure.position] = R - center[idx_m]
         return inputs
 
 

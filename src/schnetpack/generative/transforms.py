@@ -24,7 +24,10 @@ class Diffuse(Transform):
     """
     Noise every variable of a structure at one shared time, in order.
 
-    Runs per structure, before collation. One time is drawn per structure and
+    Runs per structure before collation, or on a collated batch (one with
+    ``idx_m``, e.g. the padded batches of
+    :class:`~schnetpack.lightning.DeviceAtomsDataModule`, where rows marked as padding
+    get weight 0). One time is drawn per structure and
     each variable is noised at it, reading x0 through its view and writing
     x_t back; each variable sees the structure the ones before it left. Writes
     for every variable its x_t (into the structure), its label and its loss
@@ -105,17 +108,23 @@ class Diffuse(Transform):
         return torch.stack(columns, dim=-1) if columns else None
 
     def forward(self, inputs):
+        # One structure (the data pipeline) or a collated batch (idx_m present),
+        # e.g. the padded batches of DeviceAtomsDataModule: one time per structure,
+        # spread to the rows through idx_m, and padding rows weighted 0.
+        idx_m = inputs.get(properties.idx_m)
         first = self.variables[0].read(inputs)
-        t = self.sample_t(1, first.device)  # one time for the structure
-        n_atoms, floating = None, None
+        n_structures = 1 if idx_m is None else inputs[properties.n_atoms].shape[0]
+        t = self.sample_t(n_structures, first.device)
+        floating = None
         for v in self.variables:
             x0 = v.read(inputs)
             dtype = x0.dtype if x0.is_floating_point() else t.dtype
             if floating is None and x0.is_floating_point():
                 floating = dtype
-            t_rows = t.to(dtype).repeat(x0.shape[0])
-            if v.per == "atom" and n_atoms is None:
-                n_atoms = x0.shape[0]
+            if idx_m is None:
+                t_rows = t.to(dtype).repeat(x0.shape[0])
+            else:
+                t_rows = (t[idx_m] if v.per == "atom" else t).to(dtype)
             # the batch goes to the prior, which may read the layout: running
             # per structure there is no idx_m, and the whole leading axis is
             # the one structure
@@ -128,19 +137,26 @@ class Diffuse(Transform):
             schedule = v.noising.schedule
             inputs = v.write(inputs, x_t)
             inputs[v.label_key] = v.parametrization.target(schedule, x0, x1, t_rows)
-            inputs[v.weight_key] = (
+            weight = (
                 v.weight(schedule, t_rows, x_t)
                 if v.weight is not None
                 else torch.ones_like(t_rows)
             )
+            mask = inputs.get(
+                properties.atom_mask if v.per == "atom" else properties.structure_mask
+            )
+            inputs[v.weight_key] = weight if mask is None else weight * mask.to(weight)
             if self.keep_clean:
                 inputs[v.clean_key] = x0
 
         t = t.to(floating or t.dtype)
-        if properties.Z in inputs:
-            n_atoms = inputs[properties.Z].shape[0]
-        if n_atoms is not None:
-            inputs[self.time_key] = t.repeat(n_atoms)
+        if idx_m is not None:
+            inputs[self.time_key] = t[idx_m]
+        elif properties.Z in inputs:
+            inputs[self.time_key] = t.repeat(inputs[properties.Z].shape[0])
+        elif any(v.per == "atom" for v in self.variables):
+            atom_rows = next(v for v in self.variables if v.per == "atom")
+            inputs[self.time_key] = t.repeat(atom_rows.read(inputs).shape[0])
         if self.structure_time_key is not None:
             inputs[self.structure_time_key] = t
         return inputs
