@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 import schnetpack.nn as snn
 import schnetpack.properties as properties
+from schnetpack.nn.ops.radial_filter import gaussian_band, gaussian_rbf_linear
 
 __all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
 
@@ -130,6 +131,10 @@ class PaiNN(nn.Module):
 
     """
 
+    # (start, spacing, half_band) of the banded filter, or None for the dense one; a
+    # class default, so that models pickled before the option load
+    filter_band: tuple[float, float, int] | None = None
+
     def __init__(
         self,
         n_atom_basis: int,
@@ -143,6 +148,7 @@ class PaiNN(nn.Module):
         norm_epsilon: float = 0.0,
         nuclear_embedding: nn.Module | None = None,
         electronic_embeddings: list | None = None,
+        banded_filter: bool = False,
     ):
         """
         Args:
@@ -165,6 +171,13 @@ class PaiNN(nn.Module):
             nuclear_embedding: custom nuclear embedding (e.g. spk.nn.embeddings.NuclearEmbedding)
             electronic_embeddings: list of electronic embeddings. E.g. for spin and
                 charge (see spk.nn.embeddings.ElectronicEmbedding)
+            banded_filter: evaluate the filter network on each pair's band of
+                Gaussians (:func:`schnetpack.nn.ops.radial_filter.gaussian_rbf_linear`):
+                the same filters (dropped terms below 1e-9 of their weight), and a
+                large saving with many narrow Gaussians, e.g. 600 on 150 A. Needs an
+                evenly spaced, non-trainable ``GaussianRBF``; runs on CUDA with
+                Triton, and densely where the distances need a gradient (forces),
+                on CPU and under TorchScript.
         """
         super().__init__()
 
@@ -183,6 +196,19 @@ class PaiNN(nn.Module):
             electronic_embeddings = []
         electronic_embeddings = nn.ModuleList(electronic_embeddings)
         self.electronic_embeddings = electronic_embeddings
+
+        if banded_filter:
+            band = None
+            if isinstance(radial_basis, snn.GaussianRBF) and not isinstance(
+                radial_basis.offsets, nn.Parameter
+            ):
+                band = gaussian_band(radial_basis.offsets, radial_basis.widths)
+            if band is None:
+                raise ValueError(
+                    "banded_filter needs a non-trainable GaussianRBF with evenly "
+                    f"spaced Gaussians of one width, got {radial_basis}"
+                )
+            self.filter_band = band
 
         # initialize filter layers
         self.share_filters = shared_filters
@@ -213,6 +239,17 @@ class PaiNN(nn.Module):
             shared_interactions,
         )
 
+    @torch.jit.unused
+    def _banded_filters(self, d_ij: torch.Tensor) -> torch.Tensor:
+        return gaussian_rbf_linear(
+            d_ij,
+            self.radial_basis.offsets,
+            self.radial_basis.widths,
+            self.filter_net.weight,
+            self.filter_net.bias,
+            self.filter_band,
+        )
+
     def forward(self, inputs: dict[str, torch.Tensor]):
         """
         Compute atomic representations/embeddings.
@@ -235,10 +272,12 @@ class PaiNN(nn.Module):
         # compute atom and pair features
         d_ij = torch.norm(r_ij, dim=1, keepdim=True)
         dir_ij = r_ij / (d_ij + self.norm_epsilon)
-        phi_ij = self.radial_basis(d_ij)
         fcut = self.cutoff_fn(d_ij)
 
-        filters = self.filter_net(phi_ij) * fcut[..., None]
+        if self.filter_band is not None and not torch.jit.is_scripting():
+            filters = self._banded_filters(d_ij) * fcut[..., None]
+        else:
+            filters = self.filter_net(self.radial_basis(d_ij)) * fcut[..., None]
         if self.share_filters:
             filter_list = [filters] * self.n_interactions
         else:
