@@ -87,11 +87,34 @@ class ModelCheckpoint(BaseModelCheckpoint):
         super().__init__(*args, **kwargs)
         self.model_path = model_path
         self.do_postprocessing = do_postprocessing
+        self._last_saved_step = None
+
+    def on_train_epoch_end(self, trainer, pl_module: AtomisticTask) -> None:
+        skip = self._should_skip_saving_checkpoint(trainer)
+        super().on_train_epoch_end(trainer, pl_module)
+        if not skip and self._should_save_on_train_epoch_end(trainer):
+            self._ensure_last_checkpoint(trainer)
 
     def on_validation_end(self, trainer, pl_module: AtomisticTask) -> None:
         self.trainer = trainer
         self.task = pl_module
+        skip = self._should_skip_saving_checkpoint(trainer)
         super().on_validation_end(trainer, pl_module)
+        if not skip and not self._should_save_on_train_epoch_end(trainer):
+            self._ensure_last_checkpoint(trainer)
+
+    def _save_last_checkpoint(self, trainer, monitor_candidates: dict[str, Any]):
+        super()._save_last_checkpoint(trainer, monitor_candidates)
+        self._last_saved_step = trainer.global_step
+
+    def _ensure_last_checkpoint(self, trainer):
+        # Since PyTorch Lightning 2.6.0 the last checkpoint is only written in
+        # steps that also save a top-k checkpoint
+        # (Lightning-AI/pytorch-lightning#22043), so once the monitored metric
+        # stops improving, resuming from it would repeat epochs. Write it here
+        # whenever Lightning did not, as Lightning < 2.6 does.
+        if self.save_last and self._last_saved_step != trainer.global_step:
+            self._save_last_checkpoint(trainer, self._monitor_candidates(trainer))
 
     def _update_best_and_save(
         self, current: torch.Tensor, trainer, monitor_candidates: dict[str, Any]
