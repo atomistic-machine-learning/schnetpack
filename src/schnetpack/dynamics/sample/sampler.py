@@ -590,20 +590,15 @@ class Sampler(Dynamics):
         super().__init__(calculator, structures=structures, hooks=hooks)
         self.grid = grid
 
-    def sample(self, n_samples: int, n_steps: int) -> dict[str, Any]:
+    def _start_from(self, batch: dict[str, Any]) -> dict[str, Any]:
         """
-        Draw ``n_samples`` structures, then every variable from its prior in
-        the order of ``start``, written through its view, and run on them.
+        Every variable drawn from its prior in the order of ``start``, written
+        through its view: where :meth:`sample` and :meth:`sample_batches` run
+        from.
         """
-        if self.structures is None:
-            raise ValueError(
-                "Sampler has no structures to sample from; pass structures=... "
-                "at construction, or call run on given structures"
-            )
-        batch = self.structures(n_samples)
         for v in self.start:
             batch = v.write(batch, v.noising.sampling_prior().draw(batch))
-        return self.run(batch, n_steps)
+        return batch
 
     def run(self, batch: Mapping[str, Any], n_steps: int) -> dict[str, Any]:
         """

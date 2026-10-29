@@ -253,6 +253,26 @@ def test_sample_draws_every_prior_in_order():
     assert out["t_structure"].shape == (4,)
 
 
+def test_sample_batches_draws_as_successive_sample_calls():
+    pos, y, model = two_variable_model()
+    sampler = Sampler(
+        FieldCalculator(model, dtype=torch.float64),
+        [SDEUpdate(pos), AncestralUpdate(y)],
+        [pos, y],
+        structures=StatisticsStructures(
+            n_atoms=torch.tensor([0, 0, 1, 1]), atom_types=torch.ones(3)
+        ),
+    )
+    torch.manual_seed(0)
+    expected = [sampler.sample(n, 3) for n in (2, 2, 1)]
+    torch.manual_seed(0)
+    got = list(sampler.sample_batches(5, 3, batch_size=2))
+    assert [int(b[properties.n_atoms].shape[0]) for b in got] == [2, 2, 1]
+    for e, g in zip(expected, got):
+        for key in (properties.Z, properties.R, "y"):
+            assert torch.equal(e[key], g[key])
+
+
 # --- centered noise ----------------------------------------------------------- #
 
 
