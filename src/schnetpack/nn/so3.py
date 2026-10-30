@@ -62,8 +62,12 @@ class RealSphericalHarmonics(nn.Module):
 
         ls = torch.arange(0, lmax + 1)
         nls = 2 * ls + 1
-        self.lidx = torch.repeat_interleave(ls, nls)
-        self.midx = torch.cat([torch.arange(-l, l + 1) for l in ls])
+        # buffers, so that .to() moves them with the model: on the CPU, compiled
+        # graphs would hold CPU ops and eager calls copy them to the GPU every time
+        self.register_buffer("lidx", torch.repeat_interleave(ls, nls), False)
+        self.register_buffer(
+            "midx", torch.cat([torch.arange(-l, l + 1) for l in ls]), False
+        )
 
         self.register_buffer("flidx", self.lidx.to(dtype=dtype), False)
 
@@ -326,7 +330,7 @@ class SO3ParametricGatedNonlinearity(nn.Module):
         super().__init__()
         self.lmax = lmax
         self.n_in = n_in
-        self.lidx, _ = sh_indices(lmax)
+        self.register_buffer("lidx", sh_indices(lmax)[0], False)
         self.scaling = nn.Linear(n_in, n_in * (lmax + 1))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -352,7 +356,7 @@ class SO3GatedNonlinearity(nn.Module):
     def __init__(self, lmax: int):
         super().__init__()
         self.lmax = lmax
-        self.lidx, _ = sh_indices(lmax)
+        self.register_buffer("lidx", sh_indices(lmax)[0], False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         s0 = x[:, 0, :]

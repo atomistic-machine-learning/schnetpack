@@ -121,7 +121,8 @@ class SchNet(nn.Module):
         self.n_filters = n_filters or self.n_atom_basis
         self.radial_basis = radial_basis
         self.cutoff_fn = cutoff_fn
-        self.cutoff = cutoff_fn.cutoff
+        # a buffer, so that .to() moves it (deploy reads it); not in the state dict
+        self.register_buffer("cutoff", cutoff_fn.cutoff.clone(), persistent=False)
 
         # initialize embeddings
         if nuclear_embedding is None:

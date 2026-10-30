@@ -184,7 +184,8 @@ class PaiNN(nn.Module):
         self.n_atom_basis = n_atom_basis
         self.n_interactions = n_interactions
         self.cutoff_fn = cutoff_fn
-        self.cutoff = cutoff_fn.cutoff
+        # a buffer, so that .to() moves it (deploy reads it); not in the state dict
+        self.register_buffer("cutoff", cutoff_fn.cutoff.clone(), persistent=False)
         self.radial_basis = radial_basis
         self.norm_epsilon = norm_epsilon
 

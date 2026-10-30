@@ -52,7 +52,8 @@ class SO3net(nn.Module):
         self.n_interactions = n_interactions
         self.lmax = lmax
         self.cutoff_fn = cutoff_fn
-        self.cutoff = cutoff_fn.cutoff
+        # a buffer, so that .to() moves it (deploy reads it); not in the state dict
+        self.register_buffer("cutoff", cutoff_fn.cutoff.clone(), persistent=False)
         self.radial_basis = radial_basis
         self.return_vector_representation = return_vector_representation
         self.activation = activation
