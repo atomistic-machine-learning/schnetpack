@@ -9,10 +9,13 @@ import schnetpack.properties as properties
 import schnetpack.transform as trn
 from schnetpack.data import ASEAtomsData
 from schnetpack.data.device import (
+    ArrayStats,
     DeviceAtomsData,
+    DeviceAtomsLoader,
     OrderedBatches,
     ShuffledBatches,
     convert_to_arrays,
+    split_transforms,
 )
 from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.generative import (
@@ -253,6 +256,86 @@ def test_index_batches(dataset, tmp_path):
     assert all(data.fits(sel, *exact) for sel in ordered)
 
 
+def test_from_dataset_converts_once(dataset, tmp_path):
+    """The arrays are written once and reused while dataset and neighbor list stay
+    the same; another neighbor list converts again. Padding pairs lie 1 beyond the
+    stored pairs' cutoff, or far out with all pairs."""
+    arrays = os.path.join(tmp_path, "arrays")
+    data = DeviceAtomsData.from_dataset(dataset, "cpu", array_dir=arrays)
+    assert data.pair_i is None and data.pad_distance == 1000.0
+    mtime = os.path.getmtime(os.path.join(arrays, "meta.json"))
+    DeviceAtomsData.from_dataset(dataset, "cpu", array_dir=arrays)
+    assert os.path.getmtime(os.path.join(arrays, "meta.json")) == mtime
+    neighbors = trn.MatScipyNeighborList(cutoff=1.5)
+    data = DeviceAtomsData.from_dataset(dataset, "cpu", neighbors, arrays)
+    assert data.pair_i is not None and data.pad_distance == 2.5
+    batch = data.padded_batch(torch.tensor([0, 1]), 32, 64)
+    assert (
+        batch[properties.offsets][int(data.n_pairs_cpu[:2].sum()) :, 0] == 2.5
+    ).all()
+
+
+def test_split_transforms():
+    neighbors, cast = trn.MatScipyNeighborList(cutoff=2.0), trn.CastTo32()
+    nl, rest = split_transforms([neighbors, cast])
+    assert nl is neighbors and rest == [cast]
+    nl, rest = split_transforms([trn.AllToAllNeighborList(), cast])
+    assert nl is None and rest == [cast]
+    with pytest.raises(ValueError, match="one neighbor list"):
+        split_transforms([neighbors, trn.ASENeighborList(cutoff=2.0)])
+
+
+def test_array_stats_answer_as_the_db_provider(dataset, tmp_path):
+    from schnetpack.data import StatsAtomrefProvider
+
+    data = DeviceAtomsData.from_dataset(
+        dataset, "cpu", array_dir=os.path.join(tmp_path, "arrays")
+    )
+    idx = list(range(20))
+    stats, db = (
+        ArrayStats(data, idx, dataset.atomrefs),
+        StatsAtomrefProvider(dataset, idx),
+    )
+    for divide_by_atoms in (False, True):
+        for remove_atomref in (False, True):
+            for a, b in zip(
+                stats.get_stats("energy", divide_by_atoms, remove_atomref),
+                db.get_stats("energy", divide_by_atoms, remove_atomref),
+            ):
+                torch.testing.assert_close(a, b.double())
+        torch.testing.assert_close(
+            stats.get_atomrefs("energy", divide_by_atoms)["energy"].float(),
+            db.get_atomrefs("energy", divide_by_atoms)["energy"].float(),
+            rtol=1e-4,
+            atol=1e-4,
+        )
+
+
+def test_device_atoms_loader(dataset, tmp_path):
+    """Batches built on the device with the transforms applied: in order every
+    structure once, shuffled and budget batches with one shape each; index_batches
+    with build_batch give the same batches."""
+    data = DeviceAtomsData.from_dataset(
+        dataset, "cpu", array_dir=os.path.join(tmp_path, "arrays")
+    )
+    idx = np.arange(25)
+    ordered = DeviceAtomsLoader(data, idx, 4, [trn.CastTo32()])
+    batches = list(ordered)
+    assert len(batches) == len(ordered) == 7
+    assert batches[0][properties.R].dtype == torch.float32
+    real = [b[properties.idx][:-1] for b in batches]  # the last is the padding
+    assert torch.equal(torch.cat(real), torch.from_numpy(idx))
+    for batching in ("fixed", "budget"):
+        loader = DeviceAtomsLoader(data, idx, 4, batching=batching, seed=3)
+        shapes = {tuple(b[properties.R].shape) for b in loader}
+        assert len(shapes) == 1
+        for sel in loader.index_batches:
+            batch = loader.build_batch(sel)
+            assert batch[properties.R].shape == (loader.pad[0], 3)
+    with pytest.raises(ValueError, match="batching"):
+        DeviceAtomsLoader(data, idx, 4, batching="sorted")
+
+
 def positions():
     return Variable(
         name="positions",
@@ -361,7 +444,8 @@ def test_datamodule_takes_the_neighbor_list_to_the_conversion(dataset, tmp_path)
         - batch[properties.R][batch[properties.idx_i]]
     ).norm(dim=1)
     assert len(real) > 0 and (d[batch[properties.offsets][:, 0] == 0] < 1.5).all()
-    assert len(batch[properties.structure_mask]) == dm.train_batches.max_structures + 1
+    budget = dm.device_loaders["train"].index_batches
+    assert len(batch[properties.structure_mask]) == budget.max_structures + 1
 
 
 def test_batching_budget_needs_data_device(dataset):

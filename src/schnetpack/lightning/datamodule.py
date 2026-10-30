@@ -11,22 +11,15 @@ from torch.utils.data import BatchSampler
 
 from schnetpack.data.atoms import ASEAtomsData
 from schnetpack.data.device import (
-    ARRAYS_FORMAT,
-    BudgetBatches,
+    ArrayStats,
     DeviceAtomsData,
-    OrderedBatches,
-    ShuffledBatches,
-    convert_to_arrays,
-    dataset_fingerprint,
+    DeviceAtomsLoader,
     neighbor_list_descriptor,
+    split_transforms,
 )
 from schnetpack.data.loader import AtomsLoader
 from schnetpack.data.provider import StatsAtomrefProvider, train_partition_fingerprint
 from schnetpack.data.splitting import RandomSplit, SplittingStrategy, splitting_lock
-from schnetpack.transform.neighborlist import (
-    AllToAllNeighborList,
-    NeighborListTransform,
-)
 
 __all__ = ["AtomsDataModule"]
 
@@ -208,6 +201,8 @@ class AtomsDataModule(pl.LightningDataModule):
         self.val_seed = val_seed
         self.array_dir = array_dir
         self.data: DeviceAtomsData | None = None
+        #: with data_device: the batches of each split ("train", "val", "test")
+        self.device_loaders: dict[str, DeviceAtomsLoader] = {}
         # set by a training step that builds its own batches from structure
         # indices (AtomisticTask with cuda_graph)
         self.train_batches_in_step = False
@@ -265,21 +260,18 @@ class AtomsDataModule(pl.LightningDataModule):
         self._val_dataset.initialize_transforms(self.provider)
         self._test_dataset.initialize_transforms(self.provider)
         if self.data_device is not None:
-            # their buffers (e.g. RemoveOffsets' atomrefs) on the batches' device
-            for ts in self._batch_transforms.values():
-                for t in ts:
-                    t.to(self.data.device)
+            self._setup_device_loaders()
 
     def _setup_device(self) -> None:
-        """Convert the dataset (once; cached), hold it on data_device, and set up
-        the training batches and the pad sizes."""
+        """Hold the dataset on data_device (converted once, cached) and take the
+        statistics from its arrays."""
         neighbor_lists, self._batch_transforms = {}, {}
         for stage, ds in (
             ("train", self._train_dataset),
             ("val", self._val_dataset),
             ("test", self._test_dataset),
         ):
-            neighbor_lists[stage], self._batch_transforms[stage] = _split_transforms(
+            neighbor_lists[stage], self._batch_transforms[stage] = split_transforms(
                 ds.get_split_transforms()
             )
         descriptors = {
@@ -287,61 +279,41 @@ class AtomsDataModule(pl.LightningDataModule):
         }
         if len(descriptors) > 1:
             raise ValueError("data_device needs the same neighbor list for all splits")
-        neighbor_list = neighbor_lists["train"]
-
-        array_dir = self.array_dir or f"{self.dataset.datapath}.arrays"
-        wanted = {
-            "source": json.loads(json.dumps(dataset_fingerprint(self.dataset))),
-            "format": ARRAYS_FORMAT,
-            "neighbor_list": neighbor_list_descriptor(neighbor_list),
-        }
-        meta_file = os.path.join(array_dir, "meta.json")
-        fresh = False
-        if os.path.exists(meta_file):
-            with open(meta_file) as f:
-                meta = json.load(f)
-            fresh = all(meta.get(k) == v for k, v in wanted.items())
-        if not fresh:
-            log.info(f"Converting the dataset into arrays in {array_dir}")
-            convert_to_arrays(
-                self.dataset, array_dir, self.num_workers, neighbor_list=neighbor_list
-            )
-        self.data = DeviceAtomsData(array_dir, self.data_device)
-        # padding pairs lie beyond the cutoff (all pairs: beyond any cutoff)
-        self._pad_distance = (
-            neighbor_list._cutoff + 1.0 if neighbor_list is not None else 1000.0
+        self.data = DeviceAtomsData.from_dataset(
+            self.dataset,
+            self.data_device,
+            neighbor_lists["train"],
+            self.array_dir,
+            self.num_workers,
         )
+        self.provider = ArrayStats(self.data, self.train_idx, self.dataset.atomrefs)
 
-        train_idx = np.asarray(self.train_idx, dtype=np.int64)
+    def _setup_device_loaders(self) -> None:
+        """The batches of each split, built on the device; after the transforms are
+        initialized, as the loaders move them there."""
         seed = int(torch.randint(2**31, ()))  # follows seed_everything
-        if self.batching == "budget":
-            self.train_batches = BudgetBatches(
-                self.data, train_idx, self.batch_size, seed
+        self.device_loaders = {
+            "train": DeviceAtomsLoader(
+                self.data,
+                self.train_idx,
+                self.batch_size,
+                self._batch_transforms["train"],
+                batching=self.batching,
+                seed=seed,
+                pad_k=self.pad_k,
             )
-            train_pad = self.train_batches.pad
-        else:
-            train_pad = self.data.pad_sizes(train_idx, self.batch_size, self.pad_k)
-            self.train_batches = ShuffledBatches(
-                self.data, train_idx, self.batch_size, train_pad, seed
-            )
-        self.pad = {"train": train_pad}
+        }
         for stage, idx, batch_size in (
             ("val", self.val_idx, self.val_batch_size),
             ("test", self.test_idx, self.test_batch_size),
         ):
-            if len(idx):
-                self.pad[stage] = self.data.exact_pad_sizes(idx, batch_size)
-        self.provider = _ArrayStats(self.data, self.train_idx, self.dataset)
-
-    def build_batch(self, sel: torch.Tensor, stage: str) -> dict[str, torch.Tensor]:
-        """With data_device: the padded, transformed batch of the structures sel
-        (``stage``: train, val or test). Fixed shapes and no host sync: recordable
-        in a CUDA graph."""
-        sel = sel.to(self.data.device, non_blocking=True)
-        batch = self.data.padded_batch(sel, *self.pad[stage], self._pad_distance)
-        for t in self._batch_transforms[stage]:
-            batch = t(batch)
-        return batch
+            self.device_loaders[stage] = DeviceAtomsLoader(
+                self.data,
+                idx,
+                batch_size,
+                self._batch_transforms[stage],
+                transform_seed=self.val_seed,
+            )
 
     def teardown(self, stage: str | None = None) -> None:
         # Transforms with external resources (e.g. cached neighbor lists)
@@ -461,7 +433,10 @@ class AtomsDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         if self.data_device is not None:
-            return _DeviceBatches(self, "train", self.train_batches, None)
+            loader = self.device_loaders["train"]
+            # a step that builds its own batches (AtomisticTask with cuda_graph)
+            # takes the structure indices
+            return loader.index_batches if self.train_batches_in_step else loader
         if self._train_dataloader is None:
             train_batch_sampler = self._setup_sampler(
                 sampler_cls=self.train_sampler_cls,
@@ -482,12 +457,7 @@ class AtomsDataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         if self.data_device is not None:
-            return _DeviceBatches(
-                self,
-                "val",
-                OrderedBatches(self.val_idx, self.val_batch_size),
-                self.val_seed,
-            )
+            return self.device_loaders["val"]
         if self._val_dataloader is None:
             self._val_dataloader = AtomsLoader(
                 self.val_dataset,
@@ -500,12 +470,7 @@ class AtomsDataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         if self.data_device is not None:
-            return _DeviceBatches(
-                self,
-                "test",
-                OrderedBatches(self.test_idx, self.test_batch_size),
-                self.val_seed,
-            )
+            return self.device_loaders["test"]
         if self._test_dataloader is None:
             self._test_dataloader = AtomsLoader(
                 self.test_dataset,
@@ -515,98 +480,3 @@ class AtomsDataModule(pl.LightningDataModule):
             )
 
         return self._test_dataloader
-
-
-def _split_transforms(transforms) -> tuple[Any, list]:
-    """The neighbor list of a transform list (run at the conversion; None: all pairs)
-    and the other transforms (run on batches on the device)."""
-    pairs = [
-        t
-        for t in transforms
-        if isinstance(t, (NeighborListTransform, AllToAllNeighborList))
-    ]
-    if len(pairs) > 1:
-        raise ValueError(f"data_device takes one neighbor list, got {pairs}")
-    rest = [t for t in transforms if not any(t is p for p in pairs)]
-    for t in rest:
-        if type(t).__module__ == NeighborListTransform.__module__:
-            raise ValueError(f"{type(t).__name__} is not supported with data_device")
-    if pairs and isinstance(pairs[0], NeighborListTransform):
-        return pairs[0], rest
-    return None, rest  # all pairs within each structure
-
-
-class _ArrayStats:
-    """Statistics of the train split from the arrays on the device, for the
-    transforms and postprocessors: no second pass over the db (which took ~30-50 s
-    for QM9), atom references fitted in float64."""
-
-    def __init__(self, data: DeviceAtomsData, train_idx, dataset: ASEAtomsData):
-        self.data, self.train_idx, self.dataset = data, train_idx, dataset
-
-    def get_stats(
-        self, property: str, divide_by_atoms: bool, remove_atomref: bool
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        atomrefs = self.dataset.atomrefs if remove_atomref else {}
-        return self.data.stats(
-            property, self.train_idx, divide_by_atoms, atomrefs.get(property)
-        )
-
-    def get_atomrefs(
-        self, property: str, is_extensive: bool, estimate: bool = True
-    ) -> dict[str, torch.Tensor]:
-        given = self.dataset.atomrefs
-        if property in given:
-            return {property: given[property]}
-        if not estimate:
-            raise RuntimeError(
-                f"The dataset provides no atomrefs for property '{property}' "
-                "and atomref estimation is disabled."
-            )
-        return {property: self.data.atomrefs(property, self.train_idx, is_extensive)}
-
-
-def _default_generator(device: torch.device) -> torch.Generator:
-    if device.type == "cuda":
-        index = (
-            device.index if device.index is not None else torch.cuda.current_device()
-        )
-        return torch.cuda.default_generators[index]
-    return torch.default_generator
-
-
-class _DeviceBatches:
-    """The batches of one stage with data_device, built on the device as they are
-    drawn; or only their structure indices, when the training step builds the batch
-    itself (AtomisticTask with cuda_graph).
-
-    With a seed, the pass has a random state of its own, started from the seed: the
-    device's default generator is switched to it while a batch is built and back
-    right after, so random transforms (noise) draw the same values in every pass,
-    and everything else continues its own sequence."""
-
-    def __init__(self, datamodule, stage, indices, seed):
-        self.dm, self.stage, self.indices, self.seed = datamodule, stage, indices, seed
-
-    def __len__(self) -> int:
-        return len(self.indices)
-
-    def __iter__(self):
-        build = not (self.stage == "train" and self.dm.train_batches_in_step)
-        if self.seed is None:
-            for sel in self.indices:
-                yield self.dm.build_batch(sel, self.stage) if build else sel
-            return
-        gen = _default_generator(self.dm.data.device)
-        outer = gen.get_state()
-        own = gen.manual_seed(self.seed).get_state()
-        gen.set_state(outer)
-        for sel in self.indices:
-            outer = gen.get_state()
-            gen.set_state(own)
-            try:
-                batch = self.dm.build_batch(sel, self.stage)
-                own = gen.get_state()
-            finally:
-                gen.set_state(outer)
-            yield batch

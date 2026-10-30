@@ -174,3 +174,69 @@ Example
 
    spktrain experiment=qm9_atomwise data.data_device=cuda data.batching=budget \
        task.compile=True task.cuda_graph=True task.optimizer_args.fused=True
+
+Without Lightning
+=================
+
+The same speedups work in a training loop of your own, and nothing below imports
+Lightning:
+
+- the data on the GPU: :class:`~schnetpack.data.device.DeviceAtomsData` and
+  :class:`~schnetpack.data.device.DeviceAtomsLoader`;
+- their statistics: :class:`~schnetpack.data.device.ArrayStats`;
+- the CUDA graph step: :class:`~schnetpack.train.GraphStep`;
+- the parameter average: :class:`~schnetpack.train.EMA`.
+
+.. code-block:: python
+
+   import gc
+
+   import torch
+
+   import schnetpack as spk
+   import schnetpack.transform as trn
+   from schnetpack.data.device import ArrayStats, DeviceAtomsData, DeviceAtomsLoader
+   from schnetpack.train import EMA, GraphStep
+
+   # converted once (cached next to the db); the neighbor list runs at the conversion
+   data = DeviceAtomsData.from_dataset(dataset, "cuda", trn.MatScipyNeighborList(5.0))
+   stats = ArrayStats(data, train_idx, dataset.atomrefs)
+   transforms = [
+       trn.RemoveOffsets("energy_U0", remove_mean=True, remove_atomrefs=True),
+       trn.CastTo32(),
+   ]
+   for t in transforms:  # before the loaders, which move them to the GPU
+       t.initialize(stats)
+   train = DeviceAtomsLoader(data, train_idx, 100, transforms, batching="budget")
+   val = DeviceAtomsLoader(data, val_idx, 100, transforms)
+
+   model.initialize_transforms(stats)  # its postprocessors, e.g. AddOffsets
+   model.to("cuda")
+   optimizer = torch.optim.AdamW(model.parameters(), lr=5e-4, fused=True)
+   ema = EMA(model.parameters(), decay=0.995)
+   step = GraphStep(
+       spk.model.CompiledPotential(model, dynamic=False),
+       outputs,
+       optimizer,
+       train.build_batch,
+       skip_loss_above=1e3,
+   )
+
+   gc.collect()
+   gc.freeze()  # no garbage-collector stalls between the short steps
+   for epoch in range(n_epochs):
+       for sel in train.index_batches:  # the step builds the batch itself
+           loss = step(sel)
+           ema.update(gate=step.keep)  # not on skipped steps
+       with ema.average_parameters():
+           for batch in val:
+               ...
+
+The batches are padded:
+
+- compute the loss with :func:`~schnetpack.objectives.calculate_padded_loss`;
+- compute metrics on the rows where :func:`~schnetpack.objectives.padding_mask` is 1;
+- extract the targets (:func:`~schnetpack.objectives.extract_targets`) before the
+  model runs, because the model writes its predictions under the output keys.
+
+Without the CUDA graph, iterate over ``train`` itself: it gives the transformed batches.

@@ -6,9 +6,20 @@ flat arrays, one file per key with the structures back to back, in the dataset's
 units and dtypes. :class:`DeviceAtomsData` holds them on a device and builds padded
 batches of any structures with index operations only: fixed shapes and no host
 synchronization, so a training step can build its own batch inside a CUDA graph
-(:class:`~schnetpack.lightning.AtomisticTask` with ``cuda_graph``). On QM9 this takes
-the data loading out of the step: there are no per-sample reads or collation, and no
-worker processes.
+(:class:`~schnetpack.train.GraphStep`). On QM9 this takes the data loading out of the
+step: there are no per-sample reads or collation, and no worker processes.
+
+In a training loop of your own::
+
+    data = DeviceAtomsData.from_dataset(dataset, "cuda", neighbor_list)
+    stats = ArrayStats(data, train_idx, dataset.atomrefs)
+    for t in transforms:  # e.g. RemoveOffsets, CastTo32: they run on the batches
+        t.initialize(stats)
+    train = DeviceAtomsLoader(data, train_idx, 100, transforms, batching="budget")
+    for batch in train:
+        ...
+
+``AtomsDataModule(data_device=...)`` does the same for Lightning.
 
 The pairs of a batch come from a neighbor list given to the conversion (e.g.
 ``MatScipyNeighborList(cutoff)``), which runs once per structure: each pair is stored
@@ -25,6 +36,7 @@ function zeroes their messages and gradients. ``properties.atom_mask`` and
 """
 
 import json
+import logging
 import os
 
 import numpy as np
@@ -32,14 +44,23 @@ import torch
 
 from schnetpack import properties
 from schnetpack.data.atoms import ASEAtomsData
+from schnetpack.transform.neighborlist import (
+    AllToAllNeighborList,
+    NeighborListTransform,
+)
 
 __all__ = [
     "convert_to_arrays",
+    "split_transforms",
     "DeviceAtomsData",
+    "ArrayStats",
+    "DeviceAtomsLoader",
     "ShuffledBatches",
     "BudgetBatches",
     "OrderedBatches",
 ]
+
+log = logging.getLogger(__name__)
 
 #: version of the files convert_to_arrays writes (2: cells, pbc, stored pairs)
 ARRAYS_FORMAT = 2
@@ -69,6 +90,31 @@ def neighbor_list_descriptor(neighbor_list) -> dict | None:
         "type": type(neighbor_list).__name__,
         "cutoff": float(neighbor_list._cutoff),
     }
+
+
+def split_transforms(transforms) -> tuple[NeighborListTransform | None, list]:
+    """
+    A dataset's transforms, split for the data on a device: its neighbor list runs
+    once per structure at the conversion, the other transforms run on the batches.
+
+    Returns:
+        the neighbor list (None for ``AllToAllNeighborList`` or none: all pairs
+        within each structure) and the other transforms
+    """
+    pairs = [
+        t
+        for t in transforms
+        if isinstance(t, (NeighborListTransform, AllToAllNeighborList))
+    ]
+    if len(pairs) > 1:
+        raise ValueError(f"data on a device takes one neighbor list, got {pairs}")
+    rest = [t for t in transforms if not any(t is p for p in pairs)]
+    for t in rest:
+        if type(t).__module__ == NeighborListTransform.__module__:
+            raise ValueError(f"{type(t).__name__} is not supported on device data")
+    if pairs and isinstance(pairs[0], NeighborListTransform):
+        return pairs[0], rest
+    return None, rest
 
 
 def _cell_shifts(offsets: np.ndarray, cell: np.ndarray) -> np.ndarray:
@@ -228,6 +274,9 @@ class DeviceAtomsData:
         with open(os.path.join(path, "meta.json")) as f:
             self.meta = json.load(f)
         files = self.meta["files"]
+        # padding pairs lie beyond the stored pairs' cutoff (all pairs: any cutoff)
+        stored = self.meta.get("neighbor_list")
+        self.pad_distance = stored["cutoff"] + 1.0 if stored else 1000.0
 
         def load(key):
             return torch.from_numpy(np.load(os.path.join(path, files[key])))
@@ -282,6 +331,47 @@ class DeviceAtomsData:
                     torch.cat([v, v.new_zeros(1, *v.shape[1:])]),
                     kind,
                 )
+
+    @classmethod
+    def from_dataset(
+        cls,
+        dataset: ASEAtomsData,
+        device: str | torch.device = "cuda",
+        neighbor_list: NeighborListTransform | None = None,
+        array_dir: str | None = None,
+        num_workers: int = 0,
+    ) -> "DeviceAtomsData":
+        """
+        The arrays of a dataset on a device. The conversion
+        (:func:`convert_to_arrays`) runs once: its arrays are reused while the
+        dataset, the array format and the neighbor list stay the same.
+
+        Args:
+            dataset: the dataset, read without its transforms
+            device: where the arrays and the batches live
+            neighbor_list: runs once per structure at the conversion; the batches
+                hold its pairs. None: all pairs within each structure (molecules)
+            array_dir: where the arrays are written (default: ``<datapath>.arrays``)
+            num_workers: DataLoader workers reading the db for the conversion
+        """
+        array_dir = array_dir or f"{dataset.datapath}.arrays"
+        wanted = {
+            "source": json.loads(json.dumps(dataset_fingerprint(dataset))),
+            "format": ARRAYS_FORMAT,
+            "neighbor_list": neighbor_list_descriptor(neighbor_list),
+        }
+        meta_file = os.path.join(array_dir, "meta.json")
+        fresh = False
+        if os.path.exists(meta_file):
+            with open(meta_file) as f:
+                meta = json.load(f)
+            fresh = all(meta.get(k) == v for k, v in wanted.items())
+        if not fresh:
+            log.info(f"Converting the dataset into arrays in {array_dir}")
+            convert_to_arrays(
+                dataset, array_dir, num_workers, neighbor_list=neighbor_list
+            )
+        return cls(array_dir, device)
 
     def __len__(self) -> int:
         return self.empty
@@ -381,7 +471,9 @@ class DeviceAtomsData:
     def exact_pad_sizes(self, indices, batch_size: int) -> tuple[int, int]:
         """Padded sizes that fit every batch of indices taken in order (largest
         batch, +1 padding atom)."""
-        indices = torch.as_tensor(indices)
+        indices = torch.as_tensor(indices, dtype=torch.int64)
+        if not len(indices):
+            return 1, 0
         atoms = self.n_atoms_cpu[indices]
         pairs = self.n_pairs_cpu[indices]
         starts = range(0, len(indices), batch_size)
@@ -395,7 +487,7 @@ class DeviceAtomsData:
         sel: torch.Tensor,
         n_atoms_pad: int,
         n_pairs_pad: int,
-        pad_distance: float = 1000.0,
+        pad_distance: float | None = None,
     ) -> dict[str, torch.Tensor]:
         """
         The batch of the structures sel (device tensor), padded to fixed sizes.
@@ -409,11 +501,14 @@ class DeviceAtomsData:
             n_atoms_pad: atoms of the batch, padding included
             n_pairs_pad: pairs of the batch, padding included
             pad_distance: length of the padding pairs, beyond the model's cutoff
+                (default: ``pad_distance``, 1 beyond the stored pairs' cutoff)
 
         Returns:
             the batch, B + 1 structures (the last one is the padding)
         """
         dev, R_dtype = self.device, self.R.dtype
+        if pad_distance is None:
+            pad_distance = self.pad_distance
         B = sel.shape[0]
         n, p = self.n_atoms[sel], self.n_pairs[sel]
         cn, cp = torch.cumsum(n, 0), torch.cumsum(p, 0)
@@ -472,6 +567,50 @@ class DeviceAtomsData:
             else:
                 batch[key] = v[atom] * mask.view(-1, *[1] * (v.dim() - 1)).to(v.dtype)
         return batch
+
+
+class ArrayStats:
+    """
+    Statistics and atom references of some structures (the training split) from
+    the arrays on the device: a stats source (``get_stats``, ``get_atomrefs``) for
+    the transforms and the model's postprocessors, as
+    :class:`~schnetpack.data.StatsAtomrefProvider` is for the db. No pass over the
+    db (~46 s for QM9); atom references are fitted in float64.
+    """
+
+    def __init__(
+        self,
+        data: DeviceAtomsData,
+        indices,
+        atomrefs: dict[str, torch.Tensor] | None = None,
+    ):
+        """
+        Args:
+            data: the arrays
+            indices: the structures, e.g. the training split
+            atomrefs: the dataset's atom references (``dataset.atomrefs``);
+                properties without one are fitted
+        """
+        self.data, self.indices = data, indices
+        self.atomrefs = atomrefs or {}
+
+    def get_stats(
+        self, property: str, divide_by_atoms: bool, remove_atomref: bool
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        atomref = self.atomrefs.get(property) if remove_atomref else None
+        return self.data.stats(property, self.indices, divide_by_atoms, atomref)
+
+    def get_atomrefs(
+        self, property: str, is_extensive: bool, estimate: bool = True
+    ) -> dict[str, torch.Tensor]:
+        if property in self.atomrefs:
+            return {property: self.atomrefs[property]}
+        if not estimate:
+            raise RuntimeError(
+                f"The dataset provides no atomrefs for property '{property}' "
+                "and atomref estimation is disabled."
+            )
+        return {property: self.data.atomrefs(property, self.indices, is_extensive)}
 
 
 class ShuffledBatches:
@@ -595,3 +734,110 @@ class OrderedBatches:
     def __iter__(self):
         for s in range(0, len(self.indices), self.batch_size):
             yield torch.from_numpy(self.indices[s : s + self.batch_size])
+
+
+def _default_generator(device: torch.device) -> torch.Generator:
+    if device.type == "cuda":
+        index = (
+            device.index if device.index is not None else torch.cuda.current_device()
+        )
+        return torch.cuda.default_generators[index]
+    return torch.default_generator
+
+
+class DeviceAtomsLoader:
+    """
+    Batches of structures of :class:`DeviceAtomsData`, built on its device as they
+    are drawn: padded to fixed sizes, with the transforms applied. The counterpart
+    of :class:`~schnetpack.data.AtomsLoader` for data on a device.
+
+    Iterating gives the batches. ``index_batches`` gives only the structure indices
+    of each batch, for a training step that builds the batch itself with
+    :meth:`build_batch` (:class:`~schnetpack.train.GraphStep`).
+    """
+
+    def __init__(
+        self,
+        data: DeviceAtomsData,
+        indices,
+        batch_size: int,
+        transforms=(),
+        batching: str = "ordered",
+        seed: int = 0,
+        transform_seed: int | None = None,
+        pad_k: float = 6.0,
+    ):
+        """
+        Args:
+            data: the arrays
+            indices: the structures, e.g. a split
+            batch_size: structures per batch ("budget": on average)
+            transforms: run on each batch, in order (e.g. ``RemoveOffsets``,
+                ``CastTo32``, ``Diffuse``). Initialize them before; their buffers
+                are moved to the data's device here.
+            batching: "ordered": every structure once, in order, the last batch
+                smaller (validation, testing). "fixed": shuffled, batch_size
+                structures per batch, padded for the mean + pad_k standard
+                deviations (rarer batches are skipped). "budget": shuffled,
+                packed to the atoms and pairs batch_size structures hold on
+                average (:class:`BudgetBatches`).
+            seed: seed of the shuffled orders
+            transform_seed: random transforms (noise) draw the same values in every
+                pass, from a random state of their own started from this seed.
+                None: from the device's default generator
+            pad_k: padding of "fixed" batching, in standard deviations
+        """
+        self.data, self.transforms = data, list(transforms)
+        self.transform_seed = transform_seed
+        for t in self.transforms:
+            t.to(data.device)
+        indices = np.asarray(indices, dtype=np.int64)
+        if batching == "ordered":
+            self.pad = data.exact_pad_sizes(indices, batch_size)
+            self.index_batches = OrderedBatches(indices, batch_size)
+        elif batching == "fixed":
+            self.pad = data.pad_sizes(indices, batch_size, pad_k)
+            self.index_batches = ShuffledBatches(
+                data, indices, batch_size, self.pad, seed
+            )
+        elif batching == "budget":
+            self.index_batches = BudgetBatches(data, indices, batch_size, seed)
+            self.pad = self.index_batches.pad
+        else:
+            raise ValueError(
+                f"batching must be 'ordered', 'fixed' or 'budget', not {batching!r}"
+            )
+
+    def __len__(self) -> int:
+        return len(self.index_batches)
+
+    def build_batch(self, sel: torch.Tensor) -> dict[str, torch.Tensor]:
+        """The padded, transformed batch of the structures sel. Fixed shapes and no
+        host sync: recordable in a CUDA graph."""
+        sel = sel.to(self.data.device, non_blocking=True)
+        batch = self.data.padded_batch(sel, *self.pad)
+        for t in self.transforms:
+            batch = t(batch)
+        return batch
+
+    def __iter__(self):
+        if self.transform_seed is None:
+            for sel in self.index_batches:
+                yield self.build_batch(sel)
+            return
+        # the device's default generator is switched to the pass's own state while
+        # a batch is built and back right after: everything else continues its
+        # own sequence
+        gen = _default_generator(self.data.device)
+        outer = gen.get_state()
+        own = gen.manual_seed(self.transform_seed).get_state()
+        gen.set_state(outer)
+        for sel in self.index_batches:
+            outer = gen.get_state()
+            gen.set_state(own)
+            try:
+                batch = self.build_batch(sel)
+                own = gen.get_state()
+            finally:
+                gen.set_state(outer)
+            yield batch

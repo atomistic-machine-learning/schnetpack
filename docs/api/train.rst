@@ -3,6 +3,22 @@ schnetpack.train
 .. currentmodule:: schnetpack.train
 
 
+Fast training steps
+-------------------
+
+The training step as one CUDA graph and the parameter average, for a training loop of
+your own; :class:`~schnetpack.lightning.AtomisticTask` (``cuda_graph``) and
+:class:`~schnetpack.lightning.ExponentialMovingAverage` use them (see
+:doc:`/userguide/speed`).
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+    :template: classtemplate.rst
+
+    GraphStep
+    EMA
+
 Scheduler
 ---------
 

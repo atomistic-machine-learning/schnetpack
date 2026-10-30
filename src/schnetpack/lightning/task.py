@@ -23,6 +23,7 @@ from schnetpack.objectives import (
     predict_without_postprocessing,
 )
 from schnetpack.train.distillation import Distillation
+from schnetpack.train.graph_step import GraphStep
 from schnetpack.train.teacher import TeacherWrapper
 
 __all__ = ["AtomisticTask"]
@@ -43,8 +44,8 @@ class AtomisticTask(pl.LightningModule):
     - ``compile``: the model runs as one compiled graph including its derivatives.
     - ``cuda_graph``: the whole training step (building the batch, the transforms,
       the model, the loss and its gradients) is recorded once as a CUDA graph and
-      replayed every step: one launch instead of hundreds of kernels, and no host
-      synchronization. Needs the data on the GPU
+      replayed every step (:class:`~schnetpack.train.GraphStep`): one launch instead
+      of hundreds of kernels, and no host synchronization. Needs the data on the GPU
       (:class:`~schnetpack.lightning.AtomsDataModule` with ``data_device``).
 
     Padded batches (data on the GPU) are handled in every mode: their padding rows
@@ -145,7 +146,7 @@ class AtomisticTask(pl.LightningModule):
         # skips its update with the optimizer step. None: always updated.
         self.keep_step: torch.Tensor | None = None
         self.skipped_steps: torch.Tensor | None = None
-        self._graph = None
+        self._graph_step: GraphStep | None = None
         # cuda_graph: the training loss summed on the GPU, read once per validation
         self._loss_sum: torch.Tensor | None = None
         self._loss_steps = 0
@@ -357,74 +358,30 @@ class AtomisticTask(pl.LightningModule):
             gradient_clip_val, gradient_clip_algorithm = self.grad_clip, "norm"
         self.clip_gradients(optimizer, gradient_clip_val, gradient_clip_algorithm)
 
-    # -- the training step as one CUDA graph (cuda_graph) ---------------------- #
-
-    def _record_graph(self, sel: torch.Tensor):
-        """Record building the batch, the forward pass, the loss and the backward
-        pass as one CUDA graph, whose only input are the structure indices."""
-        dm = self.trainer.datamodule
-        self._graph_input = sel.clone()
-
-        def step():
-            batch = dm.build_batch(self._graph_input, "train")
-            targets = extract_targets(self.outputs, batch)
-            pred = predict_without_postprocessing(self.compiled_model, batch)
-            loss = calculate_padded_loss(self.outputs, pred, targets, batch)
-            loss.backward()
-            return loss, pred, targets, batch
-
-        side = torch.cuda.Stream()
-        side.wait_stream(torch.cuda.current_stream())
-        with torch.cuda.stream(side):
-            for _ in range(3):  # compiles here, outside the capture
-                step()
-        torch.cuda.current_stream().wait_stream(side)
-        for p in self.model.parameters():
-            p.grad = None
-        self._graph = torch.cuda.CUDAGraph()
-        # the AccumulateGrad nodes of the parameters remember the stream of an
-        # earlier backward; let the capturing stream take over
-        if hasattr(torch.autograd.graph, "set_override_stale_capture_stream"):
-            torch.autograd.graph.set_override_stale_capture_stream(True)
-        with torch.cuda.graph(self._graph, stream=side):
-            self._graph_output = step()
-
     def _graph_training_step(self, sel: torch.Tensor):
-        """Replay the graph with new structure indices, then clip, step the
-        optimizer and decide on skipping, all without a host sync."""
-        if self._graph is None:
-            self._record_graph(sel)
-        self._graph_input.copy_(sel, non_blocking=True)
-        self._graph.replay()
-        loss, pred, targets, batch = self._graph_output
+        """The step as one CUDA graph (GraphStep), and its logs."""
         opt = self.optimizers()
+        if self._graph_step is None:
+            self._graph_step = GraphStep(
+                self.compiled_model,
+                self.outputs,
+                opt,  # Lightning's wrapper: its step advances global_step
+                self.trainer.datamodule.device_loaders["train"].build_batch,
+                self.grad_clip,
+                self.skip_loss_above,
+            )
         self._warmup(opt.param_groups)
-        if self.grad_clip is not None:
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
-        if self.skip_loss_above is None:
-            opt.step()
-        elif opt.optimizer.defaults.get("fused", False):
-            # on the GPU: the fused step skips itself where found_inf is 1
-            skip = (~(loss.detach() <= self.skip_loss_above)).to(torch.float32)
-            opt.optimizer.found_inf = skip
-            self._count_step(skip)
-            opt.step()
-        else:  # a host sync every step
-            keep = bool(loss.detach() <= self.skip_loss_above)
-            self._count_step(torch.tensor(0.0 if keep else 1.0, device=loss.device))
-            if keep:
-                opt.step()
-
+        step = self._graph_step
+        loss = step(sel)
+        self.keep_step, self.skipped_steps = step.keep, step.skipped
         self._loss_sum = (
-            loss.detach().clone()
-            if self._loss_sum is None
-            else self._loss_sum.add_(loss.detach())
+            loss.clone() if self._loss_sum is None else self._loss_sum.add_(loss)
         )
         self._loss_steps += 1
         if self.writes_train_logs():
-            self.log_padded_metrics(pred, targets, batch, "train")
+            self.log_padded_metrics(step.pred, step.targets, step.batch, "train")
             self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
-        return loss.detach()
+        return loss
 
     def on_validation_model_zero_grad(self):
         # Lightning sets every .grad to None before validation by default. The

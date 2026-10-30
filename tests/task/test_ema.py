@@ -1,7 +1,7 @@
 import torch
 from torch_ema import ExponentialMovingAverage as TorchEMA
 
-from schnetpack.lightning.callbacks import EMA
+from schnetpack.train import EMA
 
 
 def test_foreach_update_matches_torch_ema():
