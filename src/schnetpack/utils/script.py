@@ -30,11 +30,12 @@ def log_hyperparameters(
     This saves Hydra config using Lightning loggers.
     """
 
-    # send hparams to all loggers
-    trainer.logger.log_hyperparams(config)
+    for logger in trainer.loggers:
+        # send hparams to all loggers
+        logger.log_hyperparams(config)
 
-    # disable logging any more hyperparameters for all loggers
-    trainer.logger.log_hyperparams = empty
+        # disable logging any more hyperparameters for all loggers
+        logger.log_hyperparams = empty
 
 
 @rank_zero_only
