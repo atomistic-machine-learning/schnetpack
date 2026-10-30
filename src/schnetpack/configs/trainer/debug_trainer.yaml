@@ -1,7 +1,6 @@
 defaults:
   - default_trainer
 
-gpus: 1
 min_epochs: 1
 max_epochs: 3
 
