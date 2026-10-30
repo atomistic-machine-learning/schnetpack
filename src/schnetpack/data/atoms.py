@@ -216,6 +216,7 @@ class ASEAtomsData(BaseAtomsData):
         """
         self.datapath = datapath
         self.conn = connect(self.datapath, use_lock_file=False)
+        self._available_properties: list[str] | None = None
 
         BaseAtomsData.__init__(
             self,
@@ -383,6 +384,7 @@ class ASEAtomsData(BaseAtomsData):
     def _set_metadata(self, val: dict[str, Any]):
         with connect(self.datapath, use_lock_file=False) as conn:
             conn.metadata = val
+        self._available_properties = None
 
     def update_metadata(self, **kwargs):
         assert all(key[0] != 0 for key in kwargs), (
@@ -395,8 +397,10 @@ class ASEAtomsData(BaseAtomsData):
 
     @property
     def available_properties(self) -> list[str]:
-        md = self.metadata
-        return list(md["_property_unit_dict"].keys())
+        if self._available_properties is None:
+            md = self.metadata
+            self._available_properties = list(md["_property_unit_dict"].keys())
+        return list(self._available_properties)
 
     @property
     def units(self) -> dict[str, str]:

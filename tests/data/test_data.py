@@ -93,6 +93,49 @@ def test_asedb_getprops(asedb):
     )
 
 
+def test_asedb_available_properties_cached(asedb, monkeypatch):
+    available_properties = asedb.available_properties
+
+    def fail(self):
+        raise AssertionError("metadata was read again")
+
+    monkeypatch.setattr(ASEAtomsData, "metadata", property(fail))
+    assert asedb.available_properties == available_properties
+    assert set(asedb[0].keys()) >= set(available_properties)
+
+
+def test_asedb_available_properties_not_mutable(asedb):
+    expected = list(asedb.available_properties)
+
+    asedb.available_properties.append("unknown")
+    asedb.load_properties.append("unknown")
+
+    assert asedb.available_properties == expected
+    assert "unknown" not in asedb[0]
+    with pytest.raises(AssertionError):
+        asedb.load_properties = ["unknown"]
+
+
+def test_asedb_available_properties_reset_by_metadata(asedb):
+    removed, *remaining = asedb.available_properties
+
+    md = asedb.metadata
+    del md["_property_unit_dict"][removed]
+    asedb._set_metadata(md)
+
+    assert asedb.available_properties == remaining
+
+
+def test_asedb_load_properties_in_constructor(asedb):
+    load_properties = asedb.available_properties[0:2]
+
+    dataset = ASEAtomsData(asedb.datapath, load_properties=load_properties)
+    assert dataset.load_properties == load_properties
+
+    with pytest.raises(AssertionError):
+        ASEAtomsData(asedb.datapath, load_properties=["unknown"])
+
+
 def test_stats():
     data = []
     for i in range(6):
