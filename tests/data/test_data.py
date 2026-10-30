@@ -105,6 +105,25 @@ def test_asedb_reads_in_dataloader_workers(asedb, context):
     assert all(torch.equal(a, b) for a, b in zip(expected, got))
 
 
+@pytest.mark.parametrize("context", ["fork", "spawn"])
+def test_atoms_loader_batches_from_workers_equal_the_main_process(asedb, context):
+    """Batches from workers (sent as numpy arrays) are the same tensors, with the
+    same dtypes, as batches collated in the main process."""
+    from schnetpack.data import AtomsLoader
+
+    expected = list(AtomsLoader(asedb, batch_size=2))
+    got = list(
+        AtomsLoader(asedb, batch_size=2, num_workers=2, multiprocessing_context=context)
+    )
+    assert len(got) == len(expected)
+    for a, b in zip(expected, got):
+        assert a.keys() == b.keys()
+        for key in a:
+            assert isinstance(b[key], torch.Tensor)
+            assert b[key].dtype == a[key].dtype
+            assert torch.equal(a[key], b[key])
+
+
 def test_asedb_reads_rows_added_after_a_read(asedb, example_data):
     n = len(asedb)
     asedb[0]  # opens the held connection

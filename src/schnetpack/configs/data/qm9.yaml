@@ -23,4 +23,6 @@ num_train: 110000
 num_val: 10000
 # null: use all remaining molecules (10831) as the test set
 num_test: null
-num_workers: 2
+# with 2 workers the GPU waited for data: a PaiNN 3 x 128 training step took 55 ms on
+# an H100 PCIe, against 26 ms with 8
+num_workers: 8

@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 
+import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, Sampler
 from torch.utils.data.dataloader import _collate_fn_t, _T_co
@@ -138,8 +139,38 @@ def _prune_triples(
     return triples
 
 
+class _AsArrays:
+    """A collate function whose batches leave the worker as numpy arrays."""
+
+    def __init__(self, collate_fn):
+        self.collate_fn = collate_fn
+
+    def __call__(self, samples):
+        batch = self.collate_fn(samples)
+        return {
+            k: v.numpy() if isinstance(v, torch.Tensor) else v for k, v in batch.items()
+        }
+
+
+def _as_tensors(batches):
+    for batch in batches:
+        yield {
+            k: torch.from_numpy(v) if isinstance(v, np.ndarray) else v
+            for k, v in batch.items()
+        }
+
+
 class AtomsLoader(DataLoader):
-    """Data loader for subclasses of ASEAtomsData"""
+    """
+    Data loader for subclasses of ASEAtomsData.
+
+    With worker processes (and no pinned memory), a collated batch crosses to the
+    main process as numpy arrays, one pickled message per batch, and becomes tensors
+    there without a copy. Tensors would cross through shared memory one file
+    descriptor at a time, a socket round trip each: receiving a QM9 batch of 13
+    tensors cost the main process 6.5 ms, a third of a compiled training step
+    (16 workers, H100 PCIe).
+    """
 
     def __init__(
         self,
@@ -153,6 +184,7 @@ class AtomsLoader(DataLoader):
         pin_memory: bool = False,
         **kwargs,
     ):
+        self._as_arrays = num_workers > 0 and not pin_memory
         super().__init__(
             dataset=dataset,
             batch_size=batch_size,
@@ -160,7 +192,11 @@ class AtomsLoader(DataLoader):
             sampler=sampler,
             batch_sampler=batch_sampler,
             num_workers=num_workers,
-            collate_fn=collate_fn,
+            collate_fn=_AsArrays(collate_fn) if self._as_arrays else collate_fn,
             pin_memory=pin_memory,
             **kwargs,
         )
+
+    def __iter__(self):
+        batches = super().__iter__()
+        return _as_tensors(batches) if self._as_arrays else batches
