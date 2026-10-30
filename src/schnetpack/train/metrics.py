@@ -5,8 +5,6 @@ from torchmetrics.functional.regression.mae import (
     _mean_absolute_error_update,
 )
 
-from typing import Optional, Tuple
-
 __all__ = ["TensorDiagonalMeanAbsoluteError"]
 
 
@@ -23,8 +21,8 @@ class TensorDiagonalMeanAbsoluteError(Metric):
 
     def __init__(
         self,
-        diagonal: Optional[bool] = True,
-        diagonal_dims: Optional[Tuple[int, int]] = (-2, -1),
+        diagonal: bool | None = True,
+        diagonal_dims: tuple[int, int] | None = (-2, -1),
         dist_sync_on_step=False,
     ) -> None:
         """

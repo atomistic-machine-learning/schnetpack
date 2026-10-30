@@ -6,10 +6,10 @@ In addition to loading structures, velocities, etc., various postprocessing func
 
 import json
 import logging
+
 import h5py
 import numpy as np
 from ase import Atoms
-from typing import Optional
 from tqdm import trange
 
 from schnetpack import properties, units
@@ -41,8 +41,8 @@ class HDF5Loader:
     def __init__(
         self,
         hdf5_database: str,
-        skip_initial: Optional[int] = 0,
-        load_properties: Optional[bool] = True,
+        skip_initial: int | None = 0,
+        load_properties: bool | None = True,
     ):
         self.database = h5py.File(hdf5_database, "r", swmr=True, libver="latest")
         self.skip_initial = skip_initial
@@ -52,9 +52,7 @@ class HDF5Loader:
 
         # Load basic structure properties and MD info
         if "molecules" not in self.data_groups:
-            raise HDF5LoaderError(
-                "Molecule data not found in {:s}".format(hdf5_database)
-            )
+            raise HDF5LoaderError(f"Molecule data not found in {hdf5_database:s}")
         else:
             self._load_molecule_data()
 
@@ -62,7 +60,7 @@ class HDF5Loader:
         if load_properties:
             if "properties" not in self.data_groups:
                 raise HDF5LoaderError(
-                    "Molecule properties not found in {:s}".format(hdf5_database)
+                    f"Molecule properties not found in {hdf5_database:s}"
                 )
             else:
                 self._load_property_data()
@@ -76,9 +74,7 @@ class HDF5Loader:
                 ", ".join(loaded_properties[:-1]) + " and " + loaded_properties[-1]
             )
 
-        log.info(
-            "Loaded properties {:s} from {:s}".format(loaded_properties, hdf5_database)
-        )
+        log.info(f"Loaded properties {loaded_properties:s} from {hdf5_database:s}")
 
     def _load_molecule_data(self):
         """
@@ -180,8 +176,8 @@ class HDF5Loader:
         self,
         property_name: str,
         atomistic: bool,
-        mol_idx: Optional[int] = 0,
-        replica_idx: Optional[int] = None,
+        mol_idx: int | None = 0,
+        replica_idx: int | None = None,
     ):
         """
         Extract property from dataset.
@@ -230,9 +226,7 @@ class HDF5Loader:
 
         return target_property
 
-    def get_velocities(
-        self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None
-    ):
+    def get_velocities(self, mol_idx: int | None = 0, replica_idx: int | None = None):
         """
         Auxiliary routine for getting the velocities of specific molecules and replicas.
 
@@ -249,9 +243,7 @@ class HDF5Loader:
             "velocities", atomistic=True, mol_idx=mol_idx, replica_idx=replica_idx
         )
 
-    def get_positions(
-        self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None
-    ):
+    def get_positions(self, mol_idx: int | None = 0, replica_idx: int | None = None):
         """
         Auxiliary routine for getting the positions of specific molecules and replicas.
 
@@ -269,7 +261,7 @@ class HDF5Loader:
         )
 
     def get_kinetic_energy(
-        self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None
+        self, mol_idx: int | None = 0, replica_idx: int | None = None
     ):
         """
         Auxiliary routine for computing the kinetic energy of every configuration based on it's velocities.
@@ -299,7 +291,7 @@ class HDF5Loader:
         return kinetic_energy
 
     def get_potential_energy(
-        self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None
+        self, mol_idx: int | None = 0, replica_idx: int | None = None
     ):
         """
         Auxiliary routine for extracting a systems potential energy.
@@ -318,9 +310,7 @@ class HDF5Loader:
             energy_key, atomistic=False, mol_idx=mol_idx, replica_idx=replica_idx
         )
 
-    def get_temperature(
-        self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None
-    ):
+    def get_temperature(self, mol_idx: int | None = 0, replica_idx: int | None = None):
         """
         Auxiliary routine for computing the instantaneous temperature of every configuration.
 
@@ -344,7 +334,7 @@ class HDF5Loader:
 
         return temperature
 
-    def get_volume(self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None):
+    def get_volume(self, mol_idx: int | None = 0, replica_idx: int | None = None):
         """
         Auxiliary routine for computing the cell volume in periodic simulations.
 
@@ -362,7 +352,7 @@ class HDF5Loader:
         )
         return np.linalg.det(cells)
 
-    def get_stress(self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None):
+    def get_stress(self, mol_idx: int | None = 0, replica_idx: int | None = None):
         """
         Auxiliary routine for extracting the stress tensor in cell simulations.
 
@@ -380,9 +370,7 @@ class HDF5Loader:
             stress_key, atomistic=False, mol_idx=mol_idx, replica_idx=replica_idx
         )
 
-    def get_pressure(
-        self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None
-    ):
+    def get_pressure(self, mol_idx: int | None = 0, replica_idx: int | None = None):
         """
         Auxiliary routine for computing the pressure in periodic simulations.
 
@@ -414,9 +402,7 @@ class HDF5Loader:
 
         return pressure
 
-    def convert_to_atoms(
-        self, mol_idx: Optional[int] = 0, replica_idx: Optional[int] = None
-    ):
+    def convert_to_atoms(self, mol_idx: int | None = 0, replica_idx: int | None = None):
         """
         Converts molecular structures to a list of ASE Atom objects. Length units are converted from the internal unit
         system to Angstrom.

@@ -1,10 +1,12 @@
+import os
+
+import numpy as np
 import pytest
 import torch
-import numpy as np
-from schnetpack.data import *
-import os
+
 import schnetpack.properties as structure
-from schnetpack.data import calculate_stats, AtomsLoader
+from schnetpack.data import *
+from schnetpack.data import AtomsLoader, calculate_stats
 
 
 @pytest.fixture
@@ -14,7 +16,6 @@ def asedbpath(tmpdir):
 
 @pytest.fixture(scope="function")
 def asedb(asedbpath, example_data, property_units):
-
     asedb = ASEAtomsData.create(
         datapath=asedbpath, distance_unit="A", property_unit_dict=property_units
     )
@@ -92,6 +93,49 @@ def test_asedb_getprops(asedb):
     )
 
 
+def test_asedb_available_properties_cached(asedb, monkeypatch):
+    available_properties = asedb.available_properties
+
+    def fail(self):
+        raise AssertionError("metadata was read again")
+
+    monkeypatch.setattr(ASEAtomsData, "metadata", property(fail))
+    assert asedb.available_properties == available_properties
+    assert set(asedb[0].keys()) >= set(available_properties)
+
+
+def test_asedb_available_properties_not_mutable(asedb):
+    expected = list(asedb.available_properties)
+
+    asedb.available_properties.append("unknown")
+    asedb.load_properties.append("unknown")
+
+    assert asedb.available_properties == expected
+    assert "unknown" not in asedb[0]
+    with pytest.raises(AssertionError):
+        asedb.load_properties = ["unknown"]
+
+
+def test_asedb_available_properties_reset_by_metadata(asedb):
+    removed, *remaining = asedb.available_properties
+
+    md = asedb.metadata
+    del md["_property_unit_dict"][removed]
+    asedb._set_metadata(md)
+
+    assert asedb.available_properties == remaining
+
+
+def test_asedb_load_properties_in_constructor(asedb):
+    load_properties = asedb.available_properties[0:2]
+
+    dataset = ASEAtomsData(asedb.datapath, load_properties=load_properties)
+    assert dataset.load_properties == load_properties
+
+    with pytest.raises(AssertionError):
+        ASEAtomsData(asedb.datapath, load_properties=["unknown"])
+
+
 def test_stats():
     data = []
     for i in range(6):
@@ -138,5 +182,5 @@ def test_asedb_add(asedb, example_data):
     p2 = asedb[l + 1]
     for k, v in p1.items():
         if k != "_idx":
-            assert type(v) == torch.Tensor, k
+            assert isinstance(v, torch.Tensor), k
             assert (p2[k] == v).all(), v

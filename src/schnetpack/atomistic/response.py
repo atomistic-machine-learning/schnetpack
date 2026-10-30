@@ -1,12 +1,9 @@
-from typing import Dict, Optional, List, Tuple
-
 import torch
 import torch.nn as nn
-
 from torch.autograd import grad
 
-from schnetpack.nn.utils import derivative_from_molecular, derivative_from_atomic
 import schnetpack.properties as properties
+from schnetpack.nn.utils import derivative_from_atomic, derivative_from_molecular
 
 __all__ = ["Forces", "Strain", "Response"]
 
@@ -38,7 +35,7 @@ class Forces(nn.Module):
             force_key: Key of the forces in results.
             stress_key: Key of the stress in results.
         """
-        super(Forces, self).__init__()
+        super().__init__()
         self.calc_forces = calc_forces
         self.calc_stress = calc_stress
         self.energy_key = energy_key
@@ -56,10 +53,10 @@ class Forces(nn.Module):
         if self.calc_stress:
             self.required_derivatives.append(properties.strain)
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         Epred = inputs[self.energy_key]
 
-        go: List[Optional[torch.Tensor]] = [torch.ones_like(Epred)]
+        go: list[torch.Tensor | None] = [torch.ones_like(Epred)]
         grads = grad(
             [Epred],
             [inputs[prop] for prop in self.required_derivatives],
@@ -109,8 +106,8 @@ class Response(nn.Module):
     def __init__(
         self,
         energy_key: str,
-        response_properties: List[str],
-        map_properties: Optional[Dict[str, str]] = None,
+        response_properties: list[str],
+        map_properties: dict[str, str] | None = None,
     ):
         """
         Compute different response properties by taking derivatives of an energy model. See [#field1]_ for details.
@@ -128,12 +125,12 @@ class Response(nn.Module):
             Machine learning of solvent effects on molecular spectra and reactions.
             Chemical Science, 12(34), 11473-11483. 2021.
         """
-        super(Response, self).__init__()
+        super().__init__()
 
         for prop in response_properties:
             if prop not in self.implemented_properties:
                 raise NotImplementedError(
-                    "Property {:s} not implemented in response layer.".format(prop)
+                    f"Property {prop:s} not implemented in response layer."
                 )
 
         self.energy_key = energy_key
@@ -168,11 +165,11 @@ class Response(nn.Module):
             [p for p in self.derivative_instructions if self.derivative_instructions[p]]
         )
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         energy = inputs[self.energy_key]
 
         # Compute base level derivatives
-        go: List[Optional[torch.Tensor]] = [torch.ones_like(energy)]
+        go: list[torch.Tensor | None] = [torch.ones_like(energy)]
         basic_derivatives = grad(
             [energy],
             [inputs[prop] for prop in self.basic_derivatives.values()],
@@ -188,7 +185,6 @@ class Response(nn.Module):
         # dE / dR
         # ================================
         if self.derivative_instructions["dEdR"]:
-
             # basic distance derivatives
             if properties.forces in self.response_properties:
                 results[properties.forces] = -basic_derivatives["dEdR"]
@@ -301,7 +297,7 @@ class Response(nn.Module):
 
     def _construct_properties(
         self,
-    ) -> Tuple[Dict[str, str], List[str], Dict[str, bool], Dict[str, bool]]:
+    ) -> tuple[dict[str, str], list[str], dict[str, bool], dict[str, bool]]:
         """
         Routine for automatically determining the computational settings of the response
         layer based on the requested response properties.
@@ -351,7 +347,6 @@ class Response(nn.Module):
         if (properties.forces in self.response_properties) or (
             properties.hessian in self.response_properties
         ):
-
             derivative_instructions["dEdR"] = True
             required_derivatives.add(properties.R)
             basic_derivatives["dEdR"] = properties.R
@@ -374,7 +369,6 @@ class Response(nn.Module):
             or (properties.polarizability_derivatives in self.response_properties)
             or (properties.partial_charges in self.response_properties)
         ):
-
             derivative_instructions["dEdF"] = True
             required_derivatives.add(properties.electric_field)
             basic_derivatives["dEdF"] = properties.electric_field
@@ -438,7 +432,7 @@ class Strain(nn.Module):
     positions and unit cell.
     """
 
-    def forward(self, inputs: Dict[str, torch.Tensor]):
+    def forward(self, inputs: dict[str, torch.Tensor]):
         strain = torch.zeros_like(inputs[properties.cell])
         strain.requires_grad_()
         inputs[properties.strain] = strain

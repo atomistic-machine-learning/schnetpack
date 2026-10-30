@@ -11,21 +11,21 @@ References
     Journal of Physics: Condensed Matter, 9, 27. 2017.
 """
 
-import os
-import numpy as np
-from abc import ABC, abstractmethod
-import torch
-import torch.nn as nn
 import logging
+import os
+from abc import ABC, abstractmethod
+from collections.abc import Callable
 from copy import deepcopy
 
-from ase import Atoms
-from ase import units
-from ase.constraints import FixAtoms
+import numpy as np
+import torch
+import torch.nn as nn
+from ase import Atoms, units
 from ase.calculators.calculator import Calculator, all_changes
+from ase.constraints import FixAtoms
 from ase.io import read, write
 from ase.io.trajectory import Trajectory
-from ase.md import VelocityVerlet, Langevin, MDLogger
+from ase.md import Langevin, MDLogger, VelocityVerlet
 from ase.md.velocitydistribution import (
     MaxwellBoltzmannDistribution,
     Stationary,
@@ -36,12 +36,10 @@ from ase.vibrations import Vibrations
 
 from schnetpack import properties
 from schnetpack.data.loader import _atoms_collate_fn
+from schnetpack.md.utils import activate_model_stress
 from schnetpack.transform import CastTo32, CastTo64, Transform
 from schnetpack.units import convert_units
 from schnetpack.utils import load_model
-from schnetpack.md.utils import activate_model_stress
-
-from typing import Optional, List, Union, Dict
 
 log = logging.getLogger(__name__)
 
@@ -60,11 +58,11 @@ class AtomsConverter:
 
     def __init__(
         self,
-        neighbor_list: Union[Transform, None],
-        transforms: Union[Transform, List[Transform]] = None,
-        device: Union[str, torch.device] = "cpu",
+        neighbor_list: Transform | None,
+        transforms: Transform | list[Transform] = None,
+        device: str | torch.device = "cpu",
         dtype: torch.dtype = torch.float32,
-        additional_inputs: Dict[str, torch.Tensor] = None,
+        additional_inputs: dict[str, torch.Tensor] | None = None,
     ):
         """
         Args:
@@ -90,22 +88,22 @@ class AtomsConverter:
 
         # convert transforms and neighbor_list to list
         transforms = transforms or []
-        if type(transforms) != list:
+        if type(transforms) is not list:
             transforms = [transforms]
         neighbor_list = [] if neighbor_list is None else [neighbor_list]
 
         # get transforms and initialize neighbor list
-        self.transforms: List[Transform] = neighbor_list + transforms
+        self.transforms: list[Transform] = neighbor_list + transforms
 
         # Set numerical precision
-        if dtype == torch.float32:
+        if dtype is torch.float32:
             self.transforms.append(CastTo32())
-        elif dtype == torch.float64:
+        elif dtype is torch.float64:
             self.transforms.append(CastTo64())
         else:
             raise AtomsConverterError(f"Unrecognized precision {dtype}")
 
-    def __call__(self, atoms: List[Atoms] or Atoms):
+    def __call__(self, atoms: list[Atoms] or Atoms):
         """
 
         Args:
@@ -116,20 +114,17 @@ class AtomsConverter:
         """
 
         # check input type and prepare for conversion
-        if type(atoms) == list:
+        if type(atoms) is list:
             pass
-        elif type(atoms) == Atoms:
+        elif type(atoms) is Atoms:
             atoms = [atoms]
         else:
             raise TypeError(
-                "atoms is type {}, but should be either list or ase.Atoms object".format(
-                    type(atoms)
-                )
+                f"atoms is type {type(atoms)}, but should be either list or ase.Atoms object"
             )
 
         inputs_batch = []
         for at_idx, at in enumerate(atoms):
-
             inputs = {
                 properties.n_atoms: torch.tensor([at.get_global_number_of_atoms()]),
                 properties.Z: torch.from_numpy(at.get_atomic_numbers()),
@@ -173,18 +168,18 @@ class SpkCalculator(Calculator):
 
     def __init__(
         self,
-        model: Union[str, nn.Module],
+        model: str | nn.Module,
         neighbor_list: Transform,
         energy_key: str = "energy",
         force_key: str = "forces",
-        stress_key: Optional[str] = None,
-        energy_unit: Union[str, float] = "kcal/mol",
-        position_unit: Union[str, float] = "Angstrom",
-        device: Union[str, torch.device] = "cpu",
+        stress_key: str | None = None,
+        energy_unit: str | float = "kcal/mol",
+        position_unit: str | float = "Angstrom",
+        device: str | torch.device = "cpu",
         dtype: torch.dtype = torch.float32,
-        converter: callable = AtomsConverter,
-        transforms: Union[Transform, List[Transform]] = None,
-        additional_inputs: Dict[str, torch.Tensor] = None,
+        converter: Callable = AtomsConverter,
+        transforms: Transform | list[Transform] = None,
+        additional_inputs: dict[str, torch.Tensor] | None = None,
         **kwargs,
     ):
         """
@@ -242,8 +237,8 @@ class SpkCalculator(Calculator):
 
     def _load_model(
         self,
-        model: Union[str, nn.Module],
-        device: Union[str, torch.device],
+        model: str | nn.Module,
+        device: str | torch.device,
         dtype: torch.dtype,
     ) -> nn.Module:
         """
@@ -257,7 +252,7 @@ class SpkCalculator(Calculator):
         """
 
         if isinstance(model, str):
-            log.info("Loading model from {:s}...".format(model))
+            log.info(f"Loading model from {model:s}...")
             model = load_model(model, device=torch.device(device)).to(dtype)
 
         else:
@@ -276,8 +271,8 @@ class SpkCalculator(Calculator):
         self,
         atoms: Atoms = None,
         # properties is just a placeholder and will be ignored
-        properties: List[str] = ["energy"],
-        system_changes: List[str] = all_changes,
+        properties: list[str] | None = None,
+        system_changes: list[str] = all_changes,
     ):
         """
         Args:
@@ -290,6 +285,8 @@ class SpkCalculator(Calculator):
         # (see https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/calculator.html#Calculator)
 
         # make a list of all properties available in the model
+        if properties is None:
+            properties = ["energy"]
         properties = [
             p_key for p_key, p_value in self.property_map.items() if p_value is not None
         ]
@@ -330,9 +327,9 @@ class SpkCalculator(Calculator):
                     )
             else:
                 raise AtomsConverterError(
-                    "'{:s}' is not a property of your model. Please "
+                    f"'{prop:s}' is not a property of your model. Please "
                     "check the model "
-                    "properties!".format(prop)
+                    "properties!"
                 )
         self.results = results
 
@@ -361,13 +358,12 @@ class Uncertainty(ABC):
         self.stress_weight = stress_weight / total_weight
 
     @abstractmethod
-    def __call__(self, predictions: Dict[str, List[np.ndarray]]) -> float:
+    def __call__(self, predictions: dict[str, list[np.ndarray]]) -> float:
         pass
 
 
 class AbsoluteUncertainty(Uncertainty):
-
-    def __call__(self, predictions: Dict[str, List[np.ndarray]]) -> float:
+    def __call__(self, predictions: dict[str, list[np.ndarray]]) -> float:
         uncertainty = 0
 
         if self.energy_weight > 0:
@@ -394,8 +390,7 @@ class AbsoluteUncertainty(Uncertainty):
 
 
 class RelativeUncertainty(Uncertainty):
-
-    def __call__(self, predictions: Dict[str, List[np.ndarray]]) -> float:
+    def __call__(self, predictions: dict[str, list[np.ndarray]]) -> float:
         uncertainty = 0
 
         if self.energy_weight > 0:
@@ -440,19 +435,19 @@ class SpkEnsembleCalculator(SpkCalculator):
 
     def __init__(
         self,
-        models: Union[List[str], List[nn.Module]],
+        models: list[str] | list[nn.Module],
         neighbor_list: Transform,
         energy_key: str = "energy",
         force_key: str = "forces",
-        stress_key: Optional[str] = None,
-        energy_unit: Union[str, float] = "kcal/mol",
-        position_unit: Union[str, float] = "Angstrom",
-        device: Union[str, torch.device] = "cpu",
+        stress_key: str | None = None,
+        energy_unit: str | float = "kcal/mol",
+        position_unit: str | float = "Angstrom",
+        device: str | torch.device = "cpu",
         dtype: torch.dtype = torch.float32,
-        converter: callable = AtomsConverter,
-        transforms: Optional[Union[Transform, List[Transform]]] = None,
-        uncertainty_fn: callable = None,
-        additional_inputs: Dict[str, torch.Tensor] = None,
+        converter: Callable = AtomsConverter,
+        transforms: Transform | list[Transform] | None = None,
+        uncertainty_fn: Callable | None = None,
+        additional_inputs: dict[str, torch.Tensor] | None = None,
         **kwargs,
     ):
         """
@@ -532,9 +527,11 @@ class SpkEnsembleCalculator(SpkCalculator):
         self,
         atoms: Atoms = None,
         # properties is just a placeholder and will be ignored
-        properties: List[str] = ["energy"],
-        system_changes: List[str] = all_changes,
+        properties: list[str] | None = None,
+        system_changes: list[str] = all_changes,
     ):
+        if properties is None:
+            properties = ["energy"]
         properties = [
             p_key for p_key, p_value in self.property_map.items() if p_value is not None
         ]
@@ -606,16 +603,16 @@ class AseInterface:
         neighbor_list: Transform,
         energy_key: str = "energy",
         force_key: str = "forces",
-        stress_key: Optional[str] = None,
-        energy_unit: Union[str, float] = "kcal/mol",
-        position_unit: Union[str, float] = "Angstrom",
-        device: Union[str, torch.device] = "cpu",
+        stress_key: str | None = None,
+        energy_unit: str | float = "kcal/mol",
+        position_unit: str | float = "Angstrom",
+        device: str | torch.device = "cpu",
         dtype: torch.dtype = torch.float32,
         converter: AtomsConverter = AtomsConverter,
         optimizer_class: type = QuasiNewton,
-        fixed_atoms: Optional[List[int]] = None,
-        transforms: Union[Transform, List[Transform]] = None,
-        additional_inputs: Dict[str, torch.Tensor] = None,
+        fixed_atoms: list[int] | None = None,
+        transforms: Transform | list[Transform] = None,
+        additional_inputs: dict[str, torch.Tensor] | None = None,
     ):
         """
         Args:
@@ -682,9 +679,7 @@ class AseInterface:
             file_format: Format to store geometry (default xyz).
             append: If set to true, geometry is added to end of file (default False).
         """
-        molecule_path = os.path.join(
-            self.working_dir, "{:s}.{:s}".format(name, file_format)
-        )
+        molecule_path = os.path.join(self.working_dir, f"{name:s}.{file_format:s}")
         write(molecule_path, self.molecule, format=file_format, append=append)
 
     def calculate_single_point(self):
@@ -706,7 +701,7 @@ class AseInterface:
         name: str,
         time_step: float = 0.5,
         temp_init: float = 300,
-        temp_bath: Optional[float] = None,
+        temp_bath: float | None = None,
         reset: bool = False,
         interval: int = 1,
     ):
@@ -745,8 +740,8 @@ class AseInterface:
             )
 
         # Create monitors for logfile and a trajectory file
-        logfile = os.path.join(self.working_dir, "{:s}.log".format(name))
-        trajfile = os.path.join(self.working_dir, "{:s}.traj".format(name))
+        logfile = os.path.join(self.working_dir, f"{name:s}.log")
+        trajfile = os.path.join(self.working_dir, f"{name:s}.traj")
         logger = MDLogger(
             self.dynamics,
             self.molecule,
@@ -792,7 +787,7 @@ class AseInterface:
         """
         if not self.dynamics:
             raise AttributeError(
-                "Dynamics need to be initialized using the" " 'setup_md' function"
+                "Dynamics need to be initialized using the 'setup_md' function"
             )
 
         self.dynamics.run(steps)
@@ -810,8 +805,8 @@ class AseInterface:
         optimize_file = os.path.join(self.working_dir, name)
         optimizer = self.optimizer_class(
             self.molecule,
-            trajectory="{:s}.traj".format(optimize_file),
-            restart="{:s}.pkl".format(optimize_file),
+            trajectory=f"{optimize_file:s}.traj",
+            restart=f"{optimize_file:s}.pkl",
         )
         optimizer.run(fmax, steps)
 

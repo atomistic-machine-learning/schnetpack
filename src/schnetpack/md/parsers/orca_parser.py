@@ -4,10 +4,9 @@ information from the output files, as well as gradient and hessian files generat
 the ORCA code package. Contains several predefined parsers.
 """
 
-from typing import Optional, List, Dict, Union
-
 import logging
 import os
+
 import numpy as np
 from ase import Atoms, units
 from tqdm import tqdm
@@ -79,12 +78,14 @@ class OrcaParser:
     def __init__(
         self,
         dbpath: str,
-        target_properties: List,
-        filter: Optional[Dict[str, float]] = None,
+        target_properties: list,
+        filter: dict[str, float] | None = None,
         mask_charges: bool = False,
-        property_units: Dict[str, Union[str, float]] = {},
-        distance_unit: Union[str, float] = 1.0,
+        property_units: dict[str, str | float] | None = None,
+        distance_unit: str | float = 1.0,
     ):
+        if property_units is None:
+            property_units = {}
         self.dbpath = dbpath
 
         main_properties = []
@@ -103,7 +104,7 @@ class OrcaParser:
             elif p in self.hessian_properties:
                 hessian_properties.append(p)
             else:
-                print("Unrecognized property {:s}".format(p))
+                print(f"Unrecognized property {p:s}")
 
         if properties.electric_field in target_properties:
             dummy_properties.append(properties.electric_field)
@@ -135,7 +136,7 @@ class OrcaParser:
         # If requested, mask Q charges introduced by Orca
         self.mask_charges = mask_charges
 
-    def parse_data(self, data_files: List[str], buffer_size: int = 10):
+    def parse_data(self, data_files: list[str], buffer_size: int = 10):
         """
         Reads in a list of ORCA output files, extracts the data, performs reformatting and
         then stores structures and properties to an ASE database.
@@ -149,9 +150,7 @@ class OrcaParser:
         property_buffer = []
 
         for file in tqdm(sorted(data_files), ncols=100):
-
             if os.path.exists(file):
-
                 atoms, properties = self._parse_molecule(file)
 
                 if properties is not None:
@@ -210,7 +209,7 @@ class OrcaParser:
         target_properties = {}
         for p in main_properties:
             if main_properties[p] is None:
-                print("Error parsers {:s}".format(p))
+                print(f"Error parsers {p:s}")
                 return None, None
             elif p == "atoms":
                 atypes, coords = main_properties[p]
@@ -223,7 +222,7 @@ class OrcaParser:
                 os.path.splitext(datafile)[0] + self.file_extensions["hessian"]
             )
             if not os.path.exists(hessian_file):
-                print("Could not open Hessian file {:s}".format(hessian_file))
+                print(f"Could not open Hessian file {hessian_file:s}")
                 return atoms, None
             else:
                 self.hessian_parser.parse_file(hessian_file)
@@ -275,7 +274,7 @@ class OrcaParser:
         else:
             return True
 
-    def _mask_charges(self, main_properties: Dict[str, np.array]):
+    def _mask_charges(self, main_properties: dict[str, np.array]):
         """
         Remove the external charges Q introduced in orca input file. This is
         only necessary, if the charges are given in the input file. This in
@@ -370,12 +369,12 @@ class OrcaFormatter:
     def __init__(
         self,
         position,
-        stop: Optional[int] = None,
+        stop: int | None = None,
         datatype: str = "vector",
         converter: type = np.double,
-        skip_first: Optional[int] = None,
-        unit: Optional[Union[float]] = None,
-        default: Optional[float] = None,
+        skip_first: int | None = None,
+        unit: float | None = None,
+        default: float | None = None,
     ):
         self.position = position
         self.stop = stop
@@ -386,7 +385,7 @@ class OrcaFormatter:
         self.unit = unit
         self.default = default
 
-    def format(self, parsed: List[str]):
+    def format(self, parsed: list[str]):
         """
         Format the raw parsed data according to the given instructions.
 
@@ -415,16 +414,14 @@ class OrcaFormatter:
         elif self.datatype == "shielding":
             formatted = self._format_shielding(parsed)
         else:
-            raise NotImplementedError(
-                "Unrecognized data type {:s}".format(self.datatype)
-            )
+            raise NotImplementedError(f"Unrecognized data type {self.datatype:s}")
 
         if self.unit is not None:
             formatted *= self.unit
 
         return formatted
 
-    def _format_vector(self, parsed: List[str]):
+    def _format_vector(self, parsed: list[str]):
         """
         Take numerical entries in a line and collect them into an array.
         It is possible to extract only certain slices of an array.
@@ -458,7 +455,7 @@ class OrcaFormatter:
 
         return vector
 
-    def _format_matrix(self, parsed: List[str]):
+    def _format_matrix(self, parsed: list[str]):
         """
         Format raw extracted matrices. Unlike the vector formatter, this routine
         deals with cases where ORCA stores special matrices, such as Hamiltionians
@@ -493,7 +490,7 @@ class OrcaFormatter:
         matrix = np.array(matrix)
         return matrix
 
-    def _format_shielding(self, parsed: List[str]):
+    def _format_shielding(self, parsed: list[str]):
         """
         Format the raw shielding tensors taken from the ORCA output.
 
@@ -538,8 +535,8 @@ class OrcaPropertyParser:
     def __init__(
         self,
         start: str,
-        stop: Union[str, List[str]],
-        formatters: Optional[Union[OrcaFormatter, List[OrcaFormatter]]] = None,
+        stop: str | list[str],
+        formatters: OrcaFormatter | list[OrcaFormatter] | None = None,
     ):
         self.start = start
         self.stop = stop
@@ -615,7 +612,7 @@ class OrcaOutputParser:
                                        each with their own :obj:`OrcaFormatter`.
     """
 
-    def __init__(self, parsers: Dict[str, OrcaPropertyParser]):
+    def __init__(self, parsers: dict[str, OrcaPropertyParser]):
         self.parsers = parsers
         self.parsed = None
 
@@ -631,7 +628,7 @@ class OrcaOutputParser:
         for parser in self.parsers:
             self.parsers[parser].reset()
 
-        with open(path, "r") as f:
+        with open(path) as f:
             for line in f:
                 for parser in self.parsers:
                     self.parsers[parser].parse_line(line)
@@ -697,15 +694,14 @@ class OrcaMainFileParser(OrcaOutputParser):
         properties.shielding: OrcaFormatter(0, datatype="shielding", unit=ppm2au),
     }
 
-    def __init__(self, target_properties: Optional[List[str]] = None):
-
+    def __init__(self, target_properties: list[str] | None = None):
         if target_properties is None:
             to_parse = self.target_properties
         else:
             to_parse = []
             for p in target_properties:
                 if p not in self.target_properties:
-                    print("Cannot parse property {:s}".format(p))
+                    print(f"Cannot parse property {p:s}")
                 else:
                     to_parse.append(p)
 
@@ -716,7 +712,7 @@ class OrcaMainFileParser(OrcaOutputParser):
             for p in to_parse
         }
 
-        super(OrcaMainFileParser, self).__init__(parsers)
+        super().__init__(parsers)
 
 
 class OrcaHessianFileParser(OrcaMainFileParser):
@@ -750,5 +746,5 @@ class OrcaHessianFileParser(OrcaMainFileParser):
         properties.polarizability_derivatives: OrcaFormatter(0, stop=6, skip_first=1),
     }
 
-    def __init__(self, target_properties: Optional[List[str]] = None):
-        super(OrcaHessianFileParser, self).__init__(target_properties)
+    def __init__(self, target_properties: list[str] | None = None):
+        super().__init__(target_properties)

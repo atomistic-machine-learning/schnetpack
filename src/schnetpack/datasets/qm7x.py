@@ -5,7 +5,6 @@ import os
 import re
 import shutil
 import tempfile
-from typing import Dict, List, Optional
 from urllib import request as request
 
 import h5py
@@ -15,8 +14,14 @@ import torch
 from ase import Atoms
 from tqdm import tqdm
 
-from schnetpack.data import *
-from schnetpack.data import AtomsDataModule
+from schnetpack.data import (
+    AtomsDataFormat,
+    AtomsDataModule,
+    BaseAtomsData,
+    SplittingStrategy,
+    create_dataset,
+    load_dataset,
+)
 from schnetpack.data.splitting import GroupSplit
 
 __all__ = ["QM7X"]
@@ -90,10 +95,10 @@ def extract_xz(source: str, target: str):
     try:
         with lzma.open(source) as fin, open(target, mode="wb") as fout:
             shutil.copyfileobj(fin, fout)
-    except:
+    except Exception as e:
         if os.path.exists(target):
             os.remove(target)
-        raise RuntimeError(f"Could not extract file {s_file}. Please try again.")
+        raise RuntimeError(f"Could not extract file {s_file}. Please try again.") from e
 
     logging.info("Done.")
 
@@ -161,29 +166,29 @@ class QM7X(AtomsDataModule):
         self,
         datapath: str,
         batch_size: int,
-        raw_data_path: str = None,
+        raw_data_path: str | None = None,
         remove_duplicates: bool = True,
         only_equilibrium: bool = False,
         only_non_equilibrium: bool = False,
-        num_train: Optional[int] = None,
-        num_val: Optional[int] = None,
-        num_test: Optional[int] = None,
-        split_file: Optional[str] = "split.npz",
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
-        load_properties: Optional[List[str]] = None,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
-        train_transforms: Optional[List[torch.nn.Module]] = None,
-        val_transforms: Optional[List[torch.nn.Module]] = None,
-        test_transforms: Optional[List[torch.nn.Module]] = None,
+        num_train: int | None = None,
+        num_val: int | None = None,
+        num_test: int | None = None,
+        split_file: str | None = "split.npz",
+        format: AtomsDataFormat | None = AtomsDataFormat.ASE,
+        load_properties: list[str] | None = None,
+        val_batch_size: int | None = None,
+        test_batch_size: int | None = None,
+        transforms: list[torch.nn.Module] | None = None,
+        train_transforms: list[torch.nn.Module] | None = None,
+        val_transforms: list[torch.nn.Module] | None = None,
+        test_transforms: list[torch.nn.Module] | None = None,
         num_workers: int = 2,
-        num_val_workers: Optional[int] = None,
-        num_test_workers: Optional[int] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
-        data_workdir: Optional[str] = None,
-        splitting: Optional[SplittingStrategy] = None,
+        num_val_workers: int | None = None,
+        num_test_workers: int | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
+        data_workdir: str | None = None,
+        splitting: SplittingStrategy | None = None,
         **kwargs,
     ):
         """
@@ -249,7 +254,7 @@ class QM7X(AtomsDataModule):
         """
         download duplicates ids for QM7-X
         """
-        url = f"https://zenodo.org/record/4288677/files/DupMols.dat"
+        url = "https://zenodo.org/record/4288677/files/DupMols.dat"
         tar_path = os.path.join(tar_dir, "DupMols.dat")
         checksum = "5d886ccac38877c8cb26c07704dd1034"
 
@@ -257,11 +262,11 @@ class QM7X(AtomsDataModule):
 
         # fetch duplicates ids
         dup_mols = []
-        for line in open(tar_path, "r"):
+        for line in open(tar_path):
             dup_mols.append(line.rstrip("\n")[:-4])
         self.duplicates_ids = dup_mols
 
-    def _download_data(self, tar_dir: str, ignore_extracted: bool = True) -> List[str]:
+    def _download_data(self, tar_dir: str, ignore_extracted: bool = True) -> list[str]:
         """
         download data and extract them
         """
@@ -298,7 +303,7 @@ class QM7X(AtomsDataModule):
 
         # extract the compressed files
         extracted = []
-        for i, file_id in enumerate(file_ids):
+        for file_id in file_ids:
             xz_path = os.path.join(tar_dir, f"{file_id}.xz")
             hd_path = os.path.join(tar_dir, f"{file_id}.hdf5")
 
@@ -308,7 +313,7 @@ class QM7X(AtomsDataModule):
 
         return extracted
 
-    def _parse_data(self, files: List[str], dataset: BaseAtomsData):
+    def _parse_data(self, files: list[str], dataset: BaseAtomsData):
         """
         Parse the downloaded data files and add them to the dataset.
         """
@@ -328,7 +333,7 @@ class QM7X(AtomsDataModule):
             }
 
             with h5py.File(file, "r") as mol_dict:
-                for mol_id, mol in tqdm(mol_dict.items()):
+                for _mol_id, mol in tqdm(mol_dict.items()):
                     for conf_id, conf in mol.items():
                         # exclude equilibrium duplicates
                         trunc_id = conf_id[::-1].split("-", 1)[-1][::-1]

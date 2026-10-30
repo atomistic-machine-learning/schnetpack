@@ -11,14 +11,15 @@ References
    Journal of Physics: Condensed Matter, 9, 27. 2017.
 """
 
+import copy
 import logging
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from enum import Enum
-from typing import Optional, List, Dict, Any, Iterable, Union, Tuple
+from typing import Any
 
 import torch
-import copy
 from ase import Atoms
 from ase.db import connect
 
@@ -59,10 +60,10 @@ class BaseAtomsData(ABC):
 
     def __init__(
         self,
-        load_properties: Optional[List[str]] = None,
+        load_properties: list[str] | None = None,
         load_structure: bool = True,
-        transforms: Optional[List[Transform]] = None,
-        subset_idx: Optional[List[int]] = None,
+        transforms: list[Transform] | None = None,
+        subset_idx: list[int] | None = None,
     ):
         """
         Args:
@@ -86,7 +87,7 @@ class BaseAtomsData(ABC):
         return self._transforms
 
     @transforms.setter
-    def transforms(self, value: Optional[List[Transform]]):
+    def transforms(self, value: list[Transform] | None):
         self._transforms = []
         self._transform_module = None
 
@@ -95,10 +96,10 @@ class BaseAtomsData(ABC):
                 self._transforms.append(tf)
             self._transform_module = torch.nn.Sequential(*self._transforms)
 
-    def subset(self, subset_idx: List[int]):
-        assert (
-            subset_idx is not None
-        ), "Indices for creation of the subset need to be provided!"
+    def subset(self, subset_idx: list[int]):
+        assert subset_idx is not None, (
+            "Indices for creation of the subset need to be provided!"
+        )
         ds = copy.copy(self)
         if ds.subset_idx:
             ds.subset_idx = [ds.subset_idx[i] for i in subset_idx]
@@ -108,18 +109,18 @@ class BaseAtomsData(ABC):
 
     @property
     @abstractmethod
-    def available_properties(self) -> List[str]:
+    def available_properties(self) -> list[str]:
         """Available properties in the dataset"""
         pass
 
     @property
     @abstractmethod
-    def units(self) -> Dict[str, str]:
+    def units(self) -> dict[str, str]:
         """Property to unit dict"""
         pass
 
     @property
-    def load_properties(self) -> List[str]:
+    def load_properties(self) -> list[str]:
         """Properties to be loaded"""
         if self._load_properties is None:
             return self.available_properties
@@ -127,23 +128,23 @@ class BaseAtomsData(ABC):
             return self._load_properties
 
     @load_properties.setter
-    def load_properties(self, val: List[str]):
+    def load_properties(self, val: list[str]):
         if val is not None:
             props = self.available_properties
-            assert all(
-                [p in props for p in val]
-            ), "Not all given properties are available in the dataset!"
+            assert all([p in props for p in val]), (
+                "Not all given properties are available in the dataset!"
+            )
         self._load_properties = val
 
     @property
     @abstractmethod
-    def metadata(self) -> Dict[str, Any]:
+    def metadata(self) -> dict[str, Any]:
         """Global metadata"""
         pass
 
     @property
     @abstractmethod
-    def atomrefs(self) -> Dict[str, torch.Tensor]:
+    def atomrefs(self) -> dict[str, torch.Tensor]:
         """Single-atom reference values for properties"""
         pass
 
@@ -154,9 +155,9 @@ class BaseAtomsData(ABC):
     @abstractmethod
     def iter_properties(
         self,
-        indices: Union[int, Iterable[int]] = None,
-        load_properties: List[str] = None,
-        load_structure: Optional[bool] = None,
+        indices: int | Iterable[int] | None = None,
+        load_properties: list[str] | None = None,
+        load_structure: bool | None = None,
     ):
         pass
 
@@ -165,8 +166,8 @@ class BaseAtomsData(ABC):
     def create(
         datapath: str,
         position_unit: str,
-        property_unit_dict: Dict[str, str],
-        atomrefs: Dict[str, List[float]],
+        property_unit_dict: dict[str, str],
+        atomrefs: dict[str, list[float]],
         **kwargs,
     ) -> "BaseAtomsData":
         pass
@@ -174,14 +175,14 @@ class BaseAtomsData(ABC):
     @abstractmethod
     def add_systems(
         self,
-        property_list: List[Dict[str, Any]],
-        atoms_list: Optional[List[Atoms]] = None,
-        atoms_metadata_list: Optional[List[Dict[str, Any]]] = None,
+        property_list: list[dict[str, Any]],
+        atoms_list: list[Atoms] | None = None,
+        atoms_metadata_list: list[dict[str, Any]] | None = None,
     ):
         pass
 
     @abstractmethod
-    def add_system(self, atoms: Optional[Atoms] = None, **properties):
+    def add_system(self, atoms: Atoms | None = None, **properties):
         pass
 
 
@@ -195,12 +196,12 @@ class ASEAtomsData(BaseAtomsData):
     def __init__(
         self,
         datapath: str,
-        load_properties: Optional[List[str]] = None,
+        load_properties: list[str] | None = None,
         load_structure: bool = True,
-        transforms: Optional[List[torch.nn.Module]] = None,
-        subset_idx: Optional[List[int]] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
+        transforms: list[torch.nn.Module] | None = None,
+        subset_idx: list[int] | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
     ):
         """
         Args:
@@ -215,6 +216,7 @@ class ASEAtomsData(BaseAtomsData):
         """
         self.datapath = datapath
         self.conn = connect(self.datapath, use_lock_file=False)
+        self._available_properties: list[str] | None = None
 
         BaseAtomsData.__init__(
             self,
@@ -263,7 +265,7 @@ class ASEAtomsData(BaseAtomsData):
 
         return self.conn.count()
 
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         if self.subset_idx is not None:
             idx = self.subset_idx[idx]
 
@@ -291,9 +293,9 @@ class ASEAtomsData(BaseAtomsData):
 
     def iter_properties(
         self,
-        indices: Union[int, Iterable[int]] = None,
-        load_properties: List[str] = None,
-        load_structure: Optional[bool] = None,
+        indices: int | Iterable[int] | None = None,
+        load_properties: list[str] | None = None,
+        load_structure: bool | None = None,
         load_metadata: bool = False,
     ):
         """
@@ -340,7 +342,7 @@ class ASEAtomsData(BaseAtomsData):
         self,
         conn,
         idx: int,
-        load_properties: List[str],
+        load_properties: list[str],
         load_structure: bool,
         load_metadata: bool = False,
     ):
@@ -379,31 +381,34 @@ class ASEAtomsData(BaseAtomsData):
         with connect(self.datapath, use_lock_file=False) as conn:
             return conn.metadata
 
-    def _set_metadata(self, val: Dict[str, Any]):
+    def _set_metadata(self, val: dict[str, Any]):
         with connect(self.datapath, use_lock_file=False) as conn:
             conn.metadata = val
+        self._available_properties = None
 
     def update_metadata(self, **kwargs):
-        assert all(
-            key[0] != 0 for key in kwargs
-        ), "Metadata keys starting with '_' are protected!"
+        assert all(key[0] != 0 for key in kwargs), (
+            "Metadata keys starting with '_' are protected!"
+        )
 
         md = self.metadata
         md.update(kwargs)
         self._set_metadata(md)
 
     @property
-    def available_properties(self) -> List[str]:
-        md = self.metadata
-        return list(md["_property_unit_dict"].keys())
+    def available_properties(self) -> list[str]:
+        if self._available_properties is None:
+            md = self.metadata
+            self._available_properties = list(md["_property_unit_dict"].keys())
+        return list(self._available_properties)
 
     @property
-    def units(self) -> Dict[str, str]:
+    def units(self) -> dict[str, str]:
         """Dictionary of properties to units"""
         return self._units
 
     @property
-    def atomrefs(self) -> Dict[str, torch.Tensor]:
+    def atomrefs(self) -> dict[str, torch.Tensor]:
         md = self.metadata
         arefs = md["atomrefs"]
         arefs = {k: self.conversions[k] * torch.tensor(v) for k, v in arefs.items()}
@@ -415,8 +420,8 @@ class ASEAtomsData(BaseAtomsData):
     def create(
         datapath: str,
         distance_unit: str,
-        property_unit_dict: Dict[str, str],
-        atomrefs: Optional[Dict[str, List[float]]] = None,
+        property_unit_dict: dict[str, str],
+        atomrefs: dict[str, list[float]] | None = None,
         **kwargs,
     ) -> "ASEAtomsData":
         """
@@ -460,8 +465,8 @@ class ASEAtomsData(BaseAtomsData):
     # add systems
     def add_system(
         self,
-        atoms: Optional[Atoms] = None,
-        atoms_metadata: Optional[Dict[str, Any]] = None,
+        atoms: Atoms | None = None,
+        atoms_metadata: dict[str, Any] | None = None,
         **properties,
     ):
         """
@@ -482,9 +487,9 @@ class ASEAtomsData(BaseAtomsData):
 
     def add_systems(
         self,
-        property_list: List[Dict[str, Any]],
-        atoms_list: Optional[List[Atoms]] = None,
-        atoms_metadata_list: Optional[List[Dict[str, Any]]] = None,
+        property_list: list[dict[str, Any]],
+        atoms_list: list[Atoms] | None = None,
+        atoms_metadata_list: list[dict[str, Any]] | None = None,
     ):
         """
         Add atoms data to the dataset.
@@ -519,8 +524,8 @@ class ASEAtomsData(BaseAtomsData):
 
     def _add_system(
         self,
-        atoms: Optional[Atoms] = None,
-        atoms_metadata: Optional[Dict[str, Any]] = None,
+        atoms: Atoms | None = None,
+        atoms_metadata: dict[str, Any] | None = None,
         **properties,
     ):
         """
@@ -553,9 +558,9 @@ class ASEAtomsData(BaseAtomsData):
                 if pname not in valid_props:
                     logger.warning(
                         f"Property `{pname}` is not a defined property for this dataset and "
-                        + f"will be ignored. If it should be included, it has to be "
-                        + f"provided together with its unit when calling "
-                        + f"AseAtomsData.create()."
+                        + "will be ignored. If it should be included, it has to be "
+                        + "provided together with its unit when calling "
+                        + "AseAtomsData.create()."
                     )
 
             data = {}
@@ -572,7 +577,7 @@ def create_dataset(
     datapath: str,
     format: AtomsDataFormat,
     distance_unit: str,
-    property_unit_dict: Dict[str, str],
+    property_unit_dict: dict[str, str],
     **kwargs,
 ) -> BaseAtomsData:
     """
@@ -619,8 +624,8 @@ def load_dataset(datapath: str, format: AtomsDataFormat, **kwargs) -> BaseAtomsD
 
 
 def resolve_format(
-    datapath: str, format: Optional[AtomsDataFormat] = None
-) -> Tuple[str, AtomsDataFormat]:
+    datapath: str, format: AtomsDataFormat | None = None
+) -> tuple[str, AtomsDataFormat]:
     """
     Extract data format from file suffix, check for consistency with (optional) given
     format, or append suffix to file path.
@@ -634,9 +639,9 @@ def resolve_format(
     if suffix == ".db":
         if format is None:
             format = AtomsDataFormat.ASE
-        assert (
-            format is AtomsDataFormat.ASE
-        ), f"File extension {suffix} is not compatible with chosen format {format}"
+        assert format is AtomsDataFormat.ASE, (
+            f"File extension {suffix} is not compatible with chosen format {format}"
+        )
     elif len(suffix) == 0 and format:
         datapath = datapath + extension_map[format]
     elif len(suffix) == 0 and format is None:

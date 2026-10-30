@@ -1,10 +1,11 @@
+from collections.abc import Callable
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Union, Callable, Dict, Optional
 
-import schnetpack.properties as properties
 import schnetpack.nn as snn
+import schnetpack.properties as properties
 import schnetpack.units as spk_units
 
 __all__ = ["ZBLRepulsionEnergy"]
@@ -31,13 +32,13 @@ class ZBLRepulsionEnergy(nn.Module):
 
     def __init__(
         self,
-        energy_unit: Union[str, float],
-        position_unit: Union[str, float],
+        energy_unit: str | float,
+        position_unit: str | float,
         output_key: str,
         trainable: bool = True,
-        cutoff_fn: Optional[Callable] = None,
+        cutoff_fn: Callable | None = None,
     ):
-        super(ZBLRepulsionEnergy, self).__init__()
+        super().__init__()
 
         energy_units = spk_units.convert_units("Ha", energy_unit)
         position_units = spk_units.convert_units("Bohr", position_unit)
@@ -67,7 +68,7 @@ class ZBLRepulsionEnergy(nn.Module):
         self.coefficients = nn.Parameter(coefficients, requires_grad=trainable)
         self.exponents = nn.Parameter(exponents, requires_grad=trainable)
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         z = inputs[properties.Z]
         r_ij = inputs[properties.Rij]
         d_ij = torch.norm(r_ij, dim=1)

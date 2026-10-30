@@ -3,20 +3,20 @@ This module contains different hooks for monitoring the simulation and checkpoin
 """
 
 from __future__ import annotations
-from typing import Union, List, Dict, Tuple, Any
-from typing import TYPE_CHECKING
+
+from typing import TYPE_CHECKING, Any
 
 import schnetpack.units
 
 if TYPE_CHECKING:
-    from schnetpack.md import System
-    from schnetpack.md import Simulator
+    from schnetpack.md import Simulator, System
 
-import torch
 import json
 import os
+
 import h5py
 import numpy as np
+import torch
 
 from schnetpack.md.simulation_hooks import SimulationHook
 
@@ -32,7 +32,7 @@ class Checkpoint(SimulationHook):
     """
 
     def __init__(self, checkpoint_file: str, every_n_steps: int):
-        super(Checkpoint, self).__init__()
+        super().__init__()
         self.every_n_steps = every_n_steps
         self.checkpoint_file = checkpoint_file
 
@@ -83,7 +83,7 @@ class DataStream:
         try:
             return getattr(np, f"float{precision}")
         except AttributeError:
-            raise AttributeError(f"Unknown float precision {precision}")
+            raise AttributeError(f"Unknown float precision {precision}") from None
 
     def init_data_stream(
         self,
@@ -156,7 +156,7 @@ class DataStream:
         self.data_group.attrs.modify("entries", file_position + buffer_position)
         self.data_group.flush()
 
-    def _setup_data_groups(self, data_shape: Tuple[Any, int], simulator: Simulator):
+    def _setup_data_groups(self, data_shape: tuple[Any, int], simulator: Simulator):
         """
         Auxiliary routine for initializing data groups in the main hdf5 data file as well as the buffer used during
         logging. All arrays are initialized using the full number of simulation steps specified in the main simulator
@@ -205,7 +205,7 @@ class MoleculeStream(DataStream):
     """
 
     def __init__(self, store_velocities: bool):
-        super(MoleculeStream, self).__init__("molecules")
+        super().__init__("molecules")
         self.store_velocities = store_velocities
         self.cells = False
         self.written = 0
@@ -322,8 +322,8 @@ class PropertyStream(DataStream):
                                   to None, which means all properties are stored.
     """
 
-    def __init__(self, target_properties: List[str] = None):
-        super(PropertyStream, self).__init__("properties")
+    def __init__(self, target_properties: list[str] | None = None):
+        super().__init__("properties")
         self.n_replicas = None
         self.n_molecules = None
         self.n_atoms = None
@@ -382,7 +382,7 @@ class PropertyStream(DataStream):
                 simulator.system.properties[p].contiguous().view(self.n_replicas, -1)
             ).detach()
 
-    def _get_properties_structures(self, property_dict: Dict[str, torch.tensor]):
+    def _get_properties_structures(self, property_dict: dict[str, torch.tensor]):
         """
         Auxiliary function to get the names, shapes and positions used in the property stream based on the property
         dictionary of the system.
@@ -404,11 +404,8 @@ class PropertyStream(DataStream):
             self.target_properties = list(property_dict.keys())
 
         for p in self.target_properties:
-
             if p not in property_dict:
-                raise FileLoggerError(
-                    "Property {:s} not found in system properties".format(p)
-                )
+                raise FileLoggerError(f"Property {p:s} not found in system properties")
 
             # Store shape for metadata
             properties_shape[p] = [int(i) for i in property_dict[p].shape[1:]]
@@ -451,11 +448,13 @@ class FileLogger(SimulationHook):
         self,
         filename: str,
         buffer_size: int,
-        data_streams: List[DataStream] = [],
+        data_streams: list[DataStream] | None = None,
         every_n_steps: int = 1,
         precision: int = 32,
     ):
-        super(FileLogger, self).__init__()
+        if data_streams is None:
+            data_streams = []
+        super().__init__()
 
         self.every_n_steps = every_n_steps
         self.filename = filename
@@ -488,14 +487,11 @@ class FileLogger(SimulationHook):
 
         # Check, whether file already exists
         if os.path.exists(self.filename):
-
             # If file exists and it is the first call of a simulator without restart,
             # raise and error.
             if (not simulator.restart) and (simulator.effective_steps == 0):
                 raise FileLoggerError(
-                    "File {:s} already exists and simulation was not restarted.".format(
-                        self.filename
-                    )
+                    f"File {self.filename:s} already exists and simulation was not restarted."
                 )
 
             # If either a restart is requested or the simulator has already been called,
@@ -585,7 +581,7 @@ class BasicTensorboardLogger(SimulationHook):
     """
 
     def __init__(self, log_file, every_n_steps=100):
-        super(BasicTensorboardLogger, self).__init__()
+        super().__init__()
         from tensorboardX import SummaryWriter
 
         self.log_file = log_file
@@ -633,13 +629,13 @@ class BasicTensorboardLogger(SimulationHook):
         logger_dict = {}
 
         for molecule in range(self.n_molecules):
-            mol_name = "{:s}/molecule_{:02d}".format(group_name, molecule + 1)
+            mol_name = f"{group_name:s}/molecule_{molecule + 1:02d}"
 
             if property_centroid is not None:
                 logger_dict["centroid"] = property_centroid[0, molecule]
 
             for replica in range(self.n_replicas):
-                rep_name = "r{:02d}".format(replica + 1)
+                rep_name = f"r{replica + 1:02d}"
                 logger_dict[rep_name] = property[replica, molecule]
 
             self.writer.add_scalars(mol_name, logger_dict, step)
@@ -664,8 +660,8 @@ class TensorBoardLogger(BasicTensorboardLogger):
         every_n_steps (int): Frequency with which data is logged to TensorBoard.
     """
 
-    def __init__(self, log_file: str, properties: List, every_n_steps: int = 100):
-        super(TensorBoardLogger, self).__init__(log_file, every_n_steps=every_n_steps)
+    def __init__(self, log_file: str, properties: list, every_n_steps: int = 100):
+        super().__init__(log_file, every_n_steps=every_n_steps)
         # Instructions of how to compute properties
         self.get_properties = {
             "energy": self._get_energies,
@@ -675,7 +671,7 @@ class TensorBoardLogger(BasicTensorboardLogger):
         }
         for p in properties:
             if p not in self.get_properties:
-                raise TensorBoardLoggerError("Property '{:s}' not available.".format(p))
+                raise TensorBoardLoggerError(f"Property '{p:s}' not available.")
 
         self.properties = properties
 

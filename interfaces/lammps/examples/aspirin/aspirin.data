@@ -1,13 +1,13 @@
-/home/niklas/phd/code/pair_nequip/test/aspirin.data (written by ASE) 
+/home/niklas/phd/code/pair_nequip/test/aspirin.data (written by ASE)
 
-21 	 atoms 
+21 	 atoms
 3  atom types
 0.0                      10  xlo xhi
 0.0                      10  ylo yhi
 0.0                      10  zlo zhi
 
 
-Atoms 
+Atoms
 
      1   1      7.1344888199999996      4.0156389499999996      4.8047821099999997
      2   1      5.7626438100000001      5.9594139500000001      3.3200710999999998

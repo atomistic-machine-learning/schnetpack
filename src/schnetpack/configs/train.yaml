@@ -10,6 +10,7 @@ defaults:
       - earlystopping
       - lrmonitor
       - ema
+      - progress_bar
   - task: default_task
   - model: null
   - data: custom
@@ -17,6 +18,12 @@ defaults:
   - experiment: null
 
 print_config: True
+
+# seed for pytorch, numpy and python.random; null draws a random seed
+seed: null
+
+# wandb project name, referenced by configs/logger/wandb.yaml
+project: default
 
 # hydra configuration
 hydra:
@@ -27,8 +34,8 @@ hydra:
         dir: ${run.path}/${run.id}
 
     searchpath:
-      - file://${oc.env:PWD}
-      - file://${oc.env:PWD}/configs
+      - file://.
+      - file://./configs
 
     # disable hydra config storage, since handled manually
     output_subdir: null

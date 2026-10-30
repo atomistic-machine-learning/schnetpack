@@ -1,2 +1,9 @@
 wandb:
     _target_: pytorch_lightning.loggers.WandbLogger
+    project: ${project}
+    entity: null
+    name: ${run.id}
+    id: ${run.id}
+    resume: allow
+    notes: "none"
+    tags: null

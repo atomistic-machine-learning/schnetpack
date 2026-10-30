@@ -1,8 +1,7 @@
 import numpy as np
-import torch
 
-from schnetpack.data.loader import _atoms_collate_fn
 import schnetpack as spk
+from schnetpack.data.loader import _atoms_collate_fn
 
 
 def test_strain(environment_periodic):

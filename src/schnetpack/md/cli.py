@@ -1,26 +1,22 @@
 import logging
-import uuid
-import torch
 import os
-import shutil
 import random
-
+import shutil
+import tempfile
+import uuid
 from datetime import datetime
 
 import hydra
+import torch
+from ase.io import read
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf, open_dict
-
-import tempfile
-
-import schnetpack.md
-from schnetpack.utils import str2class, int2precision
-from schnetpack.utils.script import print_config
-from schnetpack.md.utils import get_npt_integrator, is_rpmd_integrator, MDConfigMerger
-
 from pytorch_lightning import seed_everything
 
-from ase.io import read
+import schnetpack.md
+from schnetpack.md.utils import MDConfigMerger, get_npt_integrator, is_rpmd_integrator
+from schnetpack.utils import int2precision, str2class
+from schnetpack.utils.script import print_config
 
 log = logging.getLogger(__name__)
 
@@ -41,10 +37,10 @@ def simulate(config: DictConfig):
     print(
         """
            _____      __    _   __     __  ____             __    __  __    ___
-          / ___/_____/ /_  / | / /__  / /_/ __ \____ ______/ /__ |  \/  |  |   \\
-          \__ \/ ___/ __ \/  |/ / _ \/ __/ /_/ / __ `/ ___/ //_/ | |\/| |  | |) |
+          / ___/_____/ /_  / | / /__  / /_/ __ \\____ ______/ /__ |  \\/  |  |   \\
+          \\__ \\/ ___/ __ \\/  |/ / _ \\/ __/ /_/ / __ `/ ___/ //_/ | |\\/| |  | |) |
          ___/ / /__/ / / / /|  /  __/ /_/ ____/ /_/ / /__/ ,<    |_|__|_|  |___/
-        /____/\___/_/ /_/_/ |_/\___/\__/_/    \__,_/\___/_/|_|  _|""  ""|_|""  ""|
+        /____/\\___/_/ /_/_/ |_/\\___/\\__/_/    \\__,_/\\___/_/|_|  _|""  ""|_|""  ""|
                                                                 "`-0--0-'"`-0--0-'
         """
     )
@@ -56,7 +52,7 @@ def simulate(config: DictConfig):
     # Load custom config and use to update defaults
     if config.load_config is not None:
         config_path = hydra.utils.to_absolute_path(config.load_config)
-        logging.info("Loading config from {:s}".format(config_path))
+        logging.info(f"Loading config from {config_path:s}")
         loaded_config = OmegaConf.load(config_path)
 
         # get hydra overrides
@@ -127,9 +123,7 @@ def simulate(config: DictConfig):
         )
         system.load_system_state(state_dict["system"])
         log.info(
-            "Loaded previous system state from {:s}".format(
-                config.system.load_system_state
-            )
+            f"Loaded previous system state from {config.system.load_system_state:s}"
         )
     else:
         molecules = read(
@@ -197,14 +191,14 @@ def simulate(config: DictConfig):
     # NHC barostat and since npt integrators rely on the barostat for system propagation routines)
     if config.dynamics.thermostat is not None:
         thermostat_hook = hydra.utils.instantiate(config.dynamics.thermostat)
-        log.info("Found {:s} thermostat...".format(config.dynamics.thermostat._target_))
+        log.info(f"Found {config.dynamics.thermostat._target_:s} thermostat...")
     else:
         thermostat_hook = None
 
     # Check for barostat hook and whether thermostat is required
     if config.dynamics.barostat is not None:
         barostat_hook = hydra.utils.instantiate(config.dynamics.barostat)
-        log.info("Found {:s} barostat...".format(config.dynamics.barostat._target_))
+        log.info(f"Found {config.dynamics.barostat._target_:s} barostat...")
 
         if thermostat_hook is not None:
             if hasattr(barostat_hook, "temperature_control"):
@@ -318,7 +312,7 @@ def simulate(config: DictConfig):
 
     if config.restart is not None:
         checkpoint = hydra.utils.to_absolute_path(config.restart)
-        logging.info("Restarting simulation from checkpoint {:s}...".format(checkpoint))
+        logging.info(f"Restarting simulation from checkpoint {checkpoint:s}...")
         state_dict = torch.load(checkpoint, weights_only=False)
         simulator.restart_simulation(state_dict)
 
@@ -330,7 +324,7 @@ def simulate(config: DictConfig):
     #   Finally run simulation
     # ===========================================
 
-    log.info("Running simulation in {:s}...".format(hydra_wd))
+    log.info(f"Running simulation in {hydra_wd:s}...")
 
     start = datetime.now()
     simulator.simulate(config.dynamics.n_steps)
@@ -338,16 +332,12 @@ def simulate(config: DictConfig):
 
     final_dir = hydra.utils.to_absolute_path(config.simulation_dir)
     if final_dir != hydra_wd:
-        logging.info(
-            "Moving simulation output from {:s} to {:s}...".format(hydra_wd, final_dir)
-        )
+        logging.info(f"Moving simulation output from {hydra_wd:s} to {final_dir:s}...")
 
         if os.path.exists(final_dir):
             logging.info(
-                "Destination {:s} already exists, moving data to subdirectory...".format(
-                    final_dir
-                )
+                f"Destination {final_dir:s} already exists, moving data to subdirectory..."
             )
         shutil.move(hydra_wd, final_dir)
 
-    log.info("Finished after: {:s}".format(str(stop - start)))
+    log.info(f"Finished after: {str(stop - start):s}")

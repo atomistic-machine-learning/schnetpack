@@ -1,6 +1,9 @@
 import numpy as np
 import pytest
+import torch
 from ase import Atoms
+
+import schnetpack as spk
 
 
 @pytest.fixture(scope="session")
@@ -50,7 +53,7 @@ def example_data(min_atoms, max_atoms, num_data, property_shapes):
     randomly.
     """
     data = []
-    for i in range(1, num_data + 1):
+    for _i in range(1, num_data + 1):
         n_atoms = np.random.randint(min_atoms, max_atoms)
         z = np.random.randint(1, 100, size=(n_atoms,))
         r = np.random.randn(n_atoms, 3)
@@ -74,7 +77,7 @@ def example_data_pbc(min_atoms, max_atoms, num_data, property_shapes):
     List of (ase.Atoms, data) tuples with different sized periodic atomic systems.
     """
     data = []
-    for i in range(1, num_data + 1):
+    for _i in range(1, num_data + 1):
         n_atoms = np.random.randint(min_atoms, max_atoms)
         z = np.random.randint(1, 100, size=(n_atoms,))
         r = np.random.randn(n_atoms, 3)
@@ -90,14 +93,6 @@ def example_data_pbc(min_atoms, max_atoms, num_data, property_shapes):
         data.append((ats, props))
 
     return data
-
-
-import pytest
-from ase import Atoms
-import numpy as np
-import torch
-
-import schnetpack as spk
 
 
 @pytest.fixture

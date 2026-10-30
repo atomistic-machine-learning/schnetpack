@@ -1,9 +1,9 @@
 import torch
-from typing import Optional, Dict, List
 
-from schnetpack.data import *
+from schnetpack.data import (
+    AtomsDataFormat,
+)
 from schnetpack.datasets.md17 import GDMLDataModule
-
 
 all = ["MD22"]
 
@@ -22,24 +22,24 @@ class MD22(GDMLDataModule):
         datapath: str,
         molecule: str,
         batch_size: int,
-        num_train: Optional[int] = None,
-        num_val: Optional[int] = None,
-        num_test: Optional[int] = None,
-        split_file: Optional[str] = "split.npz",
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
-        load_properties: Optional[List[str]] = None,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
-        train_transforms: Optional[List[torch.nn.Module]] = None,
-        val_transforms: Optional[List[torch.nn.Module]] = None,
-        test_transforms: Optional[List[torch.nn.Module]] = None,
+        num_train: int | None = None,
+        num_val: int | None = None,
+        num_test: int | None = None,
+        split_file: str | None = "split.npz",
+        format: AtomsDataFormat | None = AtomsDataFormat.ASE,
+        load_properties: list[str] | None = None,
+        val_batch_size: int | None = None,
+        test_batch_size: int | None = None,
+        transforms: list[torch.nn.Module] | None = None,
+        train_transforms: list[torch.nn.Module] | None = None,
+        val_transforms: list[torch.nn.Module] | None = None,
+        test_transforms: list[torch.nn.Module] | None = None,
         num_workers: int = 2,
-        num_val_workers: Optional[int] = None,
-        num_test_workers: Optional[int] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
-        data_workdir: Optional[str] = None,
+        num_val_workers: int | None = None,
+        num_test_workers: int | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
+        data_workdir: str | None = None,
         **kwargs,
     ):
         """
@@ -87,7 +87,7 @@ class MD22(GDMLDataModule):
             "double-walled_nanotube": "md22_double-walled_nanotube.npz",
         }
 
-        super(MD22, self).__init__(
+        super().__init__(
             datasets_dict=datasets_dict,
             download_url="http://www.quantum-machine.org/gdml/repo/datasets/",
             tmpdir="md22",

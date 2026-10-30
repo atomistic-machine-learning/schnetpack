@@ -1,9 +1,8 @@
 import re
-from typing import Union, Dict
 
+import numpy as np
 from ase import units as aseunits
 from ase.units import Units
-import numpy as np
 
 __all__ = ["convert_units"]
 
@@ -16,7 +15,7 @@ __md_base_units__ = {
 }
 
 
-def setup_md_units(md_base_units: Dict[str, Union[str, float]]):
+def setup_md_units(md_base_units: dict[str, str | float]):
     """
     Define the units used in molecular dynamics. This is done based on the base units for energy, length and mass
     from which all other quantities are derived.
@@ -144,7 +143,7 @@ def _conversion_factor_internal(unit: str):
 
 
 def _parse_unit(unit, conversion_factor=_conversion_factor_ase):
-    if type(unit) == str:
+    if type(unit) is str:
         # If a string is given, split into parts.
         parts = re.split(r"(\W)", unit)
 
@@ -168,7 +167,7 @@ def _parse_unit(unit, conversion_factor=_conversion_factor_ase):
         return unit
 
 
-def unit2internal(src_unit: Union[str, float]):
+def unit2internal(src_unit: str | float):
     """
     Convert unit to internal unit system defined above.
 
@@ -181,7 +180,7 @@ def unit2internal(src_unit: Union[str, float]):
     return _parse_unit(src_unit, conversion_factor=_conversion_factor_internal)
 
 
-def convert_units(src_unit: Union[str, float], tgt_unit: Union[str, float]):
+def convert_units(src_unit: str | float, tgt_unit: str | float):
     """Return conversion factor for given units"""
     return _parse_unit(src_unit) / _parse_unit(tgt_unit)
 

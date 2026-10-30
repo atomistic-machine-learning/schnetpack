@@ -33,17 +33,26 @@ References:
 
 using namespace LAMMPS_NS;
 
-PairSCHNETPACK::PairSCHNETPACK(LAMMPS *lmp) : Pair(lmp) {
+// Defined here, in the only translation unit that includes libtorch, so that
+// torch's headers are never visible to the rest of LAMMPS via style_pair.h.
+namespace LAMMPS_NS {
+struct PairSCHNETPACK::Impl {
+  torch::jit::script::Module model;
+  torch::Device device = torch::kCPU;
+};
+}
+
+PairSCHNETPACK::PairSCHNETPACK(LAMMPS *lmp) : Pair(lmp), impl(new Impl) {
   restartinfo = 0;
   manybody_flag = 1;
 
   if(torch::cuda::is_available()){
-    device = torch::kCUDA;
+    impl->device = torch::kCUDA;
   }
   else {
-    device = torch::kCPU;
+    impl->device = torch::kCPU;
   }
-  std::cout << "SCHNETPACK is using device " << device << "\n";
+  std::cout << "SCHNETPACK is using device " << impl->device << "\n";
 
   if(const char* env_p = std::getenv("SCHNETPACK_DEBUG")){
     std::cout << "PairSCHNETPACK is in DEBUG mode, since SCHNETPACK_DEBUG is in env\n";
@@ -121,12 +130,12 @@ void PairSCHNETPACK::coeff(int narg, char **arg) {
 
   std::cout << "Loading model from " << arg[2] << "\n";
 
-  
+
   std::unordered_map<std::string, std::string> metadata = {
     {"cutoff", ""},
   };
-  model = torch::jit::load(std::string(arg[2]), device, metadata);
-  model.eval();
+  impl->model = torch::jit::load(std::string(arg[2]), impl->device, metadata);
+  impl->model.eval();
 
 
   cutoff = std::stod(metadata["cutoff"]);
@@ -137,7 +146,7 @@ void PairSCHNETPACK::coeff(int narg, char **arg) {
       type_mapper[counter] = std::stoi(arg[i]);
       counter++;
   }
-  
+
   if(debug_mode){
     std::cout << "cutoff" << cutoff << "\n";
     for (int i = 0; i <= ntypes+1; i++){
@@ -294,24 +303,24 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
       new_offsets[i][1] = ev[1];
       new_offsets[i][2] = ev[2];
   }
-  
+
   // define SchNetPack specific inputs
   torch::Tensor idx_m_tensor = torch::zeros({nlocal}, torch::TensorOptions().dtype(torch::kInt64));
-  
+
   // define SchNetPack n_atoms input
   torch::Tensor n_atoms_tensor = torch::zeros({1}, torch::TensorOptions().dtype(torch::kInt64));
   n_atoms_tensor[0] = nlocal;
 
 
   c10::Dict<std::string, torch::Tensor> input;
-  input.insert("_positions", positions_tensor.to(device));
-  input.insert("_idx_i", idx_i_tensor.to(device));
-  input.insert("_idx_j", idx_j_tensor.to(device));
-  input.insert("_idx_m", idx_m_tensor.to(device));
-  input.insert("_offsets", offsets_tensor.to(device));
-  input.insert("_cell", cell_tensor.to(device));
-  input.insert("_n_atoms", n_atoms_tensor.to(device));
-  input.insert("_atomic_numbers", atomic_numbers_tensor.to(device));
+  input.insert("_positions", positions_tensor.to(impl->device));
+  input.insert("_idx_i", idx_i_tensor.to(impl->device));
+  input.insert("_idx_j", idx_j_tensor.to(impl->device));
+  input.insert("_idx_m", idx_m_tensor.to(impl->device));
+  input.insert("_offsets", offsets_tensor.to(impl->device));
+  input.insert("_cell", cell_tensor.to(impl->device));
+  input.insert("_n_atoms", n_atoms_tensor.to(impl->device));
+  input.insert("_atomic_numbers", atomic_numbers_tensor.to(impl->device));
   std::vector<torch::IValue> input_vector(1, input);
 
   if(debug_mode){
@@ -324,9 +333,9 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
     std::cout << "_cell:\n" << cell_tensor << "\n";
     std::cout << "_atomic_numbers:\n" << atomic_numbers_tensor << "\n";
   }
-  
-  auto output = model.forward(input_vector).toGenericDict();
-  
+
+  auto output = impl->model.forward(input_vector).toGenericDict();
+
   torch::Tensor forces_tensor = output.at("forces").toTensor().cpu();
   auto forces = forces_tensor.accessor<float, 2>();
 
@@ -340,7 +349,7 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
     std::cout << "forces: " << forces_tensor << "\n";
     std::cout << "energy: " << total_energy_tensor << "\n";
   }
-  
+
   // Write forces and per-atom energies (0-based tags here)
   for(int itag = 0; itag < inum; itag++){
     int i = tag2i[itag];
@@ -348,5 +357,5 @@ void PairSCHNETPACK::compute(int eflag, int vflag){
     f[i][1] = forces[itag][1];
     f[i][2] = forces[itag][2];
   }
-  
+
 }

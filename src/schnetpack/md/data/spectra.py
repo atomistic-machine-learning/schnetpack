@@ -10,13 +10,14 @@ References
                Phys. Chem. Chem. Phys., 15 (18), 6608--6622. 2013.
 """
 
+import logging
+
 import numpy as np
 from ase import units as ase_units
-from schnetpack.md.data import HDF5Loader
-import logging
 
 from schnetpack import properties
 from schnetpack import units as spk_units
+from schnetpack.md.data import HDF5Loader
 
 __all__ = ["VibrationalSpectrum", "PowerSpectrum", "IRSpectrum", "RamanSpectrum"]
 
@@ -82,10 +83,8 @@ class VibrationalSpectrum:
 
         spectral_range = 0.5 / self.timestep / (ase_units._c / 1e13)
         spectral_resolution = spectral_range / (4 * resolution)
-        logging.info(
-            "Spectral resolutions: {:12.3f} [cm^-1]".format(spectral_resolution)
-        )
-        logging.info("Spectral range:       {:12.3f} [cm^-1]".format(spectral_range))
+        logging.info(f"Spectral resolutions: {spectral_resolution:12.3f} [cm^-1]")
+        logging.info(f"Spectral range:       {spectral_range:12.3f} [cm^-1]")
 
         self.res = spectral_resolution
         self.frequencies = []
@@ -237,7 +236,7 @@ class PowerSpectrum(VibrationalSpectrum):
     """
 
     def __init__(self, data: HDF5Loader, resolution: int = 4096):
-        super(PowerSpectrum, self).__init__(data, resolution=resolution)
+        super().__init__(data, resolution=resolution)
 
     def _get_data(self, molecule_idx: int):
         """
@@ -286,7 +285,7 @@ class IRSpectrum(VibrationalSpectrum):
         resolution: int = 4096,
         dipole_moment_handle: str = properties.dipole_moment,
     ):
-        super(IRSpectrum, self).__init__(data, resolution=resolution)
+        super().__init__(data, resolution=resolution)
         self.dipole_moment_handle = dipole_moment_handle
 
     def _get_data(self, molecule_idx: int):
@@ -349,7 +348,7 @@ class RamanSpectrum(VibrationalSpectrum):
         resolution: int = 4096,
         averaged: bool = False,
     ):
-        super(RamanSpectrum, self).__init__(data, resolution=resolution)
+        super().__init__(data, resolution=resolution)
         self.incident_frequency = incident_frequency
         self.temperature = temperature
         self.averaged = averaged

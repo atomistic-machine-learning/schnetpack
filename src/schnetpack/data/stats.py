@@ -1,5 +1,3 @@
-from typing import Dict, Tuple
-
 import torch
 from tqdm import tqdm
 
@@ -11,9 +9,9 @@ __all__ = ["calculate_stats", "estimate_atomrefs"]
 
 def calculate_stats(
     dataloader: AtomsLoader,
-    divide_by_atoms: Dict[str, bool],
-    atomref: Dict[str, torch.Tensor] = None,
-) -> Dict[str, Tuple[torch.Tensor, torch.Tensor]]:
+    divide_by_atoms: dict[str, bool],
+    atomref: dict[str, torch.Tensor] | None = None,
+) -> dict[str, tuple[torch.Tensor, torch.Tensor]]:
     """
     Use the incremental Welford algorithm described in [h1]_ to accumulate
     the mean and standard deviation over a set of samples.
@@ -133,9 +131,7 @@ def estimate_atomrefs(dataloader, is_extensive, z_max=100):
             )
 
     # compute energy estimates
-    elementwise_contributions = {
-        pname: torch.zeros((z_max)) for pname in property_names
-    }
+    elementwise_contributions = {pname: torch.zeros(z_max) for pname in property_names}
     for pname in property_names:
         for atom_type, weight in zip(existing_atom_types, w[pname]):
             elementwise_contributions[pname][atom_type] = weight
