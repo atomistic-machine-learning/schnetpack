@@ -85,6 +85,11 @@ def train(config: DictConfig):
         with open(f"config.old.{count}.yaml", "w") as f:
             OmegaConf.save(old_config, f, resolve=False)
 
+        # a resumed run keeps its seed, unless a new one is given
+        if config.get("seed") is None and old_config.get("seed") is not None:
+            with open_dict(config):
+                config.seed = old_config.seed
+
         # resume from latest checkpoint
         if config.run.ckpt_path is None:
             if os.path.exists("checkpoints/last.ckpt"):
@@ -94,9 +99,6 @@ def train(config: DictConfig):
             log.info(
                 f"Resuming from checkpoint {os.path.abspath(config.run.ckpt_path)}"
             )
-    else:
-        with open("config.yaml", "w") as f:
-            OmegaConf.save(config, f, resolve=False)
 
     # Set matmul precision if specified
     if "matmul_precision" in config and config.matmul_precision is not None:
@@ -112,6 +114,11 @@ def train(config: DictConfig):
             config.seed = random.randint(0, 2**32 - 1)
         log.info(f"Seed randomly with <{config.seed}>")
     seed_everything(seed=config.seed, workers=True)
+
+    # written after the seed is chosen, so that it holds a randomly drawn seed
+    if not os.path.exists("config.yaml"):
+        with open("config.yaml", "w") as f:
+            OmegaConf.save(config, f, resolve=False)
 
     if config.get("print_config"):
         print_config(config, resolve=False)
