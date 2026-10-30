@@ -106,7 +106,7 @@ def train(config: DictConfig):
         torch.set_float32_matmul_precision(config.matmul_precision)
 
     # Set seed for random number generators in pytorch, numpy and python.random
-    if "seed" in config:
+    if config.get("seed") is not None:
         log.info(f"Seed with <{config.seed}>")
     else:
         # choose seed randomly
