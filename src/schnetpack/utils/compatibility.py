@@ -85,7 +85,7 @@ def load_model(
     # convert 2.0.4 models to 2.1.0 format
     if model.spk_version == "2.0.4":
         if not hasattr(model.representation, "electronic_embeddings"):
-            model.representation.electronic_embeddings = []
+            model.representation.electronic_embeddings = torch.nn.ModuleList()
         model.spk_version = "2.1.0"
 
     # convert 2.1.0 models to 2.1.1 format

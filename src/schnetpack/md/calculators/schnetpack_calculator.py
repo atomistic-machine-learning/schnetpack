@@ -110,6 +110,13 @@ class SchNetPackCalculator(MDCalculator):
 
         if self.script_model:
             log.info("Converting model to torch script...")
+            # type casting cannot be scripted, and is deactivated below anyway
+            if hasattr(model, "postprocessors"):
+                model.postprocessors = torch.nn.ModuleList(
+                    pp
+                    for pp in model.postprocessors
+                    if not isinstance(pp, schnetpack.transform.CastMap)
+                )
             model = torch.jit.script(model)
 
         log.info("Deactivating inference mode for simulation...")
