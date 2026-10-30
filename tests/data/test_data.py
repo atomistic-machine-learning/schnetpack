@@ -113,6 +113,21 @@ def test_asedb_reads_rows_added_after_a_read(asedb, example_data):
     assert torch.equal(asedb[n][structure.Z], torch.tensor(atoms.numbers))
 
 
+def test_asedb_reads_scalar_properties(asedbpath, example_data):
+    """A db written with ase.db directly may store a property as a plain number."""
+    atoms, _ = example_data[0]
+    with connect(asedbpath, use_lock_file=False) as conn:
+        conn.metadata = {
+            "_property_unit_dict": {"energy_per_atom": "eV"},
+            "_distance_unit": "Ang",
+            "atomrefs": {},
+        }
+        conn.write(atoms, data={"energy_per_atom": -1.5})
+    props = ASEAtomsData(datapath=asedbpath)[0]
+    assert props["energy_per_atom"].shape == (1,)
+    assert float(props["energy_per_atom"]) == -1.5
+
+
 def test_asedb_getprops(asedb):
     props = list(asedb.iter_properties(0))[0]
     assert set(props.keys()) == set(

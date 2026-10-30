@@ -20,6 +20,7 @@ from collections.abc import Iterable
 from typing import Any
 
 import fasteners
+import numpy as np
 import torch
 from ase import Atoms
 from ase.db import connect
@@ -339,8 +340,10 @@ class ASEAtomsData(torch.utils.data.Dataset):
         properties[structure.idx] = torch.tensor([idx])
 
         for pname in load_properties:
+            # torch.tensor copies; atleast_1d also takes properties stored as plain
+            # numbers (e.g. a db written with ase.db directly), as shape (1,)
             properties[pname] = (
-                torch.tensor(row.data[pname].copy()) * self.conversions[pname]
+                torch.tensor(np.atleast_1d(row.data[pname])) * self.conversions[pname]
             )
 
         Z = row["numbers"].copy()
