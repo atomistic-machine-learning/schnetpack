@@ -437,8 +437,14 @@ class TorchNeighborList(NeighborListTransform):
         # Check if shifts are needed for periodic boundary conditions
         if torch.all(pbc == 0):
             shifts = torch.zeros(0, 3, device=cell.device, dtype=torch.long)
+            wrap = torch.zeros_like(positions, dtype=torch.long)
         else:
             shifts = self._get_shifts(cell, pbc, cutoff)
+            # The shifts only reach far enough for atoms inside the cell, so search on
+            # wrapped positions and fold the wrapping back into the offsets below
+            wrap = torch.floor(positions.detach() @ torch.linalg.inv(cell)).long()
+            wrap = torch.where(pbc, wrap, 0)
+            positions = positions - wrap.to(cell.dtype) @ cell
         idx_i, idx_j, offset = self._get_neighbor_pairs(positions, cell, shifts, cutoff)
 
         # Create bidirectional id arrays, similar to what the ASE neighbor_list returns
@@ -451,7 +457,7 @@ class TorchNeighborList(NeighborListTransform):
         idx_j = bi_idx_j[sorted_idx]
 
         bi_offset = torch.cat((-offset, offset), dim=0)
-        offset = bi_offset[sorted_idx]
+        offset = bi_offset[sorted_idx] + wrap[idx_i] - wrap[idx_j]
         offset = torch.mm(offset.to(cell.dtype), cell)
 
         return idx_i, idx_j, offset
