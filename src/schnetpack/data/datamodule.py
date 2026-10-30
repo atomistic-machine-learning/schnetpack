@@ -324,15 +324,11 @@ class AtomsDataModule(pl.LightningDataModule):
     def _log_with_rank(self, msg: str):
         if self.trainer is not None:
             logging.debug(
-                "Global rank:",
-                self.trainer.global_rank,
-                ", lokal rank:",
-                self.trainer.local_rank,
-                " >> ",
-                msg,
+                f"Global rank: {self.trainer.global_rank}, "
+                f"local rank: {self.trainer.local_rank} >> {msg}"
             )
         else:
-            logging.debug(">> ", msg)
+            logging.debug(f">> {msg}")
 
     def _setup_sampler(self, sampler_cls, sampler_args, dataset):
         if sampler_cls is None:
