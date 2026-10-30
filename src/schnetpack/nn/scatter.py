@@ -19,13 +19,6 @@ def scatter_add(
         reduced input
 
     """
-    return _scatter_add(x, idx_i, dim_size, dim)
-
-
-@torch.jit.script
-def _scatter_add(
-    x: torch.Tensor, idx_i: torch.Tensor, dim_size: int, dim: int = 0
-) -> torch.Tensor:
     shape = list(x.shape)
     shape[dim] = dim_size
     tmp = torch.zeros(shape, dtype=x.dtype, device=x.device)
