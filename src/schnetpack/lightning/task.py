@@ -146,8 +146,22 @@ class AtomisticTask(pl.LightningModule):
         else:
             pred, targets = self.distillation.step(batch, train=subset == "train")
         loss = calculate_loss(self.outputs, pred, targets)
-        self.log_metrics(pred, targets, subset)
+        if subset != "train" or self.writes_train_logs():
+            self.log_metrics(pred, targets, subset)
         return loss
+
+    def writes_train_logs(self) -> bool:
+        """Whether Lightning writes this training step's logs (every
+        ``log_every_n_steps``). Training metrics are computed and logged only then:
+        the values of the other steps are never written, and computing them cost a
+        quarter of a fast training step. Without a trainer, always."""
+        trainer = self._trainer
+        if trainer is None:
+            return True
+        # Lightning's own condition (update_train_step_metrics)
+        return trainer._logger_connector.should_update_logs or bool(
+            trainer.fast_dev_run
+        )
 
     def on_validation_epoch_start(self):
         if self.distillation is not None:
@@ -159,7 +173,8 @@ class AtomisticTask(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss = self._step(batch, "train")
-        self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
+        if self.writes_train_logs():
+            self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
         return loss
 
     def validation_step(self, batch, batch_idx):

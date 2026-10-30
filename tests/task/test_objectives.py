@@ -329,3 +329,81 @@ def test_outputs_on_one_prediction_log_their_metrics_apart(tmp_path):
     trainer.fit(task, train_dataloaders=loader, val_dataloaders=loader)
 
     assert {"val_y_ref_mae", "val_y_alt_mae"} <= set(trainer.callback_metrics)
+
+
+class RecordingLogger(pl.loggers.Logger):
+    """The metrics of every write, as Lightning hands them to a logger."""
+
+    def __init__(self):
+        super().__init__()
+        self.rows = []
+
+    @property
+    def name(self):
+        return "recording"
+
+    @property
+    def version(self):
+        return 0
+
+    def log_hyperparams(self, params, *args, **kwargs):
+        pass
+
+    def log_metrics(self, metrics, step=None):
+        self.rows.append((step, dict(metrics)))
+
+
+def test_train_metrics_only_on_the_steps_whose_logs_are_written(tmp_path):
+    """Training metrics and train_loss are computed only on the steps Lightning
+    writes (every log_every_n_steps), with that step's values."""
+    output = make_output()
+    task = AtomisticTask(
+        model=LinearModel(), outputs=[output], optimizer_args={"lr": 1e-3}
+    )
+    updates, losses = [], []
+    update_metrics = output.update_metrics
+    training_step = task.training_step
+
+    def counted_update(pred, target, subset):
+        updates.append(subset)
+        update_metrics(pred, target, subset)
+
+    def recorded_step(batch, batch_idx):
+        loss = training_step(batch, batch_idx)
+        losses.append(float(loss))
+        return loss
+
+    output.update_metrics = counted_update
+    task.training_step = recorded_step
+    batch = make_batch()
+    loader = DataLoader(
+        TensorDataset(batch["x"], batch["y_ref"], batch["_idx"]),
+        batch_size=2,
+        collate_fn=lambda samples: {
+            "x": torch.stack([s[0] for s in samples]),
+            "y_ref": torch.stack([s[1] for s in samples]),
+            "_idx": torch.stack([s[2] for s in samples]),
+        },
+    )
+    logger = RecordingLogger()
+    trainer = pl.Trainer(
+        max_steps=12,
+        log_every_n_steps=4,
+        limit_val_batches=0,
+        accelerator="cpu",
+        logger=logger,
+        enable_checkpointing=False,
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        default_root_dir=str(tmp_path),
+    )
+    trainer.fit(task, train_dataloaders=loader)
+
+    written = [m for _, m in logger.rows if "train_loss" in m]
+    assert len(written) == 3  # steps 3, 7, 11
+    assert all("train_y_ref_mae" in m for m in written)
+    assert updates.count("train") == 3
+    # the value written is the loss of the step it is written at, not a stale one
+    assert [float(m["train_loss"]) for m in written] == pytest.approx(
+        [losses[3], losses[7], losses[11]]
+    )
