@@ -175,6 +175,7 @@ the command::
     │         _target_: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
     │         save_dir: tensorboard/
     │         name: default
+    │         version: 0
     │
     └── seed
         └── None
