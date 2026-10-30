@@ -10,6 +10,11 @@ so a model can be trained in a hand-written PyTorch loop:
     loss = calculate_loss(outputs, pred, targets)
     loss.backward()
 
+Batches padded to fixed shapes (data held on the GPU,
+:class:`~schnetpack.lightning.AtomsDataModule` with ``data_device``) mark their
+padding rows in ``properties.atom_mask`` / ``properties.structure_mask``;
+:func:`calculate_padded_loss` leaves them out without a host sync.
+
 :class:`schnetpack.lightning.AtomisticTask` uses these same functions for training with
 the PyTorch Lightning Trainer.
 """
@@ -20,6 +25,7 @@ import torch
 from torch import nn as nn
 from torchmetrics import Metric
 
+from schnetpack import properties
 from schnetpack.model.base import AtomisticModel
 
 __all__ = [
@@ -30,6 +36,8 @@ __all__ = [
     "extract_targets",
     "predict_without_postprocessing",
     "calculate_loss",
+    "calculate_padded_loss",
+    "padding_mask",
 ]
 
 
@@ -154,6 +162,27 @@ class ModelOutput(nn.Module):
         loss = self.loss_weight * self.loss_fn(*self.masked(pred, target))
         return loss
 
+    def calculate_padded_loss(self, pred, target, mask):
+        """
+        The loss over the rows where ``mask`` is 1 (a padded batch), as the loss over
+        those rows alone, without a host sync. Needs ``MSELoss`` or ``L1Loss`` with
+        mean reduction and no loss masks.
+        """
+        if self.loss_weight == 0 or self.loss_fn is None:
+            return 0.0
+        mse = isinstance(self.loss_fn, nn.MSELoss)
+        if self.masks or not (mse or isinstance(self.loss_fn, nn.L1Loss)):
+            raise ValueError(
+                f"output {self.name!r}: padded batches need MSELoss or L1Loss "
+                "without loss masks"
+            )
+        if self.loss_fn.reduction != "mean":
+            raise ValueError(f"output {self.name!r}: padded batches need mean loss")
+        p, t = pred[self.name], target[self.target_property]
+        err = (p - t) ** 2 if mse else (p - t).abs()
+        w = mask.to(p.dtype).view(-1, *[1] * (p.dim() - 1))
+        return self.loss_weight * (w * err).sum() / (w.sum() * p[0].numel())
+
     def update_metrics(self, pred, target, subset):
         prediction, reference = self.masked(pred, target)
         for metric in self.metrics[subset].values():
@@ -247,4 +276,30 @@ def calculate_loss(
     loss: torch.Tensor | float = 0.0
     for output in outputs:
         loss = loss + output.calculate_loss(pred, targets)
+    return loss if isinstance(loss, torch.Tensor) else torch.tensor(loss)
+
+
+def padding_mask(value: torch.Tensor, batch: dict[str, torch.Tensor]) -> torch.Tensor:
+    """The padding mask of a padded batch (1.0 real, 0.0 padding) that matches the
+    rows of value: per atom or per structure."""
+    atom_mask = batch[properties.atom_mask]
+    if value.shape[0] == atom_mask.shape[0]:
+        return atom_mask
+    return batch[properties.structure_mask]
+
+
+def calculate_padded_loss(
+    outputs: list[ModelOutput],
+    pred: dict[str, torch.Tensor],
+    targets: dict[str, torch.Tensor],
+    batch: dict[str, torch.Tensor],
+) -> torch.Tensor:
+    """
+    Weighted composite loss of a padded batch over its real rows, with fixed shapes
+    and no host sync (so it can be recorded in a CUDA graph).
+    """
+    loss: torch.Tensor | float = 0.0
+    for output in outputs:
+        mask = padding_mask(pred[output.name], batch)
+        loss = loss + output.calculate_padded_loss(pred, targets, mask)
     return loss if isinstance(loss, torch.Tensor) else torch.tensor(loss)

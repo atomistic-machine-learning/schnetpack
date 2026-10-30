@@ -40,8 +40,8 @@ class SubtractCenterOfMass(Transform):
     Subtract center of mass from positions.
 
     Works on one structure, or on a collated batch (``idx_m`` present, e.g. the
-    padded batches of :class:`~schnetpack.lightning.DeviceAtomsDataModule`), structure by
-    structure on the batch's device.
+    padded batches of :class:`~schnetpack.lightning.AtomsDataModule` with
+    ``data_device``), structure by structure on the batch's device.
     """
 
     is_preprocessor: bool = True
@@ -242,9 +242,18 @@ class RemoveOffsets(Transform):
             inputs[self._property] -= mean
 
         if self.remove_atomrefs:
-            atomref_bias = torch.sum(self.atomref[inputs[structure.Z]])
+            y0i = self.atomref[inputs[structure.Z]]
+            if structure.idx_m in inputs:  # a collated batch: per structure
+                atomref_bias = scatter_add(
+                    y0i,
+                    inputs[structure.idx_m],
+                    dim_size=inputs[structure.n_atoms].shape[0],
+                )
+            else:
+                atomref_bias = torch.sum(y0i)
             if not self.is_extensive:
-                atomref_bias = atomref_bias / inputs[structure.n_atoms]
+                # clamp: a padded batch may hold empty structures (no atoms)
+                atomref_bias = atomref_bias / inputs[structure.n_atoms].clamp(min=1)
             inputs[self._property] -= atomref_bias
         return inputs
 
@@ -417,7 +426,8 @@ class AddOffsets(Transform):
             y0 = scatter_add(y0i, idx_m, dim_size=maxm)
 
             if not self.is_extensive:
-                y0 /= inputs[structure.n_atoms]
+                # clamp: a padded batch may hold empty structures (no atoms)
+                y0 = y0 / inputs[structure.n_atoms].clamp(min=1)
 
             inputs[self._property] += y0
 

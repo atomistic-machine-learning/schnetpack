@@ -6,4 +6,9 @@ defaults:
 _target_: schnetpack.lightning.AtomisticTask
 outputs: ???
 warmup_steps: 0
+# speed (see the user guide, "Training faster"): a compiled model, and the whole
+# training step as one CUDA graph (needs data.data_device)
 compile: false
+cuda_graph: false
+grad_clip: null
+skip_loss_above: null

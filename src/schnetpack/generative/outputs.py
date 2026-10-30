@@ -64,6 +64,11 @@ class VariableOutput(ModelOutput):
     def loss_keys(self) -> tuple[str, ...]:
         return self.weight_key, self.mask_key
 
+    def calculate_padded_loss(self, pred, target, mask):
+        # the weight is 0 on padding rows already (Diffuse), and the row count
+        # comes from the padding mask copied into target
+        return self.calculate_loss(pred, target)
+
     def calculate_loss(self, pred, target):
         if self.loss_weight == 0:
             return 0.0

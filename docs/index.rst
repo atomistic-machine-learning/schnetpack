@@ -28,6 +28,7 @@ Contents
 
    userguide/overview
    userguide/configs
+   userguide/speed
    userguide/md
 
 .. toctree::

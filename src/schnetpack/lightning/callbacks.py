@@ -163,7 +163,7 @@ class ExponentialMovingAverage(Callback):
         self.ema.restore()
 
     def on_train_batch_end(self, trainer, pl_module: AtomisticTask, *args, **kwargs):
-        # a task may skip a step on the GPU (GraphStepTask: keep_step 0.0)
+        # a task may skip a step (AtomisticTask with skip_loss_above: keep_step 0.0)
         self.ema.update(gate=getattr(pl_module, "keep_step", None))
 
     def on_validation_epoch_start(

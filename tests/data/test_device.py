@@ -23,7 +23,7 @@ from schnetpack.generative import (
     GaussianPrior,
     Variable,
 )
-from schnetpack.lightning import DeviceAtomsDataModule
+from schnetpack.lightning import AtomsDataModule
 
 CUTOFF = 5.0
 
@@ -71,7 +71,7 @@ def test_padded_batch_matches_the_collated_batch(dataset, tmp_path):
     sel = torch.tensor([3, 0, 7, 5, 12])
     ref = collated(dataset, sel)
     N, P = len(ref[properties.Z]), len(ref[properties.idx_i])
-    batch = data.padded_batch(sel, N + 4, P + 10, CUTOFF)
+    batch = data.padded_batch(sel, N + 4, P + 10, CUTOFF + 1.0)
 
     B = len(sel)
     assert torch.equal(batch[properties.n_atoms][:B], ref[properties.n_atoms])
@@ -97,6 +97,144 @@ def test_padded_batch_matches_the_collated_batch(dataset, tmp_path):
     ).all()
     assert (batch[properties.offsets][P:, 0] > CUTOFF).all()
     assert (batch[properties.offsets][:P] == 0).all()
+
+
+def test_molecules_with_a_stored_neighbor_list(dataset, tmp_path):
+    """The conversion's neighbor list (pairs within its cutoff) is what a padded
+    batch of molecules holds, in its order."""
+    cutoff = 1.5  # the test molecules are ~1-3 A across: some pairs in, some out
+    neighbors = trn.MatScipyNeighborList(cutoff=cutoff)
+    convert_to_arrays(
+        dataset, os.path.join(tmp_path, "arrays"), neighbor_list=neighbors
+    )
+    data = DeviceAtomsData(os.path.join(tmp_path, "arrays"), "cpu")
+    sel = torch.tensor([3, 0, 7, 5, 12])
+    ref = _atoms_collate_fn([neighbors(dataset[int(i)]) for i in sel])
+    N, P = len(ref[properties.Z]), len(ref[properties.idx_i])
+    all_pairs = int((data.n_atoms_cpu[sel] * (data.n_atoms_cpu[sel] - 1)).sum())
+    assert 0 < P < all_pairs
+    assert int(data.n_pairs_cpu[sel].sum()) == P
+    batch = data.padded_batch(sel, N + 1, P + 3, cutoff + 1.0)
+    assert torch.equal(batch[properties.idx_i][:P], ref[properties.idx_i])
+    assert torch.equal(batch[properties.idx_j][:P], ref[properties.idx_j])
+    assert (batch[properties.idx_i][P:] == N).all()
+    assert (batch[properties.offsets][P:, 0] > cutoff).all()
+
+
+@pytest.mark.parametrize("divide_by_atoms", [False, True])
+def test_array_statistics_match_the_db_pass(dataset, tmp_path, divide_by_atoms):
+    """Mean, std and estimated atom references from the arrays equal those of
+    calculate_stats / estimate_atomrefs over the same structures."""
+    from schnetpack.data.stats import calculate_stats, estimate_atomrefs
+
+    convert_to_arrays(dataset, os.path.join(tmp_path, "arrays"))
+    data = DeviceAtomsData(os.path.join(tmp_path, "arrays"), "cpu")
+    idx = [int(i) for i in np.random.RandomState(1).permutation(len(dataset))[:20]]
+    atomref = torch.linspace(-1.0, 1.0, 100, dtype=torch.float64)
+    for ref in (None, atomref):
+        mean, std = data.stats("energy", idx, divide_by_atoms, ref)
+        expected = calculate_stats(
+            dataset,
+            {"energy": divide_by_atoms},
+            atomref=None if ref is None else {"energy": ref},
+            indices=idx,
+        )["energy"]
+        torch.testing.assert_close(mean, expected[0].double())
+        torch.testing.assert_close(std, expected[1].double())
+    got = data.atomrefs("energy", idx, is_extensive=not divide_by_atoms)
+    expected = estimate_atomrefs(dataset, {"energy": not divide_by_atoms}, indices=idx)[
+        "energy"
+    ]
+    torch.testing.assert_close(got.float(), expected, rtol=1e-4, atol=1e-4)
+
+
+def test_budget_batches(dataset, tmp_path):
+    """Batches packed to an atom and pair budget: fixed slots, free ones on the
+    empty structure (masked out), each structure at most once per pass, the same
+    number of batches every pass."""
+    from schnetpack.data.device import BudgetBatches
+
+    convert_to_arrays(dataset, os.path.join(tmp_path, "arrays"))
+    data = DeviceAtomsData(os.path.join(tmp_path, "arrays"), "cpu")
+    assert len(data) == len(dataset) and data.empty == len(dataset)
+    idx = np.arange(28)
+    budget = BudgetBatches(data, idx, batch_size=4, seed=0, grains=(1, 1))
+    for _ in range(3):
+        batches = list(budget)
+        assert len(batches) == len(budget)
+        seen = torch.cat([b[b != data.empty] for b in batches])
+        assert len(seen) == len(set(seen.tolist()))
+        for sel in batches:
+            assert len(sel) == budget.max_structures
+            real = sel[sel != data.empty]
+            assert int(data.n_atoms_cpu[real].sum()) <= budget.atom_budget
+            assert int(data.n_pairs_cpu[real].sum()) <= budget.pair_budget
+            batch = data.padded_batch(sel, *budget.pad, CUTOFF)
+            mask = batch[properties.structure_mask]
+            assert torch.equal(mask[:-1], (sel != data.empty).double())
+            assert int(batch[properties.atom_mask].sum()) == int(
+                data.n_atoms_cpu[real].sum()
+            )
+            assert (batch["energy"][:-1][sel == data.empty] == 0).all()
+
+
+def test_remove_offsets_with_atomrefs_on_a_batch(dataset):
+    """RemoveOffsets subtracts each structure's own atom references on a collated
+    batch, as it does structure by structure."""
+    atomref = torch.linspace(-1.0, 1.0, 100, dtype=torch.float64)
+    t = trn.RemoveOffsets("energy", remove_mean=False, remove_atomrefs=True)
+    t.atomref = atomref
+    sel = torch.tensor([3, 0, 7])
+    one_by_one = torch.cat([t(dataset[int(i)])["energy"] for i in sel])
+    batch = t(collated(dataset, sel))
+    torch.testing.assert_close(batch["energy"], one_by_one)
+
+
+def test_periodic_structures_with_a_stored_neighbor_list(tmp_path):
+    """Crystals: the conversion's neighbor list (periodic images) is stored as local
+    pairs and cell shifts; a padded batch holds the same pairs, offsets, cells and
+    pbc flags as the collated per-structure neighbor lists."""
+    from ase.build import bulk
+
+    path = os.path.join(tmp_path, "crystals.db")
+    db = ASEAtomsData.create(
+        path, distance_unit="Ang", property_unit_dict={"energy": "eV"}
+    )
+    rng = np.random.RandomState(0)
+    atoms, props = [], []
+    for k in range(6):
+        a = bulk("Si", "diamond", a=5.43).repeat((1, 1, 1 + k % 2))
+        a.rattle(0.05, seed=k)
+        atoms.append(a)
+        props.append({"energy": np.array([rng.randn()])})
+    db.add_systems(props, atoms)
+    dataset = ASEAtomsData(path, load_properties=["energy"])
+    neighbors = trn.MatScipyNeighborList(cutoff=3.0)
+    arrays = os.path.join(tmp_path, "arrays")
+    convert_to_arrays(dataset, arrays, neighbor_list=neighbors)
+    data = DeviceAtomsData(arrays, "cpu")
+    sel = torch.tensor([2, 0, 5])
+    ref = _atoms_collate_fn([neighbors(dataset[int(i)]) for i in sel])
+    N, P = len(ref[properties.Z]), len(ref[properties.idx_i])
+    assert int(data.n_pairs_cpu[sel].sum()) == P
+    batch = data.padded_batch(sel, N + 2, P + 5, 4.0)
+    assert torch.equal(batch[properties.idx_i][:P], ref[properties.idx_i])
+    assert torch.equal(batch[properties.idx_j][:P], ref[properties.idx_j])
+    torch.testing.assert_close(batch[properties.offsets][:P], ref[properties.offsets])
+    assert (batch[properties.offsets][:P] != 0).any()  # periodic images present
+    torch.testing.assert_close(batch[properties.cell][:3], ref[properties.cell])
+    assert torch.equal(batch[properties.pbc][:9], ref[properties.pbc])
+    assert (batch[properties.offsets][P:, 0] > 3.0).all()
+
+
+def test_periodic_structures_need_a_neighbor_list(tmp_path):
+    from ase.build import bulk
+
+    path = os.path.join(tmp_path, "crystals.db")
+    db = ASEAtomsData.create(path, distance_unit="Ang", property_unit_dict={})
+    db.add_systems([{}], [bulk("Si", "diamond", a=5.43)])
+    with pytest.raises(ValueError, match="neighbor_list"):
+        convert_to_arrays(ASEAtomsData(path), os.path.join(tmp_path, "arrays"))
 
 
 def test_index_batches(dataset, tmp_path):
@@ -128,21 +266,29 @@ def positions():
     )
 
 
-def test_datamodule_batches(dataset, tmp_path):
+def test_datamodule_batches(molecules_db, dataset, tmp_path):
+    """AtomsDataModule with data_device: fixed-shape batches built on the device,
+    the dataset's transforms run on them, seeded validation noise, a reused cache
+    and statistics from the arrays."""
     split = os.path.join(tmp_path, "split.npz")
     np.savez(
         split, train_idx=np.arange(20), val_idx=np.arange(20, 27), test_idx=[27, 28]
     )
     v = positions()
-    dm = DeviceAtomsDataModule(
-        dataset,
-        batch_size=4,
-        split_file=split,
-        cutoff=CUTOFF,
+    noised = ASEAtomsData(
+        molecules_db,
+        load_properties=["energy", "forces"],
         transforms=[trn.SubtractCenterOfGeometry(), Diffuse([v]), trn.CastTo32()],
+    )
+    dm = AtomsDataModule(
+        noised,
+        batch_size=4,
+        num_train=20,
+        num_val=7,
+        split_file=split,
         val_batch_size=3,
-        device="cpu",
-        cache_dir=os.path.join(tmp_path, "arrays"),
+        data_device="cpu",
+        array_dir=os.path.join(tmp_path, "arrays"),
     )
     dm.setup("fit")
     train = list(dm.train_dataloader())
@@ -170,16 +316,54 @@ def test_datamodule_batches(dataset, tmp_path):
 
     # the cache is reused, and statistics come from the train split
     mtime = os.path.getmtime(os.path.join(tmp_path, "arrays", "meta.json"))
-    dm2 = DeviceAtomsDataModule(
+    dm2 = AtomsDataModule(
         dataset,
         4,
-        split,
-        CUTOFF,
-        device="cpu",
-        cache_dir=os.path.join(tmp_path, "arrays"),
+        20,
+        7,
+        split_file=split,
+        data_device="cpu",
+        array_dir=os.path.join(tmp_path, "arrays"),
     )
     dm2.setup("fit")
     assert os.path.getmtime(os.path.join(tmp_path, "arrays", "meta.json")) == mtime
     mean, std = dm2.get_stats("energy", divide_by_atoms=False, remove_atomref=False)
     energies = torch.cat([dataset[i]["energy"] for i in range(20)])
     torch.testing.assert_close(mean, energies.mean())
+
+
+def test_datamodule_takes_the_neighbor_list_to_the_conversion(dataset, tmp_path):
+    """A neighbor list among the dataset's transforms runs at the conversion; the
+    batches hold its pairs, and budget batching packs them."""
+    split = os.path.join(tmp_path, "split.npz")
+    np.savez(split, train_idx=np.arange(24), val_idx=np.arange(24, 30), test_idx=[])
+    neighbors = ASEAtomsData(
+        dataset.datapath,
+        load_properties=["energy"],
+        transforms=[trn.MatScipyNeighborList(cutoff=1.5), trn.CastTo32()],
+    )
+    dm = AtomsDataModule(
+        neighbors,
+        batch_size=4,
+        num_train=24,
+        num_val=6,
+        split_file=split,
+        data_device="cpu",
+        batching="budget",
+        array_dir=os.path.join(tmp_path, "arrays"),
+    )
+    dm.setup("fit")
+    assert dm.data.pair_i is not None
+    batch = next(iter(dm.train_dataloader()))
+    real = batch[properties.idx_i][batch[properties.offsets][:, 0] == 0]
+    d = (
+        batch[properties.R][batch[properties.idx_j]]
+        - batch[properties.R][batch[properties.idx_i]]
+    ).norm(dim=1)
+    assert len(real) > 0 and (d[batch[properties.offsets][:, 0] == 0] < 1.5).all()
+    assert len(batch[properties.structure_mask]) == dm.train_batches.max_structures + 1
+
+
+def test_batching_budget_needs_data_device(dataset):
+    with pytest.raises(ValueError, match="data_device"):
+        AtomsDataModule(dataset, 4, 20, 7, batching="budget")

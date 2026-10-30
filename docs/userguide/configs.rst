@@ -470,3 +470,7 @@ are not affected: the best model is saved as a regular ``AtomisticModel``.
 Simulations compile the model the same way: ``spkmd`` with
 ``calculator.compile_model=True``, the ASE ``SpkCalculator`` with ``compile_model=True``
 and ``schnetpack.dynamics.Calculator`` with ``compile=True``.
+
+Compiling is one of several switches that make training faster; the others (data on
+the GPU, budget batching, the training step as one CUDA graph) and which to use when
+are in :doc:`speed`.

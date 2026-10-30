@@ -26,8 +26,8 @@ class Diffuse(Transform):
 
     Runs per structure before collation, or on a collated batch (one with
     ``idx_m``, e.g. the padded batches of
-    :class:`~schnetpack.lightning.DeviceAtomsDataModule`, where rows marked as padding
-    get weight 0). One time is drawn per structure and
+    :class:`~schnetpack.lightning.AtomsDataModule` with ``data_device``, where rows
+    marked as padding get weight 0). One time is drawn per structure and
     each variable is noised at it, reading x0 through its view and writing
     x_t back; each variable sees the structure the ones before it left. Writes
     for every variable its x_t (into the structure), its label and its loss
@@ -109,7 +109,7 @@ class Diffuse(Transform):
 
     def forward(self, inputs):
         # One structure (the data pipeline) or a collated batch (idx_m present),
-        # e.g. the padded batches of DeviceAtomsDataModule: one time per structure,
+        # e.g. the padded batches of data held on the GPU: one time per structure,
         # spread to the rows through idx_m, and padding rows weighted 0.
         idx_m = inputs.get(properties.idx_m)
         first = self.variables[0].read(inputs)

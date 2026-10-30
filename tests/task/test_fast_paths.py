@@ -22,11 +22,11 @@ from schnetpack.generative import (
     VELinear,
 )
 from schnetpack.lightning import (
-    DeviceAtomsDataModule,
+    AtomisticTask,
+    AtomsDataModule,
     ExponentialMovingAverage,
-    GraphStepTask,
-    padded_loss,
 )
+from schnetpack.objectives import calculate_padded_loss
 
 cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 SIGMA_MAX = 5.0
@@ -47,14 +47,14 @@ def test_padded_loss_is_the_loss_of_the_real_rows():
         spk.ModelOutput("energy", torch.nn.MSELoss(), 0.3, target_property="E"),
         spk.ModelOutput("forces", torch.nn.L1Loss(), 0.7, target_property="F"),
     ]
-    loss = padded_loss(outputs, pred, targets, batch)
+    loss = calculate_padded_loss(outputs, pred, targets, batch)
     expected = 0.3 * torch.nn.functional.mse_loss(
         pred["energy"][:3], targets["E"][:3]
     ) + 0.7 * torch.nn.functional.l1_loss(pred["forces"][:7], targets["F"][:7])
     torch.testing.assert_close(loss, expected)
 
 
-def gpff_setup(tmp_path, n=48):
+def gpff_setup(tmp_path, n=48, device="cuda", banded=True):
     db = ASEAtomsData.create(
         os.path.join(tmp_path, "mols.db"), distance_unit="Ang", property_unit_dict={}
     )
@@ -65,7 +65,7 @@ def gpff_setup(tmp_path, n=48):
         atoms.append(Atoms(numbers=rng.randint(1, 10, k), positions=rng.randn(k, 3)))
     db.add_systems([{} for _ in atoms], atoms)
     split = os.path.join(tmp_path, "split.npz")
-    np.savez(split, train_idx=np.arange(32), val_idx=np.arange(32, 48))
+    np.savez(split, train_idx=np.arange(32), val_idx=np.arange(32, 48), test_idx=[])
     noising = GaussianInterpolant(
         VELinear(sigma_max=SIGMA_MAX, t_min=0.0),
         prior=GaussianPrior(std=SIGMA_MAX, centered=False),
@@ -84,14 +84,15 @@ def gpff_setup(tmp_path, n=48):
         Diffuse([v], t_sampler=LogNormalSigmaTimes(noising, truncate=True)),
         trn.CastTo32(),
     ]
-    dm = DeviceAtomsDataModule(
-        ASEAtomsData(db.datapath, load_properties=[]),
+    dm = AtomsDataModule(
+        ASEAtomsData(db.datapath, load_properties=[], transforms=transforms),
         batch_size=8,
+        num_train=32,
+        num_val=16,
         split_file=split,
-        cutoff=CUTOFF,
-        transforms=transforms,
         val_batch_size=16,
-        cache_dir=os.path.join(tmp_path, "arrays"),
+        data_device=device,
+        array_dir=os.path.join(tmp_path, "arrays"),
     )
     torch.manual_seed(0)
     model = spk.model.NeuralNetworkPotential(
@@ -101,7 +102,7 @@ def gpff_setup(tmp_path, n=48):
             radial_basis=spk.nn.GaussianRBF(n_rbf=40, cutoff=CUTOFF),
             cutoff_fn=spk.nn.CosineCutoff(CUTOFF),
             norm_epsilon=1.0,
-            banded_filter=True,
+            banded_filter=banded,
         ),
         input_modules=[spk.model.PairwiseDistances()],
         output_modules=[spk.model.AtomwiseVector(n_in=16, output_key=v.output_key)],
@@ -109,19 +110,20 @@ def gpff_setup(tmp_path, n=48):
     return dm, model, v
 
 
-def fit(dm, model, v, skip_loss_above, epochs=3):
-    task = GraphStepTask(
+def fit(dm, model, v, skip_loss_above, epochs=3, cuda_graph=True):
+    task = AtomisticTask(
         model=model,
         outputs=[VariableOutput(v)],
         optimizer_cls=torch.optim.AdamW,
-        optimizer_args={"lr": 1e-3, "fused": True},
+        optimizer_args={"lr": 1e-3, "fused": cuda_graph},
+        cuda_graph=cuda_graph,
         grad_clip=1.0,
         skip_loss_above=skip_loss_above,
     )
     ema = ExponentialMovingAverage(decay=0.9)
     trainer = pl.Trainer(
         max_epochs=epochs,
-        accelerator="gpu",
+        accelerator="gpu" if cuda_graph else "cpu",
         devices=1,
         logger=False,
         enable_checkpointing=False,
@@ -141,7 +143,7 @@ def test_graph_step_trains(tmp_path):
     dm, model, v = gpff_setup(tmp_path)
     before = [p.detach().clone() for p in model.parameters()]
     task, trainer, ema = fit(dm, model, v, skip_loss_above=1e3)
-    assert task.graph is not None and dm.train_batches_in_step
+    assert task._graph is not None and dm.train_batches_in_step
     assert trainer.global_step == 3 * 4
     assert math.isfinite(float(trainer.callback_metrics["val_loss"]))
     assert int(task.skipped_steps) == 0
@@ -162,3 +164,23 @@ def test_skipped_steps_change_nothing(tmp_path):
         assert torch.equal(a, b.detach().cpu())  # Lightning moves the model back
     for a, b in zip(before, ema.ema.shadow_params):
         assert torch.equal(a, b.cpu())
+
+
+def test_padded_batches_train_without_cuda_graph(tmp_path):
+    """Data on the device without the graph: Lightning's own optimization on padded
+    batches; skip_loss_above skips the steps (and the EMA updates) on the host."""
+    dm, model, v = gpff_setup(tmp_path, device="cpu", banded=False)
+    before = [p.detach().clone() for p in model.parameters()]
+    task, trainer, ema = fit(
+        dm, model, v, skip_loss_above=-1.0, epochs=1, cuda_graph=False
+    )
+    assert int(task.skipped_steps) == 4  # Lightning counts the steps it skipped
+    for a, b in zip(before, model.parameters()):
+        assert torch.equal(a, b.detach())
+    for a, b in zip(before, ema.ema.shadow_params):
+        assert torch.equal(a, b)
+    assert math.isfinite(float(trainer.callback_metrics["val_loss"]))
+    task, trainer, ema = fit(
+        dm, model, v, skip_loss_above=1e3, epochs=1, cuda_graph=False
+    )
+    assert trainer.global_step == 4 and int(task.skipped_steps) == 0

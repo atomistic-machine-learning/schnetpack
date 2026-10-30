@@ -24,3 +24,8 @@ num_workers: 8
 train_sampler_cls: null
 train_sampler_args: {}
 pin_memory: false
+# speed: hold the dataset on the GPU and build the batches there (e.g. cuda),
+# with "fixed" batches of batch_size structures or "budget" batches packed to
+# their atoms and pairs (see the user guide, "Training faster")
+data_device: null
+batching: fixed
