@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import schnetpack.nn as snn
 import schnetpack.nn.so3 as so3
 import schnetpack.properties as properties
+from schnetpack.nn.ops.so3_message import so3_message_pairs, so3_message_supported
 
 __all__ = ["SO3net"]
 
@@ -17,6 +18,9 @@ class SO3net(nn.Module):
     Clebsch-Gordon tensor products.
 
     """
+
+    # a class default, so that models pickled before the option load
+    fused_kernel: bool = False
 
     def __init__(
         self,
@@ -30,6 +34,7 @@ class SO3net(nn.Module):
         activation: Callable | None = F.silu,
         nuclear_embedding: nn.Module | None = None,
         electronic_embeddings: list | None = None,
+        fused_kernel: bool = False,
     ):
         """
         Args:
@@ -45,12 +50,17 @@ class SO3net(nn.Module):
             nuclear_embedding: custom nuclear embedding (e.g. spk.nn.embeddings.NuclearEmbedding)
             electronic_embeddings: list of electronic embeddings. E.g. for spin and
                 charge (see spk.nn.embeddings.ElectronicEmbedding)
+            fused_kernel: on CUDA with Triton, sum the messages of each convolution in
+                one kernel (:class:`schnetpack.nn.SO3Convolution`): the same results,
+                2-4x faster to train energies from lmax 2 and forces from lmax 3, about
+                even for forces at lmax 2, no gain at lmax 1.
         """
         super().__init__()
 
         self.n_atom_basis = n_atom_basis
         self.n_interactions = n_interactions
         self.lmax = lmax
+        self.fused_kernel = fused_kernel
         self.cutoff_fn = cutoff_fn
         # a buffer, so that .to() moves it (deploy reads it); not in the state dict
         self.register_buffer("cutoff", cutoff_fn.cutoff.clone(), persistent=False)
@@ -72,7 +82,9 @@ class SO3net(nn.Module):
 
         # initialize filters
         self.so3convs = snn.replicate_module(
-            lambda: so3.SO3Convolution(lmax, n_atom_basis, self.radial_basis.n_rbf),
+            lambda: so3.SO3Convolution(
+                lmax, n_atom_basis, self.radial_basis.n_rbf, fused_kernel=fused_kernel
+            ),
             self.n_interactions,
             shared_interactions,
         )
@@ -100,6 +112,18 @@ class SO3net(nn.Module):
         )
         self.so3product = so3.SO3TensorProduct(lmax)
 
+    @torch.jit.unused
+    def _kernel_pairs(
+        self,
+        idx_i: torch.Tensor,
+        idx_j: torch.Tensor,
+        cutoff_ij: torch.Tensor,
+        atomic_numbers: torch.Tensor,
+    ) -> list[torch.Tensor] | None:
+        if not so3_message_supported(cutoff_ij):
+            return None
+        return so3_message_pairs(idx_i, idx_j, cutoff_ij, atomic_numbers.shape[0])
+
     def forward(self, inputs: dict[str, torch.Tensor]):
         """
         Compute atomic representations/embeddings.
@@ -118,6 +142,11 @@ class SO3net(nn.Module):
         idx_i = inputs[properties.idx_i]
         idx_j = inputs[properties.idx_j]
 
+        if self.fused_kernel and not torch.jit.is_scripting():
+            # the kernel needs the pairs by center, and not every neighbor list sorts them
+            order = torch.argsort(idx_i.to(torch.int32), stable=True)
+            r_ij, idx_i, idx_j = r_ij[order], idx_i[order], idx_j[order]
+
         # compute atom and pair features
         d_ij = torch.norm(r_ij, dim=1, keepdim=True)
         dir_ij = r_ij / d_ij
@@ -125,6 +154,10 @@ class SO3net(nn.Module):
         Yij = self.sphharm(dir_ij)
         radial_ij = self.radial_basis(d_ij)
         cutoff_ij = self.cutoff_fn(d_ij)[..., None]
+
+        pairs: list[torch.Tensor] | None = None
+        if self.fused_kernel and not torch.jit.is_scripting():
+            pairs = self._kernel_pairs(idx_i, idx_j, cutoff_ij, atomic_numbers)
 
         # compute initial embeddings
         x0 = self.embedding(atomic_numbers)
@@ -137,7 +170,7 @@ class SO3net(nn.Module):
         for so3conv, mixing1, mixing2, gating, mixing3 in zip(
             self.so3convs, self.mixings1, self.mixings2, self.gatings, self.mixings3
         ):
-            dx = so3conv(x, radial_ij, Yij, cutoff_ij, idx_i, idx_j)
+            dx = so3conv(x, radial_ij, Yij, cutoff_ij, idx_i, idx_j, pairs)
             ddx = mixing1(dx)
             dx = dx + self.so3product(dx, ddx)
             dx = mixing2(dx)
