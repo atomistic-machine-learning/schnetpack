@@ -120,3 +120,20 @@ def test_qm7x_property_names_are_distinct():
     assert set(QM7X.property_dataset_keys) == set(names)
     assert QM7X.property_dataset_keys[QM7X.FPBE0] == "pbe0FOR"
     assert QM7X.property_dataset_keys[QM7X.FMBD] == "vdwFOR"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ASEAtomsData",
+        "AtomsLoader",
+        "AtomsDataModule",
+        "RandomSplit",
+        "calculate_stats",
+    ],
+)
+def test_datasets_still_pass_on_the_data_api(name):
+    """Older releases exported all of schnetpack.data from schnetpack.datasets."""
+    import schnetpack as spk
+
+    assert getattr(spk.datasets, name) is getattr(spk.data, name)
