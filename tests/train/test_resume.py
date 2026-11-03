@@ -1,5 +1,6 @@
 import os
 
+import pytest
 import pytorch_lightning as pl
 import torch
 import torchmetrics
@@ -8,7 +9,7 @@ from torch.utils.data import Subset
 import schnetpack as spk
 import schnetpack.transform as trn
 from schnetpack.data import ASEAtomsData, AtomsLoader
-from schnetpack.train import ModelCheckpoint
+from schnetpack.train import ExponentialMovingAverage, ModelCheckpoint
 from schnetpack.utils import (
     load_task_from_checkpoint,
     trainer_fit_kwargs_for_checkpoint,
@@ -42,7 +43,7 @@ def make_task():
     )
 
 
-def fit(run_dir, max_epochs, ckpt_path=None):
+def fit(run_dir, max_epochs, ckpt_path=None, ema=False):
     """One spktrain-like process: seed, build everything, fit (or resume)."""
     pl.seed_everything(SEED, workers=True)
     dataset = ASEAtomsData(
@@ -60,9 +61,12 @@ def fit(run_dir, max_epochs, ckpt_path=None):
         save_top_k=1,
         save_last=True,
     )
+    callbacks = [checkpoint]
+    if ema:
+        callbacks.append(ExponentialMovingAverage(decay=0.9))
     trainer = pl.Trainer(
         max_epochs=max_epochs,
-        callbacks=[checkpoint],
+        callbacks=callbacks,
         accelerator="cpu",
         deterministic=True,
         logger=False,
@@ -76,14 +80,15 @@ def fit(run_dir, max_epochs, ckpt_path=None):
     return task, checkpoint
 
 
-def test_resumed_training_matches_uninterrupted(tmp_path):
+@pytest.mark.parametrize("ema", [False, True], ids=["plain", "ema"])
+def test_resumed_training_matches_uninterrupted(tmp_path, ema):
     """Stopping after 2 epochs and resuming from last.ckpt in a new, re-seeded
     process must give the same weights as training 4 epochs in one go."""
-    reference, _ = fit(tmp_path / "uninterrupted", max_epochs=4)
+    reference, _ = fit(tmp_path / "uninterrupted", max_epochs=4, ema=ema)
 
-    _, first = fit(tmp_path / "resumed", max_epochs=2)
+    _, first = fit(tmp_path / "resumed", max_epochs=2, ema=ema)
     resumed, _ = fit(
-        tmp_path / "resumed", max_epochs=4, ckpt_path=first.last_model_path
+        tmp_path / "resumed", max_epochs=4, ckpt_path=first.last_model_path, ema=ema
     )
 
     for name, value in reference.state_dict().items():

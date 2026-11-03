@@ -138,30 +138,39 @@ class ModelCheckpoint(BaseModelCheckpoint):
 
 
 class ExponentialMovingAverage(Callback):
+    """
+    Keeps an exponential moving average (EMA) of the model weights.
+
+    Validation, and thereby checkpoints and the best model, use the EMA average,
+    while training continues on the raw weights.
+    """
+
     def __init__(self, decay, *args, **kwargs):
         self.decay = decay
         self.ema = None
         self._to_load = None
+        # True while the model holds the EMA average and self.ema stores the raw
+        # training weights
+        self._average_loaded = False
 
     def on_fit_start(self, trainer, pl_module: AtomisticTask):
         if self.ema is None:
             self.ema = EMA(pl_module.model.parameters(), decay=self.decay)
         if self._to_load is not None:
-            self.ema.load_state_dict(self._to_load)
+            self._load_ema_state(*self._to_load)
             self._to_load = None
-            if self.ema.collected_params is not None:
-                # checkpoints hold the EMA average (saved during validation);
-                # restore the raw training weights before store()/copy_to()
-                self.ema.restore()
 
         # load average parameters, to have same starting point as after validation
-        self.ema.store()
-        self.ema.copy_to()
+        if not self._average_loaded:
+            self._load_average()
 
-    def on_train_epoch_start(
-        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
-    ) -> None:
-        self.ema.restore()
+    def on_train_batch_start(self, trainer, pl_module: AtomisticTask, *args, **kwargs):
+        # Validation loads the average; train on the raw weights again. Doing this
+        # per batch, not per epoch, also covers validation within an epoch and
+        # epochs without validation.
+        if self._average_loaded:
+            self.ema.restore()
+            self._average_loaded = False
 
     def on_train_batch_end(self, trainer, pl_module: AtomisticTask, *args, **kwargs):
         self.ema.update()
@@ -169,19 +178,32 @@ class ExponentialMovingAverage(Callback):
     def on_validation_epoch_start(
         self, trainer: "pl.Trainer", pl_module: AtomisticTask, *args, **kwargs
     ):
-        if trainer.sanity_checking:
-            # on_fit_start already stored the raw weights and copied the EMA
-            # average in; storing again would overwrite them with the average
-            return
+        # The average is already loaded during the sanity check and when no
+        # training step ran since the last validation. Storing again would
+        # overwrite the raw weights with the average.
+        if not self._average_loaded:
+            self._load_average()
+
+    def _load_average(self):
         self.ema.store()
         self.ema.copy_to()
+        self._average_loaded = True
+
+    def _load_ema_state(self, ema_state, average_loaded):
+        self.ema.load_state_dict(ema_state)
+        if average_loaded is None:
+            # checkpoints without the flag were saved with the average loaded
+            # whenever raw weights had been stored
+            average_loaded = self.ema.collected_params is not None
+        self._average_loaded = average_loaded
 
     def load_state_dict(self, state_dict):
         if "ema" in state_dict:
+            to_load = (state_dict["ema"], state_dict.get("average_loaded"))
             if self.ema is None:
-                self._to_load = state_dict["ema"]
+                self._to_load = to_load
             else:
-                self.ema.load_state_dict(state_dict["ema"])
+                self._load_ema_state(*to_load)
 
     def state_dict(self):
-        return {"ema": self.ema.state_dict()}
+        return {"ema": self.ema.state_dict(), "average_loaded": self._average_loaded}
