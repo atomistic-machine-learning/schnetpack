@@ -1,5 +1,8 @@
+import numpy as np
 import pytest
 import torch
+from ase import Atoms
+from ase.build import fcc111, molecule
 from ase.data import atomic_masses
 
 import schnetpack.properties as structure
@@ -214,3 +217,79 @@ def test_remove_cog(four_atoms):
         cog += r_i
 
     torch.testing.assert_close(cog, torch.tensor([0.0, 0.0, 0.0]))
+
+
+def _inputs(atoms):
+    return {
+        structure.idx: torch.tensor([0]),
+        structure.Z: torch.tensor(atoms.numbers),
+        structure.R: torch.tensor(atoms.positions),
+        structure.cell: torch.tensor(np.array(atoms.cell)),
+        structure.pbc: torch.tensor(atoms.pbc),
+    }
+
+
+def _pairs(neighbor_list, atoms):
+    """Sorted (i, j, offset) tuples of a neighbor list."""
+    out = neighbor_list(_inputs(atoms))
+    offsets = out[structure.offsets].numpy().round(8) + 0.0  # no negative zeros
+    return sorted(
+        zip(
+            out[structure.idx_i].tolist(),
+            out[structure.idx_j].tolist(),
+            map(tuple, offsets.tolist()),
+        )
+    )
+
+
+def _matscipy_cases():
+    molecule_outside_box = molecule("CH3CH2OH")
+    molecule_outside_box.set_cell([6.0, 6.0, 6.0])
+    molecule_outside_box.positions += 50.0
+
+    slab_outside_box = fcc111("Cu", size=(2, 2, 3), vacuum=5.0)
+    slab_outside_box.positions[:, 2] += 30.0
+
+    wire = Atoms(
+        "C4", positions=[[0, 0, 0], [1.4, 0.1, 9], [2.8, -0.1, 0], [4.2, 0, -7]]
+    )
+    wire.set_cell([5.6, 4.0, 4.0])
+    wire.pbc = [True, False, False]
+
+    cases = {
+        "molecule_without_cell": molecule("CH3CH2OH"),
+        "molecule_outside_box": molecule_outside_box,
+        "slab_outside_box": slab_outside_box,
+        "wire_outside_box": wire,
+    }
+    rng = np.random.default_rng(0)
+    for k in range(30):
+        n_atoms = int(rng.integers(2, 9))
+        cell = np.diag(rng.uniform(3.0, 8.0, size=3)) + rng.uniform(-1.0, 1.0, (3, 3))
+        scaled = rng.uniform(-0.5, 1.5, size=(n_atoms, 3))
+        cases[f"random_{k}"] = Atoms(
+            numbers=rng.integers(1, 10, size=n_atoms),
+            scaled_positions=scaled,
+            cell=cell,
+            pbc=rng.integers(0, 2, size=3).astype(bool),
+        )
+    return cases
+
+
+MATSCIPY_CASES = _matscipy_cases()
+
+
+@pytest.mark.parametrize("name", MATSCIPY_CASES)
+def test_matscipy_neighbor_list_matches_ase(name):
+    """Atoms outside the cell must not get offsets along non-periodic directions."""
+    atoms = MATSCIPY_CASES[name]
+    assert _pairs(MatScipyNeighborList(3.0), atoms) == _pairs(
+        ASENeighborList(3.0), atoms
+    )
+
+
+def test_matscipy_neighbor_list_rejects_periodic_cell_without_volume():
+    """Replacing the cell of a partially periodic system would discard its lattice."""
+    slab = fcc111("Cu", size=(2, 2, 3), vacuum=None)  # pbc=TTF, zero c-vector
+    with pytest.raises(ValueError, match="non-zero volume"):
+        MatScipyNeighborList(3.0)(_inputs(slab))

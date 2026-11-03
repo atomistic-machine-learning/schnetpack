@@ -271,6 +271,14 @@ class MatScipyNeighborList(NeighborListTransform):
 
         # Add cell if none is present (volume = 0)
         if at.cell.volume < eps:
+            if at.pbc.any():
+                # replacing the cell would discard the periodic lattice vectors
+                raise ValueError(
+                    "MatScipyNeighborList needs a cell with non-zero volume for "
+                    f"periodic systems, but got pbc={at.pbc.tolist()} and cell "
+                    f"{at.cell.tolist()}. Set the cell vectors of the non-periodic "
+                    "directions (e.g. add vacuum) or use ASENeighborList."
+                )
             # max values - min values along xyz augmented by small buffer for stability
             new_cell = np.ptp(at.positions, axis=0) + buffer
             # Set cell and center
@@ -279,6 +287,9 @@ class MatScipyNeighborList(NeighborListTransform):
 
         # Compute neighborhood
         idx_i, idx_j, S = msp_neighbor_list("ijS", at, cutoff)
+        # matscipy also returns shifts along non-periodic directions (for atoms
+        # outside the cell), but there are no periodic images along those
+        S[:, ~at.pbc] = 0
         idx_i = torch.from_numpy(idx_i).long()
         idx_j = torch.from_numpy(idx_j).long()
         S = torch.from_numpy(S).to(dtype=positions.dtype)
