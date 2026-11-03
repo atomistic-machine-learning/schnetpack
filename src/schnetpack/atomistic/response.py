@@ -136,16 +136,15 @@ class Response(nn.Module):
         self.energy_key = energy_key
         self.response_properties = response_properties
 
-        if map_properties is None:
-            self.map_properties = {}
-        else:
-            self.map_properties = map_properties
+        # copy, so that the defaults below do not change the caller's dict
+        self.map_properties = dict(map_properties or {})
 
         for prop in self.response_properties:
             if prop not in self.map_properties:
                 self.map_properties[prop] = prop
 
-        self.model_outputs = list(self.map_properties.keys())
+        # the results are stored under the mapped names
+        self.model_outputs = list(self.map_properties.values())
 
         # Set up instructions for computing response properties and derivatives
         (
