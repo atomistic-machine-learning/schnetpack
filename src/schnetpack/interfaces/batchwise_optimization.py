@@ -8,7 +8,7 @@ import numpy as np
 from math import sqrt
 from os.path import isfile
 
-from ase.optimize.optimize import Dynamics
+from ase.optimize.optimize import DEFAULT_MAX_STEPS, Dynamics
 from ase.parallel import world, barrier
 from ase.io import write
 from ase import Atoms
@@ -19,6 +19,7 @@ import torch
 from torch import nn
 from schnetpack.units import convert_units
 from schnetpack.interfaces.ase_interface import AtomsConverter
+from schnetpack.utils import load_model
 
 
 __all__ = [
@@ -157,9 +158,8 @@ class BatchwiseCalculator:
         self._initialize_model(model)
 
     def _load_model(self, model: str) -> nn.Module:
-        return torch.load(model, map_location="cpu", weights_only=False).to(
-            torch.float64
-        )
+        # load_model also converts models saved with older SchNetPack versions
+        return load_model(model, device="cpu").to(torch.float64)
 
     def _initialize_model(self, model: nn.Module) -> None:
         for auxiliary_output_module in self.auxiliary_output_modules:
@@ -297,11 +297,9 @@ class BatchwiseEnsembleCalculator(BatchwiseCalculator):
         # create module list
         models = torch.nn.ModuleList()
         for m_path in model_paths:
-            m = torch.load(
-                os.path.join(m_path, "best_model"),
-                map_location="cpu",
-                weights_only=False,
-            ).to(torch.float64)
+            m = load_model(os.path.join(m_path, "best_model"), device="cpu").to(
+                torch.float64
+            )
             models.append(m)
 
         return models
@@ -397,13 +395,16 @@ class BatchwiseDynamics(Dynamics):
         fixed_atoms:
             list of indices corresponding to atoms with positions fixed in space.
         """
-        super().__init__(
-            atoms=atoms,
-            logfile=logfile,
-            trajectory=trajectory,
-            append_trajectory=append_trajectory,
-            master=master,
-        )
+        # Dynamics.__init__ is not called: since ASE 3.23 it wraps `atoms` with
+        # atoms.__ase_optimizable__(), which a list of Atoms does not have. These
+        # are the attributes of Dynamics that the batch-wise run loop uses. The
+        # trajectories are written per structure in BatchwiseOptimizer.log.
+        self.atoms = atoms
+        self.logfile = self.openfile(file=logfile, comm=world, mode="a")
+        self.observers = []
+        self.nsteps = 0
+        self.max_steps = 0  # set in run or irun
+        self.comm = world
 
         self.calculator = calculator
         self.trajectory = trajectory
@@ -545,15 +546,15 @@ class BatchwiseOptimizer(BatchwiseDynamics):
     def irun(self, fmax: float = 0.05, steps: Optional[int] = None):
         """call Dynamics.irun and keep track of fmax"""
         self.fmax = fmax
-        if steps:
-            self.max_steps = steps
+        # as in ASE, run until converged unless a step limit is given
+        self.max_steps = DEFAULT_MAX_STEPS if steps is None else steps
         return BatchwiseDynamics.irun(self)
 
     def run(self, fmax: float = 0.05, steps: Optional[int] = None):
         """call Dynamics.run and keep track of fmax"""
         self.fmax = fmax
-        if steps:
-            self.max_steps = steps
+        # as in ASE, run until converged unless a step limit is given
+        self.max_steps = DEFAULT_MAX_STEPS if steps is None else steps
         return BatchwiseDynamics.run(self)
 
     def converged(self, forces: Optional[np.array] = None) -> bool:
