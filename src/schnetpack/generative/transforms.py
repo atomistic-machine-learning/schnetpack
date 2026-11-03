@@ -59,7 +59,7 @@ class Diffuse(Transform):
         Args:
             variables: the variables, in the order they are noised
             t_sampler: draws times, mapping (n, device) -> (n,), e.g. a
-                :class:`~schnetpack.generative.times.LogNormalSigmaTimes`
+                :class:`~schnetpack.generative.times.LogNormalTimes`
                 (default: uniform on the range every variable's schedule
                 covers)
             time_key: key for the time per atom, for conditioning

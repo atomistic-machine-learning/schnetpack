@@ -3,8 +3,9 @@ Time samplers: where along the path training draws its times.
 
 The schedule fixes what sigma(t) is; the time sampler fixes where the model
 spends its capacity. :class:`~schnetpack.generative.transforms.Diffuse` takes
-the density as a plain ``(n, device) -> (n,)`` hook, so any callable works. Details:
-``docs_new/training.md``.
+the density as a plain ``(n, device) -> (n,)`` hook, so any callable works. The
+densities are stated in t; the noise levels they train on follow from the
+schedule's sigma(t). Details: ``docs_new/training.md``.
 """
 
 import abc
@@ -12,9 +13,9 @@ import math
 
 import torch
 
-from schnetpack.generative.noising import GaussianInterpolant, Interpolant
+from schnetpack.generative.noising import Interpolant
 
-__all__ = ["TimeSampler", "UniformTimes", "LogNormalSigmaTimes"]
+__all__ = ["TimeSampler", "UniformTimes", "NormalTimes", "LogNormalTimes"]
 
 
 class TimeSampler(abc.ABC):
@@ -61,86 +62,106 @@ class UniformTimes(TimeSampler):
         return self.t_min + (self.t_max - self.t_min) * torch.rand(n, device=device)
 
 
-class LogNormalSigmaTimes(TimeSampler):
-    """
-    Log-normal in the noise level, log sigma ~ N(mean, std), mapped to t
-    through :meth:`~schnetpack.generative.schedules.GaussianSchedule.t_of_sigma`
-    (the EDM / GPFF training density).
+def _bounds(process: Interpolant, t_min, t_max) -> tuple[float, float]:
+    """The process's time range, or the given ends."""
+    t_min = process.schedule.t_min if t_min is None else t_min
+    t_max = process.schedule.t_max if t_max is None else t_max
+    if t_min >= t_max:
+        raise ValueError(f"empty time range [{t_min}, {t_max}]")
+    return t_min, t_max
 
-    Defaults are GPFF's (``mean=-0.7, std=1.2``): median sigma ~0.5 A. The
-    right mean for a dataset is set by its length scale. Draws outside
-    [sigma_min, sigma_max] are clamped onto the bounds, or, with ``truncate=True``
-    (GPFF's choice at its upper end), never drawn: the law is truncated (sampled
-    by its inverse CDF, the distribution that redrawing every miss gives).
+
+def _truncated_normal(n: int, device, mean: float, std: float, lo: float, hi: float):
+    """
+    Draws of N(mean, std^2) truncated to [lo, hi], in float64, by the inverse
+    CDF: the distribution that redrawing every miss gives, with a fixed number of
+    operations and no host sync (so it can run inside a CUDA graph).
+    """
+
+    def cdf(x: float) -> float:
+        return 0.5 * math.erfc(-(x - mean) / (std * math.sqrt(2.0)))
+
+    c_lo, c_hi = cdf(lo), cdf(hi)
+    if c_hi - c_lo < 1e-6:
+        raise RuntimeError(
+            f"N({mean:g}, {std:g}^2) almost never lands in [{lo:g}, {hi:g}]: "
+            "check the mean against the time range"
+        )
+    u = c_lo + (c_hi - c_lo) * torch.rand(n, device=device, dtype=torch.float64)
+    return (mean + std * torch.special.ndtri(u)).clamp(lo, hi)  # rounding at the ends
+
+
+class NormalTimes(TimeSampler):
+    """
+    Normal in t, t ~ N(mean, std^2), truncated to [t_min, t_max].
+
+    The noise levels it trains on are the schedule's sigma(t) at these times;
+    on :class:`~schnetpack.generative.schedules.VE`, where log sigma is affine
+    in t, that is a log-normal density in sigma.
     """
 
     def __init__(
         self,
-        process: GaussianInterpolant,
-        mean: float = -0.7,
-        std: float = 1.2,
-        sigma_min: float | None = None,
-        sigma_max: float | None = None,
-        truncate: bool = False,
+        process: Interpolant,
+        mean: float,
+        std: float,
+        t_min: float | None = None,
+        t_max: float | None = None,
     ):
         """
         Args:
-            process: Gaussian interpolant whose sigma(t) defines the map
-                to times
-            mean: mean of log sigma, in the data's length units
-            std: standard deviation of log sigma
-            sigma_min: lower bound on the draws (default: sigma(t_min))
-            sigma_max: upper bound on the draws (default: sigma(t_max))
-            truncate: truncate the law to [sigma_min, sigma_max]
-                rather than clamping onto it
+            process: process whose time range bounds the draws
+            mean: mean of t
+            std: standard deviation of t
+            t_min: override the process's own lower end
+            t_max: override the process's own upper end
         """
         if std <= 0.0:
             raise ValueError(f"std must be positive, got {std}")
-        if not isinstance(process, GaussianInterpolant):
-            raise TypeError(
-                f"{type(self).__name__} needs a GaussianInterpolant, which "
-                f"defines sigma(t); got {type(process).__name__}"
-            )
-        self.process = process
-        self.mean = mean
-        self.std = std
-        self.truncate = truncate
-
-        schedule = process.schedule
-        ends = torch.tensor([schedule.t_min, schedule.t_max])
-        s_low, s_high = torch.sort(schedule.sigma(ends)).values.tolist()
-        self.sigma_min = s_low if sigma_min is None else sigma_min
-        self.sigma_max = s_high if sigma_max is None else sigma_max
-        if self.sigma_min >= self.sigma_max:
-            raise ValueError(f"empty sigma range [{self.sigma_min}, {self.sigma_max}]")
-
-    def _draw_sigma(self, n: int, device) -> torch.Tensor:
-        return torch.exp(
-            self.mean + self.std * torch.randn(n, device=device, dtype=torch.float64)
-        )
-
-    def _cdf(self, sigma: float) -> float:
-        """CDF of the untruncated log-normal at sigma."""
-        if sigma <= 0.0:
-            return 0.0
-        z = (math.log(sigma) - self.mean) / self.std
-        return 0.5 * math.erfc(-z / math.sqrt(2.0))
+        self.mean, self.std = mean, std
+        self.t_min, self.t_max = _bounds(process, t_min, t_max)
 
     def __call__(self, n, device=None):
-        if self.truncate:
-            # The truncated law by its inverse CDF: the distribution that
-            # redrawing every miss gives, with a fixed number of operations
-            # and no host sync (so it can run inside a CUDA graph).
-            lo, hi = self._cdf(self.sigma_min), self._cdf(self.sigma_max)
-            if hi - lo < 1e-6:
-                raise RuntimeError(
-                    f"log-normal sigma (mean={self.mean}, std={self.std}) almost "
-                    f"never lands in [{self.sigma_min:g}, {self.sigma_max:g}] — "
-                    "check the mean against the data's length scale"
-                )
-            u = lo + (hi - lo) * torch.rand(n, device=device, dtype=torch.float64)
-            sigma = torch.exp(self.mean + self.std * torch.special.ndtri(u))
-            sigma = sigma.clamp(self.sigma_min, self.sigma_max)  # rounding at the ends
-        else:
-            sigma = self._draw_sigma(n, device).clamp(self.sigma_min, self.sigma_max)
-        return self.process.schedule.t_of_sigma(sigma.to(torch.get_default_dtype()))
+        t = _truncated_normal(n, device, self.mean, self.std, self.t_min, self.t_max)
+        return t.to(torch.get_default_dtype())
+
+
+class LogNormalTimes(TimeSampler):
+    """
+    Log-normal in t, log t ~ N(mean, std^2), truncated to [t_min, t_max].
+
+    On a schedule whose noise level is proportional to t, such as
+    :class:`~schnetpack.generative.schedules.VELinear` (EDM's, where sigma = t),
+    this is the log-normal noise density of EDM (Karras et al. 2022) and GPFF:
+    log sigma ~ N(m, s^2) is ``mean = m - log(sigma_max / t_max)``, ``std = s``.
+    GPFF's (m, s) = (-0.7, 1.2) on ``VELinear(sigma_max=30.0)`` is
+    ``mean = -0.7 - log(30)``.
+    """
+
+    def __init__(
+        self,
+        process: Interpolant,
+        mean: float,
+        std: float,
+        t_min: float | None = None,
+        t_max: float | None = None,
+    ):
+        """
+        Args:
+            process: process whose time range bounds the draws
+            mean: mean of log t
+            std: standard deviation of log t
+            t_min: override the process's own lower end (0 is allowed)
+            t_max: override the process's own upper end
+        """
+        if std <= 0.0:
+            raise ValueError(f"std must be positive, got {std}")
+        self.mean, self.std = mean, std
+        self.t_min, self.t_max = _bounds(process, t_min, t_max)
+        if self.t_max <= 0.0:
+            raise ValueError(f"log-normal times need t_max > 0, got {self.t_max}")
+
+    def __call__(self, n, device=None):
+        lo = math.log(self.t_min) if self.t_min > 0.0 else -math.inf
+        z = _truncated_normal(n, device, self.mean, self.std, lo, math.log(self.t_max))
+        return z.exp().clamp(self.t_min, self.t_max).to(torch.get_default_dtype())

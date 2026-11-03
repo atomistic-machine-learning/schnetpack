@@ -126,36 +126,6 @@ class GaussianSchedule(Schedule):
     def b_dot(self, t: torch.Tensor) -> torch.Tensor:
         return self.sigma_dot(t) / self.sigma_max
 
-    def t_of_sigma(self, sigma: torch.Tensor) -> torch.Tensor:
-        """
-        Inverse of :meth:`sigma`: the path time at which a noise level sits.
-
-        Bisection over [t_min, t_max], which only needs sigma to be monotone;
-        subclasses with a closed form override it.
-
-        Args:
-            sigma: noise levels, any shape
-
-        Returns:
-            Times of the same shape, clamped to [t_min, t_max].
-        """
-        sigma = torch.as_tensor(sigma)
-        lo = torch.full_like(sigma, self.t_min, dtype=torch.float64)
-        hi = torch.full_like(sigma, self.t_max, dtype=torch.float64)
-        target = sigma.to(torch.float64)
-        # sigma is monotone but its direction is the schedule's business: read
-        # it off the endpoints rather than assuming noise grows with t.
-        ends = torch.tensor([self.t_min, self.t_max], dtype=torch.float64)
-        s_min, s_max = self.sigma(ends).to(torch.float64)
-        increasing = bool(s_max >= s_min)
-        for _ in range(60):  # float64 exhausted; 60 halvings of [0, 1]
-            mid = 0.5 * (lo + hi)
-            below = self.sigma(mid.to(sigma.dtype)).to(torch.float64) < target
-            take_upper = below if increasing else ~below
-            lo = torch.where(take_upper, mid, lo)
-            hi = torch.where(take_upper, hi, mid)
-        return (0.5 * (lo + hi)).to(sigma.dtype).clamp(self.t_min, self.t_max)
-
 
 class FlowMatching(Schedule):
     """
@@ -293,16 +263,6 @@ class VE(GaussianSchedule):
 
     def sigma_dot(self, t):
         return self.sigma(t) * math.log(self.sigma_max / self.sigma_min) / self.t_max
-
-    def t_of_sigma(self, sigma):
-        # sigma is geometric, so t is affine in log sigma:
-        #     t = t_max (1 + (log sigma - log sigma_max) / log(sigma_max/sigma_min))
-        sigma = torch.as_tensor(sigma)
-        log_range = math.log(self.sigma_max / self.sigma_min)
-        t = self.t_max * (
-            1.0 + (torch.log(sigma) - math.log(self.sigma_max)) / log_range
-        )
-        return t.clamp(self.t_min, self.t_max)
 
 
 class VELinear(GaussianSchedule):

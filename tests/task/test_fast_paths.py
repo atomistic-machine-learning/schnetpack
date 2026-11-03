@@ -19,7 +19,7 @@ from schnetpack.generative import (
     Diffuse,
     GaussianInterpolant,
     GaussianPrior,
-    LogNormalSigmaTimes,
+    LogNormalTimes,
     PseudoForceParametrization,
     Variable,
     VariableOutput,
@@ -90,7 +90,10 @@ def gpff_setup(tmp_path, n=48, device="cuda", banded=True):
     )
     transforms = [
         trn.SubtractCenterOfGeometry(),
-        Diffuse([v], t_sampler=LogNormalSigmaTimes(noising, truncate=True)),
+        Diffuse(
+            [v],
+            t_sampler=LogNormalTimes(noising, mean=-0.7 - math.log(SIGMA_MAX), std=1.2),
+        ),
         trn.CastTo32(),
     ]
     dm = AtomsDataModule(

@@ -140,7 +140,8 @@ Where along the path training draws its times.
 
     TimeSampler
     UniformTimes
-    LogNormalSigmaTimes
+    NormalTimes
+    LogNormalTimes
 
 
 Variables and views

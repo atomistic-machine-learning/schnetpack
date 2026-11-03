@@ -2,17 +2,15 @@ import math
 
 import pytest
 import torch
+from torch.utils._python_dispatch import TorchDispatchMode
 
 from schnetpack import properties
 from schnetpack.generative import (
     VE,
-    VP,
     Diffuse,
-    FlowMatching,
     GaussianInterpolant,
-    GaussianSchedule,
-    Interpolant,
-    LogNormalSigmaTimes,
+    LogNormalTimes,
+    NormalTimes,
     PseudoForceParametrization,
     UniformTimes,
     Variable,
@@ -23,46 +21,6 @@ from schnetpack.generative import (
 @pytest.fixture
 def ve():
     return GaussianInterpolant(VE(sigma_min=0.05, sigma_max=30.0))
-
-
-# --- GaussianInterpolant.t_of_sigma ------------------------------------- #
-
-
-@pytest.mark.parametrize(
-    "process",
-    [
-        GaussianInterpolant(VE(sigma_min=0.05, sigma_max=30.0)),
-        GaussianInterpolant(VELinear()),
-        GaussianInterpolant(VP()),
-    ],
-    ids=["ve", "ve_linear", "vp"],
-)
-def test_t_of_sigma_inverts_sigma(process):
-    """The inverse round-trips: sigma(t_of_sigma(s)) == s."""
-    t = torch.linspace(process.schedule.t_min + 1e-3, process.schedule.t_max - 1e-3, 25)
-    sigma = process.schedule.sigma(t)
-    assert torch.allclose(process.schedule.t_of_sigma(sigma), t, atol=1e-4)
-
-
-def test_ve_closed_form_matches_bisection(ve):
-    """VE's analytic override agrees with the generic fallback."""
-    sigma = torch.logspace(math.log10(0.05), math.log10(30.0), 40)
-    generic = GaussianSchedule.t_of_sigma(ve.schedule, sigma)
-    assert torch.allclose(ve.schedule.t_of_sigma(sigma), generic, atol=1e-5)
-
-
-def test_t_of_sigma_is_affine_in_log_sigma_on_ve(ve):
-    """The property LogNormalSigmaTimes' normal-in-t result rests on."""
-    sigma = torch.tensor([0.1, 1.0, 10.0])
-    t = ve.schedule.t_of_sigma(sigma)
-    steps = t[1:] - t[:-1]  # equal ratios in sigma -> equal steps in t
-    assert torch.allclose(steps, steps[0].expand_as(steps), atol=1e-5)
-
-
-def test_t_of_sigma_clamps_outside_the_schedule(ve):
-    out = ve.schedule.t_of_sigma(torch.tensor([1e-6, 1e6]))
-    assert out[0] == pytest.approx(ve.schedule.t_min)
-    assert out[1] == pytest.approx(ve.schedule.t_max)
 
 
 # --- UniformTimes -------------------------------------------------------- #
@@ -83,85 +41,114 @@ def test_uniform_times_can_widen_the_range(ve):
     assert t.mean() == pytest.approx(0.25, abs=0.02)
 
 
-# --- LogNormalSigmaTimes ------------------------------------------------- #
+# --- NormalTimes and LogNormalTimes ------------------------------------ #
 
 
-def test_lognormal_recovers_the_sigma_density():
-    """The point of the class: the *sigma* it induces is the one asked for.
+def truncated_moments(mean, std, lo, hi):
+    """Mean and standard deviation of N(mean, std^2) truncated to [lo, hi]."""
+    a, b = (lo - mean) / std, (hi - mean) / std
 
-    Measured on a schedule wide enough that neither bound bites — on a
-    narrower one the bounds are supposed to distort the tails, which is what
-    test_truncate_rejects_instead_of_clamping pins down.
-    """
-    wide = GaussianInterpolant(VE(sigma_min=1e-4, sigma_max=1e4))
+    def pdf(z):
+        return 0.0 if math.isinf(z) else math.exp(-0.5 * z * z) / math.sqrt(2 * math.pi)
+
+    def zpdf(z):
+        return 0.0 if math.isinf(z) else z * pdf(z)
+
+    mass = 0.5 * math.erfc(-b / math.sqrt(2)) - 0.5 * math.erfc(-a / math.sqrt(2))
+    shift = (pdf(a) - pdf(b)) / mass
+    var = std**2 * (1 + (zpdf(a) - zpdf(b)) / mass - shift**2)
+    return mean + std * shift, math.sqrt(var)
+
+
+def test_normal_times_is_the_truncated_normal(ve):
+    """Both ends of the time range cut into this law; the draws follow it."""
     torch.manual_seed(0)
-    log_sigma = wide.schedule.sigma(
-        LogNormalSigmaTimes(wide, mean=-0.7, std=1.2)(200_000)
-    ).log()
-    assert log_sigma.mean() == pytest.approx(-0.7, abs=0.02)
-    assert log_sigma.std() == pytest.approx(1.2, abs=0.02)
+    t = NormalTimes(ve, mean=0.3, std=0.25)(400_000).double()
+    mean, std = truncated_moments(0.3, 0.25, 0.0, 1.0)
+    assert t.min() >= 0.0 and t.max() <= 1.0
+    assert float(t.mean()) == pytest.approx(mean, abs=0.003)
+    assert float(t.std()) == pytest.approx(std, abs=0.003)
 
 
-def test_lognormal_induces_a_normal_over_t_on_ve(ve):
-    """t affine in log sigma => the times themselves are normal."""
-    sampler = LogNormalSigmaTimes(ve, mean=-0.7, std=1.2)
-    # t = t_max (1 + (log sigma - log sigma_max) / L), L = -log b_min
-    log_range = -math.log(ve.schedule.sigma_min / ve.schedule.sigma_max)
-    mean = ve.schedule.t_max * (
-        1.0 + (-0.7 - math.log(ve.schedule.sigma_max)) / log_range
-    )
-    std = ve.schedule.t_max * 1.2 / log_range
-    assert mean == pytest.approx(0.3589, abs=1e-3)
-    assert std == pytest.approx(0.1876, abs=1e-3)
-
+def test_lognormal_times_is_the_truncated_log_normal():
+    process = GaussianInterpolant(VELinear(sigma_max=30.0, t_min=1e-3))
     torch.manual_seed(0)
-    t = sampler(200_000)
-    interior = t[(t > ve.schedule.t_min + 1e-6) & (t < ve.schedule.t_max - 1e-6)]
-    assert interior.mean() == pytest.approx(mean, abs=0.02)
-    assert interior.std() == pytest.approx(std, abs=0.02)
+    log_t = LogNormalTimes(process, mean=-3.0, std=1.2)(400_000).double().log()
+    mean, std = truncated_moments(-3.0, 1.2, math.log(1e-3), 0.0)
+    assert float(log_t.mean()) == pytest.approx(mean, abs=0.005)
+    assert float(log_t.std()) == pytest.approx(std, abs=0.005)
 
 
-def test_lognormal_concentrates_where_uniform_does_not(ve):
-    """The reason to use it: far more mass in the band that decides geometry."""
+def test_lognormal_times_on_velinear_is_the_edm_sigma_density():
+    """sigma proportional to t: log sigma ~ N(-0.7, 1.2^2) up to sigma_max, GPFF's
+    training law, from mean = -0.7 - log(sigma_max / t_max)."""
+    process = GaussianInterpolant(VELinear(sigma_max=30.0, t_min=0.0))
     torch.manual_seed(0)
-    lognormal = ve.schedule.sigma(LogNormalSigmaTimes(ve)(50_000))
-    uniform = ve.schedule.sigma(UniformTimes(ve)(50_000))
-    assert (lognormal < 1.0).float().mean() > 0.7
-    assert (uniform < 1.0).float().mean() < 0.55
+    t = LogNormalTimes(process, mean=-0.7 - math.log(30.0), std=1.2)(400_000)
+    log_sigma = process.schedule.sigma(t.double()).log()
+    mean, std = truncated_moments(-0.7, 1.2, -math.inf, math.log(30.0))
+    assert float(log_sigma.max()) <= math.log(30.0) + 1e-6
+    assert float(log_sigma.mean()) == pytest.approx(mean, abs=0.005)
+    assert float(log_sigma.std()) == pytest.approx(std, abs=0.005)
 
 
-def test_truncate_rejects_instead_of_clamping(ve):
-    """Both honour the bound; clamping piles mass on it, rejection does not."""
+def test_lognormal_times_concentrate_where_uniform_does_not():
+    """The reason to use them: most draws in the band that decides geometry."""
+    process = GaussianInterpolant(VELinear(sigma_max=30.0, t_min=0.0))
     torch.manual_seed(0)
-    clamped = LogNormalSigmaTimes(ve, sigma_max=5.0)(20_000)
-    truncated = LogNormalSigmaTimes(ve, sigma_max=5.0, truncate=True)(20_000)
-    t_cap = ve.schedule.t_of_sigma(torch.tensor(5.0))
-
-    assert clamped.max() <= t_cap + 1e-5
-    assert truncated.max() <= t_cap + 1e-5
-
-    def at_cap(t):
-        return ((t - t_cap).abs() < 1e-5).float().mean()
-
-    assert at_cap(clamped) > 0.01  # the rejected tail lands exactly on it
-    assert at_cap(truncated) == 0.0  # redrawn into the interior instead
+    sigma = process.schedule.sigma
+    gpff = sigma(LogNormalTimes(process, -0.7 - math.log(30.0), 1.2)(50_000))
+    uniform = sigma(UniformTimes(process)(50_000))
+    assert (gpff < 1.0).float().mean() > 0.7
+    assert (uniform < 1.0).float().mean() < 0.05
 
 
-def test_truncate_gives_up_on_an_impossible_range(ve):
+def test_truncation_does_not_pile_mass_on_the_bounds(ve):
+    """Draws past a bound are redrawn inside, not clamped onto it."""
+    torch.manual_seed(0)
+    t = NormalTimes(ve, mean=0.9, std=0.3, t_max=0.95)(20_000)
+    assert t.max() <= 0.95
+    assert ((t - 0.95).abs() < 1e-6).float().mean() == 0.0
+
+
+class _CountOps(TorchDispatchMode):
+    def __init__(self):
+        super().__init__()
+        self.n = 0
+
+    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+        self.n += 1
+        return func(*args, **(kwargs or {}))
+
+
+@pytest.mark.parametrize("cls", [NormalTimes, LogNormalTimes])
+def test_a_draw_is_a_few_operations_whatever_its_size(ve, cls):
+    """One draw, not a search: on the GPU each operation is a kernel launch."""
+    sampler = cls(ve, mean=-1.0 if cls is LogNormalTimes else 0.4, std=0.5)
+    counts = []
+    for n in (10, 10_000):
+        with _CountOps() as ops:
+            sampler(n)
+        counts.append(ops.n)
+    assert counts[0] == counts[1] <= 12
+
+
+def test_an_impossible_range_raises(ve):
     with pytest.raises(RuntimeError, match="almost never lands"):
-        LogNormalSigmaTimes(
-            ve, mean=-0.7, std=0.1, sigma_min=20.0, sigma_max=25.0, truncate=True
-        )(64)
+        NormalTimes(ve, mean=5.0, std=0.1)(64)
 
 
-def test_lognormal_rejects_a_non_gaussian_interpolant():
-    with pytest.raises(TypeError, match="GaussianInterpolant"):
-        LogNormalSigmaTimes(Interpolant(FlowMatching()))
-
-
-def test_bad_std_is_rejected(ve):
+@pytest.mark.parametrize("cls", [NormalTimes, LogNormalTimes])
+def test_bad_arguments_are_rejected(ve, cls):
     with pytest.raises(ValueError, match="std must be positive"):
-        LogNormalSigmaTimes(ve, std=0.0)
+        cls(ve, mean=0.0, std=0.0)
+    with pytest.raises(ValueError, match="empty time range"):
+        cls(ve, mean=0.0, std=1.0, t_min=0.6, t_max=0.4)
+
+
+def test_lognormal_times_need_a_positive_t_max(ve):
+    with pytest.raises(ValueError, match="t_max > 0"):
+        LogNormalTimes(ve, mean=0.0, std=1.0, t_min=-1.0, t_max=0.0)
 
 
 # --- integration with the consumers -------------------------------------- #
@@ -169,7 +156,7 @@ def test_bad_std_is_rejected(ve):
 
 def test_diffuse_accepts_a_time_sampler(ve):
     """The transform route: one time per structure, drawn from our density."""
-    sampler = LogNormalSigmaTimes(ve, mean=-0.7, std=1.2)
+    sampler = NormalTimes(ve, mean=0.4, std=0.1)
     v = Variable(
         "positions", properties.R, "atom", ve, PseudoForceParametrization(), "y"
     )
@@ -183,5 +170,4 @@ def test_diffuse_accepts_a_time_sampler(ve):
         assert torch.allclose(out["t"], out["t"][0])  # one time per structure
         times.append(out["t"][0])
 
-    log_sigma = ve.schedule.sigma(torch.stack(times)).log()
-    assert log_sigma.mean() == pytest.approx(-0.7, abs=0.2)
+    assert float(torch.stack(times).mean()) == pytest.approx(0.4, abs=0.02)

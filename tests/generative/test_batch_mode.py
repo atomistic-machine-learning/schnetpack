@@ -2,16 +2,14 @@
 
 import math
 
-import pytest
 import torch
 
 import schnetpack.properties as properties
 from schnetpack.generative import (
-    VE,
     Diffuse,
     GaussianInterpolant,
     GaussianPrior,
-    LogNormalSigmaTimes,
+    LogNormalTimes,
     PseudoForceParametrization,
     Variable,
     VariableOutput,
@@ -53,7 +51,7 @@ def padded_batch(n_atoms=(3, 5, 2), n_pad=4, seed=0):
 
 def test_one_time_per_structure_and_no_weight_on_padding():
     v = gpff_positions()
-    times = LogNormalSigmaTimes(v.noising, truncate=True)
+    times = LogNormalTimes(v.noising, mean=-0.7 - math.log(30.0), std=1.2)
     batch = Diffuse([v], t_sampler=times)(padded_batch())
     t, idx_m = batch[properties.t], batch[properties.idx_m]
     for m in range(4):
@@ -86,28 +84,3 @@ def test_variable_output_ignores_padding():
     unpadded = {v.label_key: batch[v.label_key][keep], v.weight_key: w}
     loss2 = output.calculate_loss({v.output_key: pred[v.output_key][keep]}, unpadded)
     torch.testing.assert_close(loss2, loss)
-
-
-def test_truncated_lognormal_is_the_truncated_law():
-    """Inverse-CDF sampling: the moments of the truncated normal in log sigma."""
-    process = GaussianInterpolant(VE(sigma_min=1e-3, sigma_max=2.0))
-    torch.manual_seed(0)
-    t = LogNormalSigmaTimes(process, mean=-0.7, std=1.2, truncate=True)(400_000)
-    x = process.schedule.sigma(t).double().log()
-    a = (math.log(1e-3) + 0.7) / 1.2
-    b = (math.log(2.0) + 0.7) / 1.2
-
-    def pdf(z):
-        return math.exp(-0.5 * z * z) / math.sqrt(2 * math.pi)
-
-    def cdf(z):
-        return 0.5 * math.erfc(-z / math.sqrt(2))
-
-    mass = cdf(b) - cdf(a)
-    mean = -0.7 + 1.2 * (pdf(a) - pdf(b)) / mass
-    var = 1.2**2 * (
-        1 + (a * pdf(a) - b * pdf(b)) / mass - ((pdf(a) - pdf(b)) / mass) ** 2
-    )
-    assert x.max() <= math.log(2.0) + 1e-6 and x.min() >= math.log(1e-3) - 1e-6
-    assert float(x.mean()) == pytest.approx(mean, abs=0.005)
-    assert float(x.std()) == pytest.approx(math.sqrt(var), abs=0.005)
