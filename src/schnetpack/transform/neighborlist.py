@@ -398,8 +398,8 @@ class SkinNeighborList(Transform):
             # check if structure change is sufficiently small to reuse previous neighbor
             # list
             if (
-                (previous_pbc == pbc.numpy()).any()
-                and (previous_cell == cell.numpy()).any()
+                (previous_pbc == pbc.numpy()).all()
+                and (previous_cell == cell.numpy()).all()
                 and ((previous_positions - positions.numpy()) ** 2).sum(1).max()
                 < 0.25 * self.cutoff_skin**2
             ):

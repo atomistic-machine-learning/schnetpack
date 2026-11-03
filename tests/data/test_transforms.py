@@ -2,10 +2,11 @@ import numpy as np
 import pytest
 import torch
 from ase import Atoms
-from ase.build import fcc111, molecule
+from ase.build import bulk, fcc111, molecule
 from ase.data import atomic_masses
 
 import schnetpack.properties as structure
+from schnetpack.atomistic import PairwiseDistances
 from schnetpack.transform import *
 
 
@@ -293,3 +294,36 @@ def test_matscipy_neighbor_list_rejects_periodic_cell_without_volume():
     slab = fcc111("Cu", size=(2, 2, 3), vacuum=None)  # pbc=TTF, zero c-vector
     with pytest.raises(ValueError, match="non-zero volume"):
         MatScipyNeighborList(3.0)(_inputs(slab))
+
+
+def _sorted_distances(neighbors):
+    return torch.sort(torch.norm(neighbors[structure.Rij], dim=1)).values
+
+
+def test_skin_neighbor_list_rebuilds_when_the_cell_changes():
+    """A strained cell must not reuse the old list, whose offsets belong to the old
+    cell, even if no atom moved by more than half the skin."""
+    atoms = bulk("Si", cubic=True)
+    skin = SkinNeighborList(ASENeighborList(5.0), cutoff_skin=0.3)
+    skin(_inputs(atoms))
+
+    strained = atoms.copy()
+    strained.set_cell(atoms.cell * 1.02, scale_atoms=True)
+    update_required, _ = skin._update(_inputs(strained))
+    assert update_required
+
+    reference = PairwiseDistances()(ASENeighborList(5.0)(_inputs(strained)))
+    torch.testing.assert_close(
+        _sorted_distances(skin(_inputs(strained))), _sorted_distances(reference)
+    )
+
+
+def test_skin_neighbor_list_is_reused_for_small_moves():
+    atoms = bulk("Si", cubic=True)
+    skin = SkinNeighborList(ASENeighborList(5.0), cutoff_skin=0.3)
+    skin(_inputs(atoms))
+
+    moved = atoms.copy()
+    moved.positions[0] += [0.05, 0.0, 0.0]
+    update_required, _ = skin._update(_inputs(moved))
+    assert not update_required
