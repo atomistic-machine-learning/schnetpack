@@ -58,9 +58,14 @@ class PredictionWriter(BasePredictionWriter):
         predictions: list[Any],
         batch_indices: list[Any],
     ):
+        # Lightning passes a flat list of batch predictions for a single dataloader,
+        # and one such list per dataloader otherwise (only the first one is written)
+        if predictions and isinstance(predictions[0], list):
+            predictions = predictions[0]
+
         # collect batches of predictions and restructure
         concatenated_predictions = defaultdict(list)
-        for batch_prediction in predictions[0]:
+        for batch_prediction in predictions:
             for property_name, data in batch_prediction.items():
                 if not self.write_idx and property_name == properties.idx_m:
                     continue
