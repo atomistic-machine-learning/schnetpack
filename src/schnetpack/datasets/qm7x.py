@@ -92,13 +92,18 @@ def extract_xz(source: str, target: str):
 
     logging.info(f"Extracting {s_file} ...")
 
+    # Extract under a temporary name: an interrupted extraction (also by Ctrl-C)
+    # must not leave a partial file under the target name, which later runs reuse.
+    partial = target + ".part"
     try:
-        with lzma.open(source) as fin, open(target, mode="wb") as fout:
+        with lzma.open(source) as fin, open(partial, mode="wb") as fout:
             shutil.copyfileobj(fin, fout)
+        os.replace(partial, target)
     except Exception as e:
-        if os.path.exists(target):
-            os.remove(target)
         raise RuntimeError(f"Could not extract file {s_file}. Please try again.") from e
+    finally:
+        if os.path.exists(partial):
+            os.remove(partial)
 
     logging.info("Done.")
 

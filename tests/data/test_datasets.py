@@ -137,3 +137,29 @@ def test_datasets_still_pass_on_the_data_api(name):
     import schnetpack as spk
 
     assert getattr(spk.datasets, name) is getattr(spk.data, name)
+
+
+def test_qm7x_interrupted_extraction_leaves_no_partial_file(tmp_path, monkeypatch):
+    """A partial file under the target name would be reused by later runs."""
+    import lzma
+
+    import schnetpack.datasets.qm7x as qm7x_module
+
+    content = bytes(range(256)) * 4096
+    source = tmp_path / "1000.xz"
+    with lzma.open(source, "wb") as f:
+        f.write(content)
+    target = tmp_path / "1000.hdf5"
+
+    def interrupted_copy(fin, fout):
+        fout.write(fin.read(1000))
+        raise KeyboardInterrupt
+
+    with monkeypatch.context() as m:
+        m.setattr(qm7x_module.shutil, "copyfileobj", interrupted_copy)
+        with pytest.raises(KeyboardInterrupt):
+            qm7x_module.extract_xz(str(source), str(target))
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["1000.xz"]
+
+    qm7x_module.extract_xz(str(source), str(target))
+    assert target.read_bytes() == content
