@@ -125,7 +125,7 @@ class QM7X(AtomsDataModule):
     Eat = "Eat"  # atomization energy using PBE0 energy per atom and ePBE0+MBD total energy
     EPBE0 = "EPBE0"  # ePBE0: total energy at the level of PBE0
     EMBD = "EMBD"  # eMBD: total energy at the level of MBD
-    FPBE0 = "FMBD"  # FPBE0: total ePBE0 forces
+    FPBE0 = "FPBE0"  # FPBE0: total ePBE0 forces
     FMBD = "FMBD"  # FMBD: total eMBD forces
     RMSD = "rmsd"  # root mean square deviation of the atomic positions from the equilibrium structure
 

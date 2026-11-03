@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pytest
 
-from schnetpack.datasets import MD17, QM9, rMD17
+from schnetpack.datasets import MD17, QM7X, QM9, rMD17
 
 
 @pytest.fixture
@@ -100,3 +100,23 @@ def test_rmd17(test_rmd17_path):
     assert len(np.intersect1d(train_idx, val_idx)) == 0
     assert len(np.intersect1d(train_idx, test_idx)) == 0
     assert len(np.intersect1d(val_idx, test_idx)) == 0
+
+
+def test_qm7x_property_names_are_distinct():
+    """Each property needs its own name. Otherwise the property tables collapse and
+    one property silently loads the data of another."""
+    names = [
+        QM7X.forces,
+        QM7X.energy,
+        QM7X.Eat,
+        QM7X.EPBE0,
+        QM7X.EMBD,
+        QM7X.FPBE0,
+        QM7X.FMBD,
+        QM7X.RMSD,
+    ]
+    assert len(set(names)) == len(names)
+    assert set(QM7X.property_unit_dict) == set(names)
+    assert set(QM7X.property_dataset_keys) == set(names)
+    assert QM7X.property_dataset_keys[QM7X.FPBE0] == "pbe0FOR"
+    assert QM7X.property_dataset_keys[QM7X.FMBD] == "vdwFOR"
