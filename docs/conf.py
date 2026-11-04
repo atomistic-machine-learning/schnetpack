@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 # SchNetPack documentation build configuration file, created by
 # sphinx-quickstart on Mon Jul 30 18:07:50 2018.
@@ -17,6 +16,7 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+import builtins
 import os
 import sys
 
@@ -209,7 +209,5 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/", None),
     "pytorch_lightning": ("https://pytorch-lightning.readthedocs.io/en/stable/", None),
 }
-
-import builtins
 
 builtins.sphinx = True

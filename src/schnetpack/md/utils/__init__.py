@@ -91,7 +91,7 @@ class UninitializedMixin(nn.modules.lazy.LazyModuleMixin):
     """
 
     def register_uninitialized_buffer(
-        self, name: str, dtype: Optional[torch.dtype] = None
+        self, name: str, dtype: torch.dtype | None = None
     ):
         """
         Register an uninitialized buffer with the requested dtype. This can be used to reserve variable which are not

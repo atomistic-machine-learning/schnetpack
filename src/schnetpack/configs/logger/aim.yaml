@@ -1,6 +1,7 @@
 # Aim Logger
+# requires the aim package, which is not a dependency of SchNetPack: pip install aim
 
 aim:
     _target_: aim.pytorch_lightning.AimLogger
-    repo: ${hydra:runtime.cwd}/${run.path}
+    repo: ${run.path}
     experiment: ${run.experiment}

@@ -4,16 +4,14 @@ It includes functionality for loading molecules from files.
 All this functionality is encoded in the :obj:`schnetpack.md.System` class.
 """
 
+from collections import OrderedDict
+
 import torch
 import torch.nn as nn
-
-from schnetpack.md.utils import NormalModeTransformer
 from ase import Atoms
 
-from typing import Union, List, OrderedDict
-
 from schnetpack import units as spk_units
-from schnetpack.md.utils import UninitializedMixin
+from schnetpack.md.utils import NormalModeTransformer, UninitializedMixin
 
 __all__ = ["System"]
 
@@ -69,7 +67,7 @@ class System(UninitializedMixin, nn.Module):
     def __init__(
         self, normal_mode_transform: NormalModeTransformer = NormalModeTransformer
     ):
-        super(System, self).__init__()
+        super().__init__()
 
         self._nm_transformer = normal_mode_transform
         # For initialized nm transform
@@ -115,10 +113,10 @@ class System(UninitializedMixin, nn.Module):
 
     def load_molecules(
         self,
-        molecules: Union[Atoms, List[Atoms]],
+        molecules: Atoms | list[Atoms],
         n_replicas: int = 1,
-        position_unit_input: Union[str, float] = "Angstrom",
-        mass_unit_input: Union[str, float] = 1.0,
+        position_unit_input: str | float = "Angstrom",
+        mass_unit_input: str | float = 1.0,
     ):
         """
         Initializes all required variables and tensors based on a list of ASE

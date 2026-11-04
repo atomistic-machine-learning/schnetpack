@@ -5,10 +5,10 @@ integrators (:obj:`schnetpack.md.integrators`) and various simulation hooks (:ob
 and performs the time integration.
 """
 
-import torch
-import torch.nn as nn
 from contextlib import nullcontext
 
+import torch
+import torch.nn as nn
 from tqdm import trange
 
 from schnetpack.md import System
@@ -61,13 +61,15 @@ class Simulator(nn.Module):
         system: System,
         integrator,
         calculator,
-        simulator_hooks: list = [],
+        simulator_hooks: list | None = None,
         step: int = 0,
         restart: bool = False,
         gradients_required: bool = False,
         progress: bool = True,
     ):
-        super(Simulator, self).__init__()
+        if simulator_hooks is None:
+            simulator_hooks = []
+        super().__init__()
 
         self.system = system
         self.integrator = integrator
@@ -122,7 +124,6 @@ class Simulator(nn.Module):
                 hook.on_simulation_start(self)
 
             for _ in iterator(n_steps):
-
                 # Call hook before first half step
                 for hook in self.simulator_hooks:
                     hook.on_step_begin(self)

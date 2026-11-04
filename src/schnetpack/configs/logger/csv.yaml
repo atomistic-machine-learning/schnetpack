@@ -4,3 +4,4 @@ csv:
     _target_: pytorch_lightning.loggers.csv_logs.CSVLogger
     save_dir: "."
     name: "csv/"
+    # no fixed version: on resume, CSVLogger would drop the rows of an existing version

@@ -4,18 +4,19 @@ molecular dynamics simulations.
 """
 
 from __future__ import annotations
-import torch
+
+import logging
+from typing import TYPE_CHECKING
+
 import numpy as np
 import scipy.linalg as linalg
-from typing import Optional, Tuple, TYPE_CHECKING
-import logging
+import torch
 
 if TYPE_CHECKING:
     from schnetpack.md.simulator import Simulator, System
 
 from schnetpack import units as spk_units
 from schnetpack.md.simulation_hooks.basic_hooks import SimulationHook
-
 from schnetpack.md.utils import YSWeights, load_gle_matrices
 
 log = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ class ThermostatHook(SimulationHook):
     ring_polymer = False
 
     def __init__(self, temperature_bath: float, time_constant: float):
-        super(ThermostatHook, self).__init__()
+        super().__init__()
         self.register_buffer("temperature_bath", torch.tensor(temperature_bath))
         # Convert from fs to internal time units
         self.register_buffer(
@@ -165,9 +166,7 @@ class BerendsenThermostat(ThermostatHook):
     ring_polymer = False
 
     def __init__(self, temperature_bath: float, time_constant: float):
-        super(BerendsenThermostat, self).__init__(
-            temperature_bath=temperature_bath, time_constant=time_constant
-        )
+        super().__init__(temperature_bath=temperature_bath, time_constant=time_constant)
 
     def _apply_thermostat(self, simulator):
         """
@@ -207,9 +206,7 @@ class LangevinThermostat(ThermostatHook):
     ring_polymer = False
 
     def __init__(self, temperature_bath: float, time_constant: float):
-        super(LangevinThermostat, self).__init__(
-            temperature_bath=temperature_bath, time_constant=time_constant
-        )
+        super().__init__(temperature_bath=temperature_bath, time_constant=time_constant)
 
         self.register_uninitialized_buffer("thermostat_factor")
         self.register_uninitialized_buffer("c1")
@@ -291,14 +288,12 @@ class NHCThermostat(ThermostatHook):
         self,
         temperature_bath: float,
         time_constant: float,
-        chain_length: Optional[int] = 3,
-        massive: Optional[bool] = False,
-        multi_step: Optional[int] = 2,
-        integration_order: Optional[int] = 3,
+        chain_length: int | None = 3,
+        massive: bool | None = False,
+        multi_step: int | None = 2,
+        integration_order: int | None = 3,
     ):
-        super(NHCThermostat, self).__init__(
-            temperature_bath=temperature_bath, time_constant=time_constant
-        )
+        super().__init__(temperature_bath=temperature_bath, time_constant=time_constant)
 
         self.register_buffer("chain_length", torch.tensor(chain_length))
         self.register_buffer("frequency", 1.0 / self.time_constant)
@@ -373,7 +368,7 @@ class NHCThermostat(ThermostatHook):
         )
 
     def _init_masses(
-        self, state_dimension: Tuple[int, int, int, int], simulator: Simulator
+        self, state_dimension: tuple[int, int, int, int], simulator: Simulator
     ):
         """
         Auxiliary routine for initializing the thermostat masses.
@@ -552,11 +547,9 @@ class GLEThermostat(ThermostatHook):
         self,
         temperature_bath: float,
         gle_file: str,
-        free_particle_limit: Optional[bool] = True,
+        free_particle_limit: bool | None = True,
     ):
-        super(GLEThermostat, self).__init__(
-            temperature_bath=temperature_bath, time_constant=0.0
-        )
+        super().__init__(temperature_bath=temperature_bath, time_constant=0.0)
 
         self.gle_file = gle_file
 
@@ -597,9 +590,7 @@ class GLEThermostat(ThermostatHook):
         a_matrix, c_matrix = load_gle_matrices(self.gle_file)
 
         if a_matrix is None:
-            raise ThermostatError(
-                "Error reading GLE matrices from {:s}".format(self.gle_file)
-            )
+            raise ThermostatError(f"Error reading GLE matrices from {self.gle_file:s}")
         elif a_matrix.shape[0] > 1:
             raise ThermostatError(
                 "More than one A matrix found. Could be PIGLET input."

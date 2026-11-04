@@ -1,4 +1,5 @@
 import math
+
 import torch
 from torch import nn
 
@@ -50,7 +51,7 @@ class CosineCutoff(nn.Module):
         Args:
             cutoff (float, optional): cutoff radius.
         """
-        super(CosineCutoff, self).__init__()
+        super().__init__()
         self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
 
     def forward(self, input: torch.Tensor):
@@ -96,7 +97,7 @@ class MollifierCutoff(nn.Module):
             cutoff: Cutoff radius.
             eps: Offset added to distances for numerical stability.
         """
-        super(MollifierCutoff, self).__init__()
+        super().__init__()
         self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
         self.register_buffer("eps", torch.FloatTensor([eps]))
 
@@ -134,7 +135,7 @@ class SwitchFunction(nn.Module):
             switch_on (float): Onset of switch.
             switch_off (float): Value from which on switch is 0.
         """
-        super(SwitchFunction, self).__init__()
+        super().__init__()
         self.register_buffer("switch_on", torch.Tensor([switch_on]))
         self.register_buffer("switch_off", torch.Tensor([switch_off]))
 

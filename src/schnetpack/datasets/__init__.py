@@ -1,3 +1,8 @@
+# The dataset modules used to star-import schnetpack.data, which passed all of
+# its names on, e.g. schnetpack.datasets.ASEAtomsData. Kept for backward
+# compatibility.
+from schnetpack.data import *
+
 from .qm9 import *
 from .md17 import *
 from .md22 import *

@@ -1,4 +1,4 @@
-from typing import Union, Dict, Sequence
+from collections.abc import Sequence
 
 import pytorch_lightning as pl
 import rich
@@ -8,7 +8,6 @@ from pytorch_lightning.utilities import rank_zero_only
 from rich.syntax import Syntax
 from rich.tree import Tree
 
-
 __all__ = ["log_hyperparameters", "print_config"]
 
 
@@ -16,7 +15,7 @@ def empty(*args, **kwargs):
     pass
 
 
-def todict(config: Union[DictConfig, Dict]):
+def todict(config: DictConfig | dict):
     config_dict = yaml.safe_load(OmegaConf.to_yaml(config, resolve=True))
     return config_dict
 
@@ -31,11 +30,12 @@ def log_hyperparameters(
     This saves Hydra config using Lightning loggers.
     """
 
-    # send hparams to all loggers
-    trainer.logger.log_hyperparams(config)
+    for logger in trainer.loggers:
+        # send hparams to all loggers
+        logger.log_hyperparams(config)
 
-    # disable logging any more hyperparameters for all loggers
-    trainer.logger.log_hyperparams = empty
+        # disable logging any more hyperparameters for all loggers
+        logger.log_hyperparams = empty
 
 
 @rank_zero_only
@@ -65,7 +65,7 @@ def print_config(
 
     style = "dim"
     tree = Tree(
-        f":gear: Running with the following config:", style=style, guide_style=style
+        ":gear: Running with the following config:", style=style, guide_style=style
     )
 
     for field in fields:

@@ -1,13 +1,12 @@
 import math
+from functools import lru_cache
+
 import torch
 from sympy.physics.wigner import clebsch_gordan
 
-from functools import lru_cache
-from typing import Tuple
-
 
 @lru_cache(maxsize=10)
-def sh_indices(lmax: int) -> Tuple[torch.Tensor, torch.Tensor]:
+def sh_indices(lmax: int) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Build index arrays for spherical harmonics
 
@@ -109,7 +108,7 @@ def generate_clebsch_gordan_rsh(
 
 def sparsify_clebsch_gordon(
     cg: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Convert Clebsch-Gordon tensor to sparse format.
 

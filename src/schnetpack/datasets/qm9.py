@@ -5,18 +5,23 @@ import re
 import shutil
 import tarfile
 import tempfile
-from typing import List, Optional, Dict
 from urllib import request as request
 
 import numpy as np
+import torch
 from ase import Atoms
 from ase.io.extxyz import read_xyz
 from tqdm import tqdm
 
-import torch
-from schnetpack.data import *
 import schnetpack.properties as structure
-from schnetpack.data import AtomsDataModuleError, AtomsDataModule
+from schnetpack.data import (
+    AtomsDataFormat,
+    AtomsDataModule,
+    AtomsDataModuleError,
+    BaseAtomsData,
+    create_dataset,
+    load_dataset,
+)
 
 __all__ = ["QM9"]
 
@@ -64,25 +69,25 @@ class QM9(AtomsDataModule):
         self,
         datapath: str,
         batch_size: int,
-        num_train: Optional[int] = None,
-        num_val: Optional[int] = None,
-        num_test: Optional[int] = None,
-        split_file: Optional[str] = "split.npz",
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
-        load_properties: Optional[List[str]] = None,
+        num_train: int | None = None,
+        num_val: int | None = None,
+        num_test: int | None = None,
+        split_file: str | None = "split.npz",
+        format: AtomsDataFormat | None = AtomsDataFormat.ASE,
+        load_properties: list[str] | None = None,
         remove_uncharacterized: bool = False,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
-        train_transforms: Optional[List[torch.nn.Module]] = None,
-        val_transforms: Optional[List[torch.nn.Module]] = None,
-        test_transforms: Optional[List[torch.nn.Module]] = None,
+        val_batch_size: int | None = None,
+        test_batch_size: int | None = None,
+        transforms: list[torch.nn.Module] | None = None,
+        train_transforms: list[torch.nn.Module] | None = None,
+        val_transforms: list[torch.nn.Module] | None = None,
+        test_transforms: list[torch.nn.Module] | None = None,
         num_workers: int = 2,
-        num_val_workers: Optional[int] = None,
-        num_test_workers: Optional[int] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
-        data_workdir: Optional[str] = None,
+        num_val_workers: int | None = None,
+        num_test_workers: int | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
+        data_workdir: str | None = None,
         **kwargs,
     ):
         """
@@ -228,7 +233,7 @@ class QM9(AtomsDataModule):
         return atref
 
     def _download_data(
-        self, tmpdir, dataset: BaseAtomsData, uncharacterized: List[int]
+        self, tmpdir, dataset: BaseAtomsData, uncharacterized: list[int]
     ):
         logging.info("Downloading GDB-9 data...")
         tar_path = os.path.join(tmpdir, "gdb9.tar.gz")
@@ -258,7 +263,7 @@ class QM9(AtomsDataModule):
             properties = {}
 
             tmp = io.StringIO()
-            with open(xyzfile, "r") as f:
+            with open(xyzfile) as f:
                 lines = f.readlines()
                 l = lines[1].split()[2:]
                 for pn, p in zip(dataset.available_properties, l):

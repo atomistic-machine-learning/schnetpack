@@ -5,8 +5,6 @@ import torch.nn as nn
 
 __all__ = ["gaussian_rbf", "GaussianRBF", "GaussianRBFCentered", "BesselRBF"]
 
-from torch import nn as nn
-
 
 def gaussian_rbf(inputs: torch.Tensor, offsets: torch.Tensor, widths: torch.Tensor):
     coeff = -0.5 / torch.pow(widths, 2)
@@ -29,7 +27,7 @@ class GaussianRBF(nn.Module):
             trainable: If True, widths and offset of Gaussian functions
                 are adjusted during training process.
         """
-        super(GaussianRBF, self).__init__()
+        super().__init__()
         self.n_rbf = n_rbf
 
         # compute offset and width of Gaussian functions
@@ -62,7 +60,7 @@ class GaussianRBFCentered(nn.Module):
             trainable: If True, widths of Gaussian functions
                 are adjusted during training process.
         """
-        super(GaussianRBFCentered, self).__init__()
+        super().__init__()
         self.n_rbf = n_rbf
 
         # compute offset and width of Gaussian functions
@@ -96,7 +94,7 @@ class BesselRBF(nn.Module):
             cutoff: radial cutoff
             n_rbf: number of basis functions.
         """
-        super(BesselRBF, self).__init__()
+        super().__init__()
         self.n_rbf = n_rbf
 
         freqs = torch.arange(1, n_rbf + 1) * pi / cutoff

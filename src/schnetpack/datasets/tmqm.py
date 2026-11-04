@@ -1,24 +1,20 @@
-import io
-import logging
-import os
-import re
-import shutil
-import tarfile
-import tempfile
-from typing import List, Optional, Dict
-from urllib import request as request
 import gzip
+import os
+import shutil
+import tempfile
+from urllib import request as request
 
 import numpy as np
-from ase import Atoms
-from ase.io.extxyz import read_xyz
-from ase.io import read
-from tqdm import tqdm
-
 import torch
-from schnetpack.data import *
-import schnetpack.properties as structure
-from schnetpack.data import AtomsDataModuleError, AtomsDataModule
+from ase.io import read
+
+from schnetpack.data import (
+    AtomsDataFormat,
+    AtomsDataModule,
+    BaseAtomsData,
+    create_dataset,
+    load_dataset,
+)
 
 __all__ = ["TMQM"]
 
@@ -55,24 +51,24 @@ class TMQM(AtomsDataModule):
         self,
         datapath: str,
         batch_size: int,
-        num_train: Optional[int] = None,
-        num_val: Optional[int] = None,
-        num_test: Optional[int] = None,
-        split_file: Optional[str] = "split.npz",
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
-        load_properties: Optional[List[str]] = None,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
-        train_transforms: Optional[List[torch.nn.Module]] = None,
-        val_transforms: Optional[List[torch.nn.Module]] = None,
-        test_transforms: Optional[List[torch.nn.Module]] = None,
+        num_train: int | None = None,
+        num_val: int | None = None,
+        num_test: int | None = None,
+        split_file: str | None = "split.npz",
+        format: AtomsDataFormat | None = AtomsDataFormat.ASE,
+        load_properties: list[str] | None = None,
+        val_batch_size: int | None = None,
+        test_batch_size: int | None = None,
+        transforms: list[torch.nn.Module] | None = None,
+        train_transforms: list[torch.nn.Module] | None = None,
+        val_transforms: list[torch.nn.Module] | None = None,
+        test_transforms: list[torch.nn.Module] | None = None,
         num_workers: int = 2,
-        num_val_workers: Optional[int] = None,
-        num_test_workers: Optional[int] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
-        data_workdir: Optional[str] = None,
+        num_val_workers: int | None = None,
+        num_test_workers: int | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
+        data_workdir: str | None = None,
         **kwargs,
     ):
         """
@@ -189,7 +185,7 @@ class TMQM(AtomsDataModule):
         prop_list = []
         key_value_pairs_list = []
 
-        with open(tmp_properties_file, "r") as file:
+        with open(tmp_properties_file) as file:
             lines = file.readlines()
             keys = lines[0].strip("\n").split(";")
 

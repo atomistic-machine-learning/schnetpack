@@ -6,16 +6,15 @@ integrator simulates multiple replicas of the system coupled by harmonic springs
 a certain extent of nuclear quantum effects (e.g. tunneling).
 """
 
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
+from ase import units as ase_units
 
 import schnetpack as spk
+from schnetpack import units as spk_units
 from schnetpack.md import System
 from schnetpack.md.simulation_hooks import BarostatHook
-
-from ase import units as ase_units
-from schnetpack import units as spk_units
 
 __all__ = ["VelocityVerlet", "RingPolymer", "NPTVelocityVerlet", "NPTRingPolymer"]
 
@@ -38,7 +37,7 @@ class Integrator(nn.Module):
     pressure_control = False
 
     def __init__(self, time_step: float):
-        super(Integrator, self).__init__()
+        super().__init__()
         # Convert fs to internal time units.
         self.time_step = time_step * spk.units.convert_units(
             ase_units.fs, spk_units.time
@@ -92,7 +91,7 @@ class VelocityVerlet(Integrator):
     pressure_control = False
 
     def __init__(self, time_step: float):
-        super(VelocityVerlet, self).__init__(time_step)
+        super().__init__(time_step)
 
     def _main_step(self, system: System):
         r"""
@@ -139,7 +138,7 @@ class RingPolymer(Integrator):
     pressure_control = False
 
     def __init__(self, time_step: float, n_beads: int, temperature: float):
-        super(RingPolymer, self).__init__(time_step)
+        super().__init__(time_step)
 
         self.n_beads = n_beads
 
@@ -243,7 +242,7 @@ class NPTVelocityVerlet(VelocityVerlet):
     pressure_control = True
 
     def __init__(self, time_step: float, barostat: BarostatHook):
-        super(NPTVelocityVerlet, self).__init__(time_step)
+        super().__init__(time_step)
         self.barostat = barostat
 
     def half_step(self, system: System):
@@ -281,7 +280,7 @@ class NPTRingPolymer(RingPolymer):
     def __init__(
         self, time_step: float, n_beads: int, temperature: float, barostat: BarostatHook
     ):
-        super(NPTRingPolymer, self).__init__(time_step, n_beads, temperature)
+        super().__init__(time_step, n_beads, temperature)
         self.barostat = barostat
 
     def half_step(self, system: System):

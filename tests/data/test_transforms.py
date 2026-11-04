@@ -1,7 +1,12 @@
-import schnetpack.properties as structure
+import numpy as np
 import pytest
 import torch
+from ase import Atoms
+from ase.build import bulk, fcc111, molecule
 from ase.data import atomic_masses
+
+import schnetpack.properties as structure
+from schnetpack.atomistic import PairwiseDistances
 from schnetpack.transform import *
 
 
@@ -48,6 +53,32 @@ class TestNeighborLists:
         neighbors_ref = self._sort_neighbors(neighbors_ref)
 
         for nbl, nbl_ref in zip(neighbors, neighbors_ref):
+            torch.testing.assert_close(nbl, nbl_ref)
+
+    def test_atoms_outside_cell(self, neighbor_list, environment_periodic):
+        """Moving atoms by lattice vectors leaves the periodic system unchanged, so the
+        pair vectors must be the same as for the atoms inside the cell."""
+        cutoff, props, _ = environment_periodic
+        cell = props[structure.cell].view(3, 3)
+        lattice_shifts = torch.tensor(
+            [[1, 0, 0], [-2, 1, 0], [0, 0, 0], [1, -1, 3], [0, 2, -1]],
+            dtype=cell.dtype,
+        )
+        moved = {k: v.clone() for k, v in props.items()}
+        moved[structure.R] = props[structure.R] + lattice_shifts @ cell
+
+        pair_vectors = []
+        for inputs in (props, moved):
+            neighbors = neighbor_list(cutoff)(inputs)
+            R = inputs[structure.R]
+            neighbors[structure.Rij] = (
+                R[neighbors[structure.idx_j]]
+                - R[neighbors[structure.idx_i]]
+                + neighbors[structure.offsets]
+            )
+            pair_vectors.append(self._sort_neighbors(neighbors))
+
+        for nbl, nbl_ref in zip(*pair_vectors):
             torch.testing.assert_close(nbl, nbl_ref)
 
     def _sort_neighbors(self, neighbors):
@@ -187,3 +218,112 @@ def test_remove_cog(four_atoms):
         cog += r_i
 
     torch.testing.assert_close(cog, torch.tensor([0.0, 0.0, 0.0]))
+
+
+def _inputs(atoms):
+    return {
+        structure.idx: torch.tensor([0]),
+        structure.Z: torch.tensor(atoms.numbers),
+        structure.R: torch.tensor(atoms.positions),
+        structure.cell: torch.tensor(np.array(atoms.cell)),
+        structure.pbc: torch.tensor(atoms.pbc),
+    }
+
+
+def _pairs(neighbor_list, atoms):
+    """Sorted (i, j, offset) tuples of a neighbor list."""
+    out = neighbor_list(_inputs(atoms))
+    offsets = out[structure.offsets].numpy().round(8) + 0.0  # no negative zeros
+    return sorted(
+        zip(
+            out[structure.idx_i].tolist(),
+            out[structure.idx_j].tolist(),
+            map(tuple, offsets.tolist()),
+        )
+    )
+
+
+def _matscipy_cases():
+    molecule_outside_box = molecule("CH3CH2OH")
+    molecule_outside_box.set_cell([6.0, 6.0, 6.0])
+    molecule_outside_box.positions += 50.0
+
+    slab_outside_box = fcc111("Cu", size=(2, 2, 3), vacuum=5.0)
+    slab_outside_box.positions[:, 2] += 30.0
+
+    wire = Atoms(
+        "C4", positions=[[0, 0, 0], [1.4, 0.1, 9], [2.8, -0.1, 0], [4.2, 0, -7]]
+    )
+    wire.set_cell([5.6, 4.0, 4.0])
+    wire.pbc = [True, False, False]
+
+    cases = {
+        "molecule_without_cell": molecule("CH3CH2OH"),
+        "molecule_outside_box": molecule_outside_box,
+        "slab_outside_box": slab_outside_box,
+        "wire_outside_box": wire,
+    }
+    rng = np.random.default_rng(0)
+    for k in range(30):
+        n_atoms = int(rng.integers(2, 9))
+        cell = np.diag(rng.uniform(3.0, 8.0, size=3)) + rng.uniform(-1.0, 1.0, (3, 3))
+        scaled = rng.uniform(-0.5, 1.5, size=(n_atoms, 3))
+        cases[f"random_{k}"] = Atoms(
+            numbers=rng.integers(1, 10, size=n_atoms),
+            scaled_positions=scaled,
+            cell=cell,
+            pbc=rng.integers(0, 2, size=3).astype(bool),
+        )
+    return cases
+
+
+MATSCIPY_CASES = _matscipy_cases()
+
+
+@pytest.mark.parametrize("name", MATSCIPY_CASES)
+def test_matscipy_neighbor_list_matches_ase(name):
+    """Atoms outside the cell must not get offsets along non-periodic directions."""
+    atoms = MATSCIPY_CASES[name]
+    assert _pairs(MatScipyNeighborList(3.0), atoms) == _pairs(
+        ASENeighborList(3.0), atoms
+    )
+
+
+def test_matscipy_neighbor_list_rejects_periodic_cell_without_volume():
+    """Replacing the cell of a partially periodic system would discard its lattice."""
+    slab = fcc111("Cu", size=(2, 2, 3), vacuum=None)  # pbc=TTF, zero c-vector
+    with pytest.raises(ValueError, match="non-zero volume"):
+        MatScipyNeighborList(3.0)(_inputs(slab))
+
+
+def _sorted_distances(neighbors):
+    return torch.sort(torch.norm(neighbors[structure.Rij], dim=1)).values
+
+
+def test_skin_neighbor_list_rebuilds_when_the_cell_changes():
+    """A strained cell must not reuse the old list, whose offsets belong to the old
+    cell, even if no atom moved by more than half the skin."""
+    atoms = bulk("Si", cubic=True)
+    skin = SkinNeighborList(ASENeighborList(5.0), cutoff_skin=0.3)
+    skin(_inputs(atoms))
+
+    strained = atoms.copy()
+    strained.set_cell(atoms.cell * 1.02, scale_atoms=True)
+    update_required, _ = skin._update(_inputs(strained))
+    assert update_required
+
+    reference = PairwiseDistances()(ASENeighborList(5.0)(_inputs(strained)))
+    torch.testing.assert_close(
+        _sorted_distances(skin(_inputs(strained))), _sorted_distances(reference)
+    )
+
+
+def test_skin_neighbor_list_is_reused_for_small_moves():
+    atoms = bulk("Si", cubic=True)
+    skin = SkinNeighborList(ASENeighborList(5.0), cutoff_skin=0.3)
+    skin(_inputs(atoms))
+
+    moved = atoms.copy()
+    moved.positions[0] += [0.05, 0.0, 0.0]
+    update_required, _ = skin._update(_inputs(moved))
+    assert not update_required

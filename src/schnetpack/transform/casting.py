@@ -1,8 +1,6 @@
-from typing import Dict
-from typing import Dict, Optional
-from schnetpack.utils import as_dtype
-
 import torch
+
+from schnetpack.utils import as_dtype
 
 from .base import Transform
 
@@ -17,7 +15,7 @@ class CastMap(Transform):
     is_preprocessor: bool = True
     is_postprocessor: bool = True
 
-    def __init__(self, type_map: Dict[str, str]):
+    def __init__(self, type_map: dict[str, str]):
         """
         Args:
             type_map: dict with source_type: target_type (as strings)
@@ -27,8 +25,8 @@ class CastMap(Transform):
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         for k, v in inputs.items():
             vdtype = str(v.dtype).split(".")[-1]
             if vdtype in self.type_map:

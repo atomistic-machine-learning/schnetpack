@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
 
-from schnetpack.transform import NeighborListTransform, CollectAtomTriples
-from schnetpack.data.loader import _atoms_collate_fn
-from typing import List, Dict
 from schnetpack import properties
+from schnetpack.data.loader import _atoms_collate_fn
+from schnetpack.transform import CollectAtomTriples, NeighborListTransform
 
 __all__ = ["NeighborListMD"]
 
@@ -97,7 +96,7 @@ class NeighborListMD:
 
         return update_required
 
-    def get_neighbors(self, inputs: Dict[str, torch.Tensor]):
+    def get_neighbors(self, inputs: dict[str, torch.Tensor]):
         """
         Compute neighbor indices from positions and simulations cells.
 
@@ -159,8 +158,8 @@ class NeighborListMD:
         return neighbor_idx
 
     def _filter_indices(
-        self, positions: torch.Tensor, neighbor_idx: Dict[str, torch.Tensor]
-    ) -> Dict[str, torch.Tensor]:
+        self, positions: torch.Tensor, neighbor_idx: dict[str, torch.Tensor]
+    ) -> dict[str, torch.Tensor]:
         """
         Routine for filtering out pair indices and offets due to the buffer region, which would otherwise slow down
         the calculators.
@@ -196,7 +195,7 @@ class NeighborListMD:
         cells: torch.Tensor,
         pbc: torch.Tensor,
         n_molecules: int,
-    ) -> List[Dict[str, torch.tensor]]:
+    ) -> list[dict[str, torch.tensor]]:
         """
         Split the tensors containing molecular information into the different molecules for neighbor list computation.
         Args:

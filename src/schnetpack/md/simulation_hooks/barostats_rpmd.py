@@ -11,8 +11,9 @@ if TYPE_CHECKING:
     from schnetpack.md import Simulator, System
 
 import torch
-from schnetpack.md.simulation_hooks import BarostatHook
+
 from schnetpack import units as spk_units
+from schnetpack.md.simulation_hooks import BarostatHook
 from schnetpack.md.utils import StableSinhDiv
 
 __all__ = ["PILEBarostat"]
@@ -44,7 +45,7 @@ class PILEBarostat(BarostatHook):
     def __init__(
         self, target_pressure: float, temperature_bath: float, time_constant: float
     ):
-        super(PILEBarostat, self).__init__(
+        super().__init__(
             target_pressure=target_pressure,
             temperature_bath=temperature_bath,
             time_constant=time_constant,

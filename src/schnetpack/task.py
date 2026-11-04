@@ -1,14 +1,40 @@
+import random
 import warnings
-from typing import Optional, Dict, List, Type, Any
+from typing import Any
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning.trainer.states import TrainerFn
 from torch import nn as nn
 from torchmetrics import Metric
 
 from schnetpack.model.base import AtomisticModel
 
 __all__ = ["ModelOutput", "AtomisticTask"]
+
+
+def _collect_rng_states() -> dict[str, Any]:
+    states = {
+        "torch": torch.get_rng_state(),
+        "numpy": np.random.get_state(),
+        "python": random.getstate(),
+    }
+    if torch.cuda.is_available():
+        states["torch.cuda"] = torch.cuda.get_rng_state_all()
+    return states
+
+
+def _set_rng_states(states: dict[str, Any]) -> None:
+    torch.set_rng_state(states["torch"])
+    np.random.set_state(states["numpy"])
+    random.setstate(states["python"])
+    if "torch.cuda" in states and torch.cuda.is_available():
+        # the run may resume on fewer devices than it was saved on
+        for device, state in enumerate(
+            states["torch.cuda"][: torch.cuda.device_count()]
+        ):
+            torch.cuda.set_rng_state(state, device)
 
 
 class ModelOutput(nn.Module):
@@ -20,11 +46,11 @@ class ModelOutput(nn.Module):
     def __init__(
         self,
         name: str,
-        loss_fn: Optional[nn.Module] = None,
+        loss_fn: nn.Module | None = None,
         loss_weight: float = 1.0,
-        metrics: Optional[Dict[str, Metric]] = None,
-        constraints: Optional[List[torch.nn.Module]] = None,
-        target_property: Optional[str] = None,
+        metrics: dict[str, Metric] | None = None,
+        constraints: list[torch.nn.Module] | None = None,
+        target_property: str | None = None,
     ):
         r"""
         Args:
@@ -46,13 +72,10 @@ class ModelOutput(nn.Module):
         self.target_property = target_property or name
         self.loss_fn = loss_fn
         self.loss_weight = loss_weight
-        self.train_metrics = nn.ModuleDict(metrics or {})
-        self.val_metrics = nn.ModuleDict(
-            {k: v.clone() for k, v in self.train_metrics.items()}
-        )
-        self.test_metrics = nn.ModuleDict(
-            {k: v.clone() for k, v in self.train_metrics.items()}
-        )
+        metrics = metrics or {}
+        self.train_metrics = nn.ModuleDict(metrics)
+        self.val_metrics = nn.ModuleDict({k: v.clone() for k, v in metrics.items()})
+        self.test_metrics = nn.ModuleDict({k: v.clone() for k, v in metrics.items()})
         self.metrics = {
             "train": self.train_metrics,
             "val": self.val_metrics,
@@ -101,12 +124,12 @@ class AtomisticTask(pl.LightningModule):
     def __init__(
         self,
         model: AtomisticModel,
-        outputs: List[ModelOutput],
-        optimizer_cls: Type[torch.optim.Optimizer] = torch.optim.Adam,
-        optimizer_args: Optional[Dict[str, Any]] = None,
-        scheduler_cls: Optional[Type] = None,
-        scheduler_args: Optional[Dict[str, Any]] = None,
-        scheduler_monitor: Optional[str] = None,
+        outputs: list[ModelOutput],
+        optimizer_cls: type[torch.optim.Optimizer] = torch.optim.Adam,
+        optimizer_args: dict[str, Any] | None = None,
+        scheduler_cls: type | None = None,
+        scheduler_args: dict[str, Any] | None = None,
+        scheduler_monitor: str | None = None,
         warmup_steps: int = 0,
     ):
         """
@@ -139,7 +162,23 @@ class AtomisticTask(pl.LightningModule):
         if stage == "fit":
             self.model.initialize_transforms(self.trainer.datamodule)
 
-    def forward(self, inputs: Dict[str, torch.Tensor]):
+    def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+        # Lightning does not store the RNG states, so without them a resumed run
+        # shuffles the training data differently than an uninterrupted one
+        checkpoint["rng_states"] = _collect_rng_states()
+
+    def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+        # Only when resuming training: Lightning calls this before it creates the
+        # train dataloader iterator, whose sampler draws the shuffle seed from the
+        # global RNG. Loading a task without a trainer leaves the RNG alone.
+        if (
+            "rng_states" in checkpoint
+            and self._trainer is not None
+            and self._trainer.state.fn == TrainerFn.FITTING
+        ):
+            _set_rng_states(checkpoint["rng_states"])
+
+    def forward(self, inputs: dict[str, torch.Tensor]):
         results = self.model(inputs)
         return results
 
@@ -168,7 +207,6 @@ class AtomisticTask(pl.LightningModule):
         return pred, targets
 
     def training_step(self, batch, batch_idx):
-
         targets = {
             output.target_property: batch[output.target_property]
             for output in self.outputs
@@ -176,7 +214,7 @@ class AtomisticTask(pl.LightningModule):
         }
         try:
             targets["considered_atoms"] = batch["considered_atoms"]
-        except:
+        except Exception:
             pass
 
         pred = self.predict_without_postprocessing(batch)
@@ -198,7 +236,7 @@ class AtomisticTask(pl.LightningModule):
         }
         try:
             targets["considered_atoms"] = batch["considered_atoms"]
-        except:
+        except Exception:
             pass
 
         pred = self.predict_without_postprocessing(batch)
@@ -228,7 +266,7 @@ class AtomisticTask(pl.LightningModule):
         }
         try:
             targets["considered_atoms"] = batch["considered_atoms"]
-        except:
+        except Exception:
             pass
 
         pred = self.predict_without_postprocessing(batch)
@@ -270,7 +308,8 @@ class AtomisticTask(pl.LightningModule):
                 warnings.warn(
                     "Learning rate scheduling is set to occur after the epoch ends. To enable scheduling before the "
                     "epoch end, please set the `val_check_interval` parameter to a value greater than 1.0, which "
-                    "indicates the number of training steps after which the model should be validated."
+                    "indicates the number of training steps after which the model should be validated.",
+                    stacklevel=2,
                 )
             # incase model is validated before epoch end (recommended use of val_check_interval)
             if self.trainer.val_check_interval > 1.0:
@@ -283,8 +322,8 @@ class AtomisticTask(pl.LightningModule):
 
     def optimizer_step(
         self,
-        epoch: int = None,
-        batch_idx: int = None,
+        epoch: int | None = None,
+        batch_idx: int | None = None,
         optimizer=None,
         optimizer_closure=None,
     ):
@@ -296,7 +335,7 @@ class AtomisticTask(pl.LightningModule):
         # update params
         optimizer.step(closure=optimizer_closure)
 
-    def save_model(self, path: str, do_postprocessing: Optional[bool] = None):
+    def save_model(self, path: str, do_postprocessing: bool | None = None):
         if self.global_rank == 0:
             pp_status = self.model.do_postprocessing
             if do_postprocessing is not None:

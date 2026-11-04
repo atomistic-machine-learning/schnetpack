@@ -1,8 +1,10 @@
 from __future__ import annotations
-import torch
 
 from abc import ABC
-from typing import TYPE_CHECKING, List, Dict, Optional
+from typing import TYPE_CHECKING
+
+import torch
+
 from schnetpack.md.calculators import MDCalculator
 
 if TYPE_CHECKING:
@@ -37,8 +39,8 @@ class EnsembleCalculator(ABC, MDCalculator):
 
     @staticmethod
     def _accumulate_results(
-        results: List[Dict[str, torch.tensor]],
-    ) -> Dict[str, torch.tensor]:
+        results: list[dict[str, torch.tensor]],
+    ) -> dict[str, torch.tensor]:
         """
         Accumulate results and compute average predictions and uncertainties.
 
@@ -55,11 +57,11 @@ class EnsembleCalculator(ABC, MDCalculator):
         for p in accumulated:
             tmp = torch.stack([result[p] for result in results])
             ensemble_results[p] = torch.mean(tmp, dim=0)
-            ensemble_results["{:s}_var".format(p)] = torch.var(tmp, dim=0)
+            ensemble_results[f"{p:s}_var"] = torch.var(tmp, dim=0)
 
         return ensemble_results
 
-    def _activate_stress(self, stress_key: Optional[str] = None):
+    def _activate_stress(self, stress_key: str | None = None):
         """
         Routine for activating stress computations
         Args:
@@ -73,7 +75,7 @@ class EnsembleCalculator(ABC, MDCalculator):
         """
         new_required = []
         for p in self.required_properties:
-            prop_string = "{:s}_var".format(p)
+            prop_string = f"{p:s}_var"
             new_required += [p, prop_string]
             # Update property conversion
             self.property_conversion[prop_string] = self.property_conversion[p]

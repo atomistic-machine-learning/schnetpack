@@ -1,8 +1,8 @@
 import pytest
 import torch
+
 import schnetpack.properties as structure
 from schnetpack.transform import AddOffsets, RemoveOffsets
-import copy
 
 
 # === Fixtures ===

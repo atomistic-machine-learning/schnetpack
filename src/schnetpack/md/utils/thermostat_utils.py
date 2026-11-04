@@ -1,8 +1,7 @@
-import torch
 import numpy as np
-import schnetpack.units as spk_units
+import torch
 
-from typing import Optional
+import schnetpack.units as spk_units
 
 __all__ = ["YSWeights", "load_gle_matrices", "StableSinhDiv"]
 
@@ -55,7 +54,7 @@ class YSWeights:
         """
         if order not in self.YS_weights:
             raise ValueError(
-                "Order {:d} not supported for YS integration weights".format(order)
+                f"Order {order:d} not supported for YS integration weights"
             )
         else:
             return self.YS_weights[order]
@@ -171,9 +170,9 @@ def load_gle_matrices(filename: str):
                 c_matrix.read_line(line)
     except FileNotFoundError:
         raise FileNotFoundError(
-            "Could not open {:s} for reading. Please use GLE parameter files "
-            "generated via http://gle4md.org/index.html?page=matrix".format(filename)
-        )
+            f"Could not open {filename:s} for reading. Please use GLE parameter files "
+            "generated via http://gle4md.org/index.html?page=matrix"
+        ) from None
 
     return a_matrix.matrix, c_matrix.matrix
 
@@ -183,7 +182,7 @@ class StableSinhDiv:
     McLaurin series of sinh(x)/x around zero to avoid numerical instabilities
     """
 
-    def __init__(self, eps: Optional[float] = 1e-4):
+    def __init__(self, eps: float | None = 1e-4):
         self.e0 = 1.0
         self.e2 = self.e0 / 6.0
         self.e4 = self.e2 / 20.0

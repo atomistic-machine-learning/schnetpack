@@ -10,35 +10,37 @@ pair_nequip github repository https://github.com/mir-group/pair_nequip [2].
 
 Requirements
 ============
-For the installation of the LAMMPS interface we need the following pre-requisites. Different versions for CUDA
-might cause unknown errors during the installation:
+For the installation of the LAMMPS interface we need the following pre-requisites:
 
-* **CUDA** 11.7
-* **cuDNN**
-* **python** 3.9 with **schnetpack** 2.0, **pytorch** 1.13, and **mkl-include**
+* **python** >= 3.12 with **schnetpack** >= 2.0, **pytorch** >= 2.5 and **mkl-include**
+* a C++17 compiler (e.g. GCC >= 9), **cmake** >= 3.16 and **make** or **ninja**
+* for GPU runs: a **CUDA** toolkit and **cuDNN** whose version matches the CUDA version
+  that your PyTorch build was compiled against
 
-In this installation guide we use CUDA 11.7 and pytorch 1.13. If you want to use different
-versions, make sure that the cuda versions of standalone CUDA and pytorch-CUDA are matching! This installation guide
-will focus on the installation within a conda environment, but pip environments should generally also work.
+Make sure that standalone CUDA toolkit and the CUDA version of pytorch match!
+A CPU-only PyTorch build works as well and needs neither CUDA nor cuDNN.
 
-The installation of standalone CUDA can be done according to this installation guide: https://developer.nvidia.com/cuda-11-7-0-download-archive.
+Standalone CUDA can be installed according to https://developer.nvidia.com/cuda-downloads,
+cuDNN according to https://docs.nvidia.com/deeplearning/cudnn/installation/latest/.
 
-Afterwards, install cuDNN with the help of this installation guide: https://docs.nvidia.com/deeplearning/cudnn/install-guide/index.html.
-cuDNN can be downloaded from: https://developer.nvidia.com/rdp/cudnn-archive.
+We recommend to create a new environment for the matching version of pytorch-CUDA together
+with schnetpack and all dependencies. The following commands set up a corresponding conda
+environment called :code:`spk_lammps` (replace the CUDA version with the one you need)::
 
-We recommend to create a new environment to install the matching version of pytorch-CUDA together with schnetpack and all dependencies.
-For example, the following commands will set up a corresponding conda environment called :code:`spk_lammps`::
-
-    conda create -n spk_lammps python=3.9 cuda-toolkit=11.7 pytorch mkl-include numpy -c pytorch -c nvidia
+    conda create -n spk_lammps python=3.12 cuda-toolkit=12.4 pytorch pytorch-cuda=12.4 mkl-include numpy -c pytorch -c nvidia
     conda activate spk_lammps
     pip install schnetpack
-    
+
+The interface is built against LAMMPS stable releases. The most recently reported combination is
+
+    LAMMPS ``stable_22Jul2025_update5`` / PyTorch 2.13 (CUDA 13.2) / GCC 15 / C++17
 
 Downloading LAMMPS
 ==================
-Please download LAMMPS directly from Github::
+Please download LAMMPS directly from Github. We recommend to check out a stable release
+rather than the development branch::
 
-    git clone --depth 1 git@github.com:lammps/lammps
+    git clone --depth 1 --branch stable_22Jul2025_update5 https://github.com/lammps/lammps.git
 
 Patching SchNetPack into LAMMPS
 ===============================
@@ -72,23 +74,32 @@ Next we create the build folder and :code:`cd` into it::
     mkdir build
     cd build
 
-Now the build-files can be created.
+Now the build-files can be created. libtorch requires C++17, so the standard is set explicitly.
 With conda (`recommended`)::
 
-    cmake ../cmake -DCMAKE_PREFIX_PATH=`python -c 'import torch;print(torch.utils.cmake_prefix_path)'` -DMKL_INCLUDE_DIR="$CONDA_PREFIX/include"
+    cmake ../cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 \
+        -DCMAKE_PREFIX_PATH=`python -c 'import torch;print(torch.utils.cmake_prefix_path)'` \
+        -DMKL_INCLUDE_DIR="$CONDA_PREFIX/include"
 
 **Or** with pip::
 
-    cmake ../cmake -DCMAKE_PREFIX_PATH=`python -c 'import torch;print(torch.utils.cmake_prefix_path)'`
-    -DMKL_INCLUDE_DIR=python -c "import sysconfig;from pathlib import Path;print(Path(sysconfig.get_paths()[\"include\"]).parent)"
+    cmake ../cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 \
+        -DCMAKE_PREFIX_PATH=`python -c 'import torch;print(torch.utils.cmake_prefix_path)'` \
+        -DMKL_INCLUDE_DIR=`python -c 'import sysconfig;from pathlib import Path;print(Path(sysconfig.get_paths()["include"]).parent)'`
+
+Additional LAMMPS packages can be enabled as usual, they do not interfere with the interface,
+e.g.::
+
+    cmake ../cmake ... -DPKG_KOKKOS=yes -DPKG_MEAM=yes -DKokkos_ENABLE_SERIAL=yes -DKokkos_ENABLE_OPENMP=yes
 
 Build LAMMPS
 ============
-Finally we can install our patched LAMMPS with::
+Finally we can build our patched LAMMPS with::
 
-    make -j$(nproc)
+    cmake --build . -j$(nproc)
 
-This will create a runfile called `lmp` in the build folder. By calling this runfile we can now start experiments in LAMMPS.
+This will create a runfile called `lmp` in the build folder. By calling this runfile we can now
+start experiments in LAMMPS.
 
 Creating a deployed Model
 =========================

@@ -1,8 +1,9 @@
 import os
-import pytest
-import numpy as np
 
-from schnetpack.datasets import QM9, MD17, rMD17
+import numpy as np
+import pytest
+
+from schnetpack.datasets import MD17, QM7X, QM9, rMD17
 
 
 @pytest.fixture
@@ -99,3 +100,66 @@ def test_rmd17(test_rmd17_path):
     assert len(np.intersect1d(train_idx, val_idx)) == 0
     assert len(np.intersect1d(train_idx, test_idx)) == 0
     assert len(np.intersect1d(val_idx, test_idx)) == 0
+
+
+def test_qm7x_property_names_are_distinct():
+    """Each property needs its own name. Otherwise the property tables collapse and
+    one property silently loads the data of another."""
+    names = [
+        QM7X.forces,
+        QM7X.energy,
+        QM7X.Eat,
+        QM7X.EPBE0,
+        QM7X.EMBD,
+        QM7X.FPBE0,
+        QM7X.FMBD,
+        QM7X.RMSD,
+    ]
+    assert len(set(names)) == len(names)
+    assert set(QM7X.property_unit_dict) == set(names)
+    assert set(QM7X.property_dataset_keys) == set(names)
+    assert QM7X.property_dataset_keys[QM7X.FPBE0] == "pbe0FOR"
+    assert QM7X.property_dataset_keys[QM7X.FMBD] == "vdwFOR"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ASEAtomsData",
+        "AtomsLoader",
+        "AtomsDataModule",
+        "RandomSplit",
+        "calculate_stats",
+    ],
+)
+def test_datasets_still_pass_on_the_data_api(name):
+    """Older releases exported all of schnetpack.data from schnetpack.datasets."""
+    import schnetpack as spk
+
+    assert getattr(spk.datasets, name) is getattr(spk.data, name)
+
+
+def test_qm7x_interrupted_extraction_leaves_no_partial_file(tmp_path, monkeypatch):
+    """A partial file under the target name would be reused by later runs."""
+    import lzma
+
+    import schnetpack.datasets.qm7x as qm7x_module
+
+    content = bytes(range(256)) * 4096
+    source = tmp_path / "1000.xz"
+    with lzma.open(source, "wb") as f:
+        f.write(content)
+    target = tmp_path / "1000.hdf5"
+
+    def interrupted_copy(fin, fout):
+        fout.write(fin.read(1000))
+        raise KeyboardInterrupt
+
+    with monkeypatch.context() as m:
+        m.setattr(qm7x_module.shutil, "copyfileobj", interrupted_copy)
+        with pytest.raises(KeyboardInterrupt):
+            qm7x_module.extract_xz(str(source), str(target))
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["1000.xz"]
+
+    qm7x_module.extract_xz(str(source), str(target))
+    assert target.read_bytes() == content

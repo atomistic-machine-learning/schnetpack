@@ -4,7 +4,8 @@ molecular dynamics simulations.
 """
 
 from __future__ import annotations
-from typing import Optional, Tuple, TYPE_CHECKING
+
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from schnetpack.md import Simulator, System
@@ -46,7 +47,7 @@ class BarostatHook(SimulationHook):
     def __init__(
         self, target_pressure: float, temperature_bath: float, time_constant: float
     ):
-        super(BarostatHook, self).__init__()
+        super().__init__()
         # Convert pressure from bar to internal units
         self.register_buffer(
             "target_pressure", torch.tensor(target_pressure * spk_units.bar)
@@ -193,14 +194,14 @@ class NHCBarostatIsotropic(BarostatHook):
         target_pressure: float,
         temperature_bath: float,
         time_constant: float,
-        time_constant_cell: Optional[float] = None,
-        time_constant_barostat: Optional[float] = None,
-        chain_length: Optional[int] = 4,
-        multi_step: Optional[int] = 4,
-        integration_order: Optional[int] = 7,
-        massive: Optional[bool] = False,
+        time_constant_cell: float | None = None,
+        time_constant_barostat: float | None = None,
+        chain_length: int | None = 4,
+        multi_step: int | None = 4,
+        integration_order: int | None = 7,
+        massive: bool | None = False,
     ):
-        super(NHCBarostatIsotropic, self).__init__(
+        super().__init__(
             target_pressure=target_pressure,
             temperature_bath=temperature_bath,
             time_constant=time_constant,
@@ -330,7 +331,7 @@ class NHCBarostatIsotropic(BarostatHook):
         )
 
     def _init_thermostat_variables(
-        self, state_dimension: Tuple[int, int, int, int], simulator: Simulator
+        self, state_dimension: tuple[int, int, int, int], simulator: Simulator
     ):
         """
         Initialize all quantities required for the two thermostat chains on the particles and cells.
@@ -738,14 +739,14 @@ class NHCBarostatAnisotropic(NHCBarostatIsotropic):
         target_pressure: float,
         temperature_bath: float,
         time_constant: float,
-        time_constant_cell: Optional[float] = None,
-        time_constant_barostat: Optional[float] = None,
-        chain_length: Optional[int] = 4,
-        multi_step: Optional[int] = 4,
-        integration_order: Optional[int] = 7,
-        massive: Optional[bool] = False,
+        time_constant_cell: float | None = None,
+        time_constant_barostat: float | None = None,
+        chain_length: int | None = 4,
+        multi_step: int | None = 4,
+        integration_order: int | None = 7,
+        massive: bool | None = False,
     ):
-        super(NHCBarostatAnisotropic, self).__init__(
+        super().__init__(
             target_pressure=target_pressure,
             temperature_bath=temperature_bath,
             time_constant=time_constant,

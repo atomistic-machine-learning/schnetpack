@@ -1,9 +1,5 @@
-from typing import Optional, Dict
-
 import torch
 import torch.nn as nn
-
-import schnetpack as spk
 
 __all__ = [
     "Transform",
@@ -42,8 +38,8 @@ class Transform(nn.Module):
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         raise NotImplementedError
 
     def teardown(self):

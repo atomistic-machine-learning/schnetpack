@@ -1,27 +1,34 @@
 import logging
 import os
-import uuid
-import tempfile
-import socket
-from typing import List
 import random
-import petname
+import socket
+import tempfile
+import uuid
 
-import torch
 import hydra
+import petname
+import torch
 from omegaconf import DictConfig, OmegaConf, open_dict
-from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
-from pytorch_lightning import seed_everything
+from pytorch_lightning import (
+    Callback,
+    LightningDataModule,
+    LightningModule,
+    Trainer,
+    seed_everything,
+)
 from pytorch_lightning.loggers.logger import Logger
 
 import schnetpack as spk
-from schnetpack.utils import str2class
-from schnetpack.utils.script import log_hyperparameters, print_config
-from schnetpack.data import BaseAtomsData, AtomsLoader
-from schnetpack.train import PredictionWriter
 from schnetpack import properties
-from schnetpack.utils import load_model
-
+from schnetpack.data import AtomsLoader, BaseAtomsData
+from schnetpack.train import PredictionWriter
+from schnetpack.utils import (
+    load_model,
+    load_task_from_checkpoint,
+    str2class,
+    trainer_fit_kwargs_for_checkpoint,
+)
+from schnetpack.utils.script import log_hyperparameters, print_config
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +37,7 @@ OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()), use_cache=T
 OmegaConf.register_new_resolver("petname", lambda: petname.generate())
 OmegaConf.register_new_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
 
-header = """
+header = r"""
    _____      __    _   __     __  ____             __
   / ___/_____/ /_  / | / /__  / /_/ __ \____ ______/ /__
   \__ \/ ___/ __ \/  |/ / _ \/ __/ /_/ / __ `/ ___/ //_/
@@ -50,13 +57,13 @@ def train(config: DictConfig):
 
     if OmegaConf.is_missing(config, "run.data_dir"):
         log.error(
-            f"Config incomplete! You need to specify the data directory `data_dir`."
+            "Config incomplete! You need to specify the data directory `data_dir`."
         )
         return
 
     if not ("model" in config and "data" in config):
         log.error(
-            f"""
+            """
         Config incomplete! You have to specify at least `data` and `model`!
         For an example, try one of our pre-defined experiments:
         > spktrain experiment=qm9_atomwise
@@ -78,6 +85,11 @@ def train(config: DictConfig):
         with open(f"config.old.{count}.yaml", "w") as f:
             OmegaConf.save(old_config, f, resolve=False)
 
+        # a resumed run keeps its seed, unless a new one is given
+        if config.get("seed") is None and old_config.get("seed") is not None:
+            with open_dict(config):
+                config.seed = old_config.seed
+
         # resume from latest checkpoint
         if config.run.ckpt_path is None:
             if os.path.exists("checkpoints/last.ckpt"):
@@ -87,9 +99,6 @@ def train(config: DictConfig):
             log.info(
                 f"Resuming from checkpoint {os.path.abspath(config.run.ckpt_path)}"
             )
-    else:
-        with open("config.yaml", "w") as f:
-            OmegaConf.save(config, f, resolve=False)
 
     # Set matmul precision if specified
     if "matmul_precision" in config and config.matmul_precision is not None:
@@ -97,7 +106,7 @@ def train(config: DictConfig):
         torch.set_float32_matmul_precision(config.matmul_precision)
 
     # Set seed for random number generators in pytorch, numpy and python.random
-    if "seed" in config:
+    if config.get("seed") is not None:
         log.info(f"Seed with <{config.seed}>")
     else:
         # choose seed randomly
@@ -105,6 +114,11 @@ def train(config: DictConfig):
             config.seed = random.randint(0, 2**32 - 1)
         log.info(f"Seed randomly with <{config.seed}>")
     seed_everything(seed=config.seed, workers=True)
+
+    # written after the seed is chosen, so that it holds a randomly drawn seed
+    if not os.path.exists("config.yaml"):
+        with open("config.yaml", "w") as f:
+            OmegaConf.save(config, f, resolve=False)
 
     if config.get("print_config"):
         print_config(config, resolve=False)
@@ -141,7 +155,7 @@ def train(config: DictConfig):
     )
 
     # Init Lightning callbacks
-    callbacks: List[Callback] = []
+    callbacks: list[Callback] = []
     if "callbacks" in config:
         for _, cb_conf in config["callbacks"].items():
             if "_target_" in cb_conf:
@@ -149,7 +163,7 @@ def train(config: DictConfig):
                 callbacks.append(hydra.utils.instantiate(cb_conf))
 
     # Init Lightning loggers
-    logger: List[Logger] = []
+    logger: list[Logger] = []
 
     if "logger" in config:
         for _, lg_conf in config["logger"].items():
@@ -174,18 +188,46 @@ def train(config: DictConfig):
 
     # Train the model
     log.info("Starting training.")
-    trainer.fit(model=task, datamodule=datamodule, ckpt_path=config.run.ckpt_path)
+    fit_kwargs = (
+        trainer_fit_kwargs_for_checkpoint(trainer)
+        if config.run.ckpt_path is not None
+        else {}
+    )
+    trainer.fit(
+        model=task,
+        datamodule=datamodule,
+        ckpt_path=config.run.ckpt_path,
+        **fit_kwargs,
+    )
 
-    # Evaluate model on test set after training
-    log.info("Starting testing.")
-    trainer.test(model=task, datamodule=datamodule, ckpt_path="best")
+    # Lightning's EarlyStopping stops training silently on non-finite metrics
+    # (check_finite=True), so fail explicitly instead of testing the model
+    for early_stopping in trainer.early_stopping_callbacks:
+        if not early_stopping.check_finite:
+            continue
+        value = trainer.callback_metrics.get(early_stopping.monitor)
+        if value is not None and not torch.isfinite(value).all():
+            raise RuntimeError(
+                f"Training stopped at epoch {early_stopping.stopped_epoch} because the "
+                f"monitored metric became non-finite "
+                f"({early_stopping.monitor} = {value.item()}). "
+                "Skipping testing and model export."
+            )
 
-    # Store best model
+    # Load the best checkpoint through the compatibility helper (it handles
+    # `weights_only` across PL versions) and test that task directly, instead
+    # of having Lightning re-load the checkpoint internally via
+    # ckpt_path="best", whose weights_only handling is version-dependent.
     best_path = trainer.checkpoint_callback.best_model_path
     log.info(f"Best checkpoint path:\n{best_path}")
+    best_task = load_task_from_checkpoint(type(task), best_path)
 
-    log.info(f"Store best model")
-    best_task = type(task).load_from_checkpoint(best_path)
+    # Evaluate best model on test set after training
+    log.info("Starting testing.")
+    trainer.test(model=best_task, datamodule=datamodule)
+
+    # Store best model
+    log.info("Store best model")
     torch.save(best_task, config.globals.model_path + ".task")
 
     best_task.save_model(config.globals.model_path, do_postprocessing=True)

@@ -1,6 +1,6 @@
-torch
-numpy
-ase>=3.21
+torch>=2.5.0,<3
+numpy>=2.0.0,<3
+ase>=3.23
 h5py
 pyyaml
 tqdm
@@ -11,8 +11,8 @@ sphinx==7.1.2
 sphinx_rtd_theme
 readthedocs-sphinx-search
 
-pytorch_lightning>=2.0.0
-hydra-core>=1.1.0
+pytorch_lightning>=2.6.1,<3
+hydra-core>=1.3,<2
 hydra-colorlog>=1.1.0
 torchmetrics==1.0.1
 protobuf>=5.29.6

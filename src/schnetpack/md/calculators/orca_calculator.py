@@ -1,19 +1,20 @@
 from __future__ import annotations
-import torch
+
 import os
 import subprocess
+from typing import TYPE_CHECKING
+
+import numpy as np
+import torch
 from ase import Atoms
 from ase.data import chemical_symbols
-import numpy as np
-
-from typing import List, Union, Dict, Optional, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from schnetpack.md import System
 
-from schnetpack.md.calculators.base_calculator import QMCalculatorError, QMCalculator
-from schnetpack.md.parsers.orca_parser import OrcaMainFileParser
 from schnetpack import units as spk_units
+from schnetpack.md.calculators.base_calculator import QMCalculator, QMCalculatorError
+from schnetpack.md.parsers.orca_parser import OrcaMainFileParser
 
 __all__ = ["OrcaCalculator"]
 
@@ -60,22 +61,24 @@ class OrcaCalculator(QMCalculator):
 
     def __init__(
         self,
-        required_properties: List,
+        required_properties: list,
         force_key: str,
         compdir: str,
         qm_executable: str,
         orca_template: str,
-        energy_unit: Union[str, float],
-        position_unit: Union[str, float],
-        energy_key: Optional[str] = None,
-        stress_key: Optional[str] = None,
-        property_conversion: Dict[str, Union[str, float]] = {},
+        energy_unit: str | float,
+        position_unit: str | float,
+        energy_key: str | None = None,
+        stress_key: str | None = None,
+        property_conversion: dict[str, str | float] | None = None,
         overwrite: bool = True,
         adaptive: bool = False,
         basename: str = "input",
         orca_parser=OrcaMainFileParser,
     ):
-        super(OrcaCalculator, self).__init__(
+        if property_conversion is None:
+            property_conversion = {}
+        super().__init__(
             required_properties=required_properties,
             force_key=force_key,
             compdir=compdir,
@@ -89,12 +92,12 @@ class OrcaCalculator(QMCalculator):
             adaptive=adaptive,
         )
 
-        self.orca_template = open(orca_template, "r").read()
+        self.orca_template = open(orca_template).read()
         self.basename = basename
         self.orca_parser = orca_parser(target_properties=required_properties)
 
     def _generate_orca_inputs(
-        self, molecules: List[Tuple[np.array, np.array]], current_compdir: str
+        self, molecules: list[tuple[np.array, np.array]], current_compdir: str
     ):
         """
         Generate input files for all molecules in the current System.
@@ -116,7 +119,7 @@ class OrcaCalculator(QMCalculator):
                 self.position_conversion * spk_units.length, "Angstrom"
             )
             input_file_name = os.path.join(
-                current_compdir, "{:s}_{:06d}.oinp".format(self.basename, idx + 1)
+                current_compdir, f"{self.basename:s}_{idx + 1:06d}.oinp"
             )
             self._write_orca_input(input_file_name, atom_types, positions)
             input_files.append(input_file_name)
@@ -146,7 +149,7 @@ class OrcaCalculator(QMCalculator):
         input_file.close()
 
     def _run_computation(
-        self, molecules: List[Tuple[np.array, np.array]], current_compdir: str
+        self, molecules: list[tuple[np.array, np.array]], current_compdir: str
     ):
         """
         Perform the actual computation.
@@ -165,31 +168,29 @@ class OrcaCalculator(QMCalculator):
 
         # Perform computations
         for input_file in input_files:
-            command = "{:s} {:s}".format(self.qm_executable, input_file, input_file)
-            with open("{:s}.log".format(input_file), "wb") as out:
+            command = f"{self.qm_executable:s} {input_file:s}"
+            with open(f"{input_file:s}.log", "wb") as out:
                 computation = subprocess.Popen(command.split(), stdout=out)
                 computation.wait()
 
         # Extract the results
         outputs = []
         for input_file in input_files:
-            self.orca_parser.parse_file("{:s}.log".format(input_file))
+            self.orca_parser.parse_file(f"{input_file:s}.log")
 
             orca_outputs = self.orca_parser.get_parsed()
 
             for p in self.required_properties:
                 if orca_outputs[p] is None:
                     raise QMCalculatorError(
-                        "Requested property {:s} was not computed in {:s}".format(
-                            p, input_file
-                        )
+                        f"Requested property {p:s} was not computed in {input_file:s}"
                     )
 
             outputs.append(orca_outputs)
 
         return outputs
 
-    def _format_calc(self, outputs: Dict[str, np.array], system: System):
+    def _format_calc(self, outputs: dict[str, np.array], system: System):
         """
         Format the extracted properties into the form used by the schnetpack.md.System
         class (zero padding, reshaping, etc.).

@@ -2,6 +2,7 @@
 import torch
 import torch.nn as nn
 from schnetpack.transform import CastTo64, CastTo32, AddOffsets
+from schnetpack.utils import load_model
 import argparse
 
 
@@ -48,7 +49,8 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default="cpu")
     args = parser.parse_args()
 
-    model = torch.load(args.model_path, map_location=args.device, weights_only=False)
+    # load_model also converts models saved with older SchNetPack versions
+    model = load_model(args.model_path, device=args.device)
     save_jit_model(model, args.deployed_model_path)
 
     print(f"stored deployed model at {args.deployed_model_path}.")

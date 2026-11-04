@@ -1,18 +1,21 @@
 import logging
 import os
 import shutil
-import tempfile
-from typing import List, Optional, Dict
-from urllib import request as request
-from tqdm import tqdm
-import numpy as np
-from ase.db import connect
-from urllib.error import HTTPError, URLError
 import tarfile
+import tempfile
+from urllib import request as request
+from urllib.error import HTTPError, URLError
 
+import numpy as np
 import torch
+from ase.db import connect
+from tqdm import tqdm
 
-from schnetpack.data import *
+from schnetpack.data import (
+    AtomsDataFormat,
+    AtomsDataModule,
+    load_dataset,
+)
 
 __all__ = ["ISO17"]
 
@@ -45,23 +48,23 @@ class ISO17(AtomsDataModule):
         datapath: str,
         fold: str,
         batch_size: int,
-        num_train: Optional[int] = None,
-        num_val: Optional[int] = None,
-        num_test: Optional[int] = None,
-        split_file: Optional[str] = "split.npz",
-        format: Optional[AtomsDataFormat] = AtomsDataFormat.ASE,
-        load_properties: Optional[List[str]] = None,
-        val_batch_size: Optional[int] = None,
-        test_batch_size: Optional[int] = None,
-        transforms: Optional[List[torch.nn.Module]] = None,
-        train_transforms: Optional[List[torch.nn.Module]] = None,
-        val_transforms: Optional[List[torch.nn.Module]] = None,
-        test_transforms: Optional[List[torch.nn.Module]] = None,
+        num_train: int | None = None,
+        num_val: int | None = None,
+        num_test: int | None = None,
+        split_file: str | None = "split.npz",
+        format: AtomsDataFormat | None = AtomsDataFormat.ASE,
+        load_properties: list[str] | None = None,
+        val_batch_size: int | None = None,
+        test_batch_size: int | None = None,
+        transforms: list[torch.nn.Module] | None = None,
+        train_transforms: list[torch.nn.Module] | None = None,
+        val_transforms: list[torch.nn.Module] | None = None,
+        test_transforms: list[torch.nn.Module] | None = None,
         num_workers: int = 2,
-        num_val_workers: Optional[int] = None,
-        num_test_workers: Optional[int] = None,
-        property_units: Optional[Dict[str, str]] = None,
-        distance_unit: Optional[str] = None,
+        num_val_workers: int | None = None,
+        num_test_workers: int | None = None,
+        property_units: dict[str, str] | None = None,
+        distance_unit: str | None = None,
         **kwargs,
     ):
         """
@@ -87,7 +90,7 @@ class ISO17(AtomsDataModule):
             distance_unit: Unit of the atom positions and cell as a string (Ang, Bohr, ...).
         """
         if fold not in self.existing_folds:
-            raise ValueError("Fold {:s} does not exist".format(fold))
+            raise ValueError(f"Fold {fold:s} does not exist")
 
         self.path = datapath
         self.fold = fold
@@ -120,7 +123,7 @@ class ISO17(AtomsDataModule):
         if not os.path.exists(self.datapath):
             self._download_data()
         else:
-            dataset = load_dataset(self.datapath, self.format)
+            load_dataset(self.datapath, self.format)
 
     def _download_data(self):
         logging.info("Downloading ISO17 database...")

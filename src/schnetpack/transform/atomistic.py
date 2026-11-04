@@ -1,11 +1,10 @@
-from typing import Dict, Optional
-
 import torch
 from ase.data import atomic_masses
 
 import schnetpack.properties as structure
-from .base import Transform
 from schnetpack.nn import scatter_add
+
+from .base import Transform
 
 __all__ = [
     "SubtractCenterOfMass",
@@ -29,8 +28,8 @@ class SubtractCenterOfMass(Transform):
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         masses = torch.tensor(atomic_masses[inputs[structure.Z]])
         inputs[structure.position] -= (
             masses.unsqueeze(-1) * inputs[structure.position]
@@ -48,8 +47,8 @@ class SubtractCenterOfGeometry(Transform):
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         inputs[structure.position] -= inputs[structure.position].mean(0)
         return inputs
 
@@ -95,9 +94,9 @@ class RemoveOffsets(Transform):
         self.is_extensive = is_extensive
         self.estimate_atomref = estimate_atomref
 
-        assert not (
-            estimate_atomref and atomrefs is not None
-        ), "You can not set `atomrefs` and use `estimate_atomrefs=True!`"
+        assert not (estimate_atomref and atomrefs is not None), (
+            "You can not set `atomrefs` and use `estimate_atomrefs=True!`"
+        )
 
         if atomrefs is not None:
             self._atomrefs_initialized = True
@@ -138,8 +137,8 @@ class RemoveOffsets(Transform):
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         if self.remove_mean:
             mean = (
                 self.mean * inputs[structure.n_atoms]
@@ -170,8 +169,8 @@ class ScaleProperty(Transform):
     def __init__(
         self,
         input_key: str,
-        target_key: str = None,
-        output_key: str = None,
+        target_key: str | None = None,
+        output_key: str | None = None,
         scale_by_mean: bool = False,
         scale: torch.Tensor = None,
     ):
@@ -208,8 +207,8 @@ class ScaleProperty(Transform):
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         inputs[self.output_key] = inputs[self.input_key] * self.scale
         return inputs
 
@@ -261,9 +260,9 @@ class AddOffsets(Transform):
         self._aggregation = "sum" if self.is_extensive else "mean"
         self.estimate_atomref = estimate_atomref
 
-        assert not (
-            estimate_atomref and atomrefs is not None
-        ), "You can not set `atomrefs` and use `estimate_atomrefs=True!`"
+        assert not (estimate_atomref and atomrefs is not None), (
+            "You can not set `atomrefs` and use `estimate_atomrefs=True!`"
+        )
 
         if atomrefs is not None:
             self._atomrefs_initialized = True
@@ -299,8 +298,8 @@ class AddOffsets(Transform):
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
         if self.add_mean:
             mean = (
                 self.mean * inputs[structure.n_atoms]

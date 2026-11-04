@@ -1,9 +1,10 @@
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import torch.nn as nn
 
 from schnetpack.md.utils import UninitializedMixin
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from schnetpack.md import Simulator
@@ -48,7 +49,7 @@ class RemoveCOMMotion(SimulationHook):
     """
 
     def __init__(self, every_n_steps: int, remove_rotation: bool):
-        super(RemoveCOMMotion, self).__init__()
+        super().__init__()
         self.every_n_steps = every_n_steps
         self.remove_rotation = remove_rotation
 
@@ -70,7 +71,7 @@ class WrapPositions(SimulationHook):
     """
 
     def __init__(self, every_n_steps: int):
-        super(WrapPositions, self).__init__()
+        super().__init__()
         self.every_n_steps = every_n_steps
 
     def on_step_finalize(self, simulator: Simulator):

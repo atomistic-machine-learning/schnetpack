@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import schnetpack.nn as snn
-from typing import Tuple
 
 __all__ = ["GatedEquivariantBlock"]
 
@@ -54,7 +53,7 @@ class GatedEquivariantBlock(nn.Module):
         )
         self.sactivation = sactivation
 
-    def forward(self, inputs: Tuple[torch.Tensor, torch.Tensor]):
+    def forward(self, inputs: tuple[torch.Tensor, torch.Tensor]):
         scalars, vectors = inputs
         vmix = self.mix_vectors(vectors)
         vectors_V, vectors_W = torch.split(vmix, self.n_vout, dim=-1)
