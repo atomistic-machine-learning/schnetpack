@@ -7,3 +7,4 @@ from .ani1 import *
 from .materials_project import *
 from .omdb import *
 from .qm7x import *
+from .mptrj import *
