@@ -45,6 +45,7 @@ Neighbor lists
     VesinNeighborList
     TorchNeighborList
     AllToAllNeighborList
+    BatchCutoffNeighborList
     CachedNeighborList
     DistillationNeighborList
     CountNeighbors

@@ -16,11 +16,12 @@ Data
 ====
 .. currentmodule:: schnetpack.data
 
-SchNetPack stores data sets in ASE format using :class:`ASEAtomsData`. Data sets
-that fetch their raw data from a remote source subclass
-:class:`DownloadableASEAtomsData`. These classes are compatible with PyTorch
-dataloaders and provide an additional interface to store metadata, e.g. property
-units and single-atom reference values.
+SchNetPack stores data sets in ASE databases (:class:`ASEDBStorage`) and reads them
+with :class:`AtomsDataset`, structure by structure. Data sets that fetch their raw
+data from a remote source subclass it and define a ``download`` method. These classes
+are compatible with PyTorch dataloaders and provide an additional interface to store
+metadata, e.g. property units and single-atom reference values.
+:class:`InMemoryDataset` holds a data set in memory and returns whole batches.
 
 An important aspect are the transforms that can be passed to the data classes. Those
 are PyTorch modules that perform preprocessing task on the data *before* batching.
@@ -31,7 +32,7 @@ target properties
 and calculation of neighbor lists.
 
 Furthermore, we support PyTorch Lightning datamodules through :class:`~schnetpack.lightning.AtomsDataModule`,
-which combines :class:`ASEAtomsData` with code for preparation, setup and partitioning
+which combines :class:`AtomsDataset` with code for preparation, setup and partitioning
 into train/validation/test splits. The datamodule also owns the training statistics
 (per-property mean/std and atom references): it exposes them via ``get_stats`` and
 ``get_atomrefs``, initializes all transforms that require them, and persists computed
