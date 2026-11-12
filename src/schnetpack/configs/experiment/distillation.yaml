@@ -62,6 +62,7 @@ data:
         teacher_cutoff: ${globals.teacher_cutoff}
         teacher_distance_unit: ${globals.teacher_distance_unit}
         student_distance_unit: ${globals.distance_unit}
+  batch_transforms:
       - _target_: schnetpack.transform.CastTo32
 
 model:

@@ -54,6 +54,8 @@ class VariableOutput(ModelOutput):
             target_property=variable.label_key,
         )
         self.weight_key = variable.weight_key
+        # a parametrization with a loss of its own (cross-entropy of masked types)
+        self.variable_loss = getattr(variable.parametrization, "loss", None)
         self.mask_key = (
             properties.atom_mask
             if variable.per == "atom"
@@ -64,17 +66,19 @@ class VariableOutput(ModelOutput):
     def loss_keys(self) -> tuple[str, ...]:
         return self.weight_key, self.mask_key
 
-    def calculate_padded_loss(self, pred, target, mask):
-        # the weight is 0 on padding rows already (Diffuse), and the row count
-        # comes from the padding mask copied into target
-        return self.calculate_loss(pred, target)
-
-    def calculate_loss(self, pred, target):
+    def calculate_loss(self, pred, target, weight=None):
+        # weight (the padding mask of a padded batch) is not needed: the variable's
+        # weight is 0 on padding rows already (Diffuse), and the row count comes
+        # from the padding mask copied into target
         if self.loss_weight == 0:
             return 0.0
         if self.weight_key not in target:
             raise KeyError(
                 f"{self.weight_key!r} is missing: noise the batch with Diffuse first"
+            )
+        if self.variable_loss is not None:
+            return self.loss_weight * self.variable_loss(
+                pred[self.name], target[self.target_property], target[self.weight_key]
             )
         err = (pred[self.name] - target[self.target_property]) ** 2
         err = err.reshape(err.shape[0], -1)

@@ -12,25 +12,26 @@ __all__ = ["GraphStep"]
 
 class GraphStep:
     """
-    The training step as one CUDA graph. Building the batch, the model, the loss and
-    its gradients are recorded at the first call and replayed at every later one:
-    one launch instead of hundreds of kernels, and no host synchronization. After
-    the replay the gradients are clipped and the optimizer steps.
+    The training step as one CUDA graph. The model, the loss and its gradients are
+    recorded at the first call and replayed at every later one: one launch instead
+    of hundreds of kernels, and no host synchronization. After the replay the
+    gradients are clipped and the optimizer steps.
 
-    The batch must have the same shapes in every step and be built on the GPU from
-    the structure indices alone, as :meth:`~schnetpack.data.device.DeviceAtomsLoader.build_batch`
-    does. With a fused optimizer (Adam or AdamW with ``fused=True``), a step whose
-    loss exceeds ``skip_loss_above`` is skipped on the GPU, without a host sync.
+    The step takes padded batches: dicts of tensors on the GPU with the same shapes
+    in every step, as a shuffled :class:`~schnetpack.data.AtomsLoader` with a cache
+    gives them. Each batch is copied into the graph's own buffers before the replay, so
+    any loader and any transform can build it. With a fused optimizer (Adam or AdamW
+    with ``fused=True``), a step whose loss exceeds ``skip_loss_above`` is skipped
+    on the GPU, without a host sync.
 
     In a training loop of your own::
 
-        train = DeviceAtomsLoader(data, train_idx, 100, transforms, batching="budget")
-        step = GraphStep(
-            CompiledPotential(model, dynamic=False), outputs, optimizer,
-            train.build_batch,
-        )
-        for sel in train.index_batches:
-            loss = step(sel)
+        cache = AtomsCache.from_dataset(dataset)
+        train = AtomsLoader(dataset.subset(train_idx), 100, shuffle=True,
+                            cache=cache, batch_transforms=transforms, device="cuda")
+        step = GraphStep(CompiledPotential(model, dynamic=False), outputs, optimizer)
+        for batch in train:
+            loss = step(batch)
 
     :class:`~schnetpack.lightning.AtomisticTask` with ``cuda_graph`` runs this step.
     """
@@ -40,7 +41,6 @@ class GraphStep:
         potential: torch.nn.Module,
         outputs: list[ModelOutput],
         optimizer,
-        build_batch,
         grad_clip: float | None = None,
         skip_loss_above: float | None = None,
     ):
@@ -48,18 +48,16 @@ class GraphStep:
         Args:
             potential: the model, usually ``CompiledPotential(model,
                 dynamic=False)``
-            outputs: the outputs of the loss (``MSELoss`` or ``L1Loss`` without
-                loss masks, or ``VariableOutput``)
+            outputs: the outputs of the loss (an elementwise loss with mean
+                reduction such as ``MSELoss`` or ``L1Loss``, or ``VariableOutput``)
             optimizer: steps the parameters; a wrapper holding the torch optimizer
                 as ``.optimizer`` (Lightning's) works too
-            build_batch: the batch of a tensor of structure indices, on the GPU and
-                with the same shapes for every step
             grad_clip: clip the norm of the gradients to this value
             skip_loss_above: skip the optimizer step of a batch whose loss exceeds
                 this value or is not finite
         """
         self.potential, self.outputs = potential, outputs
-        self.optimizer, self.build_batch = optimizer, build_batch
+        self.optimizer = optimizer
         self.grad_clip, self.skip_loss_above = grad_clip, skip_loss_above
         self.graph: torch.cuda.CUDAGraph | None = None
         #: 1.0 / 0.0 whether the last step updated the parameters (the gate of
@@ -75,16 +73,21 @@ class GraphStep:
         return [p for group in self.optimizer.param_groups for p in group["params"]]
 
     def _forward_backward(self):
-        batch = self.build_batch(self._input)
+        batch = dict(self._input)  # the model writes its outputs into it
         targets = extract_targets(self.outputs, batch)
         pred = predict_without_postprocessing(self.potential, batch)
         loss = calculate_padded_loss(self.outputs, pred, targets, batch)
         loss.backward()
         return loss, pred, targets, batch
 
-    def _record(self, sel: torch.Tensor):
+    def _record(self, batch):
         device = self._parameters()[0].device
-        self._input = sel.to(device).clone()
+        # the graph's buffers: every step's batch is copied into them
+        self._input = {
+            k: v.to(device).clone()
+            for k, v in batch.items()
+            if isinstance(v, torch.Tensor)
+        }
         side = torch.cuda.Stream(device)
         side.wait_stream(torch.cuda.current_stream(device))
         with torch.cuda.stream(side):
@@ -101,16 +104,24 @@ class GraphStep:
         with torch.cuda.graph(self.graph, stream=side):
             self._loss, self.pred, self.targets, self.batch = self._forward_backward()
 
-    def __call__(self, sel: torch.Tensor) -> torch.Tensor:
+    def __call__(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
         """
-        One training step on the structures sel.
+        One training step.
+
+        Args:
+            batch: a padded batch on the GPU
 
         Returns:
             the loss of the batch (before the optimizer step)
         """
+        if self.graph is not None and any(
+            batch[key].shape != buffer.shape for key, buffer in self._input.items()
+        ):
+            self.graph = None  # batches of other shapes (a grown pair capacity)
         if self.graph is None:
-            self._record(sel)
-        self._input.copy_(sel, non_blocking=True)
+            self._record(batch)
+        for key, buffer in self._input.items():
+            buffer.copy_(batch[key], non_blocking=True)
         self.graph.replay()
         loss = self._loss.detach()
         if self.grad_clip is not None:

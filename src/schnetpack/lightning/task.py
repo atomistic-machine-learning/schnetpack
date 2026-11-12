@@ -42,13 +42,14 @@ class AtomisticTask(pl.LightningModule):
     Two flags make training faster (see the user guide, "Training faster"):
 
     - ``compile``: the model runs as one compiled graph including its derivatives.
-    - ``cuda_graph``: the whole training step (building the batch, the transforms,
-      the model, the loss and its gradients) is recorded once as a CUDA graph and
-      replayed every step (:class:`~schnetpack.train.GraphStep`): one launch instead
-      of hundreds of kernels, and no host synchronization. Needs the data on the GPU
-      (:class:`~schnetpack.lightning.AtomsDataModule` with ``data_device``).
+    - ``cuda_graph``: the training step (the model, the loss and its gradients) is
+      recorded once as a CUDA graph and replayed every step
+      (:class:`~schnetpack.train.GraphStep`): one launch instead of hundreds of
+      kernels, and no host synchronization. Needs padded batches, which have the
+      same shapes in every step (:class:`~schnetpack.lightning.AtomsDataModule`
+      with ``cache``).
 
-    Padded batches (data on the GPU) are handled in every mode: their padding rows
+    Padded batches (from a cache) are handled in every mode: their padding rows
     are left out of losses and metrics.
     """
 
@@ -90,10 +91,12 @@ class AtomisticTask(pl.LightningModule):
               `schnetpack.model.CompiledPotential`, which needs torch >= 2.14). With a
               teacher, whose curvature needs derivatives of the forces, the model
               runs without compilation.
-            cuda_graph: run the whole training step as one CUDA graph; needs the
-              data on the GPU and compiles the model (with fixed shapes). Takes no
-              teacher, and outputs with ``MSELoss`` or ``L1Loss`` and no loss masks,
-              or ``VariableOutput``. A fused optimizer
+            cuda_graph: run the training step as one CUDA graph; needs padded
+              batches on the GPU (``AtomsDataModule(cache=True)``) and
+              compiles the model (with fixed shapes). Takes no
+              teacher, and outputs with an elementwise loss of mean reduction
+              (``MSELoss``, ``L1Loss``, ``HuberLoss``, ...) or ``VariableOutput``. A
+              fused optimizer
               (``optimizer_args={"fused": True}``) keeps the step free of host syncs.
             grad_clip: clip the norm of the gradients to this value
             skip_loss_above: skip the optimizer step (and the EMA update) of a batch
@@ -158,14 +161,6 @@ class AtomisticTask(pl.LightningModule):
                 self.model.initialize_transforms(self.trainer.datamodule)
             else:
                 self.distillation.setup(self.trainer.datamodule)
-            if self.cuda_graph:
-                dm = self.trainer.datamodule
-                if getattr(dm, "data_device", None) is None:
-                    raise ValueError(
-                        "cuda_graph needs the data on the GPU: "
-                        "AtomsDataModule(data_device='cuda')"
-                    )
-                dm.train_batches_in_step = True  # the graph builds the batch
 
     def forward(self, inputs: dict[str, torch.Tensor]):
         if self.compiled_model is not None:
@@ -216,11 +211,11 @@ class AtomisticTask(pl.LightningModule):
         With distillation, ``Distillation.step`` also adds the teacher's
         targets and the student's curvature, if an output asks for them. Outside
         training, the curvature probes come from a seeded generator, so every
-        validation epoch uses the same probes. A padded batch (data on the GPU) is
+        validation epoch uses the same probes. A padded batch (from a cache) is
         compared on its real rows only."""
         padded = properties.atom_mask in batch
         if padded and self.distillation is not None:
-            raise ValueError("distillation takes no padded batches (data_device)")
+            raise ValueError("distillation takes no padded batches (cache)")
         if self.distillation is None:
             targets = extract_targets(self.outputs, batch)
             model = self.compiled_model or self.model
@@ -358,21 +353,25 @@ class AtomisticTask(pl.LightningModule):
             gradient_clip_val, gradient_clip_algorithm = self.grad_clip, "norm"
         self.clip_gradients(optimizer, gradient_clip_val, gradient_clip_algorithm)
 
-    def _graph_training_step(self, sel: torch.Tensor):
+    def _graph_training_step(self, batch):
         """The step as one CUDA graph (GraphStep), and its logs."""
         opt = self.optimizers()
         if self._graph_step is None:
+            if properties.atom_mask not in batch:
+                raise ValueError(
+                    "cuda_graph needs padded batches, which have the same shapes in "
+                    "every step: AtomsDataModule(cache=True)"
+                )
             self._graph_step = GraphStep(
                 self.compiled_model,
                 self.outputs,
                 opt,  # Lightning's wrapper: its step advances global_step
-                self.trainer.datamodule.device_loaders["train"].build_batch,
-                self.grad_clip,
-                self.skip_loss_above,
+                grad_clip=self.grad_clip,
+                skip_loss_above=self.skip_loss_above,
             )
         self._warmup(opt.param_groups)
         step = self._graph_step
-        loss = step(sel)
+        loss = step(batch)
         self.keep_step, self.skipped_steps = step.keep, step.skipped
         self._loss_sum = (
             loss.clone() if self._loss_sum is None else self._loss_sum.add_(loss)

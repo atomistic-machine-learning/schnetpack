@@ -13,6 +13,8 @@ __all__ = [
     "StratifiedSampler",
     "NumberOfAtomsCriterion",
     "PropertyCriterion",
+    "BudgetBatches",
+    "OrderedBatches",
 ]
 
 
@@ -135,3 +137,94 @@ class StratifiedSampler(WeightedRandomSampler):
         weights = bin_weights[bin_indices]
 
         return weights
+
+
+class BudgetBatches:
+    """
+    Batches packed to an atom and a pair budget instead of a fixed number of
+    structures: the structure indices of each training batch, from the atom and pair
+    counts alone. Structures are taken from a shuffled order while the batch's atoms
+    and pairs fit the budgets, so a batch of large structures holds fewer of them, and
+    a batch padded to the budgets holds little padding. The budgets are what
+    ``batch_size`` structures hold on average; a batch holds at most
+    ``max_structures``, 1.3 times ``batch_size``.
+
+    Every pass yields the same number of batches, as a fixed epoch length needs: the
+    full batches of one packing. Structures left over wait for the next pass's
+    order; a pass that packs fewer batches is topped up from a second order.
+    """
+
+    def __init__(
+        self,
+        n_atoms,
+        n_pairs,
+        indices,
+        batch_size: int,
+        seed: int = 0,
+        grains=(32, 256),
+    ):
+        """
+        Args:
+            n_atoms: atoms of every structure of the dataset
+            n_pairs: neighbor pairs of every structure of the dataset
+            indices: the structures to draw from (e.g. the training split)
+            batch_size: structures per batch on average
+            seed: seed of the orders
+            grains: the budgets are rounded up to these (atoms, pairs)
+        """
+        self.indices = np.asarray(indices)
+        self.rng = np.random.default_rng(seed)
+        self.atoms, self.pairs = np.asarray(n_atoms), np.asarray(n_pairs)
+        budgets = []
+        for per, grain in ((self.atoms, grains[0]), (self.pairs, grains[1])):
+            x = per[self.indices]
+            size = max(batch_size * float(x.mean()), float(x.max()), 1.0)
+            budgets.append(int(-(-size // grain) * grain))
+        self.atom_budget, self.pair_budget = budgets
+        self.max_structures = int(np.ceil(1.3 * batch_size))
+        self.n_batches = max(len(self._pack(self.rng.permutation(self.indices))) - 1, 1)
+
+    def _pack(self, order) -> list[list[int]]:
+        batches, current, atoms, pairs = [], [], 0, 0
+        for s, a, p in zip(
+            order.tolist(), self.atoms[order].tolist(), self.pairs[order].tolist()
+        ):
+            full = len(current) == self.max_structures
+            if current and (
+                full or atoms + a > self.atom_budget or pairs + p > self.pair_budget
+            ):
+                batches.append(current)
+                current, atoms, pairs = [], 0, 0
+            current.append(s)
+            atoms, pairs = atoms + a, pairs + p
+        batches.append(current)  # the last one, usually not full
+        return batches
+
+    def __len__(self) -> int:
+        return self.n_batches
+
+    def __iter__(self):
+        batches = []
+        while len(batches) < self.n_batches:
+            packed = self._pack(self.rng.permutation(self.indices))
+            # without the last batch, which is not full; fewer structures than one
+            # batch holds: that one batch
+            batches += packed[:-1] or packed
+        for b in batches[: self.n_batches]:
+            yield np.asarray(b, dtype=np.int64)
+
+
+class OrderedBatches:
+    """Batches of all structures in their order, the last one possibly smaller
+    (validation and testing): the structure indices of each batch."""
+
+    def __init__(self, indices, batch_size: int):
+        self.indices = np.asarray(indices, dtype=np.int64)
+        self.batch_size = batch_size
+
+    def __len__(self) -> int:
+        return -(-len(self.indices) // self.batch_size)
+
+    def __iter__(self):
+        for s in range(0, len(self.indices), self.batch_size):
+            yield self.indices[s : s + self.batch_size]

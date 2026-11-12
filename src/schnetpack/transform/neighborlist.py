@@ -27,6 +27,7 @@ __all__ = [
     "SkinNeighborList",
     "DistillationNeighborList",
     "FilterNeighbors",
+    "BatchCutoffNeighborList",
 ]
 
 import schnetpack as spk
@@ -368,6 +369,128 @@ class AllToAllNeighborList(Transform):
         inputs[properties.offsets] = torch.zeros(
             (s.shape[0], 3), dtype=inputs[properties.R].dtype, device=n.device
         )
+        return inputs
+
+
+class BatchCutoffNeighborList(Transform):
+    """
+    All pairs within the cutoff in every structure of a collated batch, periodic
+    images included, built on the batch's device.
+
+    For structures whose positions or cells change every time they are drawn
+    (noise in generative training): with an :class:`~schnetpack.data.AtomsCache`,
+    the noise runs on batches, so the neighbor list is rebuilt for each batch after
+    it, among the loader's ``batch_transforms``.
+
+    Brute force: for every structure all atom pairs over the lattice shifts
+    n in [-r, r]^3, with r = ceil(cutoff / plane spacing) from its cell (0 in
+    directions without periodic boundary conditions), then the pairs within the
+    cutoff. The work grows with atoms^2 times shifts per structure, which suits
+    the small cells of crystal datasets (MP-20: 1.2 ms per batch of 100 on an
+    H200) and molecules; it is not meant for cells of thousands of atoms. Two
+    host synchronizations per call (the numbers of candidates and of pairs), so
+    it runs before a CUDA graph, not inside one.
+
+    A single structure is a batch of one, so it also runs per structure. On a
+    padded batch (``properties.atom_mask``, ``properties.structure_mask``) the
+    padding structure gets no pairs, and the pairs are padded to a fixed number,
+    ``pair_capacity`` of the batch's atom rows: 1.25 times the pairs of the first
+    such batch, in steps of 256, grown (and logged) when a batch has more. The
+    padding pairs join the first padding atom with itself beyond the cutoff.
+    """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = False
+
+    def __init__(self, cutoff: float, max_candidates: int = 200_000_000):
+        """
+        Args:
+            cutoff: cutoff radius
+            max_candidates: the most candidate pairs of a batch; more raise an
+                error instead of exhausting the memory (a nearly flat cell needs
+                many lattice shifts)
+        """
+        super().__init__()
+        self._cutoff = cutoff
+        self.max_candidates = max_candidates
+        #: padded batches: atom rows -> the pairs they are padded to
+        self.pair_capacity: dict[int, int] = {}
+
+    def forward(
+        self,
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
+        R = inputs[properties.R]
+        device, n_atoms = R.device, inputs[properties.n_atoms]
+        cell = inputs[properties.cell].view(-1, 3, 3).to(R.dtype)
+        pbc = inputs[properties.pbc].view(-1, 3)
+        n = n_atoms
+        if properties.structure_mask in inputs:  # no pairs in the padding structure
+            n = n * (inputs[properties.structure_mask] > 0).to(n.dtype)
+        # lattice shifts per direction: plane spacing = volume / face area
+        a, b, c = cell[:, 0], cell[:, 1], cell[:, 2]
+        faces = torch.stack(
+            [
+                torch.linalg.cross(b, c),
+                torch.linalg.cross(c, a),
+                torch.linalg.cross(a, b),
+            ],
+            dim=1,
+        )
+        volume = (a * faces[:, 0]).sum(1).abs()
+        spacing = volume[:, None] / faces.norm(dim=2).clamp(min=1e-12)
+        reps = torch.ceil(self._cutoff / spacing.clamp(min=1e-12))
+        reps = torch.where(pbc, reps, torch.zeros_like(reps)).long()
+        widths = 2 * reps + 1
+        candidates = n * n * widths.prod(1)
+        total = int(candidates.sum())  # host sync: the size of the candidate arrays
+        if total > self.max_candidates:
+            raise RuntimeError(
+                f"{total} candidate pairs in one batch (max_candidates = "
+                f"{self.max_candidates}): a cell is nearly flat or the batch too large"
+            )
+        # candidate k of structure s: lattice shift q, atoms i and j
+        s = torch.repeat_interleave(
+            torch.arange(n.shape[0], device=device), candidates, output_size=total
+        )
+        k = (
+            torch.arange(total, device=device)
+            - (torch.cumsum(candidates, 0) - candidates)[s]
+        )
+        ns = n[s]
+        q = torch.div(k, ns * ns, rounding_mode="floor")
+        rem = k - q * ns * ns
+        i = torch.div(rem, ns, rounding_mode="floor")
+        j = rem - i * ns
+        w = widths[s]
+        q0 = torch.div(q, w[:, 1] * w[:, 2], rounding_mode="floor")
+        q12 = q - q0 * w[:, 1] * w[:, 2]
+        q1 = torch.div(q12, w[:, 2], rounding_mode="floor")
+        shift = torch.stack([q0, q1, q12 - q1 * w[:, 2]], dim=1) - reps[s]
+        first = (torch.cumsum(n_atoms, 0) - n_atoms)[s]
+        idx_i, idx_j = first + i, first + j
+        offsets = (shift.to(R.dtype)[:, None, :] @ cell[s]).squeeze(1)
+        Rij = R[idx_j] - R[idx_i] + offsets
+        within = (Rij * Rij).sum(1) < self._cutoff**2
+        kept = (within & ((i != j) | (shift != 0).any(1))).nonzero().squeeze(1)
+        idx_i, idx_j, offsets = idx_i[kept], idx_j[kept], offsets[kept]
+        if properties.atom_mask in inputs:  # a padded batch: pad the pairs too
+            rows, n_pairs = R.shape[0], kept.shape[0]
+            capacity = self.pair_capacity.get(rows, 0)
+            if n_pairs > capacity:
+                grown = int(-(-1.25 * n_pairs // 256) * 256)
+                if capacity:
+                    log.info(f"pair capacity grows: {capacity} -> {grown}")
+                capacity = self.pair_capacity[rows] = grown
+            pad_atom = n_atoms[:-1].sum().reshape(1).expand(capacity - n_pairs)
+            pad_offsets = offsets.new_zeros(capacity - n_pairs, 3)
+            pad_offsets[:, 0] = self._cutoff + 1.0
+            idx_i = torch.cat([idx_i, pad_atom])
+            idx_j = torch.cat([idx_j, pad_atom])
+            offsets = torch.cat([offsets, pad_offsets])
+        inputs[properties.idx_i] = idx_i
+        inputs[properties.idx_j] = idx_j
+        inputs[properties.offsets] = offsets
         return inputs
 
 

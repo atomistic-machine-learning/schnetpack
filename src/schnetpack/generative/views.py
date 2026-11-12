@@ -170,6 +170,11 @@ class CellParameters(View):
         if properties.cell in batch:
             y = y.to(batch[properties.cell])  # the structure's dtype and device
         params = self.params(y, batch[properties.n_atoms])
+        mask = batch.get(properties.structure_mask)
+        if mask is not None and properties.cell in batch:
+            # a padded batch: its padding and empty structures keep their cell
+            kept = cell_to_params(batch[properties.cell].view(-1, 3, 3))
+            params = torch.where((mask > 0)[:, None], params, kept.to(params))
         valid = valid_params(params)
         if not valid.all():
             raise ValueError(

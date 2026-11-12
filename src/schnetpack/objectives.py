@@ -10,8 +10,8 @@ so a model can be trained in a hand-written PyTorch loop:
     loss = calculate_loss(outputs, pred, targets)
     loss.backward()
 
-Batches padded to fixed shapes (data held on the GPU,
-:class:`~schnetpack.lightning.AtomsDataModule` with ``data_device``) mark their
+Batches padded to fixed shapes (an :class:`~schnetpack.data.AtomsLoader` with a
+cache, :class:`~schnetpack.lightning.AtomsDataModule` with ``cache``) mark their
 padding rows in ``properties.atom_mask`` / ``properties.structure_mask``;
 :func:`calculate_padded_loss` leaves them out without a host sync.
 
@@ -39,6 +39,26 @@ __all__ = [
     "calculate_padded_loss",
     "padding_mask",
 ]
+
+
+def _loss_per_entry(loss_fn, prediction, reference, name: str) -> torch.Tensor:
+    """The value of a loss with mean reduction for every entry, before the mean."""
+    if getattr(loss_fn, "reduction", None) != "mean":
+        raise ValueError(
+            f"output {name!r}: row weights (padded batches) need a loss with "
+            f"reduction='mean', got {loss_fn!r}"
+        )
+    loss_fn.reduction = "none"
+    try:
+        err = loss_fn(prediction, reference)
+    finally:
+        loss_fn.reduction = "mean"
+    if err.shape != prediction.shape:
+        raise ValueError(
+            f"output {name!r}: row weights (padded batches) need an elementwise "
+            f"loss, got {loss_fn!r}"
+        )
+    return err
 
 
 class LossMask(nn.Module):
@@ -155,32 +175,28 @@ class ModelOutput(nn.Module):
         :func:`extract_targets` copies those the batch has."""
         return ()
 
-    def calculate_loss(self, pred, target):
+    def calculate_loss(self, pred, target, weight=None):
+        """
+        Args:
+            pred: the model's outputs
+            target: the targets, and the keys this output's masks read
+            weight: one weight per row (atom or structure), e.g. the padding mask of
+                a padded batch. The loss is then the weighted mean of the loss per
+                entry: with a 0/1 weight, the loss over the rows where it is 1, with
+                fixed shapes and no host sync. The output's loss masks multiply
+                into it. Needs an elementwise loss with mean reduction
+                (``MSELoss``, ``L1Loss``, ``HuberLoss``, ...). None: all rows.
+        """
         if self.loss_weight == 0 or self.loss_fn is None:
             return 0.0
-
-        loss = self.loss_weight * self.loss_fn(*self.masked(pred, target))
-        return loss
-
-    def calculate_padded_loss(self, pred, target, mask):
-        """
-        The loss over the rows where ``mask`` is 1 (a padded batch), as the loss over
-        those rows alone, without a host sync. Needs ``MSELoss`` or ``L1Loss`` with
-        mean reduction and no loss masks.
-        """
-        if self.loss_weight == 0 or self.loss_fn is None:
-            return 0.0
-        mse = isinstance(self.loss_fn, nn.MSELoss)
-        if self.masks or not (mse or isinstance(self.loss_fn, nn.L1Loss)):
-            raise ValueError(
-                f"output {self.name!r}: padded batches need MSELoss or L1Loss "
-                "without loss masks"
-            )
-        if self.loss_fn.reduction != "mean":
-            raise ValueError(f"output {self.name!r}: padded batches need mean loss")
+        if weight is None:
+            return self.loss_weight * self.loss_fn(*self.masked(pred, target))
         p, t = pred[self.name], target[self.target_property]
-        err = (p - t) ** 2 if mse else (p - t).abs()
-        w = mask.to(p.dtype).view(-1, *[1] * (p.dim() - 1))
+        w = weight.to(p.dtype)
+        for mask in self.masks:
+            w = w * mask(target).to(p.dtype)
+        err = _loss_per_entry(self.loss_fn, p, t, self.name)
+        w = w.view(-1, *[1] * (p.dim() - 1))
         return self.loss_weight * (w * err).sum() / (w.sum() * p[0].numel())
 
     def update_metrics(self, pred, target, subset):
@@ -204,9 +220,14 @@ class UnsupervisedModelOutput(ModelOutput):
                 f"unsupervised output {self.name!r} has no target, so it takes no masks"
             )
 
-    def calculate_loss(self, pred, target=None):
+    def calculate_loss(self, pred, target=None, weight=None):
         if self.loss_weight == 0 or self.loss_fn is None:
             return 0.0
+        if weight is not None:
+            raise ValueError(
+                f"unsupervised output {self.name!r}: its loss takes no row weights, "
+                "so it cannot leave out the padding rows of a padded batch"
+            )
         loss = self.loss_weight * self.loss_fn(pred[self.name])
         return loss
 
@@ -301,5 +322,5 @@ def calculate_padded_loss(
     loss: torch.Tensor | float = 0.0
     for output in outputs:
         mask = padding_mask(pred[output.name], batch)
-        loss = loss + output.calculate_padded_loss(pred, targets, mask)
+        loss = loss + output.calculate_loss(pred, targets, weight=mask)
     return loss if isinstance(loss, torch.Tensor) else torch.tensor(loss)

@@ -13,8 +13,7 @@ from ase import Atoms
 import schnetpack as spk
 import schnetpack.properties as properties
 import schnetpack.transform as trn
-from schnetpack.data import ASEAtomsData
-from schnetpack.data.device import ArrayStats, DeviceAtomsData, DeviceAtomsLoader
+from schnetpack.data import ArrayStats, ASEAtomsData, AtomsCache, AtomsLoader
 from schnetpack.generative import (
     Diffuse,
     GaussianInterpolant,
@@ -62,8 +61,28 @@ def test_padded_loss_is_the_loss_of_the_real_rows():
     ) + 0.7 * torch.nn.functional.l1_loss(pred["forces"][:7], targets["F"][:7])
     torch.testing.assert_close(loss, expected)
 
+    # any elementwise loss with mean reduction, and loss masks on top of the padding
+    targets["considered"] = torch.tensor([1, 0, 1, 1, 0, 1, 1, 1, 1, 1])
+    huber = spk.ModelOutput(
+        "forces",
+        torch.nn.HuberLoss(delta=0.5),
+        masks=[spk.AtomMask("considered")],
+        target_property="F",
+    )
+    loss = calculate_padded_loss([huber], pred, targets, batch)
+    keep = (mask_a * targets["considered"]).bool()
+    expected = torch.nn.functional.huber_loss(
+        pred["forces"][keep], targets["F"][keep], delta=0.5
+    )
+    torch.testing.assert_close(loss, expected)
+    assert huber.loss_fn.reduction == "mean"  # switched back after the call
+    with pytest.raises(ValueError, match="reduction='mean'"):
+        spk.ModelOutput("energy", torch.nn.MSELoss(reduction="sum")).calculate_loss(
+            pred, {"energy": targets["E"]}, weight=mask_s
+        )
 
-def gpff_setup(tmp_path, n=48, device="cuda", banded=True):
+
+def gpff_setup(tmp_path, n=48, banded=True):
     db = ASEAtomsData.create(
         os.path.join(tmp_path, "mols.db"), distance_unit="Ang", property_unit_dict={}
     )
@@ -88,8 +107,8 @@ def gpff_setup(tmp_path, n=48, device="cuda", banded=True):
         output_key="pseudo_force_pred",
         weight=lambda schedule, t, x_t: (1.0 / schedule.sigma(t) ** 2).clamp(max=1.0),
     )
-    transforms = [
-        trn.SubtractCenterOfGeometry(),
+    per_structure = [trn.SubtractCenterOfGeometry(), trn.AllToAllNeighborList()]
+    on_batches = [
         Diffuse(
             [v],
             t_sampler=LogNormalTimes(noising, mean=-0.7 - math.log(SIGMA_MAX), std=1.2),
@@ -97,14 +116,15 @@ def gpff_setup(tmp_path, n=48, device="cuda", banded=True):
         trn.CastTo32(),
     ]
     dm = AtomsDataModule(
-        ASEAtomsData(db.datapath, load_properties=[], transforms=transforms),
+        ASEAtomsData(db.datapath, load_properties=[], transforms=per_structure),
         batch_size=8,
         num_train=32,
         num_val=16,
         split_file=split,
         val_batch_size=16,
-        data_device=device,
-        array_dir=os.path.join(tmp_path, "arrays"),
+        batch_transforms=on_batches,
+        cache=True,
+        cache_dir=os.path.join(tmp_path, "cache"),
     )
     torch.manual_seed(0)
     model = spk.model.NeuralNetworkPotential(
@@ -155,8 +175,8 @@ def test_graph_step_trains(tmp_path):
     dm, model, v = gpff_setup(tmp_path)
     before = [p.detach().clone() for p in model.parameters()]
     task, trainer, ema = fit(dm, model, v, skip_loss_above=1e3)
-    assert task._graph_step.graph is not None and dm.train_batches_in_step
-    assert trainer.global_step == 3 * 4
+    assert task._graph_step.graph is not None
+    assert trainer.global_step == 3 * len(dm.loaders["train"])
     assert math.isfinite(float(trainer.callback_metrics["val_loss"]))
     assert int(task.skipped_steps) == 0
     changed = [
@@ -171,7 +191,7 @@ def test_skipped_steps_change_nothing(tmp_path):
     dm, model, v = gpff_setup(tmp_path)
     before = [p.detach().clone() for p in model.parameters()]
     task, trainer, ema = fit(dm, model, v, skip_loss_above=-1.0, epochs=1)
-    assert int(task.skipped_steps) == 4
+    assert int(task.skipped_steps) == len(dm.loaders["train"])
     for a, b in zip(before, model.parameters()):
         assert torch.equal(a, b.detach().cpu())  # Lightning moves the model back
     for a, b in zip(before, ema.ema.shadow_params):
@@ -179,14 +199,15 @@ def test_skipped_steps_change_nothing(tmp_path):
 
 
 def test_padded_batches_train_without_cuda_graph(tmp_path):
-    """Data on the device without the graph: Lightning's own optimization on padded
+    """Cached data without the graph: Lightning's own optimization on padded
     batches; skip_loss_above skips the steps (and the EMA updates) on the host."""
-    dm, model, v = gpff_setup(tmp_path, device="cpu", banded=False)
+    dm, model, v = gpff_setup(tmp_path, banded=False)
     before = [p.detach().clone() for p in model.parameters()]
     task, trainer, ema = fit(
         dm, model, v, skip_loss_above=-1.0, epochs=1, cuda_graph=False
     )
-    assert int(task.skipped_steps) == 4  # Lightning counts the steps it skipped
+    n_steps = len(dm.loaders["train"])
+    assert int(task.skipped_steps) == n_steps  # Lightning counts the skipped steps
     for a, b in zip(before, model.parameters()):
         assert torch.equal(a, b.detach())
     for a, b in zip(before, ema.ema.shadow_params):
@@ -195,15 +216,14 @@ def test_padded_batches_train_without_cuda_graph(tmp_path):
     task, trainer, ema = fit(
         dm, model, v, skip_loss_above=1e3, epochs=1, cuda_graph=False
     )
-    assert trainer.global_step == 4 and int(task.skipped_steps) == 0
+    assert trainer.global_step == n_steps and int(task.skipped_steps) == 0
 
 
 def test_fast_training_imports_no_lightning():
     """A training loop of your own needs no Lightning for the fast route."""
     code = (
         "import sys\n"
-        "from schnetpack.data.device import ArrayStats, DeviceAtomsData, "
-        "DeviceAtomsLoader\n"
+        "from schnetpack.data import ArrayStats, AtomsCache, AtomsLoader\n"
         "from schnetpack.model import CompiledPotential\n"
         "from schnetpack.train import EMA, GraphStep\n"
         "sys.exit(int('pytorch_lightning' in sys.modules or 'lightning' in "
@@ -214,7 +234,7 @@ def test_fast_training_imports_no_lightning():
 
 def plain_loop_setup(tmp_path, device):
     """Energies of small molecules on the device, as a loop of your own sets them
-    up: arrays, statistics, transforms, batches and the model."""
+    up: the cache, statistics, transforms, batches and the model."""
     db = ASEAtomsData.create(
         os.path.join(tmp_path, "mols.db"),
         distance_unit="Ang",
@@ -226,19 +246,25 @@ def plain_loop_setup(tmp_path, device):
         for i in range(24)
     ]
     db.add_systems([{"energy": np.array([rng.randn()])} for _ in atoms], atoms)
-    dataset = ASEAtomsData(db.datapath, load_properties=["energy"])
-    data = DeviceAtomsData.from_dataset(
-        dataset,
-        device,
-        trn.MatScipyNeighborList(cutoff=3.0),
-        os.path.join(tmp_path, "arrays"),
+    dataset = ASEAtomsData(
+        db.datapath,
+        load_properties=["energy"],
+        transforms=[trn.MatScipyNeighborList(cutoff=3.0)],
     )
+    cache = AtomsCache.from_dataset(dataset)
     train_idx = np.arange(16)
-    stats = ArrayStats(data, train_idx, dataset.atomrefs)
-    transforms = [trn.RemoveOffsets("energy", remove_mean=True), trn.CastTo32()]
-    for t in transforms:
+    stats = ArrayStats(cache, train_idx)
+    on_batches = [trn.RemoveOffsets("energy", remove_mean=True), trn.CastTo32()]
+    for t in on_batches:
         t.initialize(stats)
-    train = DeviceAtomsLoader(data, train_idx, 4, transforms, batching="budget")
+    train = AtomsLoader(
+        dataset.subset(train_idx),
+        4,
+        shuffle=True,
+        cache=cache,
+        batch_transforms=on_batches,
+        device=device,
+    )
     torch.manual_seed(0)
     model = spk.model.NeuralNetworkPotential(
         representation=spk.model.PaiNN(
@@ -258,8 +284,9 @@ def plain_loop_setup(tmp_path, device):
 
 def padded_step(model, outputs, optimizer, batch, grad_clip=None):
     optimizer.zero_grad()
+    targets = extract_targets(outputs, batch)  # first: the model writes into batch
     pred = predict_without_postprocessing(model, batch)
-    loss = calculate_padded_loss(outputs, pred, extract_targets(outputs, batch), batch)
+    loss = calculate_padded_loss(outputs, pred, targets, batch)
     loss.backward()
     if grad_clip is not None:
         torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -268,7 +295,7 @@ def padded_step(model, outputs, optimizer, batch, grad_clip=None):
 
 
 def test_padded_batches_in_a_loop_of_your_own(tmp_path):
-    """The data on the device in a plain PyTorch loop: padded batches, the padded
+    """Cached data in a plain PyTorch loop: padded batches, the padded
     loss and the gated EMA, without Lightning."""
     train, model, outputs = plain_loop_setup(tmp_path, "cpu")
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
@@ -298,14 +325,13 @@ def test_graph_step_matches_eager_steps(tmp_path):
         spk.model.CompiledPotential(model, dynamic=False),
         outputs,
         optimizer,
-        train.build_batch,
         grad_clip=1.0,
         skip_loss_above=1e3,
     )
-    sels = list(train.index_batches)
-    for sel in sels:
-        loss = step(sel)
-        ref = padded_step(eager, outputs, eager_optimizer, train.build_batch(sel), 1.0)
+    batches = list(train)
+    for batch in batches:
+        loss = step(batch)
+        ref = padded_step(eager, outputs, eager_optimizer, dict(batch), 1.0)
         torch.testing.assert_close(loss, ref, rtol=1e-4, atol=1e-6)
     for a, b in zip(model.parameters(), eager.parameters()):
         torch.testing.assert_close(a, b, rtol=1e-4, atol=1e-6)
@@ -313,7 +339,7 @@ def test_graph_step_matches_eager_steps(tmp_path):
 
     step.skip_loss_above = -1.0
     before = [p.detach().clone() for p in model.parameters()]
-    step(sels[0])
+    step(batches[0])
     assert float(step.keep) == 0.0 and int(step.skipped) == 1
     for a, p in zip(before, model.parameters()):
         assert torch.equal(a, p.detach())

@@ -41,7 +41,7 @@ class SubtractCenterOfMass(Transform):
 
     Works on one structure, or on a collated batch (``idx_m`` present, e.g. the
     padded batches of :class:`~schnetpack.lightning.AtomsDataModule` with
-    ``data_device``), structure by structure on the batch's device.
+    ``cache``), structure by structure on the batch's device.
     """
 
     is_preprocessor: bool = True

@@ -47,6 +47,9 @@ data:
       energy: eV
       forces: eV/Ang
     transforms:
+      - _target_: schnetpack.transform.MatScipyNeighborList
+        cutoff: ${globals.cutoff}
+  batch_transforms:
       - _target_: schnetpack.transform.RemoveOffsets
         property: ${globals.energy_key}
         remove_atomrefs: True
@@ -54,8 +57,6 @@ data:
           _target_: schnetpack.model.mace.mace_atomrefs
           path: ${globals.mace_path}
           e0s: ${globals.mace_e0s}
-      - _target_: schnetpack.transform.MatScipyNeighborList
-        cutoff: ${globals.cutoff}
       - _target_: schnetpack.transform.CastTo32
 
 task:

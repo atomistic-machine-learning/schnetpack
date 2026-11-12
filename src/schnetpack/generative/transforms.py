@@ -15,6 +15,7 @@ import torch
 
 from schnetpack import properties
 from schnetpack.generative.variables import STRUCTURE_TIME_KEY, Variable
+from schnetpack.generative.views import KeyView
 from schnetpack.transform.base import Transform
 
 __all__ = ["Diffuse"]
@@ -26,7 +27,7 @@ class Diffuse(Transform):
 
     Runs per structure before collation, or on a collated batch (one with
     ``idx_m``, e.g. the padded batches of
-    :class:`~schnetpack.lightning.AtomsDataModule` with ``data_device``, where rows
+    :class:`~schnetpack.lightning.AtomsDataModule` with ``cache``, where rows
     marked as padding get weight 0). One time is drawn per structure and
     each variable is noised at it, reading x0 through its view and writing
     x_t back; each variable sees the structure the ones before it left. Writes
@@ -40,7 +41,11 @@ class Diffuse(Transform):
     :class:`~schnetpack.transform.SubtractCenterOfGeometry` before it) and
     does not decide how noise is drawn (that is each variable's prior). Put
     any neighbor list after this transform, so it is built on the noisy
-    structure.
+    structure. With an :class:`~schnetpack.data.AtomsCache` it stands among the
+    loader's ``batch_transforms``, followed by
+    :class:`~schnetpack.transform.BatchCutoffNeighborList` if it moves the atoms;
+    :class:`~schnetpack.transform.AllToAllNeighborList` does not depend on the
+    positions and may stand among the dataset's transforms.
     """
 
     is_preprocessor: bool = True
@@ -91,6 +96,13 @@ class Diffuse(Transform):
         self.structure_time_key = structure_time_key
         self.keep_clean = keep_clean
         self.group_keys = tuple(group_keys or ())
+        # a neighbor list has to come after the noise, unless only atom types
+        # (or other keys that are not geometry) are noised
+        geometry = (properties.R, properties.cell)
+        self.moves_atoms = any(
+            not isinstance(v.view, KeyView) or v.view.key in geometry
+            for v in self.variables
+        )
 
     def sample_t(self, n: int, device: torch.device | None = None) -> torch.Tensor:
         """Times for n structures: the ``t_sampler``, or uniform on the shared range."""
