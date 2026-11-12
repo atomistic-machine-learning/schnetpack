@@ -32,7 +32,7 @@ from ase.optimize import BFGS
 
 import schnetpack as spk
 import schnetpack.transform as trn
-from schnetpack.data import ASEDBStorage, AtomsDataset
+from schnetpack.data import ASEAtomsData
 from schnetpack.lightning import AtomisticTask, AtomsDataModule, ModelCheckpoint
 
 pl.seed_everything(0)
@@ -103,26 +103,25 @@ print(f"{len(property_list)} energies and {n_forces} force components")
 # %% [markdown]
 # The frames go into an ASE database, and a dataset and data module read them as in
 # the quickstart (the [data tutorial](data.py) explains each piece). The dataset
-# computes the neighbor list once (`preprocess`) and, on every read, removes the
-# mean energy and casts to single precision (`transforms`). The data module splits
-# the frames into 350 for training, 50 for validation and 100 for testing.
+# computes the neighbor list of every frame it reads (`transforms`); the data module
+# removes the mean energy and casts to single precision on every batch
+# (`batch_transforms`). It splits the frames into 350 for training, 50 for
+# validation and 100 for testing.
 
 # %%
-storage = ASEDBStorage.create(
-    os.path.join(workdir, "acetic_acid_emt.db"),
+datapath = os.path.join(workdir, "acetic_acid_emt.db")
+db = ASEAtomsData.create(
+    datapath,
     distance_unit="Ang",
     property_unit_dict={"energy": "eV", "forces": "eV/Ang"},
 )
-storage.add_systems(property_list, atoms_list)
+db.add_systems(property_list, atoms_list)
 
 cutoff = 5.0
-dataset = AtomsDataset(
-    storage,
-    preprocess=[trn.MatScipyNeighborList(cutoff=cutoff)],
-    transforms=[trn.RemoveOffsets("energy", remove_mean=True), trn.CastTo32()],
-)
+dataset = ASEAtomsData(datapath, transforms=[trn.MatScipyNeighborList(cutoff=cutoff)])
 datamodule = AtomsDataModule(
     dataset,
+    batch_transforms=[trn.RemoveOffsets("energy", remove_mean=True), trn.CastTo32()],
     batch_size=32,
     num_train=350,
     num_val=50,
@@ -380,11 +379,11 @@ dataset = rMD17(
     molecule="ethanol",
     distance_unit="Ang",
     property_units={"energy": "eV", "forces": "eV/Ang"},
-    preprocess=[trn.MatScipyNeighborList(cutoff=cutoff)],
-    transforms=[trn.RemoveOffsets("energy", remove_mean=True), trn.CastTo32()],
+    transforms=[trn.MatScipyNeighborList(cutoff=cutoff)],
 )
 datamodule = AtomsDataModule(
     dataset,
+    batch_transforms=[trn.RemoveOffsets("energy", remove_mean=True), trn.CastTo32()],
     batch_size=10,
     num_train=1000,
     num_val=1000,

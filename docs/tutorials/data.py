@@ -24,7 +24,7 @@ from ase.calculators.emt import EMT
 
 import schnetpack.transform as trn
 from schnetpack import properties
-from schnetpack.data import ASEDBStorage, AtomsDataset
+from schnetpack.data import ASEAtomsData
 from schnetpack.lightning import AtomsDataModule
 
 # everything this page writes goes here; use a directory of your own instead
@@ -65,7 +65,7 @@ for key, value in structure.items():
 #
 # A dataset file is an ASE database (`.db`). Next to the structures, its metadata
 # holds the unit of every property and of the positions, and optionally atom
-# references (below). {class}`~schnetpack.data.AtomsDataset` opens such a file and
+# references (below). {class}`~schnetpack.data.ASEAtomsData` opens such a file and
 # returns one structure per index, as a dictionary like the one above.
 #
 # The file `tests/testdata/test_qm9.db` of the SchNetPack repository holds 20
@@ -73,7 +73,7 @@ for key, value in structure.items():
 
 # %%
 qm9_path = "../../tests/testdata/test_qm9.db"
-dataset = AtomsDataset(qm9_path)
+dataset = ASEAtomsData(qm9_path)
 
 print("structures:", len(dataset))
 print("distance unit:", dataset.distance_unit)
@@ -87,7 +87,7 @@ for name, unit in dataset.units.items():
 # `_idx` gives the index of a structure in the file.
 
 # %%
-dataset = AtomsDataset(
+dataset = ASEAtomsData(
     qm9_path,
     load_properties=["energy_U0", "homo"],
     subset_idx=[0, 5, 10, 15],
@@ -106,7 +106,7 @@ for key, value in example.items():
 # structure is read. Here we read the energies in eV and the positions in Bohr.
 
 # %%
-dataset_ev = AtomsDataset(
+dataset_ev = ASEAtomsData(
     qm9_path,
     load_properties=["energy_U0", "homo"],
     property_units={"energy_U0": "eV", "homo": "eV"},
@@ -115,7 +115,7 @@ dataset_ev = AtomsDataset(
 print("units:", {name: dataset_ev.units[name] for name in dataset_ev.load_properties})
 print("distance unit:", dataset_ev.distance_unit)
 
-stored, converted = AtomsDataset(qm9_path)[0], dataset_ev[0]
+stored, converted = ASEAtomsData(qm9_path)[0], dataset_ev[0]
 print(
     f"U0:  {stored['energy_U0'].item():.4f} Ha = {converted['energy_U0'].item():.2f} eV"
 )
@@ -138,11 +138,10 @@ for symbol, z in [("H", 1), ("C", 6), ("N", 7), ("O", 8), ("F", 9)]:
 # %% [markdown]
 # ## Writing your own dataset
 #
-# Your own data goes into a new ASE database, written by
-# {class}`~schnetpack.data.ASEDBStorage`. A storage is where the structures of a
-# dataset are held; this one reads and writes an ASE database. Its `add_systems`
-# takes two lists of equal length: for each structure a dictionary from property
-# name to numpy array, and the structures as ASE `Atoms`.
+# Your own data goes into a new ASE database, written through
+# {class}`~schnetpack.data.ASEAtomsData`. Its `add_systems` takes two lists of equal
+# length: for each structure a dictionary from property name to numpy array, and the
+# structures as ASE `Atoms`.
 #
 # As a stand-in for quantum chemistry, we take six small molecules, displace their
 # atoms at random by about 0.05 Å, ten times each, and label every structure with
@@ -180,58 +179,45 @@ for symbol in ["H", "C", "N", "O"]:
     atomrefs[atom.numbers[0]] = atom.get_potential_energy()
 
 # %% [markdown]
-# `ASEDBStorage.create` writes a new, empty database with the units and atom
-# references in its metadata; `add_systems` adds the structures. Units are strings
-# such as `"eV"`, `"kcal/mol"`, `"Ang"` or `"Bohr"`. `create` refuses to overwrite
-# an existing file; to add structures later, open it with `ASEDBStorage(path)` and
-# call `add_systems` again.
+# `ASEAtomsData.create` writes a new, empty database with the units and atom
+# references in its metadata and returns a dataset on it; `add_systems` adds the
+# structures. Units are strings such as `"eV"`, `"kcal/mol"`, `"Ang"` or `"Bohr"`.
+# `create` refuses to overwrite an existing file; to add structures later, open it
+# with `ASEAtomsData(path)` and call `add_systems` again.
 
 # %%
 db_path = os.path.join(workdir, "molecules_emt.db")
-storage = ASEDBStorage.create(
+db = ASEAtomsData.create(
     db_path,
     distance_unit="Ang",
     property_unit_dict={"energy": "eV", "forces": "eV/Ang"},
     atomrefs={"energy": atomrefs.tolist()},
 )
-storage.add_systems(property_list, atoms_list)
+db.add_systems(property_list, atoms_list)
 
-print(len(storage), "structures, units:", storage.units)
-print("atom reference of C:", storage.atomrefs["energy"][6].item(), "eV")
+print(len(db), "structures, units:", db.units)
+print("atom reference of C:", db.atomrefs["energy"][6].item(), "eV")
 
 # %% [markdown]
 # ## Transforms
 #
-# A dataset passes every structure it reads through two lists of transforms, each a
-# PyTorch module that takes and returns the dictionary:
+# Transforms are PyTorch modules that take and return the dictionary. They run in
+# two places:
 #
-# - `preprocess`: transforms whose result depends only on the stored structure, such
-#   as the neighbor list. Their result can be computed once and kept.
-# - `transforms`: all others, run after `preprocess`, such as removing energy
-#   offsets, casting to single precision or adding noise.
-#
-# {class}`~schnetpack.data.AtomsDataset` runs both lists on every read. The
-# in-memory dataset mentioned below runs `preprocess` once and keeps its result.
+# - the dataset's `transforms` act on one structure, every time it is read, such as
+#   the neighbor list;
+# - the loader's `batch_transforms` act on a batch of structures, such as removing
+#   energy offsets, casting to single precision or adding noise (next section).
 #
 # The neighbor list holds all pairs of atoms closer than a cutoff, here 5 Å.
-# `RemoveOffsets` subtracts the atom references and the mean energy per atom, and
-# `CastTo32` casts all floating point tensors to single precision.
 
 # %%
 cutoff = 5.0  # Å
-dataset = AtomsDataset(
-    storage,
-    preprocess=[trn.MatScipyNeighborList(cutoff=cutoff)],
-    transforms=[
-        trn.RemoveOffsets("energy", remove_mean=True, remove_atomrefs=True),
-        trn.CastTo32(),
-    ],
-)
+dataset = ASEAtomsData(db_path, transforms=[trn.MatScipyNeighborList(cutoff=cutoff)])
 
-stored = storage.read(0)  # as stored, without transforms
+stored = ASEAtomsData(db_path)[0]  # as stored, without transforms
 example = dataset[0]
 print("added keys:", sorted(set(example) - set(stored)))
-print("positions:", stored[properties.R].dtype, "->", example[properties.R].dtype)
 print("idx_i:", example[properties.idx_i].tolist())
 print("idx_j:", example[properties.idx_j].tolist())
 
@@ -241,10 +227,6 @@ print("idx_j:", example[properties.idx_j].tolist())
 # Water has three atoms, so all six ordered pairs are within the cutoff. A
 # periodic crystal works the same way; its pairs then include periodic images.
 #
-# `RemoveOffsets` has not changed the energy yet: it gets the atom references and
-# the mean energy from the data module below, once that has chosen the training
-# set.
-#
 # ## Splits and batches
 #
 # {class}`~schnetpack.lightning.AtomsDataModule` prepares a dataset for training.
@@ -252,11 +234,19 @@ print("idx_j:", example[properties.idx_j].tolist())
 # computes the statistics of the training set that the transforms need, and builds
 # a data loader for each set. It is a PyTorch Lightning `LightningDataModule`, so a
 # Lightning `Trainer` calls its `setup()`; here we call it by hand.
+#
+# Its `batch_transforms` run on every batch: `RemoveOffsets` subtracts the atom
+# references and the mean energy per atom, and `CastTo32` casts all floating point
+# tensors to single precision.
 
 # %%
 pl.seed_everything(0)
 datamodule = AtomsDataModule(
     dataset,
+    batch_transforms=[
+        trn.RemoveOffsets("energy", remove_mean=True, remove_atomrefs=True),
+        trn.CastTo32(),
+    ],
     batch_size=4,
     num_train=40,
     num_val=10,  # the remaining 10 structures are the test set
@@ -285,17 +275,16 @@ print("test:      ", len(datamodule.test_dataset))
 mean, std = datamodule.get_stats("energy", divide_by_atoms=True, remove_atomref=True)
 print(f"energy per atom after atom references: mean {mean:.3f} eV, std {std:.3f} eV")
 
-print(f"stored energy of structure 0:   {stored['energy'].item():8.3f} eV")
-print(f"after RemoveOffsets:            {dataset[0]['energy'].item():8.3f} eV")
-
 # %% [markdown]
-# The data loaders read the structures of each set and join them into batches.
-# The training loader shuffles the structures in every epoch.
+# The data loaders read the structures of each set, join them into batches and pass
+# each batch through the batch transforms. The training loader shuffles the
+# structures in every epoch.
 
 # %%
 batch = next(iter(datamodule.train_dataloader()))
 for key, value in batch.items():
     print(f"{key:16s} shape {tuple(value.shape)}")
+print("energies after RemoveOffsets:", batch["energy"])
 
 # %% [markdown]
 # A batch joins its structures along the atom dimension: the positions of all four
@@ -311,18 +300,50 @@ print("structure of each atom:", batch[properties.idx_m].tolist())
 
 # %% [markdown]
 # `datamodule.val_dataloader()` and `datamodule.test_dataloader()` give the
-# batches of the other two sets, in a fixed order. For training on a GPU,
-# `AtomsDataModule(..., in_memory=True)` converts the dataset once into flat
-# arrays in memory (an {class}`~schnetpack.data.InMemoryDataset`) and builds whole
-# batches from them; see [Training faster](../guides/training_speed.md).
+# batches of the other two sets, in a fixed order.
+#
+# ## Reading every structure once
+#
+# The dataset's transforms run again every time a structure is read. With
+# `cache=True` the data module reads every structure once instead, with its
+# transforms, into an {class}`~schnetpack.data.AtomsCache` in memory, and the
+# loaders slice whole batches from it: no worker processes, no reads per structure.
+# This is the fast route for training on a GPU; see
+# [Training faster](../guides/training_speed.md). The dataset's transforms then run
+# only once, so they must give the same result every time: noise and offsets belong
+# among the batch transforms.
+
+# %%
+cached = AtomsDataModule(
+    dataset,
+    batch_transforms=[
+        trn.RemoveOffsets("energy", remove_mean=True, remove_atomrefs=True),
+        trn.CastTo32(),
+    ],
+    batch_size=4,
+    num_train=40,
+    num_val=10,
+    split_file=os.path.join(workdir, "split.npz"),  # the same split as above
+    cache=True,
+)
+cached.setup()
+batch = next(iter(cached.val_dataloader()))
+print("atoms per structure:", batch[properties.n_atoms].tolist())
+print("real atoms:", batch[properties.atom_mask].tolist())
+
+# %% [markdown]
+# Batches from a cache are padded to fixed sizes, so that every training step has
+# the same shapes. The padding atoms form one extra structure at the end, with
+# `_atom_mask` and `_structure_mask` 0; the training task leaves them out of the
+# loss and the metrics.
 #
 # ## The QM9 benchmark
 #
 # SchNetPack downloads several benchmark datasets on its own, such as
 # {class}`~schnetpack.datasets.QM9` with its 133,885 molecules. These classes are
-# subclasses of `AtomsDataset` and take its arguments, such as `load_properties`,
-# `property_units`, `preprocess` and `transforms`. If the database at the given
-# path does not exist, they download the data and write it there first.
+# subclasses of `ASEAtomsData` and take its arguments, such as `load_properties`,
+# `property_units` and `transforms`. If the database at the given path does not
+# exist, they download the data and write it there first.
 #
 # The cell below shows how you would load QM9 and prepare it for training. It is
 # not run when this page is built, since the download is large; the page uses the
@@ -336,14 +357,14 @@ qm9 = QM9(
     remove_uncharacterized=True,  # leave out the 3,054 molecules that failed a check
     load_properties=[QM9.U0],
     property_units={QM9.U0: "eV"},
-    preprocess=[trn.MatScipyNeighborList(cutoff=5.0)],
-    transforms=[
-        trn.RemoveOffsets(QM9.U0, remove_mean=True, remove_atomrefs=True),
-        trn.CastTo32(),
-    ],
+    transforms=[trn.MatScipyNeighborList(cutoff=5.0)],
 )
 qm9_datamodule = AtomsDataModule(
     qm9,
+    batch_transforms=[
+        trn.RemoveOffsets(QM9.U0, remove_mean=True, remove_atomrefs=True),
+        trn.CastTo32(),
+    ],
     batch_size=100,
     num_train=110000,
     num_val=10000,

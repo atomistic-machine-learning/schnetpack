@@ -27,7 +27,7 @@ from ase.optimize import BFGS
 
 import schnetpack as spk
 import schnetpack.transform as trn
-from schnetpack.data import ASEDBStorage, AtomsDataset
+from schnetpack.data import ASEAtomsData
 from schnetpack.lightning import AtomisticTask, AtomsDataModule
 
 # everything this page writes goes here; use a directory of your own instead
@@ -67,33 +67,30 @@ for _ in range(500):
         }
     )
 
-storage = ASEDBStorage.create(
-    os.path.join(workdir, "ethanol_emt.db"),
+datapath = os.path.join(workdir, "ethanol_emt.db")
+db = ASEAtomsData.create(
+    datapath,
     distance_unit="Ang",
     property_unit_dict={"energy": "eV", "forces": "eV/Ang"},
 )
-storage.add_systems(property_list, atoms_list)
+db.add_systems(property_list, atoms_list)
 
 # %% [markdown]
-# A dataset reads the structures from the storage and passes each one through two
-# lists of transforms. `preprocess` holds the steps whose result can be kept, here
-# the neighbor list within a cutoff of 5 Å. `transforms` runs on every read: it
-# removes the mean energy, so the network learns the deviation from it, and casts
-# to single precision.
+# A dataset reads the structures from the database and passes each one through its
+# transforms, here the neighbor list within a cutoff of 5 Å. The batch transforms
+# act on each batch: they remove the mean energy, so the network learns the
+# deviation from it, and cast to single precision.
 #
-# The data module splits the dataset into training, validation and test sets and
-# computes the mean energy on the training set.
+# The data module splits the dataset into training, validation and test sets,
+# computes the mean energy on the training set and builds a loader for each set.
 
 # %%
 cutoff = 5.0
 
-dataset = AtomsDataset(
-    storage,
-    preprocess=[trn.MatScipyNeighborList(cutoff=cutoff)],
-    transforms=[trn.RemoveOffsets("energy", remove_mean=True), trn.CastTo32()],
-)
+dataset = ASEAtomsData(datapath, transforms=[trn.MatScipyNeighborList(cutoff=cutoff)])
 datamodule = AtomsDataModule(
     dataset,
+    batch_transforms=[trn.RemoveOffsets("energy", remove_mean=True), trn.CastTo32()],
     batch_size=32,
     num_train=400,
     num_val=50,

@@ -31,7 +31,7 @@ from ase.optimize import BFGS
 import schnetpack as spk
 import schnetpack.properties as properties
 import schnetpack.transform as trn
-from schnetpack.data import ASEDBStorage, AtomsDataset
+from schnetpack.data import ASEAtomsData
 from schnetpack.lightning import AtomisticTask, AtomsDataModule
 
 # everything this page writes goes here; use a directory of your own instead
@@ -75,21 +75,22 @@ for _ in range(300):
     )
 
 # %% [markdown]
-# The storage keeps each `Atoms` object with its cell and pbc, so a periodic
+# The database keeps each `Atoms` object with its cell and pbc, so a periodic
 # structure needs nothing extra. The stress is a 3×3 tensor per structure. It is
 # stored with a leading axis of length one, shape `(1, 3, 3)`, so that a batch of
 # structures stacks to `(n_structures, 3, 3)`. ASE gives it in eV/Å³
 # (1 eV/Å³ = 160.2 GPa), positive under tension.
 
 # %%
-storage = ASEDBStorage.create(
-    os.path.join(workdir, "copper_emt.db"),
+datapath = os.path.join(workdir, "copper_emt.db")
+db = ASEAtomsData.create(
+    datapath,
     distance_unit="Ang",
     property_unit_dict={"energy": "eV", "forces": "eV/Ang", "stress": "eV/Ang/Ang/Ang"},
 )
-storage.add_systems(property_list, atoms_list)
+db.add_systems(property_list, atoms_list)
 
-structure = storage.read(0)
+structure = db[0]
 print("cell (Å):\n", structure[properties.cell][0].numpy().round(3))
 print("pbc:", structure[properties.pbc].numpy())
 print("stress (GPa):\n", (structure["stress"][0] / units.GPa).numpy().round(2))
@@ -136,26 +137,23 @@ print("cell shifts of the copies of atom 0:", shifts[own].round().int().tolist()
 # edge away, shifted by one cell vector. Without the offsets, these pairs would
 # have a distance of zero.
 #
-# The dataset puts the neighbor list into `preprocess`, as for molecules. The
-# transforms remove the mean energy and cast to single precision. With
-# `in_memory=True`, the data module runs `preprocess` once, at the start, and
-# keeps the result in memory: the neighbor lists of periodic structures are
-# worth computing only once. Without it, the dataset would build them again at
-# every read. The 300 structures are split into 240 for training, 30 for
-# validation and 30 for testing.
+# The dataset puts the neighbor list into its `transforms`, as for molecules. The
+# batch transforms remove the mean energy and cast to single precision. With
+# `cache=True`, the data module reads every structure once, at the start, and keeps
+# the result in memory: the neighbor lists of periodic structures are worth
+# computing only once. Without it, the dataset would build them again at every
+# read. The 300 structures are split into 240 for training, 30 for validation and
+# 30 for testing.
 
 # %%
-dataset = AtomsDataset(
-    storage,
-    preprocess=[trn.MatScipyNeighborList(cutoff=cutoff)],
-    transforms=[trn.RemoveOffsets("energy", remove_mean=True), trn.CastTo32()],
-)
+dataset = ASEAtomsData(datapath, transforms=[trn.MatScipyNeighborList(cutoff=cutoff)])
 datamodule = AtomsDataModule(
     dataset,
+    batch_transforms=[trn.RemoveOffsets("energy", remove_mean=True), trn.CastTo32()],
     batch_size=16,
     num_train=240,
     num_val=30,
-    in_memory=True,
+    cache=True,
     split_file=os.path.join(workdir, "split.npz"),
 )
 
@@ -331,11 +329,10 @@ from schnetpack.datasets import MaterialsProject, MPTraj
 mp = MaterialsProject(
     "materials_project.db",  # downloaded on first use
     apikey="<your 32-character API key>",
-    preprocess=[trn.MatScipyNeighborList(cutoff=cutoff)],
-    transforms=[trn.CastTo32()],
+    transforms=[trn.MatScipyNeighborList(cutoff=cutoff)],
 )
 mptraj = MPTraj(
     "mptraj.db",  # downloaded on first use
-    preprocess=[trn.MatScipyNeighborList(cutoff=cutoff)],
-    transforms=[trn.RemoveOffsets("energy", remove_mean=True), trn.CastTo32()],
+    transforms=[trn.MatScipyNeighborList(cutoff=cutoff)],
 )
+# offsets and the cast go to AtomsDataModule(..., batch_transforms=[...]), as above

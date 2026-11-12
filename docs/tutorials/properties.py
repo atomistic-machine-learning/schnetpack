@@ -29,7 +29,7 @@ from ase.optimize import BFGS
 
 import schnetpack as spk
 import schnetpack.transform as trn
-from schnetpack.data import ASEDBStorage, AtomsDataset
+from schnetpack.data import ASEAtomsData
 from schnetpack.lightning import AtomisticTask, AtomsDataModule
 
 # everything this page writes goes here; use a directory of your own instead
@@ -80,12 +80,11 @@ for mol in g2:
         energies.append(relative_energy(atoms))
         atoms_list.append(atoms.copy())  # the copy leaves the calculator behind
 
-storage = ASEDBStorage.create(
-    os.path.join(workdir, "g2_emt.db"),
-    distance_unit="Ang",
-    property_unit_dict={"energy": "eV"},
+datapath = os.path.join(workdir, "g2_emt.db")
+db = ASEAtomsData.create(
+    datapath, distance_unit="Ang", property_unit_dict={"energy": "eV"}
 )
-storage.add_systems([{"energy": np.array([e])} for e in energies], atoms_list)
+db.add_systems([{"energy": np.array([e])} for e in energies], atoms_list)
 print(f"{len(atoms_list)} structures")
 print(f"energies from {min(energies):.1f} to {max(energies):.1f} eV")
 
@@ -101,13 +100,13 @@ print(f"energies from {min(energies):.1f} to {max(energies):.1f} eV")
 # set by least squares. QM9 instead comes with the energies of the free atoms as
 # its references (see the last section).
 #
-# The dataset is built as in the quickstart: `preprocess` holds the neighbor list,
-# whose result can be kept, and `transforms` runs on every read. The data module
-# splits the 405 structures into 324 for training, 40 for validation and the rest
-# for testing. When it is set up, it fits the references on the training set.
-# `in_memory=True` holds this small dataset in memory as arrays and builds whole
-# batches from them, which is faster than reading it structure by structure (see
-# [Training faster](../guides/training_speed.md)).
+# The dataset is built as in the quickstart: its `transforms` hold the neighbor
+# list, and the data module's `batch_transforms` remove the offsets and cast every
+# batch. The data module splits the 405 structures into 324 for training, 40 for
+# validation and the rest for testing. When it is set up, it fits the references on
+# the training set. `cache=True` reads this small dataset once, keeps it in memory
+# and builds whole batches from it, which is faster than reading it structure by
+# structure (see [Training faster](../guides/training_speed.md)).
 
 # %%
 cutoff = 5.0
@@ -115,18 +114,15 @@ cutoff = 5.0
 remove_offsets = trn.RemoveOffsets(
     "energy", remove_atomrefs=True, estimate_atomref=True
 )
-dataset = AtomsDataset(
-    storage,
-    preprocess=[trn.MatScipyNeighborList(cutoff=cutoff)],
-    transforms=[remove_offsets, trn.CastTo32()],
-)
+dataset = ASEAtomsData(datapath, transforms=[trn.MatScipyNeighborList(cutoff=cutoff)])
 datamodule = AtomsDataModule(
     dataset,
+    batch_transforms=[remove_offsets, trn.CastTo32()],
     batch_size=32,
     num_train=324,
     num_val=40,
     split_file=os.path.join(workdir, "split.npz"),
-    in_memory=True,
+    cache=True,
 )
 datamodule.setup()
 
@@ -320,16 +316,16 @@ qm9 = QM9(
     os.path.join(workdir, "qm9.db"),  # keep the download in a directory of your own
     load_properties=[QM9.U0],
     property_units={QM9.U0: "eV"},
-    preprocess=[trn.MatScipyNeighborList(cutoff=5.0)],
-    transforms=[
-        trn.RemoveOffsets(QM9.U0, remove_atomrefs=True, remove_mean=True),
-        trn.CastTo32(),
-    ],
+    transforms=[trn.MatScipyNeighborList(cutoff=5.0)],
 )
 print(qm9.atomrefs[QM9.U0][[1, 6, 7, 8, 9]])  # free H, C, N, O and F atoms, in eV
 
 datamodule = AtomsDataModule(
     qm9,
+    batch_transforms=[
+        trn.RemoveOffsets(QM9.U0, remove_atomrefs=True, remove_mean=True),
+        trn.CastTo32(),
+    ],
     batch_size=100,
     num_train=110000,
     num_val=10000,

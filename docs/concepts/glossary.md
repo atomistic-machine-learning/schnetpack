@@ -27,6 +27,11 @@ Atomwise output
 : An output module that predicts a contribution per atom and sums or averages them
   per structure, e.g. {class}`schnetpack.model.Atomwise` for the energy.
 
+Cache
+: A dataset's structures, read once with the dataset's transforms and held as
+  flat tensors in host memory ({class}`schnetpack.data.AtomsCache`); a loader
+  slices whole padded batches from it.
+
 Cutoff
 : The distance beyond which two atoms do not interact. It sets which pairs
   enter the neighbor list and where the cutoff function brings each pair's
@@ -47,10 +52,6 @@ Response property
   (minus the gradient with respect to the positions) or stress (from the derivative
   with respect to the strain).
 
-Storage
-: Where the structures of a dataset are held: an ASE database on disk or flat
-  arrays in memory ({class}`schnetpack.data.ASEDBStorage`,
-  {class}`schnetpack.data.ArrayStorage`).
 
 Transform
 : A module that changes a structure or a batch before or after the model, e.g.

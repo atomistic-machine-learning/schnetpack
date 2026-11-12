@@ -5,11 +5,12 @@ schnetpack.data
 Datasets and loaders
 --------------------
 
-:class:`AtomsDataset` reads a dataset structure by structure and
-:class:`AtomsLoader` collates its structures into batches, with workers.
-:class:`InMemoryDataset` holds the dataset in memory as flat arrays and returns
-whole batches (``dataset[ids]``); :class:`InMemoryLoader` chooses the structures of
-each batch. ``AtomsDataModule(in_memory=True)`` uses the second pair; for a training
+:class:`ASEAtomsData` reads a dataset from an ASE database, structure by structure,
+with its transforms; :class:`AtomsLoader` collates the structures into batches, with
+workers. :class:`AtomsCache` holds every structure of a dataset once read, as flat
+tensors; :class:`AtomsLoader` with ``cache=`` then slices whole padded batches from
+it. On both routes the loader moves each batch to ``device`` and applies its
+``batch_transforms``. ``AtomsDataModule(cache=True)`` uses the cache; for a training
 loop of your own see :doc:`/guides/training_speed`.
 
 .. autosummary::
@@ -18,35 +19,19 @@ loop of your own see :doc:`/guides/training_speed`.
     :recursive:
     :template: classtemplate.rst
 
-    AtomsDataset
+    ASEAtomsData
+    DownloadableASEAtomsData
     AtomsLoader
-    InMemoryDataset
-    InMemoryLoader
+    AtomsCache
     BudgetBatches
     OrderedBatches
     StratifiedSampler
 
-Storage
--------
-
-Where the structures of a dataset are held: an ASE database on disk (``*.db``),
-which is also where new structures are written, or flat arrays converted from it (a
-``*.arrays`` folder). A dataset takes a storage or its path.
-
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
-    :template: classtemplate.rst
-
-    AtomsStorage
-    ASEDBStorage
-    ArrayStorage
-
 .. autosummary::
     :toctree: generated
     :nosignatures:
 
-    open_storage
+    prune_neighbors
 
 Statistics
 ----------
@@ -59,6 +44,7 @@ Statistics
     calculate_stats
     estimate_atomrefs
     StatsAtomrefProvider
+    ArrayStats
     NumberOfAtomsCriterion
     PropertyCriterion
 

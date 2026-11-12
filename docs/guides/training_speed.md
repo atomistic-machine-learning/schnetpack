@@ -13,9 +13,9 @@ on or off on its own; the combination for a given training is in the next sectio
 | DataLoader workers | `data.num_workers=8`<br>`AtomsDataModule(num_workers=8)` | read and transform structures in 8 processes. With 2 workers a QM9 batch of 100 took 55 ms per training step, with 8 workers 26 ms. |
 | compile | `task.compile=True`<br>`AtomisticTask(compile=True)` | run the model and its derivatives (forces, stress) as one compiled graph ({class}`~schnetpack.model.CompiledPotential`, torch >= 2.14). Fewer, fused kernels; less GPU memory. |
 | fused optimizer | `task.optimizer_args.fused=True`<br>`optimizer_args={"fused": True}` | update all parameters in one kernel (Adam, AdamW on CUDA). |
-| data in memory | `data.in_memory=True`<br>`AtomsDataModule(in_memory=True)` | convert the dataset once into flat arrays, hold them in memory and build whole batches from them, padded to fixed shapes: no workers, no reads per structure. Each batch is gathered on the CPU while the GPU works on the last step, and copied over. The dataset's neighbor list runs once at the conversion and its leading deterministic transforms (centering, offsets, casts) once at setup; the rest run on whole batches on the GPU. |
-| budget batching | always, with the data in memory | training batches are packed to the atoms and pairs `batch_size` structures hold on average, instead of padding every batch for its largest case. Batches hold ±10% structures around `batch_size`. |
-| CUDA graph step | `task.cuda_graph=True`<br>`AtomisticTask(cuda_graph=True)` | with the data in memory: record the training step (the model, the loss, the backward pass) once as a CUDA graph and replay it every step on the padded batch: one launch instead of hundreds, no host synchronization. Compiles the model. |
+| cache | `data.cache=True`<br>`AtomsDataModule(cache=True)` | read every structure once, with the dataset's transforms (centering, the neighbor list), into an {class}`~schnetpack.data.AtomsCache` in host memory, and slice whole batches from it, padded to fixed shapes: no workers, no reads per structure. Each batch is gathered on the CPU while the GPU works on the last step, and copied over. The batch transforms (`data.batch_transforms`: offsets, casts, noise) run on whole batches on the GPU. `data.cache_dir` keeps the cache between runs. |
+| budget batching | always, with a cache | training batches are packed to the atoms and pairs `batch_size` structures hold on average, instead of padding every batch for its largest case. Batches hold ±10% structures around `batch_size`. |
+| CUDA graph step | `task.cuda_graph=True`<br>`AtomisticTask(cuda_graph=True)` | with a cache: record the training step (the model, the loss, the backward pass) once as a CUDA graph and replay it every step on the padded batch: one launch instead of hundreds, no host synchronization. Compiles the model. |
 | fused kernel (SO3net) | `model.representation.fused_kernel=True`<br>`SO3net(fused_kernel=True)` | sum each convolution's messages in one Triton kernel: 1.9× on energies at `lmax=2` and 4.5× at `lmax=3`, 3× with forces at `lmax=3`; no gain at `lmax=1`. |
 | banded filter (PaiNN) | `model.representation.banded_filter=True`<br>`PaiNN(banded_filter=True)` | evaluate PaiNN's filter network on each pair's band of Gaussians: a large saving with many narrow Gaussians (600 on 150 Å for GPFF: 2.25× per epoch). Needs an evenly spaced, non-trainable `GaussianRBF`; no gain when the distances need a gradient (forces). |
 
@@ -26,8 +26,8 @@ skip is decided on the GPU, without a host sync.
 ## Which settings for which case
 
 Measured with four short epochs on one H200 NVL (16 CPU cores), training step in ms.
-"Default" is the default route with 8 DataLoader workers; "fastest" is the data in
-memory (budget batches), the CUDA graph step and a fused optimizer:
+"Default" is the default route with 8 DataLoader workers; "fastest" is the cache
+(budget batches), the CUDA graph step and a fused optimizer:
 
 | case | default | fastest | gain |
 | --- | --- | --- | --- |
@@ -41,7 +41,7 @@ memory (budget batches), the CUDA graph step and a fused optimizer:
 | QM9 position denoising (`Diffuse`), PaiNN 3 x 128 | 12.9 | 2.4 | 5.5× |
 | MP-20 position denoising (`Diffuse`, pairs rebuilt per batch), batch 100 |  | 5.5 |  |
 
-- **Every case: the data in memory, the CUDA graph step and a fused optimizer.** The
+- **Every case: the cache, the CUDA graph step and a fused optimizer.** The
   gain over the default route is largest for small models and small batches, where
   the default route is all overhead, and smallest for models that keep the GPU busy
   on their own (2.4× for PaiNN 3 x 512).
@@ -50,25 +50,26 @@ memory (budget batches), the CUDA graph step and a fused optimizer:
   denoising).
 - **Budget batching** was 20-30% faster than fixed padded batches on molecules, and
   2.9× on crystals, whose sizes vary too much for one padded shape; it is the only
-  training batcher for data in memory.
+  training batcher with a cache.
 - **Compile alone** gains little as long as the DataLoader is the limit: the default
   route's step time is set by its workers, whatever the model. It helps where the
   model itself is slow, as SO3net (3.8× on an H100) and forces (1.3-1.5×).
-- **The data in memory without the CUDA graph** (`in_memory` with `compile`) is
+- **A cache without the CUDA graph** (`cache` with `compile`) is
   the middle ground, for losses or callbacks the graph does not take. For models
   that keep the GPU busy the graph adds 6% (PaiNN 3 x 512) to 29% (SO3net).
 - **Crystals:** the dataset's neighbor list (e.g. `MatScipyNeighborList`) runs once
-  at the conversion, and its periodic images are kept as cell shifts.
-- **Generative training:** `Diffuse` and the centering transforms run on the padded
-  batches on the GPU. For molecules, leave out the neighbor list (or use
-  `AllToAllNeighborList`), so that every batch holds all pairs of the noised
-  structures; filtering them by the cutoff per batch was 37-41% slower on QM9. For
-  crystals, put the neighbor list after `Diffuse`: it is then rebuilt on every
-  batch, on the GPU ({class}`~schnetpack.transform.BatchCutoffNeighborList`).
+  when the cache is made, and its periodic images are kept as cell shifts.
+- **Generative training:** `Diffuse` goes into the batch transforms and runs on the
+  padded batches on the GPU; the centering stays among the dataset's transforms. For
+  molecules, put `AllToAllNeighborList` there too: its pairs do not depend on the
+  positions, so every batch holds all pairs of the noised structures; filtering them
+  by the cutoff per batch was 37-41% slower on QM9. For crystals, put
+  {class}`~schnetpack.transform.BatchCutoffNeighborList` after `Diffuse` among the
+  batch transforms: it is then rebuilt on every batch, on the GPU.
 
 ## Limits
 
-- **The dataset must fit into the host's memory:** the arrays are loaded as a whole.
+- **The dataset must fit into the host's memory:** the cache is held as a whole.
   QM9 with its pairs within 5 Å takes 0.3 GB.
 - **Large batches:** at batch 1000 on QM9, gathering the batch on the CPU cost 4%
   against a batch built on the GPU.
@@ -76,20 +77,27 @@ memory (budget batches), the CUDA graph step and a fused optimizer:
   the GPU by one CPU thread. On a node whose CPU cores were all busy, MD17 with batch
   10 took 3.7 ms per step with the GPU 35% busy, against 1.6 ms on a free node. Give
   such trainings CPU cores of their own.
-- **Transforms must work on collated batches**, as the centering, offset, cast and
-  `Diffuse` transforms do; transforms that only work on one structure need the
-  DataLoader route.
-- **Stored pairs are for fixed geometries:** a neighbor list before any noise runs
-  once at the conversion. After `Diffuse` it runs on every batch, by brute force
-  over all atom pairs and lattice shifts of a structure: made for molecules and the
-  small cells of crystal datasets, not for cells of thousands of atoms.
+- **The dataset's transforms run once:** they must act on one structure and give
+  the same result every time. Making a cache refuses a transform that moves the
+  atoms (noise) or needs statistics (offsets, scaling): those belong among the batch
+  transforms. Per-split transform lists are not supported with a cache.
+- **Batch transforms must work on collated batches**, as the centering, offset, cast
+  and `Diffuse` transforms do.
+- **Stored pairs are for fixed geometries:** a neighbor list among the dataset's
+  transforms runs once, when the cache is made. After `Diffuse` it runs on every
+  batch, by brute force over all atom pairs and lattice shifts of a structure: made
+  for molecules and the small cells of crystal datasets, not for cells of thousands
+  of atoms.
+- **A cache in `cache_dir` is used as it is:** after changing the dataset or its
+  transforms, delete the folder.
+- **One GPU:** training on several GPUs (DDP) with a cache is not supported yet.
 - **Outputs:** padded batches need an elementwise loss with mean reduction
   (`MSELoss`, `L1Loss`, `HuberLoss`, ...) or a
   {class}`~schnetpack.generative.VariableOutput`; loss masks work. No knowledge
   distillation.
-- **The first epoch** pays for compiling and recording the graph (10-40 s), and the
-  first run on a dataset for the conversion (cached next to the db, or in
-  `array_dir`).
+- **The first epoch** pays for compiling and recording the graph (10-40 s). Making
+  the cache reads every structure once (about a minute for QM9 with 16 CPU cores),
+  at every run unless `cache_dir` keeps it.
 - **Very short steps** (MD17 with batch 10, small models) keep the GPU 75-87% busy:
   what remains is mostly idle time between the many small kernels inside the replay,
   which no change on the host removes.
@@ -99,7 +107,7 @@ memory (budget batches), the CUDA graph step and a fused optimizer:
 ## Example
 
 ```bash
-spktrain experiment=qm9_atomwise data.in_memory=True \
+spktrain experiment=qm9_atomwise data.cache=True data.cache_dir=/path/to/qm9_cache \
     task.compile=True task.cuda_graph=True task.optimizer_args.fused=True
 ```
 
@@ -108,12 +116,12 @@ spktrain experiment=qm9_atomwise data.in_memory=True \
 The same speedups work in a training loop of your own, and nothing below imports
 Lightning:
 
-- the data in memory: `dataset.in_memory(device)`, an
-  {class}`~schnetpack.data.InMemoryDataset` that returns whole batches, and
-  {class}`~schnetpack.data.InMemoryLoader`, which chooses the structures of each
-  batch;
-- the statistics: {class}`~schnetpack.data.StatsAtomrefProvider`, as for a dataset
-  on the database;
+- the cache and the loader: {class}`~schnetpack.data.AtomsCache` holds every
+  structure once read, and {class}`~schnetpack.data.AtomsLoader` with `cache=`
+  slices padded batches from it, moves them to the GPU and applies the batch
+  transforms;
+- the statistics: {class}`~schnetpack.data.ArrayStats`, from the cache (or
+  {class}`~schnetpack.data.StatsAtomrefProvider`, from the database);
 - the CUDA graph step: {class}`~schnetpack.train.GraphStep`;
 - the parameter average: {class}`~schnetpack.train.EMA`.
 
@@ -124,26 +132,25 @@ import torch
 
 import schnetpack as spk
 import schnetpack.transform as trn
-from schnetpack.data import AtomsDataset, InMemoryLoader, StatsAtomrefProvider
+from schnetpack.data import ArrayStats, ASEAtomsData, AtomsCache, AtomsLoader
 from schnetpack.train import EMA, GraphStep
 
-dataset = AtomsDataset(
-    "qm9.db",
-    load_properties=["energy_U0"],
-    transforms=[
-        trn.MatScipyNeighborList(5.0),
-        trn.RemoveOffsets("energy_U0", remove_mean=True, remove_atomrefs=True),
-        trn.CastTo32(),
-    ],
+# per structure: run once, when the cache is made
+dataset = ASEAtomsData(
+    "qm9.db", load_properties=["energy_U0"], transforms=[trn.MatScipyNeighborList(5.0)]
 )
-# the dataset as arrays in memory: converted once (cached next to the db), the
-# neighbor list run at the conversion; batches come out on the GPU
-dataset = dataset.in_memory("cuda")
-stats = StatsAtomrefProvider(dataset, train_idx)
-dataset.initialize_transforms(stats)
-dataset.cache_transforms()  # offsets and cast applied once, not per batch
-train = InMemoryLoader(dataset.subset(train_idx, "train"), 100, shuffle=True)
-val = InMemoryLoader(dataset.subset(val_idx, "val"), 100)
+cache = AtomsCache.from_dataset(dataset, num_workers=8)  # cache.save(path) keeps it
+stats = ArrayStats(cache, train_idx, dataset.atomrefs)  # no pass over the db
+# per batch, on the GPU
+on_batches = [
+    trn.RemoveOffsets("energy_U0", remove_mean=True, remove_atomrefs=True),
+    trn.CastTo32(),
+]
+for t in on_batches:
+    t.initialize(stats)
+on_gpu = dict(cache=cache, batch_transforms=on_batches, device="cuda")
+train = AtomsLoader(dataset.subset(train_idx), 100, shuffle=True, **on_gpu)
+val = AtomsLoader(dataset.subset(val_idx), 100, transform_seed=0, **on_gpu)
 
 model.initialize_transforms(stats)  # its postprocessors, e.g. AddOffsets
 model.to("cuda")

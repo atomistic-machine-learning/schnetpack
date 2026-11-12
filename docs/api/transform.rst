@@ -50,9 +50,3 @@ Neighbor lists
     CountNeighbors
     FilterNeighbors
     CollectAtomTriples
-
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
-
-    prune_neighbors

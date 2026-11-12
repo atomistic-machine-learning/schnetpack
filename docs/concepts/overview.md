@@ -13,21 +13,26 @@ configures SchNetPack for the command line, as described in
 ```{currentmodule} schnetpack.data
 ```
 
-SchNetPack stores data sets in ASE databases ({class}`ASEDBStorage`) and reads them
-with {class}`AtomsDataset`, structure by structure. Data sets that fetch their raw
-data from a remote source subclass it and define a `download` method. These classes
-are compatible with PyTorch dataloaders and provide an additional interface to store
-metadata, e.g. property units and single-atom reference values.
-{class}`InMemoryDataset` holds a data set in memory and returns whole batches.
+SchNetPack stores data sets in ASE databases and reads them with
+{class}`ASEAtomsData`, structure by structure. Data sets that fetch their raw data
+from a remote source subclass {class}`DownloadableASEAtomsData` and define a
+`download` method. These classes are compatible with PyTorch dataloaders and provide
+an additional interface to store metadata, e.g. property units and single-atom
+reference values. {class}`AtomsLoader` collates the structures into batches; with an
+{class}`AtomsCache`, which holds every structure once read, it slices whole padded
+batches from the cache instead.
 
-An important aspect are the transforms that can be passed to the data classes. Those
-are PyTorch modules that preprocess the data *before* batching. Typically, this runs
-on the CPU as part of the multi-processing of PyTorch dataloaders. Important
-preprocessing {class}`~schnetpack.transform.Transform` modules remove offsets from
-target properties and compute neighbor lists.
+An important aspect are the transforms. Those are PyTorch modules that change the
+data before it reaches the model, in two places:
+
+- the dataset's `transforms` act on one structure, e.g. centering and the neighbor
+  list. They run on every read, in the dataloader's worker processes, or once when
+  an {class}`AtomsCache` is made;
+- the loader's `batch_transforms` act on a collated batch, on the loader's device,
+  e.g. removing offsets from target properties, casting to float32 or adding noise.
 
 PyTorch Lightning datamodules are supported through
-{class}`~schnetpack.lightning.AtomsDataModule`, which combines {class}`AtomsDataset`
+{class}`~schnetpack.lightning.AtomsDataModule`, which combines {class}`ASEAtomsData`
 with code for preparation, setup and partitioning into train/validation/test splits.
 The datamodule also owns the training statistics (per-property mean/std and atom
 references): it exposes them via `get_stats` and `get_atomrefs`, initializes all
