@@ -9,7 +9,7 @@ Fast training steps
 The training step as one CUDA graph and the parameter average, for a training loop of
 your own; :class:`~schnetpack.lightning.AtomisticTask` (``cuda_graph``) and
 :class:`~schnetpack.lightning.ExponentialMovingAverage` use them (see
-:doc:`/userguide/speed`).
+:doc:`/guides/training_speed`).
 
 .. autosummary::
     :toctree: generated

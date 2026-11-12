@@ -1,66 +1,40 @@
 """Sphinx configuration for the SchNetPack documentation.
 
-Built by Read the Docs (see ``readthedocs.yaml``), which installs the package
-with its ``doc`` extra before running Sphinx.  For a local build:
+Read the Docs builds it (see ``readthedocs.yaml``) after installing the package with
+its ``doc`` extra, and executes the notebooks while doing so. A local build:
 
     pip install -e ".[doc]"
-    make -C docs html
+    make -C docs html                            # notebooks shown without outputs
+    NB_EXECUTION_MODE=force make -C docs html    # notebooks executed, as on RTD
     # for a clean build: make -C docs clean html
+
+Pages are MyST Markdown (``.md``), the API reference is reStructuredText (``.rst``),
+and the tutorials and guides with code are jupytext ``py:percent`` notebooks
+(``.py``, see ``jupytext.toml``). No ``.ipynb`` is ever committed.
 """
 
-import shutil
+import importlib.util
+import os
+import sys
+from datetime import date
 from pathlib import Path
 
 import schnetpack
 
-# -- Notebook sources --------------------------------------------------------
-
-# The tutorials and how-tos live in examples/, but they cannot be pulled in with
-# a symlink: nbsphinx links the figures an executed notebook produces relative to
-# the notebook's real path, which for a symlinked directory points outside the
-# source directory, and Sphinx then drops every one of them ("image file not
-# readable"). So copy them in for the duration of the build. The copies are
-# gitignored; examples/ stays the single source of truth.
 _HERE = Path(__file__).parent.resolve()
-_EXAMPLES = _HERE.parent / "examples"
-# docs directory -> examples directory
-_COPIED = {
-    "tutorials": "tutorials_deprecated",
-    "howtos": "howtos",
-    # model checkpoints that howto_ensemble_calculation loads
-    "trained_models": "trained_models",
-}
-for _dest_name, _src_name in _COPIED.items():
-    _dest = _HERE / _dest_name
-    if _dest.is_symlink():
-        # Left over from a checkout that predates the copying.
-        _dest.unlink()
-    elif _dest.is_dir():
-        shutil.rmtree(_dest)
-    shutil.copytree(
-        _EXAMPLES / _src_name,
-        _dest,
-        # Opening a tutorial in Jupyter leaves a paired .ipynb next to the .py
-        # (see examples/jupytext.toml); both would claim the same docname.
-        ignore=shutil.ignore_patterns("*.ipynb", ".ipynb_checkpoints", "__pycache__"),
-    )
+sys.path.insert(0, str(_HERE / "_ext"))
 
 # -- Project information -----------------------------------------------------
 
 project = "SchNetPack"
-author = (
-    "Kristof T. Schütt, Stefan S. P. Hessmann, Niklas W. A. Gebauer, "
-    "Jonas Lederer, Michael Gastegger"
-)
-copyright = f"2023, {author}"
+author = "the SchNetPack authors"
+copyright = f"2018–{date.today().year}, {author}"
 
 # schnetpack.__version__ is what pyproject.toml builds from. Read it from the
 # package rather than from installed metadata, which an editable install only
 # refreshes on reinstall. autodoc imports the package anyway.
 release = schnetpack.__version__
-# Short X.Y version, i.e. the release without patch level and pre-release tag.
 version = ".".join(release.split(".")[:2])
-
 
 # -- General configuration ---------------------------------------------------
 
@@ -71,31 +45,55 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
-    "sphinx.ext.autosectionlabel",
-    "nbsphinx",
+    "myst_nb",  # Markdown pages and notebooks
+    "sphinx_design",  # cards and grids on the landing page
+    "sphinx_copybutton",
+    "sphinxcontrib.mermaid",  # diagrams in the generative concept pages
 ]
 
 templates_path = ["_templates"]
-source_suffix = ".rst"  # nbsphinx registers the notebook formats on its own
 exclude_patterns = [
     "_build",
-    "Thumbs.db",
-    ".DS_Store",
     "**.ipynb_checkpoints",
-    # nbsphinx_custom_formats below registers ".py" as a source suffix, and Sphinx
-    # does not exclude its own config file, so without this it tries to render
-    # conf.py as a document.
-    "conf.py",
-    # Same for any notebook that ends up here anyway: it would collide with the
-    # .py of the same name.
+    # The notebooks are the .py files. A paired .ipynb that Jupyter leaves next
+    # to one would claim the same page.
     "**/*.ipynb",
-    # Model checkpoints for howto_ensemble_calculation, not documents.
-    "trained_models",
+    # .py is a notebook suffix here (nb_custom_formats), so the Python files
+    # that are not notebooks have to be excluded.
+    "conf.py",
+    "_ext",
 ]
 language = "en"
-pygments_style = "sphinx"
 
-# -- Extension configuration -------------------------------------------------
+# -- Notebooks ---------------------------------------------------------------
+
+# Read the jupytext py:percent files as notebooks (see _ext/spk_nbreader.py).
+nb_custom_formats = {".py": "spk_nbreader.reads"}
+
+# Read the Docs executes the notebooks on every build; so does the `docs` job in
+# .github/workflows/ci.yml. Local builds do not, unless NB_EXECUTION_MODE is set
+# ("force" or "cache"). A notebook opts out with a jupytext header
+# `mystnb: execution_mode: "off"`.
+nb_execution_mode = os.environ.get(
+    "NB_EXECUTION_MODE", "force" if os.environ.get("READTHEDOCS") else "off"
+)
+nb_execution_timeout = 600  # seconds per cell
+nb_execution_raise_on_error = True
+# Notebooks too slow for a CPU build, by path relative to docs/.
+nb_execution_excludepatterns = []
+if importlib.util.find_spec("mace") is None:
+    # downloads MACE-OFF, which needs the `mace` extra
+    nb_execution_excludepatterns.append("guides/batchwise_relaxations.py")
+
+# Warnings that a notebook prints to stderr (with the paths of the build
+# machine) stay off the page.
+nb_output_stderr = "remove"
+
+myst_enable_extensions = ["dollarmath", "colon_fence", "deflist"]
+myst_heading_anchors = 3
+myst_fence_as_directive = ["mermaid"]
+
+# -- API reference -----------------------------------------------------------
 
 # Document both the class and the __init__ docstring.
 autoclass_content = "both"
@@ -106,39 +104,42 @@ autosummary_generate = True
 # somebody else's API and pull in roles this build does not provide.
 autodoc_inherit_docstrings = False
 
-# Namespace auto-generated section labels by document, so that identically
-# titled sections (e.g. "Requirements", "Summary") do not collide.
-autosectionlabel_prefix_document = True
-
-# The tutorials and how-tos are stored as jupytext py:percent files rather than
-# .ipynb (see examples/jupytext.toml), which is why they carry no outputs at all.
-# nbsphinx reads them through jupytext.
-nbsphinx_custom_formats = {".py": ["jupytext.reads", {"fmt": "py:percent"}]}
-
-# Read the Docs and pull requests only render the notebooks. The weekly `docs`
-# job in .github/workflows/ci.yml overrides this with `-D nbsphinx_execute=auto`
-# to check that they still run; a notebook opts out of that with an
-# ``nbsphinx: execute: never`` header in its .py file.
-nbsphinx_execute = "never"
-
-nbsphinx_kernel_name = "python3"
+# Short signatures; the types are listed with the parameters.
+autodoc_typehints = "description"
+autodoc_typehints_description_target = "documented"
+autodoc_typehints_format = "short"
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),
     "pytorch_lightning": ("https://lightning.ai/docs/pytorch/stable/", None),
 }
 
+# Copy code without prompts ($, >>>, ...).
+copybutton_prompt_text = r">>> |\.\.\. |\$ "
+copybutton_prompt_is_regexp = True
 
-# -- Options for HTML output -------------------------------------------------
+# -- HTML output -------------------------------------------------------------
 
-html_theme = "sphinx_rtd_theme"
-html_static_path = []
+html_theme = "sphinx_book_theme"
+html_title = "SchNetPack"
+html_favicon = "_static/favicon.svg"
+html_static_path = ["_static"]
+# Red Hat fonts and the colours of the SchNetPack paper figure
+html_css_files = ["custom.css"]
 html_theme_options = {
-    "prev_next_buttons_location": "bottom",
-    # Toc options
-    "collapse_navigation": True,
-    "sticky_navigation": True,
-    "navigation_depth": 4,
-    "includehidden": True,
-    "titles_only": False,
+    "repository_url": "https://github.com/atomistic-machine-learning/schnetpack",
+    "path_to_docs": "docs",
+    "use_repository_button": True,
+    "show_navbar_depth": 1,
+    "show_toc_level": 2,
+    "logo": {
+        "image_light": "_static/logo-light.svg",
+        "image_dark": "_static/logo-dark.svg",
+        "text": "SchNetPack",
+    },
+    "announcement": (
+        "This site covers SchNetPack 3. "
+        "<a href='https://schnetpack.readthedocs.io/en/v2.3.x/'>"
+        "Documentation for SchNetPack 2.x</a>"
+    ),
 }

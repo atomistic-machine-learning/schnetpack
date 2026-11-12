@@ -22,3 +22,11 @@ repos:
         exclude: ^src/schnetpack/(configs|md/md_configs)/
       - id: check-added-large-files
       - id: check-merge-conflict
+
+  - repo: local
+    hooks:
+      - id: no-ipynb
+        name: no .ipynb files (notebooks are jupytext .py files, see docs/jupytext.toml)
+        language: fail
+        entry: commit the jupytext .py instead of the .ipynb
+        files: \.ipynb$

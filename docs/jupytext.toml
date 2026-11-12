@@ -1,0 +1,11 @@
+# The .py file is the version-controlled source for every notebook in the docs.
+# Opening one in Jupyter creates a paired .ipynb alongside it, which is gitignored
+# (and refused by a pre-commit hook), so you still get outputs and a normal
+# notebook UI while you work, but outputs never reach git.
+#
+# Remove metadata except cell tags (e.g. skip-execution, for a cell shown but not
+# run) and the mystnb key, whose `execution_mode` turns execution off for a
+# notebook (see docs/conf.py).
+formats = "ipynb,py:percent"
+notebook_metadata_filter = "mystnb,-all"
+cell_metadata_filter = "tags,-all"

@@ -1,0 +1,227 @@
+/* SchNetPack look: Red Hat fonts and the colours of the original SchNetPack
+   paper's figure, on top of sphinx_book_theme (pydata-sphinx-theme variables).
+
+   Palette (pastel fills; the darker shade is used for text in light mode)
+     orange  #FFB380  text #B7591A  primary: links, active entries, buttons
+     blue    #D7EEF4  text #2A7D92  secondary: hover, notes
+     yellow  #FFEEAA               fills only: banner, highlights, selection
+     green   #C6E9AF  text #3E8112  code cells, success
+*/
+
+:root {
+  --spk-orange: #ffb380;
+  --spk-orange-text: #b7591a;
+  --spk-blue: #d7eef4;
+  --spk-blue-text: #2a7d92;
+  --spk-yellow: #ffeeaa;
+  --spk-green: #c6e9af;
+  --spk-green-text: #3e8112;
+}
+
+/* -- Fonts (self-hosted, SIL Open Font License, see fonts/OFL.txt) -------- */
+
+/* Red Hat Display, italic, latin-ext */
+@font-face {
+  font-family: "Red Hat Display";
+  font-style: italic;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url("fonts/RedHatDisplay-italic-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* Red Hat Display, italic, latin */
+@font-face {
+  font-family: "Red Hat Display";
+  font-style: italic;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url("fonts/RedHatDisplay-italic-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* Red Hat Display, normal, latin-ext */
+@font-face {
+  font-family: "Red Hat Display";
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url("fonts/RedHatDisplay-normal-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* Red Hat Display, normal, latin */
+@font-face {
+  font-family: "Red Hat Display";
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url("fonts/RedHatDisplay-normal-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* Red Hat Mono, italic, latin-ext */
+@font-face {
+  font-family: "Red Hat Mono";
+  font-style: italic;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("fonts/RedHatMono-italic-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* Red Hat Mono, italic, latin */
+@font-face {
+  font-family: "Red Hat Mono";
+  font-style: italic;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("fonts/RedHatMono-italic-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* Red Hat Mono, normal, latin-ext */
+@font-face {
+  font-family: "Red Hat Mono";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("fonts/RedHatMono-normal-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* Red Hat Mono, normal, latin */
+@font-face {
+  font-family: "Red Hat Mono";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("fonts/RedHatMono-normal-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* Red Hat Text, italic, latin-ext */
+@font-face {
+  font-family: "Red Hat Text";
+  font-style: italic;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("fonts/RedHatText-italic-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* Red Hat Text, italic, latin */
+@font-face {
+  font-family: "Red Hat Text";
+  font-style: italic;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("fonts/RedHatText-italic-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* Red Hat Text, normal, latin-ext */
+@font-face {
+  font-family: "Red Hat Text";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("fonts/RedHatText-normal-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* Red Hat Text, normal, latin */
+@font-face {
+  font-family: "Red Hat Text";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("fonts/RedHatText-normal-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+html {
+  --pst-font-family-base: "Red Hat Text", var(--pst-font-family-base-system);
+  --pst-font-family-heading: "Red Hat Display", var(--pst-font-family-base-system);
+  --pst-font-family-monospace: "Red Hat Mono", var(--pst-font-family-monospace-system);
+}
+
+/* -- Colours -------------------------------------------------------------- */
+
+html[data-theme="light"] {
+  --pst-color-primary: var(--spk-orange-text);
+  --pst-color-primary-bg: color-mix(in srgb, var(--spk-orange) 35%, white);
+  --pst-color-secondary: var(--spk-blue-text);
+  --pst-color-secondary-bg: var(--spk-blue);
+  --pst-color-link: var(--spk-orange-text);
+  --pst-color-link-hover: var(--spk-blue-text);
+  --pst-color-info: var(--spk-blue-text);
+  --pst-color-info-bg: var(--spk-blue);
+  --pst-color-success: var(--spk-green-text);
+  --pst-color-success-bg: var(--spk-green);
+  --pst-color-target: var(--spk-yellow);
+  --mystnb-source-margin-color: var(--spk-green-text);
+}
+
+html[data-theme="dark"] {
+  --pst-color-primary: var(--spk-orange);
+  --pst-color-primary-bg: color-mix(in srgb, var(--spk-orange) 20%, transparent);
+  --pst-color-secondary: var(--spk-blue);
+  --pst-color-secondary-bg: color-mix(in srgb, var(--spk-blue) 18%, transparent);
+  --pst-color-link: var(--spk-orange);
+  --pst-color-link-hover: var(--spk-blue);
+  --pst-color-info: var(--spk-blue);
+  --pst-color-info-bg: color-mix(in srgb, var(--spk-blue) 15%, transparent);
+  --pst-color-success: var(--spk-green);
+  --pst-color-success-bg: color-mix(in srgb, var(--spk-green) 15%, transparent);
+  --pst-color-target: color-mix(in srgb, var(--spk-yellow) 30%, transparent);
+  --mystnb-source-margin-color: var(--spk-green);
+}
+
+::selection {
+  background: var(--spk-yellow);
+  color: #222832;
+}
+
+/* the banner that links the 2.x docs */
+.bd-header-announcement {
+  background-color: var(--spk-yellow);
+  color: #222832;
+}
+.bd-header-announcement a,
+.bd-header-announcement a:visited {
+  color: var(--spk-orange-text);
+}
+html[data-theme="dark"] .bd-header-announcement {
+  background-color: color-mix(in srgb, var(--spk-yellow) 22%, var(--pst-color-background));
+  color: var(--pst-color-text-base);
+}
+html[data-theme="dark"] .bd-header-announcement a,
+html[data-theme="dark"] .bd-header-announcement a:visited {
+  color: var(--spk-orange);
+}
+
+/* logo: a small mark with the project name beside it */
+.bd-sidebar-primary .navbar-brand {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.6rem;
+}
+.bd-sidebar-primary .navbar-brand img.logo__image {
+  height: 2.5rem;
+  width: auto;
+  max-width: none;
+}
+.navbar-brand .title {
+  font-family: var(--pst-font-family-heading);
+  font-weight: 600;
+  font-size: 1.5rem;
+}
+
+/* -- Landing page: feature cards filled with the palette ------------------- */
+
+/* the theme paints the card body itself, so the fill goes on both */
+.spk-fill-orange { --spk-fill: color-mix(in srgb, var(--spk-orange) 40%, transparent); }
+.spk-fill-blue { --spk-fill: color-mix(in srgb, var(--spk-blue) 75%, transparent); }
+.spk-fill-yellow { --spk-fill: color-mix(in srgb, var(--spk-yellow) 75%, transparent); }
+.spk-fill-green { --spk-fill: color-mix(in srgb, var(--spk-green) 60%, transparent); }
+
+html[data-theme="dark"] .spk-fill-orange { --spk-fill: color-mix(in srgb, var(--spk-orange) 16%, transparent); }
+html[data-theme="dark"] .spk-fill-blue { --spk-fill: color-mix(in srgb, var(--spk-blue) 12%, transparent); }
+html[data-theme="dark"] .spk-fill-yellow { --spk-fill: color-mix(in srgb, var(--spk-yellow) 12%, transparent); }
+html[data-theme="dark"] .spk-fill-green { --spk-fill: color-mix(in srgb, var(--spk-green) 14%, transparent); }
+
+.sd-card[class*="spk-fill-"],
+.sd-card[class*="spk-fill-"] .sd-card-body {
+  background-color: var(--spk-fill);
+}

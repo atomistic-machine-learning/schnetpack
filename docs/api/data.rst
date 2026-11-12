@@ -10,7 +10,7 @@ Datasets and loaders
 :class:`InMemoryDataset` holds the dataset in memory as flat arrays and returns
 whole batches (``dataset[ids]``); :class:`InMemoryLoader` chooses the structures of
 each batch. ``AtomsDataModule(in_memory=True)`` uses the second pair; for a training
-loop of your own see :doc:`/userguide/speed`.
+loop of your own see :doc:`/guides/training_speed`.
 
 .. autosummary::
     :toctree: generated
@@ -25,13 +25,6 @@ loop of your own see :doc:`/userguide/speed`.
     BudgetBatches
     OrderedBatches
     StratifiedSampler
-
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
-
-    prune_neighbors
-    split_transforms
 
 Storage
 -------
@@ -54,7 +47,6 @@ which is also where new structures are written, or flat arrays converted from it
     :nosignatures:
 
     open_storage
-    convert_to_arrays
 
 Statistics
 ----------
