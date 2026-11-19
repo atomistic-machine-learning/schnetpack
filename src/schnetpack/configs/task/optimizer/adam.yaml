@@ -3,3 +3,5 @@ optimizer_cls: torch.optim.AdamW
 optimizer_args:
   lr: ${globals.lr}
   weight_decay: 0.0
+  # null: torch picks (foreach on GPU); true: one fused kernel (CUDA)
+  fused: null

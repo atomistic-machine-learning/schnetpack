@@ -249,7 +249,7 @@ def test_spktrain_fine_tunes_and_stores_a_loadable_model(archive, tmp_path):
             f"run.path={runs}",
             "run.id=finetune",
             f"run.data_dir={tmp_path / 'data'}",
-            "+seed=0",
+            "seed=0",
             "print_config=False",
         ],
         cwd=tmp_path,

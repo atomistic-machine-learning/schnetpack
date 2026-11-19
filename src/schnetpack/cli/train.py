@@ -8,7 +8,7 @@ import socket
 
 import hydra
 import torch
-from omegaconf import DictConfig, OmegaConf, open_dict
+from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import (
     Callback,
     LightningDataModule,
@@ -62,6 +62,13 @@ def main(config: DictConfig):
         )
         return
 
+    # seed of torch, numpy and python's random; drawn before config.yaml is saved
+    if config.get("seed") is None:
+        config.seed = random.randint(0, 2**32 - 1)
+        log.info(f"Seed randomly with <{config.seed}>")
+    else:
+        log.info(f"Seed with <{config.seed}>")
+
     if os.path.exists("config.yaml"):
         log.info(
             f"Config already exists in given directory {os.path.abspath('.')}."
@@ -94,14 +101,6 @@ def main(config: DictConfig):
         log.info(f"Setting float32 matmul precision to <{config.matmul_precision}>")
         torch.set_float32_matmul_precision(config.matmul_precision)
 
-    # Set seed for random number generators in pytorch, numpy and python.random
-    if "seed" in config:
-        log.info(f"Seed with <{config.seed}>")
-    else:
-        # choose seed randomly
-        with open_dict(config):
-            config.seed = random.randint(0, 2**32 - 1)
-        log.info(f"Seed randomly with <{config.seed}>")
     seed_everything(seed=config.seed, workers=True)
 
     if config.get("print_config"):
