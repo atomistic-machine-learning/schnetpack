@@ -62,6 +62,11 @@ def absolute_split_sizes(dsize: int, split_sizes: list[int]) -> list[int]:
         remaining = dsize - psum
         split_sizes[none_idx] = int(remaining)
 
+    if psum > dsize:
+        raise ValueError(
+            f"Partition sizes {split_sizes} need {psum} structures, but the dataset "
+            f"holds {dsize}."
+        )
     return split_sizes
 
 

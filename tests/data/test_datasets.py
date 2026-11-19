@@ -7,6 +7,7 @@ from ase.db import connect
 from ase.units import GPa
 
 from schnetpack.data import GroupSplit
+from schnetpack.data.splitting import random_split
 from schnetpack.datasets import MD17, QM9, MPTraj, rMD17
 from schnetpack.datasets.mptraj import iter_json_object
 from schnetpack.datasets.qm7x import md5sum
@@ -209,3 +210,17 @@ def test_mptraj(mptrj_raw, tmp_path, monkeypatch):
     assert sorted(train + val + test) == list(range(len(dataset)))
     for a, b in [(train, val), (train, test), (val, test)]:
         assert not set(groups[a]) & set(groups[b])
+
+
+@pytest.mark.parametrize("sizes", [(50, 10, None), (15, 10, None), (0.8, 0.3, None)])
+def test_random_split_refuses_more_than_the_dataset(sizes):
+    """Sizes that need more structures than the dataset holds raise, instead of
+    cutting the later partitions short."""
+    with pytest.raises(ValueError, match="dataset holds 20"):
+        random_split(20, *sizes)
+
+
+def test_random_split_fills_the_rest():
+    """The undefined partition gets the rest, also when that is nothing."""
+    assert [len(p) for p in random_split(20, 15, 5, None)] == [15, 5, 0]
+    assert [len(p) for p in random_split(20, 0.5, 0.25, None)] == [10, 5, 5]
