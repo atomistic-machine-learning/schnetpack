@@ -349,6 +349,22 @@ def test_budget_batches_of_fewer_structures_than_a_batch():
         assert sorted(batch.tolist()) == [0, 1, 2, 3, 4]
 
 
+def test_budget_batches_drop_last():
+    """950 equal structures pack into 95 full batches of 10: drop_last drops the
+    last one, False keeps it and every structure comes once per pass."""
+    n_atoms, n_pairs = np.full(950, 9), np.full(950, 72)
+    for drop_last, n in ((True, 94), (False, 95)):
+        budget = BudgetBatches(
+            n_atoms, n_pairs, np.arange(950), 10, drop_last=drop_last
+        )
+        for _ in range(2):
+            batches = list(budget)
+            assert len(batches) == len(budget) == n
+            assert {len(b) for b in batches} == {10}
+            seen = np.concatenate(batches).tolist()
+            assert len(set(seen)) == len(seen) == 10 * n
+
+
 def test_ordered_batches(dataset, molecules_db):
     """Every structure once, in order, the last batch smaller; the ordered loader
     pads to its largest batch."""

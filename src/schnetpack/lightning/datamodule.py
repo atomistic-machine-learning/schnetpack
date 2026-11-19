@@ -89,6 +89,7 @@ class AtomsDataModule(pl.LightningDataModule):
         cache: bool = False,
         val_seed: int | None = 0,
         cache_dir: str | None = None,
+        drop_last: bool = True,
         **kwargs,
     ):
         """
@@ -130,6 +131,9 @@ class AtomsDataModule(pl.LightningDataModule):
                 and testing: the same draws every epoch. None: new draws
             cache_dir: with a cache, the folder it is kept in: loaded if it holds
                 one, else made and saved there. None: made in memory every run
+            drop_last: with a cache, training drops the last packed batch of each
+                pass (usually not full), also a full one. False keeps it: every
+                training structure once per pass
         """
         # Unknown kwargs other than the legacy arguments are tolerated
         # silently, because hydra data configs use top-level keys as
@@ -187,6 +191,7 @@ class AtomsDataModule(pl.LightningDataModule):
         self.cache = cache
         self.val_seed = val_seed
         self.cache_dir = cache_dir
+        self.drop_last = drop_last
         #: with cache=True: the cache, made or loaded in setup()
         self.atoms_cache: AtomsCache | None = None
 
@@ -289,8 +294,10 @@ class AtomsDataModule(pl.LightningDataModule):
             batch_transforms=self.batch_transforms,
             device=device,
         )
-        sampler = None
-        if not cached:  # workers read the structures
+        sampler, train_args = None, {}
+        if cached:
+            train_args = dict(drop_last=self.drop_last)
+        else:  # workers read the structures
             common.update(num_workers=self.num_workers, pin_memory=self._pin_memory)
             sampler = self._setup_sampler(
                 sampler_cls=self.train_sampler_cls,
@@ -306,6 +313,7 @@ class AtomsDataModule(pl.LightningDataModule):
                 shuffle=sampler is None,
                 batch_sampler=sampler,
                 seed=seed,
+                **train_args,
                 **common,
             ),
             "val": AtomsLoader(

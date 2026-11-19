@@ -286,6 +286,9 @@ class AtomsLoader(DataLoader):
             device: where the batches go and the batch transforms run. None: as
                 they come
             seed: with a cache and ``shuffle``, the seed of the orders
+            **kwargs: as for torch's ``DataLoader``. With a cache and ``shuffle``,
+                ``drop_last`` (default True) drops the last packed batch of each
+                pass, also a full one
             transform_seed: random batch transforms (noise) draw the same values in
                 every pass, from a random state of their own started from this
                 seed. None: from the device's default generator
@@ -328,8 +331,12 @@ class AtomsLoader(DataLoader):
         # their orders from a numpy generator)
         positions = cache.positions(dataset)
         atoms, pairs = cache.n_atoms.numpy(), cache.n_pairs.numpy()
+        # torch's drop_last, for the packed batches: dropped by default
+        drop_last = kwargs.pop("drop_last", True)
         if shuffle:
-            batches = BudgetBatches(atoms, pairs, positions, batch_size, seed)
+            batches = BudgetBatches(
+                atoms, pairs, positions, batch_size, seed, drop_last=drop_last
+            )
             # atoms (one padding atom at least) and pairs of every batch
             pad = (batches.atom_budget + 1, batches.pair_budget)
             slots = batches.max_structures

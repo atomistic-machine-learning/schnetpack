@@ -32,3 +32,5 @@ batch_transforms: null
 # no statistics (see the user guide, "Training faster")
 cache: false
 cache_dir: null
+# with a cache: drop the last training batch of each pass, also a full one
+drop_last: true

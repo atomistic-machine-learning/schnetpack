@@ -150,8 +150,8 @@ class BudgetBatches:
     ``max_structures``, 1.3 times ``batch_size``.
 
     Every pass yields the same number of batches, as a fixed epoch length needs: the
-    full batches of one packing. Structures left over wait for the next pass's
-    order; a pass that packs fewer batches is topped up from a second order.
+    batches of one packing, without its last one if ``drop_last``. A pass that packs
+    fewer batches is topped up from a second order.
     """
 
     def __init__(
@@ -162,6 +162,7 @@ class BudgetBatches:
         batch_size: int,
         seed: int = 0,
         grains=(32, 256),
+        drop_last: bool = True,
     ):
         """
         Args:
@@ -171,6 +172,8 @@ class BudgetBatches:
             batch_size: structures per batch on average
             seed: seed of the orders
             grains: the budgets are rounded up to these (atoms, pairs)
+            drop_last: drop the last batch of each packing (usually not full), also
+                when it is full. False keeps it: every structure once per pass
         """
         self.indices = np.asarray(indices)
         self.rng = np.random.default_rng(seed)
@@ -182,7 +185,8 @@ class BudgetBatches:
             budgets.append(int(-(-size // grain) * grain))
         self.atom_budget, self.pair_budget = budgets
         self.max_structures = int(np.ceil(1.3 * batch_size))
-        self.n_batches = max(len(self._pack(self.rng.permutation(self.indices))) - 1, 1)
+        self.drop_last = drop_last
+        self.n_batches = len(self._pack(self.rng.permutation(self.indices)))
 
     def _pack(self, order) -> list[list[int]]:
         batches, current, atoms, pairs = [], [], 0, 0
@@ -198,7 +202,8 @@ class BudgetBatches:
             current.append(s)
             atoms, pairs = atoms + a, pairs + p
         batches.append(current)  # the last one, usually not full
-        return batches
+        # fewer structures than one batch holds: that one batch
+        return batches[:-1] if self.drop_last and len(batches) > 1 else batches
 
     def __len__(self) -> int:
         return self.n_batches
@@ -206,10 +211,7 @@ class BudgetBatches:
     def __iter__(self):
         batches = []
         while len(batches) < self.n_batches:
-            packed = self._pack(self.rng.permutation(self.indices))
-            # without the last batch, which is not full; fewer structures than one
-            # batch holds: that one batch
-            batches += packed[:-1] or packed
+            batches += self._pack(self.rng.permutation(self.indices))
         for b in batches[: self.n_batches]:
             yield np.asarray(b, dtype=np.int64)
 
