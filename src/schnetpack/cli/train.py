@@ -1,6 +1,7 @@
 """spktrain: train a model from the Hydra configs (``configs/train.yaml``), then
 test its best checkpoint and store the best model."""
 
+import json
 import logging
 import os
 import random
@@ -109,16 +110,7 @@ def main(config: DictConfig):
     if not os.path.exists(config.run.data_dir):
         os.makedirs(config.run.data_dir)
 
-    # Init Lightning datamodule
-    log.info(f"Instantiating datamodule <{config.data._target_}>")
-    datamodule: LightningDataModule = hydra.utils.instantiate(
-        config.data,
-        train_sampler_cls=(
-            str2class(config.data.train_sampler_cls)
-            if config.data.train_sampler_cls
-            else None
-        ),
-    )
+    datamodule = _datamodule(config)
 
     # Init model
     log.info(f"Instantiating model <{config.model._target_}>")
@@ -203,11 +195,8 @@ def main(config: DictConfig):
     # ckpt_path="best", whose weights_only handling is version-dependent.
     best_path = trainer.checkpoint_callback.best_model_path
     log.info(f"Best checkpoint path:\n{best_path}")
-    best_task = load_task_from_checkpoint(type(task), best_path)
-
-    # Evaluate best model on test set after training
     log.info("Starting testing.")
-    trainer.test(model=best_task, datamodule=datamodule)
+    best_task = test_checkpoint(trainer, datamodule, type(task), best_path)
 
     # Store best model
     log.info("Store best model")
@@ -215,3 +204,45 @@ def main(config: DictConfig):
 
     best_task.save_model(config.globals.model_path, do_postprocessing=True)
     log.info(f"Best model stored at {os.path.abspath(config.globals.model_path)}")
+
+
+def _datamodule(config: DictConfig) -> LightningDataModule:
+    log.info(f"Instantiating datamodule <{config.data._target_}>")
+    return hydra.utils.instantiate(
+        config.data,
+        train_sampler_cls=(
+            str2class(config.data.train_sampler_cls)
+            if config.data.train_sampler_cls
+            else None
+        ),
+    )
+
+
+def test_checkpoint(
+    trainer: Trainer,
+    datamodule: LightningDataModule,
+    task_cls: type,
+    ckpt_path: str,
+    path: str = "test_metrics.json",
+) -> AtomisticTask:
+    """Test the task of a checkpoint on the test split and write the metrics, each
+    with the unit of its target property (none for the loss), to ``path``."""
+    task = load_task_from_checkpoint(task_cls, ckpt_path)
+    (metrics,) = trainer.test(model=task, datamodule=datamodule)
+    units = {
+        f"test_{output.target_property}_{name}": datamodule.dataset.units.get(
+            output.target_property
+        )
+        for output in task.outputs
+        for name in output.metrics["test"]
+    }
+    result = {
+        "checkpoint": os.path.relpath(ckpt_path),
+        "epoch": torch.load(ckpt_path, map_location="cpu", weights_only=False)["epoch"],
+        "n_test": len(datamodule.test_idx),
+        "metrics": {k: {"value": v, "unit": units.get(k)} for k, v in metrics.items()},
+    }
+    with open(path, "w") as f:
+        json.dump(result, f, indent=2)
+    log.info(f"Test metrics stored at {os.path.abspath(path)}")
+    return task

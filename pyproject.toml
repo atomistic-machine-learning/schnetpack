@@ -72,6 +72,7 @@ Documentation = "https://schnetpack.readthedocs.io"
 [project.scripts]
 spktrain = "schnetpack.cli.train:main"
 spkpredict = "schnetpack.cli.predict:main"
+spktest = "schnetpack.cli.test:main"
 spkmd = "schnetpack.md.cli:simulate"
 spkconvert = "schnetpack.cli.convert:main"
 spkdeploy = "schnetpack.cli.deploy:main"
