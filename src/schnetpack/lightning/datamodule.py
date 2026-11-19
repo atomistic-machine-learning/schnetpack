@@ -3,15 +3,18 @@ import os
 from contextlib import nullcontext
 from typing import Any
 
+import fasteners
 import numpy as np
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import BatchSampler
 
 from schnetpack.data.atoms import ASEAtomsData
+from schnetpack.data.cache import ArrayStats, AtomsCache
 from schnetpack.data.loader import AtomsLoader
 from schnetpack.data.provider import StatsAtomrefProvider, train_partition_fingerprint
 from schnetpack.data.splitting import RandomSplit, SplittingStrategy, splitting_lock
+from schnetpack.transform.base import Transform
 
 __all__ = ["AtomsDataModule"]
 
@@ -29,7 +32,20 @@ class AtomsDataModule(pl.LightningDataModule):
       - accepts a prebuilt :class:`ASEAtomsData` instance,
       - handles train/val/test splitting,
       - builds a stats provider from the train split,
-      - initializes the dataset transforms with it.
+      - initializes the dataset transforms and the batch transforms with it,
+      - builds an :class:`~schnetpack.data.AtomsLoader` for each split, which moves
+        the batches to the trainer's device and applies the batch transforms.
+
+    By default, DataLoader workers read the structures with the dataset's transforms
+    on every read. With ``cache=True`` they are read once instead
+    (:class:`~schnetpack.data.AtomsCache`, kept in ``cache_dir``) and the loaders
+    slice whole padded batches from the cache: no workers and no reads per
+    structure, so small models are not left waiting for data. The dataset's
+    transforms must then act on one structure and be deterministic (centering, a
+    neighbor list); offsets, casts and noise go into ``batch_transforms``, which
+    serve both routes. Padded batches mark their padding rows by
+    ``properties.atom_mask`` and ``properties.structure_mask``, which
+    :class:`~schnetpack.lightning.AtomisticTask` leaves out of losses and metrics.
     """
 
     # Arguments of the removed legacy AtomsDataModule that are now configured
@@ -69,6 +85,11 @@ class AtomsDataModule(pl.LightningDataModule):
         train_sampler_args: dict[str, Any] | None = None,
         pin_memory: bool = False,
         provider: type | None = None,
+        batch_transforms: list[Transform] | None = None,
+        cache: bool = False,
+        val_seed: int | None = 0,
+        cache_dir: str | None = None,
+        drop_last: bool = True,
         **kwargs,
     ):
         """
@@ -98,7 +119,21 @@ class AtomsDataModule(pl.LightningDataModule):
                     set to true, when GPUs are used.
             provider: stats provider class, constructed during setup() from
                 the base dataset and the train index list. If None, use
-                StatsAtomrefProvider.
+                StatsAtomrefProvider. With a cache: ArrayStats on the cache.
+            batch_transforms: transforms of every collated batch (offsets, casts,
+                noise), on the trainer's device
+            cache: read every structure once into an
+                :class:`~schnetpack.data.AtomsCache` and slice padded batches from
+                it (training packs them to atom and pair budgets). Takes no train
+                sampler, and the dataset's transforms must not move atoms or need
+                statistics
+            val_seed: the seed of random batch transforms (noise) in validation
+                and testing: the same draws every epoch. None: new draws
+            cache_dir: with a cache, the folder it is kept in: loaded if it holds
+                one, else made and saved there. None: made in memory every run
+            drop_last: with a cache, training drops the last packed batch of each
+                pass (usually not full), also a full one. False keeps it: every
+                training structure once per pass
         """
         # Unknown kwargs other than the legacy arguments are tolerated
         # silently, because hydra data configs use top-level keys as
@@ -141,16 +176,24 @@ class AtomsDataModule(pl.LightningDataModule):
         self._train_dataset = None
         self._val_dataset = None
         self._test_dataset = None
-
-        self._train_dataloader = None
-        self._val_dataloader = None
-        self._test_dataloader = None
+        #: the loader of each split ("train", "val", "test"), built in setup()
+        self.loaders: dict[str, AtomsLoader] = {}
 
         self._provider_cls = provider or StatsAtomrefProvider
         self.provider: StatsAtomrefProvider | None = None
 
         self.train_sampler_cls = train_sampler_cls
         self.train_sampler_args = train_sampler_args or {}
+
+        if cache and train_sampler_cls is not None:
+            raise ValueError("cache=True does not take a train sampler")
+        self.batch_transforms = list(batch_transforms or [])
+        self.cache = cache
+        self.val_seed = val_seed
+        self.cache_dir = cache_dir
+        self.drop_last = drop_last
+        #: with cache=True: the cache, made or loaded in setup()
+        self.atoms_cache: AtomsCache | None = None
 
     @property
     def train_dataset(self) -> ASEAtomsData:
@@ -191,16 +234,101 @@ class AtomsDataModule(pl.LightningDataModule):
         self._val_dataset = self.dataset.subset(self.val_idx, split="val")
         self._test_dataset = self.dataset.subset(self.test_idx, split="test")
 
-        self.provider = self._provider_cls(
-            self.dataset,
-            self.train_idx,
-            stats_file=self.stats_file,
-            fingerprint=self.train_fingerprint,
-        )
+        if self.cache:
+            self.atoms_cache = self._make_cache()
+            positions = self.atoms_cache.positions(self._train_dataset)
+            self.provider = ArrayStats(
+                self.atoms_cache, positions, self.dataset.atomrefs
+            )
+        else:
+            self.provider = self._provider_cls(
+                self.dataset,
+                self.train_idx,
+                stats_file=self.stats_file,
+                fingerprint=self.train_fingerprint,
+            )
 
         self._train_dataset.initialize_transforms(self.provider)
         self._val_dataset.initialize_transforms(self.provider)
         self._test_dataset.initialize_transforms(self.provider)
+        for t in self.batch_transforms:
+            t.initialize(self.provider)
+        self._setup_loaders()
+
+    def _make_cache(self) -> AtomsCache:
+        """The dataset's structures, read once: loaded from cache_dir if it holds
+        them, else made (and saved there)."""
+        ds = self.dataset
+        if any(
+            getattr(ds, f"{split}_transforms", None) is not None
+            for split in ("train", "val", "test")
+        ):
+            raise ValueError(
+                "cache=True applies the dataset's transforms to all splits: "
+                "per-split transform lists are not supported"
+            )
+        if self.cache_dir is None:
+            return AtomsCache.from_dataset(ds, self.num_workers)
+        # under a file lock: of several processes (DDP) one makes the cache
+        cache_dir = os.fspath(self.cache_dir).rstrip("/")
+        with fasteners.InterProcessLock(cache_dir + ".lock"):
+            if os.path.exists(os.path.join(cache_dir, "meta.json")):
+                cache = AtomsCache.load(cache_dir)
+                if len(cache) != len(ds):
+                    raise ValueError(
+                        f"the cache in {cache_dir} holds {len(cache)} structures, "
+                        f"the dataset {len(ds)}: delete the folder to make it again"
+                    )
+                return cache
+            cache = AtomsCache.from_dataset(ds, self.num_workers)
+            cache.save(cache_dir)
+            return cache
+
+    def _setup_loaders(self) -> None:
+        """The loader of each split, after the transforms are initialized; the
+        loaders move the batches to the trainer's device."""
+        device = None if self.trainer is None else self.trainer.strategy.root_device
+        cached = self.atoms_cache is not None
+        common = dict(
+            cache=self.atoms_cache,
+            batch_transforms=self.batch_transforms,
+            device=device,
+        )
+        sampler, train_args = None, {}
+        if cached:
+            train_args = dict(drop_last=self.drop_last)
+        else:  # workers read the structures
+            common.update(num_workers=self.num_workers, pin_memory=self._pin_memory)
+            sampler = self._setup_sampler(
+                sampler_cls=self.train_sampler_cls,
+                sampler_args=self.train_sampler_args,
+                dataset=self._train_dataset,
+            )
+        # the seed of the cached route's training order follows seed_everything
+        seed = int(torch.randint(2**31, ())) if cached else 0
+        self.loaders = {
+            "train": AtomsLoader(
+                self._train_dataset,
+                batch_size=self.batch_size if sampler is None else 1,
+                shuffle=sampler is None,
+                batch_sampler=sampler,
+                seed=seed,
+                **train_args,
+                **common,
+            ),
+            "val": AtomsLoader(
+                self._val_dataset,
+                batch_size=self.val_batch_size,
+                transform_seed=self.val_seed,
+                **common,
+            ),
+            "test": AtomsLoader(
+                self._test_dataset,
+                batch_size=self.test_batch_size,
+                transform_seed=self.val_seed,
+                **common,
+            ),
+        }
 
     def teardown(self, stage: str | None = None) -> None:
         # Transforms with external resources (e.g. cached neighbor lists)
@@ -318,43 +446,16 @@ class AtomsDataModule(pl.LightningDataModule):
             drop_last=False,
         )
 
-    def train_dataloader(self):
-        if self._train_dataloader is None:
-            train_batch_sampler = self._setup_sampler(
-                sampler_cls=self.train_sampler_cls,
-                sampler_args=self.train_sampler_args,
-                dataset=self.train_dataset,
-            )
+    def train_dataloader(self) -> AtomsLoader:
+        return self._loader("train")
 
-            self._train_dataloader = AtomsLoader(
-                self.train_dataset,
-                batch_size=self.batch_size if train_batch_sampler is None else 1,
-                shuffle=True if train_batch_sampler is None else False,
-                batch_sampler=train_batch_sampler,
-                num_workers=self.num_workers,
-                pin_memory=self._pin_memory,
-            )
+    def val_dataloader(self) -> AtomsLoader:
+        return self._loader("val")
 
-        return self._train_dataloader
+    def test_dataloader(self) -> AtomsLoader:
+        return self._loader("test")
 
-    def val_dataloader(self):
-        if self._val_dataloader is None:
-            self._val_dataloader = AtomsLoader(
-                self.val_dataset,
-                batch_size=self.val_batch_size,
-                num_workers=self.num_workers,
-                pin_memory=self._pin_memory,
-            )
-
-        return self._val_dataloader
-
-    def test_dataloader(self):
-        if self._test_dataloader is None:
-            self._test_dataloader = AtomsLoader(
-                self.test_dataset,
-                batch_size=self.test_batch_size,
-                num_workers=self.num_workers,
-                pin_memory=self._pin_memory,
-            )
-
-        return self._test_dataloader
+    def _loader(self, split: str) -> AtomsLoader:
+        if split not in self.loaders:
+            raise RuntimeError(f"Call setup() before accessing the {split} loader.")
+        return self.loaders[split]

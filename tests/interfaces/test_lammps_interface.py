@@ -19,7 +19,7 @@ import torch
 
 import schnetpack as spk
 from schnetpack import properties
-from schnetpack.cli import deploy
+from schnetpack.cli.deploy import main as deploy
 from schnetpack.interfaces.lammps_interface import (
     LAMMPS_INPUTS,
     LAMMPS_OUTPUTS,

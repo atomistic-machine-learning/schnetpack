@@ -8,6 +8,7 @@ without one the structures are run as given, e.g. to relax stored geometries.
 """
 
 import abc
+from collections.abc import Callable, Sequence
 
 import torch
 from torch.utils.data import Dataset
@@ -39,21 +40,30 @@ class DatasetStructures(StructureProvider):
 
     Successive calls walk through the dataset without repeating a structure
     until all were drawn, then start the next pass. Note that ``dataset[i]``
-    applies the dataset's transforms.
+    applies the dataset's transforms; ``transforms`` run on the collated
+    batch, e.g. :class:`~schnetpack.transform.AllToAllNeighborList` for all
+    structures at once instead of one at a time.
     """
 
-    def __init__(self, dataset: Dataset, shuffle: bool = True):
+    def __init__(
+        self,
+        dataset: Dataset,
+        shuffle: bool = True,
+        transforms: Sequence[Callable[[dict], dict]] = (),
+    ):
         """
         Args:
             dataset: dataset of structures, e.g. an
                 :class:`~schnetpack.data.ASEAtomsData` or a subset of it
             shuffle: walk the dataset in a random order, reshuffled every
                 pass; False walks it in order
+            transforms: batch -> batch, run in order on every collated batch
         """
         if len(dataset) == 0:
             raise ValueError("DatasetStructures needs a non-empty dataset.")
         self.dataset = dataset
         self.shuffle = shuffle
+        self.transforms = list(transforms)
         self._pending: list[int] = []
 
     def _next_indices(self, n_samples: int) -> list[int]:
@@ -70,9 +80,12 @@ class DatasetStructures(StructureProvider):
 
     def __call__(self, n_samples):
         """Collate the next ``n_samples`` structures of the dataset."""
-        return _atoms_collate_fn(
+        batch = _atoms_collate_fn(
             [self.dataset[i] for i in self._next_indices(n_samples)]
         )
+        for transform in self.transforms:
+            batch = transform(batch)
+        return batch
 
 
 class StatisticsStructures(StructureProvider):

@@ -7,7 +7,13 @@ import schnetpack.nn as snn
 from schnetpack.utils import as_dtype
 
 from .ops.math import binom
-from .ops.so3 import generate_clebsch_gordan_rsh, sh_indices, sparsify_clebsch_gordon
+from .ops.so3 import (
+    clebsch_gordan_by_l,
+    generate_clebsch_gordan_rsh,
+    sh_indices,
+    sparsify_clebsch_gordon,
+)
+from .ops.so3_message import so3_message, so3_message_pairs, so3_message_supported
 
 __all__ = [
     "RealSphericalHarmonics",
@@ -62,8 +68,12 @@ class RealSphericalHarmonics(nn.Module):
 
         ls = torch.arange(0, lmax + 1)
         nls = 2 * ls + 1
-        self.lidx = torch.repeat_interleave(ls, nls)
-        self.midx = torch.cat([torch.arange(-l, l + 1) for l in ls])
+        # buffers, so that .to() moves them with the model: on the CPU, compiled
+        # graphs would hold CPU ops and eager calls copy them to the GPU every time
+        self.register_buffer("lidx", torch.repeat_interleave(ls, nls), False)
+        self.register_buffer(
+            "midx", torch.cat([torch.arange(-l, l + 1) for l in ls]), False
+        )
 
         self.register_buffer("flidx", self.lidx.to(dtype=dtype), False)
 
@@ -236,11 +246,32 @@ class SO3Convolution(nn.Module):
 
     """
 
-    def __init__(self, lmax: int, n_atom_basis: int, n_radial: int):
+    # a class default, so that models pickled before the option load
+    fused_kernel: bool = False
+
+    def __init__(
+        self,
+        lmax: int,
+        n_atom_basis: int,
+        n_radial: int,
+        fused_kernel: bool = False,
+    ):
+        """
+        Args:
+            lmax: maximum angular momentum
+            n_atom_basis: number of features per atom and angular momentum
+            n_radial: number of radial basis functions
+            fused_kernel: on CUDA with Triton, sum the messages in one kernel
+                (:func:`schnetpack.nn.ops.so3_message.so3_message`): the same result,
+                2-4x faster to train energies from lmax 2 and forces from lmax 3, about
+                even for forces at lmax 2, no gain at lmax 1. Pairs must be sorted by
+                center. The sparse sum runs on CPU and under TorchScript.
+        """
         super().__init__()
         self.lmax = lmax
         self.n_atom_basis = n_atom_basis
         self.n_radial = n_radial
+        self.fused_kernel = fused_kernel
 
         cg = generate_clebsch_gordan_rsh(lmax).to(torch.float32)
         cg, idx_in_1, idx_in_2, idx_out = sparsify_clebsch_gordon(cg)
@@ -255,6 +286,31 @@ class SO3Convolution(nn.Module):
 
         lidx, _ = sh_indices(lmax)
         self.register_buffer("Widx", lidx[self.idx_in_1])
+        if fused_kernel:
+            self.register_buffer("cg_by_l", clebsch_gordan_by_l(lmax), persistent=False)
+
+    @torch.jit.unused
+    def _use_kernel(self, x: torch.Tensor) -> bool:
+        return self.fused_kernel and so3_message_supported(x)
+
+    @torch.jit.unused
+    def _fused_message(
+        self,
+        x: torch.Tensor,
+        radial_ij: torch.Tensor,
+        dir_ij: torch.Tensor,
+        cutoff_ij: torch.Tensor,
+        idx_i: torch.Tensor,
+        idx_j: torch.Tensor,
+        pairs: list[torch.Tensor] | None,
+    ) -> torch.Tensor:
+        n_l = self.lmax + 1
+        Wij = self.filternet(radial_ij) * cutoff_ij
+        Wij = torch.reshape(Wij, (-1, n_l, self.n_atom_basis))
+        G = torch.reshape(dir_ij @ self.cg_by_l, (-1, n_l, n_l**2, n_l**2))
+        if pairs is None:
+            pairs = so3_message_pairs(idx_i, idx_j, cutoff_ij, x.shape[0])
+        return so3_message(x, Wij, G, pairs)
 
     def _compute_radial_filter(
         self, radial_ij: torch.Tensor, cutoff_ij: torch.Tensor
@@ -282,6 +338,7 @@ class SO3Convolution(nn.Module):
         cutoff_ij: torch.Tensor,
         idx_i: torch.Tensor,
         idx_j: torch.Tensor,
+        pairs: list[torch.Tensor] | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -292,11 +349,19 @@ class SO3Convolution(nn.Module):
             cutoff_ij: cutoff function with shape [n_neighbors, 1]
             idx_i: indices for atom i
             idx_j: indices for atom j
+            pairs: for ``fused_kernel``,
+                :func:`~schnetpack.nn.ops.so3_message.so3_message_pairs`, to share one
+                sort between convolutions; computed here if None
 
         Returns:
             y: convolved SO3 features
 
         """
+        if not torch.jit.is_scripting() and self._use_kernel(x):
+            return self._fused_message(
+                x, radial_ij, dir_ij, cutoff_ij, idx_i, idx_j, pairs
+            )
+
         xj = x[idx_j[:, None], self.idx_in_2[None, :], :]
         Wij = self._compute_radial_filter(radial_ij, cutoff_ij)
 
@@ -329,7 +394,7 @@ class SO3ParametricGatedNonlinearity(nn.Module):
         super().__init__()
         self.lmax = lmax
         self.n_in = n_in
-        self.lidx, _ = sh_indices(lmax)
+        self.register_buffer("lidx", sh_indices(lmax)[0], False)
         self.scaling = nn.Linear(n_in, n_in * (lmax + 1))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -355,7 +420,7 @@ class SO3GatedNonlinearity(nn.Module):
     def __init__(self, lmax: int):
         super().__init__()
         self.lmax = lmax
-        self.lidx, _ = sh_indices(lmax)
+        self.register_buffer("lidx", sh_indices(lmax)[0], False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         s0 = x[:, 0, :]

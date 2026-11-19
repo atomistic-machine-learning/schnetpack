@@ -6,14 +6,14 @@ ci:
 
 repos:
   # The tutorials and how-tos are tracked as jupytext .py files; the paired .ipynb is
-  # gitignored (see examples/jupytext.toml). This hook makes sure that jupytext .py files
+  # gitignored (see docs/jupytext.toml). This hook makes sure that jupytext .py files
   # are synced with locally modified notebooks.
   - repo: local
     hooks:
       - id: jupytext-sync
         name: jupytext sync
         entry: >-
-          bash -c 'find examples/howtos examples/tutorials_deprecated -name "*.ipynb"
+          bash -c 'find docs/tutorials docs/guides -name "*.ipynb"
           -not -path "*/.ipynb_checkpoints/*" -print0 | xargs -0 -r -n1 jupytext --sync'
         language: python
         additional_dependencies: ["jupytext==1.19.5"]
@@ -39,3 +39,11 @@ repos:
         exclude: ^src/schnetpack/(configs|md/md_configs)/
       - id: check-added-large-files
       - id: check-merge-conflict
+
+  - repo: local
+    hooks:
+      - id: no-ipynb
+        name: no .ipynb files (notebooks are jupytext .py files, see docs/jupytext.toml)
+        language: fail
+        entry: commit the jupytext .py instead of the .ipynb
+        files: \.ipynb$

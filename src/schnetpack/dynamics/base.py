@@ -10,7 +10,7 @@ a copy, so derived keys never land in the driver's batch. Details:
 """
 
 import abc
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
 from schnetpack import properties
@@ -106,16 +106,53 @@ class Dynamics(abc.ABC):
         Returns:
             The final batch.
         """
+        self._check_structures()
+        return self.run(self._start_from(self.structures(n_samples)), n_steps)
+
+    def sample_batches(
+        self, n_samples: int, n_steps: int, batch_size: int
+    ) -> Iterator[dict[str, Any]]:
+        """
+        Draw ``n_samples`` structures in batches and run on each, as successive
+        :meth:`sample` calls of at most ``batch_size`` structures would.
+
+        The structures of the next batch are drawn while the device still runs
+        the current one: a run only queues its steps, and the caller waits for
+        them when it reads the batch. Drawing on the cpu, e.g. reading a
+        dataset, then costs no time on a GPU.
+
+        Args:
+            n_samples: number of structures in all
+            n_steps: number of steps of every run
+            batch_size: structures per run; the last run takes the rest
+
+        Yields:
+            The final batch of each run.
+        """
+        self._check_structures()
+        sizes = [batch_size] * (n_samples // batch_size)
+        if n_samples % batch_size:
+            sizes.append(n_samples % batch_size)
+        if not sizes:
+            return
+        structures = self.structures(sizes[0])
+        for next_size in [*sizes[1:], None]:
+            batch = self.run(self._start_from(structures), n_steps)
+            if next_size is not None:
+                structures = self.structures(next_size)
+            yield batch
+
+    def _check_structures(self) -> None:
         if self.structures is None:
             raise ValueError(
                 f"{type(self).__name__} has no structures to sample from; pass "
                 "structures=DatasetStructures(...) or StatisticsStructures(...) "
                 "at construction, or call run on given structures"
             )
-        batch = self.structures(n_samples)
-        if self.prior is not None:
-            batch = self.prior(batch)
-        return self.run(batch, n_steps)
+
+    def _start_from(self, batch: dict[str, Any]) -> dict[str, Any]:
+        """Where a run on drawn structures starts: the prior's draw, if any."""
+        return batch if self.prior is None else self.prior(batch)
 
     @abc.abstractmethod
     def run(self, batch: Mapping[str, Any], n_steps: int) -> dict[str, Any]:

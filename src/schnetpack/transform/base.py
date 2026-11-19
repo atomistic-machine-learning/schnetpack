@@ -31,6 +31,12 @@ class Transform(nn.Module):
     the stats source, as this does not work with torchscript conversion!
     """
 
+    #: Whether the transform changes positions or cells (noise, augmentation). A
+    #: neighbor list is only valid when it is built after every such transform, and
+    #: an :class:`~schnetpack.data.AtomsCache` refuses one among a dataset's
+    #: transforms: it goes into the loader's ``batch_transforms``.
+    moves_atoms: bool = False
+
     def forward(
         self,
         inputs: dict[str, torch.Tensor],

@@ -133,6 +133,28 @@ def sparsify_clebsch_gordon(
     return cg_sparse, idx_in_1, idx_in_2, idx_out
 
 
+def clebsch_gordan_by_l(lmax: int) -> torch.Tensor:
+    """
+    Clebsch-Gordan coefficients to contract with spherical harmonics, per l.
+
+    The first irrep ``s1`` fixes l, so ``Y @ C`` for spherical harmonics ``Y`` of shape
+    ``[..., n_s]``, reshaped to ``[..., lmax + 1, n_s, n_s]``, holds the sum over the
+    ``s1`` of l of ``Y[s1] cg[s1, s2, s]`` at ``[l, s, s2]``.
+
+    Args:
+        lmax: maximum angular momentum
+
+    Returns:
+        the coefficients, shape ``[n_s, (lmax + 1) n_s^2]`` with ``n_s = (lmax + 1)^2``
+    """
+    cg = generate_clebsch_gordan_rsh(lmax).to(torch.float32)  # [s1, s2, s]
+    lidx, _ = sh_indices(lmax)
+    n_s = lidx.shape[0]
+    by_l = torch.zeros(n_s, lmax + 1, n_s, n_s)
+    by_l[torch.arange(n_s), lidx] = cg.transpose(1, 2)
+    return by_l.reshape(n_s, -1)
+
+
 def round_cmp(x: torch.Tensor, decimals: int = 1):
     return torch.round(x.real, decimals=decimals) + 1j * torch.round(
         x.imag, decimals=decimals

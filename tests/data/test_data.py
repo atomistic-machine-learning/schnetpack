@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
@@ -83,6 +84,67 @@ def test_asedb(asedb, example_data):
 
     asedb.update_metadata(test=1)
     assert asedb.metadata["test"] == 1
+
+
+def test_asedb_reads_from_threads(asedb):
+    """Each thread reads through its own held connection."""
+    expected = [asedb[i][structure.R] for i in range(len(asedb))]
+    with ThreadPoolExecutor(2) as pool:
+        got = list(pool.map(lambda i: asedb[i][structure.R], range(len(asedb))))
+    assert all(torch.equal(a, b) for a, b in zip(expected, got))
+
+
+@pytest.mark.parametrize("context", ["fork", "spawn"])
+def test_asedb_reads_in_dataloader_workers(asedb, context):
+    """A forked worker opens its own connection; a spawned one gets none pickled."""
+    expected = [asedb[i][structure.R] for i in range(len(asedb))]
+    loader = torch.utils.data.DataLoader(
+        asedb, batch_size=None, num_workers=2, multiprocessing_context=context
+    )
+    got = [item[structure.R] for item in loader]
+    assert all(torch.equal(a, b) for a, b in zip(expected, got))
+
+
+@pytest.mark.parametrize("context", ["fork", "spawn"])
+def test_atoms_loader_batches_from_workers_equal_the_main_process(asedb, context):
+    """Batches from workers (sent as numpy arrays) are the same tensors, with the
+    same dtypes, as batches collated in the main process."""
+    from schnetpack.data import AtomsLoader
+
+    expected = list(AtomsLoader(asedb, batch_size=2))
+    got = list(
+        AtomsLoader(asedb, batch_size=2, num_workers=2, multiprocessing_context=context)
+    )
+    assert len(got) == len(expected)
+    for a, b in zip(expected, got):
+        assert a.keys() == b.keys()
+        for key in a:
+            assert isinstance(b[key], torch.Tensor)
+            assert b[key].dtype == a[key].dtype
+            assert torch.equal(a[key], b[key])
+
+
+def test_asedb_reads_rows_added_after_a_read(asedb, example_data):
+    n = len(asedb)
+    asedb[0]  # opens the held connection
+    atoms, props = example_data[0]
+    asedb.add_system(atoms=atoms, **props)
+    assert torch.equal(asedb[n][structure.Z], torch.tensor(atoms.numbers))
+
+
+def test_asedb_reads_scalar_properties(asedbpath, example_data):
+    """A db written with ase.db directly may store a property as a plain number."""
+    atoms, _ = example_data[0]
+    with connect(asedbpath, use_lock_file=False) as conn:
+        conn.metadata = {
+            "_property_unit_dict": {"energy_per_atom": "eV"},
+            "_distance_unit": "Ang",
+            "atomrefs": {},
+        }
+        conn.write(atoms, data={"energy_per_atom": -1.5})
+    props = ASEAtomsData(datapath=asedbpath)[0]
+    assert props["energy_per_atom"].shape == (1,)
+    assert float(props["energy_per_atom"]) == -1.5
 
 
 def test_asedb_getprops(asedb):

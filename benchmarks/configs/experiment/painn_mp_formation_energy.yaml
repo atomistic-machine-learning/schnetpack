@@ -1,0 +1,88 @@
+# @package _global_
+#
+# Formation energy per atom on the Materials Project with PaiNN. The spk2 paper
+# trained no Materials Project model; this is its QM9 recipe on MP:
+#
+# - data: materials_project.db (154,826 crystals, eV), the library's split of
+#   60,000 / 2,000 (the rest is the test set), batch 32; periodic neighbor list
+#   within 5 A;
+# - model: PaiNN 3 x 128, 20 Bessel functions on a 5 A cosine cutoff, an atomwise
+#   head averaged over the atoms; the mean formation energy per atom removed in
+#   training and added back in the model's output;
+# - training: AdamW 5e-4 with weight decay 0.01, MSE loss, lr halved after 25
+#   epochs without improvement, at most 5000 epochs, early stopping after 200.
+#
+# Our choices: the recipe above, seed 999, and the fast route (data.cache, a
+# compiled model run as one CUDA graph, fused AdamW).
+#
+#   spktrain --config-dir=benchmarks/configs experiment=painn_mp_formation_energy
+#       run.data_dir=<folder with materials_project.db>
+
+defaults:
+  - override /model: nnp
+  - override /model/representation: painn
+  - override /model/representation/radial_basis: bessel
+  - override /data: materials_project
+
+run:
+  experiment: mp_${globals.property}
+
+seed: 999
+
+globals:
+  cutoff: 5.
+  lr: 5e-4
+  property: formation_energy_per_atom
+
+data:
+  dataset:
+    apikey: null  # the db exists: nothing to download
+    load_properties:
+      - ${globals.property}
+    transforms:
+      - _target_: schnetpack.transform.MatScipyNeighborList
+        cutoff: ${globals.cutoff}
+  batch_transforms:
+    - _target_: schnetpack.transform.RemoveOffsets
+      property: ${globals.property}
+      remove_mean: True
+      is_extensive: False
+    - _target_: schnetpack.transform.CastTo32
+  cache: true
+
+model:
+  output_modules:
+    - _target_: schnetpack.model.Atomwise
+      output_key: ${globals.property}
+      n_in: ${model.representation.n_atom_basis}
+      aggregation_mode: avg
+  postprocessors:
+    - _target_: schnetpack.transform.CastTo64
+    - _target_: schnetpack.transform.AddOffsets
+      property: ${globals.property}
+      add_mean: True
+      is_extensive: False
+
+task:
+  compile: true
+  cuda_graph: true
+  optimizer_args:
+    weight_decay: 0.01
+    fused: true
+  scheduler_args:
+    patience: 25
+  outputs:
+    - _target_: schnetpack.ModelOutput
+      name: ${globals.property}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mae:
+          _target_: torchmetrics.regression.MeanAbsoluteError
+        rmse:
+          _target_: torchmetrics.regression.MeanSquaredError
+          squared: False
+      loss_weight: 1.
+
+trainer:
+  max_epochs: 5000

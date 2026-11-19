@@ -9,6 +9,7 @@ from schnetpack.nn.blocks import *
 from schnetpack.nn.cutoff import *
 from schnetpack.nn.embedding import *
 from schnetpack.nn.equivariant import *
+from schnetpack.nn.ops.message import message_sum, pair_product
 from schnetpack.nn.radial import *
 from schnetpack.nn.scatter import *
 from schnetpack.nn.so3 import *

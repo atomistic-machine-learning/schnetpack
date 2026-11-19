@@ -18,6 +18,7 @@ data:
       - _target_: schnetpack.transform.SubtractCenterOfMass
       - _target_: schnetpack.transform.MatScipyNeighborList
         cutoff: ${globals.cutoff}
+  batch_transforms:
       - _target_: schnetpack.transform.CastTo32
 
 model:

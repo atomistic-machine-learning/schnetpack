@@ -27,11 +27,12 @@ data:
     distance_unit: 1.0
     transforms:
       - _target_: schnetpack.transform.SubtractCenterOfMass
+      - _target_: schnetpack.transform.MatScipyNeighborList
+        cutoff: ${globals.cutoff}
+  batch_transforms:
       - _target_: schnetpack.transform.RemoveOffsets
         property: ${globals.energy_key}
         remove_mean: true
-      - _target_: schnetpack.transform.MatScipyNeighborList
-        cutoff: ${globals.cutoff}
       - _target_: schnetpack.transform.CastTo32
       - _target_: schnetpack.transform.SplitShielding
         shielding_key: ${globals.shielding_key}

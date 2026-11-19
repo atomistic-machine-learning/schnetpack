@@ -1,4 +1,6 @@
 from .distillation import *
+from .ema import *
+from .graph_step import *
 from .lr_scheduler import *
 from .teacher import *
 

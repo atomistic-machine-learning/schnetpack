@@ -80,7 +80,8 @@ class Atomwise(nn.Module):
             maxm = inputs[properties.n_atoms].shape[0]
             y = snn.scatter_add(y, idx_m, dim_size=maxm)
             if self.aggregation_mode == "avg":
-                y = y / inputs[properties.n_atoms].unsqueeze(-1)
+                # clamp: a padded batch may hold empty structures (no atoms)
+                y = y / inputs[properties.n_atoms].clamp(min=1).unsqueeze(-1)
 
             y = torch.squeeze(y, -1)
 
@@ -253,7 +254,9 @@ class DipoleMoment(nn.Module):
             else:
                 total_charge = torch.zeros_like(sum_charge)
 
-            charge_correction = (total_charge - sum_charge) / natoms.unsqueeze(-1)
+            charge_correction = (total_charge - sum_charge) / natoms.clamp(
+                min=1
+            ).unsqueeze(-1)
             charge_correction = charge_correction[idx_m]
             charges = charges + charge_correction
 

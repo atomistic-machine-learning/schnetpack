@@ -24,3 +24,13 @@ num_workers: 8
 train_sampler_cls: null
 train_sampler_args: {}
 pin_memory: false
+# transforms of every collated batch (offsets, casts, noise), on the trainer's
+# device; dataset.transforms act on one structure
+batch_transforms: null
+# speed: read every structure once into a cache (kept in cache_dir) and slice
+# padded batches from it; dataset.transforms must then be deterministic and need
+# no statistics (see the user guide, "Training faster")
+cache: false
+cache_dir: null
+# with a cache: drop the last training batch of each pass, also a full one
+drop_last: true

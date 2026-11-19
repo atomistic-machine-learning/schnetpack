@@ -34,6 +34,10 @@ Rij_lr: Final[str] = (
     "_Rij_lr"  #: vectors pointing from center atoms to neighboring atoms for long range
 )
 n_atoms: Final[str] = "_n_atoms"  #: number of atoms
+#: padded batches (fixed shapes): 1.0 for real atoms, 0.0 for padding
+atom_mask: Final[str] = "_atom_mask"
+#: padded batches: 1.0 for real structures, 0.0 for padding
+structure_mask: Final[str] = "_structure_mask"
 offsets: Final[str] = "_offsets"  #: cell offset vectors
 offsets_lr: Final[str] = "_offsets_lr"  #: cell offset vectors for long range
 

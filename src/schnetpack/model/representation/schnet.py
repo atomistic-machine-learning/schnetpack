@@ -5,7 +5,7 @@ from torch import nn
 
 import schnetpack.nn as snn
 import schnetpack.properties as properties
-from schnetpack.nn import Dense, scatter_add
+from schnetpack.nn import Dense
 from schnetpack.nn.activations import shifted_softplus
 
 __all__ = ["SchNet", "SchNetInteraction"]
@@ -62,9 +62,7 @@ class SchNetInteraction(nn.Module):
         Wij = Wij * rcut_ij[:, None]
 
         # continuous-filter convolution
-        x_j = x[idx_j]
-        x_ij = x_j * Wij
-        x = scatter_add(x_ij, idx_i, dim_size=x.shape[0])
+        x = snn.message_sum(x, Wij, idx_i, idx_j, dim_size=x.shape[0])
 
         x = self.f2out(x)
         return x
@@ -123,7 +121,8 @@ class SchNet(nn.Module):
         self.n_filters = n_filters or self.n_atom_basis
         self.radial_basis = radial_basis
         self.cutoff_fn = cutoff_fn
-        self.cutoff = cutoff_fn.cutoff
+        # a buffer, so that .to() moves it (deploy reads it); not in the state dict
+        self.register_buffer("cutoff", cutoff_fn.cutoff.clone(), persistent=False)
 
         # initialize embeddings
         if nuclear_embedding is None:

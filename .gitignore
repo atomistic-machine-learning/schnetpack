@@ -5,10 +5,6 @@ __pycache__/
 .idea
 *.DS_Store
 
-# created by docs/conf.py at build time
-docs/tutorials/
-docs/howtos/
-docs/trained_models/
 
 # hydra stuff
 outputs
@@ -84,9 +80,10 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
-# The tutorials are version-controlled as jupytext .py files; opening one in
-# Jupyter creates a paired .ipynb next to it (see examples/jupytext.toml).
-examples/**/*.ipynb
+# Notebooks are version-controlled as jupytext .py files; opening one in
+# Jupyter creates a paired .ipynb next to it (see docs/jupytext.toml). Its
+# outputs must never be committed, wherever it is.
+*.ipynb
 
 # pyenv
 .python-version
@@ -130,8 +127,6 @@ interfaces/lammps/examples/*/*.dump
 interfaces/lammps/examples/*/*.dat
 interfaces/lammps/examples/*/deployed_model
 
-# batchwise optimizer examples
-examples/howtos/howto_batchwise_relaxations_outputs/*
 # local experiments, never committed
 sandbox/
 

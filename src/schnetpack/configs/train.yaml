@@ -19,6 +19,9 @@ defaults:
 
 print_config: True
 
+# seed of torch, numpy and python's random; null draws one, saved in config.yaml
+seed: null
+
 # wandb project name, referenced by configs/logger/wandb.yaml
 project: default
 

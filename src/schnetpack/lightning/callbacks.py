@@ -6,10 +6,10 @@ import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import BasePredictionWriter, Callback
 from pytorch_lightning.callbacks import ModelCheckpoint as BaseModelCheckpoint
-from torch_ema import ExponentialMovingAverage as EMA
 
 from schnetpack import properties
 from schnetpack.lightning.task import AtomisticTask
+from schnetpack.train.ema import EMA
 
 __all__ = ["ModelCheckpoint", "PredictionWriter", "ExponentialMovingAverage"]
 
@@ -136,7 +136,8 @@ class ExponentialMovingAverage(Callback):
         self.ema.restore()
 
     def on_train_batch_end(self, trainer, pl_module: AtomisticTask, *args, **kwargs):
-        self.ema.update()
+        # a task may skip a step (AtomisticTask with skip_loss_above: keep_step 0.0)
+        self.ema.update(gate=getattr(pl_module, "keep_step", None))
 
     def on_validation_epoch_start(
         self, trainer: "pl.Trainer", pl_module: AtomisticTask, *args, **kwargs

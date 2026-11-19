@@ -136,7 +136,7 @@ This works since the pre-defined configuration for the MD17 dataset,
 provided from the command line by `experiment=md17`, is selecting the representation and output modules that
 `AtomisticModel` is using.
 A more detailed description of the configuration and how to build your custom configs can be
-found [here](https://schnetpack.readthedocs.io/en/latest/userguide/configs.html).
+found [here](https://schnetpack.readthedocs.io/en/latest/guides/configs.html).
 
 The `spktrain` script can be used to train a model for a molecule from the MD17 datasets
 
@@ -201,7 +201,7 @@ spktrain experiment=md17 logger=csv
 
 ## LAMMPS interface
 
-SchNetPack comes with an interface to LAMMPS. A detailed installation guide is linked in the [How-To section of our documentation](https://schnetpack.readthedocs.io/en/latest/howtos/lammps.html).
+SchNetPack comes with an interface to LAMMPS. A detailed installation guide is linked in the [Guides section of our documentation](https://schnetpack.readthedocs.io/en/latest/guides/lammps.html).
 
 ## Extensions
 

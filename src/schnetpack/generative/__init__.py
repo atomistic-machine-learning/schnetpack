@@ -21,8 +21,13 @@ A model is a configuration of four independent axes plus its training:
 - :mod:`~schnetpack.generative.views`: where a variable lives in the
   structure, which is all the batch holds: a batch entry, wrapped periodic
   positions, or the cell as standardized parameters.
+- :mod:`~schnetpack.generative.outputs`: a variable's head as a model output, with
+  its weighted loss, for training tasks.
 - :mod:`~schnetpack.generative.transforms`: the training step, as a
   data-pipeline transform over a list of variables.
+- :mod:`~schnetpack.generative.validation`: metrics of generated molecules
+  (validity, uniqueness, novelty, diversity, distances between distributions);
+  needs RDKit.
 
 Running a trained model lives in :mod:`schnetpack.dynamics`. Training and
 sampling must share the same variables. Theory and
@@ -31,11 +36,13 @@ design: ``docs_new/README.md``.
 
 from schnetpack.generative.couplings import *
 from schnetpack.generative.noising import *
+from schnetpack.generative.outputs import *
 from schnetpack.generative.parametrizations import *
 from schnetpack.generative.priors import *
 from schnetpack.generative.schedules import *
 from schnetpack.generative.sde import *
 from schnetpack.generative.times import *
 from schnetpack.generative.transforms import *
+from schnetpack.generative.validation import *
 from schnetpack.generative.variables import *
 from schnetpack.generative.views import *

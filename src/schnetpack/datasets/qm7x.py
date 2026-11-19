@@ -37,6 +37,18 @@ def show_progress(block_num: int, block_size: int, total_size: int):
         pbar = None
 
 
+def md5sum(path: str) -> str:
+    """
+    md5 checksum of a file, read in chunks so that large files do not have to fit
+    into memory.
+    """
+    md5 = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(2**24), b""):
+            md5.update(chunk)
+    return md5.hexdigest()
+
+
 def download_and_check(url: str, target_path: str, checksum: str):
     """
     Download file from url to tar_path and check md5 checksum.
@@ -44,8 +56,7 @@ def download_and_check(url: str, target_path: str, checksum: str):
     file_name = url.split("/")[-1]
 
     if os.path.exists(target_path):
-        md5_sum = hashlib.md5(open(target_path, "rb").read()).hexdigest()
-        if md5_sum == checksum:
+        if md5sum(target_path) == checksum:
             logging.info(
                 f"File {file_name} already exists and has correct checksum. Skipping download."
             )
@@ -58,7 +69,7 @@ def download_and_check(url: str, target_path: str, checksum: str):
     logging.info(f"Downloading {url} ...")
     request.urlretrieve(url, target_path, show_progress)
 
-    if hashlib.md5(open(target_path, "rb").read()).hexdigest() != checksum:
+    if md5sum(target_path) != checksum:
         raise RuntimeError(
             f"Checksum of downloaded file {file_name} does not match. Please try again."
         )

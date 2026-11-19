@@ -145,6 +145,9 @@ LAMMPS with `spkdeploy` are unchanged.
   - `StatsAtomrefProvider`, which caches training-set statistics and atom
     references next to the split file.
   - `prune_neighbors` and `DownloadableASEAtomsData`.
+  - The `MPTraj` dataset (MPtrj): 1.58 M DFT relaxation frames of bulk crystals
+    with energies, forces, stresses and magnetic moments, and the data config
+    `data=mptraj`, which splits by material.
 - Configs: a progress bar callback, and a wandb logger setup (#787).
 - How-tos for batch-wise relaxations, ensemble calculations and guidance.
   The tutorials and how-tos are now stored as jupytext `py:percent` files.
@@ -166,9 +169,16 @@ LAMMPS with `spkdeploy` are unchanged.
   as runtime dependencies.
 - Raised minimum versions: `ase>=3.23`, `hydra-core>=1.3,<2`,
   `pytorch_lightning>=2.2,<3`.
-- The legacy notebook tutorials moved to `examples/tutorials_deprecated`.
+- New documentation: a Markdown (MyST) site in the look of the Flax and JAX docs
+  (`sphinx_book_theme`, light and dark mode), with Getting started, Tutorials,
+  Guides, Concepts, Migrating, API reference and Project sections. The tutorials
+  and how-tos moved from `examples/` into `docs/tutorials` and `docs/guides` as
+  jupytext `.py` notebooks; Read the Docs executes them on every build, so the
+  pages show their outputs. No `.ipynb` is committed.
 - Ensemble uncertainty calculations for ASE and dynamics are refactored onto
   `schnetpack.uncertainty`.
+- `ASEAtomsData.add_systems` writes all systems over one database connection
+  instead of one per system, 20x faster (2.6 to 0.13 ms per periodic system).
 
 ### Fixed
 

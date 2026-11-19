@@ -7,7 +7,7 @@ import schnetpack.properties as properties
 from schnetpack.data.atoms import ASEAtomsData
 from schnetpack.data.loader import AtomsLoader
 
-__all__ = ["calculate_stats", "estimate_atomrefs"]
+__all__ = ["calculate_stats", "estimate_atomrefs", "structure_stats", "fit_atomrefs"]
 
 
 def _raw_view(dataset: ASEAtomsData, indices: list[int] | None) -> ASEAtomsData:
@@ -205,3 +205,98 @@ def estimate_atomrefs(
             out[pname][atom_type] = weight
 
     return out
+
+
+def _structure_values(y, n_atoms, owner, Z, divide_by_atoms, atomref) -> torch.Tensor:
+    """A per-structure property in float64, without its atom references and per
+    atom if asked: the values whose mean and standard deviation are the statistics."""
+    y = y.double()
+    if atomref is not None:
+        ref = atomref.to(y.device, torch.float64)[Z]
+        y = y - torch.zeros_like(y).index_add_(0, owner, ref)
+    if divide_by_atoms:
+        y = y / n_atoms
+    return y
+
+
+def _mean_std(y: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    mean = y.mean()
+    return mean.cpu(), ((y - mean) ** 2).mean().sqrt().cpu()
+
+
+def _type_counts(
+    owner: torch.Tensor, Z: torch.Tensor, z_max: int, n_structures: int
+) -> torch.Tensor:
+    """Atoms of each atomic number in each structure, (structures, z_max), float64."""
+    counts = torch.zeros(n_structures, z_max, dtype=torch.float64, device=owner.device)
+    return counts.index_put_((owner, Z), counts.new_ones(len(owner)), accumulate=True)
+
+
+def _solve_atomrefs(XtX: torch.Tensor, Xty: torch.Tensor) -> torch.Tensor:
+    """The least-squares references from the normal equations; 0 for absent elements."""
+    present = XtX.diagonal() != 0
+    out = torch.zeros_like(Xty)
+    out[present] = torch.linalg.solve(XtX[present][:, present], Xty[present])
+    return out.cpu()
+
+
+def structure_stats(
+    y: torch.Tensor,
+    n_atoms: torch.Tensor,
+    owner: torch.Tensor,
+    Z: torch.Tensor,
+    divide_by_atoms: bool,
+    atomref: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Mean and standard deviation of a per-structure property from flat tensors
+    (float64, population standard deviation), on the tensors' device.
+    :func:`calculate_stats` computes them for a dataset.
+
+    Args:
+        y: the property, one value per structure
+        n_atoms: atoms per structure
+        owner: the structure (0..) of each atom
+        Z: the atomic number of each atom
+        divide_by_atoms: per atom, divided by the atom count
+        atomref: reference value per atomic number, subtracted first
+    """
+    return _mean_std(_structure_values(y, n_atoms, owner, Z, divide_by_atoms, atomref))
+
+
+def fit_atomrefs(
+    y: torch.Tensor,
+    n_atoms: torch.Tensor,
+    owner: torch.Tensor,
+    Z: torch.Tensor,
+    is_extensive: bool,
+    z_max: int = 100,
+    chunk: int = 100_000,
+) -> torch.Tensor:
+    """
+    Atom references of a per-structure property by least squares over the
+    atom-type counts (float64), on the tensors' device. :func:`estimate_atomrefs`
+    fits them for a dataset. The normal equations are summed over chunks of
+    structures, so the memory does not grow with the dataset.
+
+    Args:
+        y, n_atoms, owner, Z: as in :func:`structure_stats`; the atoms of a
+            structure lie back to back (owner ascending)
+        is_extensive: without effect, as in :func:`estimate_atomrefs`
+        z_max: size of the result
+        chunk: structures per chunk
+
+    Returns:
+        reference per atomic number, shape (z_max,); 0 for absent elements
+    """
+    y = y.double()
+    XtX = torch.zeros(z_max, z_max, dtype=torch.float64, device=y.device)
+    Xty = torch.zeros(z_max, dtype=torch.float64, device=y.device)
+    atom_end = torch.cumsum(n_atoms, 0)
+    for s in range(0, len(y), chunk):
+        e = min(s + chunk, len(y))
+        atoms = slice(int(atom_end[s] - n_atoms[s]), int(atom_end[e - 1]))
+        X = _type_counts(owner[atoms] - s, Z[atoms], z_max, e - s)
+        XtX += X.T @ X
+        Xty += X.T @ y[s:e]
+    return _solve_atomrefs(XtX, Xty)

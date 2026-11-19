@@ -14,11 +14,13 @@ References
 import copy
 import logging
 import os
+import threading
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import Any
 
 import fasteners
+import numpy as np
 import torch
 from ase import Atoms
 from ase.db import connect
@@ -130,7 +132,10 @@ class ASEAtomsData(torch.utils.data.Dataset):
     @property
     def load_properties(self) -> list[str]:
         if self._load_properties is None:
-            return self.available_properties
+            # every property, as read with the units in __init__: __getitem__ asks
+            # for this on every sample, and available_properties reads the db
+            # metadata each time
+            return list(self._units)
         return self._load_properties
 
     @load_properties.setter
@@ -153,9 +158,32 @@ class ASEAtomsData(torch.utils.data.Dataset):
         if self.subset_idx is not None:
             idx = self.subset_idx[idx]
         props = self._get_properties(
-            self.conn, idx, self.load_properties, self.load_structure
+            self._reader(), idx, self.load_properties, self.load_structure
         )
         return self._apply_transforms(props)
+
+    def _reader(self):
+        """
+        The db for reading rows, with one connection held per process and thread.
+
+        ASE's SQLite backend otherwise opens, initializes and closes a connection
+        for every row: 0.71 ms per QM9 row against 0.18 ms with a held connection.
+        A connection cannot cross a fork (DataLoader workers) or a thread, so each
+        process and thread opens its own on first use. Other backends are used as
+        they are.
+        """
+        readers = self.__dict__.setdefault("_readers", {})
+        key = (os.getpid(), threading.get_ident())
+        if key not in readers:
+            reader = connect(self.datapath, use_lock_file=False)
+            if hasattr(reader, "__enter__"):
+                reader.__enter__()  # holds the connection until the process ends
+            readers[key] = reader
+        return readers[key]
+
+    def __getstate__(self):
+        # open connections do not pickle (DataLoader workers started by spawn)
+        return {k: v for k, v in self.__dict__.items() if k != "_readers"}
 
     def get_split_transforms(self) -> list[Transform]:
         if self.split == "train" and self.train_transforms is not None:
@@ -278,7 +306,7 @@ class ASEAtomsData(torch.utils.data.Dataset):
 
         for i in indices:
             yield self._get_properties(
-                self.conn,
+                self._reader(),
                 i,
                 load_properties=load_properties,
                 load_structure=load_structure,
@@ -312,8 +340,10 @@ class ASEAtomsData(torch.utils.data.Dataset):
         properties[structure.idx] = torch.tensor([idx])
 
         for pname in load_properties:
+            # torch.tensor copies; atleast_1d also takes properties stored as plain
+            # numbers (e.g. a db written with ase.db directly), as shape (1,)
             properties[pname] = (
-                torch.tensor(row.data[pname].copy()) * self.conversions[pname]
+                torch.tensor(np.atleast_1d(row.data[pname])) * self.conversions[pname]
             )
 
         Z = row["numbers"].copy()
@@ -412,7 +442,8 @@ class ASEAtomsData(torch.utils.data.Dataset):
                 `available_properties` of the dataset.
 
         """
-        self._add_system(atoms, atoms_metadata, **properties)
+        with connect(self.datapath, use_lock_file=False) as conn:
+            self._add_system(conn, atoms, atoms_metadata, **properties)
 
     def add_systems(
         self,
@@ -441,19 +472,23 @@ class ASEAtomsData(torch.utils.data.Dataset):
         if atoms_metadata_list is None:
             atoms_metadata_list = [{}] * len(property_list)
 
-        for atoms, prop, atoms_metadata in zip(
-            atoms_list, property_list, atoms_metadata_list
-        ):
-            self._add_system(atoms, atoms_metadata, **prop)
+        # One connection for all systems: ASE then commits every 5000 writes
+        # instead of once per system, which is ~20x faster for large datasets.
+        with connect(self.datapath, use_lock_file=False) as conn:
+            for atoms, prop, atoms_metadata in zip(
+                atoms_list, property_list, atoms_metadata_list
+            ):
+                self._add_system(conn, atoms, atoms_metadata, **prop)
 
     def _add_system(
         self,
+        conn,
         atoms: Atoms | None = None,
         atoms_metadata: dict[str, Any] | None = None,
         **properties,
     ):
         """
-        Add systems to DB.
+        Add systems to DB through the open connection `conn`.
         """
         if atoms is None:
             try:
@@ -468,25 +503,24 @@ class ASEAtomsData(torch.utils.data.Dataset):
         if atoms_metadata is None:
             atoms_metadata = {}
 
-        with connect(self.datapath, use_lock_file=False) as conn:
-            prop_keys = conn.metadata["_property_unit_dict"].keys()
+        prop_keys = conn.metadata["_property_unit_dict"].keys()
 
-            valid_props = set(prop_keys).union(
-                {structure.Z, structure.R, structure.cell, structure.pbc}
-            )
-            for pname in properties:
-                if pname not in valid_props:
-                    logger.warning(
-                        f"Property `{pname}` is not defined for this dataset and will be ignored."
-                    )
+        valid_props = set(prop_keys).union(
+            {structure.Z, structure.R, structure.cell, structure.pbc}
+        )
+        for pname in properties:
+            if pname not in valid_props:
+                logger.warning(
+                    f"Property `{pname}` is not defined for this dataset and will be ignored."
+                )
 
-            data = {}
-            for pname in prop_keys:
-                if pname not in properties:
-                    raise AtomsDataError("Required property missing: " + pname)
-                data[pname] = properties[pname]
+        data = {}
+        for pname in prop_keys:
+            if pname not in properties:
+                raise AtomsDataError("Required property missing: " + pname)
+            data[pname] = properties[pname]
 
-            conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
+        conn.write(atoms, data=data, key_value_pairs=atoms_metadata)
 
 
 class DownloadableASEAtomsData(ASEAtomsData, ABC):

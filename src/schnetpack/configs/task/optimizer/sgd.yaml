@@ -6,3 +6,5 @@ optimizer_args:
   momentum: 0.0
   nesterov: False
   dampening: 0.0
+  # null: torch picks (foreach on GPU); true: one fused kernel (CUDA)
+  fused: null

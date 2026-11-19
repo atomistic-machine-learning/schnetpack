@@ -1,3 +1,4 @@
+import gc
 import warnings
 from typing import Any, cast
 
@@ -10,15 +11,19 @@ from pytorch_lightning.utilities.types import (
 from torch import nn as nn
 from torchmetrics import Metric
 
+from schnetpack import properties
 from schnetpack.model.base import AtomisticModel
 from schnetpack.model.compile import CompiledPotential
 from schnetpack.objectives import (
     ModelOutput,
     calculate_loss,
+    calculate_padded_loss,
     extract_targets,
+    padding_mask,
     predict_without_postprocessing,
 )
 from schnetpack.train.distillation import Distillation
+from schnetpack.train.graph_step import GraphStep
 from schnetpack.train.teacher import TeacherWrapper
 
 __all__ = ["AtomisticTask"]
@@ -33,6 +38,19 @@ class AtomisticTask(pl.LightningModule):
     needs (logging, optimizer/scheduler configuration, warmup). To train
     without Lightning, use the model and those functions directly in your own
     training loop.
+
+    Two flags make training faster (see the user guide, "Training faster"):
+
+    - ``compile``: the model runs as one compiled graph including its derivatives.
+    - ``cuda_graph``: the training step (the model, the loss and its gradients) is
+      recorded once as a CUDA graph and replayed every step
+      (:class:`~schnetpack.train.GraphStep`): one launch instead of hundreds of
+      kernels, and no host synchronization. Needs padded batches, which have the
+      same shapes in every step (:class:`~schnetpack.lightning.AtomsDataModule`
+      with ``cache``).
+
+    Padded batches (from a cache) are handled in every mode: their padding rows
+    are left out of losses and metrics.
     """
 
     def __init__(
@@ -48,6 +66,9 @@ class AtomisticTask(pl.LightningModule):
         teacher: TeacherWrapper | None = None,
         probe_seed: int = 0,
         compile: bool = False,
+        cuda_graph: bool = False,
+        grad_clip: float | None = None,
+        skip_loss_above: float | None = None,
     ):
         """
         Args:
@@ -70,6 +91,16 @@ class AtomisticTask(pl.LightningModule):
               `schnetpack.model.CompiledPotential`, which needs torch >= 2.14). With a
               teacher, whose curvature needs derivatives of the forces, the model
               runs without compilation.
+            cuda_graph: run the training step as one CUDA graph; needs padded
+              batches on the GPU (``AtomsDataModule(cache=True)``) and
+              compiles the model (with fixed shapes). Takes no
+              teacher, and outputs with an elementwise loss of mean reduction
+              (``MSELoss``, ``L1Loss``, ``HuberLoss``, ...) or ``VariableOutput``. A
+              fused optimizer
+              (``optimizer_args={"fused": True}``) keeps the step free of host syncs.
+            grad_clip: clip the norm of the gradients to this value
+            skip_loss_above: skip the optimizer step (and the EMA update) of a batch
+              whose loss exceeds this value or is not finite
         """
         super().__init__()
         self.model = model
@@ -95,14 +126,33 @@ class AtomisticTask(pl.LightningModule):
         )
         self.lr = self.optimizer_kwargs["lr"]
         self.warmup_steps = warmup_steps
+        self.grad_clip = grad_clip
+        self.skip_loss_above = skip_loss_above
+        self.cuda_graph = cuda_graph
 
         self.compiled_model = None
-        if compile and self.distillation is not None:
+        if cuda_graph:
+            if self.distillation is not None:
+                raise ValueError("cuda_graph does not take a teacher")
+            # fixed shapes: the padded batches all have the same
+            self.compiled_model = CompiledPotential(model, dynamic=False)
+            # the backward pass is part of the graph; the task steps the optimizer
+            self.automatic_optimization = False
+        elif compile and self.distillation is not None:
             warnings.warn(
                 "distillation runs the model without compilation.", stacklevel=2
             )
         elif compile:
             self.compiled_model = CompiledPotential(model)
+
+        # 1.0 / 0.0 whether this step updated the parameters; the EMA callback
+        # skips its update with the optimizer step. None: always updated.
+        self.keep_step: torch.Tensor | None = None
+        self.skipped_steps: torch.Tensor | None = None
+        self._graph_step: GraphStep | None = None
+        # cuda_graph: the training loss summed on the GPU, read once per validation
+        self._loss_sum: torch.Tensor | None = None
+        self._loss_steps = 0
         self.save_hyperparameters()
 
     def setup(self, stage=None):
@@ -130,6 +180,29 @@ class AtomisticTask(pl.LightningModule):
                     prog_bar=False,
                 )
 
+    def log_padded_metrics(self, pred, targets, batch, subset):
+        """The metrics of a padded batch, over its real rows. Finding them is a host
+        sync, which drains the queue of GPU work; it is done once per padding mask
+        (atoms, structures) and shared by the outputs."""
+        rows: dict[int, torch.Tensor] = {}
+        for output in self.outputs:
+            if not output.metrics[subset]:
+                continue
+            mask = padding_mask(pred[output.name], batch)
+            if id(mask) not in rows:
+                rows[id(mask)] = mask.nonzero().squeeze(-1)
+            p = pred[output.name].detach().index_select(0, rows[id(mask)])
+            t = targets[output.target_property].index_select(0, rows[id(mask)])
+            for metric_name, metric in output.metrics[subset].items():
+                metric(p, t)
+                self.log(
+                    f"{subset}_{output.target_property}_{metric_name}",
+                    metric,
+                    on_step=(subset == "train"),
+                    on_epoch=(subset != "train"),
+                    prog_bar=False,
+                )
+
     def _step(self, batch, subset):
         """Loss of one batch, summed over the outputs; logs the metrics of
         ``subset``.
@@ -138,29 +211,79 @@ class AtomisticTask(pl.LightningModule):
         With distillation, ``Distillation.step`` also adds the teacher's
         targets and the student's curvature, if an output asks for them. Outside
         training, the curvature probes come from a seeded generator, so every
-        validation epoch uses the same probes."""
+        validation epoch uses the same probes. A padded batch (from a cache) is
+        compared on its real rows only."""
+        padded = properties.atom_mask in batch
+        if padded and self.distillation is not None:
+            raise ValueError("distillation takes no padded batches (cache)")
         if self.distillation is None:
             targets = extract_targets(self.outputs, batch)
             model = self.compiled_model or self.model
             pred = predict_without_postprocessing(model, batch)
         else:
             pred, targets = self.distillation.step(batch, train=subset == "train")
-        loss = calculate_loss(self.outputs, pred, targets)
-        self.log_metrics(pred, targets, subset)
+        if padded:
+            loss = calculate_padded_loss(self.outputs, pred, targets, batch)
+        else:
+            loss = calculate_loss(self.outputs, pred, targets)
+        if subset != "train" or self.writes_train_logs():
+            if padded:
+                self.log_padded_metrics(pred, targets, batch, subset)
+            else:
+                self.log_metrics(pred, targets, subset)
         return loss
+
+    def writes_train_logs(self) -> bool:
+        """Whether Lightning writes this training step's logs (every
+        ``log_every_n_steps``). Training metrics are computed and logged only then:
+        the values of the other steps are never written, and computing them cost a
+        quarter of a fast training step. Without a trainer, always."""
+        trainer = self._trainer
+        if trainer is None:
+            return True
+        # Lightning's own condition (update_train_step_metrics)
+        return trainer._logger_connector.should_update_logs or bool(
+            trainer.fast_dev_run
+        )
 
     def on_validation_epoch_start(self):
         if self.distillation is not None:
             self.distillation.reset_probes()
+        if self._loss_steps:  # cuda_graph: the mean training loss (one host sync)
+            self.log(
+                "train_loss_epoch",
+                float(self._loss_sum) / self._loss_steps,
+                on_epoch=True,
+            )
+            self._loss_sum, self._loss_steps = None, 0
 
     def on_test_epoch_start(self):
         if self.distillation is not None:
             self.distillation.reset_probes()
 
     def training_step(self, batch, batch_idx):
+        if self.cuda_graph:
+            return self._graph_training_step(batch)
         loss = self._step(batch, "train")
-        self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
+        if self.writes_train_logs():
+            self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
+        if self.skip_loss_above is not None:
+            keep = bool(loss.detach() <= self.skip_loss_above)  # a host sync
+            self._count_step(torch.tensor(0.0 if keep else 1.0, device=loss.device))
+            if not keep:
+                return None  # Lightning skips the optimizer step
         return loss
+
+    def _count_step(self, skip: torch.Tensor):
+        self.keep_step = 1.0 - skip
+        self.skipped_steps = (
+            skip if self.skipped_steps is None else self.skipped_steps + skip
+        )
+
+    def _batch_size(self, batch) -> int:
+        if properties.structure_mask in batch:  # a padded batch: its real structures
+            return int(batch[properties.structure_mask].sum())
+        return len(batch[properties.idx])
 
     def validation_step(self, batch, batch_idx):
         torch.set_grad_enabled(self.grad_enabled)
@@ -171,7 +294,7 @@ class AtomisticTask(pl.LightningModule):
             on_step=False,
             on_epoch=True,
             prog_bar=True,
-            batch_size=len(batch["_idx"]),
+            batch_size=self._batch_size(batch),
         )
         return {"val_loss": loss}
 
@@ -184,7 +307,7 @@ class AtomisticTask(pl.LightningModule):
             on_step=False,
             on_epoch=True,
             prog_bar=True,
-            batch_size=len(batch["_idx"]),
+            batch_size=self._batch_size(batch),
         )
         return {"test_loss": loss}
 
@@ -205,6 +328,12 @@ class AtomisticTask(pl.LightningModule):
             scheduler_config["monitor"] = self.schedule_monitor
         return {"optimizer": optimizer, "lr_scheduler": scheduler_config}
 
+    def _warmup(self, param_groups):
+        if self.global_step < self.warmup_steps:
+            lr_scale = min(1.0, float(self.global_step + 1) / self.warmup_steps)
+            for pg in param_groups:
+                pg["lr"] = lr_scale * self.lr
+
     def optimizer_step(
         self,
         epoch: int | None = None,
@@ -212,13 +341,90 @@ class AtomisticTask(pl.LightningModule):
         optimizer=None,
         optimizer_closure=None,
     ):
-        if self.global_step < self.warmup_steps:
-            lr_scale = min(1.0, float(self.trainer.global_step + 1) / self.warmup_steps)
-            for pg in optimizer.param_groups:
-                pg["lr"] = lr_scale * self.lr
+        self._warmup(optimizer.param_groups)
 
         # update params
         optimizer.step(closure=optimizer_closure)
+
+    def configure_gradient_clipping(
+        self, optimizer, gradient_clip_val=None, gradient_clip_algorithm=None
+    ):
+        if self.grad_clip is not None:
+            gradient_clip_val, gradient_clip_algorithm = self.grad_clip, "norm"
+        self.clip_gradients(optimizer, gradient_clip_val, gradient_clip_algorithm)
+
+    def _graph_training_step(self, batch):
+        """The step as one CUDA graph (GraphStep), and its logs."""
+        opt = self.optimizers()
+        if self._graph_step is None:
+            if properties.atom_mask not in batch:
+                raise ValueError(
+                    "cuda_graph needs padded batches, which have the same shapes in "
+                    "every step: AtomsDataModule(cache=True)"
+                )
+            self._graph_step = GraphStep(
+                self.compiled_model,
+                self.outputs,
+                opt,  # Lightning's wrapper: its step advances global_step
+                grad_clip=self.grad_clip,
+                skip_loss_above=self.skip_loss_above,
+            )
+        self._warmup(opt.param_groups)
+        step = self._graph_step
+        loss = step(batch)
+        self.keep_step, self.skipped_steps = step.keep, step.skipped
+        self._loss_sum = (
+            loss.clone() if self._loss_sum is None else self._loss_sum.add_(loss)
+        )
+        self._loss_steps += 1
+        if self.writes_train_logs():
+            self.log_padded_metrics(step.pred, step.targets, step.batch, "train")
+            self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
+        return loss
+
+    def on_validation_model_zero_grad(self):
+        # Lightning sets every .grad to None before validation by default. The
+        # graph writes the gradients into its own tensors, which would then no
+        # longer be the parameters' .grad, and the optimizer would skip them.
+        if not self.cuda_graph:
+            super().on_validation_model_zero_grad()
+
+    def on_train_start(self):
+        if self.cuda_graph:
+            # Python's garbage collector walks every tracked object in a full
+            # collection; with the model, data and compiled graphs that is a stall
+            # of milliseconds, in which the GPU runs dry. Objects alive now are
+            # left out.
+            gc.collect()
+            gc.freeze()
+
+    def on_train_end(self):
+        if self.cuda_graph:
+            gc.unfreeze()
+
+    def _schedulers(self) -> list:
+        sch = self.lr_schedulers()
+        if sch is None:
+            return []
+        return sch if isinstance(sch, list) else [sch]
+
+    def on_validation_epoch_end(self):
+        # with cuda_graph (manual optimization) the task steps the schedulers:
+        # ReduceLROnPlateau after validation, the others after each epoch
+        if not self.cuda_graph or self.trainer.sanity_checking:
+            return
+        for sch in self._schedulers():
+            if isinstance(sch, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                metric = self.trainer.callback_metrics.get(self.schedule_monitor)
+                if metric is not None:
+                    sch.step(metric)
+
+    def on_train_epoch_end(self):
+        if not self.cuda_graph:
+            return
+        for sch in self._schedulers():
+            if not isinstance(sch, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                sch.step()
 
     def save_model(self, path: str, do_postprocessing: bool | None = None):
         if self.global_rank == 0:

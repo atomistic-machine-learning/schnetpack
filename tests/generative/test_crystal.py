@@ -379,6 +379,13 @@ def brute_force_eps(x_t, x0, cell, sigma, n=8):
     return torch.stack(targets)
 
 
+def ve_time(schedule, sigma):
+    """The time at which VE's geometric noise level reaches sigma."""
+    log_range = math.log(schedule.sigma_max / schedule.sigma_min)
+    t = schedule.t_max * (1.0 + math.log(sigma / schedule.sigma_max) / log_range)
+    return torch.tensor(t, dtype=torch.float64)
+
+
 @pytest.mark.parametrize(
     "sigma, n_images, tolerance", [(0.5, 2, 1e-10), (3.0, 4, 1e-3)]
 )
@@ -387,7 +394,7 @@ def test_wrapped_eps_target_matches_a_brute_force_image_sum(sigma, n_images, tol
     cell = torch.tensor(Cell.fromcellpar([4.0, 4.5, 5.0, 80, 100, 110]).array)
     schedule = VE(sigma_min=0.01, sigma_max=10.0)
     noising = PeriodicGaussianInterpolant(schedule, n_images=n_images)
-    t = schedule.t_of_sigma(torch.tensor(sigma, dtype=torch.float64))
+    t = ve_time(schedule, sigma)
     x0 = torch.rand(6, 3, dtype=torch.float64) @ cell
     x_t = wrap(x0 + sigma * torch.randn(6, 3, dtype=torch.float64), cell)
     x1 = noising.effective_x1(x_t, x0, cell.expand(6, 3, 3), t)
@@ -403,7 +410,7 @@ def test_wrapped_eps_target_is_the_noise_while_it_is_small():
     schedule = VE(sigma_min=0.01, sigma_max=10.0)
     noising = PeriodicGaussianInterpolant(schedule)
     sigma = 0.05
-    t = schedule.t_of_sigma(torch.tensor(sigma, dtype=torch.float64))
+    t = ve_time(schedule, sigma)
     x0 = torch.rand(20, 3, dtype=torch.float64) @ cell
     eps = torch.randn(20, 3, dtype=torch.float64)
     x_t = wrap(x0 + sigma * eps, cell)
@@ -488,7 +495,7 @@ def test_position_noise_is_sigma_in_angstrom_whatever_the_cell(cellpar):
     }
     x0 = torch.rand(n, 3, dtype=torch.float64) @ cell
     sigma = 0.2
-    t = schedule.t_of_sigma(torch.tensor(sigma, dtype=torch.float64))
+    t = ve_time(schedule, sigma)
     x_t, *_ = noising.perturb(x0, t.expand(n), batch=batch)
     d = minimum_image(x_t - x0, cell)
     assert d.std().item() == pytest.approx(sigma, rel=0.02)
