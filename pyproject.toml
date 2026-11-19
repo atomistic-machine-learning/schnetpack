@@ -62,8 +62,10 @@ doc = [
 # exporting MACE models with torch.export and building MACE models to train
 # from scratch (schnetpack.interfaces.mace_interface); the archives load without
 mace = ["mace-torch>=0.3.16,<0.4"]
+# validity and uniqueness of generated molecules (spkevaluate)
+rdkit = ["rdkit"]
 # every extra above
-all = ["schnetpack[test,dev,doc,mace]"]
+all = ["schnetpack[test,dev,doc,mace,rdkit]"]
 
 [project.urls]
 Repository = "https://github.com/atomistic-machine-learning/schnetpack"

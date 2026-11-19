@@ -25,6 +25,9 @@ A model is a configuration of four independent axes plus its training:
   its weighted loss, for training tasks.
 - :mod:`~schnetpack.generative.transforms`: the training step, as a
   data-pipeline transform over a list of variables.
+- :mod:`~schnetpack.generative.validation`: metrics of generated molecules
+  (validity, uniqueness, novelty, diversity, distances between distributions);
+  needs RDKit.
 
 Running a trained model lives in :mod:`schnetpack.dynamics`. Training and
 sampling must share the same variables. Theory and
@@ -40,5 +43,6 @@ from schnetpack.generative.schedules import *
 from schnetpack.generative.sde import *
 from schnetpack.generative.times import *
 from schnetpack.generative.transforms import *
+from schnetpack.generative.validation import *
 from schnetpack.generative.variables import *
 from schnetpack.generative.views import *
