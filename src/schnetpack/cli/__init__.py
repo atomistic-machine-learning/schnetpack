@@ -5,7 +5,8 @@ The ``spk*`` commands, one module each (``spkmd`` lives in :mod:`schnetpack.md.c
   the configs in ``schnetpack/configs``.
 - ``spktest`` (:mod:`.test`), ``spksample`` (:mod:`.sample`): on a finished spktrain
   run, from its ``config.yaml``.
-- ``spkconvert`` (:mod:`.convert`), ``spkdeploy`` (:mod:`.deploy`): standalone tools.
+- ``spkevaluate`` (:mod:`.evaluate`), ``spkconvert`` (:mod:`.convert`),
+  ``spkdeploy`` (:mod:`.deploy`): standalone tools.
 
 Importing the package registers the config resolvers ``uuid``, ``petname`` and
 ``tmpdir``.
