@@ -233,7 +233,7 @@ def test_spktrain_fine_tunes_and_stores_a_loadable_model(archive, tmp_path):
         [
             sys.executable,
             "-c",
-            "import schnetpack.cli; schnetpack.cli.train()",
+            "from schnetpack.cli.train import main; main()",
             "experiment=mace_finetune",
             f"globals.mace_path={archive}",
             f"globals.cutoff={R_MAX}",

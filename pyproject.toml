@@ -70,11 +70,11 @@ Repository = "https://github.com/atomistic-machine-learning/schnetpack"
 Documentation = "https://schnetpack.readthedocs.io"
 
 [project.scripts]
-spktrain = "schnetpack.cli:train"
-spkpredict = "schnetpack.cli:predict"
+spktrain = "schnetpack.cli.train:main"
+spkpredict = "schnetpack.cli.predict:main"
 spkmd = "schnetpack.md.cli:simulate"
-spkconvert = "schnetpack.cli_scripts.convert:main"
-spkdeploy = "schnetpack.cli_scripts.deploy:main"
+spkconvert = "schnetpack.cli.convert:main"
+spkdeploy = "schnetpack.cli.deploy:main"
 
 [tool.ruff]
 line-length = 88

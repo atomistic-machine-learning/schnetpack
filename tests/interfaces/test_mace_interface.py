@@ -219,7 +219,7 @@ def test_spktrain_trains_a_built_model_from_scratch(built, toy_data, tmp_path):
         [
             sys.executable,
             "-c",
-            "import schnetpack.cli; schnetpack.cli.train()",
+            "from schnetpack.cli.train import main; main()",
             "experiment=mace_scratch",
             f"globals.mace_path={built}",
             f"data.dataset.datapath={directory / 'structures.db'}",

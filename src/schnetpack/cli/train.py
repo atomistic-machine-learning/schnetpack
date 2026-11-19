@@ -1,41 +1,32 @@
+"""spktrain: train a model from the Hydra configs (``configs/train.yaml``), then
+test its best checkpoint and store the best model."""
+
 import logging
 import os
 import random
 import socket
-import tempfile
-import uuid
 
 import hydra
-import petname
 import torch
 from omegaconf import DictConfig, OmegaConf, open_dict
 from pytorch_lightning import (
     Callback,
     LightningDataModule,
-    LightningModule,
     Trainer,
     seed_everything,
 )
 from pytorch_lightning.loggers.logger import Logger
 
-from schnetpack import properties
-from schnetpack.data import ASEAtomsData, AtomsLoader
-from schnetpack.lightning import AtomisticTask, PredictionWriter
+from schnetpack.lightning import AtomisticTask
 from schnetpack.lightning.utils import (
     load_task_from_checkpoint,
     log_hyperparameters,
     trainer_fit_kwargs_for_checkpoint,
 )
-from schnetpack.model.compile import CompiledPotential
-from schnetpack.utils import load_model, str2class
+from schnetpack.utils import str2class
 from schnetpack.utils.script import print_config
 
 log = logging.getLogger(__name__)
-
-
-OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()), use_cache=True)
-OmegaConf.register_new_resolver("petname", lambda: petname.generate())
-OmegaConf.register_new_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
 
 header = r"""
    _____      __    _   __     __  ____             __
@@ -46,8 +37,8 @@ header = r"""
 """
 
 
-@hydra.main(config_path="configs", config_name="train", version_base="1.2")
-def train(config: DictConfig):
+@hydra.main(config_path="../configs", config_name="train", version_base="1.2")
+def main(config: DictConfig):
     """
     General training routine for all models defined by the provided hydra configs.
 
@@ -225,49 +216,3 @@ def train(config: DictConfig):
 
     best_task.save_model(config.globals.model_path, do_postprocessing=True)
     log.info(f"Best model stored at {os.path.abspath(config.globals.model_path)}")
-
-
-@hydra.main(config_path="configs", config_name="predict", version_base="1.2")
-def predict(config: DictConfig):
-    log.info(f"Load data from `{config.data.datapath}`")
-    dataset: ASEAtomsData = hydra.utils.instantiate(config.data)
-    loader = AtomsLoader(dataset, batch_size=config.batch_size, num_workers=8)
-
-    model = load_model("best_model")
-
-    model_fn = CompiledPotential(model) if config.get("compile", False) else model
-
-    class WrapperLM(LightningModule):
-        def __init__(self, model, enable_grad=config.enable_grad):
-            super().__init__()
-            self.model = model
-            self.enable_grad = enable_grad
-
-        def forward(self, x):
-            return model_fn(x)
-
-        def predict_step(self, batch, batch_idx: int, dataloader_idx: int = 0):
-            torch.set_grad_enabled(self.enable_grad)
-            results = self(batch)
-            results[properties.idx_m] = batch[properties.idx][batch[properties.idx_m]]
-            results = {k: v.detach().cpu() for k, v in results.items()}
-            return results
-
-    log.info(f"Instantiating trainer <{config.trainer._target_}>")
-    trainer: Trainer = hydra.utils.instantiate(
-        config.trainer,
-        callbacks=[
-            PredictionWriter(
-                output_dir=config.outputdir,
-                write_interval=config.write_interval,
-                write_idx=config.write_idx_m,
-            )
-        ],
-        default_root_dir=".",
-        _convert_="partial",
-    )
-    trainer.predict(
-        WrapperLM(model, config.enable_grad),
-        dataloaders=loader,
-        ckpt_path=config.ckpt_path,
-    )
