@@ -1,22 +1,15 @@
-/* SchNetPack look: Red Hat fonts and the colours of the original SchNetPack
-   paper's figure, on top of sphinx_book_theme (pydata-sphinx-theme variables).
+/* SchNetPack look: Red Hat fonts, yellow and pink on a dark background, on top of
+   sphinx_book_theme (pydata-sphinx-theme variables). The site opens in dark mode.
 
-   Palette (pastel fills; the darker shade is used for text in light mode)
-     orange  #FFB380  text #B7591A  primary: links, active entries, buttons
-     blue    #D7EEF4  text #2A7D92  secondary: hover, notes
-     yellow  #FFEEAA               fills only: banner, highlights, selection
-     green   #C6E9AF  text #3E8112  code cells, success
+   Palette          dark       light
+     yellow         #f7e64a    #f7e64a   title and logo, links, current page, selection
+     yellow mark    -          #f2dc1f   light mode: link underlines, current-page bar
+     keywords       #f7e64a    #756600   code keywords (dark ochre in light mode)
+     pink           #ff5fa2    #c2185b   code strings and numbers, notes, link hover
+     greys          background #121212 / #ffffff, text #e6e6e3 / #1c1c1a
+   In light mode yellow cannot be text on white, so it marks things instead: a thick
+   underline under links, a bar beside the current page, the banner and selection.
 */
-
-:root {
-  --spk-orange: #ffb380;
-  --spk-orange-text: #b7591a;
-  --spk-blue: #d7eef4;
-  --spk-blue-text: #2a7d92;
-  --spk-yellow: #ffeeaa;
-  --spk-green: #c6e9af;
-  --spk-green-text: #3e8112;
-}
 
 /* -- Fonts (self-hosted, SIL Open Font License, see fonts/OFL.txt) -------- */
 
@@ -137,57 +130,146 @@ html {
 
 /* -- Colours -------------------------------------------------------------- */
 
-html[data-theme="light"] {
-  --pst-color-primary: var(--spk-orange-text);
-  --pst-color-primary-bg: color-mix(in srgb, var(--spk-orange) 35%, white);
-  --pst-color-secondary: var(--spk-blue-text);
-  --pst-color-secondary-bg: var(--spk-blue);
-  --pst-color-link: var(--spk-orange-text);
-  --pst-color-link-hover: var(--spk-blue-text);
-  --pst-color-info: var(--spk-blue-text);
-  --pst-color-info-bg: var(--spk-blue);
-  --pst-color-success: var(--spk-green-text);
-  --pst-color-success-bg: var(--spk-green);
-  --pst-color-target: var(--spk-yellow);
-  --mystnb-source-margin-color: var(--spk-green-text);
+html[data-theme="dark"] {
+  --spk-yellow: #f7e64a;
+  --spk-yellow-mark: #f7e64a;
+  --spk-keyword: #f7e64a;
+  --spk-pink: #ff5fa2;
+  --spk-pink-bg: #2a1520;
+  --spk-yellow-bg: #2a2810;
+  --spk-code-comment: #86867f;
+  --spk-cell: #7d7420;
+
+  --pst-color-background: #121212;
+  --pst-color-on-background: #1b1b1b;
+  --pst-color-surface: #1b1b1b;
+  --pst-color-on-surface: #e6e6e3;
+  --pst-color-text-base: #e6e6e3;
+  --pst-color-text-muted: #9b9b96;
+  --pst-color-border: #303030;
+  --pst-color-border-muted: #242424;
+  --pst-color-table-inner-border: #2a2a2a;
+  --pst-color-blockquote-notch: #86867f;
+  --pst-color-primary: var(--spk-yellow);
+  --pst-color-primary-text: #121212;
+  --pst-color-link: var(--spk-yellow);
+  --pst-color-link-higher-contrast: var(--spk-yellow);
+  --pst-color-target: #5c5414;
 }
 
-html[data-theme="dark"] {
-  --pst-color-primary: var(--spk-orange);
-  --pst-color-primary-bg: color-mix(in srgb, var(--spk-orange) 20%, transparent);
-  --pst-color-secondary: var(--spk-blue);
-  --pst-color-secondary-bg: color-mix(in srgb, var(--spk-blue) 18%, transparent);
-  --pst-color-link: var(--spk-orange);
-  --pst-color-link-hover: var(--spk-blue);
-  --pst-color-info: var(--spk-blue);
-  --pst-color-info-bg: color-mix(in srgb, var(--spk-blue) 15%, transparent);
-  --pst-color-success: var(--spk-green);
-  --pst-color-success-bg: color-mix(in srgb, var(--spk-green) 15%, transparent);
-  --pst-color-target: color-mix(in srgb, var(--spk-yellow) 30%, transparent);
-  --mystnb-source-margin-color: var(--spk-green);
+html[data-theme="light"] {
+  --spk-yellow: #f7e64a;
+  --spk-yellow-mark: #f2dc1f;
+  --spk-keyword: #756600;
+  --spk-pink: #c2185b;
+  --spk-pink-bg: #fdecf4;
+  --spk-yellow-bg: #fdf8cc;
+  --spk-code-comment: #85857f;
+  --spk-cell: #f2dc1f;
+
+  --pst-color-background: #ffffff;
+  --pst-color-on-background: #ffffff;
+  --pst-color-surface: #f8f8f5;
+  --pst-color-on-surface: #1c1c1a;
+  --pst-color-text-base: #1c1c1a;
+  --pst-color-text-muted: #62625d;
+  --pst-color-border: #e4e4df;
+  --pst-color-border-muted: #ecece8;
+  --pst-color-table-inner-border: #ecece8;
+  --pst-color-blockquote-notch: #85857f;
+  --pst-color-primary: #756600;
+  --pst-color-primary-text: #ffffff;
+  --pst-color-link: #1c1c1a;
+  --pst-color-link-higher-contrast: #1c1c1a;
+  --pst-color-target: var(--spk-yellow);
+}
+
+html[data-theme] {
+  --pst-color-primary-bg: var(--spk-yellow-bg);
+  --pst-color-primary-highlight: var(--spk-pink);
+  --pst-color-secondary: var(--spk-pink);
+  --pst-color-secondary-bg: var(--spk-pink-bg);
+  --pst-color-accent: var(--spk-pink);
+  --pst-color-accent-bg: var(--spk-pink-bg);
+  --pst-color-link-hover: var(--spk-pink);
+  --pst-color-info: var(--spk-pink);
+  --pst-color-info-bg: var(--spk-pink-bg);
+  --pst-color-table-row-hover-bg: var(--spk-yellow-bg);
+  --pst-color-inline-code: var(--pst-color-text-base);
+  --mystnb-source-margin-color: var(--spk-cell);
+  --mystnb-source-bg-color: var(--pst-color-surface);
+  --mystnb-source-border-color: var(--pst-color-border);
 }
 
 ::selection {
   background: var(--spk-yellow);
-  color: #222832;
+  color: #121212;
 }
 
-/* the banner that links the 2.x docs */
-.bd-header-announcement {
+/* the project name beside the logo is yellow in dark mode */
+html[data-theme="dark"] .navbar-brand .title {
+  color: var(--spk-yellow);
+}
+
+/* light mode: links are dark text with a thick yellow underline */
+html[data-theme="light"] a,
+html[data-theme="light"] .prev-next-area a p.prev-next-title {
+  text-decoration-color: var(--spk-yellow-mark);
+  text-decoration-thickness: max(3px, 0.1875rem, 0.12em);
+}
+html[data-theme="light"] a:hover {
+  text-decoration-color: var(--spk-pink);
+}
+
+/* light mode: the current page is dark and bold, with a yellow bar */
+html[data-theme="light"] nav.bd-links .current > a {
+  color: var(--pst-color-text-base);
+  box-shadow: inset max(3px, 0.1875rem, 0.12em) 0 0 var(--spk-yellow-mark);
+}
+
+/* the banner that links the 2.x docs: grey in dark mode, solid yellow in light */
+html[data-theme="dark"] .bd-header-announcement {
+  background-color: var(--pst-color-surface);
+  color: var(--pst-color-text-base);
+}
+html[data-theme="light"] .bd-header-announcement {
   background-color: var(--spk-yellow);
-  color: #222832;
+  color: #1c1c1a;
 }
 .bd-header-announcement a,
 .bd-header-announcement a:visited {
-  color: var(--spk-orange-text);
+  color: var(--pst-color-link);
 }
-html[data-theme="dark"] .bd-header-announcement {
-  background-color: color-mix(in srgb, var(--spk-yellow) 22%, var(--pst-color-background));
+html[data-theme="light"] .bd-header-announcement a {
+  text-decoration-color: currentColor;
+  text-decoration-thickness: max(1px, 0.0625rem);
+}
+
+/* -- Code: keywords yellow, strings and numbers pink, comments grey --------- */
+
+html[data-theme] .highlight {
+  background: var(--pst-color-surface);
   color: var(--pst-color-text-base);
 }
-html[data-theme="dark"] .bd-header-announcement a,
-html[data-theme="dark"] .bd-header-announcement a:visited {
-  color: var(--spk-orange);
+/* reset every token of the theme's colourful style, then colour a few */
+html[data-theme] .highlight span[class] {
+  color: inherit;
+  font-style: normal;
+  font-weight: normal;
+}
+html[data-theme] .highlight span:is(.k, .kc, .kd, .kn, .kp, .kr, .kt, .ow) {
+  color: var(--spk-keyword);
+  font-weight: 600;
+}
+html[data-theme] .highlight span:is(.m, .mb, .mf, .mh, .mi, .mo, .il, .s, .s1, .s2, .sa, .sb, .sc, .dl, .sd, .se, .sh, .si, .sx, .sr, .ss) {
+  color: var(--spk-pink);
+}
+html[data-theme] .highlight span:is(.c, .c1, .ch, .cm, .cp, .cpf, .cs) {
+  color: var(--spk-code-comment);
+  font-style: italic;
+}
+html[data-theme] .highlight span:is(.gp, .go, .linenos) {
+  color: var(--pst-color-text-muted);
 }
 
 /* logo: a small mark with the project name beside it */
@@ -208,20 +290,13 @@ html[data-theme="dark"] .bd-header-announcement a:visited {
   font-size: 1.5rem;
 }
 
-/* -- Landing page: feature cards filled with the palette ------------------- */
+/* -- Landing page: feature cards on the neutral surface -------------------- */
 
 /* the theme paints the card body itself, so the fill goes on both */
-.spk-fill-orange { --spk-fill: color-mix(in srgb, var(--spk-orange) 40%, transparent); }
-.spk-fill-blue { --spk-fill: color-mix(in srgb, var(--spk-blue) 75%, transparent); }
-.spk-fill-yellow { --spk-fill: color-mix(in srgb, var(--spk-yellow) 75%, transparent); }
-.spk-fill-green { --spk-fill: color-mix(in srgb, var(--spk-green) 60%, transparent); }
-
-html[data-theme="dark"] .spk-fill-orange { --spk-fill: color-mix(in srgb, var(--spk-orange) 16%, transparent); }
-html[data-theme="dark"] .spk-fill-blue { --spk-fill: color-mix(in srgb, var(--spk-blue) 12%, transparent); }
-html[data-theme="dark"] .spk-fill-yellow { --spk-fill: color-mix(in srgb, var(--spk-yellow) 12%, transparent); }
-html[data-theme="dark"] .spk-fill-green { --spk-fill: color-mix(in srgb, var(--spk-green) 14%, transparent); }
-
-.sd-card[class*="spk-fill-"],
-.sd-card[class*="spk-fill-"] .sd-card-body {
-  background-color: var(--spk-fill);
+.sd-card.spk-feature,
+.sd-card.spk-feature .sd-card-body {
+  background-color: var(--pst-color-surface);
+}
+.sd-card.spk-feature {
+  border: 1px solid var(--pst-color-border);
 }

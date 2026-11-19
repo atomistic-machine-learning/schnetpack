@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="2 4 60 56" role="img" aria-label="SchNetPack">
-  <g stroke="#4b5563" stroke-width="4" stroke-linecap="round">
+  <g stroke="#a3a39d" stroke-width="4" stroke-linecap="round">
     <line x1="18" y1="44" x2="32" y2="20"/>
     <line x1="32" y1="20" x2="48" y2="42"/>
     <line x1="18" y1="44" x2="48" y2="42"/>
   </g>
-  <circle cx="18" cy="44" r="9" fill="#C6E9AF" stroke="#3E8112" stroke-width="2.5"/>
-  <circle cx="32" cy="20" r="11" fill="#FFB380" stroke="#B7591A" stroke-width="2.5"/>
-  <circle cx="48" cy="42" r="8" fill="#D7EEF4" stroke="#2A7D92" stroke-width="2.5"/>
+  <circle cx="18" cy="44" r="9" fill="#ffffff" stroke="#756600" stroke-width="2.5"/>
+  <circle cx="32" cy="20" r="11" fill="#f7e64a" stroke="#756600" stroke-width="2.5"/>
+  <circle cx="48" cy="42" r="8" fill="#ffffff" stroke="#c2185b" stroke-width="2.5"/>
 </svg>

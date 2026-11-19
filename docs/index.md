@@ -18,28 +18,28 @@ datasets, so new models are easy to implement and evaluate.
 :gutter: 3
 
 :::{grid-item-card} Neural network potentials
-:class-card: sd-border-0 spk-fill-orange
+:class-card: spk-feature
 :shadow: none
 SchNet, PaiNN and SO3net as building blocks, trained on energies, forces and
 other properties.
 :::
 
 :::{grid-item-card} Molecular dynamics
-:class-card: sd-border-0 spk-fill-blue
+:class-card: spk-feature
 :shadow: none
 Batched MD, relaxations and ensembles in `schnetpack.md` and
 `schnetpack.dynamics`, plus ASE and LAMMPS interfaces.
 :::
 
 :::{grid-item-card} Generative modelling
-:class-card: sd-border-0 spk-fill-yellow
+:class-card: spk-feature
 :shadow: none
 Diffusion and flow matching on positions, cells and atom types in
 `schnetpack.generative`.
 :::
 
 :::{grid-item-card} Fast training
-:class-card: sd-border-0 spk-fill-green
+:class-card: spk-feature
 :shadow: none
 Compiled models, CUDA graphs and data held in memory, with or without
 PyTorch Lightning.

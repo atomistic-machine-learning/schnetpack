@@ -124,8 +124,9 @@ html_theme = "sphinx_book_theme"
 html_title = "SchNetPack"
 html_favicon = "_static/favicon.svg"
 html_static_path = ["_static"]
-# Red Hat fonts and the colours of the SchNetPack paper figure
+# Red Hat fonts; yellow and pink, dark mode by default
 html_css_files = ["custom.css"]
+html_context = {"default_mode": "dark"}
 html_theme_options = {
     "repository_url": "https://github.com/atomistic-machine-learning/schnetpack",
     "path_to_docs": "docs",
