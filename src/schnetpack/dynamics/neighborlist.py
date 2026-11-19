@@ -1,4 +1,4 @@
-"""Neighbor lists for a batch of structures that keeps moving.
+"""Neighbor lists for a batch of structures.
 
 A relaxation or an MD run evaluates the same structures over and over, moving them a
 little each step. Rebuilding their neighbor lists every time is wasteful, so
@@ -29,19 +29,10 @@ class BatchNeighborList:
     """Keeps the neighbor lists of a batch valid while its structures move.
 
     The batch is a schnetpack input dictionary and stays on its device throughout, except
-    on the steps that have to rebuild: the neighbor list implementations run on cpu, so
-    the structures needing a new list -- and only those -- are shipped over and back.
+    on the steps that have to rebuild, since the the neighbor list implementations run on
+    cpu only.
 
-    ``idx_i``, ``idx_j`` and ``offsets`` are what this produces; the ``Rij`` that can come
-    with them is a by-product of the pruning, and models recompute it with their
-    ``PairwiseDistances`` input module anyway.
-
-    Note:
-        The offsets of a pair list are cell shifts, so pruning takes ``R[j] - R[i] +
-        offsets`` for the pair vector -- the convention ``PairwiseDistances`` and every
-        neighbor list in schnetpack share. Atoms that have wandered outside their cell
-        break it, here and in the model alike, so a structure with a cell has to stay in
-        it. Structures without one are unaffected.
+    Produces ``idx_i``, ``idx_j`` and ``offsets``.
 
     Args:
         neighbor_list: the neighbor list transform to build with, e.g.
@@ -267,13 +258,9 @@ def split_batch(
 
     The inverse of :func:`_atoms_collate_fn` for the structure-defining entries: atom-wise
     entries are cut along the atom axis at the ``n_atoms`` boundaries, structure-wise ones
-    are indexed. Every structure gets its position in the batch as ``properties.idx``, the
-    sample index a per-sample transform keys its caches by, so a batch that carries none --
-    one read back from a trajectory, say -- still splits into usable samples.
+    are indexed.
 
-    Neighbor lists are deliberately not split. They are the one thing that cannot be
-    recovered by cutting: the pair indices are shifted into batch-global numbering, and any
-    caller splitting a batch is about to rebuild them anyway.
+    Neighbor lists are deliberately not split, but need to be recalculated for each structure.
 
     Args:
         inputs: collated input batch.

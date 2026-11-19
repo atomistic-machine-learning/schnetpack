@@ -15,6 +15,11 @@ The inputs which need to be provided for every `spkmd` run are:
 - the path to a trained ML model (`calculator.model_file`)
 - and the cutoff used in the neighbor list (`calculator.neighbor_list.cutoff`)
 
+```{warning}
+Model files, checkpoints and restart files are pickled PyTorch objects. Loading them
+executes code contained in the file, so only use files from sources you trust.
+```
+
 Assuming the model and structure file are present in the local directory, the command line call would be:
 
 ```bash

@@ -74,6 +74,12 @@ Jupyter then writes your edits back to the `.py`. The paired `.ipynb` holds the
 outputs; it is gitignored, and a pre-commit hook rejects any `.ipynb`, so outputs
 never reach the repository.
 
+You can also edit the `.ipynb` in an editor that does not know about jupytext, such as
+VS Code. The `jupytext-sync` pre-commit hook writes every paired notebook in
+`docs/tutorials` and `docs/guides` back into its `.py` before a commit. If it rewrote a
+`.py`, the commit fails: `git add` the `.py` and commit again. A notebook you created
+from scratch gets a new `.py` that you have to `git add` yourself.
+
 A notebook has to run on a CPU in a few minutes, downloads included. One that cannot
 opts out of execution with a header at the top of its `.py`:
 

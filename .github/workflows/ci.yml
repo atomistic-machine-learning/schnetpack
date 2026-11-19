@@ -98,13 +98,14 @@ jobs:
           python -m venv /tmp/v
           /tmp/v/bin/pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
           /tmp/v/bin/pip install --no-cache-dir dist/*.whl
-          for c in spkconvert spkdeploy spktrain spkpredict spkmd; do
+          for c in spkconvert spkdeploy spktrain spkpredict spktest spksample spkevaluate spkmd; do
             echo "--- $c ---"
             /tmp/v/bin/$c --help > /dev/null
           done
 
   docs:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
@@ -112,6 +113,8 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: pyproject.toml
+      # CPU torch: the docs build needs no CUDA wheels
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -e ".[doc]"
       # The Monday run also installs the mace extra, so it executes the
       # batch-relaxation guide too, which downloads MACE-OFF.

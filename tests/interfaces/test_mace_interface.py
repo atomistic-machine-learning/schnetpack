@@ -196,6 +196,25 @@ def test_the_neighbors_are_counted_as_mace_counts_them(toy_data, r_max):
     )
 
 
+def test_atomic_numbers_give_the_model_more_elements(toy_data, tmp_path):
+    dataset, _ = toy_data
+    path = str(tmp_path / "mace.pt2")
+
+    core = load_mace(
+        build_mace(path, dataset, range(8), atomic_numbers=[8, 1, 7, 6], **SMALL)
+    )
+
+    assert core.atomic_numbers.tolist() == [1, 6, 7, 8]
+    assert not core.atomic_energies.any()
+
+
+def test_atomic_numbers_must_cover_the_dataset(toy_data, tmp_path):
+    dataset, _ = toy_data
+
+    with pytest.raises(ValueError, match=r"\[8\]"):
+        build_mace(str(tmp_path / "mace.pt2"), dataset, atomic_numbers=[1, 6])
+
+
 def test_the_seed_fixes_the_weights(built, toy_data, tmp_path):
     dataset, _ = toy_data
     first = load_mace(built).state_dict()

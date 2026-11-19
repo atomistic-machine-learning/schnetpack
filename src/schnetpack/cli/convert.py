@@ -1,3 +1,5 @@
+"""spkconvert: update the metadata of an ASE DB dataset in place."""
+
 import argparse
 
 import numpy as np
@@ -6,6 +8,19 @@ from tqdm import tqdm
 
 
 def main():
+    """
+    Update the metadata of an ASE DB dataset in place, e.g. to make a dataset
+    created with SchNetPack 1.0 loadable by the current version.
+
+    - Converts old-style atom references (array + `atref_labels`) to a dict
+      mapping each property to its per-element references.
+    - Sets the distance unit (`--distunit`) and property units (`--propunit`).
+    - Optionally prepends a dimension to the given properties in every row
+      (`--expand_property_dims`), as needed for old FieldSchNet datasets.
+
+    The database is modified in place, so back it up first.
+
+    """
     parser = argparse.ArgumentParser(
         description="Set units of an ASE dataset, e.g. to convert from SchNetPack 1.0 to the new format."
     )

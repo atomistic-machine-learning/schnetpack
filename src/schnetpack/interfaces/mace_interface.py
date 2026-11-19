@@ -239,6 +239,7 @@ def build_mace(
     radial_MLP: Sequence[int] = (64, 64, 64),
     MLP_irreps: str = "16x0e",
     scale: float | None = None,
+    atomic_numbers: Sequence[int] | None = None,
     seed: int = 0,
 ) -> str:
     """Build a MACE model with random weights for ``dataset``, export it (see
@@ -249,7 +250,8 @@ def build_mace(
     training data when it builds a model is taken from ``dataset``:
 
     - the elements, from all of ``dataset``, so that no validation or test
-      structure has an element the model does not cover;
+      structure has an element the model does not cover, unless
+      ``atomic_numbers`` is given;
     - the average number of neighbors within ``r_max``, the normalization of
       MACE's message passing, from ``indices``;
     - the scale of the atomic energies, as the RMS of the force components
@@ -261,6 +263,11 @@ def build_mace(
     ``dataset`` in these units. The model's E0s and energy shift are zero:
     train it with ``e0s="estimated"`` (see :class:`~schnetpack.model.MaceModel`).
     Any per-atom energy shift goes into the E0s, which are fitted per element.
+
+    ``atomic_numbers`` gives the model elements beyond those of ``dataset``,
+    e.g. those of a pretrained model to compare with: each element has weights
+    of its own, so the model has as many parameters as one built for these
+    elements. The weights of elements ``dataset`` lacks get no gradient.
 
     Args:
         path: where the archive is written.
@@ -279,6 +286,8 @@ def build_mace(
         radial_MLP: hidden layer widths of the radial MLP.
         MLP_irreps: hidden irreps of the readout MLP.
         scale: scale of the atomic energies; None for the RMS of the forces.
+        atomic_numbers: the elements of the model, which must cover those of
+            ``dataset``; None for those of ``dataset``.
         seed: seed of the random weights.
     """
     with _mace_environment():
@@ -288,6 +297,13 @@ def build_mace(
         from mace import modules
 
         numbers = _elements(dataset)
+        if atomic_numbers is not None:
+            missing = sorted(set(numbers) - set(atomic_numbers))
+            if missing:
+                raise ValueError(
+                    f"atomic_numbers do not cover the elements {missing} of the dataset"
+                )
+            numbers = sorted(set(atomic_numbers))
         if scale is None:
             scale = _force_rms(dataset, indices, forces_key)
         config = {

@@ -18,8 +18,8 @@ Installing SchNetPack puts these commands on your PATH.
       - Run molecular dynamics with a trained model, from Hydra configs. See
         :doc:`/guides/md_cli`.
     * - ``spkdeploy``
-      - Export a trained model for LAMMPS:
-        ``spkdeploy <model_path> <deployed_model_path> [--device cpu]``. See
+      - Compile a trained potential with AOTInductor for the LAMMPS pair style:
+        ``spkdeploy <model_path> <package.pt2> [--device cpu] [--dtype float32]``. See
         :doc:`/guides/lammps`.
     * - ``spkconvert``
       - Set the units of an ASE database, e.g. to convert a SchNetPack 1.0 dataset.

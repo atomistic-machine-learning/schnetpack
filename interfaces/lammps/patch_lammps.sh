@@ -1,15 +1,15 @@
 #!/bin/bash
 # usage: patch_lammps.sh [-e] /path/to/lammps/
 #
+# Builds pair_style schnetpack into LAMMPS itself, e.g. for static builds.
+# Without patching LAMMPS, build it as a plugin instead (see CMakeLists.txt).
+# -e links the sources instead of copying them.
 #
 # References:
 #
 #    .. [#pair_nequip] https://github.com/mir-group/pair_nequip
 
-
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-echo $SCRIPT_DIR
-
+FILES="pair_schnetpack.cpp pair_schnetpack.h schnetpack_model.cpp schnetpack_model.h"
 
 do_e_mode=false
 
@@ -47,46 +47,33 @@ fi
 
 # Check if root directory is correct
 if [ ! -f pair_schnetpack.cpp ]; then
-    echo "Please run `patch_lammps.sh` from the `pair_schnetpack.cpp` root directory."
+    echo "Please run patch_lammps.sh from the directory that holds pair_schnetpack.cpp."
     exit 1
 fi
 
 echo "Updating CMakeLists.txt..."
 # Check for double-patch
-if grep -q "find_package(Torch REQUIRED)" $lammps_dir/cmake/CMakeLists.txt
+if grep -q "find_package(Torch" $lammps_dir/cmake/CMakeLists.txt
 then
     echo "This LAMMPS installation _seems_ to already have been patched. CMakeLists.txt file not modified."
 else
-    # Update CMakeLists.txt
-    sed -i "s/set(CMAKE_CXX_STANDARD 11)/set(CMAKE_CXX_STANDARD 14)/" $lammps_dir/cmake/CMakeLists.txt
-
     # Add libtorch
     cat >> $lammps_dir/cmake/CMakeLists.txt << "EOF2"
 
-find_package(Torch REQUIRED)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+find_package(Torch 2.14 REQUIRED)
 target_link_libraries(lammps PUBLIC "${TORCH_LIBRARIES}")
 EOF2
 
 fi
 
-# check if files need to be copied to lammps directory
-if [ ! -f $lammps_dir/src/pair_schnetpack.cpp ]; then
-    if [ "$do_e_mode" = true ]
-    then
-        echo "Making source symlinks (-e)..."
-        for file in *.{cpp,h}; do
-            ln -s `realpath -s $file` $lammps_dir/src/$file
-        done
+for file in $FILES; do
+    if [ -e $lammps_dir/src/$file ]; then
+        echo "$file already exists in $lammps_dir/src, not copied."
+    elif [ "$do_e_mode" = true ]; then
+        ln -s `realpath -s $file` $lammps_dir/src/$file
     else
-        echo "Copying files..."
-        for file in *.{cpp,h}; do
-            cp $file $lammps_dir/src/$file
-        done
+        cp $file $lammps_dir/src/$file
     fi
-else
-    echo "pair_schnetpack.cpp file already exists. No files copied."
-fi
+done
 
-
-echo "Done!"
+echo "Done! Configure LAMMPS with -D CMAKE_CXX_STANDARD=20 (torch >= 2.14 needs C++20)."

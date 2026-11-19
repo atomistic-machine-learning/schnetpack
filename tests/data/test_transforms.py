@@ -51,6 +51,32 @@ class TestNeighborLists:
         for nbl, nbl_ref in zip(neighbors, neighbors_ref):
             torch.testing.assert_close(nbl, nbl_ref)
 
+    def test_atoms_outside_cell(self, neighbor_list, environment_periodic):
+        """Moving atoms by lattice vectors leaves the periodic system unchanged, so the
+        pair vectors must be the same as for the atoms inside the cell."""
+        cutoff, props, _ = environment_periodic
+        cell = props[structure.cell].view(3, 3)
+        lattice_shifts = torch.tensor(
+            [[1, 0, 0], [-2, 1, 0], [0, 0, 0], [1, -1, 3], [0, 2, -1]],
+            dtype=cell.dtype,
+        )
+        moved = {k: v.clone() for k, v in props.items()}
+        moved[structure.R] = props[structure.R] + lattice_shifts @ cell
+
+        pair_vectors = []
+        for inputs in (props, moved):
+            neighbors = neighbor_list(cutoff)(inputs)
+            R = inputs[structure.R]
+            neighbors[structure.Rij] = (
+                R[neighbors[structure.idx_j]]
+                - R[neighbors[structure.idx_i]]
+                + neighbors[structure.offsets]
+            )
+            pair_vectors.append(self._sort_neighbors(neighbors))
+
+        for nbl, nbl_ref in zip(*pair_vectors):
+            torch.testing.assert_close(nbl, nbl_ref)
+
     def _sort_neighbors(self, neighbors):
         """
         Routine for sorting the index, shift and distance vectors to allow comparison between different
