@@ -1,0 +1,135 @@
+# @package _global_
+#
+# GPFF on QM9: a time-agnostic generative pseudo-force field, without permutation
+# alignment. Settings of gpff's run gpff_no_permutation_seed999 (GPFF paper, Table S1,
+# and that run's config.yaml):
+#
+# - data: gpff's filtered QM9 (123,569 molecules) and split (split_seed999.npz:
+#   98,855 / 12,356 / 12,358), centered by geometry, all pairs of each molecule;
+# - noise: ln sigma ~ N(-0.7, 1.2^2) truncated at sigma_max = 30 A, x_t = x0 + sigma eps
+#   (eps not mean-free), label F = 2 (x0 - x_t), loss weight min(1, 1/sigma^2), mean
+#   over atoms and xyz;
+# - model: PaiNN 4 x 256, 600 Gaussians on a 150 A cosine cutoff (every pair of a QM9
+#   molecule), a gated-equivariant vector head of 3 layers, no time input;
+# - training: AdamW 1e-4 without weight decay, batch 512, gradient norm clipped at 1,
+#   steps with loss > 1e3 skipped, EMA 0.995, lr halved after 250 epochs without
+#   improvement (cooldown 10), early stopping after 500; validation noise from a
+#   fixed seed.
+#
+# Our choices: seed 999, the fast route (data.cache, a compiled model run as one CUDA
+# graph, fused AdamW), and spksample's settings (sample:): gpff's evaluation, 10,000
+# molecules at 32 and 64 steps, the ancestral sampler on gpff's EDM grid (sigma from
+# 30 to 0.01, rho 5, then 0).
+#
+#   spktrain --config-dir=benchmarks/configs experiment=gpff_qm9 run.data_dir=<folder with qm9_filtered.db and
+#       split_seed999.npz>
+
+defaults:
+  - override /model: nnp
+  - override /data: custom
+
+run:
+  experiment: gpff_qm9
+
+seed: 999
+
+globals:
+  lr: 1e-4
+  sigma_max: 30.0
+  cutoff: 150.0  # 5 sigma_max
+  n_rbf: 600
+  n_atom_basis: 256
+
+# the generated variable, shared by the data (Diffuse) and the task (VariableOutput)
+generative:
+  noising:
+    _target_: schnetpack.generative.GaussianInterpolant
+    schedule:
+      _target_: schnetpack.generative.VELinear  # sigma = 30 t
+      sigma_max: ${globals.sigma_max}
+      t_min: 0.0
+    prior:
+      _target_: schnetpack.generative.GaussianPrior
+      std: ${globals.sigma_max}
+      centered: false  # gpff's eps is not mean-free
+  positions:
+    _target_: schnetpack.generative.Variable
+    name: positions
+    view: _positions
+    per: atom
+    noising: ${generative.noising}
+    parametrization:
+      _target_: schnetpack.generative.PseudoForceParametrization
+    output_key: pseudo_force_pred
+    weight:  # min(1, 1/sigma^2)
+      _target_: schnetpack.generative.SNRWeight
+      max_weight: 1.0
+
+data:
+  dataset:
+    datapath: ${run.data_dir}/qm9_filtered.db
+    load_properties: []
+    # once, into the cache: the pairs do not depend on the noise
+    transforms:
+      - _target_: schnetpack.transform.SubtractCenterOfGeometry
+      - _target_: schnetpack.transform.AllToAllNeighborList
+  batch_transforms:
+    - _target_: schnetpack.generative.Diffuse
+      # plain lists: OmegaConf cannot hold a Variable (a dataclass with a Union field)
+      _convert_: all
+      variables:
+        - ${generative.positions}
+      t_sampler:
+        _target_: schnetpack.generative.LogNormalTimes
+        process: ${generative.noising}
+        mean: -4.101197327  # -0.7 - ln(30): ln sigma ~ N(-0.7, 1.2^2) at sigma = 30 t
+        std: 1.2
+    - _target_: schnetpack.transform.CastTo32
+  batch_size: 512
+  val_batch_size: 1000
+  num_train: null  # from the split file
+  num_val: null
+  split_file: ${run.data_dir}/split_seed999.npz
+  val_seed: 999
+  cache: true
+
+model:
+  representation:
+    n_atom_basis: ${globals.n_atom_basis}
+    n_interactions: 4
+    norm_epsilon: 1.0
+    banded_filter: true
+    radial_basis:
+      n_rbf: ${globals.n_rbf}
+  output_modules:
+    - _target_: schnetpack.model.AtomwiseVector
+      n_in: ${globals.n_atom_basis}
+      n_layers: 3
+      output_key: pseudo_force_pred
+
+task:
+  outputs:
+    - _target_: schnetpack.generative.VariableOutput
+      variable: ${generative.positions}
+  optimizer_args:
+    weight_decay: 0.0
+    fused: true
+  scheduler_args:
+    patience: 250
+    cooldown: 10
+  grad_clip: 1.0
+  skip_loss_above: 1000.0
+  compile: true
+  cuda_graph: true
+
+callbacks:
+  early_stopping:
+    patience: 500
+
+# spksample: gpff's EDM grid in path time, t = sigma / sigma_max
+sample:
+  n_samples: 10000
+  n_steps: [32, 64]
+  grid:
+    t_min: 0.0003333333333333333  # sigma_min 0.01 / sigma_max 30 (the float of 0.01 / 30)
+    rho: 5.0

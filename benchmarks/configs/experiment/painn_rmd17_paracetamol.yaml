@@ -1,0 +1,14 @@
+# @package _global_
+#
+# PaiNN on rMD17 paracetamol, energies and forces: the SchNetPack 2.0 paper's run
+# (J. Chem. Phys. 2023, Table V), with the recipe and our choices of
+# painn_rmd17_aspirin.
+#
+#   spktrain --config-dir=benchmarks/configs experiment=painn_rmd17_paracetamol
+#       run.data_dir=<folder with rmd17_paracetamol.db>
+
+defaults:
+  - painn_rmd17_aspirin
+
+data:
+  molecule: paracetamol
