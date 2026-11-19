@@ -18,6 +18,7 @@ from schnetpack.generative import (
     PermutationCoupling,
     PseudoForceParametrization,
     ScoreParametrization,
+    SNRWeight,
     VELinear,
     VelocityParametrization,
     X0Parametrization,
@@ -364,6 +365,16 @@ def test_eps_parametrization_returns_its_noise_untouched():
     x_t = torch.randn(8, 3)
     t = torch.full((8,), 0.5)
     assert torch.equal(p.to_noise(VP(), output, x_t, t), output)
+
+
+def test_clamped_snr_weight_on_ve_is_min_of_one_and_inverse_variance():
+    # on VE, SNR = 1 / sigma^2; max_weight=1 clamps it to min(1, 1 / sigma^2)
+    schedule = VELinear(sigma_max=30.0, t_min=0.0)
+    t = torch.tensor([0.001, 0.01, 1.0 / 30.0, 0.1, 1.0], dtype=torch.float64)
+    sigma = 30.0 * t
+    weight = SNRWeight(max_weight=1.0)(schedule, t, None)
+    torch.testing.assert_close(weight, (1.0 / sigma**2).clamp(max=1.0))
+    torch.testing.assert_close(SNRWeight()(schedule, t, None), 1.0 / sigma**2)
 
 
 def test_pseudo_force_parametrization_returns_its_output_untouched():

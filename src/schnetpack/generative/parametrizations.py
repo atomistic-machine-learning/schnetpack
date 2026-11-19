@@ -370,10 +370,18 @@ class SNRWeight:
     An x0 head on a Gaussian interpolant trained with it has the loss of an
     eps head, ||eps_hat - eps||^2 = (a / sigma)^2 ||x0_hat - x0||^2, with
     eps_hat the noise its x0_hat implies. GEODE trains its cell this way
-    (its Eq. 8 and 9). Use as a
+    (its Eq. 8 and 9). With ``max_weight=1.0`` on a VE schedule it is GPFF's
+    weight min(1, 1 / sigma^2). Use as a
     :class:`~schnetpack.generative.variables.Variable` weight. Theory:
     ``docs_new/generation/new_variables.md`` §5.3.
     """
+
+    def __init__(self, max_weight: float | None = None):
+        """
+        Args:
+            max_weight: upper bound of the weight; None for no bound
+        """
+        self.max_weight = max_weight
 
     def __call__(self, schedule, t, x_t):
         """
@@ -385,4 +393,7 @@ class SNRWeight:
         Returns:
             Weight per row, shaped like t.
         """
-        return (schedule.a(t) / schedule.sigma(t)) ** 2
+        weight = (schedule.a(t) / schedule.sigma(t)) ** 2
+        if self.max_weight is not None:
+            weight = weight.clamp(max=self.max_weight)
+        return weight
