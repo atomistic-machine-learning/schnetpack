@@ -7,6 +7,7 @@ from schnetpack.dynamics import (
     Euler,
     FieldCalculator,
     Heun,
+    KarrasGrid,
     ODEUpdate,
     Sampler,
     SDEUpdate,
@@ -148,6 +149,23 @@ def test_grid_owns_its_range():
 
 def test_grids_respect_dtype():
     assert UniformGrid(1.0, 0.0)(4, dtype=torch.float64).dtype == torch.float64
+    assert KarrasGrid(1e-3)(4, dtype=torch.float32).dtype == torch.float32
+
+
+@pytest.mark.parametrize("n_steps", [32, 64])
+def test_karras_grid_is_the_edm_grid_in_path_time(n_steps):
+    """EDM noise levels from 30 to 0.01 (rho 5), then 0, divided by 30: the
+    path times of VELinear(sigma_max=30)."""
+    sigma_max, sigma_min, rho = 30.0, 0.01, 5.0
+    ramp = torch.linspace(1.0, 0.0, n_steps, dtype=torch.float64)
+    low, high = sigma_min ** (1 / rho), sigma_max ** (1 / rho)
+    sigma = (low + ramp * (high - low)) ** rho
+    edm = torch.cat([sigma, sigma.new_zeros(1)]) / sigma_max
+
+    ts = KarrasGrid(t_min=sigma_min / sigma_max, rho=rho)(n_steps, torch.float64)
+    assert ts.shape == (n_steps + 1,)
+    torch.testing.assert_close(ts, edm, rtol=1e-12, atol=0)
+    assert (ts.diff() < 0).all()
 
 
 # --- priors and defaults ---------------------------------------------------- #
