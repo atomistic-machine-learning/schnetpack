@@ -7,11 +7,13 @@ import torch.nn.functional as F
 import schnetpack.nn as snn
 import schnetpack.nn.so3 as so3
 import schnetpack.properties as properties
+from schnetpack.model_format import register
 from schnetpack.nn.ops.so3_message import so3_message_pairs, so3_message_supported
 
 __all__ = ["SO3net"]
 
 
+@register
 class SO3net(nn.Module):
     """
     A simple SO3-equivariant representation using spherical harmonics and

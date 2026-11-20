@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import schnetpack.model.atomistic.response
-from schnetpack.utils import load_model
+from schnetpack.model_format import load_model
 
 if TYPE_CHECKING:
     from schnetpack.md import System
@@ -142,7 +142,7 @@ class SchNetPackCalculator(MDCalculator):
                 if isinstance(pp, schnetpack.transform.AddOffsets):
                     log.info("Found `AddOffsets` postprocessing module...")
                     log.info(
-                        f"Constant offset of {pp.mean.detach().cpu().numpy():20.11f} per atom  will be removed..."
+                        f"Constant offset of {float(pp.mean):20.11f} per atom  will be removed..."
                     )
         model.do_postprocessing = False
         return model

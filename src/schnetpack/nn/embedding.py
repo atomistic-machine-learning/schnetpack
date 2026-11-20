@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import schnetpack.properties as properties
+from schnetpack.model_format import register
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.nn.blocks import ResidualMLP
 
@@ -156,6 +157,7 @@ electron_config = np.array([
 electron_config = electron_config / np.max(electron_config, axis=0)
 
 
+@register
 class NuclearEmbedding(nn.Module):
     """
     Embedding which maps scalar nuclear charges Z to vectors in a
@@ -237,6 +239,7 @@ class NuclearEmbedding(nn.Module):
             )
 
 
+@register
 class ElectronicEmbedding(nn.Module):
     """
     Single Head self attention like block for updating atomic features through nonlocal interactions with the

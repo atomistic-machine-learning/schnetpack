@@ -30,6 +30,7 @@ dependencies = [
     "torchmetrics",
     "hydra-colorlog>=1.1.0",
     "rich",
+    "safetensors>=0.4",
     "fasteners",
     "dirsync",
     "torch-ema",

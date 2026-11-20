@@ -1,5 +1,6 @@
 import torch
 
+from schnetpack.model_format import register
 from schnetpack.utils import as_dtype
 
 from .base import Transform
@@ -7,6 +8,7 @@ from .base import Transform
 __all__ = ["CastMap", "CastTo32", "CastTo64"]
 
 
+@register
 class CastMap(Transform):
     """
     Cast all inputs according to type map.
@@ -34,6 +36,7 @@ class CastMap(Transform):
         return inputs
 
 
+@register
 class CastTo32(CastMap):
     """Cast all float64 tensors to float32"""
 
@@ -41,6 +44,7 @@ class CastTo32(CastMap):
         super().__init__(type_map={"float64": "float32"})
 
 
+@register
 class CastTo64(CastMap):
     """Cast all float32 tensors to float64"""
 

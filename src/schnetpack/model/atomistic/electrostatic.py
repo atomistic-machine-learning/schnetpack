@@ -5,10 +5,12 @@ import torch.nn as nn
 import schnetpack.nn as snn
 from schnetpack import properties
 from schnetpack import units as spk_units
+from schnetpack.model_format import register
 
 __all__ = ["CoulombPotential", "DampedCoulombPotential", "EnergyCoulomb", "EnergyEwald"]
 
 
+@register
 class CoulombPotential(nn.Module):
     """
     Basic 1/r Coulomb component. For use in `schnetpack.model.EnergyCoulomb`.
@@ -21,6 +23,7 @@ class CoulombPotential(nn.Module):
         return 1.0 / d_ij
 
 
+@register
 class DampedCoulombPotential(nn.Module):
     """
     Compute a damped Coulomb potential, for use in `schnetpack.model.EnergyCoulomb`.
@@ -58,6 +61,7 @@ class DampedCoulombPotential(nn.Module):
         return f_switch * damped + (1 - f_switch) * potential
 
 
+@register
 class EnergyCoulomb(nn.Module):
     """
     Compute Coulomb energy from a set of point charges via direct summation. Depending on the form of the
@@ -157,6 +161,7 @@ class EnergyEwaldError(Exception):
     pass
 
 
+@register
 class EnergyEwald(torch.nn.Module):
     """
     Compute the Coulomb energy of a set of point charges inside a periodic box.

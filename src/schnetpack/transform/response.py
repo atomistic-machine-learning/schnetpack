@@ -1,11 +1,13 @@
 import torch
 
 from schnetpack import properties
+from schnetpack.model_format import register
 from schnetpack.transform.base import Transform
 
 __all__ = ["SplitShielding"]
 
 
+@register
 class SplitShielding(Transform):
     """
     Transform for splitting shielding tensors by atom types.

@@ -6,11 +6,13 @@ import torch.nn.functional as F
 
 import schnetpack.nn as snn
 import schnetpack.properties as properties
+from schnetpack.model_format import register
 from schnetpack.nn.ops.radial_filter import gaussian_band, gaussian_rbf_linear
 
 __all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
 
 
+@register
 class PaiNNInteraction(nn.Module):
     r"""PaiNN interaction block for modeling equivariant interactions of atomistic systems."""
 
@@ -67,6 +69,7 @@ class PaiNNInteraction(nn.Module):
         return q, mu
 
 
+@register
 class PaiNNMixing(nn.Module):
     r"""PaiNN interaction block for mixing on atom features."""
 
@@ -117,6 +120,7 @@ class PaiNNMixing(nn.Module):
         return q, mu
 
 
+@register
 class PaiNN(nn.Module):
     """Equivariant message-passing network for the prediction of tensorial properties
     and molecular spectra.

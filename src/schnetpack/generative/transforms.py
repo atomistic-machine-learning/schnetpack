@@ -16,11 +16,13 @@ import torch
 from schnetpack import properties
 from schnetpack.generative.variables import STRUCTURE_TIME_KEY, Variable
 from schnetpack.generative.views import KeyView
+from schnetpack.model_format import register
 from schnetpack.transform.base import Transform
 
 __all__ = ["Diffuse"]
 
 
+@register
 class Diffuse(Transform):
     """
     Noise every variable of a structure at one shared time, in order.

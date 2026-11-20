@@ -7,10 +7,12 @@ import torch.nn.functional as F
 import schnetpack as spk
 import schnetpack.nn as snn
 import schnetpack.properties as properties
+from schnetpack.model_format import register
 
 __all__ = ["Atomwise", "AtomwiseVector", "DipoleMoment", "Polarizability"]
 
 
+@register
 class Atomwise(nn.Module):
     """
     Predicts atom-wise contributions and accumulates global prediction, e.g. for the energy.
@@ -89,6 +91,7 @@ class Atomwise(nn.Module):
         return inputs
 
 
+@register
 class AtomwiseVector(nn.Module):
     """
     Predicts an atom-wise vector quantity of shape (n_atoms, 3) from scalar and
@@ -147,6 +150,7 @@ class AtomwiseVector(nn.Module):
         return inputs
 
 
+@register
 class DipoleMoment(nn.Module):
     """
     Predicts dipole moments from latent partial charges and (optionally) local, atomic dipoles.
@@ -277,6 +281,7 @@ class DipoleMoment(nn.Module):
         return inputs
 
 
+@register
 class Polarizability(nn.Module):
     """
     Predicts polarizability tensor using tensor rank factorization.

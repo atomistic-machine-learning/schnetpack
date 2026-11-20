@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.autograd import grad
 
 import schnetpack.properties as properties
+from schnetpack.model_format import register
 from schnetpack.nn.utils import derivative_from_atomic, derivative_from_molecular
 
 __all__ = ["Forces", "Strain", "Response"]
@@ -12,6 +13,7 @@ class ResponseException(Exception):
     pass
 
 
+@register
 class Forces(nn.Module):
     """
     Predicts forces and stress as response of the energy prediction
@@ -91,6 +93,7 @@ class Forces(nn.Module):
         return inputs
 
 
+@register
 class Response(nn.Module):
     implemented_properties = [
         properties.forces,
@@ -427,6 +430,7 @@ class Response(nn.Module):
         )
 
 
+@register
 class Strain(nn.Module):
     """
     This is required to calculate the stress as a response property.

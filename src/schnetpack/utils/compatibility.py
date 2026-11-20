@@ -1,4 +1,5 @@
 import importlib
+import os
 import sys
 import warnings
 from typing import Any
@@ -53,18 +54,25 @@ def load_model(
     ``schnetpack.atomistic.*``, now below ``schnetpack.model``) are remapped before
     unpickling, see `_LEGACY_MODULES`.
 
+    A model folder (`schnetpack.save_model`) is loaded by `schnetpack.load_model`.
+
     Warning:
         Model files are pickled PyTorch objects. Loading one executes code contained in the file, so only load
         models from sources you trust.
 
     Args:
-        model_path (str): Path to the saved model file.
+        model_path (str): Path to the saved model file, or a model folder.
         device (torch.device or str): Device on which to load the model. Defaults to "cpu".
-        **kwargs (Any): Additional keyword arguments for `torch.load`.
+        **kwargs (Any): Additional keyword arguments for `torch.load` (model files only).
 
     Returns:
         torch.nn.Module: Loaded model.
     """
+    if os.path.isdir(model_path):
+        from schnetpack.model_format import load_model as load_folder
+
+        return load_folder(model_path, device=device)
+
     _register_legacy_modules()
 
     # a whole pickled model only loads with weights_only=False

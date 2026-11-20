@@ -10,6 +10,8 @@ import sys
 import numpy as np
 from ase.db import connect
 
+from schnetpack import load_hyperparameters
+
 TEST_QM9 = os.path.join(os.path.dirname(__file__), "testdata", "test_qm9.db")
 
 # a small GPFF: the positions variable of the run, trained for 2 epochs
@@ -139,3 +141,10 @@ def test_spksample_samples_the_runs_variables_on_its_test_compositions(tmp_path)
         assert meta["n_steps"] == n_steps and meta["seed"] == 3
         assert meta["sample"]["grid"]["rho"] == 5.0  # the run's sample: block
         assert meta["variables"]["positions"]["output_key"] == "pseudo_force_pred"
+
+    # the model folder carries the run's resolved generative: and sample: blocks
+    blocks = load_hyperparameters(str(run / "best_model"))
+    assert blocks["sample"] == {"grid": {"t_min": 3.3333333333333335e-4, "rho": 5.0}}
+    noising = blocks["generative"]["positions"]["noising"]
+    assert noising == blocks["generative"]["noising"]
+    assert noising["schedule"]["sigma_max"] == 30.0

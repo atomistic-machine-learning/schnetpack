@@ -133,9 +133,11 @@ def test_save_model_restores_the_flag_when_saving_fails(tmp_path):
     task = AtomisticTask(
         model=model, outputs=[make_output()], optimizer_args={"lr": 1e-3}
     )
-    with pytest.raises(RuntimeError, match="does not exist"):
-        task.save_model(str(tmp_path / "missing" / "model.pt"), do_postprocessing=True)
+    # LinearModel is not registered, so it cannot be saved
+    with pytest.raises(ValueError, match="no record of its constructor arguments"):
+        task.save_model(str(tmp_path / "model"), do_postprocessing=True)
     assert not model.do_postprocessing
+    assert not (tmp_path / "model").exists()
 
 
 def masked_output(masks, target_property="y_ref"):

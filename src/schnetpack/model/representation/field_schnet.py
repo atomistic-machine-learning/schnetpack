@@ -8,6 +8,7 @@ import schnetpack.nn as snn
 import schnetpack.properties as structure
 from schnetpack import properties
 from schnetpack.model.representation.schnet import SchNetInteraction
+from schnetpack.model_format import register
 from schnetpack.nn import Dense, scatter_add
 from schnetpack.nn.activations import shifted_softplus
 from schnetpack.utils import required_fields_from_properties
@@ -15,6 +16,7 @@ from schnetpack.utils import required_fields_from_properties
 __all__ = ["FieldSchNet", "NuclearMagneticMomentEmbedding"]
 
 
+@register
 class FieldSchNetFieldInteraction(nn.Module):
     """
     Model interaction of dipole features with external fields (see Ref. [#field2]_).
@@ -70,6 +72,7 @@ class FieldSchNetFieldInteraction(nn.Module):
         return dq
 
 
+@register
 class DipoleUpdate(nn.Module):
     """
     Update the dipole moment features based on the scalar representations on the neighbor atoms.
@@ -128,6 +131,7 @@ class DipoleUpdate(nn.Module):
         return mu
 
 
+@register
 class DipoleInteraction(nn.Module):
     def __init__(
         self,
@@ -222,6 +226,7 @@ class DipoleInteraction(nn.Module):
         return dq
 
 
+@register
 class NuclearMagneticMomentEmbedding(nn.Module):
     """
     Special embedding for nuclear magnetic moments, since they can scale differently based on an atoms gyromagnetic
@@ -247,6 +252,7 @@ class NuclearMagneticMomentEmbedding(nn.Module):
         return dmu
 
 
+@register
 class FieldSchNet(nn.Module):
     """FieldSchNet architecture for modeling interactions with external fields and
     response properties.

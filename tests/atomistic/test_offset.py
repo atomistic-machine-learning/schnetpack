@@ -430,3 +430,53 @@ def test_intensive_atomref_only(dummy_inputs, atomrefs_tensor):
     )
     print(f"Original energies: {dummy_inputs[property]}")
     assert torch.allclose(restored_batch[property], dummy_inputs[property], atol=1e-2)
+
+
+# === The size of the atomref table ===
+class ShortTable:
+    """A stats source whose atomrefs end at oxygen, as MD17's do."""
+
+    def __init__(self, atomrefs):
+        self.atomrefs = atomrefs
+
+    def get_atomrefs(self, prop, *args, **kwargs):
+        return {prop: self.atomrefs}
+
+
+@pytest.mark.parametrize("cls", [AddOffsets, RemoveOffsets])
+def test_atomrefs_from_the_data_are_padded_to_zmax(cls, dummy_inputs):
+    """The table keeps the size the transform was built with, whatever length the
+    data's atomrefs have, so that a model built again has the same buffers."""
+    atomrefs = torch.arange(9, dtype=torch.float64)
+    key = "add_atomrefs" if cls is AddOffsets else "remove_atomrefs"
+    transform = cls("energy", **{key: True})
+    transform.initialize(ShortTable(atomrefs))
+
+    assert transform.atomref.shape == (100,)
+    assert transform.atomref.dtype == torch.float64
+    assert torch.equal(transform.atomref[:9], atomrefs)
+    assert not transform.atomref[9:].any()
+
+    # 2 C + 1 H, 4 C + 2 H, 1 C + 4 H with a reference of 6 per C and 1 per H
+    sign = 1 if cls is AddOffsets else -1
+    expected = dummy_inputs["energy"] + sign * torch.tensor([13.0, 26.0, 10.0])
+    assert torch.allclose(transform(dummy_inputs)["energy"], expected)
+
+
+def test_atomrefs_beyond_zmax_are_refused():
+    transform = AddOffsets("energy", add_atomrefs=True, zmax=8)
+    with pytest.raises(ValueError, match="build it with a larger zmax"):
+        transform.initialize(ShortTable(torch.arange(9.0)))
+    # zeros beyond the table are dropped
+    transform.initialize(ShortTable(torch.tensor([0.0, 1.0, 0.0, 0.0] + 6 * [0.0])))
+    assert transform.atomref.shape == (8,)
+
+
+@pytest.mark.parametrize("cls", [AddOffsets, RemoveOffsets])
+def test_an_atomic_number_beyond_the_table_is_an_error(cls, dummy_inputs):
+    key = "add_atomrefs" if cls is AddOffsets else "remove_atomrefs"
+    transform = cls("energy", **{key: True})
+    transform.initialize(ShortTable(torch.arange(9.0)))
+    dummy_inputs[structure.Z][0] = 100
+    with pytest.raises(IndexError):
+        transform(dummy_inputs)

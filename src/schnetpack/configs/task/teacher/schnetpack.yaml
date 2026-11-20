@@ -1,6 +1,7 @@
 # @package _global_
 #
-# A SchNetPack model as teacher, pickled (e.g. a run's best_model).
+# A SchNetPack model as teacher: a model folder (e.g. a run's best_model) or a
+# pickled model file.
 
 # The cutoff and length unit are globals: the data pipeline's shared neighbor
 # list is sized from them as well.

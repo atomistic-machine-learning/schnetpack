@@ -7,10 +7,12 @@ import torch.nn.functional as F
 import schnetpack.nn as snn
 import schnetpack.properties as properties
 import schnetpack.units as spk_units
+from schnetpack.model_format import register
 
 __all__ = ["ZBLRepulsionEnergy"]
 
 
+@register
 class ZBLRepulsionEnergy(nn.Module):
     """
     Computes a Ziegler-Biersack-Littmark style repulsion energy.

@@ -4,7 +4,7 @@ import argparse
 
 import torch
 
-from schnetpack.utils import load_model
+from schnetpack.model_format import load_model
 
 
 def main():

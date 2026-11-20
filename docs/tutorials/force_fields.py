@@ -206,15 +206,17 @@ task = AtomisticTask(
 #
 # The model after the last epoch is not always the best one. The
 # {class}`~schnetpack.lightning.ModelCheckpoint` callback watches the validation
-# loss and, whenever it reaches a new minimum, writes two files:
+# loss and, whenever it reaches a new minimum, writes two things:
 #
 # - a Lightning checkpoint in `dirpath`, which holds the whole training state and
 #   can resume training;
-# - the model alone at `model_path`, ready for predictions. It adds the mean energy
-#   back, so it returns energies in the units of the data.
+# - the model alone in the folder `model_path`, ready for predictions:
+#   `hyperparameters.json` holds its classes and their arguments,
+#   `model.safetensors` its weights. It adds the mean energy back, so it returns
+#   energies in the units of the data.
 
 # %%
-model_path = os.path.join(workdir, "best_model.pt")
+model_path = os.path.join(workdir, "best_model")
 checkpoint = ModelCheckpoint(
     model_path=model_path,
     dirpath=os.path.join(workdir, "checkpoints"),
@@ -258,24 +260,21 @@ plt.show()
 # %% [markdown]
 # ## Test errors
 #
-# `trainer.test` with `ckpt_path="best"` loads the kept checkpoint and evaluates it
-# on the test set, which the training never saw. The checkpoint holds the pickled
-# model, which torch loads only with `weights_only=False`:
+# `trainer.test` with `ckpt_path="best"` loads the weights of the kept checkpoint
+# into the task and evaluates it on the test set, which the training never saw:
 
 # %%
-trainer.test(
-    task, datamodule=datamodule, ckpt_path="best", weights_only=False, verbose=False
-)
+trainer.test(task, datamodule=datamodule, ckpt_path="best", verbose=False)
 print(f"energy MAE: {trainer.callback_metrics['test_energy_MAE']:.4f} eV")
 print(f"force MAE:  {trainer.callback_metrics['test_forces_MAE']:.4f} eV/Å")
 
 # %% [markdown]
-# For a closer look, we load the saved model with {func}`~schnetpack.utils.load_model`
-# and predict the forces of the test set batch by batch. The model writes its
-# predictions into the batch, so the reference forces are taken out first.
+# For a closer look, we load the saved model with `spk.load_model` and predict the
+# forces of the test set batch by batch. The model writes its predictions into the
+# batch, so the reference forces are taken out first.
 
 # %%
-best_model = spk.utils.load_model(model_path)
+best_model = spk.load_model(model_path)
 
 f_ref, f_pred = [], []
 for batch in datamodule.test_dataloader():

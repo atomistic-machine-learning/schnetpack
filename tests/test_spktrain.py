@@ -1,4 +1,4 @@
-"""spktrain's configs, and what it keeps when a run is resumed."""
+"""spktrain's configs, what it keeps when a run is resumed, and what it stores."""
 
 import os
 import re
@@ -9,6 +9,7 @@ import sys
 import hydra
 import pytest
 import pytorch_lightning as pl
+import torch
 import yaml
 from hydra import compose, initialize_config_dir
 
@@ -63,3 +64,14 @@ def test_random_seed_is_stored_and_kept_on_resume(tmp_path):
     logs = "".join(p.read_text() for p in run.glob("*.log"))
     logged = re.findall(r"Seed (?:randomly )?with <(\d+)>", logs)
     assert [int(s) for s in logged] == [seed, seed]
+
+    # the resumed run loaded last.ckpt weights-only; the best model is a folder
+    assert sorted(os.listdir(run / "best_model")) == [
+        "hyperparameters.json",
+        "model.safetensors",
+    ]
+    assert not (run / "best_model.task").exists()
+    model = schnetpack.load_model(str(run / "best_model"))
+    assert model.postprocessors[1].mean.shape == (1,)
+    for checkpoint in (run / "checkpoints").glob("*.ckpt"):
+        assert "hyper_parameters" not in torch.load(checkpoint, weights_only=True)

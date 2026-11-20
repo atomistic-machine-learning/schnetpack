@@ -14,10 +14,6 @@ from schnetpack.lightning import (
     ExponentialMovingAverage,
     ModelCheckpoint,
 )
-from schnetpack.lightning.utils import (
-    load_task_from_checkpoint,
-    trainer_fit_kwargs_for_checkpoint,
-)
 
 QM9_PATH = os.path.join(os.path.dirname(__file__), "../testdata/test_qm9.db")
 SEED = 42
@@ -85,16 +81,16 @@ def fit(run_dir, max_epochs, ckpt_path=None, ema=False, cached=False):
         num_sanity_val_steps=0,
         default_root_dir=str(run_dir),
     )
-    fit_kwargs = trainer_fit_kwargs_for_checkpoint(trainer) if ckpt_path else {}
-    trainer.fit(task, datamodule=datamodule, ckpt_path=ckpt_path, **fit_kwargs)
+    trainer.fit(task, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=True)
     return task, checkpoint
 
 
 @pytest.mark.parametrize("cached", [False, True], ids=["uncached", "cached"])
 @pytest.mark.parametrize("ema", [False, True], ids=["plain", "ema"])
 def test_resumed_training_matches_uninterrupted(tmp_path, ema, cached):
-    """Stopping after 2 epochs and resuming from last.ckpt in a new, re-seeded
-    process must give the same weights as training 4 epochs in one go."""
+    """Stopping after 2 epochs and resuming from last.ckpt (loaded weights-only)
+    in a new, re-seeded process must give the same weights as training 4 epochs
+    in one go."""
     kwargs = dict(ema=ema, cached=cached)
     reference, _ = fit(tmp_path / "uninterrupted", max_epochs=4, **kwargs)
 
@@ -107,10 +103,18 @@ def test_resumed_training_matches_uninterrupted(tmp_path, ema, cached):
         assert torch.equal(value, resumed.state_dict()[name]), name
 
 
-def test_loading_a_task_leaves_the_rng_alone(tmp_path):
-    _, checkpoint = fit(tmp_path, max_epochs=1)
+def test_checkpoint_loads_weights_only_into_a_task_built_from_code(tmp_path):
+    """No pickled model or hyperparameters in the checkpoint: the task is built
+    again and takes the checkpoint's state, with the RNG left alone."""
+    trained, checkpoint = fit(tmp_path, max_epochs=1)
+    state = torch.load(checkpoint.last_model_path, weights_only=True)
+    assert "hyper_parameters" not in state
 
+    task = make_task()
+    task.load_state_dict(state["state_dict"], assign=True)
     torch.manual_seed(0)
-    state = torch.get_rng_state()
-    load_task_from_checkpoint(AtomisticTask, checkpoint.last_model_path)
-    assert torch.equal(torch.get_rng_state(), state)
+    rng = torch.get_rng_state()
+    task.on_load_checkpoint(state)  # without a trainer: does not touch the RNG
+    assert torch.equal(torch.get_rng_state(), rng)
+    for name, value in trained.state_dict().items():
+        assert torch.equal(value, task.state_dict()[name]), name

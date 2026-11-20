@@ -85,7 +85,8 @@ class PredictionWriter(BasePredictionWriter):
 class ModelCheckpoint(BaseModelCheckpoint):
     """
     Like the PyTorch Lightning ModelCheckpoint callback,
-    but also saves the best inference model with activated post-processing
+    but also saves the best inference model with activated post-processing,
+    to the model folder ``model_path`` (`schnetpack.save_model`).
     """
 
     def __init__(self, model_path: str, do_postprocessing=True, *args, **kwargs):
@@ -133,7 +134,6 @@ class ModelCheckpoint(BaseModelCheckpoint):
 
         if current == self.best_model_score:
             if self.trainer.strategy.local_rank == 0:
-                # remove references to trainer and data loaders to avoid pickle error in ddp
                 self.task.save_model(self.model_path, do_postprocessing=True)
 
 
