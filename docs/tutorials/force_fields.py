@@ -259,10 +259,13 @@ plt.show()
 # ## Test errors
 #
 # `trainer.test` with `ckpt_path="best"` loads the kept checkpoint and evaluates it
-# on the test set, which the training never saw:
+# on the test set, which the training never saw. The checkpoint holds the pickled
+# model, which torch loads only with `weights_only=False`:
 
 # %%
-trainer.test(task, datamodule=datamodule, ckpt_path="best", verbose=False)
+trainer.test(
+    task, datamodule=datamodule, ckpt_path="best", weights_only=False, verbose=False
+)
 print(f"energy MAE: {trainer.callback_metrics['test_energy_MAE']:.4f} eV")
 print(f"force MAE:  {trainer.callback_metrics['test_forces_MAE']:.4f} eV/Å")
 
