@@ -1,0 +1,18 @@
+# @package data
+defaults:
+  - custom
+
+dataset:
+  _target_: schnetpack.datasets.MP20
+  datapath: ${run.data_dir}/mp20.db  # data_dir is specified in train.yaml
+
+# the published split of CDVAE and DiffCSP, stored in the db's metadata
+splitting:
+  _target_: schnetpack.data.splitting.SubsamplePartitions
+  split_partition_sources: [train, val, test]
+  split_id: 0
+
+batch_size: 256  # DiffCSP's
+num_train: 27136
+num_val: 9047
+num_test: 9046

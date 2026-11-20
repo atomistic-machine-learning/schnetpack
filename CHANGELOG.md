@@ -148,6 +148,9 @@ LAMMPS with `spkdeploy` are unchanged.
   - The `MPTraj` dataset (MPtrj): 1.58 M DFT relaxation frames of bulk crystals
     with energies, forces, stresses and magnetic moments, and the data config
     `data=mptraj`, which splits by material.
+  - The `MP20` dataset (MP-20 of CDVAE and DiffCSP): 45,229 crystals with at
+    most 20 atoms per cell, with the published split, and the data config
+    `data=mp20`.
 - Configs: a progress bar callback, and a wandb logger setup (#787).
 - How-tos for batch-wise relaxations, ensemble calculations and guidance.
   The tutorials and how-tos are now stored as jupytext `py:percent` files.

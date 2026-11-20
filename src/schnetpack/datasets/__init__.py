@@ -9,6 +9,7 @@ from .iso17 import *
 from .materials_project import *
 from .md17 import *
 from .md22 import *
+from .mp20 import *
 from .mptraj import *
 from .omdb import *
 from .qm7x import *
