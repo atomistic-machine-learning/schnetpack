@@ -216,6 +216,14 @@ LAMMPS with `spkdeploy` are unchanged.
   loading `FPBE0` returned the MBD forces. Databases built before hold no PBE0
   forces and have to be rebuilt. An interrupted extraction no longer leaves a
   partial file that later runs reuse.
+- With Lightning >= 2.6, `last.ckpt` stayed at the best epoch once the
+  monitored metric stopped improving, so a resumed run repeated the epochs since
+  then.
+- `ExponentialMovingAverage` continued training from the weights of the last
+  validation when validation ran less than once per epoch, and from the EMA
+  average when it ran within an epoch.
+- `PredictionWriter` with `write_interval="epoch"`, the default of
+  `spkpredict`, failed.
 
 ### Removed
 
