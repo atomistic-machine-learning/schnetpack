@@ -63,14 +63,8 @@ def main(config: DictConfig):
         )
         return
 
-    # seed of torch, numpy and python's random; drawn before config.yaml is saved
-    if config.get("seed") is None:
-        config.seed = random.randint(0, 2**32 - 1)
-        log.info(f"Seed randomly with <{config.seed}>")
-    else:
-        log.info(f"Seed with <{config.seed}>")
-
-    if os.path.exists("config.yaml"):
+    resume = os.path.exists("config.yaml")
+    if resume:
         log.info(
             f"Config already exists in given directory {os.path.abspath('.')}."
             + " Attempting to continue training."
@@ -84,6 +78,10 @@ def main(config: DictConfig):
         with open(f"config.old.{count}.yaml", "w") as f:
             OmegaConf.save(old_config, f, resolve=False)
 
+        # a resumed run keeps its seed, unless a new one is given
+        if config.get("seed") is None:
+            config.seed = old_config.get("seed")
+
         # resume from latest checkpoint
         if config.run.ckpt_path is None:
             if os.path.exists("checkpoints/last.ckpt"):
@@ -93,7 +91,15 @@ def main(config: DictConfig):
             log.info(
                 f"Resuming from checkpoint {os.path.abspath(config.run.ckpt_path)}"
             )
+
+    # seed of torch, numpy and python's random; drawn before config.yaml is saved
+    if config.get("seed") is None:
+        config.seed = random.randint(0, 2**32 - 1)
+        log.info(f"Seed randomly with <{config.seed}>")
     else:
+        log.info(f"Seed with <{config.seed}>")
+
+    if not resume:
         with open("config.yaml", "w") as f:
             OmegaConf.save(config, f, resolve=False)
 

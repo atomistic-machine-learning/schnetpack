@@ -168,7 +168,12 @@ LAMMPS with `spkdeploy` are unchanged.
   `pytest`, `pre-commit`, `protobuf` and `progressbar` are no longer installed
   as runtime dependencies.
 - Raised minimum versions: `ase>=3.23`, `hydra-core>=1.3,<2`,
-  `pytorch_lightning>=2.2,<3`.
+  `pytorch_lightning>=2.6.1,<3` and, in the `test` extra,
+  `pytest-benchmark>=5.3.1`. Before Lightning 2.6.1, random transforms in
+  DataLoader workers replayed the same random stream every epoch under
+  `seed_everything(workers=True)`, as `spktrain` uses it.
+- The TensorBoard logger config writes to a fixed `version: 0`, so a resumed run
+  stays one TensorBoard run.
 - `schnetpack.datasets` passes on the data API again (e.g.
   `schnetpack.datasets.ASEAtomsData`), as in 2.x.
 - New documentation: a Markdown (MyST) site in the look of the Flax and JAX docs
@@ -224,6 +229,10 @@ LAMMPS with `spkdeploy` are unchanged.
   average when it ran within an epoch.
 - `PredictionWriter` with `write_interval="epoch"`, the default of
   `spkpredict`, failed.
+- `spktrain` crashed with two loggers; the config is now logged to every
+  logger. A resumed run keeps its seed unless a new one is given.
+  `trainer=debug_trainer` no longer passes the removed `gpus` argument, and the
+  `aim` logger config no longer doubles its repo path.
 
 ### Removed
 
