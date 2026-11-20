@@ -235,6 +235,8 @@ LAMMPS with `spkdeploy` are unchanged.
   logger. A resumed run keeps its seed unless a new one is given.
   `trainer=debug_trainer` no longer passes the removed `gpus` argument, and the
   `aim` logger config no longer doubles its repo path.
+- `script_model=True` in the MD calculators failed for models with a
+  `CastTo64` postprocessor, for `PaiNN`, and for 2.0.x model files.
 
 ### Removed
 
