@@ -224,6 +224,8 @@ LAMMPS with `spkdeploy` are unchanged.
 - With Lightning >= 2.6, `last.ckpt` stayed at the best epoch once the
   monitored metric stopped improving, so a resumed run repeated the epochs since
   then.
+- A resumed run trains like an uninterrupted one: checkpoints hold the RNG
+  states and, with `cache=True`, the state of the training order.
 - `ExponentialMovingAverage` continued training from the weights of the last
   validation when validation ran less than once per epoch, and from the EMA
   average when it ran within an epoch.

@@ -1,9 +1,12 @@
 import gc
+import random
 import warnings
 from typing import Any, cast
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning.trainer.states import TrainerFn
 from pytorch_lightning.utilities.types import (
     LRSchedulerConfigType,
     OptimizerLRScheduler,
@@ -27,6 +30,29 @@ from schnetpack.train.graph_step import GraphStep
 from schnetpack.train.teacher import TeacherWrapper
 
 __all__ = ["AtomisticTask"]
+
+
+def _collect_rng_states() -> dict[str, Any]:
+    states = {
+        "torch": torch.get_rng_state(),
+        "numpy": np.random.get_state(),
+        "python": random.getstate(),
+    }
+    if torch.cuda.is_available():
+        states["torch.cuda"] = torch.cuda.get_rng_state_all()
+    return states
+
+
+def _set_rng_states(states: dict[str, Any]) -> None:
+    torch.set_rng_state(states["torch"])
+    np.random.set_state(states["numpy"])
+    random.setstate(states["python"])
+    if "torch.cuda" in states and torch.cuda.is_available():
+        # the run may resume on fewer devices than it was saved on
+        for device, state in enumerate(
+            states["torch.cuda"][: torch.cuda.device_count()]
+        ):
+            torch.cuda.set_rng_state(state, device)
 
 
 class AtomisticTask(pl.LightningModule):
@@ -161,6 +187,23 @@ class AtomisticTask(pl.LightningModule):
                 self.model.initialize_transforms(self.trainer.datamodule)
             else:
                 self.distillation.setup(self.trainer.datamodule)
+
+    def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+        # Lightning does not store the RNG states, so without them a resumed run
+        # shuffles the training data and draws the noise differently than an
+        # uninterrupted one
+        checkpoint["rng_states"] = _collect_rng_states()
+
+    def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+        # Only when resuming training: Lightning calls this before it creates the
+        # train dataloader iterator, whose sampler draws the shuffle seed from the
+        # global RNG. Loading a task without a trainer leaves the RNG alone.
+        if (
+            "rng_states" in checkpoint
+            and self._trainer is not None
+            and self._trainer.state.fn == TrainerFn.FITTING
+        ):
+            _set_rng_states(checkpoint["rng_states"])
 
     def forward(self, inputs: dict[str, torch.Tensor]):
         if self.compiled_model is not None:
