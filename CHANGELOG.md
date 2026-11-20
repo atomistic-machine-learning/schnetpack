@@ -169,6 +169,8 @@ LAMMPS with `spkdeploy` are unchanged.
   as runtime dependencies.
 - Raised minimum versions: `ase>=3.23`, `hydra-core>=1.3,<2`,
   `pytorch_lightning>=2.2,<3`.
+- `schnetpack.datasets` passes on the data API again (e.g.
+  `schnetpack.datasets.ASEAtomsData`), as in 2.x.
 - New documentation: a Markdown (MyST) site in the look of the Flax and JAX docs
   (`sphinx_book_theme`, light and dark mode), with Getting started, Tutorials,
   Guides, Concepts, Migrating, API reference and Project sections. The tutorials
@@ -210,6 +212,10 @@ LAMMPS with `spkdeploy` are unchanged.
 - `MatScipyNeighborList` gave atoms outside the cell offsets along non-periodic
   directions, to images that do not exist. A periodic system whose cell has no
   volume now raises an error instead of losing its lattice vectors.
+- `QM7X.FPBE0` had the name of `FMBD`, so the PBE0 forces were never stored and
+  loading `FPBE0` returned the MBD forces. Databases built before hold no PBE0
+  forces and have to be rebuilt. An interrupted extraction no longer leaves a
+  partial file that later runs reuse.
 
 ### Removed
 
