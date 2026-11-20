@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from schnetpack.model_format import register
+
 # import schnetpack as spk
 
 __all__ = [
@@ -13,6 +15,7 @@ class TransformException(Exception):
     pass
 
 
+@register
 class Transform(nn.Module):
     """
     Base class for all transforms.

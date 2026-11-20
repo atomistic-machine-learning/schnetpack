@@ -26,6 +26,7 @@ import torch
 from torch import nn
 
 from schnetpack import properties
+from schnetpack.model_format import register
 from schnetpack.utils.cell import (
     atom_cells,
     cell_to_params,
@@ -198,6 +199,7 @@ class CellParameters(View):
         return with_cell(batch, cell @ rotation)
 
 
+@register
 class ViewInput(nn.Module):
     """
     Writes a view's read of the inputs under ``key``: an input module for a

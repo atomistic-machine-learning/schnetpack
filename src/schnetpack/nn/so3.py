@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 
 import schnetpack.nn as snn
+from schnetpack.model_format import register
 from schnetpack.utils import as_dtype
 
 from .ops.math import binom
@@ -24,6 +25,7 @@ __all__ = [
 ]
 
 
+@register
 class RealSphericalHarmonics(nn.Module):
     """
     Generates the real spherical harmonics for a batch of vectors.
@@ -190,6 +192,7 @@ def scalar2rsh(x: torch.Tensor, lmax: int) -> torch.Tensor:
     return y
 
 
+@register
 class SO3TensorProduct(nn.Module):
     r"""
     SO3-equivariant Clebsch-Gordon tensor product.
@@ -234,6 +237,7 @@ class SO3TensorProduct(nn.Module):
         return y
 
 
+@register
 class SO3Convolution(nn.Module):
     r"""
     SO3-equivariant convolution using Clebsch-Gordon tensor product.
@@ -378,6 +382,7 @@ class SO3Convolution(nn.Module):
         return y
 
 
+@register
 class SO3ParametricGatedNonlinearity(nn.Module):
     r"""
     SO3-equivariant parametric gated nonlinearity.
@@ -405,6 +410,7 @@ class SO3ParametricGatedNonlinearity(nn.Module):
         return y
 
 
+@register
 class SO3GatedNonlinearity(nn.Module):
     r"""
     SO3-equivariant gated nonlinearity.

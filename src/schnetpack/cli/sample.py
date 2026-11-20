@@ -16,6 +16,7 @@ from omegaconf import OmegaConf
 
 from schnetpack import properties
 from schnetpack.cli import _run_config
+from schnetpack.model_format import load_model
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ def main():
     model_path = os.path.join(os.path.abspath(args.run_dir), "best_model")
     sampler = Sampler(
         FieldCalculator(
-            torch.load(model_path, map_location=device, weights_only=False).eval(),
+            load_model(model_path, device=device).eval(),
             device=device,
             compile=sample.compile,
         ),

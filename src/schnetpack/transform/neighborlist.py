@@ -32,6 +32,7 @@ __all__ = [
 
 import schnetpack as spk
 from schnetpack import properties
+from schnetpack.model_format import register
 from schnetpack.units import convert_units
 
 log = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ log = logging.getLogger(__name__)
 # ------------------------------------------------------------------------ neighbor lists
 
 
+@register
 class NeighborListTransform(Transform):
     """
     Base class for neighbor lists.
@@ -94,6 +96,7 @@ class NeighborListTransform(Transform):
         return Z_np, pos_np, cell_np, pbc_np_bool, pbc_np_int
 
 
+@register
 class ASENeighborList(NeighborListTransform):
     """
     Calculate neighbor list using ASE.
@@ -113,6 +116,7 @@ class ASENeighborList(NeighborListTransform):
         return idx_i, idx_j, offset
 
 
+@register
 class VesinNeighborList(NeighborListTransform):
     """
     Calculate neighbor list using Vesin.
@@ -146,6 +150,7 @@ class VesinNeighborList(NeighborListTransform):
         return idx_i, idx_j, offsets_cart
 
 
+@register
 class MatScipyNeighborList(NeighborListTransform):
     """
     Neighborlist using the efficient implementation of the Matscipy package
@@ -164,6 +169,14 @@ class MatScipyNeighborList(NeighborListTransform):
 
         # Add cell if none is present (volume = 0)
         if at.cell.volume < eps:
+            if at.pbc.any():
+                # replacing the cell would discard the periodic lattice vectors
+                raise ValueError(
+                    "MatScipyNeighborList needs a cell with non-zero volume for "
+                    f"periodic systems, but got pbc={at.pbc.tolist()} and cell "
+                    f"{at.cell.tolist()}. Set the cell vectors of the non-periodic "
+                    "directions (e.g. add vacuum) or use ASENeighborList."
+                )
             # max values - min values along xyz augmented by small buffer for stability
             new_cell = np.ptp(at.positions, axis=0) + buffer
             # Set cell and center
@@ -172,6 +185,9 @@ class MatScipyNeighborList(NeighborListTransform):
 
         # Compute neighborhood
         idx_i, idx_j, S = msp_neighbor_list("ijS", at, cutoff)
+        # matscipy also returns shifts along non-periodic directions (for atoms
+        # outside the cell), but there are no periodic images along those
+        S[:, ~at.pbc] = 0
         idx_i = torch.from_numpy(idx_i).long()
         idx_j = torch.from_numpy(idx_j).long()
         S = torch.from_numpy(S).to(dtype=positions.dtype)
@@ -180,6 +196,7 @@ class MatScipyNeighborList(NeighborListTransform):
         return idx_i, idx_j, offset
 
 
+@register
 class TorchNeighborList(NeighborListTransform):
     """
     Environment provider making use of neighbor lists as implemented in TorchAni
@@ -314,6 +331,7 @@ class TorchNeighborList(NeighborListTransform):
         )
 
 
+@register
 class AllToAllNeighborList(Transform):
     """
     Every ordered pair (i, j), i != j, is a neighbor — no cutoff, no cell.
@@ -378,6 +396,7 @@ class AllToAllNeighborList(Transform):
         return inputs
 
 
+@register
 class BatchCutoffNeighborList(Transform):
     """
     All pairs within the cutoff in every structure of a collated batch, periodic
@@ -503,6 +522,7 @@ class BatchCutoffNeighborList(Transform):
 # ------------------------------------------------------------------------------ wrappers
 
 
+@register
 class NeighborListWrapper(Transform):
     """
     Base class for transforms that wrap a neighbor list and decide when to (re)build
@@ -542,6 +562,9 @@ class CacheException(Exception):
     pass
 
 
+# not registered: its constructor creates and copies folders, and loading a model
+# file must not touch the file system. It is part of the data pipeline, never of a
+# saved model.
 class CachedNeighborList(NeighborListWrapper):
     """
     Dynamic caching of neighbor lists.
@@ -679,6 +702,7 @@ class CachedNeighborList(NeighborListWrapper):
                 )
 
 
+@register
 class SkinNeighborList(NeighborListWrapper):
     """
     Neighbor list provider utilizing a cutoff skin for computational efficiency. Wrapper
@@ -810,6 +834,7 @@ class SkinNeighborList(NeighborListWrapper):
         return inputs
 
 
+@register
 class DistillationNeighborList(NeighborListWrapper):
     """
     Neighbor list shared by a student and its teacher in distillation.
@@ -858,6 +883,7 @@ class DistillationNeighborList(NeighborListWrapper):
 # ------------------------------------------------------------------------------- helpers
 
 
+@register
 class FilterNeighbors(Transform):
     """
     Filter out all neighbor list indices corresponding to interactions between a set of
@@ -893,6 +919,7 @@ class FilterNeighbors(Transform):
         return inputs
 
 
+@register
 class CollectAtomTriples(Transform):
     """
     Generate the index tensors for all triples between atoms within the cutoff shell.
@@ -945,6 +972,7 @@ class CollectAtomTriples(Transform):
         return inputs
 
 
+@register
 class CountNeighbors(Transform):
     """
     Store the number of neighbors for each atom

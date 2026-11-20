@@ -4,3 +4,5 @@ tensorboard:
     _target_: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
     save_dir: "tensorboard/"
     name: "default"
+    # fixed, so a resumed run keeps logging to the same run instead of version_1
+    version: 0

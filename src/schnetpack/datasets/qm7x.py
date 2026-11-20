@@ -88,13 +88,19 @@ def extract_xz(source: str, target: str):
         return
 
     logging.info(f"Extracting {s_file} ...")
+
+    # Extract under a temporary name: an interrupted extraction (also by Ctrl-C)
+    # must not leave a partial file under the target name, which later runs reuse.
+    partial = target + ".part"
     try:
-        with lzma.open(source) as fin, open(target, mode="wb") as fout:
+        with lzma.open(source) as fin, open(partial, mode="wb") as fout:
             shutil.copyfileobj(fin, fout)
+        os.replace(partial, target)
     except Exception as e:
-        if os.path.exists(target):
-            os.remove(target)
         raise RuntimeError(f"Could not extract file {s_file}. Please try again.") from e
+    finally:
+        if os.path.exists(partial):
+            os.remove(partial)
 
     logging.info("Done.")
 
@@ -123,7 +129,7 @@ class QM7X(DownloadableASEAtomsData):
     Eat = "Eat"  # atomization energy using PBE0 energy per atom and ePBE0+MBD total energy
     EPBE0 = "EPBE0"  # ePBE0: total energy at the level of PBE0
     EMBD = "EMBD"  # eMBD: total energy at the level of MBD
-    FPBE0 = "FMBD"  # FPBE0: total ePBE0 forces
+    FPBE0 = "FPBE0"  # FPBE0: total ePBE0 forces
     FMBD = "FMBD"  # FMBD: total eMBD forces
     RMSD = "rmsd"  # root mean square deviation of the atomic positions from the equilibrium structure
 

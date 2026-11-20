@@ -5,9 +5,12 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn.init import xavier_uniform_, zeros_
 
+from schnetpack.model_format import register
+
 __all__ = ["Dense"]
 
 
+@register
 class Dense(nn.Linear):
     r"""Fully connected linear layer with activation function.
 

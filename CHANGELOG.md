@@ -148,6 +148,9 @@ LAMMPS with `spkdeploy` are unchanged.
   - The `MPTraj` dataset (MPtrj): 1.58 M DFT relaxation frames of bulk crystals
     with energies, forces, stresses and magnetic moments, and the data config
     `data=mptraj`, which splits by material.
+  - The `MP20` dataset (MP-20 of CDVAE and DiffCSP): 45,229 crystals with at
+    most 20 atoms per cell, with the published split, and the data config
+    `data=mp20`.
 - Configs: a progress bar callback, and a wandb logger setup (#787).
 - How-tos for batch-wise relaxations, ensemble calculations and guidance.
   The tutorials and how-tos are now stored as jupytext `py:percent` files.
@@ -168,7 +171,14 @@ LAMMPS with `spkdeploy` are unchanged.
   `pytest`, `pre-commit`, `protobuf` and `progressbar` are no longer installed
   as runtime dependencies.
 - Raised minimum versions: `ase>=3.23`, `hydra-core>=1.3,<2`,
-  `pytorch_lightning>=2.2,<3`.
+  `pytorch_lightning>=2.6.1,<3` and, in the `test` extra,
+  `pytest-benchmark>=5.3.1`. Before Lightning 2.6.1, random transforms in
+  DataLoader workers replayed the same random stream every epoch under
+  `seed_everything(workers=True)`, as `spktrain` uses it.
+- The TensorBoard logger config writes to a fixed `version: 0`, so a resumed run
+  stays one TensorBoard run.
+- `schnetpack.datasets` passes on the data API again (e.g.
+  `schnetpack.datasets.ASEAtomsData`), as in 2.x.
 - New documentation: a Markdown (MyST) site in the look of the Flax and JAX docs
   (`sphinx_book_theme`, light and dark mode), with Getting started, Tutorials,
   Guides, Concepts, Migrating, API reference and Project sections. The tutorials
@@ -202,6 +212,34 @@ LAMMPS with `spkdeploy` are unchanged.
   hooks and `StaticExternalFields` are replaced by `None`.
 - `schnetpack.utils.load_model(path, weights_only=...)` raised a `TypeError`.
   `weights_only` still defaults to `False`.
+- `Forces` and `Response` divided the stress by the signed cell volume, which
+  flipped its sign for left-handed cells.
+- `Response(map_properties=...)` listed the original names as model outputs,
+  while the results are stored under the mapped names, and changed the
+  caller's dict.
+- `MatScipyNeighborList` gave atoms outside the cell offsets along non-periodic
+  directions, to images that do not exist. A periodic system whose cell has no
+  volume now raises an error instead of losing its lattice vectors.
+- `QM7X.FPBE0` had the name of `FMBD`, so the PBE0 forces were never stored and
+  loading `FPBE0` returned the MBD forces. Databases built before hold no PBE0
+  forces and have to be rebuilt. An interrupted extraction no longer leaves a
+  partial file that later runs reuse.
+- With Lightning >= 2.6, `last.ckpt` stayed at the best epoch once the
+  monitored metric stopped improving, so a resumed run repeated the epochs since
+  then.
+- A resumed run trains like an uninterrupted one: checkpoints hold the RNG
+  states and, with `cache=True`, the state of the training order.
+- `ExponentialMovingAverage` continued training from the weights of the last
+  validation when validation ran less than once per epoch, and from the EMA
+  average when it ran within an epoch.
+- `PredictionWriter` with `write_interval="epoch"`, the default of
+  `spkpredict`, failed.
+- `spktrain` crashed with two loggers; the config is now logged to every
+  logger. A resumed run keeps its seed unless a new one is given.
+  `trainer=debug_trainer` no longer passes the removed `gpus` argument, and the
+  `aim` logger config no longer doubles its repo path.
+- `script_model=True` in the MD calculators failed for models with a
+  `CastTo64` postprocessor, for `PaiNN`, and for 2.0.x model files.
 
 ### Removed
 

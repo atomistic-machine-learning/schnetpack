@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import schnetpack.nn as snn
+from schnetpack.model_format import register
 
 __all__ = ["build_mlp", "build_gated_equivariant_mlp"]
 
@@ -157,6 +158,7 @@ def build_gated_equivariant_mlp(
     return out_net
 
 
+@register
 class Residual(nn.Module):
     """
     Pre-activation residual block inspired by He, Kaiming, et al. "Identity
@@ -214,6 +216,7 @@ class Residual(nn.Module):
         return x + y
 
 
+@register
 class ResidualStack(nn.Module):
     """
     Stack of num_blocks pre-activation residual blocks evaluated in sequence.
@@ -258,6 +261,7 @@ class ResidualStack(nn.Module):
         return x
 
 
+@register
 class ResidualMLP(nn.Module):
     """Residual MLP with num_residual residual blocks."""
 

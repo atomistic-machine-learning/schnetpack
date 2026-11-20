@@ -6,11 +6,13 @@ import torch.nn.functional as F
 
 import schnetpack.nn as snn
 import schnetpack.properties as properties
+from schnetpack.model_format import register
 from schnetpack.nn.ops.radial_filter import gaussian_band, gaussian_rbf_linear
 
 __all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
 
 
+@register
 class PaiNNInteraction(nn.Module):
     r"""PaiNN interaction block for modeling equivariant interactions of atomistic systems."""
 
@@ -67,6 +69,7 @@ class PaiNNInteraction(nn.Module):
         return q, mu
 
 
+@register
 class PaiNNMixing(nn.Module):
     r"""PaiNN interaction block for mixing on atom features."""
 
@@ -117,6 +120,7 @@ class PaiNNMixing(nn.Module):
         return q, mu
 
 
+@register
 class PaiNN(nn.Module):
     """Equivariant message-passing network for the prediction of tensorial properties
     and molecular spectra.
@@ -241,7 +245,10 @@ class PaiNN(nn.Module):
         )
 
     @torch.jit.unused
-    def _banded_filters(self, d_ij: torch.Tensor) -> torch.Tensor:
+    def _filters(self, d_ij: torch.Tensor) -> torch.Tensor:
+        # not in TorchScript, which does not see the class default of filter_band
+        if self.filter_band is None:
+            return self.filter_net(self.radial_basis(d_ij))
         return gaussian_rbf_linear(
             d_ij,
             self.radial_basis.offsets,
@@ -275,10 +282,10 @@ class PaiNN(nn.Module):
         dir_ij = r_ij / (d_ij + self.norm_epsilon)
         fcut = self.cutoff_fn(d_ij)
 
-        if self.filter_band is not None and not torch.jit.is_scripting():
-            filters = self._banded_filters(d_ij) * fcut[..., None]
-        else:
+        if torch.jit.is_scripting():  # the dense filter
             filters = self.filter_net(self.radial_basis(d_ij)) * fcut[..., None]
+        else:
+            filters = self._filters(d_ij) * fcut[..., None]
         if self.share_filters:
             filter_list = [filters] * self.n_interactions
         else:

@@ -1,8 +1,6 @@
 """A teacher in the Lightning task: steps, seeded validation, offsets from the
 teacher at setup, checkpoints."""
 
-import os
-
 import numpy as np
 import pytest
 import pytorch_lightning as pl
@@ -11,7 +9,6 @@ from torchmetrics.regression import MeanAbsoluteError
 
 from schnetpack import properties
 from schnetpack.lightning import AtomisticTask
-from schnetpack.lightning.utils import load_task_from_checkpoint
 from schnetpack.objectives import ModelOutput, calculate_loss
 from schnetpack.train import Distillation, SchNetPackTeacher
 
@@ -106,9 +103,11 @@ def test_trainer_distills_and_sets_the_student_offsets_from_the_teacher(
     assert torch.isfinite(trainer.callback_metrics["val_loss"])
 
 
-def test_checkpoint_restores_the_teacher_from_its_path(
+def test_checkpoint_loads_weights_only_into_a_task_with_the_teacher(
     tmp_path, monkeypatch, teacher_path, batch
 ):
+    """The checkpoint holds no teacher: a task built again with the teacher's
+    path takes the checkpoint's state and predicts as the trained one."""
     monkeypatch.chdir(tmp_path)
     task = make_task(teacher_path)
     trainer = fast_trainer(tmp_path)
@@ -116,15 +115,17 @@ def test_checkpoint_restores_the_teacher_from_its_path(
     checkpoint = str(tmp_path / "task.ckpt")
     trainer.save_checkpoint(checkpoint)
 
-    restored = load_task_from_checkpoint(AtomisticTask, checkpoint)
+    state = torch.load(checkpoint, weights_only=True)
+    restored = make_task(teacher_path)
+    restored.load_state_dict(state["state_dict"])
 
     probe = torch.randn_like(batch[properties.R])
     torch.testing.assert_close(
         restored.teacher(batch, probe), task.teacher(batch, probe)
     )
-    os.rename(teacher_path, teacher_path + ".moved")
-    with pytest.raises(FileNotFoundError, match="teacher"):
-        load_task_from_checkpoint(AtomisticTask, checkpoint)
+    task.eval()
+    restored.eval()
+    torch.testing.assert_close(restored.model(dict(batch)), task.model(dict(batch)))
 
 
 def test_a_label_and_a_teacher_target_for_one_output_are_logged_apart(

@@ -10,7 +10,7 @@ import torch
 from pytorch_lightning import Trainer
 
 from schnetpack.cli import _run_config
-from schnetpack.cli.train import _datamodule, test_checkpoint
+from schnetpack.cli.train import _datamodule, _task, test_checkpoint
 
 
 def main():
@@ -43,5 +43,4 @@ def main():
     trainer: Trainer = hydra.utils.instantiate(
         config.trainer, logger=False, callbacks=[], _convert_="partial"
     )
-    task_cls = hydra.utils.get_class(config.task._target_)
-    test_checkpoint(trainer, datamodule, task_cls, best[0])
+    test_checkpoint(trainer, datamodule, _task(config), best[0])

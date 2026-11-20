@@ -7,10 +7,12 @@ import torch.nn.functional as F
 
 import schnetpack as spk
 from schnetpack import properties
+from schnetpack.model_format import register
 
 __all__ = ["TimeConditioning"]
 
 
+@register
 class TimeConditioning(nn.Module):
     """
     Conditions the representation on a per-atom scalar, e.g. the diffusion

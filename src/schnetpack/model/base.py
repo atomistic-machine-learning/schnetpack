@@ -4,11 +4,13 @@ import torch
 import torch.nn as nn
 
 import schnetpack as spk
+from schnetpack.model_format import register
 from schnetpack.transform import Transform
 
 __all__ = ["AtomisticModel", "NeuralNetworkPotential"]
 
 
+@register
 class AtomisticModel(nn.Module):
     """
     Base class for all SchNetPack models.
@@ -131,6 +133,7 @@ class AtomisticModel(nn.Module):
         return results
 
 
+@register
 class NeuralNetworkPotential(AtomisticModel):
     """
     A generic neural network potential class that sequentially applies a list of input

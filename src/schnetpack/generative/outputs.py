@@ -13,11 +13,13 @@ from torchmetrics import Metric
 
 from schnetpack import properties
 from schnetpack.generative.variables import Variable
+from schnetpack.model_format import register
 from schnetpack.objectives import ModelOutput
 
 __all__ = ["VariableOutput"]
 
 
+@register
 class VariableOutput(ModelOutput):
     """
     The head of a :class:`~schnetpack.generative.variables.Variable` as a

@@ -1,9 +1,12 @@
 import torch
 import torch.nn as nn
 
+from schnetpack.model_format import register
+
 __all__ = ["Aggregation"]
 
 
+@register
 class Aggregation(nn.Module):
     """
     Aggregate predictions into a single output variable.

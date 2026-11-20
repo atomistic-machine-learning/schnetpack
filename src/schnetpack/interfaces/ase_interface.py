@@ -39,10 +39,10 @@ from schnetpack.data.loader import _atoms_collate_fn
 from schnetpack.md.utils import activate_model_stress
 from schnetpack.model.compile import CompiledPotential
 from schnetpack.model.ensemble import NNEnsemble
+from schnetpack.model_format import load_model
 from schnetpack.transform import CastTo32, CastTo64, Transform
 from schnetpack.uncertainty import AbsoluteUncertainty, Uncertainty
 from schnetpack.units import convert_units
-from schnetpack.utils import load_model
 
 log = logging.getLogger(__name__)
 

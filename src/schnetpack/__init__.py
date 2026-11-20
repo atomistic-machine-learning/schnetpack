@@ -18,6 +18,12 @@ from schnetpack import (
     transform,
     uncertainty,
 )
+from schnetpack.model_format import (
+    load_hyperparameters,
+    load_model,
+    register,
+    save_model,
+)
 from schnetpack.objectives import (
     AtomMask,
     LossMask,
