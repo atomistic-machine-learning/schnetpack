@@ -17,6 +17,8 @@ class Forces(nn.Module):
     Predicts forces and stress as response of the energy prediction
     w.r.t. the atom positions and strain.
 
+    Stress is computed using the absolute cell volume, so the sign of
+    the cell determinant does not flip the stress sign.
     """
 
     def __init__(
@@ -83,7 +85,7 @@ class Forces(nn.Module):
                 cell[:, 0, :] * torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
                 dim=1,
                 keepdim=True,
-            )[:, :, None]
+            )[:, :, None].abs()
             inputs[self.stress_key] = stress / volume
 
         return inputs
@@ -111,6 +113,7 @@ class Response(nn.Module):
     ):
         """
         Compute different response properties by taking derivatives of an energy model. See [#field1]_ for details.
+        Stress uses the absolute cell volume, so left-handed cells do not flip the stress sign.
 
         Args:
             energy_key (str): key indicating the energy property used for response calculations.
@@ -136,16 +139,15 @@ class Response(nn.Module):
         self.energy_key = energy_key
         self.response_properties = response_properties
 
-        if map_properties is None:
-            self.map_properties = {}
-        else:
-            self.map_properties = map_properties
+        # copy, so that the defaults below do not change the caller's dict
+        self.map_properties = dict(map_properties or {})
 
         for prop in self.response_properties:
             if prop not in self.map_properties:
                 self.map_properties[prop] = prop
 
-        self.model_outputs = list(self.map_properties.keys())
+        # the results are stored under the mapped names
+        self.model_outputs = list(self.map_properties.values())
 
         # Set up instructions for computing response properties and derivatives
         (
@@ -214,7 +216,7 @@ class Response(nn.Module):
                 cell[:, 0, :] * torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
                 dim=1,
                 keepdim=True,
-            )[:, :, None]
+            )[:, :, None].abs()
             results[properties.stress] = stress / volume
 
         # ================================

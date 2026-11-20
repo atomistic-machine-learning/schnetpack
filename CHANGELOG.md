@@ -202,6 +202,14 @@ LAMMPS with `spkdeploy` are unchanged.
   hooks and `StaticExternalFields` are replaced by `None`.
 - `schnetpack.utils.load_model(path, weights_only=...)` raised a `TypeError`.
   `weights_only` still defaults to `False`.
+- `Forces` and `Response` divided the stress by the signed cell volume, which
+  flipped its sign for left-handed cells.
+- `Response(map_properties=...)` listed the original names as model outputs,
+  while the results are stored under the mapped names, and changed the
+  caller's dict.
+- `MatScipyNeighborList` gave atoms outside the cell offsets along non-periodic
+  directions, to images that do not exist. A periodic system whose cell has no
+  volume now raises an error instead of losing its lattice vectors.
 
 ### Removed
 
