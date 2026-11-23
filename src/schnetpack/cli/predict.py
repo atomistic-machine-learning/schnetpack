@@ -11,7 +11,7 @@ from schnetpack import properties
 from schnetpack.data import ASEAtomsData, AtomsLoader
 from schnetpack.lightning import PredictionWriter
 from schnetpack.model.compile import CompiledPotential
-from schnetpack.utils import load_model
+from schnetpack.model_format import load_model
 
 log = logging.getLogger(__name__)
 

@@ -3,6 +3,8 @@ from math import pi
 import torch
 import torch.nn as nn
 
+from schnetpack.model_format import register
+
 __all__ = ["gaussian_rbf", "GaussianRBF", "GaussianRBFCentered", "BesselRBF"]
 
 
@@ -13,6 +15,7 @@ def gaussian_rbf(inputs: torch.Tensor, offsets: torch.Tensor, widths: torch.Tens
     return y
 
 
+@register
 class GaussianRBF(nn.Module):
     r"""Gaussian radial basis functions."""
 
@@ -46,6 +49,7 @@ class GaussianRBF(nn.Module):
         return gaussian_rbf(inputs, self.offsets, self.widths)
 
 
+@register
 class GaussianRBFCentered(nn.Module):
     r"""Gaussian radial basis functions centered at the origin."""
 
@@ -77,6 +81,7 @@ class GaussianRBFCentered(nn.Module):
         return gaussian_rbf(inputs, self.offsets, self.widths)
 
 
+@register
 class BesselRBF(nn.Module):
     """
     Sine for radial basis functions with coulomb decay (0th order bessel).

@@ -51,7 +51,7 @@ __all__ = [
 
 def _load_model(path: str) -> nn.Module:
     """A model saved on disk, on the cpu and in float64."""
-    from schnetpack.utils.compatibility import load_model
+    from schnetpack.model_format import load_model
 
     return load_model(path, device="cpu").to(torch.float64)
 

@@ -2,10 +2,12 @@ import torch
 import torch.nn as nn
 
 import schnetpack.properties as properties
+from schnetpack.model_format import register
 
 __all__ = ["PairwiseDistances", "FilterShortRange"]
 
 
+@register
 class PairwiseDistances(nn.Module):
     """
     Compute pair-wise distances from indices provided by a neighbor list transform.
@@ -26,6 +28,7 @@ class PairwiseDistances(nn.Module):
         return inputs
 
 
+@register
 class FilterShortRange(nn.Module):
     """
     Separate short-range from all supplied distances.

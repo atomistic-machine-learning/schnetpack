@@ -3,10 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import schnetpack.nn as snn
+from schnetpack.model_format import register
 
 __all__ = ["GatedEquivariantBlock"]
 
 
+@register
 class GatedEquivariantBlock(nn.Module):
     """
     Gated equivariant block as used for the prediction of tensorial properties by PaiNN.

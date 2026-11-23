@@ -26,4 +26,5 @@ Materials
 
     MaterialsProject
     MPTraj
+    MP20
     OrganicMaterialsDatabase

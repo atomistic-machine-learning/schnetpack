@@ -198,7 +198,6 @@ class SubsamplePartitions(SplittingStrategy):
         split_indices = [None] * len(split_sizes)
         for src in self._unique_sources:
             partition = partitions[src][self.split_id]
-            print(len(partition))
             partition_split_indices = random_split(
                 len(partition), *split_partition_sizes[src]
             )

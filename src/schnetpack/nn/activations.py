@@ -3,6 +3,8 @@ import math
 import torch
 from torch.nn import functional
 
+from schnetpack.model_format import register
+
 __all__ = ["shifted_softplus", "softplus_inverse", "ShiftedSoftplus"]
 
 
@@ -35,6 +37,7 @@ def softplus_inverse(x: torch.Tensor):
     return x + (torch.log(-torch.expm1(-x)))
 
 
+@register
 class ShiftedSoftplus(torch.nn.Module):
     """
     Shifted softplus activation function with learnable feature-wise parameters:

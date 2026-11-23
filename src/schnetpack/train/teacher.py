@@ -30,10 +30,10 @@ from schnetpack.model.utils import (
     train_mode,
     train_mode_sensitive_modules,
 )
+from schnetpack.model_format import load_model
 from schnetpack.transform import AddOffsets
 from schnetpack.units import convert_units
 from schnetpack.utils import as_dtype
-from schnetpack.utils.compatibility import load_model
 
 __all__ = [
     "TeacherWrapper",
@@ -309,7 +309,7 @@ class TeacherWrapper:
 
 
 class SchNetPackTeacher(TeacherWrapper):
-    """A SchNetPack model as teacher, saved with ``torch.save``.
+    """A SchNetPack model as teacher: a model folder or a pickled model file.
 
     The model runs as it predicts: its postprocessing stays on, so its energies
     are absolute. It is kept in eval mode, and switched to train mode while a
@@ -318,7 +318,8 @@ class SchNetPackTeacher(TeacherWrapper):
     (see :func:`~schnetpack.model.utils.forces_need_train_mode`).
 
     Args:
-        model_path: path to the saved model (SchNetPack 2.x included).
+        model_path: the model folder (`schnetpack.save_model`), or a pickled
+            model file (SchNetPack 2.x included).
         teacher_energy_key: the model's energy output.
         teacher_force_key: the model's force output.
         **kwargs: units, cutoff and dtype; see :class:`TeacherWrapper`.

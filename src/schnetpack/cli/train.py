@@ -1,5 +1,6 @@
 """spktrain: train a model from the Hydra configs (``configs/train.yaml``), then
-test its best checkpoint and store the best model."""
+test its best checkpoint and store the best model (a model folder, see
+`schnetpack.save_model`)."""
 
 import json
 import logging
@@ -19,11 +20,7 @@ from pytorch_lightning import (
 from pytorch_lightning.loggers.logger import Logger
 
 from schnetpack.lightning import AtomisticTask
-from schnetpack.lightning.utils import (
-    load_task_from_checkpoint,
-    log_hyperparameters,
-    trainer_fit_kwargs_for_checkpoint,
-)
+from schnetpack.lightning.utils import log_hyperparameters
 from schnetpack.utils import str2class
 from schnetpack.utils.script import print_config
 
@@ -63,14 +60,8 @@ def main(config: DictConfig):
         )
         return
 
-    # seed of torch, numpy and python's random; drawn before config.yaml is saved
-    if config.get("seed") is None:
-        config.seed = random.randint(0, 2**32 - 1)
-        log.info(f"Seed randomly with <{config.seed}>")
-    else:
-        log.info(f"Seed with <{config.seed}>")
-
-    if os.path.exists("config.yaml"):
+    resume = os.path.exists("config.yaml")
+    if resume:
         log.info(
             f"Config already exists in given directory {os.path.abspath('.')}."
             + " Attempting to continue training."
@@ -84,6 +75,10 @@ def main(config: DictConfig):
         with open(f"config.old.{count}.yaml", "w") as f:
             OmegaConf.save(old_config, f, resolve=False)
 
+        # a resumed run keeps its seed, unless a new one is given
+        if config.get("seed") is None:
+            config.seed = old_config.get("seed")
+
         # resume from latest checkpoint
         if config.run.ckpt_path is None:
             if os.path.exists("checkpoints/last.ckpt"):
@@ -93,7 +88,15 @@ def main(config: DictConfig):
             log.info(
                 f"Resuming from checkpoint {os.path.abspath(config.run.ckpt_path)}"
             )
+
+    # seed of torch, numpy and python's random; drawn before config.yaml is saved
+    if config.get("seed") is None:
+        config.seed = random.randint(0, 2**32 - 1)
+        log.info(f"Seed randomly with <{config.seed}>")
     else:
+        log.info(f"Seed with <{config.seed}>")
+
+    if not resume:
         with open("config.yaml", "w") as f:
             OmegaConf.save(config, f, resolve=False)
 
@@ -111,23 +114,7 @@ def main(config: DictConfig):
         os.makedirs(config.run.data_dir)
 
     datamodule = _datamodule(config)
-
-    # Init model
-    log.info(f"Instantiating model <{config.model._target_}>")
-    model = hydra.utils.instantiate(config.model)
-
-    # Init LightningModule
-    log.info(f"Instantiating task <{config.task._target_}>")
-    scheduler_cls = (
-        str2class(config.task.scheduler_cls) if config.task.scheduler_cls else None
-    )
-
-    task: AtomisticTask = hydra.utils.instantiate(
-        config.task,
-        model=model,
-        optimizer_cls=str2class(config.task.optimizer_cls),
-        scheduler_cls=scheduler_cls,
-    )
+    task = _task(config)
 
     # Init Lightning callbacks
     callbacks: list[Callback] = []
@@ -159,20 +146,15 @@ def main(config: DictConfig):
     )
 
     log.info("Logging hyperparameters.")
-    log_hyperparameters(config=config, model=task, trainer=trainer)
+    log_hyperparameters(config=config, trainer=trainer)
 
-    # Train the model
+    # Train the model; a checkpoint holds weights and training state only
     log.info("Starting training.")
-    fit_kwargs = (
-        trainer_fit_kwargs_for_checkpoint(trainer)
-        if config.run.ckpt_path is not None
-        else {}
-    )
     trainer.fit(
         model=task,
         datamodule=datamodule,
         ckpt_path=config.run.ckpt_path,
-        **fit_kwargs,
+        weights_only=True,
     )
 
     # Lightning's EarlyStopping stops training silently on non-finite metrics
@@ -189,21 +171,39 @@ def main(config: DictConfig):
                 "Skipping testing and model export."
             )
 
-    # Load the best checkpoint through the compatibility helper (it handles
-    # `weights_only` across PL versions) and test that task directly, instead
-    # of having Lightning re-load the checkpoint internally via
-    # ckpt_path="best", whose weights_only handling is version-dependent.
+    # test the best checkpoint in a task built again from the config
     best_path = trainer.checkpoint_callback.best_model_path
     log.info(f"Best checkpoint path:\n{best_path}")
     log.info("Starting testing.")
-    best_task = test_checkpoint(trainer, datamodule, type(task), best_path)
+    best_task = test_checkpoint(trainer, datamodule, _task(config), best_path)
 
     # Store best model
     log.info("Store best model")
-    torch.save(best_task, config.globals.model_path + ".task")
-
     best_task.save_model(config.globals.model_path, do_postprocessing=True)
     log.info(f"Best model stored at {os.path.abspath(config.globals.model_path)}")
+
+
+def _task(config: DictConfig) -> AtomisticTask:
+    """The model and the task of a run's config, built from it."""
+    log.info(f"Instantiating model <{config.model._target_}>")
+    model = hydra.utils.instantiate(config.model)
+    log.info(f"Instantiating task <{config.task._target_}>")
+    scheduler_cls = (
+        str2class(config.task.scheduler_cls) if config.task.scheduler_cls else None
+    )
+    task = hydra.utils.instantiate(
+        config.task,
+        model=model,
+        optimizer_cls=str2class(config.task.optimizer_cls),
+        scheduler_cls=scheduler_cls,
+    )
+    # a generative model's settings go into hyperparameters.json with the model
+    task.model_blocks = {
+        key: OmegaConf.to_container(config[key], resolve=True)
+        for key in ("generative", "sample")
+        if key in config
+    }
+    return task
 
 
 def _datamodule(config: DictConfig) -> LightningDataModule:
@@ -221,13 +221,16 @@ def _datamodule(config: DictConfig) -> LightningDataModule:
 def test_checkpoint(
     trainer: Trainer,
     datamodule: LightningDataModule,
-    task_cls: type,
+    task: AtomisticTask,
     ckpt_path: str,
     path: str = "test_metrics.json",
 ) -> AtomisticTask:
-    """Test the task of a checkpoint on the test split and write the metrics, each
-    with the unit of its target property (none for the loss), to ``path``."""
-    task = load_task_from_checkpoint(task_cls, ckpt_path)
+    """Load a checkpoint's weights into ``task`` (built from the run's config), test
+    it on the test split and write the metrics, each with the unit of its target
+    property (none for the loss), to ``path``."""
+    checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+    # assign: the statistics keep the dtype they were trained with (float64)
+    task.load_state_dict(checkpoint["state_dict"], assign=True)
     (metrics,) = trainer.test(model=task, datamodule=datamodule)
     units = {
         f"test_{output.target_property}_{name}": datamodule.dataset.units.get(
@@ -238,7 +241,7 @@ def test_checkpoint(
     }
     result = {
         "checkpoint": os.path.relpath(ckpt_path),
-        "epoch": torch.load(ckpt_path, map_location="cpu", weights_only=False)["epoch"],
+        "epoch": checkpoint["epoch"],
         "n_test": len(datamodule.test_idx),
         "metrics": {k: {"value": v, "unit": units.get(k)} for k, v in metrics.items()},
     }

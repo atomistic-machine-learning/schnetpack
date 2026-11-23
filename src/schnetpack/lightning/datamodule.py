@@ -13,6 +13,7 @@ from schnetpack.data.atoms import ASEAtomsData
 from schnetpack.data.cache import ArrayStats, AtomsCache
 from schnetpack.data.loader import AtomsLoader
 from schnetpack.data.provider import StatsAtomrefProvider, train_partition_fingerprint
+from schnetpack.data.sampler import BudgetBatches
 from schnetpack.data.splitting import RandomSplit, SplittingStrategy, splitting_lock
 from schnetpack.transform.base import Transform
 
@@ -329,6 +330,21 @@ class AtomsDataModule(pl.LightningDataModule):
                 **common,
             ),
         }
+
+    def state_dict(self) -> dict[str, Any]:
+        # With cache=True, the training order comes from a generator of its own
+        # (BudgetBatches), which a resumed run has to continue. Without a cache,
+        # the order comes from torch's global generator, which the task restores.
+        batches = getattr(self.loaders.get("train"), "batch_sampler", None)
+        if isinstance(batches, BudgetBatches):
+            return {"train_order": batches.rng.bit_generator.state}
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        # Lightning calls this after setup(), which made the loaders
+        if "train_order" in state_dict:
+            batches = self.loaders["train"].batch_sampler
+            batches.rng.bit_generator.state = state_dict["train_order"]
 
     def teardown(self, stage: str | None = None) -> None:
         # Transforms with external resources (e.g. cached neighbor lists)

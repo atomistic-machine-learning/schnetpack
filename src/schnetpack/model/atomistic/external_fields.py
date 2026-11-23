@@ -2,11 +2,13 @@ import torch
 import torch.nn as nn
 
 import schnetpack.properties as properties
+from schnetpack.model_format import register
 from schnetpack.utils import required_fields_from_properties
 
 __all__ = ["StaticExternalFields"]
 
 
+@register
 class StaticExternalFields(nn.Module):
     """
     Input routine for setting up dummy external fields in response models.

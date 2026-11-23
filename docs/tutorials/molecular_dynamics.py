@@ -32,9 +32,9 @@ from ase.io import read, write
 import schnetpack as spk
 from schnetpack import properties
 from schnetpack import units as spk_units
-from schnetpack.utils import load_model
 
-# the example model was saved by an older SchNetPack and warns about it on loading
+# the example model is a pickled file saved by an older SchNetPack, which warns
+# about it on loading; `spk.load_model` loads such files as well as model folders
 warnings.filterwarnings("ignore", message="Model was saved without version")
 
 torch.manual_seed(0)
@@ -54,7 +54,7 @@ workdir = tempfile.mkdtemp()
 model_path = "../../tests/testdata/md_ethanol.model"
 molecule_path = "../../tests/testdata/md_ethanol.xyz"
 
-model = load_model(model_path)
+model = spk.load_model(model_path)
 cutoff = model.representation.cutoff.item()  # Angstrom
 print(f"{type(model.representation).__name__}, cutoff {cutoff} Å")
 

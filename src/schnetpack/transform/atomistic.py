@@ -2,6 +2,7 @@ import torch
 from ase.data import atomic_masses
 
 import schnetpack.properties as structure
+from schnetpack.model_format import register
 from schnetpack.nn import scatter_add
 from schnetpack.utils.cell import (
     atom_cells,
@@ -35,6 +36,21 @@ def _segment_mean(
     return sums / total.clamp(min=torch.finfo(total.dtype).tiny)[:, None]
 
 
+def _fit_atomrefs(atomrefs: torch.Tensor, size: int) -> torch.Tensor:
+    """``atomrefs`` as a table of ``size`` entries, the size the transform was built
+    with (``zmax``) and that a model built from its hyperparameters has: a shorter
+    table is padded with zeros, and entries from ``size`` on must be zero."""
+    atomrefs = atomrefs.detach()
+    if atomrefs[size:].any():
+        raise ValueError(
+            f"the atomrefs have entries for atomic numbers from {size} on, beyond "
+            f"the transform's table of {size} entries: build it with a larger zmax"
+        )
+    atomrefs = atomrefs[:size]
+    return torch.nn.functional.pad(atomrefs, (0, size - len(atomrefs)))
+
+
+@register
 class SubtractCenterOfMass(Transform):
     """
     Subtract center of mass from positions.
@@ -72,6 +88,7 @@ class SubtractCenterOfMass(Transform):
         return inputs
 
 
+@register
 class SubtractCenterOfGeometry(Transform):
     """
     Subtract center of geometry from positions.
@@ -98,6 +115,7 @@ class SubtractCenterOfGeometry(Transform):
         return inputs
 
 
+@register
 class NiggliReduce(Transform):
     """
     Replace the cell of a periodic structure by its Niggli cell, the unique
@@ -119,6 +137,7 @@ class NiggliReduce(Transform):
         return inputs
 
 
+@register
 class WrapPositions(Transform):
     """
     Wrap atom positions into their periodic cell, along the periodic
@@ -151,6 +170,7 @@ class WrapPositions(Transform):
         return inputs
 
 
+@register
 class RemoveOffsets(Transform):
     """
     Remove offsets from property based on the mean of the training data and/or the
@@ -178,8 +198,10 @@ class RemoveOffsets(Transform):
             remove_mean: If true, remove mean of the dataset from property.
             remove_atomrefs: If true, remove single-atom references.
             is_extensive: Set true if the property is extensive.
-            zmax: Set the maximum atomic number, to determine the size of the atomref
-                tensor.
+            zmax: Size of the atomref table: it holds the atomic numbers below
+                zmax. Atomrefs from the data are padded with zeros to this size;
+                entries beyond it are an error, as is a structure with an atomic
+                number from zmax on.
             atomrefs: Provide single-atom references directly.
             property_mean: Provide mean property value / n_atoms.
             estimate_atomref: If true, add estimated atomrefs.
@@ -209,7 +231,8 @@ class RemoveOffsets(Transform):
             atomrefs = atomrefs if atomrefs is not None else torch.zeros((zmax,))
             self.register_buffer("atomref", atomrefs)
         if self.remove_mean:
-            property_mean = property_mean or torch.zeros((1,))
+            if property_mean is None:
+                property_mean = torch.zeros((1,))
             self.register_buffer("mean", property_mean)
 
     def initialize(self, stats) -> None:
@@ -221,13 +244,15 @@ class RemoveOffsets(Transform):
             atrefs = stats.get_atomrefs(
                 self._property, self.is_extensive, estimate=self.estimate_atomref
             )
-            self.atomref = atrefs[self._property].detach()
+            self.atomref = _fit_atomrefs(atrefs[self._property], len(self.atomref))
 
         if self.remove_mean and not self._mean_initialized:
             mean, _std = stats.get_stats(
                 self._property, self.is_extensive, self.remove_atomrefs
             )
-            self.mean = mean.detach()
+            # the statistics are 0-d: keep the shape the constructor gave, which a
+            # model built from its hyperparameters has
+            self.mean = mean.detach().reshape(self.mean.shape)
 
     def forward(
         self,
@@ -258,6 +283,7 @@ class RemoveOffsets(Transform):
         return inputs
 
 
+@register
 class ScaleProperty(Transform):
     """
     Scale an entry of the input or results dictionary.
@@ -301,7 +327,8 @@ class ScaleProperty(Transform):
         else:
             self._initialized = False
 
-        scale = scale or torch.ones((1,))
+        if scale is None:
+            scale = torch.ones((1,))
         self.register_buffer("scale", scale)
 
     def initialize(self, stats) -> None:
@@ -311,7 +338,11 @@ class ScaleProperty(Transform):
         if not self._initialized:
             mean, std = stats.get_stats(self._target_key, True, False)
             scale = mean if self._scale_by_mean else std
-            self.scale = torch.abs(scale).detach()
+            # the statistics are 0-d float64: keep the constructor's shape, which a
+            # model built from its hyperparameters has, and its dtype, so that the
+            # product keeps the input's dtype (as with the 0-d scale before)
+            scale = torch.abs(scale).detach().reshape(self.scale.shape)
+            self.scale = scale.to(self.scale.dtype)
 
     def forward(
         self,
@@ -321,6 +352,7 @@ class ScaleProperty(Transform):
         return inputs
 
 
+@register
 class AddOffsets(Transform):
     """
     Add offsets to property based on the mean of the training data and/or the single
@@ -348,8 +380,10 @@ class AddOffsets(Transform):
             add_mean: If true, add mean of the dataset.
             add_atomrefs: If true, add single-atom references.
             is_extensive: Set true if the property is extensive.
-            zmax: Set the maximum atomic number, to determine the size of the atomref
-                tensor.
+            zmax: Size of the atomref table: it holds the atomic numbers below
+                zmax. Atomrefs from the data are padded with zeros to this size;
+                entries beyond it are an error, as is a structure with an atomic
+                number from zmax on.
             atomrefs: Provide single-atom references directly.
             property_mean: Provide mean property value / n_atoms.
             estimate_atomref: If true, add estimated atomrefs.
@@ -377,7 +411,8 @@ class AddOffsets(Transform):
             self._mean_initialized = False
 
         atomrefs = atomrefs if atomrefs is not None else torch.zeros((zmax,))
-        property_mean = property_mean or torch.zeros((1,))
+        if property_mean is None:
+            property_mean = torch.zeros((1,))
         self.register_buffer("atomref", atomrefs)
         self.register_buffer("mean", property_mean)
 
@@ -390,18 +425,21 @@ class AddOffsets(Transform):
             atrefs = stats.get_atomrefs(
                 self._property, self.is_extensive, estimate=self.estimate_atomref
             )
-            self.atomref = atrefs[self._property].detach()
+            self.atomref = _fit_atomrefs(atrefs[self._property], len(self.atomref))
 
         if self.add_mean and not self._mean_initialized:
             mean, _std = stats.get_stats(
                 self._property, self.is_extensive, self.add_atomrefs
             )
-            self.mean = mean.detach()
+            # 0-d: keep the constructor's shape, as RemoveOffsets does (the dtype
+            # stays float64: the offsets are added in place, in the output's dtype)
+            self.mean = mean.detach().reshape(self.mean.shape)
 
     def set_offsets(self, atomrefs: torch.Tensor, mean: torch.Tensor) -> None:
         """Set atomrefs and mean, as if given to the constructor: ``initialize``
         then leaves them alone."""
-        self.atomref = atomrefs.detach().to(self.atomref.device)
+        atomrefs = _fit_atomrefs(atomrefs, len(self.atomref))
+        self.atomref = atomrefs.to(self.atomref.device)
         self.mean = mean.detach().reshape(1).to(self.mean.device)
         self._atomrefs_initialized = True
         self._mean_initialized = True

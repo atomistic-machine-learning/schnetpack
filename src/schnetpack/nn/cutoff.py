@@ -3,6 +3,8 @@ import math
 import torch
 from torch import nn
 
+from schnetpack.model_format import register
+
 __all__ = [
     "CosineCutoff",
     "MollifierCutoff",
@@ -34,6 +36,7 @@ def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
     return input_cut
 
 
+@register
 class CosineCutoff(nn.Module):
     r""" Behler-style cosine cutoff module.
 
@@ -80,6 +83,7 @@ def mollifier_cutoff(input: torch.Tensor, cutoff: torch.Tensor, eps: torch.Tenso
     return cutoffs
 
 
+@register
 class MollifierCutoff(nn.Module):
     r""" Mollifier cutoff module scaled to have a value of 1 at :math:`r=0`.
 
@@ -123,6 +127,7 @@ def _switch_component(
     return torch.where(x <= 0, zeros, torch.exp(-ones / x_))
 
 
+@register
 class SwitchFunction(nn.Module):
     """
     Decays from 1 to 0 between `switch_on` and `switch_off`.

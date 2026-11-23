@@ -5,9 +5,12 @@ Several models evaluated together, reported as one prediction per model.
 import torch
 from torch import nn
 
+from schnetpack.model_format import register
+
 __all__ = ["NNEnsemble"]
 
 
+@register
 class NNEnsemble(nn.Module):
     """
     Several models evaluated together, reported as one prediction per model.

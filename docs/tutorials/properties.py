@@ -189,8 +189,9 @@ model = spk.model.NeuralNetworkPotential(
 # {class}`~schnetpack.lightning.ModelCheckpoint` keeps the best model: after every
 # epoch it compares the validation loss with the best so far. It extends
 # Lightning's callback of the same name. Besides the Lightning checkpoint in
-# `dirpath`, from which a training can resume, it saves the model alone to
-# `model_path`, ready for prediction.
+# `dirpath`, from which a training can resume, it saves the model alone to the
+# folder `model_path`, ready for prediction: `hyperparameters.json` holds its
+# classes and their arguments, `model.safetensors` its weights.
 
 # %%
 outputs = [
@@ -226,8 +227,9 @@ trainer = pl.Trainer(
 trainer.fit(task, datamodule=datamodule)
 
 # %% [markdown]
-# `trainer.test` with `ckpt_path="best"` loads the best checkpoint and computes the
-# metrics on the test set, which the training never saw:
+# `trainer.test` with `ckpt_path="best"` loads the weights of the best checkpoint
+# into the task and computes the metrics on the test set, which the training never
+# saw:
 
 # %%
 trainer.test(task, datamodule=datamodule, ckpt_path="best", verbose=False)
@@ -247,7 +249,7 @@ print(f"test MAE: {trainer.callback_metrics['test_energy_MAE']:.3f} eV")
 # references back, so it predicts the energy itself.
 
 # %%
-best_model = spk.utils.load_model(model_path)
+best_model = spk.load_model(model_path)
 converter = spk.interfaces.AtomsConverter(
     neighbor_list=trn.MatScipyNeighborList(cutoff=cutoff)
 )

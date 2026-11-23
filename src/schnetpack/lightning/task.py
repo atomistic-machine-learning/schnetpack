@@ -1,9 +1,12 @@
 import gc
+import random
 import warnings
 from typing import Any, cast
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning.trainer.states import TrainerFn
 from pytorch_lightning.utilities.types import (
     LRSchedulerConfigType,
     OptimizerLRScheduler,
@@ -14,6 +17,8 @@ from torchmetrics import Metric
 from schnetpack import properties
 from schnetpack.model.base import AtomisticModel
 from schnetpack.model.compile import CompiledPotential
+from schnetpack.model.mace import MaceModel
+from schnetpack.model_format import save_model
 from schnetpack.objectives import (
     ModelOutput,
     calculate_loss,
@@ -27,6 +32,47 @@ from schnetpack.train.graph_step import GraphStep
 from schnetpack.train.teacher import TeacherWrapper
 
 __all__ = ["AtomisticTask"]
+
+
+def _collect_rng_states() -> dict[str, Any]:
+    # numpy's state as a tensor and plain numbers, so that the checkpoint loads
+    # with torch.load(weights_only=True)
+    name, keys, pos, has_gauss, cached_gaussian = np.random.get_state()
+    states = {
+        "torch": torch.get_rng_state(),
+        "numpy": {
+            "name": name,
+            "keys": torch.from_numpy(keys.astype(np.int64)),
+            "pos": int(pos),
+            "has_gauss": int(has_gauss),
+            "cached_gaussian": float(cached_gaussian),
+        },
+        "python": random.getstate(),
+    }
+    if torch.cuda.is_available():
+        states["torch.cuda"] = torch.cuda.get_rng_state_all()
+    return states
+
+
+def _set_rng_states(states: dict[str, Any]) -> None:
+    torch.set_rng_state(states["torch"])
+    numpy = states["numpy"]
+    np.random.set_state(
+        (
+            numpy["name"],
+            numpy["keys"].numpy().astype(np.uint32),
+            numpy["pos"],
+            numpy["has_gauss"],
+            numpy["cached_gaussian"],
+        )
+    )
+    random.setstate(states["python"])
+    if "torch.cuda" in states and torch.cuda.is_available():
+        # the run may resume on fewer devices than it was saved on
+        for device, state in enumerate(
+            states["torch.cuda"][: torch.cuda.device_count()]
+        ):
+            torch.cuda.set_rng_state(state, device)
 
 
 class AtomisticTask(pl.LightningModule):
@@ -51,6 +97,16 @@ class AtomisticTask(pl.LightningModule):
 
     Padded batches (from a cache) are handled in every mode: their padding rows
     are left out of losses and metrics.
+
+    Its checkpoints hold weights and training state only, and load with
+    ``torch.load(weights_only=True)``: to resume or test, build the task again (as
+    ``spktrain`` does from the run's config) and load the checkpoint into it. Outside
+    a resumed fit, load with ``task.load_state_dict(state, assign=True)``, so that
+    the statistics keep the dtype they were trained with.
+
+    ``model_blocks`` (None by default) are further plain-JSON entries that
+    ``save_model`` writes into the model's hyperparameters.json; ``spktrain`` sets
+    them to the run's ``generative:`` and ``sample:`` blocks.
     """
 
     def __init__(
@@ -153,7 +209,7 @@ class AtomisticTask(pl.LightningModule):
         # cuda_graph: the training loss summed on the GPU, read once per validation
         self._loss_sum: torch.Tensor | None = None
         self._loss_steps = 0
-        self.save_hyperparameters()
+        self.model_blocks: dict | None = None
 
     def setup(self, stage=None):
         if stage == "fit":
@@ -161,6 +217,23 @@ class AtomisticTask(pl.LightningModule):
                 self.model.initialize_transforms(self.trainer.datamodule)
             else:
                 self.distillation.setup(self.trainer.datamodule)
+
+    def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+        # Lightning does not store the RNG states, so without them a resumed run
+        # shuffles the training data and draws the noise differently than an
+        # uninterrupted one
+        checkpoint["rng_states"] = _collect_rng_states()
+
+    def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+        # Only when resuming training: Lightning calls this before it creates the
+        # train dataloader iterator, whose sampler draws the shuffle seed from the
+        # global RNG. Loading a task without a trainer leaves the RNG alone.
+        if (
+            "rng_states" in checkpoint
+            and self._trainer is not None
+            and self._trainer.state.fn == TrainerFn.FITTING
+        ):
+            _set_rng_states(checkpoint["rng_states"])
 
     def forward(self, inputs: dict[str, torch.Tensor]):
         if self.compiled_model is not None:
@@ -427,11 +500,20 @@ class AtomisticTask(pl.LightningModule):
                 sch.step()
 
     def save_model(self, path: str, do_postprocessing: bool | None = None):
+        """Save the model to the folder ``path`` (`schnetpack.save_model`), with
+        postprocessing switched to ``do_postprocessing`` if given, and
+        ``model_blocks`` next to it in hyperparameters.json."""
         if self.global_rank == 0:
             pp_status = self.model.do_postprocessing
             if do_postprocessing is not None:
                 self.model.do_postprocessing = do_postprocessing
             try:
-                torch.save(self.model, path)
+                if isinstance(self.model, MaceModel):
+                    # MACE models stay a pickled file: their architecture is a
+                    # torch.export archive that hyperparameters.json cannot describe,
+                    # so they are outside the model format
+                    torch.save(self.model, path)
+                else:
+                    save_model(self.model, path, blocks=self.model_blocks)
             finally:
                 self.model.do_postprocessing = pp_status

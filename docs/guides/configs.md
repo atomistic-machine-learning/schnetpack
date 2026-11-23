@@ -175,6 +175,7 @@ the command:
 │         _target_: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
 │         save_dir: tensorboard/
 │         name: default
+│         version: 0
 │
 └── seed
     └── None
@@ -217,7 +218,10 @@ Here is a description of the purpose of the different config groups:
 - **task**: defines the {class}`lightning.AtomisticTask`
 - **trainer**: configure the PyTorchLightning `Trainer`
 - **callbacks**: a list of callbacks for the PyTorchLightning `Trainer`
-- **logger**: a dictionary of training logger that is passed to the trainer
+- **logger**: a dictionary of training logger that is passed to the trainer. Next to
+  `tensorboard` (default) and `csv`, there are configs for `aim` and `wandb`; these two
+  loggers need their package installed separately (`pip install aim` or
+  `pip install wandb`)
 - **seed**: the random seed
 - **experiment**: define experiment templates by overriding the train.yaml config
 

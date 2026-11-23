@@ -5,12 +5,14 @@ from torch import nn
 
 import schnetpack.nn as snn
 import schnetpack.properties as properties
+from schnetpack.model_format import register
 from schnetpack.nn import Dense
 from schnetpack.nn.activations import shifted_softplus
 
 __all__ = ["SchNet", "SchNetInteraction"]
 
 
+@register
 class SchNetInteraction(nn.Module):
     r"""SchNet interaction block for modeling interactions of atomistic systems."""
 
@@ -68,6 +70,7 @@ class SchNetInteraction(nn.Module):
         return x
 
 
+@register
 class SchNet(nn.Module):
     """Continuous-filter convolutional network for learning representations of
     atomistic systems.
