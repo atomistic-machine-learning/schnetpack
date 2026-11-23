@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------
-   SchNetPack pair style: runs a potential that spkdeploy compiled with
+   SchNetPack pair style: runs a potential that spk deploy compiled with
    AOTInductor (schnetpack.interfaces.lammps_interface).
 
    The package maps flat tensors -- positions, atomic numbers, edges, edge

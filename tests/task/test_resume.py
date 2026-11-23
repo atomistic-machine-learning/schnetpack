@@ -42,7 +42,7 @@ def make_task():
 
 
 def fit(run_dir, max_epochs, ckpt_path=None, ema=False, cached=False):
-    """One spktrain-like process: seed, build everything, fit (or resume)."""
+    """One spk train-like process: seed, build everything, fit (or resume)."""
     pl.seed_everything(SEED, workers=True)
     # with cache=True, the training order comes from a generator of its own
     datamodule = AtomsDataModule(

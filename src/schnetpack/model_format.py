@@ -354,12 +354,24 @@ def _read(path: str, weights: bool) -> tuple[dict, dict]:
     return hyperparameters, state
 
 
+def _model_folder(path: str) -> str:
+    """``path``, or the ``best_model`` in it when ``path`` is a run folder of
+    ``spk train``."""
+    best = os.path.join(path, "best_model")
+    if not os.path.exists(os.path.join(path, _HYPERPARAMETERS)) and os.path.exists(
+        best
+    ):
+        return best
+    return path
+
+
 def load_hyperparameters(path: str) -> dict:
     """
-    ``hyperparameters.json`` of the model folder ``path``, in the current format:
-    ``model`` and the blocks saved with it (e.g. ``generative``, ``sample``).
+    ``hyperparameters.json`` of the model folder ``path`` (or of the ``best_model``
+    of the run folder ``path``), in the current format: ``model`` and the blocks
+    saved with it (e.g. ``generative``, ``sample``).
     """
-    return _read(path, weights=False)[0]
+    return _read(_model_folder(path), weights=False)[0]
 
 
 def load_model(path: str, device: str | torch.device = "cpu") -> nn.Module:
@@ -375,9 +387,11 @@ def load_model(path: str, device: str | torch.device = "cpu") -> nn.Module:
     before. Unpickling runs code from the file: load only files you trust.
 
     Args:
-        path: the model folder.
+        path: the model folder, or a run folder of ``spk train`` (its
+            ``best_model`` is loaded).
         device: the device the model is put on.
     """
+    path = _model_folder(path)
     if not os.path.isdir(path):
         from schnetpack.utils.compatibility import load_model as load_pickle
 

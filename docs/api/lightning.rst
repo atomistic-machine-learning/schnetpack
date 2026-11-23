@@ -2,7 +2,7 @@ schnetpack.lightning
 ====================
 .. currentmodule:: schnetpack.lightning
 
-PyTorch Lightning integration used by ``spktrain``. Custom PyTorch training
+PyTorch Lightning integration used by ``spk train``. Custom PyTorch training
 loops do not need this module; see :mod:`schnetpack.objectives` instead.
 
 Task

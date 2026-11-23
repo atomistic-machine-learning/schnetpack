@@ -7,14 +7,14 @@
 #
 # The teacher is machine-specific, so pass it on the command line:
 #
-#   spktrain experiment=distillation data.dataset.datapath=/path/to/structures.db \
+#   spk train experiment=distillation data.dataset.datapath=/path/to/structures.db \
 #       task.teacher.model_path=/path/to/teacher/best_model
 #
 # The teacher is chosen from task/teacher: schnetpack (the default) or
 # mace. Each sets its cutoff and length unit in globals.teacher_*, which the
 # shared neighbor list needs too, and everything else under task.teacher:
 #
-#   spktrain experiment=distillation task/teacher=mace \
+#   spk train experiment=distillation task/teacher=mace \
 #       task.teacher.model_path=/path/to/MACE-OFF23_medium.pt2 ...
 #
 # Teacher and student share one neighbor list, built by the data pipeline at

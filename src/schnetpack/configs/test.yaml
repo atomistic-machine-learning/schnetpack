@@ -1,0 +1,14 @@
+# spk test run_dir=<run folder>: tests the run's best checkpoint on its test split and
+# writes <run>/test_metrics.json. Everything else comes from the run's config.yaml.
+defaults:
+  - override hydra/job_logging: stdout
+  - _self_
+
+run_dir: ???  # the run folder spk train wrote
+data_dir: null  # the folder of the run's data, if it moved since training
+device: auto  # the trainer's accelerator: auto, cpu or cuda
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .

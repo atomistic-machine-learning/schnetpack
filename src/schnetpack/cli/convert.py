@@ -1,52 +1,28 @@
-"""spkconvert: update the metadata of an ASE DB dataset in place."""
+"""spk convert: update the metadata of an ASE DB dataset in place
+(``configs/convert.yaml``)."""
 
-import argparse
-
+import hydra
 import numpy as np
 from ase.db import connect
+from omegaconf import DictConfig
 from tqdm import tqdm
 
 
-def main():
+@hydra.main(config_path="../configs", config_name="convert", version_base="1.2")
+def main(config: DictConfig):
     """
-    Update the metadata of an ASE DB dataset in place, e.g. to make a dataset
-    created with SchNetPack 1.0 loadable by the current version.
+    Update the metadata of the ASE DB dataset ``db`` in place, e.g. to make a
+    dataset created with SchNetPack 1.0 loadable by the current version.
 
     - Converts old-style atom references (array + `atref_labels`) to a dict
       mapping each property to its per-element references.
-    - Sets the distance unit (`--distunit`) and property units (`--propunit`).
+    - Sets the distance unit (``distunit``) and property units (``propunit``).
     - Optionally prepends a dimension to the given properties in every row
-      (`--expand_property_dims`), as needed for old FieldSchNet datasets.
+      (``expand_property_dims``), as needed for old FieldSchNet datasets.
 
     The database is modified in place, so back it up first.
-
     """
-    parser = argparse.ArgumentParser(
-        description="Set units of an ASE dataset, e.g. to convert from SchNetPack 1.0 to the new format."
-    )
-    parser.add_argument(
-        "data_path",
-        help="Path to ASE DB dataset",
-    )
-    parser.add_argument(
-        "--distunit",
-        help="Distance unit as string, corresponding to ASE units (e.g. `Ang`)",
-    )
-    parser.add_argument(
-        "--propunit",
-        help="Property units as string, corresponding "
-        "to ASE units (e.g. `kcal/mol/Ang`), in the form: `property1:unit1,property2:unit2`",
-    )
-    parser.add_argument(
-        "--expand_property_dims",
-        default=[],
-        nargs="+",
-        help="Expanding the first dimension of the given property "
-        "(required for example for old FieldSchNet datasets). "
-        "Add property names here in the form 'property1 property2 property3'",
-    )
-    args = parser.parse_args()
-    with connect(args.data_path) as db:
+    with connect(config.db) as db:
         meta = db.metadata
     print(meta)
 
@@ -64,37 +40,28 @@ def main():
         meta["atomrefs"] = new_atomrefs
         del meta["atref_labels"]
 
-    if args.distunit:
-        if args.distunit == "A":
+    if config.distunit:
+        if config.distunit == "A":
             raise ValueError(
                 "The provided unit (A for Ampere) is not a valid distance unit according to the ASE unit"
                 " definitions. You probably mean `Ang`/`Angstrom`. Please also check your property units!"
             )
-        meta["_distance_unit"] = args.distunit
+        meta["_distance_unit"] = config.distunit
 
-    if args.propunit:
-        if "_property_unit_dict" not in meta.keys():
-            meta["_property_unit_dict"] = {}
+    if config.propunit:
+        meta.setdefault("_property_unit_dict", {}).update(dict(config.propunit))
 
-        for p in args.propunit.split(","):
-            prop, unit = p.split(":")
-            meta["_property_unit_dict"][prop] = unit
-
-    with connect(args.data_path) as db:
+    with connect(config.db) as db:
         db.metadata = meta
 
-    if args.expand_property_dims is not None and len(args.expand_property_dims) > 0:
-        with connect(args.data_path) as db:
+    if config.expand_property_dims:
+        with connect(config.db) as db:
             for i in tqdm(range(len(db))):
                 atoms_row = db.get(i + 1)
                 data = {}
                 for p, v in atoms_row.data.items():
-                    if p in args.expand_property_dims:
+                    if p in config.expand_property_dims:
                         data[p] = np.expand_dims(v, 0)
                     else:
                         data[p] = v
                 db.update(i + 1, data=data)
-
-
-if __name__ == "__main__":
-    main()

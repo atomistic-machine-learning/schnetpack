@@ -14,7 +14,7 @@
 # scale (the RMS of the forces over indices: pass the training split) from the
 # data. Then train it:
 #
-#   spktrain experiment=mace_scratch globals.mace_path=/path/to/mace.pt2 \
+#   spk train experiment=mace_scratch globals.mace_path=/path/to/mace.pt2 \
 #       data.dataset.datapath=/path/to/data.db data.num_train=... data.num_val=...
 #
 # The model trains on MACE's interaction energy. The per-element reference

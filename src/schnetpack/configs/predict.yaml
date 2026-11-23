@@ -1,65 +1,21 @@
-# @package _global_
+# spk predict model_dir=<model folder or run folder> db=<ASE db> out=<folder>: runs the
+# model on every structure of the db and writes the predictions to out.
 defaults:
-  - _self_
   - trainer: default_trainer
+  - _self_
+  - override hydra/job_logging: stdout
 
-datapath: ???
-modeldir: ???
-outputdir: ???
-cutoff: ???
-ckpt_path: null
+model_dir: ???  # a model folder, or a run folder of spk train
+db: ???  # the ASE db of structures
+out: ???  # the folder the predictions are written to
+ckpt_path: null  # a training checkpoint whose weights replace the model's
 batch_size: 100
 write_interval: epoch
 enable_grad: false
 compile: false
 write_idx_m: false
 
-data:
-  _target_: schnetpack.data.ASEAtomsData
-  datapath: ${datapath}
-  transforms:
-    - _target_: schnetpack.transform.SubtractCenterOfMass
-    - _target_: schnetpack.transform.MatScipyNeighborList
-      cutoff: ${cutoff}
-    - _target_: schnetpack.transform.CastTo32
-
-
-# hydra configuration
 hydra:
-    job:
-      chdir: True
-
-    # output paths for hydra logs
-    run:
-        dir: ${modeldir}
-
-    # disable hydra config storage, since handled manually
-    output_subdir: null
-
-    help:
-      app_name: SchNetPack Predict
-
-      template: |-
-        SchNetPack
-
-        == Configuration groups ==
-        Compose your configuration from those groups (db=mysql)
-
-        $APP_CONFIG_GROUPS
-
-        == Config ==
-        This is the config generated for this run.
-        You can change the config file to be loaded to a predefined one
-        > spktrain --config-name=train_qm9
-
-        or your own:
-        > spktrain --config-dir=./my_configs --config-name=my_config
-
-        You can override everything, for example:
-        > spktrain --config-name=train_qm9 data_dir=/path/to/datadir data.batch_size=50 --help
-
-        -------
-        $CONFIG
-        -------
-
-        ${hydra.help.footer}
+  output_subdir: null
+  run:
+    dir: .

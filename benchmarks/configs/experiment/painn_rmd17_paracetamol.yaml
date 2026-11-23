@@ -4,7 +4,7 @@
 # (J. Chem. Phys. 2023, Table V), with the recipe and our choices of
 # painn_rmd17_aspirin.
 #
-#   spktrain --config-dir=benchmarks/configs experiment=painn_rmd17_paracetamol
+#   spk train --config-dir=benchmarks/configs experiment=painn_rmd17_paracetamol
 #       run.data_dir=<folder with rmd17_paracetamol.db>
 
 defaults:

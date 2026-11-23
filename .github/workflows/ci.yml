@@ -98,10 +98,12 @@ jobs:
           python -m venv /tmp/v
           /tmp/v/bin/pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
           /tmp/v/bin/pip install --no-cache-dir dist/*.whl
-          for c in spkconvert spkdeploy spktrain spkpredict spktest spksample spkevaluate spkmd; do
-            echo "--- $c ---"
-            /tmp/v/bin/$c --help > /dev/null
+          /tmp/v/bin/spk --help
+          for c in train test predict sample evaluate convert deploy; do
+            echo "--- spk $c ---"
+            /tmp/v/bin/spk $c --help > /dev/null
           done
+          /tmp/v/bin/spkmd --help > /dev/null
 
   docs:
     runs-on: ubuntu-latest

@@ -84,8 +84,15 @@ This changes command-line overrides:
 # 2.x
 spktrain experiment=qm9_atomwise data.datapath=/data/qm9.db
 # 3.0
-spktrain experiment=qm9_atomwise data.dataset.datapath=/data/qm9.db
+spk train experiment=qm9_atomwise data.dataset.datapath=/data/qm9.db
 ```
+
+**Commands.** One `spk` command replaces the console scripts: `spktrain` →
+`spk train`, `spk predict` → `spk predict`, `spk deploy` → `spk deploy`,
+`spk convert` → `spk convert`; `spkmd` stays. Arguments are `key=value`, paths
+too: `spk deploy model_dir=best_model out=model.pt2`,
+`spk convert db=data.db distunit=Ang`, `spk predict model_dir=<run> db=<db> out=<folder>`
+(`modeldir=` and `cutoff=` are gone; the cutoff comes from the model).
 
 Custom configs and the `config.yaml` saved in existing run directories still
 refer to the old `_target_` paths. Update them using the table above,
@@ -158,10 +165,13 @@ LAMMPS with `spkdeploy` are unchanged.
 
 ### Changed
 
-- Console scripts (`spktrain`, `spkpredict`, `spkmd`, `spkconvert`,
-  `spkdeploy`) are `[project.scripts]` entry points. `spkconvert` and
-  `spkdeploy` moved into `schnetpack.cli`.
-- `spkdeploy model package.pt2 [--device cuda] [--dtype float64]` compiles a
+- One `spk` command with subcommands replaces the `spk*` console scripts:
+  `spk train`, `spk test`, `spk predict`, `spk sample`, `spk evaluate`,
+  `spk convert` and `spk deploy` (`spkmd` stays for now). Every subcommand is a
+  Hydra app with `key=value` arguments; all but `spk train` write no Hydra
+  output folder. `model_dir=` takes a model folder or the run folder `spk train`
+  wrote. `spk test`, `spk sample` and `spk evaluate` are new.
+- `spk deploy model_dir=<model> out=package.pt2 [device=cuda] [dtype=float64]` compiles a
   potential with AOTInductor (`schnetpack.interfaces.lammps_interface`) instead
   of writing TorchScript. The package holds energy, per-atom energies, forces
   and the virial, and runs only with the torch version and on the device it was
@@ -174,7 +184,7 @@ LAMMPS with `spkdeploy` are unchanged.
   `pytorch_lightning>=2.6.1,<3` and, in the `test` extra,
   `pytest-benchmark>=5.3.1`. Before Lightning 2.6.1, random transforms in
   DataLoader workers replayed the same random stream every epoch under
-  `seed_everything(workers=True)`, as `spktrain` uses it.
+  `seed_everything(workers=True)`, as `spk train` uses it.
 - The TensorBoard logger config writes to a fixed `version: 0`, so a resumed run
   stays one TensorBoard run.
 - `schnetpack.datasets` passes on the data API again (e.g.
@@ -196,7 +206,7 @@ LAMMPS with `spkdeploy` are unchanged.
   `SO3net` used `sqrt(0.5)` rounded to float32 (a relative error of about 2e-8).
 - `spkmd` was broken in every installed wheel and sdist, because the
   `md_configs` YAML files were not packaged.
-- `spktrain` raises an error if the early-stopping metric becomes NaN or
+- `spk train` raises an error if the early-stopping metric becomes NaN or
   infinite. Before, it reported the run as finished (#802).
 - `Atomwise` with `aggregation_mode="avg"` failed for multiple outputs (#801).
 - Resumed training restores the callback and training state (#788).
@@ -233,8 +243,8 @@ LAMMPS with `spkdeploy` are unchanged.
   validation when validation ran less than once per epoch, and from the EMA
   average when it ran within an epoch.
 - `PredictionWriter` with `write_interval="epoch"`, the default of
-  `spkpredict`, failed.
-- `spktrain` crashed with two loggers; the config is now logged to every
+  `spk predict`, failed.
+- `spk train` crashed with two loggers; the config is now logged to every
   logger. A resumed run keeps its seed unless a new one is given.
   `trainer=debug_trainer` no longer passes the removed `gpus` argument, and the
   `aim` logger config no longer doubles its repo path.

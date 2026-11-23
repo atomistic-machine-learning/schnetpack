@@ -10,7 +10,7 @@ installed, e.g. in a container (the CI job in .github/workflows/lammps.yml runs 
 With the plugin build, point LAMMPS_PLUGIN_PATH at the directory of
 schnetpackplugin.so.
 
-It builds a small random PaiNN potential, deploys it with spkdeploy, writes a rattled
+It builds a small random PaiNN potential, deploys it with spk deploy, writes a rattled
 SiC crystal and runs LAMMPS:
 
 1. one force evaluation with domain decomposition on each rank count of --ranks and
@@ -270,7 +270,7 @@ def main():
     )
     parser.add_argument("--lmp", default="lmp", help="LAMMPS binary (default: lmp)")
     parser.add_argument("--mpirun", default="mpirun", help="(default: mpirun)")
-    parser.add_argument("--spkdeploy", default="spkdeploy", help="(default: spkdeploy)")
+    parser.add_argument("--spk", default="spk", help="(default: spk)")
     parser.add_argument(
         "--timeout",
         type=float,
@@ -279,7 +279,7 @@ def main():
     )
     args = parser.parse_args()
 
-    for tool in (args.lmp, args.mpirun, args.spkdeploy):
+    for tool in (args.lmp, args.mpirun, args.spk):
         if shutil.which(tool) is None:
             sys.exit(f"{tool} not found")
     static_tol, position_tol = TOLERANCES[args.dtype]
@@ -314,14 +314,14 @@ def main():
     print(f"{len(atoms)} atoms, cell {np.diag(atoms.cell).round(3).tolist()} Angstrom")
 
     deploy = subprocess.run(
-        [args.spkdeploy, "best_model", "model.pt2"]
-        + ["--device", args.device, "--dtype", args.dtype],
+        [args.spk, "deploy", "model_dir=best_model", "out=model.pt2"]
+        + [f"device={args.device}", f"dtype={args.dtype}"],
         cwd=workdir,
         capture_output=True,
         text=True,
     )
     report.check(
-        "spkdeploy",
+        "spk deploy",
         deploy.returncode == 0,
         "" if deploy.returncode == 0 else "\n" + tail(deploy.stdout + deploy.stderr),
     )

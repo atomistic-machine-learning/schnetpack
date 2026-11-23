@@ -44,7 +44,7 @@ SchNetPack supports multiple logging backends via PyTorch Lightning. The default
 
 The best place to get started is training a SchNetPack model on a common benchmark dataset via the command line
 interface (CLI).
-When installing SchNetPack, the training script `spktrain` is added to your PATH.
+When installing SchNetPack, the `spk` command is added to your PATH; `spk train` trains a model.
 The CLI uses [Hydra](https://hydra.cc/) and is based on the PyTorch Lightning/Hydra template that can be found
 [here](https://github.com/ashleve/lightning-hydra-template).
 This enables a flexible configuration of the model, data and training process.
@@ -64,7 +64,7 @@ cd spk_workdir
 Then, the training of a SchNet model with default settings for QM9 can be started by:
 
 ```
-spktrain experiment=qm9_atomwise
+spk train experiment=qm9_atomwise
 ```
 
 The script prints the defaults for the experiment config `qm9_atomwise`.
@@ -76,15 +76,15 @@ By default, the model is stored in a directory with a unique run id hash as a su
 This can be changed as follows:
 
 ```
-spktrain experiment=qm9_atomwise run.data_dir=/my/data/dir run.path=~/all_my_runs run.id=this_run
+spk train experiment=qm9_atomwise run.data_dir=/my/data/dir run.path=~/all_my_runs run.id=this_run
 ```
 
-If you call `spktrain experiment=qm9_atomwise --help`, you can see the full config with all the parameters
+If you call `spk train experiment=qm9_atomwise --help`, you can see the full config with all the parameters
 that can be changed.
 Nested parameters can be changed as follows:
 
 ```
-spktrain experiment=qm9_atomwise run.data_dir=<path> data.batch_size=64
+spk train experiment=qm9_atomwise run.data_dir=<path> data.batch_size=64
 ```
 
 Hydra organizes parameters in config groups which allows hierarchical configurations consisting of multiple
@@ -92,7 +92,7 @@ yaml files. This allows to easily change the whole dataset, model or representat
 For instance, changing from the default SchNet representation to PaiNN, use:
 
 ```
-spktrain experiment=qm9_atomwise run.data_dir=<path> model/representation=painn
+spk train experiment=qm9_atomwise run.data_dir=<path> model/representation=painn
 ```
 
 It is a bit confusing at first when to use "." or "/". The slash is used, if you are loading a preconfigured config
@@ -119,7 +119,7 @@ corresponds to the following part of the config:
 If you would want to additionally change some value of this group, you could use:
 
 ```
-spktrain experiment=qm9_atomwise run.data_dir=<path> model/representation=painn model.representation.n_interactions=5
+spk train experiment=qm9_atomwise run.data_dir=<path> model/representation=painn model.representation.n_interactions=5
 ```
 
 For more details on config groups, have a look at the
@@ -138,10 +138,10 @@ provided from the command line by `experiment=md17`, is selecting the representa
 A more detailed description of the configuration and how to build your custom configs can be
 found [here](https://schnetpack.readthedocs.io/en/latest/guides/configs.html).
 
-The `spktrain` script can be used to train a model for a molecule from the MD17 datasets
+`spk train` can be used to train a model for a molecule from the MD17 datasets
 
 ```
-spktrain experiment=md17 data.molecule=uracil
+spk train experiment=md17 data.molecule=uracil
 ```
 
 In the case of MD17, reference calculations of energies and forces are available.
@@ -179,7 +179,7 @@ By default, the loss weights are set to 0.005 for the energy and 0.995 for force
 This can be changed as follow:
 
 ```
-spktrain experiment=md17 data.molecule=uracil task.outputs.0.loss_weight=0.005 task.outputs.1.loss_weight=0.995
+spk train experiment=md17 data.molecule=uracil task.outputs.0.loss_weight=0.005 task.outputs.1.loss_weight=0.995
 ```
 
 ### Logging
@@ -196,7 +196,7 @@ Furthermore, SchNetPack comes with configs for a CSV logger and [Aim](https://gi
 These can be selected as follows:
 
 ```
-spktrain experiment=md17 logger=csv
+spk train experiment=md17 logger=csv
 ```
 
 ## LAMMPS interface

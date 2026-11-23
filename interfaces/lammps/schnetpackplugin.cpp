@@ -25,7 +25,7 @@ extern "C" void lammpsplugin_init(void *lmp, void *handle, void *regfunc)
   plugin.version = LAMMPS_VERSION;
   plugin.style = "pair";
   plugin.name = "schnetpack";
-  plugin.info = "SchNetPack potentials compiled with AOTInductor (spkdeploy)";
+  plugin.info = "SchNetPack potentials compiled with AOTInductor (spk deploy)";
   plugin.author = "SchNetPack developers";
   plugin.creator.v1 = (lammpsplugin_factory1 *) &schnetpackcreator;
   plugin.handle = handle;

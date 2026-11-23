@@ -201,7 +201,7 @@ def message_sum(
     Returns:
         summed messages, shape ``(dim_size, ...)``
     """
-    # TorchScript models (spkdeploy, LAMMPS) must not depend on the Python-registered op
+    # TorchScript models (spk deploy, LAMMPS) must not depend on the Python-registered op
     if torch.jit.is_scripting():
         return _message_sum_torch(x, w, idx_i, idx_j, dim_size)
     return _message_sum_dispatch(x, w, idx_i, idx_j, dim_size)

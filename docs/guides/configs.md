@@ -10,7 +10,7 @@ We will explain the structure of the config at the example of training PaiNN on 
 with the command:
 
 ```bash
-$ spktrain experiment=qm9_atomwise
+$ spk train experiment=qm9_atomwise
 ```
 
 Before going through the config step-by-step, we show the full config as printed by
@@ -379,14 +379,14 @@ them. When changing a single value, such as the learning rate, you can use the f
 notation:
 
 ```bash
-$ spktrain experiment=qm9_atomwise globals.lr=1e-4
+$ spk train experiment=qm9_atomwise globals.lr=1e-4
 ```
 
 Alternatively, one can also change a whole config group. The syntax for this is slightly
 different:
 
 ```bash
-$ spktrain experiment=qm9_atomwise model/representation=schnet
+$ spk train experiment=qm9_atomwise model/representation=schnet
 ```
 
 The difference here is that `schnet` refers to a pre-defined subconfig, instead of a
@@ -430,7 +430,7 @@ your custom configs and runs are located.
 If you want to specify a different config location, this is possible with:
 
 ```bash
-$ spktrain  --config-dir=/path/to/configs experiment=my_config
+$ spk train --config-dir=/path/to/configs experiment=my_config
 ```
 
 Note, that in any case the config path points to the base directory of the hierarchical
@@ -446,13 +446,13 @@ $ mkdir configs/experiment
 $ vim my_configs/experiments/my_experiment.yaml
 
 # explicitly stating config dir is not required since it is in current working dir
-$ spktrain experiment=my_experiment
+$ spk train experiment=my_experiment
 ```
 
 Within the configs you are not restricted to using SchNetPack modules, but you can also
 set your own implementations as `_target_`, as long as they conform with the required
 interface, e.g. are subclasses of SchNetPack base classes. Unfortunately, this can not
-be checked statically at the time, but will lead to errors when calling `spktrain`.
+be checked statically at the time, but will lead to errors when calling `spk train`.
 This kind of flexibilty enables a convenient extension of SchNetPack with your own
 config and code. As an example, you can check out the package
 [schnetpack-gschnet](https://github.com/atomistic-machine-learning/schnetpack-gschnet/),
@@ -473,9 +473,9 @@ Further details can be found in the PyTorch documentation for `torch.set_float32
 
 ## Compiling the model
 
-`spktrain` and `spkpredict` can run the model as one compiled graph
+`spk train` and `spk predict` can run the model as one compiled graph
 (`schnetpack.model.CompiledPotential`), switched on with `task.compile=True` for
-`spktrain` and `compile=True` for `spkpredict`. The forward pass is traced
+`spk train` and `compile=True` for `spk predict`. The forward pass is traced
 together with the derivatives of the response modules (e.g. forces and stress), so that
 training on forces needs only a single backward pass; the traced graph is then compiled
 with `torch.compile` and dynamic shapes, so batches of different size reuse it.

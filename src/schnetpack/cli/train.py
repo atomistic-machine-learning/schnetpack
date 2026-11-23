@@ -1,4 +1,4 @@
-"""spktrain: train a model from the Hydra configs (``configs/train.yaml``), then
+"""spk train: train a model from the Hydra configs (``configs/train.yaml``), then
 test its best checkpoint and store the best model (a model folder, see
 `schnetpack.save_model`)."""
 
@@ -55,7 +55,7 @@ def main(config: DictConfig):
             """
         Config incomplete! You have to specify at least `data` and `model`!
         For an example, try one of our pre-defined experiments:
-        > spktrain experiment=qm9_atomwise
+        > spk train experiment=qm9_atomwise
         """
         )
         return

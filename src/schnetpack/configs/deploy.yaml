@@ -1,0 +1,15 @@
+# spk deploy model_dir=<model folder or run folder> out=<file>.pt2: compiles the potential
+# with AOTInductor for the LAMMPS pair style, for this torch version and device.
+defaults:
+  - override hydra/job_logging: stdout
+  - _self_
+
+model_dir: ???  # a model folder, or a run folder of spk train
+out: ???  # the package written, ending in .pt2
+device: cpu  # the device LAMMPS runs the model on: cpu or cuda
+dtype: float32  # float32 or float64
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .

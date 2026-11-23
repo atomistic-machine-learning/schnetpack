@@ -31,7 +31,7 @@ Model::Model(const std::string &path, int local_rank) : torch_(new Torch)
        {"cutoff", "receptive_field", "dtype", "device", "torch_version", "inputs"})
     if (metadata.count(key) == 0)
       throw std::runtime_error(path + " has no '" + key +
-                               "' metadata; deploy the model with spkdeploy");
+                               "' metadata; deploy the model with spk deploy");
 
   if (metadata["inputs"] != INPUTS)
     throw std::runtime_error(path + " takes inputs (" + metadata["inputs"] +
@@ -45,7 +45,7 @@ Model::Model(const std::string &path, int local_rank) : torch_(new Torch)
   if (torch_version.compare(0, expected.size(), expected) != 0)
     throw std::runtime_error(path + " was compiled with torch " + torch_version +
                              ", but this is libtorch " + TORCH_VERSION +
-                             "; run spkdeploy with the torch version LAMMPS is built with");
+                             "; run spk deploy with the torch version LAMMPS is built with");
 
   cutoff = std::stod(metadata["cutoff"]);
   receptive_field = std::stod(metadata["receptive_field"]);

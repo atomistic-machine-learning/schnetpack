@@ -1,0 +1,14 @@
+# spk evaluate dbs=<ASE db or pattern, or a list of them>: validity and uniqueness of
+# generated molecules (RDKit), into eval.json next to each db. Quote patterns:
+#   spk evaluate 'dbs=runs/gpff/samples/*.db'
+defaults:
+  - override hydra/job_logging: stdout
+  - _self_
+
+dbs: ???  # ASE dbs of molecules (spk sample's), patterns allowed
+timeout: 5  # seconds per molecule
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .

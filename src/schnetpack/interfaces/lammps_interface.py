@@ -7,7 +7,7 @@ without Python. The graph is recorded by the tracer of
 :class:`~schnetpack.model.CompiledPotential`, so the derivatives are part of it, and
 exported with ``torch.export``. A package runs only with the torch version it was built
 with and on the device (and GPU architecture) it was built for, so it is built on the
-machine LAMMPS runs on, with ``spkdeploy``.
+machine LAMMPS runs on, with ``spk deploy``.
 """
 
 import copy
@@ -325,7 +325,7 @@ def deploy_lammps(
     # written into a temporary directory next to `path` first, so that a failed check
     # leaves no package; the package's file name names its contents
     directory = os.path.dirname(os.path.abspath(path))
-    with tempfile.TemporaryDirectory(dir=directory, prefix=".spkdeploy-") as tmp:
+    with tempfile.TemporaryDirectory(dir=directory, prefix=".spk-deploy-") as tmp:
         partial = os.path.join(tmp, os.path.basename(path))
         torch._inductor.aoti_compile_and_package(
             program,

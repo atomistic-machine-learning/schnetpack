@@ -6,7 +6,7 @@
 #   cmake --build build
 #
 # LAMMPS must be built with -D PKG_PLUGIN=on, with the same compiler, MPI and
-# LAMMPS_SIZES. libtorch must be the version of the torch that runs spkdeploy;
+# LAMMPS_SIZES. libtorch must be the version of the torch that runs spk deploy;
 # torch >= 2.14 needs C++20.
 
 cmake_minimum_required(VERSION 3.20)

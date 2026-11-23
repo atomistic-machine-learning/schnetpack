@@ -51,7 +51,7 @@ PyTorch Lightning.
 ```bash
 pip install --upgrade schnetpack
 mkdir spk_workdir && cd spk_workdir
-spktrain experiment=qm9_atomwise
+spk train experiment=qm9_atomwise
 ```
 
 ---

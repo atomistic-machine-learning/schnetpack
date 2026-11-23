@@ -1,5 +1,5 @@
 """Fine-tuning MaceModel: trainable after loading, pickled with its core, its
-E0s the ones the data pipeline removes, and through spktrain end to end."""
+E0s the ones the data pipeline removes, and through spk train end to end."""
 
 import copy
 import subprocess

@@ -1,14 +1,23 @@
-# spksample's defaults. spksample merges them under the run's config.yaml (a
-# `sample:` block in the run's experiment config wins over them) and the command
-# line's key=value overrides over both, so ${generative.*} and ${seed} are the run's.
+# spk sample model_dir=<model folder or run folder>: samples structures with a generative
+# model, one ASE db per number of steps in `out`. The sample: block below holds the
+# defaults; the model's own sample: block (spk train saves the run's) goes over it,
+# and sample.* keys on the command line over both.
+defaults:
+  - override hydra/job_logging: stdout
+  - _self_
+
+model_dir: ???  # a model folder, or a run folder of spk train
+db: null  # an ASE db whose compositions are sampled; default: the run's test split
+data_dir: null  # the folder of the run's data, if it moved since training
+out: null  # default: <run>/samples for a run folder, ./samples otherwise
+
 sample:
   n_samples: 1000
   n_steps: [100]  # one sample set per entry
-  batch_size: 1000  # molecules per model call
-  seed: ${oc.select:seed,null}  # the run's training seed
+  batch_size: 1000  # structures per model call
+  seed: null  # default: the run's training seed
   compile: false
-  out_dir: ${run.path}/${run.id}/samples
-  # one update per variable of the run's generative: block, by its key; the
+  # one update per variable of the model's generative: block, by its key; the
   # variables are drawn from their priors in this order
   updates:
     positions:
@@ -18,8 +27,13 @@ sample:
     _target_: schnetpack.dynamics.KarrasGrid
     t_min: 1e-3
     rho: 7.0
-  # on every batch of compositions (test split); all pairs suit models whose
-  # cutoff spans the molecule
+  # on every batch of compositions; all pairs suit models whose cutoff spans the
+  # molecule
   structure_transforms:
     - _target_: schnetpack.transform.AllToAllNeighborList
     - _target_: schnetpack.transform.CastTo32
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .

@@ -3,7 +3,7 @@
 # PaiNN on rMD17 aspirin, energies and forces: the SchNetPack 2.0 paper's run
 # (J. Chem. Phys. 2023, Table V). The command from its LaTeX source:
 #
-#   spktrain experiment=md17 data=rmd17 data.molecule=aspirin
+#   spk train experiment=md17 data=rmd17 data.molecule=aspirin
 #       model/representation=painn model.representation.n_atom_basis=128
 #       globals.lr=1e-3 task.optimizer_args.weight_decay=0.01
 #
@@ -17,7 +17,7 @@
 # graph, fused AdamW), and data.drop_last false: 950 / 10 gives 95 full batches, of
 # which the default would drop the last in every epoch.
 #
-#   spktrain --config-dir=benchmarks/configs experiment=painn_rmd17_aspirin
+#   spk train --config-dir=benchmarks/configs experiment=painn_rmd17_aspirin
 #       run.data_dir=<folder with rmd17_aspirin.db>
 
 defaults:

@@ -308,7 +308,7 @@ print(f"model: {benzonitrile.get_potential_energy():.2f} eV")
 # database's metadata (`qm9.atomrefs`). So `RemoveOffsets` takes those and needs no
 # fit. With `remove_mean=True` it also removes the mean energy per atom that the
 # references leave; `AddOffsets` adds both back. The cell below is not run when the
-# documentation is built. From the command line, `spktrain experiment=qm9_atomwise`
+# documentation is built. From the command line, `spk train experiment=qm9_atomwise`
 # trains the same kind of model (see [Configs](../guides/configs.md)).
 
 # %% tags=["skip-execution"]

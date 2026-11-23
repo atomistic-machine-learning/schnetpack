@@ -3,7 +3,7 @@
 # LAMMPS Interface
 
 SchNetPack potentials run in LAMMPS [1] through the pair style `schnetpack`.
-`spkdeploy` compiles a trained model with PyTorch's AOTInductor into a package that
+`spk deploy` compiles a trained model with PyTorch's AOTInductor into a package that
 holds the energy, the per-atom energies, the forces and the virial, and the pair style
 runs that package without Python. Since the virial is computed, NPT simulations work,
 and the pair style runs on any number of MPI ranks.
@@ -13,7 +13,7 @@ version was adapted from [pair_nequip](https://github.com/mir-group/pair_nequip)
 
 ## Requirements
 
-- **torch** >= 2.14, the **same version** for `spkdeploy` and for building the pair
+- **torch** >= 2.14, the **same version** for `spk deploy` and for building the pair
   style: a package runs only with the libtorch version that compiled it.
 - A C++20 compiler (torch >= 2.14 needs C++20), e.g. GCC 13, and **cmake** >= 3.20.
 - LAMMPS with the PLUGIN package (`-D PKG_PLUGIN=on`), built with the same compiler
@@ -74,14 +74,14 @@ cd <path/to/schnetpack>/interfaces/lammps
 
 ## Deploying a model
 
-`spkdeploy` compiles a trained model for one device. The package runs only with the
+`spk deploy` compiles a trained model for one device. The package runs only with the
 torch version it was compiled with and, on GPU, on the GPU architecture it was compiled
 for, so run it **on the machine that runs LAMMPS**:
 
 ```bash
-spkdeploy best_model deployed_model.pt2                  # CPU, float32
-spkdeploy best_model deployed_model.pt2 --device cuda    # GPU
-spkdeploy best_model deployed_model.pt2 --dtype float64
+spk deploy model_dir=best_model out=deployed_model.pt2                # CPU, float32
+spk deploy model_dir=best_model out=deployed_model.pt2 device=cuda    # GPU
+spk deploy model_dir=best_model out=deployed_model.pt2 dtype=float64
 ```
 
 Compiling takes a few tens of seconds. Before the package is written, it is checked
@@ -108,7 +108,7 @@ with a model trained on rMD17:
 
 ```bash
 cd <path/to/schnetpack>/interfaces/lammps/examples/aspirin
-spkdeploy best_model deployed_model.pt2
+spk deploy model_dir=best_model out=deployed_model.pt2
 <path/to/lmp> -in aspirin_md.in
 ```
 

@@ -1,16 +1,19 @@
-"""spkdeploy: compile a trained potential for the LAMMPS pair style."""
+"""spk deploy: compile a trained potential for the LAMMPS pair style
+(``configs/deploy.yaml``)."""
 
-import argparse
-
+import hydra
 import torch
+from omegaconf import DictConfig
 
 from schnetpack.model_format import load_model
 
 
-def main():
+@hydra.main(config_path="../configs", config_name="deploy", version_base="1.2")
+def main(config: DictConfig):
     """
-    Compile a trained potential with AOTInductor into a package for the LAMMPS pair
-    style in ``interfaces/lammps`` (see
+    Compile the potential ``model_dir`` (a model folder or a spk train run folder) with
+    AOTInductor into the package ``out`` for the LAMMPS pair style in
+    ``interfaces/lammps`` (see
     :func:`~schnetpack.interfaces.lammps_interface.deploy_lammps`).
 
     The package runs only with the torch version and on the device it was compiled
@@ -18,35 +21,8 @@ def main():
     """
     from schnetpack.interfaces.lammps_interface import deploy_lammps
 
-    parser = argparse.ArgumentParser(
-        description="Compile a SchNetPack potential for LAMMPS (pair_style schnetpack)."
-    )
-    parser.add_argument("model_path", help="Path to the trained model, e.g. best_model")
-    parser.add_argument(
-        "deployed_model_path", help="Where the package is written, ending in .pt2"
-    )
-    parser.add_argument(
-        "--device",
-        default="cpu",
-        help="Device LAMMPS runs the model on, e.g. cpu or cuda (default: cpu)",
-    )
-    parser.add_argument(
-        "--dtype",
-        choices=["float32", "float64"],
-        default="float32",
-        help="Precision of the deployed model (default: float32)",
-    )
-    args = parser.parse_args()
-
-    model = load_model(args.model_path, device=args.device)
+    model = load_model(config.model_dir, device=config.device)
     deploy_lammps(
-        model,
-        args.deployed_model_path,
-        device=args.device,
-        dtype=getattr(torch, args.dtype),
+        model, config.out, device=config.device, dtype=getattr(torch, config.dtype)
     )
-    print(f"stored deployed model at {args.deployed_model_path}.")
-
-
-if __name__ == "__main__":
-    main()
+    print(f"stored deployed model at {config.out}.")

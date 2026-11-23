@@ -277,11 +277,13 @@ def test_deployed_package_matches_model(representation, tmp_path):
 
 @pytest.mark.slow
 @requires_compile
-def test_spkdeploy_writes_a_package(tmp_path, monkeypatch):
+def test_spk_deploy_writes_a_package(tmp_path, monkeypatch):
     torch.save(potential(spk.model.SchNet), tmp_path / "best_model")
     path = tmp_path / "deployed.pt2"
     monkeypatch.setattr(
-        sys, "argv", ["spkdeploy", str(tmp_path / "best_model"), str(path)]
+        sys,
+        "argv",
+        ["spk deploy", f"model_dir={tmp_path / 'best_model'}", f"out={path}"],
     )
 
     deploy()

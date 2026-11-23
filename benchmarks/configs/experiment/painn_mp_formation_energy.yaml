@@ -15,7 +15,7 @@
 # Our choices: the recipe above, seed 999, and the fast route (data.cache, a
 # compiled model run as one CUDA graph, fused AdamW).
 #
-#   spktrain --config-dir=benchmarks/configs experiment=painn_mp_formation_energy
+#   spk train --config-dir=benchmarks/configs experiment=painn_mp_formation_energy
 #       run.data_dir=<folder with materials_project.db>
 
 defaults:

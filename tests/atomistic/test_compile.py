@@ -209,7 +209,7 @@ def test_task_runs_compiled_model_and_pickles():
     for k in (properties.energy, properties.forces):
         torch.testing.assert_close(out[k], expected[k])
 
-    # spktrain stores the whole task with torch.save
+    # spk train stores the whole task with torch.save
     copy = pickle.loads(pickle.dumps(task))
     assert copy.compiled_model.model is copy.model
     assert copy.compiled_model._graphs == {}
@@ -220,7 +220,7 @@ def test_compile_needs_torch_2_14(monkeypatch):
     monkeypatch.setattr("schnetpack.model.compile.compile_supported", lambda: False)
     with pytest.raises(RuntimeError, match="torch >= 2.14"):
         spk.model.CompiledPotential(potential(spk.model.SchNet))
-    # the task, spkpredict and the calculators all compile through it
+    # the task, spk predict and the calculators all compile through it
     with pytest.raises(RuntimeError, match="torch >= 2.14"):
         atomistic_task(compile=True)
 

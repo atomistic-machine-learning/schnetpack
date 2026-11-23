@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------
-   A potential that spkdeploy compiled with AOTInductor
+   A potential that spk deploy compiled with AOTInductor
    (schnetpack.interfaces.lammps_interface), run on flat arrays.
 
    Independent of LAMMPS, so that pair_style schnetpack and the C++ test in

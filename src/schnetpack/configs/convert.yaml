@@ -1,0 +1,16 @@
+# spk convert db=<ASE db>: updates the dataset's metadata in place (back it up first),
+# e.g. from SchNetPack 1.0:
+#   spk convert db=data.db distunit=Ang 'propunit={energy:kcal/mol,forces:kcal/mol/Ang}'
+defaults:
+  - override hydra/job_logging: stdout
+  - _self_
+
+db: ???  # the ASE db, changed in place
+distunit: null  # the distance unit as ASE names it, e.g. Ang
+propunit: null  # the unit of each property as ASE names it, e.g. {energy:eV}
+expand_property_dims: []  # properties that get a leading dimension in every row
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .

@@ -8,7 +8,7 @@ on or off on its own; the combination for a given training is in the next sectio
 
 ## Switches
 
-| switch | `spktrain` / Python | what it does |
+| switch | `spk train` / Python | what it does |
 | --- | --- | --- |
 | DataLoader workers | `data.num_workers=8`<br>`AtomsDataModule(num_workers=8)` | read and transform structures in 8 processes. With 2 workers a QM9 batch of 100 took 55 ms per training step, with 8 workers 26 ms. |
 | compile | `task.compile=True`<br>`AtomisticTask(compile=True)` | run the model and its derivatives (forces, stress) as one compiled graph ({class}`~schnetpack.model.CompiledPotential`, torch >= 2.14). Fewer, fused kernels; less GPU memory. |
@@ -107,7 +107,7 @@ Measured with four short epochs on one H200 NVL (16 CPU cores), training step in
 ## Example
 
 ```bash
-spktrain experiment=qm9_atomwise data.cache=True data.cache_dir=/path/to/qm9_cache \
+spk train experiment=qm9_atomwise data.cache=True data.cache_dir=/path/to/qm9_cache \
     task.compile=True task.cuda_graph=True task.optimizer_args.fused=True
 ```
 

@@ -100,12 +100,12 @@ class AtomisticTask(pl.LightningModule):
 
     Its checkpoints hold weights and training state only, and load with
     ``torch.load(weights_only=True)``: to resume or test, build the task again (as
-    ``spktrain`` does from the run's config) and load the checkpoint into it. Outside
+    ``spk train`` does from the run's config) and load the checkpoint into it. Outside
     a resumed fit, load with ``task.load_state_dict(state, assign=True)``, so that
     the statistics keep the dtype they were trained with.
 
     ``model_blocks`` (None by default) are further plain-JSON entries that
-    ``save_model`` writes into the model's hyperparameters.json; ``spktrain`` sets
+    ``save_model`` writes into the model's hyperparameters.json; ``spk train`` sets
     them to the run's ``generative:`` and ``sample:`` blocks.
     """
 

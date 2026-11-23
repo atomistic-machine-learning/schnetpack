@@ -1,6 +1,6 @@
 # Training from the command line
 
-Installing SchNetPack puts the training script `spktrain` on your PATH. It trains a
+Installing SchNetPack puts the `spk` command on your PATH; `spk train` trains a
 SchNetPack model [^schnetpack2] [^schnetpack] on a benchmark dataset with one
 command. The CLI is built on [Hydra](https://hydra.cc/) and follows the
 [Lightning-Hydra template](https://github.com/ashleve/lightning-hydra-template), so
@@ -20,7 +20,7 @@ cd spk_workdir
 Then start the training of a SchNet model with the default settings for QM9:
 
 ```bash
-spktrain experiment=qm9_atomwise
+spk train experiment=qm9_atomwise
 ```
 
 The script prints the config of the experiment `qm9_atomwise`, downloads the dataset
@@ -31,14 +31,14 @@ directories for runs and data. By default, a run is stored in a subdirectory of
 `spk_workdir/runs` named by a unique run id. To change that:
 
 ```bash
-spktrain experiment=qm9_atomwise run.data_dir=/my/data/dir run.path=~/all_my_runs run.id=this_run
+spk train experiment=qm9_atomwise run.data_dir=/my/data/dir run.path=~/all_my_runs run.id=this_run
 ```
 
-`spktrain experiment=qm9_atomwise --help` prints the full config with every
+`spk train experiment=qm9_atomwise --help` prints the full config with every
 parameter. Nested parameters are set with dots:
 
 ```bash
-spktrain experiment=qm9_atomwise data.batch_size=64
+spk train experiment=qm9_atomwise data.batch_size=64
 ```
 
 Hydra groups parameters into config groups, so a whole dataset, model or
@@ -46,7 +46,7 @@ representation can be swapped at once. To replace the default SchNet
 representation [^schnet1] [^schnet2] [^schnet3] by PaiNN [^painn]:
 
 ```bash
-spktrain experiment=qm9_atomwise model/representation=painn
+spk train experiment=qm9_atomwise model/representation=painn
 ```
 
 The slash loads a predefined config group; the dot changes a single value. The
@@ -72,7 +72,7 @@ model:
 Both can be combined, for example to load PaiNN with five interactions:
 
 ```bash
-spktrain experiment=qm9_atomwise model/representation=painn model.representation.n_interactions=5
+spk train experiment=qm9_atomwise model/representation=painn model.representation.n_interactions=5
 ```
 
 More on config groups is in the
@@ -85,7 +85,7 @@ representation and output modules that predict the energy and its derivatives, t
 forces. To train on one molecule of the MD17 dataset:
 
 ```bash
-spktrain experiment=md17 data.molecule=uracil
+spk train experiment=md17 data.molecule=uracil
 ```
 
 MD17 has reference energies and forces, so the loss is a weighted sum of both. The
@@ -122,7 +122,7 @@ For training on energies and forces, a stronger weight on the forces works best.
 The defaults are 0.01 for the energy and 0.99 for the forces. To change them:
 
 ```bash
-spktrain experiment=md17 data.molecule=uracil task.outputs.0.loss_weight=0.05 task.outputs.1.loss_weight=0.95
+spk train experiment=md17 data.molecule=uracil task.outputs.0.loss_weight=0.05 task.outputs.1.loss_weight=0.95
 ```
 
 ## Logging
@@ -143,7 +143,7 @@ and [Weights & Biases](https://wandb.ai/). Aim and Weights & Biases need a separ
 install. Select a logger with:
 
 ```bash
-spktrain experiment=md17 logger=csv
+spk train experiment=md17 logger=csv
 ```
 
 ## References

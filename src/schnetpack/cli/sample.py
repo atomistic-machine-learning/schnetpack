@@ -1,6 +1,5 @@
-"""spksample: sample molecules from a finished generative spktrain run."""
+"""spk sample: sample structures with a generative model (``configs/sample.yaml``)."""
 
-import argparse
 import logging
 import os
 import shutil
@@ -12,54 +11,67 @@ import numpy as np
 import torch
 from ase import Atoms
 from ase.db import connect
-from omegaconf import OmegaConf
+from hydra.core.hydra_config import HydraConfig
+from hydra.core.override_parser.overrides_parser import OverridesParser
+from omegaconf import DictConfig, OmegaConf
 
 from schnetpack import properties
 from schnetpack.cli import _run_config
-from schnetpack.model_format import load_model
+from schnetpack.data import ASEAtomsData
+from schnetpack.model_format import load_hyperparameters, load_model
 
 log = logging.getLogger(__name__)
 
 
-def main():
-    """spksample: sample molecules from a generative spktrain run's best_model, with
-    the compositions of its test split, and write one ASE db per number of steps to
-    ``sample.out_dir``. The settings are the ``sample:`` block of configs/sample.yaml,
-    under the run's own ``sample:`` block and the command line's overrides."""
+@hydra.main(config_path="../configs", config_name="sample", version_base="1.2")
+def main(config: DictConfig):
+    """spk sample: sample structures with the generative model ``model`` (a model
+    folder or a spk train run folder) and write one ASE db per number of steps to
+    ``out``. The compositions are those of ``db``, or else of the run's test split.
+    The settings are the model's ``sample:`` block over the ``sample:`` block of
+    configs/sample.yaml, under the command line's ``sample.*`` keys."""
     from schnetpack.dynamics import DatasetStructures, FieldCalculator, Sampler
 
-    parser = argparse.ArgumentParser(
-        description="Sample molecules from a generative spktrain run."
-    )
-    parser.add_argument("run_dir", help="the run folder spktrain wrote")
-    parser.add_argument(
-        "overrides",
-        nargs="*",
-        help="key=value changes, e.g. sample.n_samples=1000 run.data_dir=/data",
-    )
-    args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    defaults = OmegaConf.load(
-        os.path.join(os.path.dirname(__file__), "..", "configs", "sample.yaml")
-    )
-    config = _run_config(args.run_dir, args.overrides, defaults)
-    sample = config.sample
+    run = None
+    if os.path.exists(os.path.join(config.model_dir, "config.yaml")):
+        run = _run_config(config.model_dir, config.data_dir)
+    blocks = load_hyperparameters(config.model_dir)
+    if "generative" not in blocks:
+        raise ValueError(
+            f"{config.model_dir} has no generative: block: not a generative model"
+        )
+    sample = _settings(config.sample, blocks.get("sample", {}))
+
+    if config.db is not None:
+        dataset = ASEAtomsData(config.db, load_properties=[], transforms=[])
+    elif run is not None:
+        test_idx = np.load(run.data.split_file)["test_idx"].tolist()
+        dataset = hydra.utils.instantiate(
+            run.data.dataset, load_properties=[], transforms=[]
+        ).subset(test_idx)
+    else:
+        raise ValueError(
+            f"{config.model_dir} is a model folder: give the compositions as db=<ASE db>"
+        )
+    if sample.seed is None and run is not None:
+        sample.seed = run.get("seed")
     if sample.seed is None:
-        raise ValueError("the run has no seed: give sample.seed=<seed>")
+        raise ValueError("no seed: give sample.seed=<seed>")
+    out = config.out
+    if out is None:
+        out = (
+            os.path.join(config.model_dir, "samples") if run is not None else "samples"
+        )
 
     # each variable built once: the updates and the prior draws must hold the same
     # objects
-    generative = hydra.utils.instantiate(config.generative, _convert_="all")
+    generative = hydra.utils.instantiate(blocks["generative"], _convert_="all")
     updates = [
         hydra.utils.instantiate(update)(generative[name])
         for name, update in sample.updates.items()
     ]
-    test_idx = np.load(config.data.split_file)["test_idx"].tolist()
-    dataset = hydra.utils.instantiate(
-        config.data.dataset, load_properties=[], transforms=[]
-    )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_path = os.path.join(os.path.abspath(args.run_dir), "best_model")
+    model_path = os.path.abspath(config.model_dir)
     sampler = Sampler(
         FieldCalculator(
             load_model(model_path, device=device).eval(),
@@ -70,12 +82,11 @@ def main():
         start=[generative[name] for name in sample.updates],
         grid=hydra.utils.instantiate(sample.grid),
         structures=DatasetStructures(
-            dataset.subset(test_idx),
-            transforms=hydra.utils.instantiate(sample.structure_transforms),
+            dataset, transforms=hydra.utils.instantiate(sample.structure_transforms)
         ),
     )
     gpu = torch.cuda.get_device_name() if device.type == "cuda" else "cpu"
-    os.makedirs(sample.out_dir, exist_ok=True)
+    os.makedirs(out, exist_ok=True)
 
     for n_steps in sample.n_steps:
         torch.manual_seed(sample.seed)
@@ -89,7 +100,7 @@ def main():
             seconds.append(time.perf_counter() - start - sum(seconds))
         total = sum(seconds)
         log.info(
-            f"{sample.n_samples} molecules, {n_steps} steps: {total:.1f} s "
+            f"{sample.n_samples} structures, {n_steps} steps: {total:.1f} s "
             f"(first batch {seconds[0]:.2f} s"
             f"{', with the compile' if sample.compile else ''}), {gpu}"
         )
@@ -116,10 +127,23 @@ def main():
                 "gpu": gpu,
                 "sample": OmegaConf.to_container(sample, resolve=True),
                 "variables": {
-                    name: OmegaConf.to_container(config.generative[name], resolve=True)
-                    for name in sample.updates
+                    name: blocks["generative"][name] for name in sample.updates
                 },
             }
-        out = os.path.join(sample.out_dir, name)
-        shutil.move(local, out)
-        log.info(f"Samples stored at {out}")
+        path = os.path.join(out, name)
+        shutil.move(local, path)
+        log.info(f"Samples stored at {path}")
+
+
+def _settings(defaults: DictConfig, saved: dict) -> DictConfig:
+    """The model's saved ``sample:`` block over ``defaults`` (the command's
+    ``sample:`` block), and the ``sample.*`` keys given on the command line over
+    both."""
+    settings = OmegaConf.merge(OmegaConf.to_container(defaults), saved)
+    task = HydraConfig.get().overrides.task
+    for override in OverridesParser.create().parse_overrides(task):
+        key = override.key_or_group.removeprefix("sample.")
+        if key != override.key_or_group:
+            value = OmegaConf.select(defaults, key)
+            OmegaConf.update(settings, key, value, merge=False)
+    return settings

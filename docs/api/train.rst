@@ -36,7 +36,7 @@ Fine tuning
 ~~~~~~~~~~~
 
 A pretrained MACE model, wrapped in a :class:`~schnetpack.model.MaceModel`, trains like
-any SchNetPack model: ``spktrain experiment=mace_finetune``. See
+any SchNetPack model: ``spk train experiment=mace_finetune``. See
 :mod:`schnetpack.model.mace` for the reference energies (E0s) the data pipeline removes.
 
 Training from scratch
@@ -45,7 +45,7 @@ Training from scratch
 A MACE model with random weights, written by
 :func:`~schnetpack.interfaces.mace_interface.build_mace` (needs ``schnetpack[mace]``)
 with the elements, neighbor count and energy scale of the training data, trains the same
-way: ``spktrain experiment=mace_scratch``. Its E0s are estimated on the training split
+way: ``spk train experiment=mace_scratch``. Its E0s are estimated on the training split
 (``MaceModel(e0s="estimated")``).
 
 Distillation

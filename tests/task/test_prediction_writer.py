@@ -13,7 +13,7 @@ QM9_PATH = os.path.join(os.path.dirname(__file__), "../testdata/test_qm9.db")
 
 def test_epoch_predictions_hold_one_entry_per_molecule(tmp_path):
     """With one dataloader, Lightning passes the batch predictions as a flat list,
-    which `spkpredict` (write_interval="epoch") has to write to predictions.pt."""
+    which `spk predict` (write_interval="epoch") has to write to predictions.pt."""
     dataset = ASEAtomsData(
         QM9_PATH,
         load_properties=["energy_U0"],
